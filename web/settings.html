@@ -8,6 +8,8 @@
 <style>
   .loading-state { text-align:center; padding: 60px 24px; color: var(--text-muted); }
   .btn-save { background: var(--blue); }
+  .topic-group-label { width:100%; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); padding:8px 0 4px; }
+  .topic-group-label:first-child { padding-top:0; }
   .btn-danger {
     width: 100%; padding: 12px; background: #fff;
     color: #DC2626; border: 1.5px solid #FECACA;
@@ -85,18 +87,18 @@
         <div class="section-title">Analysis level</div>
       </div>
       <div class="depth-options">
-        <label class="depth-option" data-value="headlines">
-          <input type="radio" name="depth" value="headlines">
+        <label class="depth-option" data-depth="headline_only">
+          <input type="radio" name="depth" value="headline_only">
           <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
           <div><div class="depth-label">Headlines only</div><div class="depth-desc">Ultra-fast scan.</div></div>
         </label>
-        <label class="depth-option" data-value="oneliner">
-          <input type="radio" name="depth" value="oneliner">
+        <label class="depth-option" data-depth="headline_plus_oneliner">
+          <input type="radio" name="depth" value="headline_plus_oneliner">
           <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
           <div><div class="depth-label">Headlines + one-liner</div><div class="depth-desc">2-minute read.</div></div>
         </label>
-        <label class="depth-option" data-value="full">
-          <input type="radio" name="depth" value="full">
+        <label class="depth-option" data-depth="headline_plus_why">
+          <input type="radio" name="depth" value="headline_plus_why">
           <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
           <div><div class="depth-label">Headlines + "Why it matters"</div><div class="depth-desc">Full analysis. 4-minute read.</div></div>
         </label>

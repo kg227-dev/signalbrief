@@ -1,11 +1,35 @@
 /* SignalBrief — settings.js
    Loaded only by settings.html — handles load, save, unsubscribe. */
 
-const DEFAULT_TOPICS = [
-  'AI×TECH', 'HEALTHCARE', 'FINANCIAL SERVICES', 'PE×M&A',
-  'ENERGY', 'CONSUMER', 'POLICY×REGULATORY', 'STRATEGY',
-  'SUSTAINABILITY', 'REAL ESTATE'
+const INDUSTRY_TOPICS = [
+  'HEALTHCARE', 'FINANCIAL SERVICES', 'PE×M&A', 'ENERGY', 'CONSUMER',
+  'LIFE SCIENCES', 'TECHNOLOGY', 'INDUSTRIALS', 'REAL ESTATE', 'PUBLIC SECTOR',
 ];
+const CAPABILITY_TOPICS = [
+  'AI×TECH', 'STRATEGY', 'POLICY×REGULATORY', 'SUSTAINABILITY',
+  'DIGITAL', 'M&A ADVISORY', 'TALENT',
+];
+const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+
+const TOPIC_LABELS = {
+  'HEALTHCARE': 'Healthcare',
+  'FINANCIAL SERVICES': 'Financial Services',
+  'PE×M&A': 'Private Equity & M&A',
+  'ENERGY': 'Energy',
+  'CONSUMER': 'Consumer & Retail',
+  'LIFE SCIENCES': 'Life Sciences',
+  'TECHNOLOGY': 'Technology',
+  'INDUSTRIALS': 'Industrials',
+  'REAL ESTATE': 'Real Estate',
+  'PUBLIC SECTOR': 'Public Sector',
+  'AI×TECH': 'AI & Technology',
+  'STRATEGY': 'Strategy',
+  'POLICY×REGULATORY': 'Policy & Regulatory',
+  'SUSTAINABILITY': 'Sustainability & ESG',
+  'DIGITAL': 'Digital Transformation',
+  'M&A ADVISORY': 'M&A Advisory',
+  'TALENT': 'Talent & Workforce',
+};
 
 let selectedTopics = new Set();
 
@@ -21,7 +45,8 @@ function renderChip(topic, selected) {
   const chip = document.createElement('div');
   chip.className = 'topic-chip' + (selected ? ' selected' : '');
   chip.dataset.topic = topic;
-  chip.innerHTML = '<span class="check"></span> ' + topic;
+  const label = TOPIC_LABELS[topic] || topic;
+  chip.innerHTML = '<span class="check"></span> ' + label;
   chip.addEventListener('click', function() {
     if (selectedTopics.has(topic)) {
       selectedTopics.delete(topic);
@@ -35,16 +60,43 @@ function renderChip(topic, selected) {
   return chip;
 }
 
+function renderGroupLabel(text) {
+  const el = document.createElement('div');
+  el.className = 'topic-group-label';
+  el.textContent = text;
+  return el;
+}
+
 function renderChips(topics, userTopics) {
   const container = document.getElementById('topicGrid');
   if (!container) return;
   container.innerHTML = '';
-  const all = [...new Set([...DEFAULT_TOPICS, ...userTopics])];
-  all.forEach(function(t) {
+
+  // Render Industries group
+  container.appendChild(renderGroupLabel('Industries'));
+  INDUSTRY_TOPICS.forEach(function(t) {
     const sel = userTopics.includes(t);
     if (sel) selectedTopics.add(t);
     container.appendChild(renderChip(t, sel));
   });
+
+  // Render Capabilities group
+  container.appendChild(renderGroupLabel('Capabilities'));
+  CAPABILITY_TOPICS.forEach(function(t) {
+    const sel = userTopics.includes(t);
+    if (sel) selectedTopics.add(t);
+    container.appendChild(renderChip(t, sel));
+  });
+
+  // Render any custom topics the user has (not in default list)
+  const customTopics = userTopics.filter(t => !DEFAULT_TOPICS.includes(t));
+  if (customTopics.length) {
+    customTopics.forEach(function(t) {
+      selectedTopics.add(t);
+      container.appendChild(renderChip(t, true));
+    });
+  }
+
   updateTopicNote();
 }
 
@@ -117,7 +169,7 @@ async function init() {
     }
     setSelect('deliveryTime', prefs.delivery_time);
     setSelect('frequency', prefs.frequency);
-    setSelect('digestLength', prefs.items_per_digest ? String(prefs.items_per_digest) : '7');
+    setSelect('itemsPerDigest', prefs.items_per_digest ? String(prefs.items_per_digest) : '7');
 
     // Save
     document.getElementById('saveBtn').addEventListener('click', async function() {
@@ -142,7 +194,7 @@ async function init() {
               depth: getDepth(),
               delivery_time: document.getElementById('deliveryTime').value,
               frequency: document.getElementById('frequency').value,
-              items_per_digest: parseInt(document.getElementById('digestLength').value),
+              items_per_digest: parseInt(document.getElementById('itemsPerDigest').value),
               email_enabled: true,
               telegram_enabled: !!document.getElementById('telegram').value.trim(),
             }

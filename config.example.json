@@ -8,50 +8,143 @@
   "digest": {
     "itemCount": 7,
     "maxItemsPerTag": 2,
-    "lookbackHours": 24
+    "lookbackHours": 48
   },
   "topics": [
     {
-      "tag": "AI×HEALTH",
+      "tag": "HEALTHCARE",
       "queries": [
-        "artificial intelligence healthcare deployment 2026",
-        "clinical AI adoption health systems"
+        "health system strategy merger acquisition 2026",
+        "payer provider dynamics value-based care 2026",
+        "clinical AI healthcare deployment 2026"
       ]
     },
     {
-      "tag": "PHARMA×M&A",
+      "tag": "FINANCIAL SERVICES",
       "queries": [
-        "pharmaceutical mergers acquisitions life sciences 2026"
+        "banking fintech regulation credit markets 2026",
+        "insurance innovation capital markets 2026",
+        "Federal Reserve monetary policy financial services 2026"
       ]
     },
     {
-      "tag": "PAYERS",
+      "tag": "PE×M&A",
       "queries": [
-        "health insurance payer strategy Medicare Medicaid 2026"
+        "private equity leveraged buyout deal 2026",
+        "M&A deal flow sponsor exits restructuring 2026",
+        "corporate merger acquisition strategic deal 2026"
       ]
     },
     {
-      "tag": "BIOTECH",
+      "tag": "ENERGY",
       "queries": [
-        "biotech clinical trial results FDA approval 2026"
+        "energy transition grid infrastructure policy 2026",
+        "clean energy renewables utilities decarbonization 2026",
+        "oil gas commodities energy strategy 2026"
       ]
     },
     {
-      "tag": "REGULATORY",
+      "tag": "CONSUMER",
       "queries": [
-        "FDA CMS ONC healthcare regulation policy 2026"
+        "retail consumer spending brand strategy 2026",
+        "CPG consumer goods DTC ecommerce trends 2026",
+        "consumer earnings pricing inflation 2026"
+      ]
+    },
+    {
+      "tag": "LIFE SCIENCES",
+      "queries": [
+        "pharma pipeline FDA approval drug 2026",
+        "biotech clinical trials CMO 2026",
+        "drug pricing biopharma strategy 2026"
+      ]
+    },
+    {
+      "tag": "TECHNOLOGY",
+      "queries": [
+        "enterprise software cloud platform economics 2026",
+        "semiconductor supply chain technology 2026",
+        "technology company strategy earnings 2026"
+      ]
+    },
+    {
+      "tag": "INDUSTRIALS",
+      "queries": [
+        "manufacturing aerospace defense industrial 2026",
+        "industrial automation supply chain reshoring 2026",
+        "industrials infrastructure investment 2026"
+      ]
+    },
+    {
+      "tag": "REAL ESTATE",
+      "queries": [
+        "commercial real estate CRE office industrial REIT 2026",
+        "housing market mortgage proptech rates 2026",
+        "real estate private equity investment 2026"
+      ]
+    },
+    {
+      "tag": "PUBLIC SECTOR",
+      "queries": [
+        "federal government policy corporate business 2026",
+        "defense procurement government services 2026",
+        "public sector reform regulation 2026"
+      ]
+    },
+    {
+      "tag": "AI×TECH",
+      "queries": [
+        "artificial intelligence enterprise deployment foundation models 2026",
+        "AI regulation infrastructure policy 2026",
+        "AI startup funding M&A technology 2026"
       ]
     },
     {
       "tag": "STRATEGY",
       "queries": [
-        "health system strategy digital transformation consulting"
+        "corporate strategy operating model competitive dynamics 2026",
+        "org design transformation restructuring 2026",
+        "management consulting McKinsey Bain BCG strategy 2026"
       ]
     },
     {
-      "tag": "DIGITAL HEALTH",
+      "tag": "POLICY×REGULATORY",
       "queries": [
-        "digital health startup funding telemedicine 2026"
+        "antitrust competition regulation trade policy 2026",
+        "sanctions compliance sector-specific regulation 2026",
+        "tariff trade policy economic impact 2026"
+      ]
+    },
+    {
+      "tag": "SUSTAINABILITY",
+      "queries": [
+        "ESG climate risk reporting corporate 2026",
+        "carbon markets supply chain sustainability 2026",
+        "clean energy net zero corporate investment 2026"
+      ]
+    },
+    {
+      "tag": "DIGITAL",
+      "queries": [
+        "digital transformation cloud migration enterprise 2026",
+        "data platforms modernization enterprise technology 2026",
+        "digital strategy technology investment 2026"
+      ]
+    },
+    {
+      "tag": "M&A ADVISORY",
+      "queries": [
+        "M&A valuation trends deal process integration 2026",
+        "activist investors corporate governance 2026",
+        "investment banking advisory deal 2026"
+      ]
+    },
+    {
+      "tag": "TALENT",
+      "queries": [
+        "workforce strategy labor market AI displacement 2026",
+        "upskilling talent acquisition corporate 2026",
+        "CEO leadership human capital strategy 2026"
       ]
     }
   ],
@@ -64,7 +157,7 @@
     "telegramBotToken": "YOUR_JARVIS_BOT_TOKEN",
     "signalBriefBotToken": "YOUR_SIGNALBRIEF_BOT_TOKEN",
     "resendApiKey": "",
-    "fromEmail": "digest@yourdomain.com",
+    "fromEmail": "digest@getsignalbrief.com",
     "fromName": "SignalBrief"
   }
 }

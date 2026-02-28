@@ -51,6 +51,8 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 select.input-field { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; background-color:var(--bg); padding-right:40px; cursor:pointer; }
 
 /* Topic chips */
+.topic-group-label { width:100%; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); padding:4px 0 2px; }
+.topic-group-label:not(:first-child) { margin-top:6px; }
 .topic-grid { display:flex; flex-wrap:wrap; gap:10px; }
 .topic-chip { display:flex; align-items:center; gap:8px; padding:10px 16px; border:1.5px solid var(--border); border-radius:100px; font-size:14px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:all 0.2s ease; user-select:none; background:#fff; }
 .topic-chip:hover { border-color:var(--accent); color:var(--text); background:var(--accent-light); }
@@ -163,20 +165,29 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         <div class="section-number">2</div>
         <div class="section-title">What signals matter to you?</div>
       </div>
-      <p class="section-subtitle">Select the topics you want covered. Pick at least 2.</p>
+      <p class="section-subtitle">Select from Industries and Capabilities below. Pick at least 2 total.</p>
 
       <div class="topic-grid" id="topicGrid">
-      <div class="topic-chip" data-topic="AI×TECH" onclick="toggleTopic(this)"><span class="check"></span> AI &amp; Technology</div>
-      <div class="topic-chip" data-topic="HEALTHCARE" onclick="toggleTopic(this)"><span class="check"></span> Healthcare &amp; Life Sciences</div>
-      <div class="topic-chip" data-topic="FINANCIAL SERVICES" onclick="toggleTopic(this)"><span class="check"></span> Financial Services</div>
-      <div class="topic-chip" data-topic="PE×M&A" onclick="toggleTopic(this)"><span class="check"></span> Private Equity &amp; M&amp;A</div>
-      <div class="topic-chip" data-topic="ENERGY" onclick="toggleTopic(this)"><span class="check"></span> Energy &amp; Infrastructure</div>
-      <div class="topic-chip" data-topic="CONSUMER" onclick="toggleTopic(this)"><span class="check"></span> Consumer &amp; Retail</div>
-      <div class="topic-chip" data-topic="POLICY×REGULATORY" onclick="toggleTopic(this)"><span class="check"></span> Policy &amp; Regulation</div>
-      <div class="topic-chip" data-topic="STRATEGY" onclick="toggleTopic(this)"><span class="check"></span> Strategy &amp; Consulting</div>
-      <div class="topic-chip" data-topic="SUSTAINABILITY" onclick="toggleTopic(this)"><span class="check"></span> Sustainability &amp; ESG</div>
-      <div class="topic-chip" data-topic="REAL ESTATE" onclick="toggleTopic(this)"><span class="check"></span> Real Estate</div>
-    </div>
+        <div class="topic-group-label">Industries</div>
+        <div class="topic-chip" data-topic="HEALTHCARE" onclick="toggleTopic(this)"><span class="check"></span> Healthcare</div>
+        <div class="topic-chip" data-topic="FINANCIAL SERVICES" onclick="toggleTopic(this)"><span class="check"></span> Financial Services</div>
+        <div class="topic-chip" data-topic="PE×M&A" onclick="toggleTopic(this)"><span class="check"></span> Private Equity &amp; M&amp;A</div>
+        <div class="topic-chip" data-topic="ENERGY" onclick="toggleTopic(this)"><span class="check"></span> Energy</div>
+        <div class="topic-chip" data-topic="CONSUMER" onclick="toggleTopic(this)"><span class="check"></span> Consumer &amp; Retail</div>
+        <div class="topic-chip" data-topic="LIFE SCIENCES" onclick="toggleTopic(this)"><span class="check"></span> Life Sciences</div>
+        <div class="topic-chip" data-topic="TECHNOLOGY" onclick="toggleTopic(this)"><span class="check"></span> Technology</div>
+        <div class="topic-chip" data-topic="INDUSTRIALS" onclick="toggleTopic(this)"><span class="check"></span> Industrials</div>
+        <div class="topic-chip" data-topic="REAL ESTATE" onclick="toggleTopic(this)"><span class="check"></span> Real Estate</div>
+        <div class="topic-chip" data-topic="PUBLIC SECTOR" onclick="toggleTopic(this)"><span class="check"></span> Public Sector</div>
+        <div class="topic-group-label">Capabilities</div>
+        <div class="topic-chip" data-topic="AI×TECH" onclick="toggleTopic(this)"><span class="check"></span> AI &amp; Technology</div>
+        <div class="topic-chip" data-topic="STRATEGY" onclick="toggleTopic(this)"><span class="check"></span> Strategy</div>
+        <div class="topic-chip" data-topic="POLICY×REGULATORY" onclick="toggleTopic(this)"><span class="check"></span> Policy &amp; Regulatory</div>
+        <div class="topic-chip" data-topic="SUSTAINABILITY" onclick="toggleTopic(this)"><span class="check"></span> Sustainability &amp; ESG</div>
+        <div class="topic-chip" data-topic="DIGITAL" onclick="toggleTopic(this)"><span class="check"></span> Digital Transformation</div>
+        <div class="topic-chip" data-topic="M&A ADVISORY" onclick="toggleTopic(this)"><span class="check"></span> M&amp;A Advisory</div>
+        <div class="topic-chip" data-topic="TALENT" onclick="toggleTopic(this)"><span class="check"></span> Talent &amp; Workforce</div>
+      </div>
 
     <div class="custom-topic-input">
         <input type="text" class="input-field" placeholder="Add a custom topic (e.g. GLP-1 drugs)" id="customTopic">

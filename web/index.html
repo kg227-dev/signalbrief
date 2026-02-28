@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalBrief — Sign Up</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+<header class="site-header">
+  <div class="brand"><span class="brand-sun">☀️</span> SignalBrief</div>
+  <p class="tagline">Your daily signal across healthcare, AI, and strategy</p>
+</header>
+
+<div class="container">
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step-dot active" id="dot0"></div>
+    <span class="step-sep">·</span>
+    <div class="step-dot" id="dot1"></div>
+    <span class="step-sep">·</span>
+    <div class="step-dot" id="dot2"></div>
+    <span class="step-sep">·</span>
+    <div class="step-dot" id="dot3"></div>
+  </div>
+
+  <!-- Form -->
+  <form id="signupForm" novalidate>
+
+    <!-- Section 1: Details -->
+    <div class="section" id="section0">
+      <div class="section-header">
+        <div class="section-num">01 / 04</div>
+        <div class="section-title">Your details</div>
+        <div class="section-subtitle">Where should we send your digest?</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="name">Full name</label>
+          <input type="text" id="name" name="name" placeholder="Alex Chen" required>
+        </div>
+        <div class="field">
+          <label for="email">Email address</label>
+          <input type="email" id="email" name="email" placeholder="you@company.com" required>
+          <div class="error-msg" id="emailError">Please enter a valid email address.</div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="telegram">Telegram username <span class="optional">(optional — for the Telegram digest)</span></label>
+        <input type="text" id="telegram" name="telegram" placeholder="@yourhandle">
+      </div>
+    </div>
+
+    <!-- Section 2: Topics -->
+    <div class="section" id="section1">
+      <div class="section-header">
+        <div class="section-num">02 / 04</div>
+        <div class="section-title">Your topics</div>
+        <div class="section-subtitle">Select the verticals you want to track. Minimum 2.</div>
+      </div>
+      <div class="chips" id="topicChips"></div>
+      <div class="chip-min-note" id="topicMinNote">0 selected</div>
+      <div class="custom-topic-row">
+        <input type="text" id="customTopicInput" placeholder="Add a custom topic (e.g. GLP-1, biosimilars)">
+        <button type="button" class="btn-add-topic" id="addTopicBtn">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Section 3: Depth -->
+    <div class="section" id="section2">
+      <div class="section-header">
+        <div class="section-num">03 / 04</div>
+        <div class="section-title">Digest depth</div>
+        <div class="section-subtitle">How much analysis do you want with each story?</div>
+      </div>
+      <div class="depth-options">
+        <label class="depth-option" data-value="headlines">
+          <input type="radio" name="depth" value="headlines">
+          <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
+          <div>
+            <div class="depth-label">Headlines only</div>
+            <div class="depth-desc">Story + source link. Ultra-fast scan.</div>
+          </div>
+        </label>
+        <label class="depth-option" data-value="oneliner">
+          <input type="radio" name="depth" value="oneliner">
+          <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
+          <div>
+            <div class="depth-label">Headlines + one-liner</div>
+            <div class="depth-desc">Story + a single-sentence implication. 2-minute read.</div>
+          </div>
+        </label>
+        <label class="depth-option selected" data-value="full">
+          <input type="radio" name="depth" value="full" checked>
+          <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
+          <div>
+            <div class="depth-label">Headlines + "Why it matters" <span style="font-size:11px;color:var(--blue);font-weight:600;">RECOMMENDED</span></div>
+            <div class="depth-desc">Full consultant-grade analysis on every story. 4-minute read.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Section 4: Schedule -->
+    <div class="section" id="section3">
+      <div class="section-header">
+        <div class="section-num">04 / 04</div>
+        <div class="section-title">Delivery schedule</div>
+        <div class="section-subtitle">When do you want your digest?</div>
+      </div>
+      <div class="schedule-grid">
+        <div class="schedule-field">
+          <label for="deliveryTime">Delivery time</label>
+          <select id="deliveryTime" name="delivery_time">
+            <option value="06:00">6:00 AM ET</option>
+            <option value="07:00" selected>7:00 AM ET</option>
+            <option value="08:00">8:00 AM ET</option>
+            <option value="09:00">9:00 AM ET</option>
+          </select>
+        </div>
+        <div class="schedule-field">
+          <label for="frequency">Frequency</label>
+          <select id="frequency" name="frequency">
+            <option value="weekdays" selected>Weekdays (Mon–Fri)</option>
+            <option value="sixdays">Mon–Sat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly (Mon only)</option>
+          </select>
+        </div>
+        <div class="schedule-field">
+          <label for="itemsPerDigest">Stories per digest</label>
+          <select id="itemsPerDigest" name="items_per_digest">
+            <option value="5">5 stories</option>
+            <option value="7" selected>7 stories</option>
+            <option value="10">10 stories</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="error-msg" id="submitError"></div>
+      <button type="submit" class="btn-submit" id="submitBtn">Subscribe to SignalBrief →</button>
+    </div>
+
+  </form>
+
+  <!-- Success state -->
+  <div class="success-state" id="successState">
+    <div class="success-header section visible">
+      <div class="success-icon">✅</div>
+      <div class="success-title">You're subscribed.</div>
+      <div class="success-subtitle">First digest arrives tomorrow at 7 AM ET. Here's a preview of what to expect.</div>
+    </div>
+
+    <div class="section visible">
+      <div class="preview-label">Preview</div>
+      <div class="preview-tabs">
+        <div class="preview-tab active" data-panel="telegram">📱 Telegram</div>
+        <div class="preview-tab" data-panel="email">📧 Email</div>
+      </div>
+
+      <div class="preview-panel active" id="panel-telegram">
+        <div class="preview-telegram"><span class="tg-bold">☀️ SignalBrief — Mon, Mar 3</span>
+<span class="tg-muted">Your daily signal across healthcare, AI, and strategy</span>
+
+1⃣ <span class="tg-bold">[AI×Healthcare]</span> CHAI scraps clinical AI assurance labs
+Independent validation infrastructure for AI tools is gone — no third-party governance cover.
+→ fiercehealthcare.com
+
+2⃣ <span class="tg-bold">[Payers]</span> Cigna acquires CarePathRx
+Another payer going full care-delivery stack — point-solution vendors will feel it.
+→ statnews.com
+
+3⃣ <span class="tg-bold">[Regulatory/FDA]</span> FDA tightens rare disease approvals
+Makary signals harder evidentiary bar — re-underwrite any pipeline asset on accelerated pathway.
+→ statnews.com
+
+───
+📧 Deeper takes in your email
+💾 save [#] · 📊 more/less [topic] · ⚙️ settings</div>
+      </div>
+
+      <div class="preview-panel" id="panel-email">
+        <div class="preview-email">
+          <div class="preview-email-header">
+            <div class="preview-email-brand">☀️ SignalBrief</div>
+            <div class="preview-email-date">Monday, March 3, 2026 · 7 signals · 4 min read</div>
+          </div>
+          <div class="preview-email-body">
+            <div class="preview-email-item">
+              <div class="preview-email-tag">★ LEAD · AI×HEALTHCARE</div>
+              <div class="preview-email-headline">CHAI Scraps Clinical AI Assurance Labs</div>
+              <div class="preview-email-wim"><strong>Health systems and vendors have been pointing to CHAI as credible governance cover. That's gone.</strong> Procurement teams will now ask harder questions internally — governance documentation just moved up the priority list.</div>
+            </div>
+            <div class="preview-email-item">
+              <div class="preview-email-tag">PAYERS</div>
+              <div class="preview-email-headline">Cigna Acquires CarePathRx</div>
+              <div class="preview-email-wim"><strong>Another payer going full care-delivery stack.</strong> For point-solution vendors in drug management, your buyer is now also your competitor's parent company.</div>
+            </div>
+            <div class="preview-email-item">
+              <div class="preview-email-tag">REGULATORY</div>
+              <div class="preview-email-headline">FDA Tightens Rare Disease Approvals</div>
+              <div class="preview-email-wim"><strong>Any pipeline asset relying on accelerated approval timelines needs re-underwriting now.</strong> This is a stated policy direction — biotech valuations should be stress-tested against a slower cadence.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:8px;">
+      <a href="/settings" style="font-size:13px;color:var(--blue);">Manage preferences →</a>
+    </div>
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  Powered by SignalBrief · Built with OpenClaw
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

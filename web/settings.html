@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalBrief — Settings</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .loading-state { text-align:center; padding: 60px 24px; color: var(--text-muted); }
+  .btn-save { background: var(--blue); }
+  .btn-danger {
+    width: 100%; padding: 12px; background: #fff;
+    color: #DC2626; border: 1.5px solid #FECACA;
+    border-radius: 10px; font-size: 14px; font-weight: 500;
+    cursor: pointer; margin-top: 8px; font-family: 'DM Sans', sans-serif;
+  }
+  .btn-danger:hover { background: #FEF2F2; }
+  .saved-banner {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #065F46; color: #fff; padding: 12px 24px;
+    border-radius: 100px; font-size: 14px; font-weight: 500;
+    display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .saved-banner.visible { display: block; }
+</style>
+</head>
+<body>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:100%"></div></div>
+
+<header class="site-header">
+  <div class="brand"><span class="brand-sun">☀️</span> SignalBrief</div>
+  <p class="tagline">Manage your preferences</p>
+</header>
+
+<div class="container">
+
+  <div class="loading-state" id="loadingState">
+    Loading your preferences…
+  </div>
+
+  <div id="settingsForm" style="display:none">
+
+    <!-- Details -->
+    <div class="section visible" id="sec-details">
+      <div class="section-header">
+        <div class="section-num">Account</div>
+        <div class="section-title">Your details</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="name" placeholder="Alex Chen">
+        </div>
+        <div class="field">
+          <label>Email address</label>
+          <input type="email" id="email" placeholder="you@company.com" readonly style="background:#F9FAFB;color:var(--text-muted);">
+        </div>
+      </div>
+      <div class="field">
+        <label>Telegram username <span class="optional">(optional)</span></label>
+        <input type="text" id="telegram" placeholder="@yourhandle">
+      </div>
+    </div>
+
+    <!-- Topics -->
+    <div class="section visible">
+      <div class="section-header">
+        <div class="section-num">Topics</div>
+        <div class="section-title">What you track</div>
+        <div class="section-subtitle">Minimum 2 required.</div>
+      </div>
+      <div class="chips" id="topicChips"></div>
+      <div class="chip-min-note" id="topicMinNote">0 selected</div>
+      <div class="custom-topic-row">
+        <input type="text" id="customTopicInput" placeholder="Add a custom topic">
+        <button type="button" class="btn-add-topic" id="addTopicBtn">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Depth -->
+    <div class="section visible">
+      <div class="section-header">
+        <div class="section-num">Depth</div>
+        <div class="section-title">Analysis level</div>
+      </div>
+      <div class="depth-options">
+        <label class="depth-option" data-value="headlines">
+          <input type="radio" name="depth" value="headlines">
+          <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
+          <div><div class="depth-label">Headlines only</div><div class="depth-desc">Ultra-fast scan.</div></div>
+        </label>
+        <label class="depth-option" data-value="oneliner">
+          <input type="radio" name="depth" value="oneliner">
+          <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
+          <div><div class="depth-label">Headlines + one-liner</div><div class="depth-desc">2-minute read.</div></div>
+        </label>
+        <label class="depth-option" data-value="full">
+          <input type="radio" name="depth" value="full">
+          <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
+          <div><div class="depth-label">Headlines + "Why it matters"</div><div class="depth-desc">Full analysis. 4-minute read.</div></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Schedule -->
+    <div class="section visible">
+      <div class="section-header">
+        <div class="section-num">Schedule</div>
+        <div class="section-title">Delivery schedule</div>
+      </div>
+      <div class="schedule-grid">
+        <div class="schedule-field">
+          <label>Delivery time</label>
+          <select id="deliveryTime">
+            <option value="06:00">6:00 AM ET</option>
+            <option value="07:00">7:00 AM ET</option>
+            <option value="08:00">8:00 AM ET</option>
+            <option value="09:00">9:00 AM ET</option>
+          </select>
+        </div>
+        <div class="schedule-field">
+          <label>Frequency</label>
+          <select id="frequency">
+            <option value="weekdays">Weekdays (Mon–Fri)</option>
+            <option value="sixdays">Mon–Sat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </div>
+        <div class="schedule-field">
+          <label>Stories per digest</label>
+          <select id="itemsPerDigest">
+            <option value="5">5 stories</option>
+            <option value="7">7 stories</option>
+            <option value="10">10 stories</option>
+          </select>
+        </div>
+      </div>
+      <div class="error-msg" id="saveError"></div>
+      <button type="button" class="btn-submit btn-save" id="saveBtn">Save preferences</button>
+      <button type="button" class="btn-danger" id="unsubBtn">Unsubscribe from SignalBrief</button>
+    </div>
+
+  </div>
+
+  <div class="loading-state" id="notFoundState" style="display:none">
+    <div style="font-size:32px;margin-bottom:12px;">🤔</div>
+    <div style="font-weight:600;margin-bottom:6px;">User not found</div>
+    <div>Make sure you're using the link from your email footer.</div>
+    <div style="margin-top:16px;"><a href="/" style="color:var(--blue);">Sign up for SignalBrief →</a></div>
+  </div>
+
+</div>
+
+<div class="saved-banner" id="savedBanner">✅ Preferences saved</div>
+
+<footer class="site-footer">
+  Powered by SignalBrief · Built with OpenClaw
+</footer>
+
+<script src="app.js"></script>
+<script>
+  // Settings page init — override app.js behavior
+  window.SETTINGS_MODE = true;
+</script>
+</body>
+</html>

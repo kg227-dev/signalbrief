@@ -62,6 +62,9 @@
     "googleClientId": "YOUR_CLIENT_ID",
     "googleClientSecret": "YOUR_CLIENT_SECRET",
     "telegramBotToken": "YOUR_JARVIS_BOT_TOKEN",
-    "signalBriefBotToken": "YOUR_SIGNALBRIEF_BOT_TOKEN"
+    "signalBriefBotToken": "YOUR_SIGNALBRIEF_BOT_TOKEN",
+    "resendApiKey": "",
+    "fromEmail": "digest@yourdomain.com",
+    "fromName": "SignalBrief"
   }
 }

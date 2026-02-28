@@ -391,34 +391,76 @@ async function main() {
     .map((i) => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
   const subject = `SignalBrief — ${shortDate} | ${topThree.join(", ")}`;
 
-  const emailHtml = buildEmail(enriched, dateStr, quickScan);
-
-  // Deliver to ALL active users
+  // Deliver to ALL active users with per-user preferences
   const { allUsers } = require("./store");
   const activeUsers = allUsers().filter(u => u.status === "active");
   log(`Delivering to ${activeUsers.length} user(s)...`);
+
   for (const u of activeUsers) {
-    const userTelegram = formatTelegram(enriched, shortDate, u);
-    await sendTelegram(userTelegram, u.chatId);
-    if (u.email && u.preferences?.email_enabled !== false) {
-      await sendEmail(subject, emailHtml, u.email);
+    try {
+      const prefs = u.preferences || {};
+
+      // 1. Filter items by user's topic list (if set)
+      let userItems = enriched;
+      if (u.topics && u.topics.length >= 2) {
+        // Normalize: match tag to user topic list (loose contains match)
+        const userTopicsLower = u.topics.map(t => t.toLowerCase());
+        const filtered = enriched.filter(item => {
+          const tag = (item.tag || "").toLowerCase();
+          return userTopicsLower.some(t => tag.includes(t) || t.includes(tag));
+        });
+        // Fall back to full list if filter leaves < 3 items
+        userItems = filtered.length >= 3 ? filtered : enriched;
+      }
+
+      // 2. Trim to user's items_per_digest
+      const count = prefs.items_per_digest || CONFIG.digest.itemCount;
+      userItems = userItems.slice(0, count);
+
+      // 3. Apply depth — strip wim if user wants headlines only or one-liner
+      const depth = prefs.depth || "full";
+      if (depth === "headline_only" || depth === "headlines") {
+        userItems = userItems.map(i => ({ ...i, wim: null }));
+      } else if (depth === "oneliner" || depth === "headline_plus_oneliner") {
+        // Keep only first sentence of wim
+        userItems = userItems.map(i => ({
+          ...i,
+          wim: i.wim ? i.wim.replace(/<strong>(.*?)<\/strong>/s, "$1").split(".")[0] + "." : null
+        }));
+      }
+
+      // 4. Build per-user quick scan + subject
+      const userQuickScan = userItems
+        .map(i => i.headline.split(":")[0].split("—")[0].trim())
+        .join(" &nbsp;·&nbsp; ");
+      const userTopThree = userItems.slice(0, 3)
+        .map(i => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
+      const userSubject = `SignalBrief — ${shortDate} | ${userTopThree.join(", ")}`;
+
+      // 5. Deliver
+      if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
+        const userTelegram = formatTelegram(userItems, shortDate, u);
+        await sendTelegram(userTelegram, u.chatId);
+      }
+      if (u.email && prefs.email_enabled !== false) {
+        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan);
+        await sendEmail(userSubject, userEmailHtml, u.email);
+      }
+
+      // 6. Persist state
+      u.digests_received = (u.digests_received || 0) + 1;
+      u.last_digest_at = now.toISOString();
+      u.last_digest_items = userItems.map(i => ({
+        headline: i.headline, url: i.url, tag: i.tag, source: i.source,
+      }));
+      writeUser(u.chatId, u);
+      log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth})`);
+    } catch (err) {
+      log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);
     }
   }
 
-  // Persist per-user state for bookmarking + tuning
-  const chatId = CONFIG.user.telegramChatId;
-  const user = readUser(chatId);
-  user.digests_received = (user.digests_received || 0) + 1;
-  user.last_digest_at = now.toISOString();
-  user.last_digest_items = enriched.map(i => ({
-    headline: i.headline,
-    url: i.url,
-    tag: i.tag,
-    source: i.source,
-  }));
-  writeUser(chatId, user);
-
-  log(`=== SignalBrief complete (digest #${user.digests_received}) ===`);
+  log(`=== SignalBrief complete — ${activeUsers.length} user(s) delivered ===`);
 }
 
 main().catch((e) => {

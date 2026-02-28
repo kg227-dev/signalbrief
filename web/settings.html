@@ -70,8 +70,8 @@
         <div class="section-title">What you track</div>
         <div class="section-subtitle">Minimum 2 required.</div>
       </div>
-      <div class="chips" id="topicChips"></div>
-      <div class="chip-min-note" id="topicMinNote">0 selected</div>
+      <div class="topic-grid" id="topicGrid"></div>
+      <div style="font-size:12px;color:#6B7280;margin-top:8px;" id="topicMinNote">0 selected</div>
       <div class="custom-topic-row">
         <input type="text" id="customTopicInput" placeholder="Add a custom topic">
         <button type="button" class="btn-add-topic" id="addTopicBtn">+ Add</button>
@@ -159,10 +159,6 @@
   Powered by SignalBrief · Built with OpenClaw
 </footer>
 
-<script src="app.js"></script>
-<script>
-  // Settings page init — override app.js behavior
-  window.SETTINGS_MODE = true;
-</script>
+<script src="settings.js"></script>
 </body>
 </html>

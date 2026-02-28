@@ -61,12 +61,34 @@ cp config.example.json config.json
 # 3. Fill in your keys (Perplexity, Anthropic, Google OAuth, Telegram bot tokens)
 nano config.json
 
-# 4. Run manually
-node digest.js
+# 4. Start all services (bot + web)
+./start.sh
 
-# 5. Schedule via cron (7 AM ET, Mon-Sat)
+# Or run individually:
+node bot-server.js          # Telegram reply handler (port-less, long-poll)
+node web/server.js          # Onboarding + settings UI  (localhost:3003)
+node digest.js              # Manual digest run
+
+# 5. Schedule digest via cron (7 AM ET, Mon-Sat)
 # 0 12 * * 1-6 cd /path/to/signalbrief && node digest.js
+# Or use OpenClaw cron: openclaw cron add --name signalbrief-daily ...
 ```
+
+## Web Layer
+
+The onboarding and settings pages run on **port 3003** via `web/server.js`.
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:3003` | New user onboarding (4-step form) |
+| `http://localhost:3003/settings?email=you@co.com` | Self-serve preferences |
+
+**The API server must be running for the onboarding form to submit.**
+The `/api/signup` endpoint writes to `data/user-{chatId}.json` via `store.js`.
+
+On macOS, both services run as LaunchAgents (auto-start on boot):
+- `com.jarvis.signalbrief-web` — web server
+- `com.jarvis.signalbrief-bot` — Telegram bot
 
 ---
 

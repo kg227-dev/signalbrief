@@ -152,6 +152,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
   if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));
+  if (pathname === "/settings.js") return serveFile(res, path.join(WEB_DIR, "settings.js"));
 
   res.writeHead(404); res.end("Not found");
 });

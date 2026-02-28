@@ -425,84 +425,131 @@ Re-underwrite any pipeline asset on accelerated pathway now.
 </div>
 
 <script>
-  // Topic selection
-  function toggleTopic(el) 
+  // ── Topic chips ───────────────────────────────────────────────────────────
+  function toggleTopic(el) {
+    el.classList.toggle('selected');
+    updateProgress();
+  }
 
-  // Custom topic
-  function addCustomTopic() 
-{
+  function addCustomTopic() {
     const input = document.getElementById('customTopic');
     const value = input.value.trim();
     if (!value) return;
-
-    const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const slug = 'custom_' + value.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    // Prevent duplicates
+    if (document.querySelector('[data-topic="' + slug + '"]')) { input.value = ''; return; }
     const chip = document.createElement('div');
     chip.className = 'topic-chip selected';
-    chip.dataset.topic = `custom_$
-`;
-    chip.onclick = function() 
-;
-    chip.innerHTML = `<span class="check"></span> $
-`;
-
+    chip.dataset.topic = slug;
+    chip.onclick = function() { toggleTopic(this); };
+    chip.innerHTML = '<span class="check"></span> ' + value;
     document.getElementById('topicGrid').appendChild(chip);
     input.value = '';
     updateProgress();
-  
-}
+  }
 
-  // Enter key for custom topic
-  document.getElementById('customTopic').addEventListener('keypress', (e) => 
-{
-    if (e.key === 'Enter') 
+  document.getElementById('customTopic').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomTopic(); }
+  });
 
-  
-});
+  // ── Depth ─────────────────────────────────────────────────────────────────
+  function selectDepth(el) {
+    document.querySelectorAll('.depth-option').forEach(function(o) { o.classList.remove('selected'); });
+    el.classList.add('selected');
+    updateProgress();
+  }
 
-  // Depth selection
-  function selectDepth(el) 
+  // ── Progress ──────────────────────────────────────────────────────────────
+  function updateProgress() {
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const topics = document.querySelectorAll('.topic-chip.selected').length;
+    const depth = document.querySelector('.depth-option.selected');
 
-  // Progress tracking
-  function updateProgress() 
+    function setStep(id, state) {
+      document.getElementById(id).className = 'progress-step' + (state ? ' ' + state : '');
+    }
+    setStep('prog-1', (name && email) ? 'completed' : (name || email) ? 'active' : '');
+    setStep('prog-2', topics >= 2 ? 'completed' : topics > 0 ? 'active' : '');
+    setStep('prog-3', depth ? 'completed' : '');
+    setStep('prog-4', 'active');
+  }
 
-  // Listen for input changes
   document.getElementById('name').addEventListener('input', updateProgress);
   document.getElementById('email').addEventListener('input', updateProgress);
 
-  // Form submission
-  document.getElementById('onboardForm').addEventListener('submit', async (e) => 
-{
+  // ── Form submit ───────────────────────────────────────────────────────────
+  document.getElementById('onboardForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
-    const selectedTopics = [...document.querySelectorAll('.topic-chip.selected')]
-      .map(c => c.dataset.topic);
+    const selectedTopics = Array.from(document.querySelectorAll('.topic-chip.selected'))
+      .map(function(c) { return c.dataset.topic; });
 
-    if (selectedTopics.length < 2) 
+    if (selectedTopics.length < 2) {
+      alert('Please select at least 2 topics.');
+      return;
+    }
 
-    const data = 
-;
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    if (!name || !email) { alert('Name and email are required.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Please enter a valid email address.'); return; }
 
-    console.log('SignalBrief signup:', JSON.stringify(data, null, 2));
+    const btn = document.querySelector('.submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Subscribing\u2026';
 
-    // TODO: POST to your backend / Google Sheets API
-    // await fetch('/api/subscribe', 
-);
+    const depthEl = document.querySelector('.depth-option.selected');
 
-    // Show success
-    document.getElementById('onboardForm').style.display = 'none';
-    document.getElementById('successCard').classList.add('visible');
-    document.querySelectorAll('.progress-step').forEach(s => s.className = 'progress-step completed');
-  
-});
+    try {
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name,
+          email: email,
+          telegram: document.getElementById('telegram').value.trim().replace('@', '') || null,
+          topics: selectedTopics,
+          depth: depthEl ? depthEl.dataset.depth : 'headline_plus_why',
+          delivery_time: document.getElementById('deliveryTime').value,
+          frequency: document.getElementById('frequency').value,
+          items_per_digest: parseInt(document.getElementById('digestLength').value)
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        document.getElementById('onboardForm').style.display = 'none';
+        document.getElementById('formFooter').style.display = 'none';
+        document.getElementById('successCard').classList.add('visible');
+        document.querySelectorAll('.progress-step').forEach(function(s) { s.className = 'progress-step completed'; });
+        var settingsLink = document.getElementById('settingsLink');
+        if (settingsLink) settingsLink.href = '/settings?email=' + encodeURIComponent(email);
+      } else {
+        alert(result.error || 'Something went wrong. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Start my SignalBrief \u2192';
+      }
+    } catch(err) {
+      alert('Network error. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Start my SignalBrief \u2192';
+    }
+  });
 
-
+  // ── Preview tab switcher ──────────────────────────────────────────────────
   function switchPreview(panel, btn) {
     document.getElementById('prev-telegram').style.display = panel === 'telegram' ? 'block' : 'none';
     document.getElementById('prev-email').style.display = panel === 'email' ? 'block' : 'none';
-    document.querySelectorAll('.prev-tab').forEach(t => {
-      t.style.borderColor = '#E5E7EB'; t.style.background = '#fff'; t.style.color = '#6B7280'; t.style.fontWeight = '500';
+    document.querySelectorAll('.prev-tab').forEach(function(t) {
+      t.style.borderColor = '#E5E7EB';
+      t.style.background = '#fff';
+      t.style.color = '#6B7280';
+      t.style.fontWeight = '500';
     });
-    btn.style.borderColor = '#2563EB'; btn.style.background = '#EFF6FF'; btn.style.color = '#2563EB'; btn.style.fontWeight = '600';
+    btn.style.borderColor = '#2563EB';
+    btn.style.background = '#EFF6FF';
+    btn.style.color = '#2563EB';
+    btn.style.fontWeight = '600';
   }
 
   // Init

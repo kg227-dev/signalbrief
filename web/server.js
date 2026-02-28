@@ -46,11 +46,15 @@ function readBody(req) {
   });
 }
 
-const DEFAULT_TOPICS = [
-  "AI×TECH", "HEALTHCARE", "FINANCIAL SERVICES", "PE×M&A",
-  "ENERGY", "CONSUMER", "POLICY×REGULATORY", "STRATEGY",
-  "SUSTAINABILITY", "REAL ESTATE"
+const INDUSTRY_TOPICS = [
+  "HEALTHCARE", "FINANCIAL SERVICES", "PE×M&A", "ENERGY", "CONSUMER",
+  "LIFE SCIENCES", "TECHNOLOGY", "INDUSTRIALS", "REAL ESTATE", "PUBLIC SECTOR",
 ];
+const CAPABILITY_TOPICS = [
+  "AI×TECH", "STRATEGY", "POLICY×REGULATORY", "SUSTAINABILITY",
+  "DIGITAL", "M&A ADVISORY", "TALENT",
+];
+const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -64,9 +68,9 @@ const server = http.createServer(async (req, res) => {
 
   // ── API routes ──────────────────────────────────────────────────────────────
 
-  // GET /api/topics — default topic list
+  // GET /api/topics — default topic list (flat + grouped)
   if (pathname === "/api/topics" && req.method === "GET") {
-    return json(res, { topics: DEFAULT_TOPICS });
+    return json(res, { topics: DEFAULT_TOPICS, industries: INDUSTRY_TOPICS, capabilities: CAPABILITY_TOPICS });
   }
 
   // GET /api/user?email=... — load user by email

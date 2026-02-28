@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-server",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["web/server.js"],
+      "port": 3003
+    },
+    {
+      "name": "bot-server",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["bot-server.js"],
+      "port": 3002
+    }
+  ]
+}

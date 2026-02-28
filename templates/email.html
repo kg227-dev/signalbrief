@@ -55,7 +55,7 @@
       <div class="header-brand">☀️ SignalBrief</div>
       <div class="header-tagline">Your daily signal across AI, strategy, and business</div>
       <div class="header-meta">
-        <span class="header-date">Saturday, February 28, 2026</span>
+        <span class="header-date">{{DATE}}</span>
         <span class="header-sep">·</span>
         <span class="header-readtime">7 signals · 4 min read</span>
       </div>
@@ -64,7 +64,7 @@
     <!-- Quick Scan -->
     <div class="quick-scan">
       <div class="quick-scan-label">Today's Signals</div>
-      <div class="quick-scan-text">CHAI kills clinical AI governance labs &nbsp;·&nbsp; Cigna goes full pharmacy stack &nbsp;·&nbsp; BioNTech runs leaner ADC Phase 3 &nbsp;·&nbsp; FDA tightens rare disease bar &nbsp;·&nbsp; DOJ backs pharma on 340B</div>
+      <div class="quick-scan-text">{{QUICK_SCAN}}</div>
     </div>
 
     <!-- Items -->
@@ -154,8 +154,8 @@
         💾 Reply "save [#]" to bookmark &nbsp;·&nbsp; "more/less [topic]" to tune
       </div>
       <div class="footer-legal">
-        SignalBrief is curated daily for strategy professionals in healthcare and life sciences.<br>
-        <a href="http://localhost:3003/settings?email={{USER_EMAIL}}">Update preferences</a> &nbsp;·&nbsp; <a href="http://localhost:3003/settings?email={{USER_EMAIL}}#unsub">Unsubscribe</a><br><br>
+        SignalBrief is curated daily for strategy professionals across AI, strategy, and business.<br>
+        <a href="http://localhost:3003/archive">Browse past digests</a> &nbsp;·&nbsp; <a href="http://localhost:3003/settings?email={{USER_EMAIL}}">Update preferences</a> &nbsp;·&nbsp; <a href="http://localhost:3003/settings?email={{USER_EMAIL}}#unsub">Unsubscribe</a><br><br>
         Powered by SignalBrief · Built with OpenClaw
       </div>
     </div>

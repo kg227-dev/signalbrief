@@ -29,7 +29,10 @@ function httpsPost(hostname, path_, headers, body) {
       (res) => {
         let out = "";
         res.on("data", c => out += c);
-        res.on("end", () => { try { resolve(JSON.parse(out)); } catch { resolve(out); } });
+        res.on("end", () => {
+          try { resolve({ status: res.statusCode, body: JSON.parse(out) }); }
+          catch { resolve({ status: res.statusCode, body: out }); }
+        });
       }
     );
     req.on("error", reject);
@@ -99,7 +102,7 @@ Examples:
   );
 
   try {
-    let text = res?.content?.[0]?.text || "{}";
+    let text = res.body?.content?.[0]?.text || "{}";
     text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     return JSON.parse(text);
   } catch { return { action: "unknown" }; }
@@ -167,7 +170,8 @@ async function handleStart(chatId) {
     `• Sharp "why it matters" analysis for each\n` +
     `• Direct links to full articles\n` +
     `• A deeper email version in your inbox\n\n` +
-    `*Default topics:* AI×TECH · HEALTHCARE · FINANCIAL SERVICES · PE×M&A · ENERGY · CONSUMER · POLICY · STRATEGY\n\n` +
+    `*Industries:* HEALTHCARE · FINANCIAL SERVICES · PE×M&A · ENERGY · CONSUMER · LIFE SCIENCES · TECHNOLOGY · INDUSTRIALS · REAL ESTATE · PUBLIC SECTOR\n` +
+    `*Capabilities:* AI×TECH · STRATEGY · POLICY×REGULATORY · SUSTAINABILITY · DIGITAL · M&A ADVISORY · TALENT\n\n` +
     `You can tune these anytime — just reply with:\n` +
     `📊 *more AI* · 📉 *less pharma* · ➕ *add GLP-1*\n\n` +
     `First digest arrives tomorrow at 7 AM ET. See you then.`
@@ -336,7 +340,7 @@ async function handleQuestion(chatId, question) {
       }]
     }
   );
-  const answer = res?.content?.[0]?.text || "I'm not sure — try asking again.";
+  const answer = res.body?.content?.[0]?.text || "I'm not sure — try asking again.";
   await send(chatId, answer);
 }
 

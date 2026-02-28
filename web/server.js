@@ -8,6 +8,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { sendEmail } = require("../mailer");
 const { readUser, writeUser, allUsers } = require("../store");
 
 const PORT = 3003;
@@ -31,6 +32,17 @@ function serveFile(res, filePath) {
   } catch {
     res.writeHead(404); res.end("Not found");
   }
+}
+
+const WELCOME_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/welcome.html"), "utf8");
+const BASE_URL = process.env.BASE_URL || "http://localhost:3003";
+
+async function sendWelcomeEmail(name, email) {
+  const settingsUrl = `${BASE_URL}/settings?email=${encodeURIComponent(email)}`;
+  const html = WELCOME_TEMPLATE.replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl);
+  const subject = "Welcome to SignalBrief — your first digest arrives tomorrow";
+  const result = await sendEmail(email, subject, html);
+  console.log(`[welcome email] ${email} → ${result.ok ? "✅ sent via " + result.via : "❌ failed"}`);
 }
 
 function json(res, data, status = 200) {
@@ -123,6 +135,10 @@ const server = http.createServer(async (req, res) => {
 
     writeUser(chatId, user);
     console.log(`[signup] ${name} <${email}>`);
+
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail(name, email).catch(e => console.error("[welcome email]", e));
+
     return json(res, { success: true, chatId });
   }
 

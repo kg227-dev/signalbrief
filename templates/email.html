@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalBrief</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1A1A1A; }
+  .wrapper { padding: 32px 16px; }
+  .card { background: #FFFFFF; max-width: 600px; margin: 0 auto; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .header { padding: 28px 32px 20px; border-bottom: 1px solid #E5E7EB; }
+  .header-brand { font-size: 22px; font-weight: 700; color: #1A1A1A; letter-spacing: -0.3px; }
+  .header-tagline { font-size: 14px; font-style: italic; color: #6B7280; margin-top: 2px; }
+  .header-meta { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
+  .header-date { font-size: 13px; color: #9CA3AF; }
+  .header-readtime { font-size: 13px; color: #9CA3AF; }
+  .header-sep { font-size: 13px; color: #D1D5DB; }
+  .quick-scan { background: #F3F4F6; padding: 16px 36px; border-bottom: 1px solid #E5E7EB; }
+  .quick-scan-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2563EB; margin-bottom: 6px; }
+  .quick-scan-text { font-size: 13px; color: #374151; line-height: 1.7; }
+  .items { padding: 0 32px; }
+  .item { padding: 32px 0; border-bottom: 1px solid #E5E7EB; }
+  .item:last-child { border-bottom: none; padding-bottom: 24px; }
+  .item-lead { border-left: 3px solid #2563EB; padding-left: 16px; margin-left: -16px; }
+  .item-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .item-number { font-size: 13px; color: #9CA3AF; font-weight: 600; }
+  .item-lead-badge { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #2563EB; }
+  .item-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #2563EB; background: #EFF6FF; padding: 2px 8px; border-radius: 4px; }
+  .item-title { font-size: 16px; font-weight: 700; color: #1A1A1A; line-height: 1.4; margin-bottom: 8px; }
+  .item-lede { font-size: 15px; color: #374151; line-height: 1.6; margin-bottom: 12px; }
+  .item-wim-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #2563EB; margin-bottom: 5px; }
+  .item-wim { font-size: 14px; color: #374151; line-height: 1.65; margin-bottom: 12px; }
+  .item-readmore { font-size: 13px; }
+  .item-readmore a { color: #2563EB; text-decoration: none; font-weight: 500; }
+  .footer { padding: 24px 32px 28px; background: #F9FAFB; border-top: 1px solid #E5E7EB; }
+  .footer-forward { text-align: center; margin-bottom: 16px; }
+  .footer-forward a { display: inline-block; font-size: 14px; font-weight: 600; color: #2563EB; background: #EFF6FF; border: 1.5px solid #2563EB; padding: 10px 28px; border-radius: 24px; text-decoration: none; }
+  .footer-commands { font-size: 13px; color: #6B7280; text-align: center; line-height: 1.8; margin-bottom: 14px; }
+  .footer-legal { font-size: 11px; color: #9CA3AF; text-align: center; line-height: 1.7; }
+  .footer-legal a { color: #9CA3AF; }
+  @media (max-width: 600px) {
+    .header, .items, .footer { padding-left: 20px; padding-right: 20px; }
+    .quick-scan { padding-left: 24px; padding-right: 24px; }
+    .item-lead { margin-left: -20px; padding-left: 17px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="card">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-brand">☀️ SignalBrief</div>
+      <div class="header-tagline">Your daily signal across healthcare, AI, and strategy</div>
+      <div class="header-meta">
+        <span class="header-date">Saturday, February 28, 2026</span>
+        <span class="header-sep">·</span>
+        <span class="header-readtime">7 signals · 4 min read</span>
+      </div>
+    </div>
+
+    <!-- Quick Scan -->
+    <div class="quick-scan">
+      <div class="quick-scan-label">Today's Signals</div>
+      <div class="quick-scan-text">CHAI kills clinical AI governance labs &nbsp;·&nbsp; Cigna goes full pharmacy stack &nbsp;·&nbsp; BioNTech runs leaner ADC Phase 3 &nbsp;·&nbsp; FDA tightens rare disease bar &nbsp;·&nbsp; DOJ backs pharma on 340B</div>
+    </div>
+
+    <!-- Items -->
+    <div class="items">
+
+      <!-- 1 LEAD -->
+      <div class="item item-lead">
+        <div class="item-meta">
+          <span class="item-lead-badge">★ LEAD</span>
+          <span class="item-tag">AI×HEALTH</span>
+        </div>
+        <div class="item-title">CHAI Scraps Clinical AI Assurance Labs</div>
+        <div class="item-lede">The Coalition for Health AI quietly killed its "assurance labs" program — the only independent initiative attempting to validate clinical AI tools before deployment.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>Health systems and vendors have been pointing to CHAI as credible governance cover. That's gone.</strong> Procurement teams will now ask harder questions internally, and vendors who've built their own validation frameworks gain a real differentiator. If you're advising a health system buying AI right now, governance documentation just moved up the priority list — there's no external body to outsource that accountability to anymore.</div>
+        <div class="item-readmore"><a href="https://fiercehealthcare.com">Read more → fiercehealthcare.com</a></div>
+      </div>
+
+      <!-- 2 -->
+      <div class="item">
+        <div class="item-meta"><span class="item-number">2</span><span class="item-tag">PAYERS</span></div>
+        <div class="item-title">Cigna Acquires CarePathRx</div>
+        <div class="item-lede">Cigna extends vertical integration into hospital pharmacy, acquiring a major pharmacy services provider used by health systems.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>Another payer going full care-delivery stack.</strong> For point-solution vendors in drug management, your buyer is now also your competitor's parent company. Health system CFOs should expect the leverage dynamic in pharmacy contracting to shift materially.</div>
+        <div class="item-readmore"><a href="https://statnews.com">Read more → statnews.com</a></div>
+      </div>
+
+      <!-- 3 -->
+      <div class="item">
+        <div class="item-meta"><span class="item-number">3</span><span class="item-tag">BIOTECH</span></div>
+        <div class="item-title">BioNTech's B7-H3 ADC Hits Phase 3</div>
+        <div class="item-lede">BioNTech advances its DualityBio-partnered ADC at half the patient enrollment of Merck/Daiichi rivals, citing a strong efficacy signal.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>Regulators are increasingly receptive to leaner pivotal trials when early data is clean.</strong> This is a template for capital-efficient ADC development — and a signal to watch on CRO capacity and trial site economics downstream.</div>
+        <div class="item-readmore"><a href="https://fiercebiotech.com">Read more → fiercebiotech.com</a></div>
+      </div>
+
+      <!-- 4 -->
+      <div class="item">
+        <div class="item-meta"><span class="item-number">4</span><span class="item-tag">AI×HEALTH</span></div>
+        <div class="item-title">AI for Safety Event Detection Gets a Regulatory Push</div>
+        <div class="item-lede">Tejal Gandhi argues AI should be mandatory infrastructure for hospital safety event reporting, not optional technology.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>CMS has been exploring reimbursement ties to safety reporting quality.</strong> AI detection tools are quietly moving from ROI conversation to compliance infrastructure — which changes who owns the buying decision and how fast it moves.</div>
+        <div class="item-readmore"><a href="https://fiercehealthcare.com">Read more → fiercehealthcare.com</a></div>
+      </div>
+
+      <!-- 5 -->
+      <div class="item">
+        <div class="item-meta"><span class="item-number">5</span><span class="item-tag">REGULATORY</span></div>
+        <div class="item-title">FDA Tightens Rare Disease Approvals</div>
+        <div class="item-lede">Commissioner Makary publicly defended recent rare disease drug rejections, signaling a harder evidentiary bar for accelerated approvals going forward.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>Any pipeline asset relying on accelerated approval timelines needs re-underwriting now.</strong> This is a stated policy direction — biotech valuations with rare disease velocity assumptions should be stress-tested against a slower cadence.</div>
+        <div class="item-readmore"><a href="https://statnews.com">Read more → statnews.com</a></div>
+      </div>
+
+      <!-- 6 -->
+      <div class="item">
+        <div class="item-meta"><span class="item-number">6</span><span class="item-tag">PHARMA×M&amp;A</span></div>
+        <div class="item-title">Henrietta Lacks Estate Settles with Novartis</div>
+        <div class="item-lede">The Lacks family settled over Novartis's commercial use of the HeLa cell line, establishing that patient-derived biological materials carry compensable IP value.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>Biotech companies with deep cell line dependencies should audit their materials agreements now.</strong> The commercial precedent is set — provenance questions will follow.</div>
+        <div class="item-readmore"><a href="https://statnews.com">Read more → statnews.com</a></div>
+      </div>
+
+      <!-- 7 -->
+      <div class="item">
+        <div class="item-meta"><span class="item-number">7</span><span class="item-tag">STRATEGY</span></div>
+        <div class="item-title">DOJ Sides with AbbVie Against Colorado's 340B Law</div>
+        <div class="item-lede">The Justice Department backed AbbVie's challenge to Colorado's drug discount regulations, positioning federal enforcement against state-level pharma pricing interventions.</div>
+        <div class="item-wim-label">Why it matters</div>
+        <div class="item-wim"><strong>Other states with similar 340B legislation are watching.</strong> For health system CFOs counting on 340B revenue, the legal ground is shifting — worth tracking before it becomes a budget conversation.</div>
+        <div class="item-readmore"><a href="https://statnews.com">Read more → statnews.com</a></div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="footer-forward">
+        <a href="mailto:?subject=SignalBrief%20%E2%80%94%20Feb%2028&body=Thought%20you%27d%20find%20this%20useful%20%E2%80%94%20daily%20signal%20across%20healthcare%2C%20AI%2C%20and%20strategy.">📤 Forward to a colleague</a>
+      </div>
+      <div class="footer-commands">
+        💾 Reply "save [#]" to bookmark &nbsp;·&nbsp; "more/less [topic]" to tune
+      </div>
+      <div class="footer-legal">
+        SignalBrief is curated daily for strategy professionals in healthcare and life sciences.<br>
+        <a href="#">Update preferences</a> &nbsp;·&nbsp; <a href="#">Unsubscribe</a><br><br>
+        Powered by Jarvis
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

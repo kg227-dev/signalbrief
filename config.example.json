@@ -1,0 +1,67 @@
+{
+  "user": {
+    "email": "you@example.com",
+    "telegramChatId": "YOUR_CHAT_ID",
+    "deliveryTime": "07:00",
+    "timezone": "America/New_York"
+  },
+  "digest": {
+    "itemCount": 7,
+    "maxItemsPerTag": 2,
+    "lookbackHours": 24
+  },
+  "topics": [
+    {
+      "tag": "AI×HEALTH",
+      "queries": [
+        "artificial intelligence healthcare deployment 2026",
+        "clinical AI adoption health systems"
+      ]
+    },
+    {
+      "tag": "PHARMA×M&A",
+      "queries": [
+        "pharmaceutical mergers acquisitions life sciences 2026"
+      ]
+    },
+    {
+      "tag": "PAYERS",
+      "queries": [
+        "health insurance payer strategy Medicare Medicaid 2026"
+      ]
+    },
+    {
+      "tag": "BIOTECH",
+      "queries": [
+        "biotech clinical trial results FDA approval 2026"
+      ]
+    },
+    {
+      "tag": "REGULATORY",
+      "queries": [
+        "FDA CMS ONC healthcare regulation policy 2026"
+      ]
+    },
+    {
+      "tag": "STRATEGY",
+      "queries": [
+        "health system strategy digital transformation consulting"
+      ]
+    },
+    {
+      "tag": "DIGITAL HEALTH",
+      "queries": [
+        "digital health startup funding telemedicine 2026"
+      ]
+    }
+  ],
+  "keys": {
+    "perplexity": "pplx-YOUR_KEY",
+    "anthropic": "sk-ant-YOUR_KEY",
+    "googleRefreshToken": "YOUR_REFRESH_TOKEN",
+    "googleClientId": "YOUR_CLIENT_ID",
+    "googleClientSecret": "YOUR_CLIENT_SECRET",
+    "telegramBotToken": "YOUR_JARVIS_BOT_TOKEN",
+    "signalBriefBotToken": "YOUR_SIGNALBRIEF_BOT_TOKEN"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "signalbrief",
+  "version": "1.0.0",
+  "description": "AI-curated daily news digest for healthcare strategy professionals",
+  "main": "digest.js",
+  "scripts": {
+    "start": "node digest.js",
+    "test": "node digest.js --dry-run"
+  },
+  "engines": { "node": ">=22" }
+}

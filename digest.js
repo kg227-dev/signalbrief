@@ -184,7 +184,7 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
   const res = await httpsPost(
     "api.anthropic.com", "/v1/messages",
     { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
-    { model: "claude-sonnet-4-6", max_tokens: 3000, messages: [{ role: "user", content: prompt }] }
+    { model: "claude-haiku-4-5", max_tokens: 3000, messages: [{ role: "user", content: prompt }] }
   );
 
   try {

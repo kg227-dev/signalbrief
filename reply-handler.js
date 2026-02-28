@@ -95,7 +95,7 @@ Examples:
   const res = await httpsPost(
     "api.anthropic.com", "/v1/messages",
     { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
-    { model: "claude-sonnet-4-6", max_tokens: 200, messages: [{ role: "user", content: prompt }] }
+    { model: "claude-haiku-4-5", max_tokens: 200, messages: [{ role: "user", content: prompt }] }
   );
 
   try {
@@ -328,7 +328,7 @@ async function handleQuestion(chatId, question) {
     "api.anthropic.com", "/v1/messages",
     { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
     {
-      model: "claude-sonnet-4-6",
+      model: "claude-haiku-4-5",
       max_tokens: 300,
       messages: [{
         role: "user",

@@ -142,6 +142,29 @@ const server = http.createServer(async (req, res) => {
     return json(res, { success: true });
   }
 
+  // GET /api/archive — list of all past digests
+  if (pathname === "/api/archive" && req.method === "GET") {
+    const archiveDir = path.join(__dirname, "../archive");
+    if (!fs.existsSync(archiveDir)) return json(res, { digests: [] });
+    const files = fs.readdirSync(archiveDir)
+      .filter(f => f.endsWith(".json"))
+      .sort()
+      .reverse(); // newest first
+    const digests = files.map(f => {
+      const d = JSON.parse(fs.readFileSync(path.join(archiveDir, f), "utf8"));
+      return { date: d.date, dateStr: d.dateStr, quickScan: d.quickScan, itemCount: d.items.length };
+    });
+    return json(res, { digests });
+  }
+
+  // GET /api/archive/:date — full digest for a specific date
+  if (pathname.startsWith("/api/archive/") && req.method === "GET") {
+    const date = pathname.replace("/api/archive/", "");
+    const file = path.join(__dirname, "../archive", `${date}.json`);
+    if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
+    return json(res, JSON.parse(fs.readFileSync(file, "utf8")));
+  }
+
   // ── Static files ────────────────────────────────────────────────────────────
 
   if (pathname === "/" || pathname === "/index.html") {
@@ -149,6 +172,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/settings" || pathname === "/settings.html") {
     return serveFile(res, path.join(WEB_DIR, "settings.html"));
+  }
+  if (pathname === "/archive" || pathname === "/archive.html") {
+    return serveFile(res, path.join(WEB_DIR, "archive.html"));
   }
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
   if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));

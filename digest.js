@@ -17,6 +17,7 @@ const EMAIL_TEMPLATE = fs.readFileSync(
   "utf8"
 );
 const { readUser, writeUser } = require("./store");
+const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 
@@ -50,21 +51,6 @@ function httpsPost(hostname, path_, headers, body, isForm = false) {
     req.write(data);
     req.end();
   });
-}
-
-async function refreshGoogleToken() {
-  const formData = new URLSearchParams({
-    client_id: CONFIG.keys.googleClientId,
-    client_secret: CONFIG.keys.googleClientSecret,
-    refresh_token: CONFIG.keys.googleRefreshToken,
-    grant_type: "refresh_token",
-  }).toString();
-  const res = await httpsPost(
-    "oauth2.googleapis.com", "/token",
-    { "Content-Type": "application/x-www-form-urlencoded" },
-    formData, true
-  );
-  return res.body.access_token;
 }
 
 // ── 1. Fetch news via Perplexity Sonar (with real URLs from citations) ───────
@@ -317,52 +303,52 @@ async function sendTelegram(text, chatId) {
   else log(`❌ Telegram failed: ${JSON.stringify(res.body)}`);
 }
 
-// ── 7. Send Gmail ─────────────────────────────────────────────────────────────
+// ── 7. Send Email (via mailer.js — Resend if configured, Gmail fallback) ──────
 
 async function sendEmail(subject, html, toEmail) {
   const target = toEmail || CONFIG.user.email;
-  html = html.replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(target));
   log(`Sending email to ${target}...`);
-  const accessToken = await refreshGoogleToken();
+  const result = await sendEmailViaMailer(target, subject, html);
+  if (result.ok) log(`✅ Email sent via ${result.via}`);
+  else log(`❌ Email failed`);
+}
 
-  const mime = [
-    `To: ${target}`,
-    `From: SignalBrief <jarvisjones2922@gmail.com>`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=utf-8`,
-    ``,
-    html,
-  ].join("\r\n");
+// ── Archive ───────────────────────────────────────────────────────────────────
 
-  const raw = Buffer.from(mime).toString("base64")
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
-  const body = JSON.stringify({ raw });
-  const res = await new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: "gmail.googleapis.com",
-      path: "/gmail/v1/users/me/messages/send",
-      method: "POST",
-      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
-    }, (res) => {
-      let out = "";
-      res.on("data", (c) => (out += c));
-      res.on("end", () => resolve({ status: res.statusCode, body: out }));
-    });
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
-
-  if (res.status === 200) log("✅ Email sent");
-  else log(`❌ Email failed (${res.status}): ${res.body}`);
+function saveToArchive(date, items, dateStr, quickScan) {
+  const archiveDir = path.join(__dirname, "archive");
+  if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir);
+  const key = date.toISOString().slice(0, 10);
+  const file = path.join(archiveDir, `${key}.json`);
+  // Don't overwrite if already saved today (scheduled run wins)
+  if (fs.existsSync(file)) return;
+  const entry = {
+    date: key,
+    dateStr,
+    quickScan,
+    items: items.map(i => ({
+      tag: i.tag,
+      headline: i.headline,
+      summary: i.summary,
+      wim: i.wim,
+      url: i.url,
+      source: i.source,
+    })),
+    generatedAt: date.toISOString(),
+  };
+  fs.writeFileSync(file, JSON.stringify(entry, null, 2));
+  log(`📁 Archived: ${key}`);
 }
 
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  log("=== SignalBrief starting ===");
+  // Support --chatId flag for on-demand single-user delivery (/digest command)
+  const args = process.argv.slice(2);
+  const chatIdIdx = args.indexOf("--chatId");
+  const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
+  if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);
+  else log("=== SignalBrief starting ===");
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", {
@@ -393,7 +379,11 @@ async function main() {
 
   // Deliver to ALL active users with per-user preferences
   const { allUsers } = require("./store");
-  const activeUsers = allUsers().filter(u => u.status === "active");
+  const allActive = allUsers().filter(u => u.status === "active");
+  // If on-demand (/digest command), only deliver to requesting user
+  const activeUsers = targetChatId
+    ? allActive.filter(u => u.chatId === targetChatId)
+    : allActive;
   log(`Delivering to ${activeUsers.length} user(s)...`);
 
   for (const u of activeUsers) {
@@ -454,6 +444,9 @@ async function main() {
         headline: i.headline, url: i.url, tag: i.tag, source: i.source,
       }));
       writeUser(u.chatId, u);
+
+      // 7. Save to archive (shared, date-keyed)
+      saveToArchive(now, userItems, dateStr, quickScan);
       log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth})`);
     } catch (err) {
       log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);

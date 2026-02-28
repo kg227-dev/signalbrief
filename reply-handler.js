@@ -52,6 +52,7 @@ async function parseIntent(message) {
   // Fast-path for slash commands
   const m = message.trim().toLowerCase();
   if (m === "/start") return { action: "start" };
+  if (m === "/digest") return { action: "digest" };
   if (m === "/settings") return { action: "settings" };
   if (m === "/bookmarks") return { action: "bookmarks" };
   if (m === "/topics") return { action: "topics" };
@@ -124,6 +125,30 @@ function commandMenu(user) {
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
+
+async function handleDigest(chatId) {
+  await send(chatId, `⏳ Pulling your digest now — takes about 45 seconds...`);
+  try {
+    // Spawn digest.js as a child process, scoped to this user
+    const { spawn } = require("child_process");
+    const proc = spawn("node", [
+      require("path").join(__dirname, "digest.js"),
+      "--chatId", chatId
+    ], { cwd: __dirname });
+
+    let stderr = "";
+    proc.stderr.on("data", d => { stderr += d.toString(); });
+    proc.on("close", async (code) => {
+      if (code !== 0) {
+        console.error("digest error:", stderr);
+        await send(chatId, `❌ Something went wrong pulling the digest. Check /tmp/signalbrief.log.`);
+      }
+      // Success message already delivered by digest.js via Telegram
+    });
+  } catch (e) {
+    await send(chatId, `❌ Failed to trigger digest: ${e.message}`);
+  }
+}
 
 async function handleStart(chatId) {
   const user = readUser(chatId);
@@ -323,6 +348,7 @@ async function handle(message, chatId) {
 
   switch (intent.action) {
     case "start":     return handleStart(chatId);
+    case "digest":    return handleDigest(chatId);
     case "save":      return handleSave(chatId, intent.items);
     case "topic_more": return handleTopicMore(chatId, intent.topic);
     case "topic_less": return handleTopicLess(chatId, intent.topic);

@@ -16,7 +16,7 @@ const EMAIL_TEMPLATE = fs.readFileSync(
   path.join(__dirname, "templates/email.html"),
   "utf8"
 );
-const STATE_FILE = path.join(__dirname, "user-state.json");
+const { readUser, writeUser } = require("./store");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 
@@ -26,18 +26,8 @@ function log(msg) {
   fs.appendFileSync(LOG_FILE, line + "\n");
 }
 
-// ── User state (digests_received counter, bookmarks, prefs) ─────────────────
-
-function loadState() {
-  if (!fs.existsSync(STATE_FILE)) {
-    return { digests_received: 0, bookmarks: [], topic_weights: {} };
-  }
-  return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-}
-
-function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-}
+// ── User state helpers ────────────────────────────────────────────────────────
+// Uses store.js — per-user JSON in data/ directory
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
 
@@ -314,26 +304,28 @@ function buildEmail(items, dateStr, quickScan) {
 
 // ── 6. Send via SignalBrief bot ───────────────────────────────────────────────
 
-async function sendTelegram(text) {
-  log("Sending Telegram via SignalBrief bot...");
+async function sendTelegram(text, chatId) {
+  const targetId = chatId || CONFIG.user.telegramChatId;
+  log(`Sending Telegram to ${targetId}...`);
   const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
   const res = await httpsPost(
     "api.telegram.org", `/bot${token}/sendMessage`,
     { "Content-Type": "application/json" },
-    { chat_id: CONFIG.user.telegramChatId, text, parse_mode: "Markdown", disable_web_page_preview: false }
+    { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false }
   );
-  if (res.body?.ok) log("✅ Telegram sent");
+  if (res.body?.ok) log(`✅ Telegram sent to ${targetId}`);
   else log(`❌ Telegram failed: ${JSON.stringify(res.body)}`);
 }
 
 // ── 7. Send Gmail ─────────────────────────────────────────────────────────────
 
-async function sendEmail(subject, html) {
-  log("Sending email...");
+async function sendEmail(subject, html, toEmail) {
+  const target = toEmail || CONFIG.user.email;
+  log(`Sending email to ${target}...`);
   const accessToken = await refreshGoogleToken();
 
   const mime = [
-    `To: ${CONFIG.user.email}`,
+    `To: ${target}`,
     `From: SignalBrief <jarvisjones2922@gmail.com>`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
@@ -371,7 +363,6 @@ async function sendEmail(subject, html) {
 async function main() {
   log("=== SignalBrief starting ===");
 
-  const state = loadState();
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -399,18 +390,34 @@ async function main() {
     .map((i) => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
   const subject = `SignalBrief — ${shortDate} | ${topThree.join(", ")}`;
 
-  const telegramText = formatTelegram(enriched, shortDate, state);
   const emailHtml = buildEmail(enriched, dateStr, quickScan);
 
-  await sendTelegram(telegramText);
-  await sendEmail(subject, emailHtml);
+  // Deliver to ALL active users
+  const { allUsers } = require("./store");
+  const activeUsers = allUsers().filter(u => u.status === "active");
+  log(`Delivering to ${activeUsers.length} user(s)...`);
+  for (const u of activeUsers) {
+    const userTelegram = formatTelegram(enriched, shortDate, u);
+    await sendTelegram(userTelegram, u.chatId);
+    if (u.email && u.preferences?.email_enabled !== false) {
+      await sendEmail(subject, emailHtml, u.email);
+    }
+  }
 
-  // Update state
-  state.digests_received = (state.digests_received || 0) + 1;
-  state.last_run = now.toISOString();
-  saveState(state);
+  // Persist per-user state for bookmarking + tuning
+  const chatId = CONFIG.user.telegramChatId;
+  const user = readUser(chatId);
+  user.digests_received = (user.digests_received || 0) + 1;
+  user.last_digest_at = now.toISOString();
+  user.last_digest_items = enriched.map(i => ({
+    headline: i.headline,
+    url: i.url,
+    tag: i.tag,
+    source: i.source,
+  }));
+  writeUser(chatId, user);
 
-  log(`=== SignalBrief complete (digest #${state.digests_received}) ===`);
+  log(`=== SignalBrief complete (digest #${user.digests_received}) ===`);
 }
 
 main().catch((e) => {

@@ -1,0 +1,18 @@
+{
+  "chatId": "6297966907",
+  "email": "kushgulati29@gmail.com",
+  "status": "active",
+  "digests_received": 0,
+  "joined_at": "2026-02-28T00:00:00.000Z",
+  "last_digest_at": null,
+  "topic_weights": {},
+  "custom_topics": [],
+  "bookmarks": [],
+  "last_digest_items": [],
+  "preferences": {
+    "delivery_time": "07:00",
+    "timezone": "America/New_York",
+    "email_enabled": true,
+    "telegram_enabled": true
+  }
+}

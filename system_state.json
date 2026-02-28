@@ -1,0 +1,30 @@
+{
+  "last_updated": "2026-02-27",
+  "active_agents": ["jarvis", "beacon", "mercury", "weave", "lumen"],
+  "next_scheduled_runs": {
+    "beacon": "2026-02-28 08:15 ET",
+    "mercury": "2026-02-27 20:30 ET",
+    "weave": "2026-03-01 19:30 ET",
+    "lumen": "2026-03-01 11:00 ET",
+    "jarvis_weekly_review": "2026-03-01 20:30 ET"
+  },
+  "last_runs": {
+    "beacon": null,
+    "mercury": "2026-02-27 (scan only, no trade)",
+    "weave": null,
+    "lumen": null
+  },
+  "bankroll": {
+    "total": 100.00,
+    "deployed": 0,
+    "realized_pnl": 0,
+    "current": 100.00
+  },
+  "portfolio": [],
+  "pending_approvals": [],
+  "last_outputs": {},
+  "blockers": [],
+  "rotation_notes": {
+    "mercury": "Last action: market scan 2026-02-27. Next: nightly scan 2026-02-27 20:30 ET."
+  }
+}

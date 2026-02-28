@@ -136,13 +136,13 @@ async function handleStart(chatId) {
 
   await send(chatId,
     `☀️ *Welcome to SignalBrief*\n\n` +
-    `Your daily signal across healthcare, AI, and strategy — delivered every morning at 7 AM ET.\n\n` +
+    `Your daily signal across AI, strategy, and business — delivered every morning at 7 AM ET.\n\n` +
     `*What you'll get:*\n` +
     `• 7 curated stories from the last 24 hours\n` +
     `• Sharp "why it matters" analysis for each\n` +
     `• Direct links to full articles\n` +
     `• A deeper email version in your inbox\n\n` +
-    `*Default topics:* AI×HEALTH · PHARMA·M&A · PAYERS · BIOTECH · REGULATORY · STRATEGY · DIGITAL HEALTH\n\n` +
+    `*Default topics:* AI×TECH · HEALTHCARE · FINANCIAL SERVICES · PE×M&A · ENERGY · CONSUMER · POLICY · STRATEGY\n\n` +
     `You can tune these anytime — just reply with:\n` +
     `📊 *more AI* · 📉 *less pharma* · ➕ *add GLP-1*\n\n` +
     `First digest arrives tomorrow at 7 AM ET. See you then.`
@@ -307,7 +307,7 @@ async function handleQuestion(chatId, question) {
       max_tokens: 300,
       messages: [{
         role: "user",
-        content: `You are SignalBrief, a healthcare and life sciences news assistant. Answer this question concisely (2-3 sentences max, plain text, no markdown headers): ${question}`
+        content: `You are SignalBrief, a business and strategy news assistant covering AI, healthcare, financial services, PE/M&A, energy, consumer, policy, and consulting. Answer this question concisely (2-3 sentences max, plain text, no markdown headers): ${question}`
       }]
     }
   );

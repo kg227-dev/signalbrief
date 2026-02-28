@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalBrief 
-— Your Daily Signal</title>
+<title>SignalBrief — Your Daily Signal</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -116,7 +115,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
   <div class="header">
     <div class="sun"></div>
     <h1>SignalBrief</h1>
-    <p class="tagline">Your daily signal across healthcare, AI, and strategy</p>
+    <p class="tagline">Your daily signal across AI, strategy, and business</p>
     <p class="description">
       AI-curated news digests for strategy professionals. Set up your preferences below 
 — your first briefing arrives tomorrow morning.
@@ -167,40 +166,19 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       <p class="section-subtitle">Select the topics you want covered. Pick at least 2.</p>
 
       <div class="topic-grid" id="topicGrid">
-        <div class="topic-chip" data-topic="ai_health" onclick="toggleTopic(this)">
-          <span class="check"></span> AI 
-× Healthcare
-        </div>
-        <div class="topic-chip" data-topic="pharma_ma" onclick="toggleTopic(this)">
-          <span class="check"></span> Pharma M&A
-        </div>
-        <div class="topic-chip" data-topic="biotech" onclick="toggleTopic(this)">
-          <span class="check"></span> Biotech
-        </div>
-        <div class="topic-chip" data-topic="payers" onclick="toggleTopic(this)">
-          <span class="check"></span> Payers & Insurance
-        </div>
-        <div class="topic-chip" data-topic="regulatory" onclick="toggleTopic(this)">
-          <span class="check"></span> Regulatory & FDA
-        </div>
-        <div class="topic-chip" data-topic="clinical_trials" onclick="toggleTopic(this)">
-          <span class="check"></span> Clinical Trials
-        </div>
-        <div class="topic-chip" data-topic="digital_health" onclick="toggleTopic(this)">
-          <span class="check"></span> Digital Health
-        </div>
-        <div class="topic-chip" data-topic="consulting" onclick="toggleTopic(this)">
-          <span class="check"></span> Consulting Industry
-        </div>
-        <div class="topic-chip" data-topic="strategy" onclick="toggleTopic(this)">
-          <span class="check"></span> Strategy & Business
-        </div>
-        <div class="topic-chip" data-topic="health_systems" onclick="toggleTopic(this)">
-          <span class="check"></span> Health Systems
-        </div>
-      </div>
+      <div class="topic-chip" data-topic="AI×TECH" onclick="toggleTopic(this)"><span class="check"></span> AI &amp; Technology</div>
+      <div class="topic-chip" data-topic="HEALTHCARE" onclick="toggleTopic(this)"><span class="check"></span> Healthcare &amp; Life Sciences</div>
+      <div class="topic-chip" data-topic="FINANCIAL SERVICES" onclick="toggleTopic(this)"><span class="check"></span> Financial Services</div>
+      <div class="topic-chip" data-topic="PE×M&A" onclick="toggleTopic(this)"><span class="check"></span> Private Equity &amp; M&amp;A</div>
+      <div class="topic-chip" data-topic="ENERGY" onclick="toggleTopic(this)"><span class="check"></span> Energy &amp; Infrastructure</div>
+      <div class="topic-chip" data-topic="CONSUMER" onclick="toggleTopic(this)"><span class="check"></span> Consumer &amp; Retail</div>
+      <div class="topic-chip" data-topic="POLICY×REGULATORY" onclick="toggleTopic(this)"><span class="check"></span> Policy &amp; Regulation</div>
+      <div class="topic-chip" data-topic="STRATEGY" onclick="toggleTopic(this)"><span class="check"></span> Strategy &amp; Consulting</div>
+      <div class="topic-chip" data-topic="SUSTAINABILITY" onclick="toggleTopic(this)"><span class="check"></span> Sustainability &amp; ESG</div>
+      <div class="topic-chip" data-topic="REAL ESTATE" onclick="toggleTopic(this)"><span class="check"></span> Real Estate</div>
+    </div>
 
-      <div class="custom-topic-input">
+    <div class="custom-topic-input">
         <input type="text" class="input-field" placeholder="Add a custom topic (e.g. GLP-1 drugs)" id="customTopic">
         <button type="button" class="add-btn" onclick="addCustomTopic()">+ Add</button>
       </div>
@@ -304,7 +282,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
     <div id="prev-telegram" class="preview-box" style="font-family:monospace;background:#1a1a1a;color:#e5e5e5;border-radius:10px;padding:20px;text-align:left;line-height:1.8;font-size:13px;">
 <span style="color:#fff;font-weight:700;">☀️ SignalBrief — Mon, Mar 3</span>
-<span style="color:#9CA3AF;font-style:italic;">Your daily signal across healthcare, AI, and strategy</span>
+<span style="color:#9CA3AF;font-style:italic;">Your daily signal across AI, strategy, and business</span>
 
 <span style="color:#fff;font-weight:600;">1⃣ [AI×HEALTH]</span> CHAI scraps clinical AI assurance labs
 Independent governance cover for AI tools is gone.

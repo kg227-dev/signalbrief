@@ -172,7 +172,7 @@ function selectItems(allItems) {
 async function enrichItems(items) {
   log("Enriching with Claude...");
 
-  const prompt = `You are the editorial voice of SignalBrief — a daily news digest for senior strategy consultants in healthcare and life sciences. Your readers work at firms like McKinsey, Deloitte, Accenture, and major health systems. They are time-pressed, sophisticated, and allergic to generic analysis.
+  const prompt = `You are the editorial voice of SignalBrief — a daily news digest for senior strategy consultants and business professionals. Your readers work at MBB, Big 4, boutique strategy firms, corporate strategy functions, and PE/investment shops. They work across multiple industries and need to sound informed in client meetings across healthcare, tech, financial services, PE, energy, consumer, and policy. They are time-pressed, sophisticated, and allergic to generic analysis.
 
 TASK: For each news item below, write a "why it matters" field of exactly 2-3 sentences.
 
@@ -240,7 +240,7 @@ function buildCommandMenu(state) {
 function formatTelegram(items, dateStr, state) {
   const lines = [
     `☀️ *SignalBrief — ${dateStr}*`,
-    `_Your daily signal across healthcare, AI, and strategy_`,
+    `_Your daily signal across AI, strategy, and business_`,
     "",
   ];
   items.forEach((item, i) => {

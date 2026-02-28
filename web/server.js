@@ -47,9 +47,9 @@ function readBody(req) {
 }
 
 const DEFAULT_TOPICS = [
-  "AI×Healthcare", "Pharma M&A", "Biotech", "Payers",
-  "Regulatory/FDA", "Clinical Trials", "Digital Health",
-  "Consulting Industry", "Strategy & Business", "Health Systems"
+  "AI×TECH", "HEALTHCARE", "FINANCIAL SERVICES", "PE×M&A",
+  "ENERGY", "CONSUMER", "POLICY×REGULATORY", "STRATEGY",
+  "SUSTAINABILITY", "REAL ESTATE"
 ];
 
 const server = http.createServer(async (req, res) => {

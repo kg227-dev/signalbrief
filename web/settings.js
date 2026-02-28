@@ -2,9 +2,9 @@
    Loaded only by settings.html — handles load, save, unsubscribe. */
 
 const DEFAULT_TOPICS = [
-  'AI×Healthcare', 'Pharma M&A', 'Biotech', 'Payers',
-  'Regulatory/FDA', 'Clinical Trials', 'Digital Health',
-  'Consulting Industry', 'Strategy & Business', 'Health Systems'
+  'AI×TECH', 'HEALTHCARE', 'FINANCIAL SERVICES', 'PE×M&A',
+  'ENERGY', 'CONSUMER', 'POLICY×REGULATORY', 'STRATEGY',
+  'SUSTAINABILITY', 'REAL ESTATE'
 ];
 
 let selectedTopics = new Set();

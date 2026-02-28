@@ -1,5 +1,15 @@
-node_modules/
+# User data — never commit
+data/
 user-state.json
 config.json
+
+# Logs
 *.log
+/tmp/
+
+# OS
 .DS_Store
+
+# Runtime state (workspace-level, not repo-level)
+spend_state.json
+system_state.json

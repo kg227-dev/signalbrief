@@ -321,6 +321,7 @@ async function sendTelegram(text, chatId) {
 
 async function sendEmail(subject, html, toEmail) {
   const target = toEmail || CONFIG.user.email;
+  html = html.replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(target));
   log(`Sending email to ${target}...`);
   const accessToken = await refreshGoogleToken();
 

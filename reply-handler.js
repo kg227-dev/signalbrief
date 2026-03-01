@@ -14,7 +14,8 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { readUser, writeUser, allUsers, generateToken } = require("./store");
-const { sendEmail: sendEmailViaMailer } = require("./mailer");
+const { sendEmail: sendEmailViaMailer, sendWelcomeEmail } = require("./mailer");
+const { spawn } = require("child_process");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
@@ -298,15 +299,23 @@ async function handleEmailCapture(chatId, text) {
   };
   writeUser(chatId, user);
 
-  // Send welcome email (simple version — full welcome goes via server.js for web signups)
-  const settingsUrl = `${BASE_URL}/settings?token=${userToken}`;
-  const archiveUrl = `${BASE_URL}/archive?token=${userToken}`;
-  const welcomeHtml = `<p>Hi! Your SignalBrief account is set up. Customize your topics and schedule at <a href="${settingsUrl}">${settingsUrl}</a>. View past digests at <a href="${archiveUrl}">${archiveUrl}</a>.</p>`;
-  sendEmailViaMailer(email, "Welcome to SignalBrief — customize your digest", welcomeHtml).catch(() => {});
+  // Send full welcome email (same template as web signups)
+  sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
 
+  // Spawn an immediate welcome digest so the user sees content right away
+  // (mirrors the web signup flow in server.js)
+  const digestPath = path.join(__dirname, "digest.js");
+  const child = spawn(process.execPath, [digestPath, "--chatId", chatId], {
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env, BASE_URL },
+  });
+  child.unref();
+
+  const settingsUrl = `${BASE_URL}/settings?token=${userToken}`;
   await send(chatId,
     `✅ *You're in!*\n\n` +
-    `First digest arrives at *${formatDeliveryTime(user.preferences)}* — 7 signals across the top strategy, AI, and business stories.\n\n` +
+    `Sending your first digest now — 7 signals across strategy, AI, and business.\n\n` +
     `🔗 [Manage preferences](${settingsUrl})\n\n` +
     `💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
   );

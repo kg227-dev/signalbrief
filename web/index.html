@@ -502,6 +502,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
     <p style="margin-top:20px;font-size:13px;color:#6B7280;">
       <a id="settingsLink" href="/settings" style="color:#2563EB;">Manage preferences →</a>
+      &nbsp;·&nbsp;
+      <a id="archiveLink" href="/archive" style="color:#2563EB;">Browse digests →</a>
     </p>
   </div>
 
@@ -672,6 +674,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         document.querySelectorAll('.progress-step').forEach(function(s) { s.className = 'progress-step filled'; });
         var settingsLink = document.getElementById('settingsLink');
         if (settingsLink) settingsLink.href = '/settings?email=' + encodeURIComponent(email);
+        var archiveLink = document.getElementById('archiveLink');
+        if (archiveLink && result.archiveUrl) archiveLink.href = result.archiveUrl;
         // Update delivery time in success message
         var timeVal = document.getElementById('deliveryTime').value || '07:00';
         var timeParts = timeVal.split(':').map(Number);

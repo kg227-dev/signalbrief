@@ -19,6 +19,7 @@ const path = require("path");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
+const WELCOME_TEMPLATE = fs.readFileSync(path.join(__dirname, "templates/welcome.html"), "utf8");
 
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
@@ -156,4 +157,62 @@ async function sendEmail(to, subject, html, token = null) {
   return { ok: result.ok, via: "gmail" };
 }
 
-module.exports = { sendEmail };
+// ── Welcome email ─────────────────────────────────────────────────────────────
+// Shared by server.js (web signup) and reply-handler.js (Telegram signup)
+
+async function sendWelcomeEmail(user) {
+  const { name, email } = user;
+  const prefs = user.preferences || {};
+  const settingsUrl = `${BASE_URL}/settings?token=${user.token}`;
+  const archiveUrl  = `${BASE_URL}/archive?token=${user.token}`;
+  const firstName = (name || "there").split(" ")[0];
+
+  const [hRaw, mRaw] = (prefs.delivery_time || "07:00").split(":").map(Number);
+  const ampm = hRaw >= 12 ? "PM" : "AM";
+  const hour = hRaw % 12 || 12;
+  const timeLabel = `${hour}:${String(mRaw).padStart(2, "0")} ${ampm} ET`;
+
+  const days = prefs.days_of_week || [1, 2, 3, 4, 5];
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let daysLabel;
+  if (days.length === 7) daysLabel = "Every day";
+  else if (days.length === 6 && days.includes(6)) daysLabel = "Mon–Sat";
+  else if (days.length === 5 && !days.includes(0) && !days.includes(6)) daysLabel = "Mon–Fri";
+  else daysLabel = days.map(d => DAY_NAMES[d]).join(", ");
+
+  const DEPTH_LABELS = {
+    headline_only:          "Scan (headlines only)",
+    scan:                   "Scan (headlines only)",
+    headline_plus_oneliner: "Brief (headline + one-liner)",
+    headline_plus_why:      "Brief (headline + why it matters)",
+    deep:                   "Deep (extended analysis)",
+  };
+  const depthLabel = DEPTH_LABELS[prefs.depth] || "Brief (headline + why it matters)";
+
+  const topics = user.topics || [];
+  const topicsHtml = topics.map(t => {
+    if (t.startsWith("custom_")) {
+      const label = "Custom: " + t.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#7C3AED;background:#F5F3FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${label}</span>`;
+    }
+    return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${t}</span>`;
+  }).join("");
+
+  const html = WELCOME_TEMPLATE
+    .replace(/\{\{NAME\}\}/g, firstName)
+    .replace(/\{\{TOPICS_HTML\}\}/g, topicsHtml)
+    .replace(/\{\{TOPIC_COUNT\}\}/g, String(topics.length))
+    .replace(/\{\{DELIVERY_TIME_LABEL\}\}/g, timeLabel)
+    .replace(/\{\{DELIVERY_DAYS_LABEL\}\}/g, daysLabel)
+    .replace(/\{\{DEPTH_LABEL\}\}/g, depthLabel)
+    .replace(/\{\{ITEMS_COUNT\}\}/g, String(prefs.items_per_digest || 5))
+    .replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl)
+    .replace(/\{\{ARCHIVE_URL\}\}/g, archiveUrl)
+    .replace(/\{\{USER_EMAIL\}\}/g, email);
+
+  const subject = `Welcome to SignalBrief, ${firstName} — your brief is set for ${timeLabel}`;
+  const result = await sendEmail(email, subject, html, user.token);
+  console.log(`[welcome email] ${email} → ${result.ok ? "✅ sent via " + result.via : "❌ failed"}`);
+}
+
+module.exports = { sendEmail, sendWelcomeEmail };

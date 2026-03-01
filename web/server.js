@@ -94,17 +94,23 @@ async function sendWelcomeEmail(user) {
 
   // Format depth
   const DEPTH_LABELS = {
-    scan: "Scan (headlines only)",
-    headline_plus_why: "Brief (headline + why it matters)",
-    deep: "Deep (extended analysis)",
+    headline_only:         "Scan (headlines only)",
+    scan:                  "Scan (headlines only)",
+    headline_plus_oneliner:"Brief (headline + one-liner)",
+    headline_plus_why:     "Brief (headline + why it matters)",
+    deep:                  "Deep (extended analysis)",
   };
   const depthLabel = DEPTH_LABELS[prefs.depth] || "Brief (headline + why it matters)";
 
   // Format topics as inline chips
   const topics = user.topics || [];
-  const topicsHtml = topics.map(t =>
-    `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${t}</span>`
-  ).join("");
+  const topicsHtml = topics.map(t => {
+    if (t.startsWith("custom_")) {
+      const label = "Custom: " + t.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#7C3AED;background:#F5F3FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${label}</span>`;
+    }
+    return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${t}</span>`;
+  }).join("");
 
   const html = WELCOME_TEMPLATE
     .replace(/\{\{NAME\}\}/g, firstName)

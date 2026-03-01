@@ -14,3 +14,4 @@ config.json
 spend_state.json
 system_state.json
 archive/
+FEATURES.md

@@ -435,7 +435,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     <!-- SUBMIT -->
     <div class="submit-section">
       <button type="submit" class="submit-btn">Start my SignalBrief →</button>
-      <p class="submit-note">Free to use. Your first digest arrives at your chosen time.<br>Update your preferences anytime from your settings page.</p>
+      <p class="submit-note">Free to use. Your digest arrives at your chosen time.<br>Update your preferences anytime from your settings page.</p>
     </div>
 
   </form>
@@ -444,7 +444,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
   <div class="success-card" id="successCard">
     <div class="success-icon">✓</div>
     <h2>You're all set</h2>
-    <p id="successDeliveryMsg">Your first SignalBrief arrives tomorrow. Here's a preview of what to expect:</p>
+    <p id="successDeliveryMsg">Your first SignalBrief is on its way. Here's a preview of what to expect:</p>
 
     <div style="display:flex;gap:8px;margin:20px 0 12px;justify-content:center;">
       <button onclick="switchPreview('telegram',this)" class="prev-tab prev-active" style="padding:6px 16px;border-radius:100px;border:1.5px solid #2563EB;background:#EFF6FF;color:#2563EB;font-size:13px;font-weight:600;cursor:pointer;">📱 Telegram</button>
@@ -679,7 +679,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         var ampm = h >= 12 ? 'PM' : 'AM';
         var hour = h % 12 || 12;
         var timeStr = hour + ':' + String(m).padStart(2, '0') + ' ' + ampm + ' ET';
-        document.getElementById('successDeliveryMsg').innerHTML = 'Your first SignalBrief arrives tomorrow at <strong>' + timeStr + '</strong>. Here\'s a preview of what to expect:';
+        document.getElementById('successDeliveryMsg').innerHTML = 'Your first SignalBrief arrives at <strong>' + timeStr + '</strong>. Here\'s a preview of what to expect:';
       } else {
         alert(result.error || 'Something went wrong. Please try again.');
         btn.disabled = false;

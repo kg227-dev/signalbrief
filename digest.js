@@ -527,7 +527,7 @@ async function main() {
 
       // 4. Apply depth — strip wim if user wants headlines only or one-liner
       const depth = prefs.depth || "full";
-      if (depth === "headline_only" || depth === "headlines") {
+      if (depth === "headline_only" || depth === "headlines" || depth === "scan") {
         userItems = userItems.map(i => ({ ...i, wim: null }));
       } else if (depth === "oneliner" || depth === "headline_plus_oneliner") {
         // Keep only first sentence of wim

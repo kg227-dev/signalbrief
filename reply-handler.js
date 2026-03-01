@@ -19,6 +19,17 @@ const { sendEmail: sendEmailViaMailer } = require("./mailer");
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
+// ── Time helpers ──────────────────────────────────────────────────────────────
+
+function formatDeliveryTime(prefs) {
+  const time = (prefs && prefs.delivery_time) || "07:00";
+  const [h, m] = time.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  const min = m === 0 ? "" : `:${String(m).padStart(2, "0")}`;
+  return `${hour}${min} ${ampm} ET`;
+}
+
 // ── Telegram-first onboarding state ──────────────────────────────────────────
 // Maps chatId → true when we're waiting for the user to reply with their email
 const AWAITING_EMAIL = new Map();
@@ -178,7 +189,7 @@ async function handleStart(chatId, email) {
       return;
     }
     if (match.chatId === chatId) {
-      await send(chatId, `✅ Already linked! Your digest arrives at *7 AM ET* on weekdays.\n\n💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`);
+      await send(chatId, `✅ Already linked! Your digest arrives at *${formatDeliveryTime(match.preferences)}* on weekdays.\n\n💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`);
       return;
     }
 
@@ -192,7 +203,7 @@ async function handleStart(chatId, email) {
     const firstName = (match.name || "").split(" ")[0] || "there";
     await send(chatId,
       `✅ *Linked, ${firstName}!* Telegram is now connected to your SignalBrief account.\n\n` +
-      `Your digest arrives tomorrow at *7 AM ET*. Or get one now:\n\n` +
+      `Your digest arrives at *${formatDeliveryTime(updated.preferences)}*. Or get one now:\n\n` +
       `⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
     );
     return;
@@ -210,9 +221,9 @@ async function handleStart(chatId, email) {
     writeUser(chatId, { ...user, status: "active", joined_at: user.joined_at || new Date().toISOString() });
     await send(chatId,
       `☀️ *Welcome to SignalBrief*\n\n` +
-      `Your daily signal across AI, strategy, and business — every morning at 7 AM ET.\n\n` +
+      `Your daily signal across AI, strategy, and business — every morning at *${formatDeliveryTime(user.preferences)}*.\n\n` +
       `📊 *more AI* · 📉 *less pharma* · ➕ *add topic* · ⚙️ /settings\n\n` +
-      `First digest arrives tomorrow. See you then.`
+      `First digest arrives at your scheduled time. See you then.`
     );
     return;
   }
@@ -222,7 +233,7 @@ async function handleStart(chatId, email) {
   await send(chatId,
     `☀️ *Welcome to SignalBrief*\n\n` +
     `Your daily signal across AI, strategy, and business.\n\n` +
-    `What's your email address? I'll create your account and you'll get your first digest tomorrow at 7 AM ET.`
+    `What's your email address? I'll create your account and send your first digest at your chosen time.`
   );
 }
 
@@ -251,7 +262,7 @@ async function handleEmailCapture(chatId, text) {
     const firstName = (existing.name || "").split(" ")[0] || "there";
     await send(chatId,
       `✅ *Linked, ${firstName}!* Your existing account is now connected to Telegram.\n\n` +
-      `Digest arrives at *7 AM ET* on weekdays. Or:\n⚡ /digest · 💾 save [#] · ⚙️ /settings`
+      `Digest arrives at *${formatDeliveryTime(existing.preferences)}*. Or:\n⚡ /digest · 💾 save [#] · ⚙️ /settings`
     );
     return;
   }
@@ -295,7 +306,7 @@ async function handleEmailCapture(chatId, text) {
 
   await send(chatId,
     `✅ *You're in!*\n\n` +
-    `Digest starts tomorrow at *7 AM ET* — 7 signals across the top strategy, AI, and business stories.\n\n` +
+    `First digest arrives at *${formatDeliveryTime(user.preferences)}* — 7 signals across the top strategy, AI, and business stories.\n\n` +
     `🔗 [Manage preferences](${settingsUrl})\n\n` +
     `💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
   );
@@ -362,7 +373,11 @@ async function handleTopicLess(chatId, topic) {
 
 async function handleTopicAdd(chatId, topic) {
   const user = readUser(chatId);
+  // Add to custom_topics (for display/labeling in /topics and settings)
   if (!user.custom_topics.includes(topic)) user.custom_topics.push(topic);
+  // Also add to topics[] so digest.js includes it in relevance filtering
+  if (!user.topics) user.topics = [];
+  if (!user.topics.includes(topic)) user.topics.push(topic);
   writeUser(chatId, user);
   await send(chatId, `➕ Added *${topic}* to your topics. You'll see it in tomorrow's digest.`);
 }
@@ -385,7 +400,7 @@ async function handleSettings(chatId) {
   await send(chatId,
     `⚙️ *Your SignalBrief Settings*\n\n` +
     `📬 Digests received: *${user.digests_received}*\n` +
-    `📅 Delivery: *${(user.preferences?.delivery_time || "07:00")} ET*\n` +
+    `📅 Delivery: *${formatDeliveryTime(user.preferences)}*\n` +
     `💾 Bookmarks saved: *${user.bookmarks?.length || 0}*\n\n` +
     `📊 Topic adjustments: ${adjustments}\n` +
     `➕ Custom topics: ${customTopics}` +
@@ -436,6 +451,7 @@ async function handleTopics(chatId) {
 }
 
 async function handleHelp(chatId) {
+  const user = readUser(chatId);
   await send(chatId,
     `☀️ *SignalBrief Help*\n\n` +
     `*Saving items:*\n` +
@@ -449,7 +465,7 @@ async function handleHelp(chatId) {
     `• /bookmarks — view saved items\n` +
     `• /topics — view tracked topics\n` +
     `• /settings — view all preferences\n\n` +
-    `Digest arrives Mon–Sat at 7 AM ET.\n` +
+    `Digest arrives at *${formatDeliveryTime(user.preferences)}* on your scheduled days.\n` +
     `Questions? Just ask.`
   );
 }

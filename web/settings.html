@@ -203,10 +203,20 @@
   </div>
 
   <div class="loading-state" id="notFoundState" style="display:none">
-    <div style="font-size:32px;margin-bottom:12px;">🤔</div>
-    <div style="font-weight:600;margin-bottom:6px;">User not found</div>
-    <div>Make sure you're using the link from your email footer.</div>
-    <div style="margin-top:16px;"><a href="/" style="color:var(--blue);">Sign up for SignalBrief →</a></div>
+    <div style="font-size:32px;margin-bottom:12px;">🔐</div>
+    <div style="font-weight:600;font-size:17px;margin-bottom:8px;">Access your settings</div>
+    <div style="color:var(--text-muted);margin-bottom:20px;font-size:14px;line-height:1.5;">Enter your email and we'll send you a link to your preferences page.</div>
+    <div id="linkFormWrap" style="max-width:320px;margin:0 auto 0;">
+      <input type="email" id="linkEmail" placeholder="you@company.com"
+        style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:10px;outline:none;color:var(--text);" />
+      <button onclick="requestSettingsLink()"
+        style="width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
+        Send me my settings link
+      </button>
+      <div id="linkSent" style="display:none;margin-top:12px;color:#065F46;font-size:13px;font-weight:500;">✅ Check your inbox — your settings link is on the way.</div>
+      <div id="linkError" style="display:none;margin-top:12px;color:#DC2626;font-size:13px;"></div>
+    </div>
+    <div style="margin-top:20px;font-size:13px;color:var(--text-muted);">New to SignalBrief? <a href="/" style="color:var(--blue);">Sign up →</a></div>
   </div>
 
 </div>
@@ -217,6 +227,33 @@
   Powered by SignalBrief · Built with OpenClaw
 </footer>
 
+<script>
+async function requestSettingsLink() {
+  const email = (document.getElementById('linkEmail').value || '').trim().toLowerCase();
+  const errEl = document.getElementById('linkError');
+  const sentEl = document.getElementById('linkSent');
+  errEl.style.display = 'none';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errEl.textContent = 'Please enter a valid email address.';
+    errEl.style.display = 'block';
+    return;
+  }
+  try {
+    const res = await fetch('/api/request-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    // Always show success (don't reveal whether email exists)
+    document.getElementById('linkFormWrap').querySelector('input').disabled = true;
+    document.getElementById('linkFormWrap').querySelector('button').disabled = true;
+    sentEl.style.display = 'block';
+  } catch (e) {
+    errEl.textContent = 'Something went wrong. Please try again.';
+    errEl.style.display = 'block';
+  }
+}
+</script>
 <script src="settings.js"></script>
 </body>
 </html>

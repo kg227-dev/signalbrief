@@ -8,20 +8,20 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1A1A1A; }
   .wrapper { padding: 32px 16px; }
-  .card { background: #FFFFFF; max-width: 600px; margin: 0 auto; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  .header { padding: 28px 32px 20px; border-bottom: 1px solid #E5E7EB; }
+  .card { background: #FFFFFF; max-width: 680px; margin: 0 auto; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .header { padding: 28px 40px 20px; border-bottom: 1px solid #E5E7EB; }
   .header-brand { font-size: 22px; font-weight: 700; color: #1A1A1A; letter-spacing: -0.3px; }
   .header-tagline { font-size: 14px; font-style: italic; color: #6B7280; margin-top: 2px; }
   .header-meta { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
   .header-date { font-size: 13px; color: #9CA3AF; }
   .header-readtime { font-size: 13px; color: #9CA3AF; }
   .header-sep { font-size: 13px; color: #D1D5DB; }
-  .quick-scan { background: #F3F4F6; padding: 16px 36px; border-bottom: 1px solid #E5E7EB; }
-  .quick-scan-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2563EB; margin-bottom: 6px; }
-  .quick-scan-text { font-size: 13px; color: #374151; line-height: 1.7; }
-  .items { padding: 0 32px; }
+  .quick-scan { background: #F8F9FA; padding: 18px 40px; border-bottom: 1px solid #E5E7EB; }
+  .quick-scan-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2563EB; margin-bottom: 12px; }
+  .quick-scan table { width: 100%; border-collapse: collapse; }
+  .items { padding: 0 40px; }
   .item { padding: 32px 0; border-bottom: 1px solid #E5E7EB; }
-  .item:last-child { border-bottom: none; padding-bottom: 24px; }
+  .item:last-child { border-bottom: none; padding-bottom: 28px; }
   .item-lead { border-left: 3px solid #2563EB; padding-left: 16px; margin-left: -16px; }
   .item-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   .item-number { font-size: 13px; color: #9CA3AF; font-weight: 600; }
@@ -33,15 +33,15 @@
   .item-wim { font-size: 14px; color: #374151; line-height: 1.65; margin-bottom: 12px; }
   .item-readmore { font-size: 13px; }
   .item-readmore a { color: #2563EB; text-decoration: none; font-weight: 500; }
-  .footer { padding: 24px 32px 28px; background: #F9FAFB; border-top: 1px solid #E5E7EB; }
+  .footer { padding: 24px 40px 28px; background: #F9FAFB; border-top: 1px solid #E5E7EB; }
   .footer-forward { text-align: center; margin-bottom: 16px; }
   .footer-forward a { display: inline-block; font-size: 14px; font-weight: 600; color: #2563EB; background: #EFF6FF; border: 1.5px solid #2563EB; padding: 10px 28px; border-radius: 24px; text-decoration: none; }
   .footer-commands { font-size: 13px; color: #6B7280; text-align: center; line-height: 1.8; margin-bottom: 14px; }
   .footer-legal { font-size: 11px; color: #9CA3AF; text-align: center; line-height: 1.7; }
   .footer-legal a { color: #9CA3AF; }
-  @media (max-width: 600px) {
+  @media (max-width: 680px) {
     .header, .items, .footer { padding-left: 20px; padding-right: 20px; }
-    .quick-scan { padding-left: 24px; padding-right: 24px; }
+    .quick-scan { padding-left: 20px; padding-right: 20px; }
     .item-lead { margin-left: -20px; padding-left: 17px; }
   }
 </style>
@@ -57,14 +57,16 @@
       <div class="header-meta">
         <span class="header-date">{{DATE}}</span>
         <span class="header-sep">·</span>
-        <span class="header-readtime">7 signals · 4 min read</span>
+        <span class="header-readtime">{{ITEM_COUNT}}</span>
       </div>
     </div>
 
     <!-- Quick Scan -->
     <div class="quick-scan">
       <div class="quick-scan-label">Today's Signals</div>
-      <div class="quick-scan-text">{{QUICK_SCAN}}</div>
+      <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+        {{QUICK_SCAN}}
+      </table>
     </div>
 
     <!-- Items -->
@@ -148,15 +150,15 @@
     <!-- Footer -->
     <div class="footer">
       <div class="footer-forward">
-        <a href="mailto:?subject=SignalBrief%20%E2%80%94%20Feb%2028&body=Thought%20you%27d%20find%20this%20useful%20%E2%80%94%20daily%20signal%20across%20healthcare%2C%20AI%2C%20and%20strategy.">📤 Forward to a colleague</a>
+        <a href="mailto:?subject=SignalBrief%20%E2%80%94%20{{DATE}}&body=Thought%20you%27d%20find%20this%20useful%20%E2%80%94%20daily%20signal%20across%20strategy%2C%20AI%2C%20and%20business.">📤 Forward to a colleague</a>
       </div>
       <div class="footer-commands">
         💾 Reply "save [#]" to bookmark &nbsp;·&nbsp; "more/less [topic]" to tune
       </div>
       <div class="footer-legal">
-        SignalBrief is curated daily for strategy professionals across AI, strategy, and business.<br>
+        SignalBrief is curated daily for strategy professionals.<br>
         <a href="http://localhost:3003/archive">Browse past digests</a> &nbsp;·&nbsp; <a href="http://localhost:3003/settings?email={{USER_EMAIL}}">Update preferences</a> &nbsp;·&nbsp; <a href="http://localhost:3003/settings?email={{USER_EMAIL}}#unsub">Unsubscribe</a><br><br>
-        Powered by SignalBrief · Built with OpenClaw
+        SignalBrief · Daily intelligence for strategy professionals
       </div>
     </div>
 

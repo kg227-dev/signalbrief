@@ -276,8 +276,11 @@ function buildEmail(items, dateStr, quickScan) {
       </div>`;
   }).join("\n");
 
+  const readMins = Math.max(2, Math.ceil(items.length * 0.6));
+
   return EMAIL_TEMPLATE
     .replace("{{DATE}}", dateStr)
+    .replace("{{ITEM_COUNT}}", `${items.length} signals · ${readMins} min read`)
     .replace("{{QUICK_SCAN}}", quickScan)
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
@@ -417,9 +420,10 @@ async function main() {
       }
 
       // 4. Build per-user quick scan + subject
-      const userQuickScan = userItems
-        .map(i => i.headline.split(":")[0].split("—")[0].trim())
-        .join(" &nbsp;·&nbsp; ");
+      const userQuickScan = userItems.map((i, idx) => {
+        const short = i.headline.split(":")[0].split("—")[0].trim();
+        return `<tr><td style="font-size:11px;color:#9CA3AF;font-weight:600;padding:4px 10px 4px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td><td style="font-size:10px;font-weight:700;letter-spacing:0.05em;color:#2563EB;text-transform:uppercase;white-space:nowrap;padding:4px 14px 4px 0;vertical-align:top;line-height:1.5;">${i.tag}</td><td style="font-size:13px;color:#374151;padding:4px 0;vertical-align:top;line-height:1.5;">${short}</td></tr>`;
+      }).join("\n");
       const userTopThree = userItems.slice(0, 3)
         .map(i => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
       const userSubject = `SignalBrief — ${shortDate} | ${userTopThree.join(", ")}`;
@@ -432,6 +436,7 @@ async function main() {
       if (u.email && prefs.email_enabled !== false) {
         const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan);
         await sendEmail(userSubject, userEmailHtml, u.email);
+        await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }
 
       // 6. Persist state

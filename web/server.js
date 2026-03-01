@@ -37,10 +37,52 @@ function serveFile(res, filePath) {
 const WELCOME_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/welcome.html"), "utf8");
 const BASE_URL = process.env.BASE_URL || "http://localhost:3003";
 
-async function sendWelcomeEmail(name, email) {
+async function sendWelcomeEmail(user) {
+  const { name, email } = user;
+  const prefs = user.preferences || {};
   const settingsUrl = `${BASE_URL}/settings?email=${encodeURIComponent(email)}`;
-  const html = WELCOME_TEMPLATE.replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl);
-  const subject = "Welcome to SignalBrief — your first digest arrives tomorrow";
+  const firstName = (name || "there").split(" ")[0];
+
+  // Format delivery time: "06:45" → "6:45 AM"
+  const [hRaw, mRaw] = (prefs.delivery_time || "07:00").split(":").map(Number);
+  const ampm = hRaw >= 12 ? "PM" : "AM";
+  const hour = hRaw % 12 || 12;
+  const timeLabel = `${hour}:${String(mRaw).padStart(2, "0")} ${ampm} ET`;
+
+  // Format days of week
+  const days = prefs.days_of_week || [1, 2, 3, 4, 5];
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let daysLabel;
+  if (days.length === 7) daysLabel = "Every day";
+  else if (days.length === 6 && days.includes(6)) daysLabel = "Mon–Sat";
+  else if (days.length === 5 && !days.includes(0) && !days.includes(6)) daysLabel = "Mon–Fri";
+  else daysLabel = days.map(d => DAY_NAMES[d]).join(", ");
+
+  // Format depth
+  const DEPTH_LABELS = {
+    scan: "Scan (headlines only)",
+    headline_plus_why: "Brief (headline + why it matters)",
+    deep: "Deep (extended analysis)",
+  };
+  const depthLabel = DEPTH_LABELS[prefs.depth] || "Brief (headline + why it matters)";
+
+  // Format topics as inline chips
+  const topics = user.topics || [];
+  const topicsHtml = topics.map(t =>
+    `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${t}</span>`
+  ).join("");
+
+  const html = WELCOME_TEMPLATE
+    .replace(/\{\{NAME\}\}/g, firstName)
+    .replace(/\{\{TOPICS_HTML\}\}/g, topicsHtml)
+    .replace(/\{\{TOPIC_COUNT\}\}/g, String(topics.length))
+    .replace(/\{\{DELIVERY_TIME_LABEL\}\}/g, timeLabel)
+    .replace(/\{\{DELIVERY_DAYS_LABEL\}\}/g, daysLabel)
+    .replace(/\{\{DEPTH_LABEL\}\}/g, depthLabel)
+    .replace(/\{\{ITEMS_COUNT\}\}/g, String(prefs.items_per_digest || 5))
+    .replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl);
+
+  const subject = `Welcome to SignalBrief, ${firstName} — your brief is set for ${timeLabel}`;
   const result = await sendEmail(email, subject, html);
   console.log(`[welcome email] ${email} → ${result.ok ? "✅ sent via " + result.via : "❌ failed"}`);
 }
@@ -145,7 +187,7 @@ const server = http.createServer(async (req, res) => {
     console.log(`[signup] ${name} <${email}>`);
 
     // Send welcome email (non-blocking)
-    sendWelcomeEmail(name, email).catch(e => console.error("[welcome email]", e));
+    sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
 
     return json(res, { success: true, chatId });
   }

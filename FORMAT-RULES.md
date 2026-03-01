@@ -1,5 +1,5 @@
 # SignalBrief Format Rules
-*Locked from Batch 1 feedback — Feb 28 2026 | Updated for cross-sector expansion*
+*Locked from Batch 1 feedback — Feb 28 2026 | Updated for 17-topic architecture*
 
 ## Item Format (Telegram)
 ```
@@ -12,7 +12,7 @@ One-sentence factual lede.
 1. **Number items** with keycap emojis: 1⃣ 2⃣ 3⃣ etc.
 2. **Max 2 items per tag** — never stack same-tag items adjacently. Interleave verticals.
 3. **Links**: `→ domain.com` — clean, no emoji, direct article URL (not homepage).
-4. **7 items default**, configurable 5/7/10 per user.
+4. **5 items default**, configurable 5/10 per user.
 5. **Freshness signal**: add `(2d ago)` only when item is >24h old. Nothing if today.
 6. **Every item must have a strategic so-what** — one clause answering "why should a strategy consultant care about this tomorrow morning?" Specific, implication-forward, not generic.
 7. **Cross-vertical tags** (×) are a feature: `[AI×TECH]`, `[PE×M&A]`, `[POLICY×REGULATORY]`
@@ -41,18 +41,31 @@ Your daily signal across AI, strategy, and business
 💾 save [#] · 📊 more/less [topic] · ⚙️ settings
 ```
 
-## Vertical Tags Reference
+## Topic Tags Reference (17 total)
+
+### Industries (10)
 | Tag | Covers |
 |-----|--------|
-| `AI×TECH` | Enterprise AI, foundation models, infrastructure, Big Tech |
 | `HEALTHCARE` | Payers, providers, pharma, FDA, clinical AI |
 | `FINANCIAL SERVICES` | Banking, fintech, insurance, capital markets |
 | `PE×M&A` | Private equity, deal flow, leveraged buyouts, M&A activity |
 | `ENERGY` | Transition, utilities, grid, industrials, IRA |
 | `CONSUMER` | Retail, DTC, brand, supply chain, consumer trends |
-| `POLICY×REGULATORY` | Federal regulation, antitrust, trade, DOGE, budget |
-| `STRATEGY` | Consulting, corporate strategy, transformation, firm moves |
-| `SUSTAINABILITY` | ESG, net zero, carbon, climate policy, reporting |
+| `LIFE SCIENCES` | Biotech, medical devices, genomics, drug pipelines |
+| `TECHNOLOGY` | Enterprise tech, SaaS, cloud infrastructure |
+| `INDUSTRIALS` | Manufacturing, logistics, automation, supply chain |
 | `REAL ESTATE` | CRE, proptech, construction, data centers |
+| `PUBLIC SECTOR` | Government, defense, federal procurement, municipalities |
+
+### Capabilities (7)
+| Tag | Covers |
+|-----|--------|
+| `AI×TECH` | Enterprise AI, foundation models, infrastructure, Big Tech |
+| `STRATEGY` | Consulting, corporate strategy, transformation, firm moves |
+| `POLICY×REGULATORY` | Federal regulation, antitrust, trade, DOGE, budget |
+| `SUSTAINABILITY` | ESG, net zero, carbon, climate policy, reporting |
+| `DIGITAL` | Digital transformation, platforms, product strategy |
+| `M&A ADVISORY` | Deal advisory, integration, synergy capture, valuation |
+| `TALENT` | Workforce trends, hiring, org restructuring, compensation |
 
 Custom tags supported: `GLP-1`, `DOGE`, `quantum`, `defense`, etc.

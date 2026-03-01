@@ -14,7 +14,7 @@
 - First 5 target user pain statements (consultant-specific)
 - Success metric for v1
 
-**Exit criteria:** Kush approves v1 scope in one message.
+**Status:** ✅ Complete
 
 ---
 
@@ -26,19 +26,19 @@
 - "Why it matters" lines — neutral, journalistic tone
 - Deduped, high-signal sources
 
-**Exit criteria:** Kush says "this is valuable enough to automate."
+**Status:** ✅ Complete
 
 ---
 
 ## Batch 2: MVP Automation for 1 User
 **Goal:** Automated daily digest for Kush only. Minimize moving parts.
 **Deliverables:**
-- Final MVP architecture decision (1–2 options + recommendation)
+- Final MVP architecture decision
 - Inputs/outputs definition (config file, sources list, message + email templates)
 - Runbook: how to run it / how to fix if it fails / how to change topics
-- Cost guardrail plan (monthly cap + fail-safe)
+- Cost guardrail plan
 
-**Exit criteria:** Runs automatically with stable output.
+**Status:** ✅ Complete — digest.js pipeline, LaunchAgents, cron at 6:45 AM ET Mon–Sat
 
 ---
 
@@ -47,10 +47,10 @@
 **Deliverables:**
 - "save 3" parsing spec (exact behaviors)
 - "more AI / less M&A / add keyword" behaviors
-- Simple data store (sheet or equivalent)
+- Simple data store
 - Confirmation messages
 
-**Exit criteria:** Kush can tune and save without breaking the pipeline.
+**Status:** ✅ Complete — reply-handler.js, Claude intent parsing, per-user JSON store
 
 ---
 
@@ -62,7 +62,53 @@
 - Safety/guardrails (prevent spam, handle bounces)
 - 10 pilot user archetypes (not names)
 
-**Exit criteria:** Can add 1–2 pilot users and deliver reliably.
+**Status:** ✅ Complete — web onboarding (index.html), settings page, welcome email
+
+---
+
+## Batch 5: Custom Domain + Email
+**Goal:** Branded email delivery from a real domain.
+**Deliverables:**
+- Resend API integration
+- Custom from address (digest@getsignalbrief.com)
+- Gmail OAuth fallback
+
+**Status:** ✅ Complete — mailer.js, Resend primary + Gmail fallback
+
+---
+
+## Batch 6: Digest Archive / Web Reader
+**Goal:** Every past digest browsable in a clean web UI.
+**Deliverables:**
+- /archive page listing all past issues
+- Full digest reader per date
+- Archive JSON saved on every digest run
+
+**Status:** ✅ Complete — archive.html, /api/archive endpoints, saveToArchive()
+
+---
+
+## Batch 7: Referral / Invite Flow *(next)*
+**Goal:** Frictionless word-of-mouth growth.
+**Deliverables:**
+- Unique invite link per user
+- "Forward to a colleague" CTA in email footer (already in template)
+- Tracking: who invited who
+- Optional: referral reward (skip a week of prompts?)
+
+**Status:** 🔲 Not started
+
+---
+
+## Batch 8: Analytics Dashboard
+**Goal:** Understand what's working.
+**Deliverables:**
+- Digests sent per day
+- Active vs paused users
+- Most bookmarked topics/items
+- Simple admin view (localhost only)
+
+**Status:** 🔲 Not started
 
 ---
 
@@ -90,12 +136,7 @@
 
 | Stream | Cadence | Examples |
 |--------|---------|---------|
-| **Run Stream** (daily utility) | Every day | Daily briefing, money experiment approval packet |
+| **Run Stream** (daily utility) | Every day | Daily briefing, digest delivery |
 | **Build Stream** (compounding asset) | 1–2 bullets/day MAX unless Build Mode | SignalBrief batches |
 
 **Rule:** Build Stream never cannibalizes Run Stream.
-
----
-
-## Status
-🟡 Not started. Awaiting Kush to enter Build Mode and trigger Batch 0.

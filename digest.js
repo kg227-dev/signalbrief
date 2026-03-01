@@ -337,15 +337,32 @@ function formatTelegram(items, dateStr, state) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false, wasFiltered = true, depth = "headline_plus_why") {
+function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false, wasFiltered = true, depth = "headline_plus_why", user = null) {
   const filterNote = wasFiltered
     ? "filtered to your selected topics"
     : "today's top signals across all areas";
+
+  // ── Welcome banner (first digest only — placed BEFORE Quick Scan via template placeholder) ──
   const welcomeBanner = isFirstDigest ? `
-      <div style="margin:0 0 20px;padding:16px 20px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;">
-        <div style="font-size:11px;font-weight:700;color:#15803D;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">👋 Your first SignalBrief</div>
-        <div style="font-size:13px;color:#374151;line-height:1.6;">Below is your first briefing, ${filterNote}. You'll receive this at your scheduled time — update topics, timing, or depth from the link below anytime.</div>
-      </div>` : "";
+  <div style="padding:28px 40px 24px;background:#F0FDF4;border-bottom:2px solid #BBF7D0;">
+    <div style="font-size:21px;font-weight:700;color:#15803D;margin-bottom:8px;">👋 Welcome to SignalBrief</div>
+    <div style="font-size:14px;color:#166534;line-height:1.6;margin-bottom:20px;">Your first briefing is below — ${filterNote}. Here's what you're looking at:</div>
+    <div style="font-size:13px;color:#374151;margin-bottom:20px;">
+      <div style="margin-bottom:12px;">
+        <strong>📰 Headline + "Why it matters"</strong><br>
+        <span style="color:#6B7280;">Each signal includes a strategic analysis written for how consultants think about implications — not just what happened, but who feels it and what moves next.</span>
+      </div>
+      <div style="margin-bottom:12px;">
+        <strong>🎯 Relevance scores</strong> — the colored badges like <span style="background:#DCFCE7;color:#15803D;padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700;">8.5</span><br>
+        <span style="color:#6B7280;">Ranked 0–10 per story: 40% topic match · 35% market significance · 25% strategic utility. Green = high signal, yellow = moderate, red = low.</span>
+      </div>
+      <div>
+        <strong>⚙️ Personalized to your topics</strong><br>
+        <span style="color:#6B7280;">This digest is ${filterNote}. Tune anytime — email "more [topic]" or "less [topic]" to adjust what you see, or update your full preferences below.</span>
+      </div>
+    </div>
+    <a href="${BASE_URL}/settings?token=${userToken}" style="display:inline-block;background:#15803D;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 28px;border-radius:100px;">Update preferences →</a>
+  </div>` : "";
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
     // Relevance score badge (color-coded, embedded in enrichment — no extra API cost)
@@ -387,15 +404,55 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
 
   const readMins = Math.max(2, Math.ceil(items.length * 0.6));
 
+  // ── Per-user settings footer (shown in every digest) ──
+  let settingsFooter = "";
+  if (user) {
+    const prefs = user.preferences || {};
+    const [sh, sm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+    const sampm = sh >= 12 ? "PM" : "AM";
+    const shour = sh % 12 || 12;
+    const sTimeStr = `${shour}${sm === 0 ? "" : ":" + String(sm).padStart(2, "0")} ${sampm} ET`;
+    const sDays = prefs.days_of_week || [1, 2, 3, 4, 5];
+    const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let sDaysStr;
+    if (sDays.length === 7) sDaysStr = "Every day";
+    else if (sDays.length === 5 && !sDays.includes(0) && !sDays.includes(6)) sDaysStr = "Mon–Fri";
+    else sDaysStr = sDays.map(d => DAY_NAMES[d]).join(", ");
+    const SDEPTH = { headline_only: "Scan", scan: "Scan", headline_plus_oneliner: "Brief", headline_plus_why: "Deep", full: "Deep", deep: "Deep" };
+    const sDepth = SDEPTH[prefs.depth] || "Deep";
+    const sTopics = (user.topics || [])
+      .map(t => t.replace(/^custom_/, "").replace(/_/g, " "))
+      .join(" · ") || "—";
+    const sSettingsUrl = `${BASE_URL}/settings?token=${userToken}`;
+    settingsFooter = `
+    <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E5E7EB;">
+      <tr valign="top">
+        <td>
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px;">Your digest settings</div>
+          <div style="font-size:11px;color:#6B7280;line-height:1.9;">
+            <span style="color:#374151;font-weight:600;">Topics</span>&nbsp;&nbsp;${sTopics}<br>
+            <span style="color:#374151;font-weight:600;">Delivery</span>&nbsp;&nbsp;${sTimeStr} · ${sDaysStr}<br>
+            <span style="color:#374151;font-weight:600;">Depth</span>&nbsp;&nbsp;${sDepth}
+          </div>
+        </td>
+        <td style="text-align:right;vertical-align:middle;padding-left:12px;">
+          <a href="${sSettingsUrl}" style="font-size:11px;font-weight:600;color:#2563EB;text-decoration:none;white-space:nowrap;">Edit settings →</a>
+        </td>
+      </tr>
+    </table>`;
+  }
+
   return EMAIL_TEMPLATE
-    .replace("{{DATE}}", dateStr)
+    .replace(/\{\{DATE\}\}/g, dateStr)
     .replace("{{ITEM_COUNT}}", `${items.length} signals · ${readMins} min read`)
     .replace("{{QUICK_SCAN}}", quickScan)
+    .replace("{{WELCOME_BANNER}}", welcomeBanner)
+    .replace("{{SETTINGS_FOOTER}}", settingsFooter)
     .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
     .replace(/\{\{SETTINGS_TOKEN\}\}/g, userToken)
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
-      `<!-- Items -->\n    <div class="items">\n${welcomeBanner}\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
+      `<!-- Items -->\n    <div class="items">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
     );
 }
 
@@ -529,10 +586,22 @@ async function main() {
       let wasFiltered = false;
       let userItems = enriched;
       if (u.topics && u.topics.length >= 2) {
-        const userTopicsLower = u.topics.map(t => t.toLowerCase());
+        // Standard topics: match against article tag
+        const standardTopicsLower = u.topics
+          .filter(t => !t.startsWith("custom_"))
+          .map(t => t.toLowerCase());
+        // Custom topics: match keyword against headline + summary text
+        const customKeywords = u.topics
+          .filter(t => t.startsWith("custom_") || !standardTopicsLower.includes(t.toLowerCase()))
+          .map(t => t.toLowerCase().replace(/^custom_/, "").replace(/_/g, " ").trim())
+          .filter(Boolean);
         const filtered = enriched.filter(item => {
           const tag = (item.tag || "").toLowerCase();
-          return userTopicsLower.some(t => tag.includes(t) || t.includes(tag));
+          const headline = (item.headline || "").toLowerCase();
+          const summary = (item.summary || "").toLowerCase();
+          const tagMatch = standardTopicsLower.some(t => tag.includes(t) || t.includes(tag));
+          const customMatch = customKeywords.some(kw => headline.includes(kw) || summary.includes(kw));
+          return tagMatch || customMatch;
         });
         const MIN_ITEMS = 3;
         if (filtered.length >= MIN_ITEMS) {
@@ -580,9 +649,9 @@ async function main() {
         const short = i.headline.split(":")[0].split("—")[0].trim();
         return `<tr><td style="font-size:11px;color:#9CA3AF;font-weight:600;padding:4px 10px 4px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td><td style="font-size:10px;font-weight:700;letter-spacing:0.05em;color:#2563EB;text-transform:uppercase;white-space:nowrap;padding:4px 14px 4px 0;vertical-align:top;line-height:1.5;">${i.tag}</td><td style="font-size:13px;color:#374151;padding:4px 0;vertical-align:top;line-height:1.5;">${short}</td></tr>`;
       }).join("\n");
-      const userTopThree = userItems.slice(0, 3)
-        .map(i => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
-      const userSubject = `SignalBrief — ${shortDate} | ${userTopThree.join(", ")}`;
+      // Clean subject: first name + tagline (headlines get cut off and look ugly)
+      const uFirstName = ((u.name || "").split(" ")[0]) || u.email.split("@")[0];
+      const userSubject = `SignalBrief — ${shortDate} | ${uFirstName}'s daily signal across AI, strategy, and business`;
 
       // 5. Deliver
       if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
@@ -591,7 +660,7 @@ async function main() {
       }
       if (u.email && prefs.email_enabled !== false) {
         const isFirstDigest = (u.digests_received || 0) === 0;
-        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth);
+        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth, u);
         await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
         await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }

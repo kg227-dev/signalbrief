@@ -88,25 +88,42 @@
 
 ---
 
-## Batch 7: Referral / Invite Flow *(next)*
+## Batch 7: Beta Hardening
+**Goal:** Make it safe and ready to hand to real users outside your network.
+**Deliverables:**
+- Relevance scoring — per-user item sort (baseScore + topicMatch)
+- Admin cost dashboard — per-run API spend tracking, user roster at /admin
+- Email deliverability — List-Unsubscribe RFC 8058 headers, Resend domain verified
+- One-click unsubscribe — GET|POST /api/unsubscribe, settings page confirmation
+- Rate limiting — 5 signups/IP/15min, per-email cooldown, disposable domain blocklist
+- Cloudflare Tunnel — public HTTPS at getsignalbrief.com, LaunchAgent managed
+- Telegram-first onboarding — /start email capture, account creation + linking from bot
+- Telegram format fix — headline + italic WIM (single message, no splits, 250-char cap)
+- Welcome email — Telegram tip with pre-filled /start command, live archive link
+
+**Status:** ✅ Complete — all services live, first beta user ready to onboard
+
+---
+
+## Batch 8: Referral / Invite Flow *(next)*
 **Goal:** Frictionless word-of-mouth growth.
 **Deliverables:**
 - Unique invite link per user
 - "Forward to a colleague" CTA in email footer (already in template)
 - Tracking: who invited who
-- Optional: referral reward (skip a week of prompts?)
+- Optional: referral reward
 
 **Status:** 🔲 Not started
 
 ---
 
-## Batch 8: Analytics Dashboard
+## Batch 9: Analytics + Engagement
 **Goal:** Understand what's working.
 **Deliverables:**
-- Digests sent per day
-- Active vs paused users
+- Email open/click tracking (Resend webhooks)
 - Most bookmarked topics/items
-- Simple admin view (localhost only)
+- Digest delivery success/failure rate
+- Extend /admin dashboard with engagement metrics
 
 **Status:** 🔲 Not started
 

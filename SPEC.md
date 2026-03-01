@@ -53,15 +53,16 @@ Users pick 2+ topics on signup. Custom topics supported (e.g. "GLP-1", "DOGE", "
 ### Telegram
 - 5 items default (configurable 5/10 per user)
 - Numbered with keycap emoji (1⃣)
-- `[VERTICAL×SUBTAG]` cross-category labels
-- Headline + punchy factual lede
+- `*[VERTICAL×SUBTAG]*` bold cross-category labels
+- Headline + italic "why it matters" first sentence (250-char cap)
 - `→ direct article link`
 - Command menu (expanded first 5 digests, compressed after)
 
 ### Email
-- Quick-scan summary bar at top
+- Quick-scan summary bar at top (numbered headlines with tags)
 - ★ LEAD item with left blue border accent
 - Bold first clause on every "Why it matters"
+- Relevance score badge (color-coded: green >8.5, yellow >5.0, orange >3.5, red <3.5)
 - `Read more →` with direct article link
 - "Forward to a colleague" button in footer
 - `Update preferences` link → `/settings?email=...`
@@ -77,28 +78,31 @@ Perplexity Sonar (17 topics in parallel)
         ↓
    selectItems() — dedup + interleave + tag cap
         ↓
-   Claude Sonnet — "why it matters" enrichment
+   Claude Haiku — "why it matters" enrichment + baseScore (0-10)
         ↓
-  ┌──────────────────────────────────┐
-  │  Per-user delivery fan-out       │
-  │  - topic filter                  │
-  │  - items_per_digest (5 or 10)    │
-  │  - depth preference              │
-  │  → Telegram bot (@signalbrief29bot) │
-  │  → Resend API → HTML email       │
-  │     (Gmail OAuth fallback)       │
-  └──────────────────────────────────┘
+  ┌──────────────────────────────────────┐
+  │  Per-user delivery fan-out           │
+  │  - relevance sort (baseScore 60% + topicMatch 40%) │
+  │  - topic filter                      │
+  │  - items_per_digest (5 or 10)        │
+  │  - depth preference                  │
+  │  → Telegram bot (@signalbrief29bot)  │
+  │  → Resend API → HTML email           │
+  │     (Gmail OAuth fallback)           │
+  └──────────────────────────────────────┘
         ↓
    saveToArchive() — archive/YYYY-MM-DD.json
+   logCosts() — data/cost-log.json
 ```
 
 ## Personalization
 
 - **Topic selection**: pick from 17 topics on signup, tune with `more/less [topic]`
-- **Depth**: Scan (headline only) / Brief (headline + one-liner) / Deep (full "why it matters")
+- **Relevance scoring**: items sorted by baseScore (from Claude) + per-user topicMatch
+- **Depth**: Scan (headline only) / Brief (headline + WIM) / Deep (extended — not yet built)
 - **Schedule**: delivery time (30-min intervals), days of week, items per digest (5 or 10)
 - **Bookmarks**: `save 3` → persisted to user profile with headline + URL
-- **Custom topics**: freeform (e.g. "GLP-1", "quantum computing")
+- **Custom topics**: freeform (e.g. "GLP-1", "quantum computing") — stored, fetch not yet wired
 
 ## Interaction (Telegram)
 
@@ -106,10 +110,16 @@ All replies parsed by Claude for fuzzy intent:
 - `save 3` / `save 1,4,6` → bookmark
 - `more AI` / `less pharma` → topic weight
 - `add DOGE` → custom topic
+- `/start email@example.com` → link Telegram to existing web signup
 - `/settings` → preferences
 - `/bookmarks` → saved items
 - `/help` → command guide
 - Any question → answered with Claude in strategy/consulting context
+
+### Telegram-first Onboarding
+- `/start` (no email, unknown user) → bot asks for email
+- Email provided → account created with defaults OR linked to existing web signup
+- Preferences editable via web settings page
 
 ## Web Layer
 
@@ -118,18 +128,18 @@ All replies parsed by Claude for fuzzy intent:
 | `/` | New user onboarding (4-step: details, topics, depth, schedule) |
 | `/settings?email=...` | Self-serve preferences editor |
 | `/archive` | Browse and read past digests |
+| `/admin` | API cost dashboard + user roster (localhost only) |
 
 ## Data Model (per user)
 
 ```json
 {
-  "chatId": "email-1234567890",
+  "chatId": "6297966907",
   "name": "Alex Chen",
   "email": "alex@firm.com",
-  "telegram": "alexhandle",
-  "topics": ["AI×TECH", "PE×M&A", "STRATEGY"],
   "status": "active",
   "joined_at": "2026-03-01T00:00:00.000Z",
+  "last_digest_at": "2026-03-01T11:45:00.000Z",
   "preferences": {
     "depth": "headline_plus_why",
     "delivery_time": "07:00",
@@ -138,11 +148,12 @@ All replies parsed by Claude for fuzzy intent:
     "items_per_digest": 5,
     "timezone": "America/New_York",
     "email_enabled": true,
-    "telegram_enabled": false
+    "telegram_enabled": true
   },
   "bookmarks": [],
   "topic_weights": {},
   "custom_topics": [],
+  "topics": ["AI×TECH", "PE×M&A", "STRATEGY"],
   "digests_received": 0
 }
 ```
@@ -156,5 +167,6 @@ All replies parsed by Claude for fuzzy intent:
 - **Batch 4** ✅ Multi-user onboarding web app
 - **Batch 5** ✅ Custom domain + Resend email sending
 - **Batch 6** ✅ Digest archive / web reader
-- **Batch 7** Referral / invite flow
-- **Batch 8** Analytics dashboard (digests sent, opens, bookmarks)
+- **Batch 7** ✅ Beta hardening (relevance scoring, admin dashboard, rate limiting, unsubscribe, Cloudflare Tunnel, Telegram-first onboarding)
+- **Batch 8** Referral / invite flow
+- **Batch 9** Analytics + engagement tracking

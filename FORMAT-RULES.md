@@ -1,10 +1,10 @@
 # SignalBrief Format Rules
-*Locked from Batch 1 feedback — Feb 28 2026 | Updated for 17-topic architecture*
+*Locked from Batch 1 feedback — Feb 28 2026 | Updated for 17-topic architecture + Batch 7 format*
 
 ## Item Format (Telegram)
 ```
-[N]⃣ [VERTICAL×SUBTAG] Headline
-One-sentence factual lede.
+[N]⃣ *[VERTICAL×SUBTAG]* Headline
+_First sentence of "why it matters." (250-char cap)_
 → source.com
 ```
 
@@ -14,10 +14,10 @@ One-sentence factual lede.
 3. **Links**: `→ domain.com` — clean, no emoji, direct article URL (not homepage).
 4. **5 items default**, configurable 5/10 per user.
 5. **Freshness signal**: add `(2d ago)` only when item is >24h old. Nothing if today.
-6. **Every item must have a strategic so-what** — one clause answering "why should a strategy consultant care about this tomorrow morning?" Specific, implication-forward, not generic.
+6. **Every item must have a strategic so-what** — one clause answering "why should a strategy consultant care about this tomorrow morning?" Specific, implication-forward, not generic. Displayed as italic WIM sentence in Telegram, full paragraph in email.
 7. **Cross-vertical tags** (×) are a feature: `[AI×TECH]`, `[PE×M&A]`, `[POLICY×REGULATORY]`
-8. **Item length**: ~2.5 lines on mobile. So-what tight. "Another payer going full care-delivery stack — point-solution vendors will feel it." not "Another payer becoming a care delivery stack; expect more point-solution vendors to get squeezed out of hospital contracts."
-9. **Email CTA**: "📧 Deeper takes in your email" — signals email ≠ repeat.
+8. **WIM sentence**: strip all HTML before splitting on sentence boundaries. First sentence only, hard cap at 250 chars. Use `(?<=[.!?])\s+(?=[A-Z])` to split (avoids firing on abbreviations like `vs.`). Never send multiple Telegram messages — shorten rather than split.
+9. **Single message always** — if content exceeds 4096 chars, shorten WIM sentences. Do not paginate or split digest across multiple messages.
 
 ## Email-Specific Rules
 1. **Quick-scan header**: TODAY'S SIGNALS bar before items. 10-second read.
@@ -26,7 +26,8 @@ One-sentence factual lede.
 4. **Subject line**: date + 3 punchy topic teasers.
    e.g. `SignalBrief — Mon, Mar 3 | OpenAI's enterprise push, PE deal drought ends, DOGE cuts bite`
 5. **"Why it matters" first clause**: bold (`<strong>`) — speed-reader anchor.
-6. **Footer**: Forward CTA button (primary growth vector), preferences link, unsubscribe.
+6. **Relevance badge**: color-coded score shown on each item (green >8.5, yellow >5.0, orange >3.5, red <3.5).
+7. **Footer**: Forward CTA button (primary growth vector), preferences link, unsubscribe.
 
 ## Header
 ```

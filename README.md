@@ -9,12 +9,15 @@ Each user gets a personalized briefing: choose your topics, delivery time, how d
 ## What It Does
 
 - Pulls top news across 17 topics (10 industries + 7 capabilities) from the last 48 hours via Perplexity Sonar
-- Selects 5 or 10 items per user with interleaved sector coverage — no two adjacent items from the same tag
-- Enriches each item with a "why it matters" analysis at senior consultant level (Claude Sonnet)
+- Scores and ranks items per user with a relevance algorithm (Claude base score + per-user topic match)
+- Selects 5 or 10 items with interleaved sector coverage — no two adjacent items from the same tag
+- Enriches each item with a "why it matters" analysis at senior consultant level (Claude Haiku)
 - Delivers a tight Telegram message and a full HTML email simultaneously
 - Tracks bookmarks and topic preferences per user
 - On-demand digest via `/digest` Telegram command
+- Telegram-first onboarding — sign up directly in the bot with `/start your@email.com`
 - Past digests browsable at `/archive`
+- Admin cost dashboard at `/admin` — per-run API spend tracking
 
 ---
 
@@ -25,19 +28,21 @@ Perplexity Sonar (17 topics in parallel)
         ↓
    selectItems() — dedup + interleave + tag cap
         ↓
-   Claude Sonnet — "why it matters" enrichment
+   Claude Haiku — "why it matters" enrichment + base relevance score
         ↓
-  ┌──────────────────────────────────┐
-  │  Per-user delivery fan-out       │
-  │  - topic filter                  │
-  │  - items_per_digest (5 or 10)    │
-  │  - depth preference              │
-  │  → Telegram bot                  │
-  │  → Resend API → HTML email       │
-  │  → (Gmail OAuth fallback)        │
-  └──────────────────────────────────┘
+  ┌──────────────────────────────────────┐
+  │  Per-user delivery fan-out           │
+  │  - relevance sort (baseScore + topicMatch) │
+  │  - topic filter                      │
+  │  - items_per_digest (5 or 10)        │
+  │  - depth preference                  │
+  │  → Telegram bot (@signalbrief29bot)  │
+  │  → Resend API → HTML email           │
+  │     (Gmail OAuth fallback)           │
+  └──────────────────────────────────────┘
         ↓
    saveToArchive() — archive/YYYY-MM-DD.json
+   logCosts() — data/cost-log.json
 ```
 
 ---
@@ -46,19 +51,20 @@ Perplexity Sonar (17 topics in parallel)
 
 | File | Purpose |
 |------|---------|
-| `digest.js` | Main pipeline — fetch, select, enrich, deliver, archive |
-| `mailer.js` | Email delivery — Resend (branded domain) with Gmail OAuth fallback |
-| `reply-handler.js` | Fuzzy intent parser for user replies + `/digest` on-demand command |
+| `digest.js` | Main pipeline — fetch, score, select, enrich, deliver, archive, log costs |
+| `mailer.js` | Email delivery — Resend (branded domain) with Gmail OAuth fallback + RFC 8058 unsubscribe headers |
+| `reply-handler.js` | Fuzzy intent parser for Telegram replies, `/digest` on-demand, Telegram-first onboarding |
 | `bot-server.js` | Long-poll Telegram bot server |
 | `store.js` | Per-user JSON store (`data/user-{chatId}.json`) |
 | `templates/email.html` | HTML digest email template (responsive, 600px) |
-| `templates/welcome.html` | Welcome email sent on signup |
+| `templates/welcome.html` | Welcome email sent on signup (email + Telegram-first flows) |
 | `config.json` | API keys + config (gitignored — copy from config.example.json) |
 | `config.example.json` | Template — copy to config.json and fill in keys |
-| `web/server.js` | Onboarding + settings + archive API server (port 3003) |
+| `web/server.js` | Onboarding + settings + archive + admin API server (port 3003) |
 | `web/index.html` | New user onboarding (4-step form) |
 | `web/settings.html` | Self-serve preferences page |
 | `web/archive.html` | Digest archive — list + detail reader |
+| `web/admin.html` | Admin dashboard — API cost tracking + user roster |
 | `CLAUDE.md` | Codebase context for Claude Code |
 | `FORMAT-RULES.md` | Editorial format rules |
 | `SPEC.md` | Full product specification |
@@ -88,20 +94,24 @@ node digest.js --chatId 123 # On-demand digest for one user
 
 ### macOS LaunchAgents (auto-start on boot)
 
-Three plist files are installed at `~/Library/LaunchAgents/`:
+Four plist files are installed at `~/Library/LaunchAgents/`:
 
 | Service | LaunchAgent label |
 |---------|------------------|
 | Web server (port 3003) | `com.jarvis.signalbrief-web` |
 | Telegram bot | `com.jarvis.signalbrief-bot` |
 | Daily digest (6:45 AM ET, Mon–Sat) | `com.jarvis.signalbrief-digest` |
+| Cloudflare Tunnel (public HTTPS) | `com.jarvis.signalbrief-tunnel` |
 
 Load them after filling in `config.json`:
 ```bash
 launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-web.plist
 launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-bot.plist
 launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-digest.plist
+launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 ```
+
+`BASE_URL=https://getsignalbrief.com` is set in the web LaunchAgent — no extra config needed for production URLs.
 
 ---
 
@@ -109,15 +119,18 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-digest.plist
 
 | URL | Purpose |
 |-----|---------|
-| `http://localhost:3003` | New user onboarding |
-| `http://localhost:3003/settings?email=you@co.com` | Self-serve preferences |
-| `http://localhost:3003/archive` | Browse past digests |
+| `/` | New user onboarding |
+| `/settings?email=you@co.com` | Self-serve preferences |
+| `/archive` | Browse past digests |
+| `/admin` | API cost dashboard + user roster (local only) |
 | `GET /api/user?email=...` | Load user profile |
 | `POST /api/signup` | Create/update user from onboarding form |
 | `POST /api/settings` | Update preferences from settings page |
 | `GET /api/topics` | All 17 topics (flat + grouped by industry/capability) |
 | `GET /api/archive` | List all archived digest dates |
 | `GET /api/archive/:date` | Full digest for a specific date (YYYY-MM-DD) |
+| `GET /api/admin/stats` | Cost summary, run log, per-user costs, user roster |
+| `GET\|POST /api/unsubscribe?email=...` | One-click unsubscribe (RFC 8058 compliant) |
 
 ---
 
@@ -128,6 +141,7 @@ SignalBrief sends from **`digest@getsignalbrief.com`** via [Resend](https://rese
 `mailer.js` handles delivery:
 - **Primary:** Resend API (when `resendApiKey` is set in config.json)
 - **Fallback:** Gmail OAuth
+- **Headers:** `List-Unsubscribe` + `List-Unsubscribe-Post` on all outbound mail (Gmail/Yahoo bulk sender compliance)
 
 ### Resend Setup
 
@@ -167,8 +181,9 @@ If `resendApiKey` is absent or blank, falls back to Gmail automatically.
 | Command | What it does |
 |---------|-------------|
 | `/start` | Welcome message + link to onboarding |
+| `/start your@email.com` | Link Telegram account to an existing email signup |
 | `/digest` | Pull a fresh digest on demand right now |
-| `/settings` | View/update your preferences |
+| `/settings` | View your current preferences |
 | `/bookmarks` | See your saved items |
 | `/topics` | View your tracked topic weights |
 | `/help` | Command reference |
@@ -182,6 +197,17 @@ Users can also reply in natural language — intent is parsed by Claude:
 | `more AI` | Increases AI story weight |
 | `less pharma` | Decreases pharma story weight |
 | `add DOGE` | Adds DOGE as a custom topic |
+| Any question | Answered by Claude in a strategy/consulting context |
+
+### Telegram-first Onboarding
+
+New users can sign up without the web form:
+1. Send `/start` to [@signalbrief29bot](https://t.me/signalbrief29bot)
+2. Bot asks for your email
+3. Account created with default topics — preferences editable at `getsignalbrief.com/settings`
+4. Welcome email sent with setup summary
+
+Existing web signups link their Telegram account by sending `/start their@email.com`.
 
 ---
 
@@ -226,10 +252,11 @@ Every digest run saves to `archive/YYYY-MM-DD.json`. The `/archive` web page let
 
 - **Node.js** — stdlib only, zero npm dependencies, no build step
 - **Perplexity Sonar** — real-time news with citations
-- **Claude Sonnet** — editorial enrichment + intent parsing
+- **Claude Haiku** — editorial enrichment, relevance scoring + intent parsing
 - **Resend** — branded transactional email
 - **Gmail OAuth** — email fallback
 - **Telegram Bot API** — daily digest + reply handling
+- **Cloudflare Tunnel** — public HTTPS with custom domain, no port forwarding
 
 ---
 

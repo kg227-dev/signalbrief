@@ -193,9 +193,11 @@ input::placeholder { color: var(--text-light); }
 .chip:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
 .chip.selected {
   border-color: var(--blue);
-  background: var(--blue-light);
-  color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+  font-weight: 600;
 }
+.chip.selected:hover { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .chip-check { opacity: 0; font-size: 11px; transition: opacity 0.15s; }
 .chip.selected .chip-check { opacity: 1; }
 .chip-min-note { font-size: 12px; color: var(--text-light); }

@@ -8,23 +8,18 @@
 <style>
   .loading-state { text-align:center; padding: 60px 24px; color: var(--text-muted); }
   .btn-save { background: var(--blue); }
-  .topic-group-label { width:100%; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); padding:10px 0 6px; }
+  /* Back nav */
+  .top-nav { padding: 20px 24px 0; max-width: 640px; margin: 0 auto; }
+  .back-link { font-size:13px; color:var(--text-muted); text-decoration:none; font-weight:500; }
+  .back-link:hover { color:var(--blue); }
+  /* Topics */
+  .topic-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .topic-group-label { width:100%; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); padding:8px 0 4px; }
   .topic-group-label:first-child { padding-top:0; }
-  .topic-grid { display:flex; flex-wrap:wrap; gap:8px; }
-  .topic-chip {
-    display:inline-flex; align-items:center; gap:6px;
-    padding:7px 14px; border-radius:100px;
-    border:1.5px solid var(--border); background:#fff;
-    font-size:13px; font-weight:500; color:var(--text-secondary);
-    cursor:pointer; transition:all 0.15s ease; user-select:none;
-  }
-  .topic-chip:hover { border-color:#93C5FD; color:var(--text); }
-  .topic-chip.selected {
-    background:#EFF6FF; border-color:#2563EB;
-    color:#1D4ED8; font-weight:600;
-  }
-  .topic-chip .check { display:none; font-size:11px; }
-  .topic-chip.selected .check { display:inline; }
+  /* Selected summary */
+  .selected-summary { font-size:13px; color:var(--text-muted); margin-bottom:14px; min-height:20px; }
+  .selected-summary strong { color:var(--text); }
+  .selected-summary .summary-topics { color:var(--blue); font-weight:500; }
   .btn-danger {
     width: 100%; padding: 12px; background: #fff;
     color: #DC2626; border: 1.5px solid #FECACA;
@@ -45,10 +40,12 @@
 
 <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:100%"></div></div>
 
-<header class="site-header" style="display:flex;align-items:center;justify-content:space-between;">
-  <a href="/" style="text-decoration:none;color:var(--text-muted);font-size:13px;font-weight:500;">← Home</a>
+<div class="top-nav">
+  <a href="/" class="back-link">← Home</a>
+</div>
+
+<header class="site-header">
   <div class="brand"><span class="brand-sun">☀️</span> SignalBrief</div>
-  <div style="width:52px;"></div>
 </header>
 
 <div class="container">
@@ -88,6 +85,7 @@
         <div class="section-title">What you track</div>
         <div class="section-subtitle">Minimum 2 required.</div>
       </div>
+      <div class="selected-summary" id="selectedSummary"></div>
       <div class="topic-grid" id="topicGrid"></div>
       <div style="font-size:12px;color:#6B7280;margin-top:8px;" id="topicMinNote">0 selected</div>
       <div class="custom-topic-row">

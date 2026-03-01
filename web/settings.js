@@ -39,14 +39,27 @@ function updateTopicNote() {
   if (!el) return;
   el.textContent = n + ' selected' + (n < 2 ? ' — pick at least 2' : '');
   el.style.color = (n < 2 && n > 0) ? '#DC2626' : '#6B7280';
+  updateSelectedSummary();
+}
+
+function updateSelectedSummary() {
+  const el = document.getElementById('selectedSummary');
+  if (!el) return;
+  const topics = Array.from(selectedTopics);
+  if (topics.length === 0) {
+    el.innerHTML = 'No topics selected yet.';
+    return;
+  }
+  const labels = topics.map(function(t) { return TOPIC_LABELS[t] || t; });
+  el.innerHTML = '<strong>' + topics.length + ' tracking:</strong> <span class="summary-topics">' + labels.join(' · ') + '</span>';
 }
 
 function renderChip(topic, selected) {
   const chip = document.createElement('div');
-  chip.className = 'topic-chip' + (selected ? ' selected' : '');
+  chip.className = 'chip' + (selected ? ' selected' : '');
   chip.dataset.topic = topic;
   const label = TOPIC_LABELS[topic] || topic;
-  chip.innerHTML = '<span class="check"></span> ' + label;
+  chip.innerHTML = '<span class="chip-check">✓</span> ' + label;
   chip.addEventListener('click', function() {
     if (selectedTopics.has(topic)) {
       selectedTopics.delete(topic);

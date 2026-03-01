@@ -13,9 +13,15 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const { readUser, writeUser } = require("./store");
+const { readUser, writeUser, allUsers } = require("./store");
+const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
+const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
+
+// ── Telegram-first onboarding state ──────────────────────────────────────────
+// Maps chatId → true when we're waiting for the user to reply with their email
+const AWAITING_EMAIL = new Map();
 const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
 
 // ── HTTP ─────────────────────────────────────────────────────────────────────
@@ -54,7 +60,10 @@ async function send(chatId, text, extra = {}) {
 async function parseIntent(message) {
   // Fast-path for slash commands
   const m = message.trim().toLowerCase();
-  if (m === "/start") return { action: "start" };
+  if (m.startsWith("/start")) {
+    const parts = message.trim().split(/\s+/);
+    return { action: "start", email: parts[1] || null };
+  }
   if (m === "/digest") return { action: "digest" };
   if (m === "/settings") return { action: "settings" };
   if (m === "/bookmarks") return { action: "bookmarks" };
@@ -153,28 +162,138 @@ async function handleDigest(chatId) {
   }
 }
 
-async function handleStart(chatId) {
+async function handleStart(chatId, email) {
+  // ── /start email@example.com — link Telegram to existing web signup ──────────
+  if (email) {
+    const normalised = email.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalised)) {
+      await send(chatId, `❌ That doesn't look like a valid email. Try:\n\`/start you@example.com\``);
+      return;
+    }
+
+    const users = allUsers();
+    const match = users.find(u => u.email.toLowerCase() === normalised);
+    if (!match) {
+      await send(chatId, `❌ *${normalised}* isn't signed up yet.\n\nSign up at getsignalbrief.com first, then come back and send:\n\`/start ${normalised}\``);
+      return;
+    }
+    if (match.chatId === chatId) {
+      await send(chatId, `✅ Already linked! Your digest arrives at *7 AM ET* on weekdays.\n\n💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`);
+      return;
+    }
+
+    // Migrate from placeholder email-xxx chatId → real Telegram chatId
+    const oldChatId = match.chatId;
+    const updated = { ...match, chatId, preferences: { ...(match.preferences || {}), telegram_enabled: true }, last_updated: new Date().toISOString() };
+    writeUser(chatId, updated);
+    const oldFile = require("path").join(__dirname, "data", `user-${oldChatId}.json`);
+    if (require("fs").existsSync(oldFile)) require("fs").unlinkSync(oldFile);
+
+    const firstName = (match.name || "").split(" ")[0] || "there";
+    await send(chatId,
+      `✅ *Linked, ${firstName}!* Telegram is now connected to your SignalBrief account.\n\n` +
+      `Your digest arrives tomorrow at *7 AM ET*. Or get one now:\n\n` +
+      `⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
+    );
+    return;
+  }
+
+  // ── Plain /start — existing or new user ─────────────────────────────────────
   const user = readUser(chatId);
   if (user.digests_received > 0) {
     await send(chatId, `Welcome back! You've received *${user.digests_received}* digests so far.\n\nUse /settings to update your preferences or /bookmarks to see saved items.`);
     return;
   }
 
-  writeUser(chatId, { ...user, status: "active", joined_at: new Date().toISOString() });
+  // Already a linked, active account
+  if (user.email) {
+    writeUser(chatId, { ...user, status: "active", joined_at: user.joined_at || new Date().toISOString() });
+    await send(chatId,
+      `☀️ *Welcome to SignalBrief*\n\n` +
+      `Your daily signal across AI, strategy, and business — every morning at 7 AM ET.\n\n` +
+      `📊 *more AI* · 📉 *less pharma* · ➕ *add topic* · ⚙️ /settings\n\n` +
+      `First digest arrives tomorrow. See you then.`
+    );
+    return;
+  }
 
+  // Unknown Telegram user — prompt for email (Telegram-first onboarding)
+  AWAITING_EMAIL.set(chatId, true);
   await send(chatId,
     `☀️ *Welcome to SignalBrief*\n\n` +
-    `Your daily signal across AI, strategy, and business — delivered every morning at 7 AM ET.\n\n` +
-    `*What you'll get:*\n` +
-    `• 7 curated stories from the last 24 hours\n` +
-    `• Sharp "why it matters" analysis for each\n` +
-    `• Direct links to full articles\n` +
-    `• A deeper email version in your inbox\n\n` +
-    `*Industries:* HEALTHCARE · FINANCIAL SERVICES · PE×M&A · ENERGY · CONSUMER · LIFE SCIENCES · TECHNOLOGY · INDUSTRIALS · REAL ESTATE · PUBLIC SECTOR\n` +
-    `*Capabilities:* AI×TECH · STRATEGY · POLICY×REGULATORY · SUSTAINABILITY · DIGITAL · M&A ADVISORY · TALENT\n\n` +
-    `You can tune these anytime — just reply with:\n` +
-    `📊 *more AI* · 📉 *less pharma* · ➕ *add GLP-1*\n\n` +
-    `First digest arrives tomorrow at 7 AM ET. See you then.`
+    `Your daily signal across AI, strategy, and business.\n\n` +
+    `What's your email address? I'll create your account and you'll get your first digest tomorrow at 7 AM ET.`
+  );
+}
+
+// ── Telegram-first email capture ──────────────────────────────────────────────
+async function handleEmailCapture(chatId, text) {
+  const email = text.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    await send(chatId, `That doesn't look like a valid email. Try again — e.g. *you@gmail.com*`);
+    return;
+  }
+
+  AWAITING_EMAIL.delete(chatId);
+
+  // Check if already signed up via web — link instead of creating duplicate
+  const existing = allUsers().find(u => u.email.toLowerCase() === email);
+  if (existing) {
+    const oldChatId = existing.chatId;
+    if (oldChatId !== chatId) {
+      existing.chatId = chatId;
+      existing.preferences = { ...(existing.preferences || {}), telegram_enabled: true };
+      existing.last_updated = new Date().toISOString();
+      writeUser(chatId, existing);
+      const oldFile = path.join(__dirname, "data", `user-${oldChatId}.json`);
+      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+    }
+    const firstName = (existing.name || "").split(" ")[0] || "there";
+    await send(chatId,
+      `✅ *Linked, ${firstName}!* Your existing account is now connected to Telegram.\n\n` +
+      `Digest arrives at *7 AM ET* on weekdays. Or:\n⚡ /digest · 💾 save [#] · ⚙️ /settings`
+    );
+    return;
+  }
+
+  // New user — create account with smart defaults
+  const user = {
+    chatId,
+    email,
+    name: email.split("@")[0],
+    telegram: null,
+    topics: CONFIG.topics.slice(0, 5).map(t => t.tag), // first 5 topics as default
+    status: "active",
+    joined_at: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    digests_received: 0,
+    bookmarks: [],
+    topic_weights: {},
+    custom_topics: [],
+    last_digest_items: [],
+    preferences: {
+      depth: "headline_plus_why",
+      delivery_time: "07:00",
+      frequency: "daily_weekday",
+      days_of_week: [1, 2, 3, 4, 5],
+      items_per_digest: 5,
+      timezone: "America/New_York",
+      email_enabled: true,
+      telegram_enabled: true,
+    },
+  };
+  writeUser(chatId, user);
+
+  // Send welcome email
+  const settingsUrl = `${BASE_URL}/settings?email=${encodeURIComponent(email)}`;
+  const welcomeHtml = `<p>Hi! Your SignalBrief account is set up. Customize your topics and schedule at <a href="${settingsUrl}">${settingsUrl}</a>.</p>`;
+  sendEmailViaMailer(email, "Welcome to SignalBrief — customize your digest", welcomeHtml).catch(() => {});
+
+  await send(chatId,
+    `✅ *You're in!*\n\n` +
+    `Digest starts tomorrow at *7 AM ET* — 7 signals across the top strategy, AI, and business stories.\n\n` +
+    `Customize your topics and schedule:\n${settingsUrl}\n\n` +
+    `💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
   );
 }
 
@@ -347,11 +466,16 @@ async function handleQuestion(chatId, question) {
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
 async function handle(message, chatId) {
+  // Telegram-first onboarding: intercept email reply before intent parsing
+  if (AWAITING_EMAIL.has(chatId) && !message.trim().startsWith("/")) {
+    return handleEmailCapture(chatId, message);
+  }
+
   const intent = await parseIntent(message);
   console.log(`[${chatId}] "${message}" → ${JSON.stringify(intent)}`);
 
   switch (intent.action) {
-    case "start":     return handleStart(chatId);
+    case "start":     return handleStart(chatId, intent.email);
     case "digest":    return handleDigest(chatId);
     case "save":      return handleSave(chatId, intent.items);
     case "topic_more": return handleTopicMore(chatId, intent.topic);

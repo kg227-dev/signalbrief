@@ -18,6 +18,7 @@ const fs = require("fs");
 const path = require("path");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
+const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
@@ -25,12 +26,17 @@ async function sendViaResend(to, subject, html) {
   const apiKey = CONFIG.keys.resendApiKey;
   const fromEmail = CONFIG.keys.fromEmail || "digest@signalbrief.co";
   const fromName = CONFIG.keys.fromName || "SignalBrief";
+  const unsubUrl = `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
 
   const body = JSON.stringify({
     from: `${fromName} <${fromEmail}>`,
     to: [to],
     subject,
     html,
+    headers: {
+      "List-Unsubscribe": `<${unsubUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
   });
 
   return new Promise((resolve, reject) => {
@@ -92,6 +98,7 @@ async function sendViaGmail(to, subject, html) {
   const accessToken = await refreshGoogleToken();
   const fromEmail = "jarvisjones2922@gmail.com";
   const fromName = CONFIG.keys.fromName || "SignalBrief";
+  const unsubUrl = `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
 
   const mime = [
     `To: ${to}`,
@@ -99,6 +106,8 @@ async function sendViaGmail(to, subject, html) {
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
     `MIME-Version: 1.0`,
     `Content-Type: text/html; charset=utf-8`,
+    `List-Unsubscribe: <${unsubUrl}>`,
+    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
     ``,
     html,
   ].join("\r\n");
@@ -132,9 +141,6 @@ async function sendViaGmail(to, subject, html) {
 // ── Main send function ────────────────────────────────────────────────────────
 
 async function sendEmail(to, subject, html) {
-  // Inject settings link into email footer
-  html = html.replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(to));
-
   // Use Resend if configured, otherwise Gmail
   if (CONFIG.keys.resendApiKey) {
     const result = await sendViaResend(to, subject, html);

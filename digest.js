@@ -21,6 +21,7 @@ const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
+const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
 // API cost estimates
 const PERPLEXITY_COST_PER_CALL  = 0.005;   // Sonar model per call
@@ -297,16 +298,18 @@ function formatTelegram(items, dateStr, state) {
   ];
   items.forEach((item, i) => {
     const num = ["1⃣","2⃣","3⃣","4⃣","5⃣","6⃣","7⃣","8⃣"][i];
-    // Strip HTML tags for Telegram, convert <strong> to *bold*
-    const wim = item.wim
-      .replace(/<strong>(.*?)<\/strong>/g, "*$1*")
-      .replace(/<\/?[^>]+>/g, "");
-    // Sharp format: headline — punchy summary line
-    const summaryLine = item.summary.length > 80
-      ? item.summary.slice(0, 77) + "..."
-      : item.summary;
+    // Strip ALL HTML first (including <strong>) before splitting — bold asterisks break
+    // the sentence-boundary lookbehind. Cap at 250 chars (plaintext sentence avg ~200).
+    const rawWim = item.wim
+      ? item.wim
+          .replace(/<\/?[^>]+>/g, "")
+          .split(/(?<=[.!?])\s+(?=[A-Z])/)[0]
+      : null;
+    const wim = rawWim
+      ? (rawWim.length > 250 ? rawWim.slice(0, 247).replace(/\s+\S*$/, "") + "…" : rawWim)
+      : null;
     lines.push(`${num} *[${item.tag}]* ${item.headline}`);
-    lines.push(`${summaryLine}`);
+    if (wim) lines.push(`_${wim}_`);
     if (item.url && item.url !== "#") {
       lines.push(`→ [${item.source}](${item.url})`);
     } else {
@@ -320,7 +323,7 @@ function formatTelegram(items, dateStr, state) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(items, dateStr, quickScan) {
+function buildEmail(items, dateStr, quickScan, userEmail = "") {
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
     // Relevance score badge (color-coded, embedded in enrichment — no extra API cost)
@@ -351,6 +354,8 @@ function buildEmail(items, dateStr, quickScan) {
     .replace("{{DATE}}", dateStr)
     .replace("{{ITEM_COUNT}}", `${items.length} signals · ${readMins} min read`)
     .replace("{{QUICK_SCAN}}", quickScan)
+    .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
+    .replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(userEmail))
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
       `<!-- Items -->\n    <div class="items">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
@@ -507,7 +512,7 @@ async function main() {
         await sendTelegram(userTelegram, u.chatId);
       }
       if (u.email && prefs.email_enabled !== false) {
-        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan);
+        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.email);
         await sendEmail(userSubject, userEmailHtml, u.email);
         await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }

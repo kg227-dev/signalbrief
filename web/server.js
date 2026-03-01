@@ -15,6 +15,40 @@ const PORT = 3003;
 const WEB_DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.json"), "utf8"));
 
+// ── Rate limiting (in-memory, per-IP + per-email) ─────────────────────────────
+const RATE_IP    = new Map(); // ip  → { count, resetAt }
+const RATE_EMAIL = new Map(); // email → resetAt (cooldown)
+const IP_LIMIT   = 5;          // max signups per IP per window
+const IP_WINDOW  = 15 * 60 * 1000; // 15 min
+const EMAIL_COOLDOWN = 10 * 60 * 1000; // 10 min re-submit cooldown
+
+function getClientIp(req) {
+  // Respect Cloudflare's real-IP header
+  return (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+}
+
+function checkRateLimit(ip, email) {
+  const now = Date.now();
+
+  // Prune expired entries (keep map lean)
+  for (const [k, v] of RATE_IP) if (v.resetAt < now) RATE_IP.delete(k);
+  for (const [k, v] of RATE_EMAIL) if (v < now) RATE_EMAIL.delete(k);
+
+  // Per-IP check
+  const ipEntry = RATE_IP.get(ip) || { count: 0, resetAt: now + IP_WINDOW };
+  if (ipEntry.resetAt < now) { ipEntry.count = 0; ipEntry.resetAt = now + IP_WINDOW; }
+  if (ipEntry.count >= IP_LIMIT) return { limited: true, reason: "Too many signups from your network. Try again in 15 minutes." };
+  ipEntry.count++;
+  RATE_IP.set(ip, ipEntry);
+
+  // Per-email cooldown
+  const emailReset = RATE_EMAIL.get(email.toLowerCase());
+  if (emailReset && emailReset > now) return { limited: true, reason: "This email was just submitted. Wait a few minutes before resubmitting." };
+  RATE_EMAIL.set(email.toLowerCase(), now + EMAIL_COOLDOWN);
+
+  return { limited: false };
+}
+
 const MIME = {
   ".html": "text/html",
   ".css": "text/css",
@@ -80,7 +114,8 @@ async function sendWelcomeEmail(user) {
     .replace(/\{\{DELIVERY_DAYS_LABEL\}\}/g, daysLabel)
     .replace(/\{\{DEPTH_LABEL\}\}/g, depthLabel)
     .replace(/\{\{ITEMS_COUNT\}\}/g, String(prefs.items_per_digest || 5))
-    .replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl);
+    .replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl)
+    .replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(email));
 
   const subject = `Welcome to SignalBrief, ${firstName} — your brief is set for ${timeLabel}`;
   const result = await sendEmail(email, subject, html);
@@ -148,6 +183,11 @@ const server = http.createServer(async (req, res) => {
     if (!email || !name) return json(res, { error: "name and email required" }, 400);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, { error: "invalid email address" }, 400);
     if (!topics || topics.length < 2) return json(res, { error: "select at least 2 topics" }, 400);
+
+    // Rate limiting
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(ip, email);
+    if (rl.limited) return json(res, { error: rl.reason }, 429);
 
     // Sanitize telegram: strip leading @ characters
     const telegramClean = telegram ? String(telegram).replace(/^@+/, "").trim() : null;
@@ -224,6 +264,28 @@ const server = http.createServer(async (req, res) => {
     return json(res, { success: true });
   }
 
+  // GET|POST /api/unsubscribe?email=... — one-click unsubscribe (RFC 8058)
+  // GET:  human-readable redirect to success page
+  // POST: email client one-click (body: "List-Unsubscribe=One-Click")
+  if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
+    const emailParam = url.searchParams.get("email") || "";
+    const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
+    if (!targetEmail) return json(res, { error: "email required" }, 400);
+
+    const users = allUsers();
+    const existing = users.find(u => u.email.toLowerCase() === targetEmail);
+    if (existing) {
+      writeUser(existing.chatId, { ...existing, status: "unsubscribed", email_unsubscribed_at: new Date().toISOString() });
+      console.log(`[unsubscribe] ${targetEmail}`);
+    }
+    // Always succeed (idempotent — if user not found, silently ok)
+    if (req.method === "POST") return json(res, { success: true });
+    // GET: redirect to a simple confirmation page
+    const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
+    res.writeHead(302, { Location: `${BASE_URL}/settings?email=${encodeURIComponent(targetEmail)}&unsubscribed=1` });
+    return res.end();
+  }
+
   // GET /api/archive — list of all past digests
   if (pathname === "/api/archive" && req.method === "GET") {
     const archiveDir = path.join(__dirname, "../archive");
@@ -285,6 +347,20 @@ const server = http.createServer(async (req, res) => {
       .map(u => ({ ...u, total_cost: parseFloat(u.total_cost.toFixed(5)) }))
       .sort((a, b) => b.total_cost - a.total_cost);
 
+    // User roster for admin view
+    const roster = allUsers().map(u => ({
+      name:           u.name || "",
+      email:          u.email || "",
+      status:         u.status || "active",
+      joined:         (u.joined_at || "").slice(0, 10),
+      digests:        u.digests_received || 0,
+      last_digest:    (u.last_digest_at || "").slice(0, 10) || null,
+      telegram:       !!(u.chatId && !u.chatId.startsWith("email-")),
+      topics:         (u.topics || []).length,
+      bookmarks:      (u.bookmarks || []).length,
+      adjustments:    Object.keys(u.topic_weights || {}).length,
+    })).sort((a, b) => (b.digests - a.digests));
+
     return json(res, {
       summary: {
         all_time_cost:      parseFloat(sum(runs, "total_cost_usd").toFixed(4)),
@@ -293,9 +369,11 @@ const server = http.createServer(async (req, res) => {
         month_runs:         monthRuns.length,
         month_on_demand:    monthRuns.filter(r => r.on_demand).length,
         month_users_served: sum(monthRuns, "users_served"),
+        active_users:       allUsers().filter(u => u.status === "active").length,
       },
       runs: runs.slice(0, 30),
       per_user: perUser,
+      roster,
     });
   }
 

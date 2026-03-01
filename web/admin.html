@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin — SignalBrief Cost Dashboard</title>
+<title>Admin — SignalBrief</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -23,7 +23,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .header p { font-size:14px; color:var(--text-secondary); }
 
 /* Summary cards */
-.cards { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:36px; }
+.cards { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:36px; }
 .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; }
 .card-label { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:10px; }
 .card-value { font-size:28px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
@@ -51,9 +51,15 @@ tbody tr:hover td { background:#FAFAFA; }
 
 .empty { padding:32px; text-align:center; color:var(--text-secondary); font-size:14px; }
 
+/* Roster status badges */
+.badge-active   { font-size:10px; font-weight:700; color:#fff; background:var(--green); padding:2px 7px; border-radius:100px; }
+.badge-unsub    { font-size:10px; font-weight:700; color:#fff; background:var(--red);   padding:2px 7px; border-radius:100px; }
+.badge-pending  { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
+.tg-yes  { color:var(--green); font-size:15px; }
+.tg-no   { color:#D1D5DB;     font-size:15px; }
+
 @media (max-width:640px) {
   .cards { grid-template-columns:1fr 1fr; }
-  .cards .card:last-child { grid-column:1/-1; }
   table { font-size:12px; }
   thead th, tbody td { padding:10px 12px; }
 }
@@ -86,6 +92,11 @@ tbody tr:hover td { background:#FAFAFA; }
       <div class="card-label">Users served (month)</div>
       <div class="card-value" id="monthUsers">—</div>
       <div class="card-sub" id="monthOnDemand">— on-demand</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Active subscribers</div>
+      <div class="card-value" id="activeUsers">—</div>
+      <div class="card-sub" id="telegramUsers">— on Telegram</div>
     </div>
   </div>
 
@@ -130,6 +141,30 @@ tbody tr:hover td { background:#FAFAFA; }
     </table>
   </div>
 
+  <!-- User roster -->
+  <div class="section-title">User roster</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Joined</th>
+          <th>Digests</th>
+          <th>Last digest</th>
+          <th>TG</th>
+          <th>Topics</th>
+          <th>Saves</th>
+          <th>Tuned</th>
+        </tr>
+      </thead>
+      <tbody id="rosterBody">
+        <tr><td colspan="10" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
 </div>
 
 <script>
@@ -163,7 +198,7 @@ async function load() {
     return;
   }
 
-  const { summary, runs, per_user } = data;
+  const { summary, runs, per_user, roster } = data;
 
   // Summary cards
   document.getElementById("monthCost").textContent  = fmt$(summary.month_cost);
@@ -172,6 +207,13 @@ async function load() {
   document.getElementById("allTimeRuns").innerHTML  = `<strong>${summary.all_time_runs}</strong> runs total`;
   document.getElementById("monthUsers").textContent  = summary.month_users_served;
   document.getElementById("monthOnDemand").innerHTML = `<strong>${summary.month_on_demand}</strong> on-demand`;
+
+  if (roster) {
+    const active = roster.filter(u => u.status === "active").length;
+    const tgLinked = roster.filter(u => u.telegram).length;
+    document.getElementById("activeUsers").textContent = active;
+    document.getElementById("telegramUsers").innerHTML = `<strong>${tgLinked}</strong> on Telegram`;
+  }
 
   // Run log
   const runsBody = document.getElementById("runsBody");
@@ -209,6 +251,39 @@ async function load() {
         <td>${u.runs}</td>
         <td class="cost-cell ${costClass(u.total_cost)}">${fmt$(u.total_cost)}</td>
         <td class="mono">${fmt$(avg)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  // Roster table
+  const rosterBody = document.getElementById("rosterBody");
+  if (!roster || roster.length === 0) {
+    rosterBody.innerHTML = `<tr><td colspan="10" class="empty">No users yet.</td></tr>`;
+  } else {
+    rosterBody.innerHTML = roster.map(u => {
+      const statusBadge = u.status === "active"
+        ? `<span class="badge-active">active</span>`
+        : u.status === "unsubscribed"
+          ? `<span class="badge-unsub">unsub</span>`
+          : `<span class="badge-pending">${u.status || "—"}</span>`;
+      const tgIcon = u.telegram
+        ? `<span class="tg-yes" title="Telegram linked">✓</span>`
+        : `<span class="tg-no">—</span>`;
+      const lastDig = u.last_digest || "—";
+      const tuned = u.adjustments > 0
+        ? `<span style="color:var(--accent);font-weight:600;">${u.adjustments}</span>`
+        : `<span style="color:var(--text-secondary);">0</span>`;
+      return `<tr>
+        <td style="font-weight:600;">${u.name || "—"}</td>
+        <td class="mono" style="font-size:12px;">${u.email || "—"}</td>
+        <td>${statusBadge}</td>
+        <td class="mono">${u.joined || "—"}</td>
+        <td style="font-weight:600;">${u.digests}</td>
+        <td class="mono">${lastDig}</td>
+        <td style="text-align:center;">${tgIcon}</td>
+        <td>${u.topics}</td>
+        <td>${u.bookmarks}</td>
+        <td>${tuned}</td>
       </tr>`;
     }).join("");
   }

@@ -182,6 +182,19 @@ async function init() {
   const formEl = document.getElementById('settingsForm');
   const notFoundEl = document.getElementById('notFoundState');
 
+  // Show unsubscribed confirmation if redirected from /api/unsubscribe
+  if (params.get('unsubscribed') === '1') {
+    loadingEl.style.display = 'none';
+    formEl.innerHTML =
+      '<div class="form-section" style="text-align:center;padding:48px 24px;">' +
+      '<div style="font-size:40px;margin-bottom:16px;">👋</div>' +
+      '<h2 style="font-family:\'Instrument Serif\',serif;font-weight:400;font-size:26px;margin-bottom:8px;">You\'re unsubscribed.</h2>' +
+      '<p style="color:#6B7280;">No more digests. <a href="/" style="color:#2563EB;">Re-subscribe anytime →</a></p>' +
+      '</div>';
+    formEl.style.display = 'block';
+    return;
+  }
+
   if (!email) {
     loadingEl.style.display = 'none';
     notFoundEl.style.display = 'block';
@@ -283,8 +296,16 @@ async function init() {
     });
 
     // Unsubscribe
+    // Auto-scroll to unsubscribe section if URL has #unsub
+    if (window.location.hash === '#unsub') {
+      setTimeout(() => {
+        const el = document.getElementById('unsub');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+    }
+
     document.getElementById('unsubBtn').addEventListener('click', async function() {
-      if (!confirm('Unsubscribe from SignalBrief? You can re-subscribe anytime at localhost:3003.')) return;
+      if (!confirm('Unsubscribe from SignalBrief? You can re-subscribe anytime at getsignalbrief.com.')) return;
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

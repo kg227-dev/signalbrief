@@ -354,13 +354,15 @@ const server = http.createServer(async (req, res) => {
       .sort((a, b) => b.total_cost - a.total_cost);
 
     // User roster for admin view
+    // Convert UTC timestamps to ET dates (users signing up after 7 PM ET appear as next UTC day)
+    const toETDate = iso => iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
     const roster = allUsers().map(u => ({
       name:           u.name || "",
       email:          u.email || "",
       status:         u.status || "active",
-      joined:         (u.joined_at || "").slice(0, 10),
+      joined:         toETDate(u.joined_at),
       digests:        u.digests_received || 0,
-      last_digest:    (u.last_digest_at || "").slice(0, 10) || null,
+      last_digest:    toETDate(u.last_digest_at),
       telegram:       !!(u.chatId && !u.chatId.startsWith("email-")),
       topics:         (u.topics || []).length,
       bookmarks:      (u.bookmarks || []).length,

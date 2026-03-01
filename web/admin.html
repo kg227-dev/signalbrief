@@ -106,7 +106,8 @@ tbody tr:hover td { background:#FAFAFA; }
     <table>
       <thead>
         <tr>
-          <th>Date</th>
+          <th>Date (ET)</th>
+          <th>Time (ET)</th>
           <th>Type</th>
           <th>Users</th>
           <th>Perp. calls</th>
@@ -118,7 +119,7 @@ tbody tr:hover td { background:#FAFAFA; }
         </tr>
       </thead>
       <tbody id="runsBody">
-        <tr><td colspan="9" class="empty">Loading…</td></tr>
+        <tr><td colspan="10" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -154,13 +155,16 @@ tbody tr:hover td { background:#FAFAFA; }
           <th>Digests</th>
           <th>Last digest</th>
           <th>TG</th>
+          <th>Delivery</th>
+          <th>Depth</th>
           <th>Topics</th>
           <th>Saves</th>
           <th>Tuned</th>
+          <th>Settings</th>
         </tr>
       </thead>
       <tbody id="rosterBody">
-        <tr><td colspan="10" class="empty">Loading…</td></tr>
+        <tr><td colspan="13" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -200,6 +204,11 @@ async function load() {
 
   const { summary, runs, per_user, roster } = data;
 
+  // Month label from server (ET timezone, not browser local)
+  if (summary.month_label) {
+    document.getElementById("monthLabel").textContent = summary.month_label;
+  }
+
   // Summary cards
   document.getElementById("monthCost").textContent  = fmt$(summary.month_cost);
   document.getElementById("monthRuns").innerHTML    = `<strong>${summary.month_runs}</strong> runs this month`;
@@ -218,15 +227,25 @@ async function load() {
   // Run log
   const runsBody = document.getElementById("runsBody");
   if (!runs || runs.length === 0) {
-    runsBody.innerHTML = `<tr><td colspan="9" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
+    runsBody.innerHTML = `<tr><td colspan="10" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
   } else {
     runsBody.innerHTML = runs.map(r => {
       const typeBadge = r.on_demand
         ? `<span class="badge-on-demand">on-demand</span>`
         : `<span class="badge-scheduled">scheduled</span>`;
       const totalClass = costClass(r.total_cost_usd || 0);
+      // run_at_et added in Batch 10; fall back to deriving from run_at for older entries
+      let timeEt = r.run_at_et || "—";
+      if (!r.run_at_et && r.run_at) {
+        try {
+          timeEt = new Date(r.run_at).toLocaleString("en-US", {
+            timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true
+          });
+        } catch {}
+      }
       return `<tr>
         <td class="mono">${r.date}</td>
+        <td class="mono" style="font-size:12px;color:#6B7280;">${timeEt}</td>
         <td>${typeBadge}</td>
         <td>${r.users_served || 0}</td>
         <td>${r.perplexity_calls || 0}</td>
@@ -258,7 +277,7 @@ async function load() {
   // Roster table
   const rosterBody = document.getElementById("rosterBody");
   if (!roster || roster.length === 0) {
-    rosterBody.innerHTML = `<tr><td colspan="10" class="empty">No users yet.</td></tr>`;
+    rosterBody.innerHTML = `<tr><td colspan="13" class="empty">No users yet.</td></tr>`;
   } else {
     rosterBody.innerHTML = roster.map(u => {
       const statusBadge = u.status === "active"
@@ -273,6 +292,12 @@ async function load() {
       const tuned = u.adjustments > 0
         ? `<span style="color:var(--accent);font-weight:600;">${u.adjustments}</span>`
         : `<span style="color:var(--text-secondary);">0</span>`;
+      const topicsCell = u.topics_list
+        ? `<span title="${u.topics_list}" style="cursor:default;">${u.topics} topics</span>`
+        : `${u.topics || 0}`;
+      const settingsLink = u.settings_url
+        ? `<a href="${u.settings_url}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;">open →</a>`
+        : `<span style="color:var(--text-secondary);">—</span>`;
       return `<tr>
         <td style="font-weight:600;">${u.name || "—"}</td>
         <td class="mono" style="font-size:12px;">${u.email || "—"}</td>
@@ -281,9 +306,12 @@ async function load() {
         <td style="font-weight:600;">${u.digests}</td>
         <td class="mono">${lastDig}</td>
         <td style="text-align:center;">${tgIcon}</td>
-        <td>${u.topics}</td>
+        <td style="font-size:12px;white-space:nowrap;">${u.delivery_time || "—"}</td>
+        <td style="font-size:12px;">${u.depth || "—"}</td>
+        <td>${topicsCell}</td>
         <td>${u.bookmarks}</td>
         <td>${tuned}</td>
+        <td>${settingsLink}</td>
       </tr>`;
     }).join("");
   }

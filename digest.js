@@ -199,6 +199,10 @@ TASK: For each news item below, return two fields:
    - 5.0–6.9: Moderate interest (incremental update, early-stage signal worth watching)
    - Below 5.0: Routine or narrow-interest item
 
+3. "implications" — one actionable sentence naming a specific role (e.g. "CFO", "deal team", "payer CMO", "PE portfolio team") and the concrete action, question, or client meeting flag this story creates. Return null if it is fully covered by the wim already.
+
+4. "watch_next" — one forward-looking sentence: name the specific signal, filing, earnings call, or regulatory decision to monitor in the next 2–4 weeks. Start with an entity name or date. Return null if this is a one-time development with no near-term pending catalysts.
+
 WHAT TO AVOID (too generic):
 ❌ "This could have significant implications for the industry." (says nothing)
 ❌ "Companies should pay attention to this trend." (empty filler)
@@ -206,7 +210,7 @@ WHAT TO AVOID (too generic):
 WHAT TO AIM FOR (specific, implication-forward):
 ✅ "<strong>Another payer going full care-delivery stack — point-solution vendors in drug management will feel it.</strong> Your buyer is now also your competitor's parent company. Any vendor with Cigna in their top-3 logos needs to stress-test that relationship."
 
-Return ONLY a JSON array with the same items plus "wim" and "baseScore" fields. No markdown, no explanation.
+Return ONLY a JSON array with the same items plus "wim", "baseScore", "implications", and "watch_next" fields. No markdown, no explanation.
 
 Items:
 ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag: i.tag })), null, 2)}`;
@@ -214,7 +218,7 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
   const res = await httpsPost(
     "api.anthropic.com", "/v1/messages",
     { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
-    { model: "claude-haiku-4-5", max_tokens: 3000, messages: [{ role: "user", content: prompt }] }
+    { model: "claude-haiku-4-5", max_tokens: 4500, messages: [{ role: "user", content: prompt }] }
   );
 
   const usage = {
@@ -230,15 +234,17 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
     return {
       items: items.map((item, i) => ({
         ...item,
-        wim: enriched[i]?.wim || "Analysis unavailable.",
-        baseScore: typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
+        wim:          enriched[i]?.wim || "Analysis unavailable.",
+        baseScore:    typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
+        implications: enriched[i]?.implications || null,
+        watch_next:   enriched[i]?.watch_next   || null,
       })),
       usage,
     };
   } catch (e) {
     log(`Claude parse error: ${e.message}`);
     return {
-      items: items.map((i) => ({ ...i, wim: "Analysis unavailable." })),
+      items: items.map((i) => ({ ...i, wim: "Analysis unavailable.", implications: null, watch_next: null })),
       usage,
     };
   }
@@ -331,11 +337,14 @@ function formatTelegram(items, dateStr, state) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false) {
+function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false, wasFiltered = true, depth = "headline_plus_why") {
+  const filterNote = wasFiltered
+    ? "filtered to your selected topics"
+    : "today's top signals across all areas";
   const welcomeBanner = isFirstDigest ? `
       <div style="margin:0 0 20px;padding:16px 20px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;">
         <div style="font-size:11px;font-weight:700;color:#15803D;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">👋 Your first SignalBrief</div>
-        <div style="font-size:13px;color:#374151;line-height:1.6;">Below is your first briefing, filtered to your selected topics. You'll receive this at your scheduled time — update topics, timing, or depth from the link below anytime.</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;">Below is your first briefing, ${filterNote}. You'll receive this at your scheduled time — update topics, timing, or depth from the link below anytime.</div>
       </div>` : "";
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
@@ -351,6 +360,15 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
       ? `<div class="item-wim-label">Why it matters</div>\n        <div class="item-wim">${item.wim}</div>`
       : "";
 
+    // Deep mode extras: implications + watch_next (only for headline_plus_why / full depth)
+    const isDeep = depth === "headline_plus_why" || depth === "full" || depth === "deep";
+    const implHtml = (isDeep && item.implications)
+      ? `<div class="item-implication">→ ${item.implications}</div>`
+      : "";
+    const watchHtml = (isDeep && item.watch_next)
+      ? `<div class="item-watch">👀 ${item.watch_next}</div>`
+      : "";
+
     return `
       <div class="item">
         <div class="item-meta">
@@ -361,6 +379,8 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
         <div class="item-title">${item.headline}</div>
         <div class="item-lede">${item.summary}</div>
         ${wimHtml}
+        ${implHtml}
+        ${watchHtml}
         <div class="item-readmore"><a href="${linkUrl}">Read more → ${item.source}</a></div>
       </div>`;
   }).join("\n");
@@ -418,12 +438,14 @@ function saveToArchive(date, items, dateStr, quickScan) {
     dateStr,
     quickScan,
     items: items.map(i => ({
-      tag: i.tag,
-      headline: i.headline,
-      summary: i.summary,
-      wim: i.wim,
-      url: i.url,
-      source: i.source,
+      tag:         i.tag,
+      headline:    i.headline,
+      summary:     i.summary,
+      wim:         i.wim,
+      implications: i.implications || null,
+      watch_next:  i.watch_next || null,
+      url:         i.url,
+      source:      i.source,
     })),
     generatedAt: date.toISOString(),
   };
@@ -504,17 +526,33 @@ async function main() {
       const prefs = u.preferences || {};
 
       // 1. Filter items by user's topic list (if set)
+      let wasFiltered = false;
       let userItems = enriched;
       if (u.topics && u.topics.length >= 2) {
-        // Normalize: match tag to user topic list (loose contains match)
         const userTopicsLower = u.topics.map(t => t.toLowerCase());
         const filtered = enriched.filter(item => {
           const tag = (item.tag || "").toLowerCase();
           return userTopicsLower.some(t => tag.includes(t) || t.includes(tag));
         });
-        // Fall back to full list only if filter leaves zero items
-        // (>= 1 match means we should honour the user's topic preference)
-        userItems = filtered.length >= 1 ? filtered : enriched;
+        const MIN_ITEMS = 3;
+        if (filtered.length >= MIN_ITEMS) {
+          // Enough topic matches — use them directly
+          userItems = filtered;
+          wasFiltered = true;
+        } else if (filtered.length >= 1) {
+          // Some topic matches but below floor — pad with highest-baseScore unmatched items
+          const filteredSet = new Set(filtered.map(i => i.headline));
+          const topups = enriched
+            .filter(i => !filteredSet.has(i.headline))
+            .sort((a, b) => (b.baseScore || 5) - (a.baseScore || 5))
+            .slice(0, MIN_ITEMS - filtered.length);
+          userItems = [...filtered, ...topups];
+          wasFiltered = true; // topics still used to prioritize
+        } else {
+          // Zero topic matches — full fallback (banner reflects this)
+          userItems = enriched;
+          wasFiltered = false;
+        }
       }
 
       // 2. Score by relevance (free — uses baseScore from enrichment + local topic match)
@@ -553,7 +591,7 @@ async function main() {
       }
       if (u.email && prefs.email_enabled !== false) {
         const isFirstDigest = (u.digests_received || 0) === 0;
-        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest);
+        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth);
         await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
         await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }
@@ -586,8 +624,9 @@ async function main() {
   const totalCost = perplexityCost + claudeCost;
 
   appendCostLog({
-    date:                  now.toISOString().slice(0, 10),
+    date:                  now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }), // ET date (not UTC)
     run_at:                now.toISOString(),
+    run_at_et:             now.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }),
     on_demand:             !!targetChatId,
     perplexity_calls:      perplexityCalls,
     perplexity_cost_usd:   parseFloat(perplexityCost.toFixed(5)),

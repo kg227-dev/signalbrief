@@ -416,7 +416,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     const now = new Date();
-    const monthPrefix = now.toISOString().slice(0, 7); // "2026-03"
+    // Use ET date for month prefix so runs at 10 PM ET (= 3 AM UTC next day) aren't miscounted
+    const monthPrefix = now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }).slice(0, 7);
+    const monthLabel  = now.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
     const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
 
@@ -436,18 +438,30 @@ const server = http.createServer(async (req, res) => {
     // User roster for admin view
     // Convert UTC timestamps to ET dates (users signing up after 7 PM ET appear as next UTC day)
     const toETDate = iso => iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
-    const roster = allUsers().map(u => ({
-      name:           u.name || "",
-      email:          u.email || "",
-      status:         u.status || "active",
-      joined:         toETDate(u.joined_at),
-      digests:        u.digests_received || 0,
-      last_digest:    toETDate(u.last_digest_at),
-      telegram:       !!(u.chatId && !u.chatId.startsWith("email-")),
-      topics:         (u.topics || []).length,
-      bookmarks:      (u.bookmarks || []).length,
-      adjustments:    Object.keys(u.topic_weights || {}).length,
-    })).sort((a, b) => (b.digests - a.digests));
+    const depthLabel = d => ({ headline_only: "Scan", headline_plus_oneliner: "Brief", headline_plus_why: "Deep", full: "Deep", deep: "Deep" }[d] || "Deep");
+    const roster = allUsers().map(u => {
+      const prefs = u.preferences || {};
+      const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+      const ampm = dh >= 12 ? "PM" : "AM";
+      const hour = dh % 12 || 12;
+      const min  = dm === 0 ? "" : `:${String(dm).padStart(2,"0")}`;
+      return {
+        name:          u.name || "",
+        email:         u.email || "",
+        status:        u.status || "active",
+        joined:        toETDate(u.joined_at),
+        digests:       u.digests_received || 0,
+        last_digest:   toETDate(u.last_digest_at),
+        telegram:      !!(u.chatId && !u.chatId.startsWith("email-")),
+        topics:        (u.topics || []).length,
+        topics_list:   (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
+        bookmarks:     (u.bookmarks || []).length,
+        adjustments:   Object.keys(u.topic_weights || {}).length,
+        delivery_time: `${hour}${min} ${ampm} ET`,
+        depth:         depthLabel(prefs.depth),
+        settings_url:  u.token ? `${BASE_URL}/settings?token=${u.token}` : null,
+      };
+    }).sort((a, b) => (b.digests - a.digests));
 
     return json(res, {
       summary: {
@@ -458,6 +472,7 @@ const server = http.createServer(async (req, res) => {
         month_on_demand:    monthRuns.filter(r => r.on_demand).length,
         month_users_served: sum(monthRuns, "users_served"),
         active_users:       allUsers().filter(u => u.status === "active").length,
+        month_label:        monthLabel,
       },
       runs: runs.slice(0, 30),
       per_user: perUser,

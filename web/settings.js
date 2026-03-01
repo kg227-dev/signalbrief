@@ -123,6 +123,58 @@ function getDepth() {
   return el ? el.dataset.depth : 'headline_plus_why';
 }
 
+// ── Day circle helpers ────────────────────────────────────────────────────────
+function daysFromFrequency(freq) {
+  if (freq === 'daily_all') return [0, 1, 2, 3, 4, 5, 6];
+  if (freq === 'daily_weekday' || freq === 'weekdays') return [1, 2, 3, 4, 5];
+  if (freq === 'sixdays') return [1, 2, 3, 4, 5, 6];
+  return [1, 2, 3, 4, 5]; // default weekdays
+}
+
+function initSettingsDays(days) {
+  document.querySelectorAll('#dayCircles .day-circle').forEach(function(c) {
+    c.classList.toggle('active', days.includes(parseInt(c.dataset.day)));
+  });
+  syncSettingsDayPresets();
+}
+
+function toggleSettingsDay(el) {
+  el.classList.toggle('active');
+  syncSettingsDayPresets();
+}
+
+function setSettingsDays(preset) {
+  document.querySelectorAll('#dayCircles .day-circle').forEach(function(c) {
+    const day = parseInt(c.dataset.day);
+    if (preset === 'weekdays') c.classList.toggle('active', day >= 1 && day <= 5);
+    else if (preset === 'everyday') c.classList.add('active');
+  });
+  syncSettingsDayPresets();
+}
+
+function syncSettingsDayPresets() {
+  const active = Array.from(document.querySelectorAll('#dayCircles .day-circle.active'))
+    .map(function(c) { return parseInt(c.dataset.day); });
+  const isWeekdays = active.length === 5 && [1,2,3,4,5].every(function(d) { return active.includes(d); });
+  const isEveryday = active.length === 7;
+  document.getElementById('preset-weekdays').classList.toggle('active', isWeekdays);
+  document.getElementById('preset-everyday').classList.toggle('active', isEveryday);
+}
+
+function getSettingsDays() {
+  return Array.from(document.querySelectorAll('#dayCircles .day-circle.active'))
+    .map(function(c) { return parseInt(c.dataset.day); });
+}
+
+function getSettingsFrequency() {
+  const days = getSettingsDays();
+  const isWeekdays = days.length === 5 && [1,2,3,4,5].every(function(d) { return days.includes(d); });
+  const isEveryday = days.length === 7;
+  if (isWeekdays) return 'daily_weekday';
+  if (isEveryday) return 'daily_all';
+  return 'custom';
+}
+
 async function init() {
   const params = new URLSearchParams(window.location.search);
   const email = params.get('email');
@@ -178,11 +230,14 @@ async function init() {
     const prefs = user.preferences || {};
     function setSelect(id, val) {
       const el = document.getElementById(id);
-      if (el && val) el.value = val;
+      if (el && val != null) el.value = String(val);
     }
     setSelect('deliveryTime', prefs.delivery_time);
-    setSelect('frequency', prefs.frequency);
-    setSelect('itemsPerDigest', prefs.items_per_digest ? String(prefs.items_per_digest) : '7');
+    setSelect('itemsPerDigest', prefs.items_per_digest ? String(prefs.items_per_digest) : '5');
+
+    // Day circles — populate from saved days_of_week, fall back to frequency string
+    const savedDays = prefs.days_of_week || daysFromFrequency(prefs.frequency);
+    initSettingsDays(savedDays);
 
     // Save
     document.getElementById('saveBtn').addEventListener('click', async function() {
@@ -206,7 +261,8 @@ async function init() {
             preferences: {
               depth: getDepth(),
               delivery_time: document.getElementById('deliveryTime').value,
-              frequency: document.getElementById('frequency').value,
+              frequency: getSettingsFrequency(),
+              days_of_week: getSettingsDays(),
               items_per_digest: parseInt(document.getElementById('itemsPerDigest').value),
               email_enabled: true,
               telegram_enabled: !!document.getElementById('telegram').value.trim(),

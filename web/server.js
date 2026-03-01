@@ -68,6 +68,9 @@ const CAPABILITY_TOPICS = [
 ];
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
+// Fields that must never be overwritten via /api/settings
+const PROTECTED_FIELDS = ["chatId", "joined_at", "digests_received", "bookmarks", "last_digest_items", "last_digest_at"];
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
@@ -98,10 +101,14 @@ const server = http.createServer(async (req, res) => {
   // POST /api/signup — new user onboarding
   if (pathname === "/api/signup" && req.method === "POST") {
     const body = await readBody(req);
-    const { name, email, telegram, topics, depth, delivery_time, frequency, items_per_digest } = body;
+    const { name, email, telegram, topics, depth, delivery_time, frequency, days_of_week, items_per_digest } = body;
 
     if (!email || !name) return json(res, { error: "name and email required" }, 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, { error: "invalid email address" }, 400);
     if (!topics || topics.length < 2) return json(res, { error: "select at least 2 topics" }, 400);
+
+    // Sanitize telegram: strip leading @ characters
+    const telegramClean = telegram ? String(telegram).replace(/^@+/, "").trim() : null;
 
     // Check existing
     const existing = allUsers().find(u => u.email === email);
@@ -112,7 +119,7 @@ const server = http.createServer(async (req, res) => {
       chatId,
       name,
       email,
-      telegram: telegram || null,
+      telegram: telegramClean || null,
       topics,
       status: "active",
       joined_at: existing?.joined_at || new Date().toISOString(),
@@ -123,13 +130,14 @@ const server = http.createServer(async (req, res) => {
       custom_topics: topics.filter(t => !DEFAULT_TOPICS.includes(t)),
       last_digest_items: existing?.last_digest_items || [],
       preferences: {
-        depth: depth || "full",
+        depth: depth || "headline_plus_why",
         delivery_time: delivery_time || "07:00",
-        frequency: frequency || "weekdays",
-        items_per_digest: parseInt(items_per_digest) || 7,
+        frequency: frequency || "daily_weekday",
+        days_of_week: Array.isArray(days_of_week) ? days_of_week : [1, 2, 3, 4, 5],
+        items_per_digest: parseInt(items_per_digest) || 5,
         timezone: "America/New_York",
         email_enabled: true,
-        telegram_enabled: !!telegram,
+        telegram_enabled: !!telegramClean,
       },
     };
 
@@ -152,11 +160,23 @@ const server = http.createServer(async (req, res) => {
     const existing = users.find(u => u.email === email);
     if (!existing) return json(res, { error: "user not found" }, 404);
 
+    // Strip protected fields from body so they can never be overwritten
+    const safeBody = Object.fromEntries(
+      Object.entries(body).filter(([k]) => !PROTECTED_FIELDS.includes(k))
+    );
+
+    // Sanitize telegram if present
+    if (safeBody.telegram != null) {
+      safeBody.telegram = String(safeBody.telegram).replace(/^@+/, "").trim() || null;
+    }
+
     const updated = {
       ...existing,
-      ...body,
+      ...safeBody,
       last_updated: new Date().toISOString(),
-      preferences: { ...existing.preferences, ...body.preferences },
+      preferences: { ...existing.preferences, ...safeBody.preferences },
+      // Always restore protected fields from existing record
+      ...Object.fromEntries(PROTECTED_FIELDS.map(k => [k, existing[k]])),
     };
     writeUser(existing.chatId, updated);
     return json(res, { success: true });
@@ -170,19 +190,27 @@ const server = http.createServer(async (req, res) => {
       .filter(f => f.endsWith(".json"))
       .sort()
       .reverse(); // newest first
-    const digests = files.map(f => {
-      const d = JSON.parse(fs.readFileSync(path.join(archiveDir, f), "utf8"));
-      return { date: d.date, dateStr: d.dateStr, quickScan: d.quickScan, itemCount: d.items.length };
+    const digests = files.flatMap(f => {
+      try {
+        const d = JSON.parse(fs.readFileSync(path.join(archiveDir, f), "utf8"));
+        return [{ date: d.date, dateStr: d.dateStr, quickScan: d.quickScan, itemCount: d.items?.length || 0 }];
+      } catch { return []; } // skip malformed files silently
     });
     return json(res, { digests });
   }
 
   // GET /api/archive/:date — full digest for a specific date
   if (pathname.startsWith("/api/archive/") && req.method === "GET") {
-    const date = pathname.replace("/api/archive/", "");
-    const file = path.join(__dirname, "../archive", `${date}.json`);
+    const rawDate = pathname.replace("/api/archive/", "");
+    // Sanitize: only allow YYYY-MM-DD format to prevent path traversal
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return json(res, { error: "invalid date" }, 400);
+    const file = path.join(__dirname, "../archive", `${rawDate}.json`);
     if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
-    return json(res, JSON.parse(fs.readFileSync(file, "utf8")));
+    try {
+      return json(res, JSON.parse(fs.readFileSync(file, "utf8")));
+    } catch {
+      return json(res, { error: "malformed archive file" }, 500);
+    }
   }
 
   // ── Static files ────────────────────────────────────────────────────────────

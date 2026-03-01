@@ -16,7 +16,38 @@
 body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
 .container { max-width:640px; margin:0 auto; padding:40px 24px 80px; }
 
-/* Header */
+/* Hero */
+.hero { text-align:center; padding:60px 0 0; margin-bottom:48px; animation:fadeUp 0.6s ease both; }
+.hero h1 { font-family:'Instrument Serif',Georgia,serif; font-size:52px; font-weight:400; letter-spacing:-0.5px; margin-bottom:10px; }
+.hero .tagline { font-family:'Instrument Serif',Georgia,serif; font-style:italic; color:var(--text-secondary); font-size:20px; margin-bottom:20px; }
+.hero .description { color:var(--text-secondary); font-size:16px; line-height:1.6; max-width:460px; margin:0 auto 32px; }
+.hero-cta { display:inline-block; background:var(--accent); color:#fff; font-family:inherit; font-size:16px; font-weight:600; padding:16px 40px; border-radius:100px; border:none; cursor:pointer; transition:all 0.2s ease; box-shadow:0 4px 20px rgba(37,99,235,0.25); letter-spacing:-0.2px; text-decoration:none; }
+.hero-cta:hover { background:var(--accent-hover); transform:translateY(-2px); box-shadow:0 8px 28px rgba(37,99,235,0.3); }
+.hero-cta:active { transform:translateY(0); }
+
+/* Digest preview mockup */
+.digest-preview { margin:36px auto 32px; max-width:560px; background:#fff; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.08); text-align:left; animation:fadeUp 0.6s ease 0.15s both; }
+.dp-header { padding:16px 20px 14px; border-bottom:1px solid var(--border); }
+.dp-brand { font-family:'Instrument Serif',Georgia,serif; font-size:16px; font-weight:400; color:var(--text); }
+.dp-meta { font-size:11px; color:#9CA3AF; margin-top:2px; }
+.dp-scan { background:#F8F9FA; padding:12px 20px; border-bottom:1px solid var(--border); }
+.dp-scan-label { font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:7px; }
+.dp-scan-row { display:flex; align-items:baseline; gap:8px; padding:2px 0; }
+.dp-scan-num { font-size:10px; color:#9CA3AF; font-weight:600; width:10px; flex-shrink:0; }
+.dp-scan-tag { font-size:9px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent); white-space:nowrap; flex-shrink:0; }
+.dp-scan-hl { font-size:12px; color:#374151; line-height:1.3; }
+.dp-items { padding:0 20px; }
+.dp-item { padding:14px 0; border-bottom:1px solid #F3F4F6; }
+.dp-item:last-child { border-bottom:none; }
+.dp-item-meta { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+.dp-item-num { font-size:11px; color:#9CA3AF; font-weight:600; }
+.dp-tag { font-size:9px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 7px; border-radius:3px; }
+.dp-score { font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; }
+.dp-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.4; margin-bottom:4px; }
+.dp-wim { font-size:11px; color:#6B7280; line-height:1.5; }
+.dp-wim strong { color:#374151; }
+
+/* Header (legacy alias kept for progress bar spacing) */
 .header { text-align:center; margin-bottom:48px; animation:fadeUp 0.6s ease both; }
 .header .sun { font-size:36px; margin-bottom:8px; }
 .header h1 { font-family:'Instrument Serif',Georgia,serif; font-size:42px; font-weight:400; letter-spacing:-0.5px; margin-bottom:8px; }
@@ -121,8 +152,11 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 /* Mobile */
 @media (max-width:600px) {
   .container { padding:24px 16px 60px; }
-  .header h1 { font-size:34px; }
-  .header .tagline { font-size:16px; }
+  .hero { padding:40px 0 0; }
+  .hero h1 { font-size:38px; }
+  .hero .tagline { font-size:17px; }
+  .hero .description { font-size:14px; }
+  .digest-preview { margin:28px auto 24px; }
   .form-section { padding:24px 20px; }
   .input-row { grid-template-columns:1fr; }
   .topic-chip { font-size:13px; padding:8px 14px; }
@@ -135,17 +169,60 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
 <div class="container">
 
-  <!-- HEADER -->
-  <div class="header">
-    <div class="sun"></div>
+  <!-- HERO -->
+  <div class="hero">
     <h1>SignalBrief</h1>
     <p class="tagline">Your daily signal across AI, strategy, and business</p>
-    <p class="description">
-      AI-curated news digests for strategy professionals. Set up your preferences below. Your first briefing arrives tomorrow morning.
-    </p>
+    <p class="description">AI-curated news digests for strategy professionals. 5 minutes every morning across every vertical that matters.</p>
+
+    <!-- Sample digest preview -->
+    <div class="digest-preview">
+      <div class="dp-header">
+        <div class="dp-brand">☀️ SignalBrief</div>
+        <div class="dp-meta">Saturday, March 1, 2026 &nbsp;·&nbsp; 7 signals · 4 min read</div>
+      </div>
+      <div class="dp-scan">
+        <div class="dp-scan-label">Today's Signals</div>
+        <div class="dp-scan-row"><span class="dp-scan-num">1</span><span class="dp-scan-tag">PE×M&amp;A</span><span class="dp-scan-hl">KKR Acquires Cotiviti in $11B Healthcare IT Buyout</span></div>
+        <div class="dp-scan-row"><span class="dp-scan-num">2</span><span class="dp-scan-tag">AI×TECH</span><span class="dp-scan-hl">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</span></div>
+        <div class="dp-scan-row"><span class="dp-scan-num">3</span><span class="dp-scan-tag">POLICY×REGULATORY</span><span class="dp-scan-hl">FTC Signals Scrutiny on AI-Adjacent M&amp;A</span></div>
+      </div>
+      <div class="dp-items">
+        <div class="dp-item">
+          <div class="dp-item-meta">
+            <span class="dp-item-num">1</span>
+            <span class="dp-tag">PE×M&amp;A</span>
+            <span class="dp-score" style="color:#fff;background:#16A34A;">9.1</span>
+          </div>
+          <div class="dp-title">KKR Acquires Cotiviti in $11B Healthcare IT Leveraged Buyout</div>
+          <div class="dp-wim"><strong>The largest healthcare IT LBO of 2026 resets comparable multiples across the sector.</strong> Any PE-backed health tech asset in late-stage diligence needs to recalibrate its comps deck now. Cotiviti's payer analytics focus signals continued sponsor appetite for recurring-revenue, mission-critical SaaS in healthcare.</div>
+        </div>
+        <div class="dp-item">
+          <div class="dp-item-meta">
+            <span class="dp-item-num">2</span>
+            <span class="dp-tag">AI×TECH</span>
+            <span class="dp-score" style="color:#fff;background:#22C55E;">8.4</span>
+          </div>
+          <div class="dp-title">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</div>
+          <div class="dp-wim"><strong>Compliance buyers now have a credible AI alternative to building in-house.</strong> Enterprise procurement cycles just compressed — incumbents in GRC and legal workflow software face accelerating displacement pressure.</div>
+        </div>
+        <div class="dp-item">
+          <div class="dp-item-meta">
+            <span class="dp-item-num">3</span>
+            <span class="dp-tag">POLICY×REGULATORY</span>
+            <span class="dp-score" style="color:#111827;background:#EAB308;">6.8</span>
+          </div>
+          <div class="dp-title">FTC Signals Closer Scrutiny on AI-Adjacent M&amp;A</div>
+          <div class="dp-wim"><strong>Any deal with an AI component now requires a regulatory narrative built into the thesis from day one.</strong> Deal teams underwriting AI-adjacent targets should stress-test their HSR timelines — expect 6–9 month delays becoming standard.</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="hero-cta" onclick="(function(){ var f=document.getElementById('onboard-form'); f.style.display='block'; setTimeout(function(){ f.scrollIntoView({behavior:'smooth',block:'start'}); }, 50); })()">Get started — it's free &nbsp;→</button>
   </div>
 
-  <!-- PROGRESS -->
+  <!-- PROGRESS + FORM (hidden until CTA clicked) -->
+  <div id="onboard-form" style="display:none;scroll-margin-top:32px;">
   <div class="progress-bar">
     <div class="progress-step" id="prog-1"></div>
     <div class="progress-step" id="prog-2"></div>
@@ -404,6 +481,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       <a id="settingsLink" href="/settings" style="color:#2563EB;">Manage preferences →</a>
     </p>
   </div>
+
+  </div><!-- /onboard-form -->
 
   <!-- FOOTER -->
   <div class="footer" id="formFooter">

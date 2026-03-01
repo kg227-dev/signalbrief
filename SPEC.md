@@ -2,7 +2,7 @@
 
 ## What It Is
 
-SignalBrief is a daily AI-curated news digest for strategy consultants and business professionals. It surfaces the signals that matter across the verticals consultants are most likely to be staffed on — delivered at 7 AM before the first client meeting.
+SignalBrief is a daily AI-curated news digest for strategy consultants and business professionals. It surfaces the signals that matter across 17 topics — delivered at your chosen time before the first client meeting.
 
 **Not a news aggregator.** Every item has a "why it matters" layer written at the level of a senior strategy consultant: what moves, who feels it, what to watch next.
 
@@ -19,27 +19,39 @@ SignalBrief provides that cross-vertical situational awareness in under 5 minute
 - Investors (PE, growth, VC) who need sector breadth
 - Senior operators who need to track adjacent markets
 
-## Coverage Verticals (v1)
+## Topics (17 total)
 
-| Vertical | What We Track |
-|----------|---------------|
-| AI & Technology | Enterprise AI deployment, infrastructure, regulation, foundation models |
-| Healthcare & Life Sciences | Payers, providers, pharma, FDA, clinical AI |
-| Financial Services | Banking, fintech, insurance, capital markets |
-| Private Equity & M&A | Deal flow, multiples, sector activity, sponsor moves |
-| Energy & Infrastructure | Transition, utilities, grid, industrials |
-| Consumer & Retail | Brand moves, DTC, retail media, supply chain |
-| Government & Policy | Regulation, antitrust, trade, federal budget |
-| Strategy & Consulting | Firm moves, methodology shifts, client industry trends |
-| Sustainability & ESG | Corporate commitments, regulation, reporting |
-| Real Estate & Built Environment | CRE, construction tech, proptech |
+Users pick 2+ topics on signup. Custom topics supported (e.g. "GLP-1", "DOGE", "data centers").
 
-Users pick 2+ verticals on signup. Custom topics supported (e.g. "GLP-1", "DOGE", "data centers").
+### Industries (10)
+| Tag | What We Track |
+|-----|---------------|
+| `HEALTHCARE` | Payers, providers, pharma, FDA, clinical AI |
+| `FINANCIAL SERVICES` | Banking, fintech, insurance, capital markets |
+| `PE×M&A` | Deal flow, multiples, sector activity, sponsor moves |
+| `ENERGY` | Transition, utilities, grid, industrials |
+| `CONSUMER` | Brand moves, DTC, retail media, supply chain |
+| `LIFE SCIENCES` | Biotech, medical devices, genomics, drug pipelines |
+| `TECHNOLOGY` | Enterprise tech, SaaS, cloud infrastructure |
+| `INDUSTRIALS` | Manufacturing, logistics, automation, supply chain |
+| `REAL ESTATE` | CRE, construction tech, proptech, data centers |
+| `PUBLIC SECTOR` | Government, defense, federal procurement |
+
+### Capabilities (7)
+| Tag | What We Track |
+|-----|---------------|
+| `AI×TECH` | Enterprise AI deployment, foundation models, infrastructure |
+| `STRATEGY` | Firm moves, methodology shifts, transformation trends |
+| `POLICY×REGULATORY` | Regulation, antitrust, trade, DOGE, federal budget |
+| `SUSTAINABILITY` | ESG, net zero, carbon, climate policy, reporting |
+| `DIGITAL` | Digital transformation, platforms, product strategy |
+| `M&A ADVISORY` | Deal advisory, integration, valuation trends |
+| `TALENT` | Workforce trends, hiring, org restructuring |
 
 ## Format
 
-### Telegram / WhatsApp
-- 7 items (configurable 5/7/10)
+### Telegram
+- 5 items default (configurable 5/10 per user)
 - Numbered with keycap emoji (1⃣)
 - `[VERTICAL×SUBTAG]` cross-category labels
 - Headline + punchy factual lede
@@ -61,7 +73,7 @@ See `FORMAT-RULES.md`.
 ## Architecture
 
 ```
-Perplexity Sonar (news, all topics in parallel)
+Perplexity Sonar (17 topics in parallel)
         ↓
    selectItems() — dedup + interleave + tag cap
         ↓
@@ -70,18 +82,21 @@ Perplexity Sonar (news, all topics in parallel)
   ┌──────────────────────────────────┐
   │  Per-user delivery fan-out       │
   │  - topic filter                  │
-  │  - items_per_digest              │
+  │  - items_per_digest (5 or 10)    │
   │  - depth preference              │
   │  → Telegram bot (@signalbrief29bot) │
-  │  → Gmail API → HTML email        │
+  │  → Resend API → HTML email       │
+  │     (Gmail OAuth fallback)       │
   └──────────────────────────────────┘
+        ↓
+   saveToArchive() — archive/YYYY-MM-DD.json
 ```
 
 ## Personalization
 
-- **Topic selection**: pick verticals on signup, tune with `more/less [topic]`
-- **Depth**: headlines only / headlines + one-liner / full "why it matters"
-- **Schedule**: delivery time, frequency, items per digest
+- **Topic selection**: pick from 17 topics on signup, tune with `more/less [topic]`
+- **Depth**: Scan (headline only) / Brief (headline + one-liner) / Deep (full "why it matters")
+- **Schedule**: delivery time (30-min intervals), days of week, items per digest (5 or 10)
 - **Bookmarks**: `save 3` → persisted to user profile with headline + URL
 - **Custom topics**: freeform (e.g. "GLP-1", "quantum computing")
 
@@ -94,7 +109,43 @@ All replies parsed by Claude for fuzzy intent:
 - `/settings` → preferences
 - `/bookmarks` → saved items
 - `/help` → command guide
-- Any question → answered with Claude in healthcare/strategy context
+- Any question → answered with Claude in strategy/consulting context
+
+## Web Layer
+
+| URL | Purpose |
+|-----|---------|
+| `/` | New user onboarding (4-step: details, topics, depth, schedule) |
+| `/settings?email=...` | Self-serve preferences editor |
+| `/archive` | Browse and read past digests |
+
+## Data Model (per user)
+
+```json
+{
+  "chatId": "email-1234567890",
+  "name": "Alex Chen",
+  "email": "alex@firm.com",
+  "telegram": "alexhandle",
+  "topics": ["AI×TECH", "PE×M&A", "STRATEGY"],
+  "status": "active",
+  "joined_at": "2026-03-01T00:00:00.000Z",
+  "preferences": {
+    "depth": "headline_plus_why",
+    "delivery_time": "07:00",
+    "frequency": "daily_weekday",
+    "days_of_week": [1, 2, 3, 4, 5],
+    "items_per_digest": 5,
+    "timezone": "America/New_York",
+    "email_enabled": true,
+    "telegram_enabled": false
+  },
+  "bookmarks": [],
+  "topic_weights": {},
+  "custom_topics": [],
+  "digests_received": 0
+}
+```
 
 ## Roadmap
 
@@ -103,6 +154,7 @@ All replies parsed by Claude for fuzzy intent:
 - **Batch 2** ✅ Automation (digest.js, cron, reply handler)
 - **Batch 3** ✅ Bookmarking + topic tuning
 - **Batch 4** ✅ Multi-user onboarding web app
-- **Batch 5** Custom domain + email sending domain
-- **Batch 6** Digest archive / web reader
+- **Batch 5** ✅ Custom domain + Resend email sending
+- **Batch 6** ✅ Digest archive / web reader
 - **Batch 7** Referral / invite flow
+- **Batch 8** Analytics dashboard (digests sent, opens, bookmarks)

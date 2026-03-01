@@ -49,7 +49,10 @@ function allUsers() {
   if (!fs.existsSync(DATA_DIR)) return [];
   return fs.readdirSync(DATA_DIR)
     .filter(f => f.startsWith("user-") && f.endsWith(".json"))
-    .map(f => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8")));
+    .flatMap(f => {
+      try { return [JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"))]; }
+      catch { return []; } // skip malformed user files silently
+    });
 }
 
 module.exports = { readUser, writeUser, allUsers, defaultUser };

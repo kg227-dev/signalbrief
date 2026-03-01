@@ -31,7 +31,12 @@ Topics appear as grouped chips in onboarding (index.html) and settings (settings
 1. **Settings links in email footer point to localhost:3003** — fine for local dev, but production deploy will need these updated to the real domain.
 2. **Archive not linked from onboarding success card or Telegram /start** — email footer links to /archive but the post-signup success screen and bot welcome message don't mention it.
 3. **config.json missing** — must be created from config.example.json before first run. digest.js, bot-server.js, web/server.js all crash without it.
-4. **LaunchAgents not loaded** — created at ~/Library/LaunchAgents/ but not yet loaded. Load after config.json exists: `launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-bot.plist` and same for web.
+4. **LaunchAgents not loaded** — created at ~/Library/LaunchAgents/ but not yet loaded. Load after config.json exists:
+   ```
+   launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-bot.plist
+   launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-web.plist
+   launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-digest.plist
+   ```
 
 ## Architecture decisions
 - Zero npm dependencies — everything uses Node.js built-in https, http, fs, path
@@ -40,8 +45,8 @@ Topics appear as grouped chips in onboarding (index.html) and settings (settings
 - Email: Resend preferred (branded domain), Gmail OAuth fallback
 - Web server on port 3003, no framework — raw http.createServer
 - Telegram via long-polling (not webhooks) — runs on local Mac
-- LaunchAgent labels: `com.jarvis.signalbrief-bot` and `com.jarvis.signalbrief-web`
-- Digest cron: 6:45 AM ET Mon–Sat via OpenClaw (primary). System cron fallback: `45 6 * * 1-6`
+- LaunchAgent labels: `com.jarvis.signalbrief-bot`, `com.jarvis.signalbrief-web`, `com.jarvis.signalbrief-digest`
+- Digest cron: 6:45 AM ET Mon–Sat via LaunchAgent (com.jarvis.signalbrief-digest.plist). No OpenClaw dependency.
 - httpsPost in digest.js and reply-handler.js both resolve `{ status, body }` — always access `.body` for response data
 
 ## Style notes

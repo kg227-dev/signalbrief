@@ -20,6 +20,22 @@ const { readUser, writeUser } = require("./store");
 const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const LOG_FILE = "/tmp/signalbrief.log";
+const COST_LOG = path.join(__dirname, "data", "cost-log.json");
+
+// API cost estimates
+const PERPLEXITY_COST_PER_CALL  = 0.005;   // Sonar model per call
+const CLAUDE_HAIKU_IN_PER_MTOK  = 0.80;    // $/million input tokens
+const CLAUDE_HAIKU_OUT_PER_MTOK = 4.00;    // $/million output tokens
+
+function appendCostLog(entry) {
+  try {
+    const dir = path.dirname(COST_LOG);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(COST_LOG, JSON.stringify(entry) + "\n");
+  } catch (e) {
+    log(`⚠️  Cost log write failed: ${e.message}`);
+  }
+}
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -192,19 +208,30 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
     { model: "claude-haiku-4-5", max_tokens: 3000, messages: [{ role: "user", content: prompt }] }
   );
 
+  const usage = {
+    input_tokens:  res.body?.usage?.input_tokens  || 0,
+    output_tokens: res.body?.usage?.output_tokens || 0,
+  };
+
   try {
     let content = res.body?.content?.[0]?.text || "[]";
     content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const enriched = JSON.parse(content);
     // Merge wim + baseScore back onto original items (which have URLs)
-    return items.map((item, i) => ({
-      ...item,
-      wim: enriched[i]?.wim || "Analysis unavailable.",
-      baseScore: typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
-    }));
+    return {
+      items: items.map((item, i) => ({
+        ...item,
+        wim: enriched[i]?.wim || "Analysis unavailable.",
+        baseScore: typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
+      })),
+      usage,
+    };
   } catch (e) {
     log(`Claude parse error: ${e.message}`);
-    return items.map((i) => ({ ...i, wim: "Analysis unavailable." }));
+    return {
+      items: items.map((i) => ({ ...i, wim: "Analysis unavailable." })),
+      usage,
+    };
   }
 }
 
@@ -409,7 +436,7 @@ async function main() {
   const selected = selectItems(allItems);
   log(`Selected ${selected.length} items`);
 
-  const enriched = await enrichItems(selected);
+  const { items: enriched, usage: claudeUsage } = await enrichItems(selected);
 
   // Quick scan & subject
   const quickScan = enriched
@@ -500,6 +527,28 @@ async function main() {
       log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);
     }
   }
+
+  // ── Cost tracking ─────────────────────────────────────────────────────────
+  const perplexityCalls = CONFIG.topics.length;
+  const perplexityCost  = perplexityCalls * PERPLEXITY_COST_PER_CALL;
+  const claudeCost = (claudeUsage.input_tokens  / 1_000_000 * CLAUDE_HAIKU_IN_PER_MTOK)
+                   + (claudeUsage.output_tokens / 1_000_000 * CLAUDE_HAIKU_OUT_PER_MTOK);
+  const totalCost = perplexityCost + claudeCost;
+
+  appendCostLog({
+    date:                  now.toISOString().slice(0, 10),
+    run_at:                now.toISOString(),
+    on_demand:             !!targetChatId,
+    perplexity_calls:      perplexityCalls,
+    perplexity_cost_usd:   parseFloat(perplexityCost.toFixed(5)),
+    claude_tokens_in:      claudeUsage.input_tokens,
+    claude_tokens_out:     claudeUsage.output_tokens,
+    claude_cost_usd:       parseFloat(claudeCost.toFixed(6)),
+    total_cost_usd:        parseFloat(totalCost.toFixed(5)),
+    users_served:          activeUsers.length,
+    per_user:              activeUsers.map(u => ({ id: u.email || u.chatId, on_demand: !!targetChatId })),
+  });
+  log(`💰 Run cost: $${totalCost.toFixed(4)} (Perplexity $${perplexityCost.toFixed(3)} · Claude in=${claudeUsage.input_tokens} out=${claudeUsage.output_tokens} $${claudeCost.toFixed(4)})`);
 
   log(`=== SignalBrief complete — ${activeUsers.length} user(s) delivered ===`);
 }

@@ -255,6 +255,50 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // GET /api/admin/stats — cost dashboard data (localhost only)
+  if (pathname === "/api/admin/stats" && req.method === "GET") {
+    const logPath = path.join(__dirname, "../data/cost-log.json");
+    let runs = [];
+    if (fs.existsSync(logPath)) {
+      runs = fs.readFileSync(logPath, "utf8")
+        .split("\n").filter(Boolean)
+        .map(line => { try { return JSON.parse(line); } catch { return null; } })
+        .filter(Boolean)
+        .reverse(); // newest first
+    }
+
+    const now = new Date();
+    const monthPrefix = now.toISOString().slice(0, 7); // "2026-03"
+    const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
+    const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
+
+    // Per-user rollup across all runs
+    const userMap = {};
+    for (const r of runs) {
+      for (const u of (r.per_user || [])) {
+        if (!userMap[u.id]) userMap[u.id] = { id: u.id, runs: 0, total_cost: 0 };
+        userMap[u.id].runs++;
+        userMap[u.id].total_cost += r.total_cost_usd || 0;
+      }
+    }
+    const perUser = Object.values(userMap)
+      .map(u => ({ ...u, total_cost: parseFloat(u.total_cost.toFixed(5)) }))
+      .sort((a, b) => b.total_cost - a.total_cost);
+
+    return json(res, {
+      summary: {
+        all_time_cost:      parseFloat(sum(runs, "total_cost_usd").toFixed(4)),
+        all_time_runs:      runs.length,
+        month_cost:         parseFloat(sum(monthRuns, "total_cost_usd").toFixed(4)),
+        month_runs:         monthRuns.length,
+        month_on_demand:    monthRuns.filter(r => r.on_demand).length,
+        month_users_served: sum(monthRuns, "users_served"),
+      },
+      runs: runs.slice(0, 30),
+      per_user: perUser,
+    });
+  }
+
   // ── Static files ────────────────────────────────────────────────────────────
 
   if (pathname === "/" || pathname === "/index.html") {
@@ -265,6 +309,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/archive" || pathname === "/archive.html") {
     return serveFile(res, path.join(WEB_DIR, "archive.html"));
+  }
+  if (pathname === "/admin" || pathname === "/admin.html") {
+    return serveFile(res, path.join(WEB_DIR, "admin.html"));
   }
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
   if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));

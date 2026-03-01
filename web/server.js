@@ -459,7 +459,9 @@ const server = http.createServer(async (req, res) => {
         adjustments:   Object.keys(u.topic_weights || {}).length,
         delivery_time: `${hour}${min} ${ampm} ET`,
         depth:         depthLabel(prefs.depth),
-        settings_url:  u.token ? `${BASE_URL}/settings?token=${u.token}` : null,
+        // Use localhost so admin links always open directly on the local server
+        // (avoids Cloudflare Tunnel round-trip and works even if tunnel is down)
+        settings_url:  u.email ? `http://localhost:${PORT}/settings?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
 
@@ -478,6 +480,20 @@ const server = http.createServer(async (req, res) => {
       per_user: perUser,
       roster,
     });
+  }
+
+  // GET /api/admin/user-by-email?email=... — admin user lookup (localhost only)
+  // Used by settings.html when opened from the admin roster (?email=... param)
+  if (pathname === "/api/admin/user-by-email" && req.method === "GET") {
+    const clientIp = req.socket.remoteAddress || "";
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
+      return json(res, { error: "admin access only" }, 403);
+    }
+    const emailParam = url.searchParams.get("email");
+    if (!emailParam) return json(res, { error: "email required" }, 400);
+    const adminUser = allUsers().find(u => u.email.toLowerCase() === emailParam.toLowerCase().trim());
+    if (!adminUser) return json(res, { error: "not found" }, 404);
+    return json(res, adminUser);
   }
 
   // ── Static files ────────────────────────────────────────────────────────────

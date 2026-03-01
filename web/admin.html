@@ -14,7 +14,7 @@
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
-.container { max-width:900px; margin:0 auto; padding:40px 24px 80px; }
+.container { max-width:1200px; margin:0 auto; padding:40px 24px 80px; }
 
 .header { margin-bottom:36px; padding-bottom:20px; border-bottom:1px solid var(--border); }
 .header-top { display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
@@ -234,17 +234,22 @@ async function load() {
         ? `<span class="badge-on-demand">on-demand</span>`
         : `<span class="badge-scheduled">scheduled</span>`;
       const totalClass = costClass(r.total_cost_usd || 0);
-      // run_at_et added in Batch 10; fall back to deriving from run_at for older entries
+      // Derive both date and time in ET from run_at (covers old entries where date was saved in UTC)
+      let dateEt = r.date;
       let timeEt = r.run_at_et || "—";
-      if (!r.run_at_et && r.run_at) {
+      if (r.run_at) {
         try {
-          timeEt = new Date(r.run_at).toLocaleString("en-US", {
-            timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true
-          });
+          const d = new Date(r.run_at);
+          dateEt = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD in ET
+          if (!r.run_at_et) {
+            timeEt = d.toLocaleString("en-US", {
+              timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true
+            });
+          }
         } catch {}
       }
       return `<tr>
-        <td class="mono">${r.date}</td>
+        <td class="mono">${dateEt}</td>
         <td class="mono" style="font-size:12px;color:#6B7280;">${timeEt}</td>
         <td>${typeBadge}</td>
         <td>${r.users_served || 0}</td>

@@ -55,9 +55,30 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .header .description { color:var(--text-secondary); font-size:15px; line-height:1.6; max-width:480px; margin:0 auto; }
 
 /* Progress */
-.progress-bar { display:flex; gap:6px; margin-bottom:40px; animation:fadeUp 0.6s ease 0.1s both; }
-.progress-step { flex:1; height:4px; background:var(--border); border-radius:2px; transition:background 0.4s ease; }
-.progress-step.filled { background:var(--accent); }
+.progress-bar { display:flex; align-items:flex-start; margin-bottom:40px; animation:fadeUp 0.6s ease 0.1s both; position:relative; }
+.progress-bar::before { content:''; position:absolute; top:14px; left:12.5%; right:12.5%; height:2px; background:var(--border); z-index:0; transition:background 0.3s; }
+.progress-step { flex:1; display:flex; flex-direction:column; align-items:center; position:relative; z-index:1; }
+.step-circle { width:28px; height:28px; border-radius:50%; border:2px solid var(--border); background:var(--bg); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#9CA3AF; transition:all 0.3s ease; }
+.progress-step.filled .step-circle { border-color:var(--accent); background:var(--accent); color:#fff; }
+.step-label { font-size:11px; font-weight:500; color:#9CA3AF; margin-top:6px; white-space:nowrap; transition:color 0.3s ease; }
+.progress-step.filled .step-label { color:var(--accent); font-weight:600; }
+
+/* Dark mode */
+body.dark { --bg:#0F172A; --card:#1E293B; --text:#F1F5F9; --text-secondary:#94A3B8; --border:#334155; --accent:#3B82F6; --accent-light:#1e3a5f; --accent-hover:#2563EB; --shadow-sm:0 1px 2px rgba(0,0,0,0.2); --shadow-md:0 4px 12px rgba(0,0,0,0.25); }
+body.dark .input-field { background:var(--card); color:var(--text); }
+body.dark select.input-field { background-color:var(--card); }
+body.dark .topic-chip, body.dark .depth-option, body.dark .size-pill { background:var(--card); }
+body.dark .size-toggle { background:var(--card); }
+body.dark .day-circle { background:var(--card); }
+body.dark .digest-preview { background:var(--card); }
+body.dark .dp-scan { background:#1a2744; }
+body.dark .dp-item-meta .dp-tag { background:#1e3a5f; }
+body.dark .dp-title { color:var(--text); }
+body.dark .dp-wim { color:var(--text-secondary); }
+body.dark .success-card { background:var(--card); }
+/* Dark toggle button */
+#darkToggle { position:fixed; top:16px; right:16px; z-index:999; width:40px; height:40px; border-radius:50%; border:1.5px solid var(--border); background:var(--card); cursor:pointer; font-size:18px; transition:all 0.2s ease; box-shadow:var(--shadow-sm); line-height:1; display:flex; align-items:center; justify-content:center; }
+#darkToggle:hover { box-shadow:var(--shadow-md); transform:scale(1.08); }
 
 /* Form sections */
 .form-section { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:32px; margin-bottom:24px; box-shadow:var(--shadow-sm); animation:fadeUp 0.5s ease both; }
@@ -167,6 +188,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 </head>
 <body>
 
+<button id="darkToggle" onclick="toggleDark()" title="Toggle dark mode">🌙</button>
+
 <div class="container">
 
   <!-- HERO -->
@@ -218,16 +241,16 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       </div>
     </div>
 
-    <button class="hero-cta" onclick="(function(){ var f=document.getElementById('onboard-form'); f.style.display='block'; setTimeout(function(){ f.scrollIntoView({behavior:'smooth',block:'start'}); }, 50); })()">Get started — it's free &nbsp;→</button>
+    <button class="hero-cta" onclick="(function(){ document.querySelector('.hero').style.display='none'; document.getElementById('onboard-form').style.display='block'; window.scrollTo({top:0,behavior:'smooth'}); })()">Get started — it's free &nbsp;→</button>
   </div>
 
   <!-- PROGRESS + FORM (hidden until CTA clicked) -->
   <div id="onboard-form" style="display:none;scroll-margin-top:32px;">
   <div class="progress-bar">
-    <div class="progress-step" id="prog-1"></div>
-    <div class="progress-step" id="prog-2"></div>
-    <div class="progress-step filled" id="prog-3"></div>
-    <div class="progress-step filled" id="prog-4"></div>
+    <div class="progress-step" id="prog-1"><div class="step-circle">1</div><div class="step-label">Details</div></div>
+    <div class="progress-step" id="prog-2"><div class="step-circle">2</div><div class="step-label">Topics</div></div>
+    <div class="progress-step" id="prog-3"><div class="step-circle">3</div><div class="step-label">Depth</div></div>
+    <div class="progress-step" id="prog-4"><div class="step-circle">4</div><div class="step-label">Schedule</div></div>
   </div>
 
   <form id="onboardForm">
@@ -318,7 +341,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
             <div class="depth-desc">Headline + one-line takeaway. 2-minute read.</div>
           </div>
         </div>
-        <div class="depth-option selected" data-depth="headline_plus_why" onclick="selectDepth(this)">
+        <div class="depth-option" data-depth="headline_plus_why" onclick="selectDepth(this)">
           <div class="depth-radio"></div>
           <div>
             <div class="depth-label">Deep</div>
@@ -383,16 +406,16 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         <label class="input-label">Delivery days</label>
         <div class="frequency-row" style="margin-top:8px;">
           <div class="day-presets">
-            <button type="button" class="day-preset-btn active" id="preset-weekdays" onclick="setDays('weekdays')">Weekdays</button>
+            <button type="button" class="day-preset-btn" id="preset-weekdays" onclick="setDays('weekdays')">Weekdays</button>
             <button type="button" class="day-preset-btn" id="preset-everyday" onclick="setDays('everyday')">Every day</button>
           </div>
           <div class="day-divider"></div>
           <div class="day-circles" id="dayCircles">
-            <div class="day-circle active" data-day="1" onclick="toggleDay(this)">M</div>
-            <div class="day-circle active" data-day="2" onclick="toggleDay(this)">T</div>
-            <div class="day-circle active" data-day="3" onclick="toggleDay(this)">W</div>
-            <div class="day-circle active" data-day="4" onclick="toggleDay(this)">T</div>
-            <div class="day-circle active" data-day="5" onclick="toggleDay(this)">F</div>
+            <div class="day-circle" data-day="1" onclick="toggleDay(this)">M</div>
+            <div class="day-circle" data-day="2" onclick="toggleDay(this)">T</div>
+            <div class="day-circle" data-day="3" onclick="toggleDay(this)">W</div>
+            <div class="day-circle" data-day="4" onclick="toggleDay(this)">T</div>
+            <div class="day-circle" data-day="5" onclick="toggleDay(this)">F</div>
             <div class="day-circle" data-day="6" onclick="toggleDay(this)">S</div>
             <div class="day-circle" data-day="0" onclick="toggleDay(this)">S</div>
           </div>
@@ -676,6 +699,17 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     btn.style.color = '#2563EB';
     btn.style.fontWeight = '600';
   }
+
+  // ── Dark mode ──────────────────────────────────────────────────────────────
+  function toggleDark() {
+    document.body.classList.toggle('dark');
+    var isDark = document.body.classList.contains('dark');
+    document.getElementById('darkToggle').textContent = isDark ? '☀️' : '🌙';
+    try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e){}
+  }
+  (function initDark() {
+    try { if (localStorage.getItem('sbDark') === '1') { document.body.classList.add('dark'); document.getElementById('darkToggle').textContent = '☀️'; } } catch(e){}
+  })();
 
   // Init
   updateProgress();

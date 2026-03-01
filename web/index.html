@@ -26,8 +26,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 /* Progress */
 .progress-bar { display:flex; gap:6px; margin-bottom:40px; animation:fadeUp 0.6s ease 0.1s both; }
 .progress-step { flex:1; height:4px; background:var(--border); border-radius:2px; transition:background 0.4s ease; }
-.progress-step.active { background:var(--accent); }
-.progress-step.completed { background:#059669; }
+.progress-step.filled { background:var(--accent); }
 
 /* Form sections */
 .form-section { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:32px; margin-bottom:24px; box-shadow:var(--shadow-sm); animation:fadeUp 0.5s ease both; }
@@ -142,16 +141,16 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     <h1>SignalBrief</h1>
     <p class="tagline">Your daily signal across AI, strategy, and business</p>
     <p class="description">
-      AI-curated news digests for strategy professionals. Set up your preferences below — your first briefing arrives tomorrow morning.
+      AI-curated news digests for strategy professionals. Set up your preferences below. Your first briefing arrives tomorrow morning.
     </p>
   </div>
 
   <!-- PROGRESS -->
   <div class="progress-bar">
-    <div class="progress-step active" id="prog-1"></div>
+    <div class="progress-step" id="prog-1"></div>
     <div class="progress-step" id="prog-2"></div>
-    <div class="progress-step" id="prog-3"></div>
-    <div class="progress-step" id="prog-4"></div>
+    <div class="progress-step filled" id="prog-3"></div>
+    <div class="progress-step filled" id="prog-4"></div>
   </div>
 
   <form id="onboardForm">
@@ -162,7 +161,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         <div class="section-number">1</div>
         <div class="section-title">Your details</div>
       </div>
-      <p class="section-subtitle">We'll send your digest here every morning.</p>
+      <p class="section-subtitle">We'll deliver your digest at your chosen time.</p>
 
       <div class="input-group">
         <label class="input-label">Full name</label>
@@ -333,7 +332,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     <!-- SUBMIT -->
     <div class="submit-section">
       <button type="submit" class="submit-btn">Start my SignalBrief →</button>
-      <p class="submit-note">Free to use. Your first digest arrives tomorrow at your chosen time.<br>You can adjust preferences anytime by replying to any digest.</p>
+      <p class="submit-note">Free to use. Your first digest arrives at your chosen time.<br>Update your preferences anytime from your settings page.</p>
     </div>
 
   </form>
@@ -356,7 +355,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       </div>
       <div style="margin-bottom:10px;">
         <span style="color:#60A5FA;font-weight:600;">1⃣</span> <span style="color:#93C5FD;font-weight:600;">[AI×TECH]</span> OpenAI strikes enterprise deal with Goldman Sachs<br>
-        <span style="color:#D1D5DB;font-size:13px;">Model deployment inside regulated workflows — compliance teams are next buyers.</span><br>
+        <span style="color:#D1D5DB;font-size:13px;">Model deployment inside regulated workflows. Compliance teams are next buyers.</span><br>
         <span style="color:#6B7280;font-size:12px;">→ ft.com</span>
       </div>
       <div style="margin-bottom:10px;">
@@ -366,7 +365,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       </div>
       <div style="margin-bottom:10px;">
         <span style="color:#60A5FA;font-weight:600;">3⃣</span> <span style="color:#93C5FD;font-weight:600;">[POLICY×REGULATORY]</span> FTC signals renewed scrutiny of serial acquisitions<br>
-        <span style="color:#D1D5DB;font-size:13px;">Deal structuring is changing — counsel will price this in immediately.</span><br>
+        <span style="color:#D1D5DB;font-size:13px;">Deal structuring is changing. Counsel will price this in immediately.</span><br>
         <span style="color:#6B7280;font-size:12px;">→ axios.com</span>
       </div>
       <div style="border-top:1px solid #374151;padding-top:10px;margin-top:4px;color:#6B7280;font-size:12px;">
@@ -383,7 +382,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E5E7EB;border-left:3px solid #2563EB;padding-left:12px;">
           <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#2563EB;background:#EFF6FF;padding:2px 7px;border-radius:4px;">★ LEAD · AI×TECH</span>
           <div style="font-size:14px;font-weight:600;margin:6px 0 4px;">OpenAI Strikes Enterprise Deal with Goldman Sachs</div>
-          <div style="font-size:12px;color:#6B7280;line-height:1.5;"><strong>Model deployment inside regulated workflows changes the procurement conversation.</strong> Compliance and risk teams become the buyer — not just IT.</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;"><strong>Model deployment inside regulated workflows changes the procurement conversation.</strong> Compliance and risk teams become the buyer, not just IT.</div>
         </div>
         <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E5E7EB;">
           <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#2563EB;background:#EFF6FF;padding:2px 7px;border-radius:4px;">PE×M&A</span>
@@ -405,7 +404,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
   <!-- FOOTER -->
   <div class="footer" id="formFooter">
-    Powered by SignalBrief · Built with <a href="https://openclaw.ai" target="_blank">OpenClaw</a>
+    SignalBrief · Daily intelligence for strategy professionals
   </div>
 
 </div>
@@ -504,14 +503,15 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     const email = document.getElementById('email').value.trim();
     const topics = document.querySelectorAll('.topic-chip.selected').length;
     const depth = document.querySelector('.depth-option.selected');
+    const days = document.querySelectorAll('.day-circle.active').length;
 
-    function setStep(id, state) {
-      document.getElementById(id).className = 'progress-step' + (state ? ' ' + state : '');
+    function setStep(id, filled) {
+      document.getElementById(id).className = 'progress-step' + (filled ? ' filled' : '');
     }
-    setStep('prog-1', (name && email) ? 'completed' : (name || email) ? 'active' : '');
-    setStep('prog-2', topics >= 2 ? 'completed' : topics > 0 ? 'active' : '');
-    setStep('prog-3', depth ? 'completed' : '');
-    setStep('prog-4', 'active');
+    setStep('prog-1', name && email);
+    setStep('prog-2', topics >= 2);
+    setStep('prog-3', !!depth);
+    setStep('prog-4', days > 0);
   }
 
   document.getElementById('name').addEventListener('input', updateProgress);
@@ -564,7 +564,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         document.getElementById('onboardForm').style.display = 'none';
         document.getElementById('formFooter').style.display = 'none';
         document.getElementById('successCard').classList.add('visible');
-        document.querySelectorAll('.progress-step').forEach(function(s) { s.className = 'progress-step completed'; });
+        document.querySelectorAll('.progress-step').forEach(function(s) { s.className = 'progress-step filled'; });
         var settingsLink = document.getElementById('settingsLink');
         if (settingsLink) settingsLink.href = '/settings?email=' + encodeURIComponent(email);
       } else {

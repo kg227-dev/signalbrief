@@ -211,9 +211,86 @@
 
 ---
 
+---
+
+## 🔴 High Priority (New)
+
+### 14. Admin Cost Dashboard
+**What:** Track per-digest API costs so you know what you're spending before inviting more users. A runaway on-demand `/digest` user could blow the monthly budget.
+
+**Metrics to track:**
+- Per-digest: Perplexity calls (count + estimated $), Claude calls (input tokens, output tokens + estimated $), users served
+- Running monthly total vs. configurable budget ceiling (default $50)
+- Per-user cost breakdown (on-demand `/digest` users cost more than scheduled users)
+
+**Implementation:**
+- After every digest run, append a line to `data/cost-log.json`:
+  `{ date, perplexity_calls, claude_tokens_in, claude_tokens_out, users_served, estimated_cost_usd }`
+- Capture token counts from Claude API response (`usage.input_tokens`, `usage.output_tokens`)
+- Perplexity cost estimated at $0.005/call (Sonar model)
+- Claude Haiku estimated at $0.80/MTok input + $4.00/MTok output
+- Dashboard at `GET /admin` (localhost only): 30-day chart + per-user breakdown table
+
+**Effort:** Small — instrument existing `httpsPost` calls, add `/admin` route to server.js
+
+**Status:** 🔲 Not started
+
+---
+
+### 15. Email Deliverability Baseline
+**What:** Resend from a personal Gmail will land in spam for non-Gmail recipients. This is a hard blocker for multi-user at scale. Fix before inviting anyone outside your network.
+
+**Checklist:**
+- Complete Resend domain verification for `getsignalbrief.com` (SPF, DKIM, DMARC records added to DNS)
+- Test delivery to Gmail, Outlook, and Apple Mail — confirm none go to spam/promotions
+- Add `List-Unsubscribe` header to all outbound email (required by Gmail/Yahoo bulk sender rules for >5K/day — good practice now)
+- Monitor Resend dashboard for bounce rate; keep below 2%
+
+**Effort:** Config work only (no code) — DNS records + Resend dashboard setup
+
+**Status:** 🔲 Not started (prerequisite for any growth)
+
+---
+
+### 16. Public Web Hosting
+**What:** Settings links in emails point to `localhost:3003`. Any non-local user can't click them. Fix before inviting anyone.
+
+**Options (pick one):**
+- **Cloudflare Tunnel** (recommended): one command (`cloudflared tunnel --url localhost:3003`), auto-TLS, free, runs from your Mac. Gives a `*.trycloudflare.com` URL immediately; custom domain setup is one extra step.
+- **Fly.io / Railway**: containerize the Node server, deploy to a persistent host. Requires Dockerfile. Better for scale.
+
+**What changes in code:**
+- `web/server.js`: `BASE_URL` env var already exists — set it in LaunchAgent plist or `.env`
+- `templates/email.html` footer links already use `{{USER_EMAIL}}` placeholder — just needs `BASE_URL` to be right
+- LaunchAgent: add `EnvironmentVariables` key: `BASE_URL = https://getsignalbrief.com`
+
+**Effort:** Small (Cloudflare Tunnel path) or Medium (full deploy)
+
+**Status:** 🔲 Not started (prerequisite for email verification links and settings pages)
+
+---
+
+### 17. Basic API Security
+**What:** Once `/api/signup` is public-facing, it's open to bots. Add minimal protection before launch.
+
+**What to add:**
+- Rate limiting on `/api/signup`: max 5 attempts per IP per hour (simple in-memory map, no Redis needed)
+- Email domain blocklist: reject known disposable email domains (mailinator.com, guerrillamail.com, etc.) — maintain a list of ~50 common disposable domains
+- Invite-only mode (optional): require an `inviteCode` param on signup for the first cohort — prevents random signups while you QA
+
+**Implementation:** All in `web/server.js` — small additions before the signup handler
+
+**Effort:** Small
+
+**Status:** 🔲 Not started
+
+---
+
 ## Notes
 
-- **Scoring feature (1)** should come before referrals (4) — quality of the product matters more than growth right now
+- **Scoring feature (1)** ✅ Built — baseScore from enrichment (zero extra API cost), topicMatch computed locally
 - **Email verification (2)** should come before any user-facing growth (referrals, landing page) — fix deliverability before scaling
 - **Production URL (3)** is a prerequisite for email verification links to work
+- **Cost dashboard (14)** should be built before inviting more users — need to know your burn rate
+- **Deliverability baseline (15)** + **Public hosting (16)** are the two hardest blockers for going from 1 user to 10+
 - Custom topics (9) and depth modes (10) are "finish what's started" items — they're half-built

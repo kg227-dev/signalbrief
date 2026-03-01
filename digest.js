@@ -160,23 +160,28 @@ async function enrichItems(items) {
 
   const prompt = `You are the editorial voice of SignalBrief — a daily news digest for senior strategy consultants and business professionals. Your readers work at MBB, Big 4, boutique strategy firms, corporate strategy functions, and PE/investment shops. They work across multiple industries and need to sound informed in client meetings across healthcare, tech, financial services, PE, energy, consumer, and policy. They are time-pressed, sophisticated, and allergic to generic analysis.
 
-TASK: For each news item below, write a "why it matters" field of exactly 2-3 sentences.
+TASK: For each news item below, return two fields:
 
-RULES — READ CAREFULLY:
-1. First sentence: a sharp, specific strategic implication. Wrap it in <strong> tags. This sentence alone should make the reader think "I need to bring this up in my client meeting."
-2. Second sentence: a concrete second-order effect — what moves downstream as a result? Name the specific player type, role, or market segment that feels it.
-3. Third sentence (optional): a forward-looking signal — what should the reader watch for next? Only add if genuinely useful. Skip if it would be vague.
+1. "wim" — a "why it matters" analysis of exactly 2-3 sentences.
+   RULES:
+   - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
+   - Second sentence: a concrete second-order effect — name the specific player type, role, or market segment that feels it.
+   - Third sentence (optional): a forward-looking signal — what to watch for next. Skip if vague.
 
-WHAT TO AVOID (these examples are WRONG — too generic):
-❌ "Health systems are focusing on scalable, reliable AI technology in 2026 to improve operations, reduce clinician burden, and drive growth amid workforce shortages and tight margins." (press release rewrite)
-❌ "This could have significant implications for the healthcare industry." (says nothing)
+2. "baseScore" — a number 0.0–10.0 measuring the story's strategic importance and consultant relevance, independent of any user's topic preferences.
+   - 8.5–10.0: Major development (landmark M&A, significant policy shift, key earnings miss with broad implications)
+   - 7.0–8.4: Notable development (meaningful deal, regulatory move, sector-level change)
+   - 5.0–6.9: Moderate interest (incremental update, early-stage signal worth watching)
+   - Below 5.0: Routine or narrow-interest item
+
+WHAT TO AVOID (too generic):
+❌ "This could have significant implications for the industry." (says nothing)
 ❌ "Companies should pay attention to this trend." (empty filler)
 
-WHAT TO AIM FOR (these examples are RIGHT — specific and implication-forward):
+WHAT TO AIM FOR (specific, implication-forward):
 ✅ "<strong>Another payer going full care-delivery stack — point-solution vendors in drug management will feel it.</strong> Your buyer is now also your competitor's parent company. Any vendor with Cigna in their top-3 logos needs to stress-test that relationship."
-✅ "<strong>Any pipeline asset relying on accelerated approval timelines needs re-underwriting now.</strong> This is a stated policy direction from the Commissioner, not a one-off rejection. Biotech valuations with rare disease velocity assumptions should be pressure-tested against a 12-18 month slower cadence."
 
-Return ONLY a JSON array with the same items plus a "wim" field. No markdown, no explanation.
+Return ONLY a JSON array with the same items plus "wim" and "baseScore" fields. No markdown, no explanation.
 
 Items:
 ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag: i.tag })), null, 2)}`;
@@ -191,12 +196,46 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
     let content = res.body?.content?.[0]?.text || "[]";
     content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const enriched = JSON.parse(content);
-    // Merge wim back onto original items (which have URLs)
-    return items.map((item, i) => ({ ...item, wim: enriched[i]?.wim || "Analysis unavailable." }));
+    // Merge wim + baseScore back onto original items (which have URLs)
+    return items.map((item, i) => ({
+      ...item,
+      wim: enriched[i]?.wim || "Analysis unavailable.",
+      baseScore: typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
+    }));
   } catch (e) {
     log(`Claude parse error: ${e.message}`);
     return items.map((i) => ({ ...i, wim: "Analysis unavailable." }));
   }
+}
+
+// ── 3b. Score items by relevance (zero extra API cost) ───────────────────────
+// baseScore comes from enrichItems (already paid for in that call).
+// topicMatch is computed locally — free.
+// finalScore = baseScore (60%) + topicMatch (40%)
+
+function scoreColor(score) {
+  if (score >= 8.5) return { bg: "#16A34A", text: "#fff" };    // strong green
+  if (score >= 7.0) return { bg: "#22C55E", text: "#fff" };    // green
+  if (score >= 5.0) return { bg: "#EAB308", text: "#111827" }; // yellow
+  if (score >= 3.5) return { bg: "#F97316", text: "#fff" };    // orange
+  return { bg: "#EF4444", text: "#fff" };                       // red
+}
+
+function computeTopicMatch(item, userTopics) {
+  const tagLower = (item.tag || "").toLowerCase();
+  const topicsLower = (userTopics || []).map(t => t.toLowerCase());
+  if (topicsLower.some(t => t === tagLower)) return 10;           // exact
+  if (topicsLower.some(t => tagLower.includes(t) || t.includes(tagLower))) return 7; // partial
+  return 3;                                                        // unrelated
+}
+
+function applyRelevanceScores(items, userTopics) {
+  return items.map(item => {
+    const topicMatch = computeTopicMatch(item, userTopics);
+    const base = typeof item.baseScore === "number" ? item.baseScore : 5.0;
+    const score = Math.round((base * 0.6 + topicMatch * 0.4) * 10) / 10;
+    return { ...item, relevanceScore: Math.min(10, Math.max(0, score)) };
+  });
 }
 
 // ── 4. Format Telegram message ───────────────────────────────────────────────
@@ -256,17 +295,20 @@ function formatTelegram(items, dateStr, state) {
 
 function buildEmail(items, dateStr, quickScan) {
   const itemsHtml = items.map((item, i) => {
-    const isLead = i === 0;
-    const metaBadge = isLead
-      ? `<span class="item-lead-badge">★ LEAD</span>`
-      : `<span class="item-number">${i + 1}</span>`;
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
+    // Relevance score badge (color-coded, embedded in enrichment — no extra API cost)
+    const score = item.relevanceScore;
+    const scoreHtml = score !== undefined ? (() => {
+      const c = scoreColor(score);
+      return `<span style="display:inline-block;font-size:10px;font-weight:700;color:${c.text};background:${c.bg};padding:2px 8px;border-radius:4px;letter-spacing:0.01em;">${score.toFixed(1)}</span>`;
+    })() : "";
 
     return `
-      <div class="item${isLead ? " item-lead" : ""}">
+      <div class="item">
         <div class="item-meta">
-          ${metaBadge}
+          <span class="item-number">${i + 1}</span>
           <span class="item-tag">${item.tag}</span>
+          ${scoreHtml}
         </div>
         <div class="item-title">${item.headline}</div>
         <div class="item-lede">${item.summary}</div>
@@ -403,11 +445,15 @@ async function main() {
         userItems = filtered.length >= 3 ? filtered : enriched;
       }
 
-      // 2. Trim to user's items_per_digest
+      // 2. Score by relevance (free — uses baseScore from enrichment + local topic match)
+      userItems = applyRelevanceScores(userItems, u.topics || []);
+      userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+      // 3. Trim to user's items_per_digest (top-N by relevance)
       const count = prefs.items_per_digest || CONFIG.digest.itemCount;
       userItems = userItems.slice(0, count);
 
-      // 3. Apply depth — strip wim if user wants headlines only or one-liner
+      // 4. Apply depth — strip wim if user wants headlines only or one-liner
       const depth = prefs.depth || "full";
       if (depth === "headline_only" || depth === "headlines") {
         userItems = userItems.map(i => ({ ...i, wim: null }));
@@ -419,7 +465,7 @@ async function main() {
         }));
       }
 
-      // 4. Build per-user quick scan + subject
+      // 5. Build per-user quick scan + subject
       const userQuickScan = userItems.map((i, idx) => {
         const short = i.headline.split(":")[0].split("—")[0].trim();
         return `<tr><td style="font-size:11px;color:#9CA3AF;font-weight:600;padding:4px 10px 4px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td><td style="font-size:10px;font-weight:700;letter-spacing:0.05em;color:#2563EB;text-transform:uppercase;white-space:nowrap;padding:4px 14px 4px 0;vertical-align:top;line-height:1.5;">${i.tag}</td><td style="font-size:13px;color:#374151;padding:4px 0;vertical-align:top;line-height:1.5;">${short}</td></tr>`;

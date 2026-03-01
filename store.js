@@ -6,6 +6,11 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+
+function generateToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
 
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
@@ -19,11 +24,13 @@ function defaultUser(chatId) {
     chatId: String(chatId),
     email: null,
     status: "active",          // active | paused | unsubscribed
+    token: null,               // 64-char hex; generated on signup or auto-generated on first readUser
     digests_received: 0,
     joined_at: new Date().toISOString(),
     last_digest_at: null,
     topic_weights: {},          // { "AI": 1, "PHARMA": -1 }
     custom_topics: [],          // ["GLP-1", "biosimilars"]
+    digest_dates: [],           // ["2026-03-01", ...] — dates user received a digest (for archive scoping)
     bookmarks: [],              // [{ date, item_num, headline, url, tag }]
     last_digest_items: [],      // snapshot of last digest for save-by-number
     preferences: {
@@ -38,7 +45,17 @@ function defaultUser(chatId) {
 function readUser(chatId) {
   const f = userFile(chatId);
   if (!fs.existsSync(f)) return defaultUser(chatId);
-  return { ...defaultUser(chatId), ...JSON.parse(fs.readFileSync(f, "utf8")) };
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(f, "utf8")); }
+  catch { return defaultUser(chatId); }
+  const user = { ...defaultUser(chatId), ...raw };
+  // Auto-generate and persist token for existing users who don't have one
+  if (!raw.token) {
+    user.token = generateToken();
+    fs.writeFileSync(f, JSON.stringify(user, null, 2));
+    console.log(`[store] Auto-generated token for ${chatId}`);
+  }
+  return user;
 }
 
 function writeUser(chatId, data) {
@@ -55,4 +72,4 @@ function allUsers() {
     });
 }
 
-module.exports = { readUser, writeUser, allUsers, defaultUser };
+module.exports = { readUser, writeUser, allUsers, defaultUser, generateToken };

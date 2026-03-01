@@ -16,12 +16,20 @@ const EMAIL_TEMPLATE = fs.readFileSync(
   path.join(__dirname, "templates/email.html"),
   "utf8"
 );
-const { readUser, writeUser } = require("./store");
+const { readUser, writeUser, allUsers } = require("./store");
 const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
+
+// ET time helpers
+function getETNow() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+}
+function toETDateStr(iso) {
+  return iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
+}
 
 // API cost estimates
 const PERPLEXITY_COST_PER_CALL  = 0.005;   // Sonar model per call
@@ -323,7 +331,12 @@ function formatTelegram(items, dateStr, state) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(items, dateStr, quickScan, userEmail = "") {
+function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false) {
+  const welcomeBanner = isFirstDigest ? `
+      <div style="margin:0 0 20px;padding:16px 20px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;">
+        <div style="font-size:11px;font-weight:700;color:#15803D;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">👋 Your first SignalBrief</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;">Below is your first briefing, filtered to your selected topics. You'll receive this at your scheduled time — update topics, timing, or depth from the link below anytime.</div>
+      </div>` : "";
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
     // Relevance score badge (color-coded, embedded in enrichment — no extra API cost)
@@ -332,6 +345,11 @@ function buildEmail(items, dateStr, quickScan, userEmail = "") {
       const c = scoreColor(score);
       return `<span style="display:inline-block;font-size:10px;font-weight:700;color:${c.text};background:${c.bg};padding:2px 8px;border-radius:4px;letter-spacing:0.01em;">${score.toFixed(1)}</span>`;
     })() : "";
+
+    // Conditionally render WIM block — skip if null/undefined (e.g. headline_only depth)
+    const wimHtml = item.wim
+      ? `<div class="item-wim-label">Why it matters</div>\n        <div class="item-wim">${item.wim}</div>`
+      : "";
 
     return `
       <div class="item">
@@ -342,8 +360,7 @@ function buildEmail(items, dateStr, quickScan, userEmail = "") {
         </div>
         <div class="item-title">${item.headline}</div>
         <div class="item-lede">${item.summary}</div>
-        <div class="item-wim-label">Why it matters</div>
-        <div class="item-wim">${item.wim}</div>
+        ${wimHtml}
         <div class="item-readmore"><a href="${linkUrl}">Read more → ${item.source}</a></div>
       </div>`;
   }).join("\n");
@@ -355,10 +372,10 @@ function buildEmail(items, dateStr, quickScan, userEmail = "") {
     .replace("{{ITEM_COUNT}}", `${items.length} signals · ${readMins} min read`)
     .replace("{{QUICK_SCAN}}", quickScan)
     .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
-    .replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(userEmail))
+    .replace(/\{\{SETTINGS_TOKEN\}\}/g, userToken)
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
-      `<!-- Items -->\n    <div class="items">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
+      `<!-- Items -->\n    <div class="items">\n${welcomeBanner}\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
     );
 }
 
@@ -421,8 +438,37 @@ async function main() {
   const args = process.argv.slice(2);
   const chatIdIdx = args.indexOf("--chatId");
   const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
+
+  // ── Check who's due BEFORE any API calls ──────────────────────────────────
+  const etNow = getETNow();
+  const todayET = etNow.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const nowMinutes = etNow.getHours() * 60 + etNow.getMinutes();
+  const allActive = allUsers().filter(u => u.status === "active");
+
+  let dueUsers;
+  if (targetChatId) {
+    // On-demand: bypass scheduling — deliver to this user regardless of time
+    dueUsers = allActive.filter(u => u.chatId === targetChatId);
+  } else {
+    const todayDOW = etNow.getDay(); // 0=Sun … 6=Sat
+    dueUsers = allActive.filter(u => {
+      const prefs = u.preferences || {};
+      // Check day of week
+      const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
+      if (!allowedDays.includes(todayDOW)) return false;
+      // Skip if already delivered today (prevents double-delivery from 30-min cron)
+      if (toETDateStr(u.last_digest_at) === todayET) return false;
+      // Match delivery time within ±25 min window
+      const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+      const userMinutes = dh * 60 + dm;
+      return Math.abs(nowMinutes - userMinutes) <= 25;
+    });
+  }
+
+  if (dueUsers.length === 0) process.exit(0); // silent — no users due this window
+
   if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);
-  else log("=== SignalBrief starting ===");
+  else log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", {
@@ -451,16 +497,9 @@ async function main() {
     .map((i) => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
   const subject = `SignalBrief — ${shortDate} | ${topThree.join(", ")}`;
 
-  // Deliver to ALL active users with per-user preferences
-  const { allUsers } = require("./store");
-  const allActive = allUsers().filter(u => u.status === "active");
-  // If on-demand (/digest command), only deliver to requesting user
-  const activeUsers = targetChatId
-    ? allActive.filter(u => u.chatId === targetChatId)
-    : allActive;
-  log(`Delivering to ${activeUsers.length} user(s)...`);
+  log(`Delivering to ${dueUsers.length} user(s)...`);
 
-  for (const u of activeUsers) {
+  for (const u of dueUsers) {
     try {
       const prefs = u.preferences || {};
 
@@ -473,8 +512,9 @@ async function main() {
           const tag = (item.tag || "").toLowerCase();
           return userTopicsLower.some(t => tag.includes(t) || t.includes(tag));
         });
-        // Fall back to full list if filter leaves < 3 items
-        userItems = filtered.length >= 3 ? filtered : enriched;
+        // Fall back to full list only if filter leaves zero items
+        // (>= 1 match means we should honour the user's topic preference)
+        userItems = filtered.length >= 1 ? filtered : enriched;
       }
 
       // 2. Score by relevance (free — uses baseScore from enrichment + local topic match)
@@ -512,8 +552,9 @@ async function main() {
         await sendTelegram(userTelegram, u.chatId);
       }
       if (u.email && prefs.email_enabled !== false) {
-        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.email);
-        await sendEmail(userSubject, userEmailHtml, u.email);
+        const isFirstDigest = (u.digests_received || 0) === 0;
+        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest);
+        await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
         await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }
 
@@ -523,6 +564,10 @@ async function main() {
       u.last_digest_items = userItems.map(i => ({
         headline: i.headline, url: i.url, tag: i.tag, source: i.source,
       }));
+      // Track which dates this user received a digest (for user-scoped archive)
+      const todayDateKey = now.toISOString().slice(0, 10);
+      if (!u.digest_dates) u.digest_dates = [];
+      if (!u.digest_dates.includes(todayDateKey)) u.digest_dates.push(todayDateKey);
       writeUser(u.chatId, u);
 
       // 7. Save to archive (shared, date-keyed)
@@ -550,12 +595,12 @@ async function main() {
     claude_tokens_out:     claudeUsage.output_tokens,
     claude_cost_usd:       parseFloat(claudeCost.toFixed(6)),
     total_cost_usd:        parseFloat(totalCost.toFixed(5)),
-    users_served:          activeUsers.length,
-    per_user:              activeUsers.map(u => ({ id: u.email || u.chatId, on_demand: !!targetChatId })),
+    users_served:          dueUsers.length,
+    per_user:              dueUsers.map(u => ({ id: u.email || u.chatId, on_demand: !!targetChatId })),
   });
   log(`💰 Run cost: $${totalCost.toFixed(4)} (Perplexity $${perplexityCost.toFixed(3)} · Claude in=${claudeUsage.input_tokens} out=${claudeUsage.output_tokens} $${claudeCost.toFixed(4)})`);
 
-  log(`=== SignalBrief complete — ${activeUsers.length} user(s) delivered ===`);
+  log(`=== SignalBrief complete — ${dueUsers.length} user(s) delivered ===`);
 }
 
 main().catch((e) => {

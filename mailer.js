@@ -22,11 +22,13 @@ const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
-async function sendViaResend(to, subject, html) {
+async function sendViaResend(to, subject, html, token = null) {
   const apiKey = CONFIG.keys.resendApiKey;
   const fromEmail = CONFIG.keys.fromEmail || "digest@signalbrief.co";
   const fromName = CONFIG.keys.fromName || "SignalBrief";
-  const unsubUrl = `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
+  const unsubUrl = token
+    ? `${BASE_URL}/api/unsubscribe?token=${encodeURIComponent(token)}`
+    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
 
   const body = JSON.stringify({
     from: `${fromName} <${fromEmail}>`,
@@ -94,11 +96,13 @@ async function refreshGoogleToken() {
   });
 }
 
-async function sendViaGmail(to, subject, html) {
+async function sendViaGmail(to, subject, html, token = null) {
   const accessToken = await refreshGoogleToken();
   const fromEmail = "jarvisjones2922@gmail.com";
   const fromName = CONFIG.keys.fromName || "SignalBrief";
-  const unsubUrl = `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
+  const unsubUrl = token
+    ? `${BASE_URL}/api/unsubscribe?token=${encodeURIComponent(token)}`
+    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
 
   const mime = [
     `To: ${to}`,
@@ -140,15 +144,15 @@ async function sendViaGmail(to, subject, html) {
 
 // ── Main send function ────────────────────────────────────────────────────────
 
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, token = null) {
   // Use Resend if configured, otherwise Gmail
   if (CONFIG.keys.resendApiKey) {
-    const result = await sendViaResend(to, subject, html);
+    const result = await sendViaResend(to, subject, html, token);
     if (result.ok) return { ok: true, via: "resend" };
     console.error(`Resend failed (${result.error}), falling back to Gmail...`);
   }
 
-  const result = await sendViaGmail(to, subject, html);
+  const result = await sendViaGmail(to, subject, html, token);
   return { ok: result.ok, via: "gmail" };
 }
 

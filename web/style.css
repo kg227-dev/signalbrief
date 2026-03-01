@@ -202,6 +202,11 @@ input::placeholder { color: var(--text-light); }
 .chip.selected .chip-check { opacity: 1; }
 .chip-min-note { font-size: 12px; color: var(--text-light); }
 .chip-min-note.error { color: #DC2626; }
+/* Custom (user-defined) topic chips */
+.chip.chip-custom { border-color: #D8B4FE; color: #7C3AED; }
+.chip.chip-custom:hover { border-color: #7C3AED; background: #F5F3FF; color: #7C3AED; }
+.chip.chip-custom.selected { background: #7C3AED; border-color: #7C3AED; color: #fff; }
+.chip.chip-custom.selected:hover { background: #6D28D9; border-color: #6D28D9; }
 
 /* Custom topic add */
 .custom-topic-row {

@@ -33,6 +33,24 @@ const TOPIC_LABELS = {
 
 let selectedTopics = new Set();
 
+// ── Custom topic display helpers ──────────────────────────────────────────────
+function isCustomTopic(t) {
+  return !DEFAULT_TOPICS.includes(t);
+}
+
+function formatCustomLabel(slug) {
+  // "custom_otsuka" → "Otsuka"  |  "custom_glp_1" → "GLP 1"  |  "GLP-1" → "GLP-1"
+  return slug
+    .replace(/^custom_/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+}
+
+function topicDisplayLabel(t) {
+  if (DEFAULT_TOPICS.includes(t)) return TOPIC_LABELS[t] || t;
+  return formatCustomLabel(t);
+}
+
 function updateTopicNote() {
   const n = selectedTopics.size;
   const el = document.getElementById('topicMinNote');
@@ -50,15 +68,16 @@ function updateSelectedSummary() {
     el.innerHTML = 'No topics selected yet.';
     return;
   }
-  const labels = topics.map(function(t) { return TOPIC_LABELS[t] || t; });
+  const labels = topics.map(function(t) { return topicDisplayLabel(t); });
   el.innerHTML = '<strong>' + topics.length + ' tracking:</strong> <span class="summary-topics">' + labels.join(' · ') + '</span>';
 }
 
 function renderChip(topic, selected) {
   const chip = document.createElement('div');
-  chip.className = 'chip' + (selected ? ' selected' : '');
+  const custom = isCustomTopic(topic);
+  chip.className = 'chip' + (selected ? ' selected' : '') + (custom ? ' chip-custom' : '');
   chip.dataset.topic = topic;
-  const label = TOPIC_LABELS[topic] || topic;
+  const label = topicDisplayLabel(topic);
   chip.innerHTML = '<span class="chip-check">✓</span> ' + label;
   chip.addEventListener('click', function() {
     if (selectedTopics.has(topic)) {
@@ -177,7 +196,7 @@ function getSettingsFrequency() {
 
 async function init() {
   const params = new URLSearchParams(window.location.search);
-  const email = params.get('email');
+  const token = params.get('token');
   const loadingEl = document.getElementById('loadingState');
   const formEl = document.getElementById('settingsForm');
   const notFoundEl = document.getElementById('notFoundState');
@@ -195,14 +214,14 @@ async function init() {
     return;
   }
 
-  if (!email) {
+  if (!token) {
     loadingEl.style.display = 'none';
     notFoundEl.style.display = 'block';
     return;
   }
 
   try {
-    const res = await fetch('/api/user?email=' + encodeURIComponent(email));
+    const res = await fetch('/api/user?token=' + encodeURIComponent(token));
     if (!res.ok) throw new Error('not found');
     const user = await res.json();
 
@@ -267,7 +286,7 @@ async function init() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: email,
+            token: token,
             name: document.getElementById('name').value.trim(),
             telegram: document.getElementById('telegram').value.replace('@', '').trim() || null,
             topics: Array.from(selectedTopics),
@@ -309,7 +328,7 @@ async function init() {
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, status: 'unsubscribed' })
+        body: JSON.stringify({ token: token, status: 'unsubscribed' })
       });
       document.getElementById('settingsForm').innerHTML =
         '<div class="form-section" style="text-align:center;padding:48px 24px;">' +

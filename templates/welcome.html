@@ -102,7 +102,7 @@
             <td style="padding:9px 0;vertical-align:top;font-size:18px;">📁</td>
             <td style="padding:9px 0;vertical-align:top;">
               <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Browse past issues</div>
-              <div style="font-size:13px;color:#6B7280;">Every digest is archived at <a href="https://getsignalbrief.com/archive" style="color:#2563EB;text-decoration:none;">getsignalbrief.com/archive</a>.</div>
+              <div style="font-size:13px;color:#6B7280;">Every digest you receive is saved at <a href="{{ARCHIVE_URL}}" style="color:#2563EB;text-decoration:none;">your personal archive</a>.</div>
             </td>
           </tr>
         </table>
@@ -111,9 +111,11 @@
       <!-- Footer -->
       <tr><td style="background:#F9FAFB;border-radius:0 0 12px 12px;padding:20px 40px;border-top:1px solid #E5E7EB;text-align:center;">
         <div style="font-size:12px;color:#9CA3AF;line-height:1.8;">
+          <a href="{{ARCHIVE_URL}}" style="color:#6B7280;text-decoration:none;">Past digests</a>
+          &nbsp;&middot;&nbsp;
           <a href="{{SETTINGS_URL}}" style="color:#6B7280;text-decoration:none;">Update preferences</a>
           &nbsp;&middot;&nbsp;
-          <a href="{{SETTINGS_URL}}&unsubscribe=1" style="color:#6B7280;text-decoration:none;">Unsubscribe</a>
+          <a href="{{SETTINGS_URL}}#unsub" style="color:#6B7280;text-decoration:none;">Unsubscribe</a>
         </div>
         <div style="font-size:11px;color:#D1D5DB;margin-top:6px;">SignalBrief &middot; Daily intelligence for strategy professionals</div>
       </td></tr>

@@ -8,8 +8,16 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { spawn } = require("child_process");
+const { generateToken } = require("../store");
 const { sendEmail } = require("../mailer");
 const { readUser, writeUser, allUsers } = require("../store");
+
+// ── Token auth helper ─────────────────────────────────────────────────────────
+function findUserByToken(token) {
+  if (!token) return null;
+  return allUsers().find(u => u.token === token) || null;
+}
 
 const PORT = 3003;
 const WEB_DIR = __dirname;
@@ -71,10 +79,24 @@ function serveFile(res, filePath) {
 const WELCOME_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/welcome.html"), "utf8");
 const BASE_URL = process.env.BASE_URL || "http://localhost:3003";
 
+async function sendMagicLinkEmail(user) {
+  const settingsUrl = `${BASE_URL}/settings?token=${user.token}`;
+  const archiveUrl  = `${BASE_URL}/archive?token=${user.token}`;
+  const html = `
+    <div style="font-family:-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:40px 24px;">
+      <div style="font-size:22px;font-weight:700;margin-bottom:24px;">☀️ SignalBrief</div>
+      <p style="font-size:16px;margin-bottom:16px;">Here's your personal SignalBrief access link:</p>
+      <a href="${settingsUrl}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 32px;border-radius:100px;">Manage preferences →</a>
+      <p style="margin-top:20px;font-size:13px;color:#6B7280;">Or view your <a href="${archiveUrl}" style="color:#2563EB;">past digests</a>.<br>This link is personal — keep it private.</p>
+    </div>`;
+  await sendEmail(user.email, "Your SignalBrief access link", html);
+}
+
 async function sendWelcomeEmail(user) {
   const { name, email } = user;
   const prefs = user.preferences || {};
-  const settingsUrl = `${BASE_URL}/settings?email=${encodeURIComponent(email)}`;
+  const settingsUrl = `${BASE_URL}/settings?token=${user.token}`;
+  const archiveUrl  = `${BASE_URL}/archive?token=${user.token}`;
   const firstName = (name || "there").split(" ")[0];
 
   // Format delivery time: "06:45" → "6:45 AM"
@@ -121,7 +143,8 @@ async function sendWelcomeEmail(user) {
     .replace(/\{\{DEPTH_LABEL\}\}/g, depthLabel)
     .replace(/\{\{ITEMS_COUNT\}\}/g, String(prefs.items_per_digest || 5))
     .replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl)
-    .replace(/\{\{USER_EMAIL\}\}/g, encodeURIComponent(email));
+    .replace(/\{\{ARCHIVE_URL\}\}/g, archiveUrl)
+    .replace(/\{\{USER_EMAIL\}\}/g, email); // raw email for /start command in Telegram tip (must NOT be URL-encoded)
 
   const subject = `Welcome to SignalBrief, ${firstName} — your brief is set for ${timeLabel}`;
   const result = await sendEmail(email, subject, html);
@@ -152,7 +175,7 @@ const CAPABILITY_TOPICS = [
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
 // Fields that must never be overwritten via /api/settings
-const PROTECTED_FIELDS = ["chatId", "joined_at", "digests_received", "bookmarks", "last_digest_items", "last_digest_at"];
+const PROTECTED_FIELDS = ["chatId", "token", "joined_at", "digests_received", "bookmarks", "last_digest_items", "last_digest_at", "digest_dates"];
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -171,12 +194,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, { topics: DEFAULT_TOPICS, industries: INDUSTRY_TOPICS, capabilities: CAPABILITY_TOPICS });
   }
 
-  // GET /api/user?email=... — load user by email
+  // GET /api/user?token=... — load user by token
   if (pathname === "/api/user" && req.method === "GET") {
-    const email = url.searchParams.get("email");
-    if (!email) return json(res, { error: "email required" }, 400);
-    const users = allUsers();
-    const user = users.find(u => u.email === email);
+    const token = url.searchParams.get("token");
+    if (!token) return json(res, { error: "token required" }, 400);
+    const user = findUserByToken(token);
     if (!user) return json(res, { error: "not found" }, 404);
     return json(res, user);
   }
@@ -210,12 +232,14 @@ const server = http.createServer(async (req, res) => {
       telegram: telegramClean || null,
       topics,
       status: "active",
+      token: existing?.token || generateToken(),
       joined_at: existing?.joined_at || new Date().toISOString(),
       last_updated: new Date().toISOString(),
       digests_received: existing?.digests_received || 0,
       bookmarks: existing?.bookmarks || [],
       topic_weights: existing?.topic_weights || {},
       custom_topics: topics.filter(t => !DEFAULT_TOPICS.includes(t)),
+      digest_dates: existing?.digest_dates || [],
       last_digest_items: existing?.last_digest_items || [],
       preferences: {
         depth: depth || "headline_plus_why",
@@ -235,18 +259,27 @@ const server = http.createServer(async (req, res) => {
     // Send welcome email (non-blocking)
     sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
 
+    // Spawn welcome digest in background — user gets their first briefing immediately
+    const digestPath = path.join(__dirname, "../digest.js");
+    const child = spawn(process.execPath, [digestPath, "--chatId", chatId], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, BASE_URL },
+    });
+    child.unref();
+    console.log(`[welcome digest] spawned for ${chatId}`);
+
     return json(res, { success: true, chatId });
   }
 
-  // POST /api/settings — update existing user
+  // POST /api/settings — update existing user (token-authenticated)
   if (pathname === "/api/settings" && req.method === "POST") {
     const body = await readBody(req);
-    const { email } = body;
-    if (!email) return json(res, { error: "email required" }, 400);
+    const { token } = body;
+    if (!token) return json(res, { error: "token required" }, 400);
 
-    const users = allUsers();
-    const existing = users.find(u => u.email === email);
-    if (!existing) return json(res, { error: "user not found" }, 404);
+    const existing = findUserByToken(token);
+    if (!existing) return json(res, { error: "invalid token" }, 401);
 
     // Strip protected fields from body so they can never be overwritten
     const safeBody = Object.fromEntries(
@@ -270,50 +303,82 @@ const server = http.createServer(async (req, res) => {
     return json(res, { success: true });
   }
 
-  // GET|POST /api/unsubscribe?email=... — one-click unsubscribe (RFC 8058)
-  // GET:  human-readable redirect to success page
+  // GET|POST /api/unsubscribe — one-click unsubscribe (RFC 8058)
+  // Supports: ?token=TOKEN (new) or ?email=... (legacy email links)
+  // GET:  human-readable redirect to settings page with unsubscribed=1
   // POST: email client one-click (body: "List-Unsubscribe=One-Click")
   if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
+    const tokenParam = url.searchParams.get("token") || "";
     const emailParam = url.searchParams.get("email") || "";
-    const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
-    if (!targetEmail) return json(res, { error: "email required" }, 400);
+    let existing = null;
 
-    const users = allUsers();
-    const existing = users.find(u => u.email.toLowerCase() === targetEmail);
+    if (tokenParam) {
+      existing = findUserByToken(decodeURIComponent(tokenParam));
+    } else if (emailParam) {
+      const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
+      existing = allUsers().find(u => u.email.toLowerCase() === targetEmail);
+    }
+
+    if (!tokenParam && !emailParam) return json(res, { error: "token or email required" }, 400);
+
     if (existing) {
       writeUser(existing.chatId, { ...existing, status: "unsubscribed", email_unsubscribed_at: new Date().toISOString() });
-      console.log(`[unsubscribe] ${targetEmail}`);
+      console.log(`[unsubscribe] ${existing.email}`);
     }
     // Always succeed (idempotent — if user not found, silently ok)
     if (req.method === "POST") return json(res, { success: true });
-    // GET: redirect to a simple confirmation page
-    const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
-    res.writeHead(302, { Location: `${BASE_URL}/settings?email=${encodeURIComponent(targetEmail)}&unsubscribed=1` });
+    // GET: redirect to settings confirmation page
+    const redirectBase = process.env.BASE_URL || "https://getsignalbrief.com";
+    const confirmUrl = existing?.token
+      ? `${redirectBase}/settings?token=${existing.token}&unsubscribed=1`
+      : `${redirectBase}/settings?unsubscribed=1`;
+    res.writeHead(302, { Location: confirmUrl });
     return res.end();
   }
 
-  // GET /api/archive — list of all past digests
+  // GET /api/archive?token=... — user-specific archive (filtered to dates they received)
+  // Without token: returns empty (archive requires auth)
   if (pathname === "/api/archive" && req.method === "GET") {
+    const token = url.searchParams.get("token");
+    if (!token) return json(res, { digests: [], requiresAuth: true });
+
+    const user = findUserByToken(token);
+    if (!user) return json(res, { error: "invalid token" }, 401);
+
     const archiveDir = path.join(__dirname, "../archive");
     if (!fs.existsSync(archiveDir)) return json(res, { digests: [] });
+
+    const allowedDates = new Set(user.digest_dates || []);
     const files = fs.readdirSync(archiveDir)
       .filter(f => f.endsWith(".json"))
       .sort()
       .reverse(); // newest first
+
     const digests = files.flatMap(f => {
+      const dateKey = f.replace(".json", "");
+      if (!allowedDates.has(dateKey)) return [];
       try {
         const d = JSON.parse(fs.readFileSync(path.join(archiveDir, f), "utf8"));
         return [{ date: d.date, dateStr: d.dateStr, quickScan: d.quickScan, itemCount: d.items?.length || 0 }];
-      } catch { return []; } // skip malformed files silently
+      } catch { return []; }
     });
     return json(res, { digests });
   }
 
-  // GET /api/archive/:date — full digest for a specific date
+  // GET /api/archive/:date?token=... — full digest for a specific date
   if (pathname.startsWith("/api/archive/") && req.method === "GET") {
     const rawDate = pathname.replace("/api/archive/", "");
     // Sanitize: only allow YYYY-MM-DD format to prevent path traversal
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return json(res, { error: "invalid date" }, 400);
+
+    // Token auth: verify user received this digest
+    const token = url.searchParams.get("token");
+    if (token) {
+      const user = findUserByToken(token);
+      if (!user) return json(res, { error: "invalid token" }, 401);
+      if (!(user.digest_dates || []).includes(rawDate)) return json(res, { error: "not found" }, 404);
+    }
+
     const file = path.join(__dirname, "../archive", `${rawDate}.json`);
     if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
     try {
@@ -321,6 +386,21 @@ const server = http.createServer(async (req, res) => {
     } catch {
       return json(res, { error: "malformed archive file" }, 500);
     }
+  }
+
+  // POST /api/request-link — send magic access link to user's email
+  if (pathname === "/api/request-link" && req.method === "POST") {
+    const body = await readBody(req);
+    const { email } = body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json(res, { error: "valid email required" }, 400);
+    }
+    // Always return success (don't reveal whether email exists)
+    const user = allUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (user && user.token) {
+      sendMagicLinkEmail(user).catch(e => console.error("[magic link]", e));
+    }
+    return json(res, { success: true });
   }
 
   // GET /api/admin/stats — cost dashboard data (localhost only)

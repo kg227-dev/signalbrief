@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalBrief — Archive</title>
+<title>SignalBrief — Your Archive</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -61,9 +61,36 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .item-link a { font-size:13px; color:var(--accent); text-decoration:none; font-weight:500; }
 .item-link a:hover { text-decoration:underline; }
 
+/* Empty / auth states */
 .empty-state { text-align:center; padding:60px 24px; color:var(--text-secondary); }
 .empty-icon { font-size:36px; margin-bottom:12px; }
 .empty-title { font-size:18px; font-weight:600; color:var(--text); margin-bottom:8px; }
+
+/* Request-link gate */
+.gate-card {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:48px 40px; text-align:center; max-width:480px; margin:0 auto;
+  box-shadow:var(--shadow-md);
+}
+.gate-icon { font-size:40px; margin-bottom:16px; }
+.gate-title { font-family:'Instrument Serif',serif; font-size:28px; font-weight:400; letter-spacing:-0.3px; margin-bottom:10px; }
+.gate-sub { font-size:15px; color:var(--text-secondary); line-height:1.6; margin-bottom:28px; }
+.gate-form { display:flex; flex-direction:column; gap:12px; align-items:stretch; }
+.gate-input {
+  width:100%; padding:12px 16px; border:1.5px solid var(--border); border-radius:8px;
+  font-size:15px; font-family:inherit; outline:none; transition:border-color 0.2s;
+}
+.gate-input:focus { border-color:var(--accent); }
+.gate-btn {
+  background:var(--accent); color:#fff; border:none; border-radius:100px;
+  padding:14px 32px; font-size:14px; font-weight:600; font-family:inherit;
+  cursor:pointer; transition:background 0.2s;
+}
+.gate-btn:hover { background:#1d4ed8; }
+.gate-btn:disabled { background:#9CA3AF; cursor:default; }
+.gate-success { font-size:14px; color:#15803D; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px 16px; display:none; }
+.gate-note { font-size:13px; color:#9CA3AF; margin-top:16px; }
+.gate-note a { color:var(--accent); text-decoration:none; }
 
 .footer { text-align:center; margin-top:48px; font-size:13px; color:var(--text-secondary); }
 .footer a { color:var(--accent); text-decoration:none; }
@@ -73,6 +100,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
   .container { padding:24px 16px 60px; }
   .archive-title { font-size:28px; }
   .digest-card { flex-direction:column; gap:8px; }
+  .gate-card { padding:36px 24px; }
 }
 </style>
 </head>
@@ -84,43 +112,92 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
       <a href="/" class="brand-link">☀️ SignalBrief</a>
       <a href="/" class="subscribe-link">Subscribe →</a>
     </div>
-    <h1 class="archive-title">Past Digests</h1>
-    <p class="archive-sub">Every issue, searchable and readable in full.</p>
+    <h1 class="archive-title">Your Past Digests</h1>
+    <p class="archive-sub" id="archiveSub">Loading your archive…</p>
   </div>
 
-  <!-- List view -->
-  <div id="listView">
-    <div class="digest-list" id="digestList">
-      <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <div class="empty-title">No digests yet</div>
-        <p>Your first digest will appear here after it's delivered.</p>
+  <!-- Token-gated content area -->
+  <div id="mainContent">
+
+    <!-- Gate: no token — request access link -->
+    <div id="gateView" style="display:none;">
+      <div class="gate-card">
+        <div class="gate-icon">🔒</div>
+        <div class="gate-title">Your personal archive</div>
+        <div class="gate-sub">Enter your email and we'll send you a link to access your past digests.</div>
+        <div class="gate-form">
+          <input type="email" id="gateEmail" class="gate-input" placeholder="you@example.com" autocomplete="email">
+          <button id="gateBtn" class="gate-btn" onclick="requestLink()">Send my access link</button>
+          <div id="gateSuccess" class="gate-success">✅ Check your inbox — your link is on the way.</div>
+        </div>
+        <p class="gate-note">Not subscribed yet? <a href="/">Sign up here →</a></p>
       </div>
     </div>
-  </div>
 
-  <!-- Detail view -->
-  <div id="detailView" class="detail-view">
-    <button class="back-btn" onclick="showList()">← Back to archive</button>
-    <div class="detail-header">
-      <div class="detail-date" id="detailDate"></div>
-      <div class="detail-title">SignalBrief</div>
-      <div class="detail-scan-box" id="detailScan"></div>
+    <!-- List view (authed) -->
+    <div id="listView" style="display:none;">
+      <div class="digest-list" id="digestList">
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">No digests yet</div>
+          <p>Your first digest will appear here after it's delivered.</p>
+        </div>
+      </div>
     </div>
-    <div id="detailItems"></div>
+
+    <!-- Detail view -->
+    <div id="detailView" class="detail-view">
+      <button class="back-btn" onclick="showList()">← Back to archive</button>
+      <div class="detail-header">
+        <div class="detail-date" id="detailDate"></div>
+        <div class="detail-title">SignalBrief</div>
+        <div class="detail-scan-box" id="detailScan"></div>
+      </div>
+      <div id="detailItems"></div>
+    </div>
+
   </div>
 
-  <div class="footer">Powered by SignalBrief · Built with OpenClaw</div>
+  <div class="footer">Powered by SignalBrief</div>
 </div>
 
 <script>
 let allDigests = [];
+let userToken = null;
 
-async function loadList() {
-  const res = await fetch('/api/archive');
-  const data = await res.json();
-  allDigests = data.digests || [];
-  renderList();
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  userToken = params.get('token');
+  const subEl = document.getElementById('archiveSub');
+
+  if (!userToken) {
+    subEl.textContent = 'Your past digests, personalized to your topics.';
+    document.getElementById('gateView').style.display = 'block';
+    return;
+  }
+
+  // Load user's archive
+  try {
+    const res = await fetch('/api/archive?token=' + encodeURIComponent(userToken));
+    const data = await res.json();
+
+    if (res.status === 401 || data.error) {
+      subEl.textContent = 'Invalid or expired link.';
+      document.getElementById('gateView').style.display = 'block';
+      return;
+    }
+
+    allDigests = data.digests || [];
+    subEl.textContent = allDigests.length
+      ? allDigests.length + ' issue' + (allDigests.length !== 1 ? 's' : '') + ' in your archive'
+      : 'Your digests will appear here after delivery.';
+
+    document.getElementById('listView').style.display = 'block';
+    renderList();
+  } catch (e) {
+    subEl.textContent = 'Could not load archive.';
+    document.getElementById('gateView').style.display = 'block';
+  }
 }
 
 function renderList() {
@@ -140,16 +217,21 @@ function renderList() {
 }
 
 async function loadDetail(date) {
-  const res = await fetch('/api/archive/' + date);
+  const url = '/api/archive/' + date + (userToken ? '?token=' + encodeURIComponent(userToken) : '');
+  const res = await fetch(url);
   const d = await res.json();
   if (d.error) return;
 
   document.getElementById('detailDate').textContent = d.dateStr || d.date;
-  document.getElementById('detailScan').innerHTML = (d.quickScan || '').replace(/ &nbsp;·&nbsp; /g, ' &nbsp;·&nbsp; ');
+  document.getElementById('detailScan').innerHTML = d.quickScan || '';
 
   document.getElementById('detailItems').innerHTML = d.items.map((item, i) => {
     const isLead = i === 0;
     const linkUrl = item.url && item.url !== '#' ? item.url : 'https://' + item.source;
+    const wimHtml = item.wim ? `
+      <div class="item-wim-label">Why it matters</div>
+      <div class="item-wim">${item.wim}</div>
+    ` : '';
     return `
       <div class="item-card${isLead ? ' item-lead' : ''}">
         <div class="item-meta">
@@ -158,10 +240,7 @@ async function loadDetail(date) {
         </div>
         <div class="item-headline">${item.headline}</div>
         <div class="item-summary">${item.summary}</div>
-        ${item.wim ? `
-          <div class="item-wim-label">Why it matters</div>
-          <div class="item-wim">${item.wim}</div>
-        ` : ''}
+        ${wimHtml}
         <div class="item-link"><a href="${linkUrl}" target="_blank" rel="noopener">Read more → ${item.source}</a></div>
       </div>
     `;
@@ -178,7 +257,35 @@ function showList() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-loadList();
+async function requestLink() {
+  const email = document.getElementById('gateEmail').value.trim();
+  if (!email) return;
+  const btn = document.getElementById('gateBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  try {
+    await fetch('/api/request-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+  } catch (e) {}
+
+  // Always show success (don't leak whether email exists)
+  document.getElementById('gateSuccess').style.display = 'block';
+  btn.textContent = 'Sent!';
+}
+
+// Allow Enter key in email input
+document.addEventListener('DOMContentLoaded', function() {
+  const input = document.getElementById('gateEmail');
+  if (input) input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') requestLink();
+  });
+});
+
+init();
 </script>
 </body>
 </html>

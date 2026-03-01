@@ -13,7 +13,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const { readUser, writeUser, allUsers } = require("./store");
+const { readUser, writeUser, allUsers, generateToken } = require("./store");
 const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
@@ -257,11 +257,13 @@ async function handleEmailCapture(chatId, text) {
   }
 
   // New user — create account with smart defaults
+  const userToken = generateToken();
   const user = {
     chatId,
     email,
     name: email.split("@")[0],
     telegram: null,
+    token: userToken,
     topics: CONFIG.topics.slice(0, 5).map(t => t.tag), // first 5 topics as default
     status: "active",
     joined_at: new Date().toISOString(),
@@ -270,6 +272,7 @@ async function handleEmailCapture(chatId, text) {
     bookmarks: [],
     topic_weights: {},
     custom_topics: [],
+    digest_dates: [],
     last_digest_items: [],
     preferences: {
       depth: "headline_plus_why",
@@ -284,15 +287,16 @@ async function handleEmailCapture(chatId, text) {
   };
   writeUser(chatId, user);
 
-  // Send welcome email
-  const settingsUrl = `${BASE_URL}/settings?email=${encodeURIComponent(email)}`;
-  const welcomeHtml = `<p>Hi! Your SignalBrief account is set up. Customize your topics and schedule at <a href="${settingsUrl}">${settingsUrl}</a>.</p>`;
+  // Send welcome email (simple version — full welcome goes via server.js for web signups)
+  const settingsUrl = `${BASE_URL}/settings?token=${userToken}`;
+  const archiveUrl = `${BASE_URL}/archive?token=${userToken}`;
+  const welcomeHtml = `<p>Hi! Your SignalBrief account is set up. Customize your topics and schedule at <a href="${settingsUrl}">${settingsUrl}</a>. View past digests at <a href="${archiveUrl}">${archiveUrl}</a>.</p>`;
   sendEmailViaMailer(email, "Welcome to SignalBrief — customize your digest", welcomeHtml).catch(() => {});
 
   await send(chatId,
     `✅ *You're in!*\n\n` +
     `Digest starts tomorrow at *7 AM ET* — 7 signals across the top strategy, AI, and business stories.\n\n` +
-    `Customize your topics and schedule:\n${settingsUrl}\n\n` +
+    `🔗 [Manage preferences](${settingsUrl})\n\n` +
     `💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
   );
 }
@@ -370,18 +374,23 @@ async function handleSettings(chatId) {
     ? weights.map(([k, v]) => `${v > 0 ? "↑".repeat(Math.min(v,3)) : "↓".repeat(Math.min(-v,3))} ${k}`).join(" · ")
     : "none";
   const customTopics = user.custom_topics?.length
-    ? user.custom_topics.join(", ")
+    ? user.custom_topics.map(t => t.replace(/^custom_/, "").replace(/_/g, " ")).join(", ")
     : "none";
+
+  // Include tokenized settings link if user has a token
+  const settingsLine = user.token
+    ? `\n🔗 [Manage preferences](${BASE_URL}/settings?token=${user.token})`
+    : "";
 
   await send(chatId,
     `⚙️ *Your SignalBrief Settings*\n\n` +
     `📬 Digests received: *${user.digests_received}*\n` +
-    `📅 Delivery: *7:00 AM ET, Mon–Sat*\n` +
+    `📅 Delivery: *${(user.preferences?.delivery_time || "07:00")} ET*\n` +
     `💾 Bookmarks saved: *${user.bookmarks?.length || 0}*\n\n` +
     `📊 Topic adjustments: ${adjustments}\n` +
-    `➕ Custom topics: ${customTopics}\n\n` +
-    `_To change anything:_\n` +
-    `more/less [topic] · add [topic] · /bookmarks`
+    `➕ Custom topics: ${customTopics}` +
+    settingsLine + `\n\n` +
+    `_To tune:_ more/less [topic] · add [topic] · /bookmarks`
   );
 }
 

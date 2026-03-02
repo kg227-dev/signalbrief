@@ -7,9 +7,10 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #FAFAF8; --card: #FFFFFF; --text: #1A1A1A; --text-secondary: #6B7280;
-  --accent: #2563EB; --accent-light: #EFF6FF;
-  --border: #E5E7EB; --radius: 12px;
+  --bg: #FAFAF8; --card: #FFFFFF; --text: #111111; --text-secondary: #6B7280;
+  --text-2: #374151; --text-light: #9CA3AF;
+  --accent: #2563EB; --accent-hover: #1D4ED8; --accent-light: #EFF6FF;
+  --border: rgba(0,0,0,0.08); --border-subtle: rgba(0,0,0,0.05); --radius: 12px;
   --green: #16A34A; --yellow: #D97706; --red: #DC2626;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -36,10 +37,10 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 /* Tables */
 .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; margin-bottom:36px; }
 table { width:100%; border-collapse:collapse; }
-thead th { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); padding:12px 16px; background:#F9FAFB; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
-tbody td { font-size:13px; padding:11px 16px; border-bottom:1px solid var(--border); color:var(--text); vertical-align:middle; }
+thead th { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); padding:12px 16px; background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+tbody td { font-size:13px; padding:11px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text); vertical-align:middle; }
 tbody tr:last-child td { border-bottom:none; }
-tbody tr:hover td { background:#FAFAFA; }
+tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
 
 .badge-on-demand { font-size:10px; font-weight:700; color:#fff; background:#7C3AED; padding:2px 7px; border-radius:100px; letter-spacing:0.03em; }
@@ -89,7 +90,7 @@ tbody tr:hover td { background:#FAFAFA; }
 .schedule-day:last-child { border-bottom:none; }
 .schedule-day-header {
   display:flex; align-items:center; gap:10px;
-  padding:10px 16px; background:#F9FAFB;
+  padding:10px 16px; background:rgba(0,0,0,0.02);
   font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary);
   border-bottom:1px solid var(--border);
 }
@@ -99,7 +100,7 @@ tbody tr:hover td { background:#FAFAFA; }
 }
 .schedule-row {
   display:flex; align-items:center; gap:16px; padding:10px 16px;
-  border-bottom:1px solid #F3F4F6; font-size:13px;
+  border-bottom:1px solid var(--border-subtle); font-size:13px;
 }
 .schedule-row:last-child { border-bottom:none; }
 .schedule-time { font-family:ui-monospace,monospace; font-size:12px; font-weight:600; color:var(--text); min-width:80px; }
@@ -108,6 +109,35 @@ tbody tr:hover td { background:#FAFAFA; }
 .schedule-link { margin-left:auto; color:var(--accent); font-size:12px; font-weight:500; text-decoration:none; }
 .schedule-link:hover { text-decoration:underline; }
 .schedule-empty { padding:24px 16px; text-align:center; color:var(--text-secondary); font-size:13px; }
+
+/* Health bar metrics */
+.health-metric { }
+.health-metric-label {
+  font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase;
+  color:var(--text-secondary); margin-bottom:3px;
+}
+.health-metric-value { font-size:14px; font-weight:600; }
+
+/* Action buttons */
+.btn-action {
+  border:none; border-radius:8px; padding:10px 20px; font-size:13px;
+  font-weight:600; cursor:pointer; font-family:inherit; transition:background 0.15s;
+  white-space:nowrap;
+}
+.btn-action-primary { background:var(--accent); color:#fff; }
+.btn-action-primary:hover { background:var(--accent-hover); }
+.btn-action-primary:disabled { background:var(--text-secondary); cursor:not-allowed; }
+.btn-action-teal { background:#0F766E; color:#fff; }
+.btn-action-teal:hover { background:#0D6B63; }
+.btn-action-teal:disabled { background:var(--text-secondary); cursor:not-allowed; }
+
+/* Export CSV / small secondary buttons */
+.btn-secondary {
+  font-size:12px; font-weight:600; color:var(--accent); background:var(--card);
+  border:1.5px solid var(--border); border-radius:8px; padding:6px 12px;
+  cursor:pointer; font-family:inherit; transition:all 0.15s;
+}
+.btn-secondary:hover { border-color:var(--accent); background:var(--accent-light); }
 
 @media (max-width:640px) {
   .cards { grid-template-columns:1fr 1fr; }
@@ -122,40 +152,39 @@ tbody tr:hover td { background:#FAFAFA; }
   <div class="header">
     <div class="header-top">
       <h1>⚙️ SignalBrief Admin</h1>
-      <button onclick="logout()" style="font-size:12px;color:var(--text-secondary);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 14px;cursor:pointer;font-family:inherit;transition:all 0.15s;" onmouseover="this.style.borderColor='#9CA3AF'" onmouseout="this.style.borderColor='var(--border)'">Sign out</button>
+      <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span></p>
   </div>
 
   <!-- System health bar -->
   <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:24px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;">
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Server uptime</div>
-      <div style="font-size:14px;font-weight:600;" id="healthUptime">—</div>
+    <div class="health-metric">
+      <div class="health-metric-label">Server uptime</div>
+      <div class="health-metric-value" id="healthUptime">—</div>
     </div>
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Last run</div>
-      <div style="font-size:14px;font-weight:600;" id="healthLastRun">—</div>
+    <div class="health-metric">
+      <div class="health-metric-label">Last run</div>
+      <div class="health-metric-value" id="healthLastRun">—</div>
     </div>
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Last run cost</div>
-      <div style="font-size:14px;font-weight:600;" id="healthLastCost">—</div>
+    <div class="health-metric">
+      <div class="health-metric-label">Last run cost</div>
+      <div class="health-metric-value" id="healthLastCost">—</div>
     </div>
-    <div>
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Cron schedule</div>
-      <div style="font-size:14px;font-weight:600;" id="healthCron">—</div>
+    <div class="health-metric">
+      <div class="health-metric-label">Cron schedule</div>
+      <div class="health-metric-value" id="healthCron">—</div>
     </div>
     <!-- Delivery health — populated by JS -->
-    <div id="healthDelivery" style="display:none;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Delivery health</div>
-      <div style="font-size:14px;font-weight:600;" id="healthDeliveryVal">—</div>
+    <div class="health-metric" id="healthDelivery" style="display:none;">
+      <div class="health-metric-label">Delivery health</div>
+      <div class="health-metric-value" id="healthDeliveryVal">—</div>
     </div>
-    <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-      <button id="runDigestBtn" onclick="triggerDigest()"
-        style="background:#2563EB;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
-        ▶ Run digest now
-      </button>
+    <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:260px;">
+      <button id="runDigestBtn" class="btn-action btn-action-primary" onclick="triggerDigest()">▶ Run digest now</button>
       <div id="runDigestMsg" style="font-size:12px;color:var(--green);display:none;"></div>
+      <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest (me)</button>
+      <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
     </div>
   </div>
 
@@ -163,6 +192,33 @@ tbody tr:hover td { background:#FAFAFA; }
   <div class="section-title">Upcoming deliveries (next 7 days)</div>
   <div class="schedule-wrap" id="scheduleWrap">
     <div class="schedule-empty">Loading…</div>
+  </div>
+
+  <!-- Schedule dashboard -->
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+    <div class="section-title" style="margin-bottom:0;">Schedule dashboard (active users)</div>
+    <button id="scheduleCsvBtn" class="btn-secondary" onclick="downloadScheduleCsv()">Export CSV</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Days</th>
+          <th>Time</th>
+          <th>Timezone</th>
+          <th>Topics</th>
+          <th>Items</th>
+          <th>Depth</th>
+          <th>Next delivery (ET)</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="scheduleRosterBody">
+        <tr><td colspan="10" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- Summary cards -->
@@ -272,6 +328,12 @@ function costClass(n) {
   if (n >= 0.20) return "cost-med";
   return "cost-low";
 }
+function csvEscape(v) {
+  const s = v == null ? "" : String(v);
+  return `"${s.replace(/"/g, '""')}"`;
+}
+let latestRoster = [];
+let testDigestPoll = null;
 
 // ── Topic weights summary string ───────────────────────────────────────────────
 function weightsSummary(weights) {
@@ -384,6 +446,141 @@ function renderSchedule(roster) {
   `).join("");
 }
 
+function renderScheduleDashboard(roster) {
+  latestRoster = Array.isArray(roster) ? roster.slice() : [];
+  const body = document.getElementById("scheduleRosterBody");
+  const active = latestRoster
+    .filter(u => u.status === "active")
+    .sort((a, b) => {
+      const ka = a.next_delivery_key || "zzzz";
+      const kb = b.next_delivery_key || "zzzz";
+      if (ka !== kb) return ka.localeCompare(kb);
+      return (a.name || a.email || "").localeCompare(b.name || b.email || "");
+    });
+
+  if (!active.length) {
+    body.innerHTML = `<tr><td colspan="10" class="empty">No active users.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = active.map(u => {
+    const topics = u.topics_list || "—";
+    const topicsShort = topics.length > 48 ? topics.slice(0, 48) + "…" : topics;
+    const action = u.settings_url ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;">edit →</a>` : "—";
+    return `<tr>
+      <td style="font-weight:600;">${esc(u.name || "—")}</td>
+      <td class="mono" style="font-size:12px;">${esc(u.email || "—")}</td>
+      <td>${esc(u.days_label || "—")}</td>
+      <td class="mono">${esc(u.delivery_time || "—")}</td>
+      <td class="mono">${esc(u.timezone || "America/New_York")}</td>
+      <td title="${esc(topics)}" style="max-width:240px;">${esc(topicsShort)}</td>
+      <td>${u.items_per_digest || 5}</td>
+      <td>${esc(u.depth || "Deep")}</td>
+      <td class="mono">${esc(u.next_delivery_et || "—")}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join("");
+}
+
+function downloadScheduleCsv() {
+  const active = (latestRoster || []).filter(u => u.status === "active");
+  if (!active.length) return;
+  const headers = ["name", "email", "delivery_days", "delivery_time", "timezone", "topics", "items_per_digest", "depth", "next_delivery_et"];
+  const rows = active.map(u => [
+    u.name || "",
+    u.email || "",
+    u.days_label || "",
+    u.delivery_time || "",
+    u.timezone || "America/New_York",
+    u.topics_list || "",
+    u.items_per_digest || 5,
+    u.depth || "",
+    u.next_delivery_et || "",
+  ]);
+  const csv = [headers.join(","), ...rows.map(r => r.map(csvEscape).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = `signalbrief-schedule-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
+function renderTestDigestStatus(status) {
+  const btn = document.getElementById("testDigestBtn");
+  const msg = document.getElementById("testDigestMsg");
+  const baseLabel = "🧪 Send test digest (me)";
+  if (!status || !status.state || status.state === "idle") {
+    btn.disabled = false;
+    btn.textContent = baseLabel;
+    msg.style.display = "none";
+    return;
+  }
+  if (status.state === "running") {
+    btn.disabled = true;
+    btn.textContent = "🧪 Running test digest…";
+    msg.textContent = `Running for chat ${status.target_chat_id || "—"}...`;
+    msg.style.color = "var(--accent)";
+    msg.style.display = "block";
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = baseLabel;
+  msg.textContent = `${status.state === "success" ? "✅" : "❌"} ${status.message || (status.state === "success" ? "Test digest complete" : "Test digest failed")}`;
+  msg.style.color = status.state === "success" ? "var(--green)" : "var(--red)";
+  msg.style.display = "block";
+}
+
+async function refreshTestDigestStatus(silent = false) {
+  try {
+    const res = await fetch("/api/admin/test-digest-status");
+    const status = await res.json();
+    renderTestDigestStatus(status);
+    if (status.state === "running") {
+      if (!testDigestPoll) {
+        testDigestPoll = setInterval(() => { refreshTestDigestStatus(true); }, 2500);
+      }
+    } else if (testDigestPoll) {
+      clearInterval(testDigestPoll);
+      testDigestPoll = null;
+    }
+  } catch (e) {
+    if (!silent) {
+      const msg = document.getElementById("testDigestMsg");
+      msg.textContent = "❌ Could not load test digest status";
+      msg.style.color = "var(--red)";
+      msg.style.display = "block";
+    }
+  }
+}
+
+async function triggerTestDigest() {
+  const btn = document.getElementById("testDigestBtn");
+  const msg = document.getElementById("testDigestMsg");
+  btn.disabled = true;
+  btn.textContent = "🧪 Starting…";
+  msg.style.display = "none";
+  try {
+    const res = await fetch("/api/admin/run-test-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      renderTestDigestStatus({ state: "failed", message: data.error || "Failed to start test digest" });
+      return;
+    }
+    renderTestDigestStatus(data.status || { state: "running", message: "Digest run in progress" });
+    await refreshTestDigestStatus(true);
+  } catch (e) {
+    renderTestDigestStatus({ state: "failed", message: "Network error starting test digest" });
+  }
+}
+
 async function logout() {
   await fetch('/api/admin/logout', { method: 'POST' });
   window.location.href = '/admin/login';
@@ -415,6 +612,8 @@ async function load() {
   const { summary, health, runs, per_user, roster } = data;
 
   renderSchedule(roster || []);
+  renderScheduleDashboard(roster || []);
+  await refreshTestDigestStatus(true);
 
   if (summary.month_label) {
     document.getElementById("monthLabel").textContent = summary.month_label;

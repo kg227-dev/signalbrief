@@ -57,6 +57,14 @@ const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 const LOGIN_RATE = new Map(); // ip → { count, resetAt }
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
+const TEST_DIGEST_STATUS = {
+  state: "idle", // idle | running | success | failed
+  job_id: null,
+  target_chat_id: null,
+  started_at: null,
+  finished_at: null,
+  message: null,
+};
 
 function verifyAdminPassword(password) {
   const { salt, passwordHash } = CONFIG.admin || {};
@@ -99,6 +107,17 @@ function checkLoginRate(ip) {
   entry.count++;
   LOGIN_RATE.set(ip, entry);
   return false;
+}
+
+function resolveAdminTestChatId() {
+  const explicit = process.env.ADMIN_TEST_CHAT_ID || CONFIG.admin?.testChatId || CONFIG.admin?.test_chat_id;
+  if (explicit) return String(explicit);
+  const adminEmail = (CONFIG.admin?.email || "").toLowerCase().trim();
+  if (!adminEmail) return null;
+  const match = allUsers().find(u => (u.email || "").toLowerCase().trim() === adminEmail);
+  if (!match?.chatId) return null;
+  if (String(match.chatId).startsWith("email-")) return null; // not linked to Telegram
+  return String(match.chatId);
 }
 
 const MIME = {
@@ -168,6 +187,64 @@ const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
 // Fields that must never be overwritten via /api/settings
 const PROTECTED_FIELDS = ["chatId", "token", "joined_at", "digests_received", "bookmarks", "last_digest_items", "last_digest_at", "digest_dates"];
+const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function parseEtNowParts() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = t => parseInt(parts.find(p => p.type === t)?.value || "0", 10);
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute") };
+}
+
+function formatTimeEt(h, m) {
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${ampm} ET`;
+}
+
+function formatDaysLabel(days) {
+  const list = Array.isArray(days) ? [...new Set(days.map(Number))].sort((a, b) => a - b) : [1, 2, 3, 4, 5];
+  if (list.length === 7) return "Every day";
+  if (list.length === 6 && !list.includes(0)) return "Mon–Sat";
+  if (list.length === 5 && [1, 2, 3, 4, 5].every(d => list.includes(d))) return "Mon–Fri";
+  return list.map(d => DAY_NAMES_SHORT[d] || `D${d}`).join(", ");
+}
+
+function computeNextDeliveryEt(preferences) {
+  const prefs = preferences || {};
+  const [hRaw, mRaw] = String(prefs.delivery_time || "07:00").split(":").map(Number);
+  const h = Number.isFinite(hRaw) ? hRaw : 7;
+  const m = Number.isFinite(mRaw) ? mRaw : 0;
+  const allowed = (Array.isArray(prefs.days_of_week) && prefs.days_of_week.length ? prefs.days_of_week : [1, 2, 3, 4, 5]).map(Number);
+  const now = parseEtNowParts();
+  const nowMins = now.hour * 60 + now.minute;
+  const deliveryMins = h * 60 + m;
+
+  for (let offset = 0; offset < 14; offset++) {
+    const d = new Date(Date.UTC(now.year, now.month - 1, now.day + offset));
+    const dow = d.getUTCDay();
+    if (!allowed.includes(dow)) continue;
+    if (offset === 0 && deliveryMins <= nowMins) continue;
+
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(d.getUTCDate()).padStart(2, "0");
+    const dateKey = `${y}-${mo}-${da}`;
+    const prettyDate = d.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+    return {
+      key: `${dateKey} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ET`,
+      label: `${prettyDate} · ${formatTimeEt(h, m)}`,
+    };
+  }
+  return null;
+}
 
 const server = http.createServer(async (req, res) => {
  try {
@@ -404,7 +481,21 @@ const server = http.createServer(async (req, res) => {
     const file = path.join(__dirname, "../archive", `${rawDate}.json`);
     if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
     try {
-      return json(res, JSON.parse(fs.readFileSync(file, "utf8")));
+      const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (Array.isArray(raw.items)) {
+        raw.items = raw.items.map(item => ({
+          tag: item?.tag || "",
+          headline: item?.headline || "",
+          summary: item?.summary || "",
+          wim: item?.wim || null,
+          implications: item?.implications || null,
+          watch_next: item?.watch_next || null,
+          url: item?.url || "",
+          source: item?.source || "",
+          baseScore: typeof item?.baseScore === "number" ? item.baseScore : null,
+        }));
+      }
+      return json(res, raw);
     } catch {
       return json(res, { error: "malformed archive file" }, 500);
     }
@@ -555,6 +646,8 @@ const server = http.createServer(async (req, res) => {
       const hour = dh % 12 || 12;
       const min  = dm === 0 ? "" : `:${String(dm).padStart(2,"0")}`;
       const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
+      const daysLabel = formatDaysLabel(allowedDays);
+      const nextDelivery = u.status === "active" ? computeNextDeliveryEt(prefs) : null;
       const tgLinked = !!(u.chatId && !u.chatId.startsWith("email-"));
       return {
         name:               u.name || "",
@@ -581,7 +674,12 @@ const server = http.createServer(async (req, res) => {
         delivery_time:      `${hour}${min} ${ampm} ET`,
         delivery_time_raw:  prefs.delivery_time || "07:00",
         days_of_week:       allowedDays,
+        days_label:         daysLabel,
+        timezone:           prefs.timezone || "America/New_York",
+        items_per_digest:   parseInt(prefs.items_per_digest, 10) || 5,
         depth:              depthLabel(prefs.depth),
+        next_delivery_et:   nextDelivery?.label || "—",
+        next_delivery_key:  nextDelivery?.key || null,
         settings_url:       u.email ? `${BASE_URL}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
@@ -631,6 +729,67 @@ const server = http.createServer(async (req, res) => {
     const adminUser = allUsers().find(u => u.email.toLowerCase() === emailParam.toLowerCase().trim());
     if (!adminUser) return json(res, { error: "not found" }, 404);
     return json(res, adminUser);
+  }
+
+  // GET /api/admin/test-digest-status — status for "Send test digest" job
+  if (pathname === "/api/admin/test-digest-status" && req.method === "GET") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    return json(res, {
+      ...TEST_DIGEST_STATUS,
+      admin_email: CONFIG.admin?.email || null,
+      resolved_chat_id: resolveAdminTestChatId(),
+    });
+  }
+
+  // POST /api/admin/run-test-digest — trigger digest for admin account with job status tracking
+  if (pathname === "/api/admin/run-test-digest" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    if (TEST_DIGEST_STATUS.state === "running") {
+      return json(res, { error: "Test digest already running", status: TEST_DIGEST_STATUS }, 409);
+    }
+
+    const digestPath = path.join(__dirname, "../digest.js");
+    const targetChatId = resolveAdminTestChatId();
+    if (!targetChatId) {
+      return json(res, {
+        error: "No admin Telegram chat ID found. Link your admin email to Telegram with /start email@... or set ADMIN_TEST_CHAT_ID.",
+      }, 400);
+    }
+
+    const jobId = crypto.randomBytes(8).toString("hex");
+    TEST_DIGEST_STATUS.state = "running";
+    TEST_DIGEST_STATUS.job_id = jobId;
+    TEST_DIGEST_STATUS.target_chat_id = targetChatId;
+    TEST_DIGEST_STATUS.started_at = new Date().toISOString();
+    TEST_DIGEST_STATUS.finished_at = null;
+    TEST_DIGEST_STATUS.message = "Digest run in progress";
+
+    const child = spawn(process.execPath, [digestPath, "--chatId", targetChatId], {
+      env: { ...process.env },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+
+    let stderr = "";
+    child.stderr.on("data", c => {
+      stderr += c.toString();
+      if (stderr.length > 4000) stderr = stderr.slice(-4000);
+    });
+
+    child.on("error", err => {
+      TEST_DIGEST_STATUS.state = "failed";
+      TEST_DIGEST_STATUS.finished_at = new Date().toISOString();
+      TEST_DIGEST_STATUS.message = `Failed to start: ${err.message}`;
+    });
+
+    child.on("close", code => {
+      TEST_DIGEST_STATUS.state = code === 0 ? "success" : "failed";
+      TEST_DIGEST_STATUS.finished_at = new Date().toISOString();
+      TEST_DIGEST_STATUS.message = code === 0
+        ? "Digest sent successfully"
+        : `Digest process exited with code ${code}${stderr ? ` — ${stderr.slice(-240)}` : ""}`;
+    });
+
+    return json(res, { success: true, status: TEST_DIGEST_STATUS });
   }
 
   // POST /api/admin/run-digest — trigger a digest run

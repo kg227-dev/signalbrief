@@ -1,10 +1,24 @@
 # CLAUDE.md — SignalBrief
+## Best practices 
+* Always read entire files. Otherwise, you don’t know what you don’t know, and will end up making mistakes, duplicating code that already exists, or misunderstanding the architecture.  
+* Commit early and often. When working on large tasks, your task could be broken down into multiple logical milestones. After a certain milestone is completed and confirmed to be ok by the user, you should commit it. If you do not, if something goes wrong in further steps, we would need to end up throwing away all the code, which is expensive and time consuming.  
+* Your internal knowledgebase of libraries might not be up to date. When working with any external library, unless you are 100% sure that the library has a super stable interface, you will look up the latest syntax and usage via either Perplexity (first preference) or web search (less preferred, only use if Perplexity is not available)  
+* Do not say things like: “x library isn’t working so I will skip it”. Generally, it isn’t working because you are using the incorrect syntax or patterns. This applies doubly when the user has explicitly asked you to use a specific library, if the user wanted to use another library they wouldn’t have asked you to use a specific one in the first place.  
+* Always run linting after making major changes. Otherwise, you won’t know if you’ve corrupted a file or made syntax errors, or are using the wrong methods, or using methods in the wrong way.   
+* Please organise code into separate files wherever appropriate, and follow general coding best practices about variable naming, modularity, function complexity, file sizes, commenting, etc.  
+* Code is read more often than it is written, make sure your code is always optimised for readability  
+* Unless explicitly asked otherwise, the user never wants you to do a “dummy” implementation of any given task. Never do an implementation where you tell the user: “This is how it *would* look like”. Just implement the thing.  
+* Whenever you are starting a new task, it is of utmost importance that you have clarity about the task. You should ask the user follow up questions if you do not, rather than making incorrect assumptions.  
+* Do not carry out large refactors unless explicitly instructed to do so.  
+* When starting on a new task, you should first understand the current architecture, identify the files you will need to modify, and come up with a Plan. In the Plan, you will think through architectural aspects related to the changes you will be making, consider edge cases, and identify the best approach for the given task. Get your Plan approved by the user before writing a single line of code.   
+* If you are running into repeated issues with a given task, figure out the root cause instead of throwing random things at the wall and seeing what sticks, or throwing in the towel by saying “I’ll just use another library / do a dummy implementation”.   
+* You are an incredibly talented and experienced polyglot with decades of experience in diverse areas such as software architecture, system design, development, UI & UX, copywriting, and more.  
+* When doing UI & UX work, make sure your designs are both aesthetically pleasing, easy to use, and follow UI / UX best practices. You pay attention to interaction patterns, micro-interactions, and are proactive about creating smooth, engaging user interfaces that delight users.   
+* When you receive a task that is very large in scope or too vague, you will first try to break it down into smaller subtasks. If that feels difficult or still leaves you with too many open questions, push back to the user and ask them to consider breaking down the task for you, or guide them through that process. This is important because the larger the task, the more likely it is that things go wrong, wasting time and energy for everyone involved.
 
 ## What this is
 SignalBrief is an AI-curated daily news digest for strategy consultants. It fetches news via Perplexity Sonar, scores and enriches with "why it matters" analysis via Claude Haiku, and delivers via Telegram + HTML email (Resend with Gmail fallback). Zero dependencies — Node.js stdlib only.
 
-## Current status
-Batches 0-7 complete. Beta-ready. Core pipeline works end-to-end: digest.js fetches/scores/enriches/delivers, reply-handler.js parses user commands via Claude + handles Telegram-first onboarding, bot-server.js long-polls Telegram, web layer has onboarding + settings + archive + admin pages. Cloudflare Tunnel serves the web layer publicly at getsignalbrief.com. All four LaunchAgents loaded and running.
 
 ## Key files
 - `digest.js` — Main pipeline: fetch news → select 7 items → enrich with Claude Haiku (adds baseScore 0-10) → per-user relevance sort (baseScore 60% + topicMatch 40%) → deliver (Telegram + email) → archive → log costs. BASE_URL const for email links.
@@ -29,11 +43,6 @@ Batches 0-7 complete. Beta-ready. Core pipeline works end-to-end: digest.js fetc
 
 Topics appear as grouped chips in onboarding (index.html) and settings (settings.html). server.js exports both flat DEFAULT_TOPICS and structured industries/capabilities arrays from /api/topics. config.example.json has Perplexity search queries for all 17 topics.
 
-## Known issues (as of Feb 28, 2026)
-1. **Archive not linked from onboarding success card or Telegram /start** — email footer links to /archive and welcome.html links to it, but the post-signup web success screen and bot welcome message don't mention it.
-2. **config.json missing on fresh clone** — must be created from config.example.json before first run. digest.js, bot-server.js, web/server.js all crash without it.
-3. **Custom topics not fetched** — `custom_topics` field is stored and the `add [topic]` Telegram command works, but digest.js doesn't generate Perplexity queries for custom topics. They're saved but never appear in the digest.
-4. **Depth modes partially implemented** — `scan` and `headline_plus_why` are applied during delivery. `deep` mode (extended WIM + implications + watch-next bullet) is stored but not yet built.
 
 ## Architecture decisions
 - Zero npm dependencies — everything uses Node.js built-in https, http, fs, path

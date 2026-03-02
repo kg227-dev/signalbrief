@@ -336,11 +336,11 @@ const server = http.createServer(async (req, res) => {
     }
     // Always succeed (idempotent — if user not found, silently ok)
     if (req.method === "POST") return json(res, { success: true });
-    // GET: redirect to settings confirmation page
-    const redirectBase = process.env.BASE_URL || "https://getsignalbrief.com";
+    // GET: redirect to settings confirmation page on the same host that handled unsubscribe.
+    // Using a relative path avoids localhost/public host bounce loops.
     const confirmUrl = existing?.token
-      ? `${redirectBase}/settings?token=${existing.token}&unsubscribed=1`
-      : `${redirectBase}/settings?unsubscribed=1`;
+      ? `/settings?token=${existing.token}&unsubscribed=1`
+      : `/settings?unsubscribed=1`;
     res.writeHead(302, { Location: confirmUrl });
     return res.end();
   }

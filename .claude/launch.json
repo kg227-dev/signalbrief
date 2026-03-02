@@ -5,7 +5,7 @@
       "name": "web-server",
       "runtimeExecutable": "/opt/homebrew/bin/node",
       "runtimeArgs": ["web/server.js"],
-      "port": 3003
+      "port": 3013
     },
     {
       "name": "bot-server",

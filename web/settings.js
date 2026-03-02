@@ -347,7 +347,17 @@ async function init() {
 
   } catch (e) {
     loadingEl.style.display = 'none';
-    notFoundEl.style.display = 'block';
+    if (e.message === 'not found') {
+      notFoundEl.style.display = 'block';
+    } else {
+      // Network or server error — show retry option rather than "not found"
+      loadingEl.innerHTML =
+        '<div style="text-align:center;padding:40px 24px;">' +
+        '<p style="color:#DC2626;font-size:14px;margin-bottom:16px;">Could not load your preferences. Check your connection and try again.</p>' +
+        '<button onclick="window.location.reload()" style="background:#2563EB;color:#fff;border:none;padding:10px 24px;border-radius:100px;font-size:14px;font-weight:600;cursor:pointer;">Retry</button>' +
+        '</div>';
+      loadingEl.style.display = 'block';
+    }
   }
 }
 

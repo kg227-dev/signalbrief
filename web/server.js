@@ -9,15 +9,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
-const { generateToken } = require("../store");
-const { sendEmail, sendWelcomeEmail } = require("../mailer");
-const { readUser, writeUser, allUsers } = require("../store");
-
-// ── Token auth helper ─────────────────────────────────────────────────────────
-function findUserByToken(token) {
-  if (!token) return null;
-  return allUsers().find(u => u.token === token) || null;
-}
+const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
+const { sendEmail, sendWelcomeEmail, signUnsubEmail } = require("../mailer");
 
 const PORT = parseInt(process.env.PORT, 10) || 3003;
 const WEB_DIR = __dirname;
@@ -273,9 +266,14 @@ const server = http.createServer(async (req, res) => {
     if (tokenParam) {
       existing = findUserByToken(decodeURIComponent(tokenParam));
     } else if (emailParam && req.method === "POST") {
-      // POST-only: email-based lookup for RFC 8058 one-click from email clients
+      // POST-only: email-based lookup for RFC 8058 one-click from email clients.
+      // Requires HMAC signature (?sig=...) to prevent unauthenticated unsubscribes (B-3).
+      const sigParam = url.searchParams.get("sig") || "";
       const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
-      existing = allUsers().find(u => u.email.toLowerCase() === targetEmail);
+      if (!sigParam || sigParam !== signUnsubEmail(targetEmail)) {
+        return json(res, { error: "invalid signature" }, 403);
+      }
+      existing = allUsers().find(u => u.email && u.email.toLowerCase() === targetEmail);
     }
 
     if (!tokenParam && !emailParam) return json(res, { error: "token or email required" }, 400);

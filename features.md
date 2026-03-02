@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-01
+Last updated: 2026-03-02
 
 ---
 
@@ -10,6 +10,7 @@ All P0 ship-blocking bugs (P0-1 through P0-6) have been fixed.
 All P1 MVP features (P1-1 through P1-12) have been implemented.
 All P2 post-launch fixes (P2-1 through P2-15) have been implemented.
 Admin user editor page (admin-user.html) has been built.
+All B-1 through B-7 bugs have been fixed (2026-03-02).
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -17,42 +18,28 @@ The remaining items below are **new features and improvements** organized by pri
 
 ## Known Remaining Issues
 
-These are bugs or gaps discovered during the workflow-by-workflow audit. They should be addressed before or alongside new features.
+All B-series bugs have been resolved. See commit history for details.
 
-### B-1: Settings page shows "request a link" if /api/user fetch fails
-If the token lookup takes too long or the server returns an error, settings.js catches the error and shows the "not found" state with a magic link form. No retry, no error message explaining what happened. Users think their link is broken.
-- File: `web/settings.js` init() catch block
-- Fix: Show a clear error message with a retry button before falling back to magic link form.
+### ✅ B-1: Settings page shows "request a link" if /api/user fetch fails — **Fixed**
+Catch block now distinguishes network errors (shows retry button) from 404 (shows magic link form).
 
-### B-2: `findUserByToken()` does O(n) full disk scan on every request
-Every call to `/api/user?token=`, `/api/settings`, and `/api/unsubscribe` triggers `allUsers()` which reads every user JSON file from disk. At 50+ users this becomes noticeably slow.
-- Files: `web/server.js:17-20`, `store.js:66-77`
-- Fix: Build an in-memory token→chatId index on startup, refresh on writes.
+### ✅ B-2: `findUserByToken()` does O(n) full disk scan on every request — **Fixed**
+`store.js` now builds an in-memory `tokenIndex` Map on startup, updated on every write. O(1) lookup.
 
-### B-3: Unauthenticated email-based POST unsubscribe (RFC 8058)
-POST `/api/unsubscribe?email=victim@example.com` can unsubscribe any user. This is technically RFC 8058 compliant (email clients send this), but it means anyone who knows an email can unsubscribe them via a simple POST.
-- File: `web/server.js:275-278`
-- Fix: Consider adding a one-time HMAC signature to the unsubscribe URL so only the actual email recipient can trigger it.
+### ✅ B-3: Unauthenticated email-based POST unsubscribe (RFC 8058) — **Fixed**
+HMAC signature (`?sig=...`) now required on email-based unsubscribe URLs. Generated in `mailer.js`, verified in `server.js`.
 
-### B-4: Custom topic normalization inconsistency between web and Telegram
-Web onboarding stores custom topics as `custom_glp_1` (slugified). Telegram `add GLP-1` stores them as raw `GLP-1`. digest.js keyword matching handles both, but the settings page and admin display show inconsistent labels.
-- Files: `web/index.html:530`, `reply-handler.js:413-421`, `web/settings.js`
-- Fix: Normalize all custom topics to `custom_<slug>` format everywhere, with a display label derived from the slug.
+### ✅ B-4: Custom topic normalization inconsistency between web and Telegram — **Fixed**
+`reply-handler.js` now normalizes `add [topic]` to `custom_<slug>` matching web storage format.
 
-### B-5: Archive doesn't store per-item relevance scores or baseScore
-`saveToArchive()` strips `baseScore` and `relevanceScore` from items. The archive page can't show score badges like the email does.
-- File: `digest.js:500-514`
-- Fix: Include `baseScore` in the archived item data.
+### ✅ B-5: Archive doesn't store per-item relevance scores or baseScore — **Fixed**
+`saveToArchive()` now includes `baseScore` in each archived item.
 
-### B-6: On-demand digest (`/digest` or welcome digest) skips schedule check but still fetches all 17 topics
-Welcome digests and `/digest` on-demand runs call Perplexity for all 17 configured topics even if the user only tracks 3. Wastes ~$0.07 per unnecessary call.
-- File: `digest.js:568-570`
-- Fix: For single-user on-demand runs, only fetch topics the user actually tracks.
+### ✅ B-6: On-demand digest fetches all 17 topics even for single user — **Fixed**
+`digest.js` now filters `topicsToFetch` to the target user's tracked topics for `--chatId` runs.
 
-### B-7: Concurrent writes can clobber user data
-digest.js and bot-server.js can both write to the same user file simultaneously. If a user sends "save 3" while their digest is being delivered, one write overwrites the other.
-- Files: `store.js:62-64`, `digest.js:689`, `reply-handler.js:375`
-- Fix: Add file-level locking (or migrate to SQLite).
+### ✅ B-7: Concurrent writes can clobber user data — **Fixed**
+`store.js` `writeUser()` now uses atomic write: write to `.tmp` then `fs.renameSync()` (POSIX-atomic).
 
 ---
 

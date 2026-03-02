@@ -71,3 +71,6 @@ Topics appear as grouped chips in onboarding (index.html) and settings (settings
 - Design: off-white #FAFAFA, white cards, blue accent #2563EB, Instrument Serif + DM Sans fonts
 - Telegram format: numbered keycap emojis, `*[TAG×TAG]*` bold labels, headline, italic WIM first sentence (250-char cap, HTML stripped before split), `→` article link
 - Email format: quick-scan header, ★ LEAD with blue left border, WHY IT MATTERS labels, relevance score badges
+
+## Git permissions
+Claude is authorized to commit and push to GitHub (including force-push on feature branches) without asking for confirmation. Always commit and push when work is complete unless told otherwise.

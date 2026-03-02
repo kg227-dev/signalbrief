@@ -119,6 +119,7 @@ const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 const PROTECTED_FIELDS = ["chatId", "token", "joined_at", "digests_received", "bookmarks", "last_digest_items", "last_digest_at", "digest_dates"];
 
 const server = http.createServer(async (req, res) => {
+ try {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
 
@@ -518,6 +519,18 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/settings.js") return serveFile(res, path.join(WEB_DIR, "settings.js"));
 
   res.writeHead(404); res.end("Not found");
+ } catch (err) {
+    console.error(`[server error] ${req.method} ${req.url} →`, err.message);
+    if (!res.headersSent) { res.writeHead(500); res.end("Internal server error"); }
+  }
+});
+
+// ── Crash protection — log + stay alive instead of dying ─────────────────────
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err.message, err.stack);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("[unhandledRejection]", err);
 });
 
 server.listen(PORT, () => {

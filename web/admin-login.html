@@ -6,7 +6,7 @@
   <title>Admin — SignalBrief</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&family=Instrument+Serif&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#FAFAF8; --card:#FFFFFF; --text:#1A1A1A; --muted:#6B7280; --accent:#2563EB; --accent-hover:#1D4ED8; --border:#E5E7EB; --radius:12px; }
+    :root { --bg:#FAFAF8; --card:#FFFFFF; --text:#111111; --muted:#6B7280; --accent:#2563EB; --accent-hover:#1D4ED8; --border:rgba(0,0,0,0.08); --border-subtle:rgba(0,0,0,0.05); --bg-input:#F5F6F8; --radius:12px; }
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
     .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:40px 36px; max-width:380px; width:100%; box-shadow:0 4px 12px rgba(0,0,0,0.06); }
@@ -14,8 +14,8 @@
     .sub { font-size:13px; color:var(--muted); margin-bottom:28px; }
     .field { margin-bottom:16px; }
     .field label { display:block; font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
-    .field input { width:100%; padding:10px 14px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; outline:none; transition:border-color 0.15s; }
-    .field input:focus { border-color:var(--accent); }
+    .field input { width:100%; padding:10px 14px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; outline:none; background:var(--bg-input); color:var(--text); transition:border-color 0.15s, background 0.15s; }
+    .field input:focus { border-color:var(--accent); background:#fff; }
     .btn { width:100%; padding:12px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:background 0.15s; margin-top:4px; }
     .btn:hover { background:var(--accent-hover); }
     .btn:disabled { background:#9CA3AF; cursor:not-allowed; }

@@ -148,6 +148,11 @@
       ]
     }
   ],
+  "admin": {
+    "email": "you@example.com",
+    "salt": "GENERATE_WITH: node -e \"console.log(require('crypto').randomBytes(16).toString('hex'))\"",
+    "passwordHash": "GENERATE_WITH: node -e \"const c=require('crypto'),s='YOUR_SALT';console.log(c.scryptSync('YOUR_PASSWORD',s,64).toString('hex'))\""
+  },
   "keys": {
     "perplexity": "pplx-YOUR_KEY",
     "anthropic": "sk-ant-YOUR_KEY",

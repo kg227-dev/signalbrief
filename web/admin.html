@@ -122,7 +122,7 @@ tbody tr:hover td { background:#FAFAFA; }
   <div class="header">
     <div class="header-top">
       <h1>⚙️ SignalBrief Admin</h1>
-      <span class="badge">localhost only</span>
+      <button onclick="logout()" style="font-size:12px;color:var(--text-secondary);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 14px;cursor:pointer;font-family:inherit;transition:all 0.15s;" onmouseover="this.style.borderColor='#9CA3AF'" onmouseout="this.style.borderColor='var(--border)'">Sign out</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span></p>
   </div>
@@ -384,7 +384,19 @@ function renderSchedule(roster) {
   `).join("");
 }
 
+async function logout() {
+  await fetch('/api/admin/logout', { method: 'POST' });
+  window.location.href = '/admin/login';
+}
+
 async function load() {
+  // Auth check — redirect to login if not authenticated
+  try {
+    const authRes = await fetch("/api/admin/check");
+    const authData = await authRes.json();
+    if (!authData.authenticated) { window.location.href = "/admin/login"; return; }
+  } catch { window.location.href = "/admin/login"; return; }
+
   const now = new Date();
   document.getElementById("monthLabel").textContent =
     now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -393,6 +405,7 @@ async function load() {
   try {
     const res = await fetch("/api/admin/stats");
     data = await res.json();
+    if (data.error === "admin access only") { window.location.href = "/admin/login"; return; }
   } catch (e) {
     document.getElementById("runsBody").innerHTML =
       `<tr><td colspan="6" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;

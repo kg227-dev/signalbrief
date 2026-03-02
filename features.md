@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-02
+Last updated: 2026-03-02 (rev 2)
 
 ---
 
@@ -10,7 +10,7 @@ All P0 ship-blocking bugs (P0-1 through P0-6) have been fixed.
 All P1 MVP features (P1-1 through P1-12) have been implemented.
 All P2 post-launch fixes (P2-1 through P2-15) have been implemented.
 Admin user editor page (admin-user.html) has been built.
-All B-1 through B-7 bugs have been fixed (2026-03-02).
+All B-1 through B-8 bugs have been fixed (2026-03-02).
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -41,6 +41,9 @@ HMAC signature (`?sig=...`) now required on email-based unsubscribe URLs. Genera
 ### ✅ B-7: Concurrent writes can clobber user data — **Fixed**
 `store.js` `writeUser()` now uses atomic write: write to `.tmp` then `fs.renameSync()` (POSIX-atomic).
 
+### ✅ B-8: Topic weights have limited impact on ranking — **Fixed**
+`applyRelevanceScores()` now accepts `topic_weights` and applies ±0.5 pts per weight unit via `matchWeightToTag()` (fuzzy key→tag matching). Digest logs before/after item order whenever a user has non-zero weights.
+
 ---
 
 ## P1: Retention — Make Beta Users Come Back Every Day
@@ -49,7 +52,7 @@ These features directly improve the daily experience for the first 10 beta users
 
 ### P1-1: Implicit relevance learning from saves and clicks
 **Problem:** Users tune topics via explicit "more/less" commands, but most won't bother. Their actual engagement (which items they save, which links they click) is a much stronger signal.
-**Feature:** Track saves per topic tag. After 5+ interactions, auto-adjust `topic_weights` — e.g., if a user saves 4 AI items and 0 Energy items, nudge AI up and Energy down. Show "we noticed you save a lot of AI stories — boosting it" in Telegram.
+**Feature:** Track saves per topic tag. After 5+ interactions, auto-adjust `topic_weights` — e.g., if a user saves 4 AI items and 0 Energy items, nudge AI up and Energy down. Show "we noticed you save a lot of AI stories — boosting it" in Telegram. Depends on B-8 being fixed first so weight changes actually affect ranking visibly.
 - Files: `reply-handler.js` (handleSave), `digest.js` (applyRelevanceScores)
 - Complexity: **Medium**
 
@@ -99,6 +102,13 @@ These features directly improve the daily experience for the first 10 beta users
 **Feature:** Add a timezone selector to onboarding and settings. Store in `preferences.timezone`. Convert delivery_time to the user's local time when checking schedule in digest.js.
 - Files: `web/index.html`, `web/settings.html`, `digest.js:540-550`, `store.js:38`
 - Complexity: **Medium**
+
+### P1-10: "Why you're seeing this" transparency note
+**Problem:** Users may not understand why certain stories appear repeatedly or why specific items rank highly. Opaque personalization erodes trust.
+**Feature:** Add a subtle, single-line footer note in email and Telegram for top-ranked items: "Shown because you track: AI, Private Equity" or "Boosted due to your watchlist: Nvidia." Pulls from the item's matched topics and any watchlist hits. Increases trust and makes personalization feel real rather than random.
+- Files: `digest.js` (formatTelegram, buildEmail)
+- Complexity: **Small**
+- Depends on: P1-1 (weights working meaningfully), B-8
 
 ---
 
@@ -154,6 +164,18 @@ These features distinguish SignalBrief from generic news aggregators and make it
 - Files: `reply-handler.js`, `mailer.js` (new share template)
 - Complexity: **Medium**
 
+### P2-9: Structured implication scoring (Consultant Lens Mode)
+**Problem:** All WIMs are freeform paragraphs. Consultants often think in structured buckets — Strategy, Financial Impact, Regulatory Risk, Competitive Dynamics — and a wall of prose requires extra mental work to slot into those frameworks.
+**Feature:** Ask Claude to output a structured implication block internally, then render either the default short paragraph (current behavior) or an optional "Consultant Lens" expanded view showing bullet implications under labeled categories. Controlled via `preferences.depth = "deep"` or a new explicit setting.
+- Files: `digest.js` (enrichment prompt + formatting)
+- Complexity: **Medium**
+
+### P2-10: Multi-source corroboration indicator
+**Problem:** Users can't tell if a signal is based on one outlet or broadly reported. A story covered by a single source deserves less confidence than one corroborated across five.
+**Feature:** If multiple reputable domains report the same story (detected during the Perplexity fetch step), show a small "3 sources" badge next to the item. Boost the item's baseScore weighting slightly to reflect broader consensus.
+- Files: `digest.js` (selection logic, scoring)
+- Complexity: **Medium**
+
 ---
 
 ## P3: Growth — Features That Scale the Product
@@ -185,6 +207,19 @@ These features distinguish SignalBrief from generic news aggregators and make it
 **Feature:** Add a simple REST API: `GET /api/v1/digest?token=TOKEN&date=YYYY-MM-DD` returns the user's digest as structured JSON. `GET /api/v1/bookmarks?token=TOKEN` returns saved items. Rate limited to 100 req/day per token.
 - Files: `web/server.js` (new `/api/v1/*` endpoints)
 - Complexity: **Medium**
+
+### P3-6: Smart onboarding based on role
+**Problem:** All users get the same onboarding topic picker. Consultants, investors, and operators have different mental models and very different default information needs.
+**Feature:** Add a first-step role selector to onboarding: "I'm a: Consultant / Investor / Operator / Corporate Strategy." Pre-select recommended topic bundles based on role (e.g., Investor → PE×M&A, Financial Services, AI×TECH pre-checked) and adjust default scoring weights accordingly. Reduces time-to-first-value.
+- Files: `web/index.html`, `store.js`
+- Complexity: **Medium**
+
+### P3-7: Engagement-based winback emails
+**Problem:** Users may silently churn — stop opening the digest without explicitly unsubscribing. No mechanism currently detects or acts on silent disengagement.
+**Feature:** If a user hasn't opened/clicked in 10 days (proxy: no Telegram activity + email click tracking shows no activity), send a short re-engagement email: "Still finding this useful? Adjust your topics here →". Include a one-click topic settings link and a gentle unsubscribe escape hatch. Cap at one winback email per 30-day window.
+- Files: `digest.js`, `mailer.js`
+- Complexity: **Small–Medium**
+- Depends on: P2-7 (click tracking for email engagement signal)
 
 ---
 
@@ -225,27 +260,46 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 - Files: All files that call `console.log` or `log()`
 - Complexity: **Medium**
 
+### P4-8: Per-topic cost attribution
+**Problem:** Hard to know which topics are driving API cost. All Perplexity calls look the same in the cost log. Can't identify whether a custom topic or a rarely-read standard topic is disproportionately expensive.
+**Feature:** Log Perplexity call cost by topic per run (already have the per-call timing, just need to annotate by topic). Show in the admin dashboard which topics are the most expensive vs. most engaged (save rate per topic). Enables informed decisions about pruning low-value queries.
+- Files: `digest.js`, `web/server.js` (admin stats endpoint), `web/admin.html`
+- Complexity: **Small**
+
+### P4-9: Feature flag framework
+**Problem:** New features must be deployed globally or not at all. During beta with 10 users, it's risky to roll out changes without a way to test with a subset first.
+**Feature:** Add simple per-user feature flags support: `flags: { weeklyDigest: true, consultantLens: false }` stored in user JSON. Digest and bot logic checks flags before enabling experimental paths. Admin dashboard shows flag state per user with toggle controls. Enables gradual rollout without separate deployment.
+- Files: `store.js` (flags field in defaultUser), `digest.js`, `web/server.js`, `web/admin-user.html`
+- Complexity: **Small–Medium**
+
 ---
 
 ## Prioritization Matrix
 
 | Feature | Impact | Effort | Priority | Depends On |
 |---------|--------|--------|----------|------------|
-| B-1 through B-7 | High | Small-Med | **Now** | — |
-| P1-1 Implicit learning | High | Medium | **Next** | — |
+| **B-8 Topic weight impact** | High | Small | **Now** | — |
+| P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
+| P1-1 Implicit learning | High | Medium | **Next** | B-8 |
 | P1-2 Weekly synthesis | High | Large | **Next** | — |
 | P1-5 Digest reactions | High | Medium | **Next** | — |
 | P1-8 Cross-day dedup | Medium | Small | **Next** | — |
+| P4-9 Feature flags | High | Small-Med | **Next** | — |
 | P2-1 Custom topic queries | High | Large | **Soon** | — |
 | P2-2 Company watchlist | High | Medium | **Soon** | — |
 | P2-5 Source diversity | Medium | Small | **Soon** | — |
 | P2-6 Inline keyboards | High | Medium | **Soon** | — |
+| P2-9 Consultant Lens Mode | Medium | Medium | **Soon** | — |
+| P2-10 Source corroboration | Medium | Medium | **Soon** | — |
 | P1-6 Archive search | Medium | Medium | **Soon** | — |
 | P1-9 Timezone support | Medium | Medium | **Soon** | — |
+| P3-6 Smart onboarding | High | Medium | **Soon** | — |
+| P4-8 Cost attribution | Medium | Small | **Soon** | — |
 | P2-7 Click tracking | Medium | Medium | **Later** | — |
 | P2-8 Share a signal | Medium | Medium | **Later** | — |
 | P3-2 Referral system | High | Medium | **Later** | — |
 | P3-3 Public archive | Medium | Medium | **Later** | — |
+| P3-7 Winback emails | Medium | Small-Med | **Later** | P2-7 |
 | P4-1 SQLite migration | High | Medium | **Later** | — |
 | P4-2 Token rotation | Medium | Medium | **Later** | P4-1 |
 | P1-3 Client briefing | High | Large | **Later** | P1-2 |
@@ -259,10 +313,12 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ---
 
-## Recommended Build Order (Post-Bug-Fixes)
+## Recommended Build Order
 
-**Sprint 1 (stickiness):** P1-8 cross-day dedup, P2-5 source diversity, P1-5 digest reactions, P1-1 implicit learning
-**Sprint 2 (differentiation):** P2-6 inline keyboards, P2-1 custom topic queries, P2-2 company watchlist
-**Sprint 3 (depth):** P1-2 weekly synthesis, P1-6 archive search, P1-9 timezone support
-**Sprint 4 (infrastructure):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation
-**Sprint 5 (growth):** P3-2 referrals, P3-3 public archive, P2-7 click tracking, P2-8 share a signal
+**Immediate (now):** B-8 topic weight impact — small fix, high perceptible value, unblocks P1-1 and P1-10
+**Sprint 1 (stickiness):** P1-10 why you're seeing this, P1-8 cross-day dedup, P2-5 source diversity, P1-5 digest reactions, P4-9 feature flags
+**Sprint 2 (personalization):** P1-1 implicit learning, P2-6 inline keyboards, P2-2 company watchlist
+**Sprint 3 (differentiation):** P2-9 Consultant Lens, P2-10 source corroboration, P2-1 custom topic queries
+**Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution
+**Sprint 5 (infrastructure):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation
+**Sprint 6 (scale):** P3-2 referrals, P3-3 public archive, P2-7 click tracking, P3-7 winback emails

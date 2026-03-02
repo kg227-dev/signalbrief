@@ -110,6 +110,30 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 }
 .day-circle.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 
+/* Topic weight pills */
+.weight-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 12px; border-radius:100px; font-size:13px; font-weight:600;
+  border:1.5px solid; cursor:default;
+}
+.weight-up   { color:#16A34A; background:#F0FDF4; border-color:#BBF7D0; }
+.weight-down { color:#DC2626; background:#FEF2F2; border-color:#FECACA; }
+.weight-signal { font-size:11px; letter-spacing:0.02em; }
+
+/* Last digest item rows */
+.digest-item-row {
+  display:flex; align-items:flex-start; gap:10px; padding:10px 12px;
+  background:#F9FAFB; border-radius:8px; font-size:13px;
+}
+.digest-item-tag {
+  font-family:ui-monospace,monospace; font-size:11px; font-weight:700;
+  color:var(--accent); background:var(--accent-light);
+  padding:2px 7px; border-radius:4px; white-space:nowrap; flex-shrink:0;
+}
+.digest-item-headline { flex:1; color:var(--text); line-height:1.4; }
+.digest-item-link { font-size:12px; color:var(--accent); text-decoration:none; flex-shrink:0; }
+.digest-item-link:hover { text-decoration:underline; }
+
 /* Action bar */
 .action-bar {
   background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
@@ -270,11 +294,27 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       </div>
     </div>
 
+    <!-- Topic weights — shown only if user has adjustments -->
+    <div class="form-card" id="weightsCard" style="display:none;">
+      <div class="card-title">Topic preferences</div>
+      <div class="card-heading">Personalization signals</div>
+      <div id="weightsList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+      <div style="font-size:12px;color:var(--text-secondary);">Set via Telegram "more" and "less" commands. Read-only here.</div>
+    </div>
+
+    <!-- Last digest preview — shown only if user has last_digest_items -->
+    <div class="form-card" id="lastDigestCard" style="display:none;">
+      <div class="card-title">Last delivery</div>
+      <div class="card-heading">Most recent digest items</div>
+      <div id="lastDigestList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
     <!-- Admin actions -->
     <div class="action-bar">
       <div class="action-bar-title">Admin actions</div>
       <div class="action-row">
         <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
+        <button type="button" class="btn btn-secondary" id="sendDigestBtn">Send digest now</button>
         <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
         <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
         <button type="button" class="btn btn-danger-soft" id="unsubBtn">Mark unsubscribed</button>
@@ -450,21 +490,65 @@ function updatePauseBtn(status) {
 
 function buildMetaBar(user) {
   const prefs = user.preferences || {};
-  const tgLinked = user.chatId && !user.chatId.startsWith('email-');
+  const tgLinked = !!(user.chatId && !user.chatId.startsWith('email-'));
   const toETDate = iso => iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : '—';
   const statusClass = { active:'status-active', paused:'status-paused', unsubscribed:'status-unsubscribed' }[user.status] || 'status-paused';
+  const emailOn = prefs.email_enabled !== false;
+  const tgOn    = !!(prefs.telegram_enabled && tgLinked);
+  const emailVal = emailOn
+    ? '<span style="color:var(--green);font-weight:700;">✓ enabled</span>'
+    : '<span style="color:#D1D5DB;">off</span>';
+  const tgVal = tgOn
+    ? '<span style="color:var(--green);font-weight:700;">✓ linked</span>'
+    : tgLinked
+      ? '<span style="color:var(--yellow);font-weight:600;">linked / disabled</span>'
+      : '<span style="color:#D1D5DB;">not linked</span>';
   const items = [
-    { label: 'Status', value: `<span class="status-badge ${statusClass}">${esc(user.status || 'active')}</span>` },
-    { label: 'Joined', value: esc(toETDate(user.joined_at)) },
-    { label: 'Digests', value: esc(String(user.digests_received || 0)) },
+    { label: 'Status',    value: `<span class="status-badge ${statusClass}">${esc(user.status || 'active')}</span>` },
+    { label: 'Joined',    value: esc(toETDate(user.joined_at)) },
+    { label: 'Digests',   value: esc(String(user.digests_received || 0)) },
     { label: 'Last digest', value: esc(toETDate(user.last_digest_at)) },
-    { label: 'Telegram', value: tgLinked ? '<span style="color:var(--green);font-weight:700;">✓ linked</span>' : '<span style="color:#D1D5DB;">—</span>' },
-    { label: 'Chat ID', value: `<span class="mono">${esc(user.chatId || '—')}</span>` },
+    { label: 'Email',     value: emailVal },
+    { label: 'Telegram',  value: tgVal },
+    { label: 'Chat ID',   value: `<span class="mono">${esc(user.chatId || '—')}</span>` },
     { label: 'Bookmarks', value: esc(String((user.bookmarks || []).length)) },
   ];
   document.getElementById('metaBar').innerHTML = items.map(i =>
     `<div class="meta-item"><div class="meta-label">${i.label}</div><div class="meta-value">${i.value}</div></div>`
   ).join('');
+}
+
+function buildWeightsPanel(user) {
+  const weights = user.topic_weights || {};
+  const nonZero = Object.entries(weights).filter(([, v]) => v !== 0);
+  if (!nonZero.length) return;
+  document.getElementById('weightsCard').style.display = '';
+  const list = document.getElementById('weightsList');
+  list.innerHTML = nonZero
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .map(([k, v]) => {
+      const label = k.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+      const cls   = v > 0 ? 'weight-up' : 'weight-down';
+      const arrows = Math.abs(v) >= 2 ? (v > 0 ? '▲▲' : '▼▼') : (v > 0 ? '▲' : '▼');
+      return `<span class="weight-pill ${cls}"><span class="weight-signal">${esc(arrows)}</span> ${esc(label)} <span style="opacity:0.6;">(${v > 0 ? '+' : ''}${v})</span></span>`;
+    }).join('');
+}
+
+function buildLastDigestPanel(user) {
+  const items = user.last_digest_items || [];
+  if (!items.length) return;
+  const preview = items.slice(0, 5); // show up to 5
+  document.getElementById('lastDigestCard').style.display = '';
+  document.getElementById('lastDigestList').innerHTML = preview.map(item => {
+    const headline = (item.headline || '').slice(0, 100);
+    const tag = item.tag || '';
+    const url = item.url || '';
+    return `<div class="digest-item-row">
+      <span class="digest-item-tag">${esc(tag)}</span>
+      <span class="digest-item-headline">${esc(headline)}${headline.length >= 100 ? '…' : ''}</span>
+      ${url ? `<a href="${esc(url)}" target="_blank" class="digest-item-link">↗</a>` : ''}
+    </div>`;
+  }).join('');
 }
 
 async function init() {
@@ -490,6 +574,8 @@ async function init() {
     document.getElementById('headerSub').textContent = 'Editing: ' + userEmail;
 
     buildMetaBar(user);
+    buildWeightsPanel(user);
+    buildLastDigestPanel(user);
 
     // Account fields
     document.getElementById('name').value = user.name || '';
@@ -563,6 +649,24 @@ async function init() {
         else showError(data.error || 'Save failed.');
       } catch { showError('Network error.'); }
       btn.disabled = false; btn.textContent = 'Save preferences';
+    });
+
+    // --- Send digest now ---
+    document.getElementById('sendDigestBtn').addEventListener('click', async function() {
+      if (!user.chatId) { showBanner('❌ No chatId — cannot trigger digest', true); return; }
+      const btn = this;
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const r = await fetch('/api/admin/run-digest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: user.chatId })
+        });
+        const data = await r.json();
+        if (data.success) showBanner('✅ Digest triggered for ' + (user.name || userEmail));
+        else showBanner('❌ ' + (data.error || 'Failed'), true);
+      } catch { showBanner('❌ Network error', true); }
+      btn.disabled = false; btn.textContent = 'Send digest now';
     });
 
     // --- Resend settings link ---

@@ -403,33 +403,75 @@ const server = http.createServer(async (req, res) => {
     // Convert UTC timestamps to ET dates (users signing up after 7 PM ET appear as next UTC day)
     const toETDate = iso => iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
     const depthLabel = d => ({ headline_only: "Scan", headline_plus_oneliner: "Brief", headline_plus_why: "Deep", full: "Deep", deep: "Deep" }[d] || "Deep");
+
+    // Count scheduled delivery days elapsed since last_digest_at with no delivery.
+    // Walks back from yesterday (excludes today — delivery may still be pending).
+    const DOW_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    function calcDaysMissed(lastDigestAtIso, daysOfWeek) {
+      if (!lastDigestAtIso) return 0; // never delivered — not "missed"
+      const toET = iso => new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      const todayET  = toET(new Date().toISOString());
+      const lastET   = toET(lastDigestAtIso);
+      if (lastET >= todayET) return 0; // delivered today
+      let missed = 0;
+      const cursor = new Date();
+      cursor.setDate(cursor.getDate() - 1); // start from yesterday
+      for (let i = 0; i < 14; i++) {
+        const curET = toET(cursor.toISOString());
+        if (curET <= lastET) break;
+        const dowET = DOW_NAMES.indexOf(
+          cursor.toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long" })
+        );
+        if ((daysOfWeek || [1,2,3,4,5]).includes(dowET)) missed++;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      return missed;
+    }
+
     const roster = allUsers().map(u => {
       const prefs = u.preferences || {};
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       const ampm = dh >= 12 ? "PM" : "AM";
       const hour = dh % 12 || 12;
       const min  = dm === 0 ? "" : `:${String(dm).padStart(2,"0")}`;
+      const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
+      const tgLinked = !!(u.chatId && !u.chatId.startsWith("email-"));
       return {
         name:               u.name || "",
         email:              u.email || "",
+        chat_id:            u.chatId || "",
         status:             u.status || "active",
         joined:             toETDate(u.joined_at),
         digests:            u.digests_received || 0,
         last_digest:        toETDate(u.last_digest_at),
-        telegram:           !!(u.chatId && !u.chatId.startsWith("email-")),
+        telegram:           tgLinked,
+        email_enabled:      prefs.email_enabled !== false,
+        telegram_enabled:   !!(prefs.telegram_enabled && tgLinked),
         topics:             (u.topics || []).length,
         topics_list:        (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
         bookmarks:          (u.bookmarks || []).length,
         adjustments:        Object.keys(u.topic_weights || {}).length,
+        topic_weights:      u.topic_weights || {},
+        last_digest_preview: (u.last_digest_items || []).slice(0, 3).map(item => ({
+          headline: (item.headline || "").slice(0, 80),
+          tag:      item.tag || "",
+          url:      item.url || "",
+        })),
+        days_missed:        u.status === "active" ? calcDaysMissed(u.last_digest_at, allowedDays) : 0,
         delivery_time:      `${hour}${min} ${ampm} ET`,
         delivery_time_raw:  prefs.delivery_time || "07:00",
-        days_of_week:       prefs.days_of_week || [1, 2, 3, 4, 5],
+        days_of_week:       allowedDays,
         depth:              depthLabel(prefs.depth),
         // Use localhost so admin links always open directly on the local server
         // (avoids Cloudflare Tunnel round-trip and works even if tunnel is down)
         settings_url:       u.email ? `http://localhost:${PORT}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
+
+    // Users whose deliveries appear to be falling behind (2+ scheduled days missed)
+    const deliveryWarnings = roster
+      .filter(u => u.status === "active" && u.days_missed >= 2)
+      .map(u => ({ name: u.name || u.email, email: u.email, days_missed: u.days_missed }));
 
     // Health / system status
     const lastRun = runs[0] || null; // runs is newest-first
@@ -450,11 +492,12 @@ const server = http.createServer(async (req, res) => {
         month_label:        monthLabel,
       },
       health: {
-        server_uptime:    uptimeStr,
-        last_run_at:      lastRun ? lastRun.run_at_et || lastRun.run_at : null,
-        last_run_users:   lastRun ? lastRun.users_served : null,
-        last_run_cost:    lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
-        cron_schedule:    "6:45 AM ET · Mon–Sat (LaunchAgent)",
+        server_uptime:            uptimeStr,
+        last_run_at:              lastRun ? lastRun.run_at_et || lastRun.run_at : null,
+        last_run_users:           lastRun ? lastRun.users_served : null,
+        last_run_cost:            lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
+        cron_schedule:            "6:45 AM ET · Mon–Sat (LaunchAgent)",
+        users_delivery_warning:   deliveryWarnings,
       },
       runs: runs.slice(0, 30),
       per_user: perUser,

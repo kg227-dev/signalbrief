@@ -254,7 +254,13 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
 // ── 3b. Score items by relevance (zero extra API cost) ───────────────────────
 // baseScore comes from enrichItems (already paid for in that call).
 // topicMatch is computed locally — free.
-// finalScore = baseScore (60%) + topicMatch (40%)
+// finalScore = baseScore (60%) + topicMatch (40%) + weightBonus (user preference)
+//
+// topic_weights (from "more X" / "less X" commands) are keyed by whatever string
+// Claude returns from intent parsing (e.g., "AI", "healthcare") — not necessarily
+// the canonical tag. matchWeightToTag() does case-insensitive substring matching
+// so "AI" matches "AI×TECH" and "health" matches "HEALTHCARE".
+// Each weight unit = ±0.5 points on the 0–10 scale (range: -5 to +5 → -2.5 to +2.5).
 
 function scoreColor(score) {
   if (score >= 8.5) return { bg: "#16A34A", text: "#fff" };    // strong green
@@ -272,12 +278,30 @@ function computeTopicMatch(item, userTopics) {
   return 3;                                                        // unrelated
 }
 
-function applyRelevanceScores(items, userTopics) {
+// Find the total weight adjustment for a given item tag from the user's topic_weights map.
+// Weight keys may be partial/informal ("AI" → "AI×TECH"), so we fuzzy-match.
+function matchWeightToTag(tag, topicWeights) {
+  if (!topicWeights || typeof topicWeights !== "object") return 0;
+  const tagLower = tag.toLowerCase();
+  let total = 0;
+  for (const [key, w] of Object.entries(topicWeights)) {
+    if (!w) continue;
+    const keyLower = key.toLowerCase();
+    if (tagLower === keyLower || tagLower.includes(keyLower) || keyLower.includes(tagLower)) {
+      total += w;
+    }
+  }
+  return total;
+}
+
+function applyRelevanceScores(items, userTopics, topicWeights = {}) {
   return items.map(item => {
-    const topicMatch = computeTopicMatch(item, userTopics);
-    const base = typeof item.baseScore === "number" ? item.baseScore : 5.0;
-    const score = Math.round((base * 0.6 + topicMatch * 0.4) * 10) / 10;
-    return { ...item, relevanceScore: Math.min(10, Math.max(0, score)) };
+    const topicMatch  = computeTopicMatch(item, userTopics);
+    const base        = typeof item.baseScore === "number" ? item.baseScore : 5.0;
+    const weight      = matchWeightToTag(item.tag, topicWeights);
+    const weightBonus = weight * 0.5; // ±0.5 pts per "more"/"less" step
+    const raw         = base * 0.6 + topicMatch * 0.4 + weightBonus;
+    return { ...item, relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)) };
   });
 }
 
@@ -545,14 +569,36 @@ async function main() {
       if (!allowedDays.includes(todayDOW)) return false;
       // Skip if already delivered today (prevents double-delivery from 30-min cron)
       if (toETDateStr(u.last_digest_at) === todayET) return false;
-      // Match delivery time within ±25 min window
+      // Catch-up window: up to 4 hours after target handles Mac sleep/missed windows.
+      // 30-min look-ahead handles cron jitter so we don't need perfect clock alignment.
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       const userMinutes = dh * 60 + dm;
-      return Math.abs(nowMinutes - userMinutes) <= 25;
+      let diff = nowMinutes - userMinutes; // positive = we're past target time
+      // Midnight wraparound: e.g. target 23:45, now 00:05 → diff should be +20 not -1420
+      if (diff < -(12 * 60)) diff += 24 * 60;
+      if (diff > (12 * 60)) diff -= 24 * 60;
+      return diff >= -30 && diff <= 4 * 60;
     });
   }
 
-  if (dueUsers.length === 0) process.exit(0); // silent — no users due this window
+  // Log scheduling decisions on every cron fire — visible even on no-op runs.
+  // Helps diagnose missed deliveries without needing --diagnose flags.
+  if (!targetChatId && allActive.length > 0) {
+    const parts = allActive.map(u => {
+      const prefs = u.preferences || {};
+      const alreadyToday = toETDateStr(u.last_digest_at) === todayET;
+      if (alreadyToday) return `${u.email || u.chatId}: alreadyToday`;
+      const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+      let diff = nowMinutes - (dh * 60 + dm);
+      if (diff < -(12 * 60)) diff += 24 * 60;
+      if (diff > (12 * 60)) diff -= 24 * 60;
+      const isDue = dueUsers.some(d => d.chatId === u.chatId);
+      return `${u.email || u.chatId}: target=${prefs.delivery_time} diff=${diff >= 0 ? "+" : ""}${diff}min → ${isDue ? "DUE" : "skip"}`;
+    });
+    log(`[schedule] ${todayET} ${etNow.getHours().toString().padStart(2,"0")}:${etNow.getMinutes().toString().padStart(2,"0")} ET — ${parts.join(" | ")}`);
+  }
+
+  if (dueUsers.length === 0) process.exit(0); // no users due this window
 
   if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);
   else log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
@@ -672,9 +718,22 @@ async function main() {
         }
       }
 
-      // 2. Score by relevance (free — uses baseScore from enrichment + local topic match)
-      userItems = applyRelevanceScores(userItems, u.topics || []);
+      // 2. Score by relevance (free — uses baseScore + local topic match + user weight adjustments)
+      const weights = u.topic_weights || {};
+      const hasWeights = Object.values(weights).some(w => w !== 0);
+
+      // Log pre-sort order when user has weight adjustments — lets us verify ranking is working
+      if (hasWeights) {
+        log(`  [weights] ${u.email || u.chatId}: ${JSON.stringify(weights)}`);
+        log(`  [pre-sort] ${userItems.map(i => `${i.tag}(${i.baseScore})`).join(", ")}`);
+      }
+
+      userItems = applyRelevanceScores(userItems, u.topics || [], weights);
       userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+      if (hasWeights) {
+        log(`  [post-sort] ${userItems.map(i => `${i.tag}(${i.relevanceScore})`).join(", ")}`);
+      }
 
       // 3. Trim to user's items_per_digest (top-N by relevance)
       const count = prefs.items_per_digest || CONFIG.digest.itemCount;

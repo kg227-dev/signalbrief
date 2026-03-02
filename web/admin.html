@@ -85,6 +85,51 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 }
 .send-btn:hover { border-color:var(--accent); background:var(--accent-light); }
 .send-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.modal-backdrop {
+  position:fixed; inset:0; background:rgba(17,24,39,0.42); z-index:90;
+  display:none; align-items:center; justify-content:center; padding:16px;
+}
+.modal-card {
+  width:min(620px, 100%); background:var(--card); border:1px solid var(--border);
+  border-radius:12px; box-shadow:0 16px 44px rgba(0,0,0,0.2); padding:18px;
+}
+.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.modal-kicker { font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:3px; }
+.modal-title { font-size:18px; font-weight:700; letter-spacing:-0.2px; }
+.modal-close {
+  border:1px solid var(--border); background:#fff; color:var(--text-secondary); border-radius:8px;
+  width:30px; height:30px; cursor:pointer; font-size:15px; line-height:1;
+}
+.modal-mode-row { display:flex; gap:8px; margin-bottom:12px; }
+.modal-mode-btn {
+  flex:1; border:1.5px solid var(--border); background:#fff; color:var(--text-2);
+  border-radius:8px; padding:8px 10px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;
+}
+.modal-mode-btn.active { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
+.modal-mode-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.modal-panel { border:1px solid var(--border-subtle); border-radius:10px; padding:12px; background:rgba(0,0,0,0.01); margin-bottom:10px; }
+.modal-help { font-size:12px; color:var(--text-secondary); line-height:1.45; }
+.modal-channels { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; font-size:13px; color:var(--text-2); }
+.modal-channels label { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2); }
+.modal-input, .modal-textarea {
+  width:100%; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; color:var(--text);
+  padding:9px 11px; font-size:13px; outline:none; margin-top:6px;
+}
+.modal-input:focus, .modal-textarea:focus { border-color:var(--accent); }
+.modal-textarea { min-height:120px; resize:vertical; line-height:1.45; }
+.modal-field { margin-bottom:10px; }
+.modal-field label { display:block; font-size:11px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-secondary); }
+.modal-feedback { display:none; font-size:12px; border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+.modal-feedback.ok { display:block; color:#065F46; background:#ECFDF5; border:1px solid #A7F3D0; }
+.modal-feedback.err { display:block; color:#B91C1C; background:#FEF2F2; border:1px solid #FECACA; }
+.modal-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+.modal-btn {
+  border:1.5px solid var(--border); background:#fff; color:var(--text-2); border-radius:8px;
+  padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;
+}
+.modal-btn:hover { border-color:var(--accent); }
+.modal-btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+.modal-btn.primary:disabled { background:#9CA3AF; border-color:#9CA3AF; cursor:not-allowed; }
 
 /* Upcoming deliveries */
 .schedule-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:36px; }
@@ -313,6 +358,51 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 
 </div>
 
+<div id="sendModal" class="modal-backdrop" onclick="if (event.target === this) closeSendModal();">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">User send options</div>
+        <div class="modal-title" id="sendModalTitle">Send to user</div>
+      </div>
+      <button class="modal-close" onclick="closeSendModal()" aria-label="Close">×</button>
+    </div>
+
+    <div class="modal-mode-row">
+      <button id="sendModeDigestBtn" class="modal-mode-btn active" onclick="setSendMode('digest')">Digest now</button>
+      <button id="sendModeCustomBtn" class="modal-mode-btn" onclick="setSendMode('custom')">Custom message</button>
+    </div>
+
+    <div id="sendDigestPanel" class="modal-panel">
+      <div class="modal-help">
+        Sends a normal digest immediately using this user's configured channels and preferences.
+      </div>
+    </div>
+
+    <div id="sendCustomPanel" class="modal-panel" style="display:none;">
+      <div class="modal-channels">
+        <label><input type="checkbox" id="sendViaEmail" onchange="syncSendModalState()"> Email</label>
+        <label><input type="checkbox" id="sendViaTelegram" onchange="syncSendModalState()"> Telegram</label>
+      </div>
+      <div id="sendChannelHint" class="modal-help" style="margin-bottom:10px;"></div>
+      <div class="modal-field">
+        <label for="sendCustomSubject">Subject (email)</label>
+        <input id="sendCustomSubject" class="modal-input" type="text" maxlength="140" placeholder="Message from SignalBrief">
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label for="sendCustomBody">Message</label>
+        <textarea id="sendCustomBody" class="modal-textarea" placeholder="Write a message to this user..." oninput="syncSendModalState()"></textarea>
+      </div>
+    </div>
+
+    <div id="sendModalFeedback" class="modal-feedback"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeSendModal()">Cancel</button>
+      <button id="sendModalSubmit" class="modal-btn primary" onclick="submitSendModal()">Send</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function esc(s) {
   if (!s) return "";
@@ -376,6 +466,8 @@ let testDigestPoll = null;
 let autoRefreshTimer = null;
 let loadInFlight = false;
 const AUTO_REFRESH_MS = 60000;
+let sendModalUser = null;
+let sendMode = "digest";
 
 // ── Topic weights summary string ───────────────────────────────────────────────
 function weightsSummary(weights) {
@@ -391,23 +483,158 @@ function weightsSummary(weights) {
     .join(" · ");
 }
 
-// ── Per-user digest trigger ────────────────────────────────────────────────────
-async function sendDigest(chatId, btnEl) {
-  if (!chatId) { btnEl.textContent = "❌ no ID"; return; }
-  btnEl.disabled = true;
-  btnEl.textContent = "…";
+// ── Per-user send tools (digest + custom message) ─────────────────────────────
+function getSendCapabilities(user) {
+  const canDigest = user.status === "active" && !!user.chat_id;
+  const canEmailMessage = !!user.email && user.email_enabled !== false;
+  const canTelegramMessage = !!(user.chat_id && !String(user.chat_id).startsWith("email-") && user.telegram_enabled);
+  return {
+    canDigest,
+    canEmailMessage,
+    canTelegramMessage,
+    canAnyMessage: canEmailMessage || canTelegramMessage,
+  };
+}
+
+async function runDigestForChat(chatId) {
+  const res = await fetch("/api/admin/run-digest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chatId }),
+  });
+  const data = await parseApiJson(res);
+  return { ok: res.ok, data };
+}
+
+function findRosterUser(email, chatId) {
+  const emailKey = String(email || "").toLowerCase().trim();
+  const chatKey = String(chatId || "").trim();
+  return (latestRoster || []).find(u => {
+    const emailMatch = emailKey && String(u.email || "").toLowerCase().trim() === emailKey;
+    const chatMatch = chatKey && String(u.chat_id || "").trim() === chatKey;
+    return emailMatch || chatMatch;
+  }) || null;
+}
+
+function setSendModalFeedback(type, text) {
+  const box = document.getElementById("sendModalFeedback");
+  box.className = "modal-feedback";
+  box.textContent = "";
+  if (!text) return;
+  box.classList.add(type === "ok" ? "ok" : "err");
+  box.textContent = text;
+}
+
+function setSendMode(mode) {
+  if (!sendModalUser) return;
+  const caps = getSendCapabilities(sendModalUser);
+  if (mode === "digest" && !caps.canDigest) mode = "custom";
+  if (mode === "custom" && !caps.canAnyMessage && caps.canDigest) mode = "digest";
+  sendMode = mode;
+
+  const digestBtn = document.getElementById("sendModeDigestBtn");
+  const customBtn = document.getElementById("sendModeCustomBtn");
+  digestBtn.classList.toggle("active", mode === "digest");
+  customBtn.classList.toggle("active", mode === "custom");
+  digestBtn.disabled = !caps.canDigest;
+  customBtn.disabled = !caps.canAnyMessage;
+  document.getElementById("sendDigestPanel").style.display = mode === "digest" ? "block" : "none";
+  document.getElementById("sendCustomPanel").style.display = mode === "custom" ? "block" : "none";
+  document.getElementById("sendModalSubmit").textContent = mode === "digest" ? "Send Digest" : "Send Message";
+  setSendModalFeedback(null, "");
+  syncSendModalState();
+}
+
+function syncSendModalState() {
+  if (!sendModalUser) return;
+  const caps = getSendCapabilities(sendModalUser);
+  const emailCb = document.getElementById("sendViaEmail");
+  const tgCb = document.getElementById("sendViaTelegram");
+  const body = document.getElementById("sendCustomBody").value.trim();
+  const hasChannel = (emailCb.checked && caps.canEmailMessage) || (tgCb.checked && caps.canTelegramMessage);
+  const canSend = sendMode === "digest"
+    ? caps.canDigest
+    : (caps.canAnyMessage && hasChannel && body.length > 0);
+  document.getElementById("sendModalSubmit").disabled = !canSend;
+}
+
+function openSendModal(email, chatId) {
+  const user = findRosterUser(email, chatId);
+  if (!user) return;
+  sendModalUser = user;
+  const caps = getSendCapabilities(user);
+
+  document.getElementById("sendModalTitle").textContent = `Send to ${user.name || user.email || user.chat_id}`;
+  const emailCb = document.getElementById("sendViaEmail");
+  const tgCb = document.getElementById("sendViaTelegram");
+  const hint = document.getElementById("sendChannelHint");
+  emailCb.checked = caps.canEmailMessage;
+  emailCb.disabled = !caps.canEmailMessage;
+  tgCb.checked = caps.canTelegramMessage;
+  tgCb.disabled = !caps.canTelegramMessage;
+  document.getElementById("sendCustomSubject").value = "Quick note from SignalBrief";
+  document.getElementById("sendCustomBody").value = "";
+  hint.textContent = [
+    caps.canEmailMessage ? "Email ready" : "Email unavailable",
+    caps.canTelegramMessage ? "Telegram ready" : "Telegram unavailable",
+  ].join(" · ");
+
+  document.getElementById("sendModal").style.display = "flex";
+  setSendMode(caps.canDigest ? "digest" : "custom");
+}
+
+function closeSendModal() {
+  document.getElementById("sendModal").style.display = "none";
+  sendModalUser = null;
+  sendMode = "digest";
+  setSendModalFeedback(null, "");
+}
+
+async function submitSendModal() {
+  if (!sendModalUser) return;
+  const submitBtn = document.getElementById("sendModalSubmit");
+  submitBtn.disabled = true;
+  setSendModalFeedback(null, "");
+
   try {
-    const res = await fetch("/api/admin/run-digest", {
+    if (sendMode === "digest") {
+      const { ok, data } = await runDigestForChat(sendModalUser.chat_id);
+      if (!ok || !data.success) {
+        setSendModalFeedback("err", data.error || "Failed to trigger digest");
+      } else {
+        setSendModalFeedback("ok", data.message || "Digest triggered");
+      }
+      return;
+    }
+
+    const channels = [];
+    if (document.getElementById("sendViaEmail").checked) channels.push("email");
+    if (document.getElementById("sendViaTelegram").checked) channels.push("telegram");
+    const body = document.getElementById("sendCustomBody").value.trim();
+    const subject = document.getElementById("sendCustomSubject").value.trim();
+    const res = await fetch("/api/admin/message-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId }),
+      body: JSON.stringify({
+        email: sendModalUser.email,
+        channels,
+        subject,
+        message: body,
+      }),
     });
-    const d = await res.json();
-    btnEl.textContent = d.success ? "✅" : "❌";
-  } catch {
-    btnEl.textContent = "❌";
+    const data = await parseApiJson(res);
+    if (!res.ok || !data.success) {
+      setSendModalFeedback("err", data.error || "Failed to send message");
+      return;
+    }
+    const warn = (data.warnings && data.warnings.length) ? ` (${data.warnings.join("; ")})` : "";
+    setSendModalFeedback("ok", (data.message || "Message sent") + warn);
+    document.getElementById("sendCustomBody").value = "";
+  } catch (e) {
+    setSendModalFeedback("err", e.message || "Network error sending message");
+  } finally {
+    syncSendModalState();
   }
-  setTimeout(() => { btnEl.textContent = "Send →"; btnEl.disabled = false; }, 3000);
 }
 
 // ── Upcoming schedule ─────────────────────────────────────────────────────────
@@ -837,9 +1064,10 @@ async function load(silent = false) {
           ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;margin-right:8px;">edit →</a>`
           : "";
 
-        // Send digest button — only for active users with a chatId
-        const sendBtn = (u.status === "active" && u.chat_id)
-          ? `<button class="send-btn" onclick="sendDigest(${JSON.stringify(u.chat_id)}, this)">Send →</button>`
+        // Send actions modal (digest + custom message), shown when at least one channel/action is available
+        const caps = getSendCapabilities(u);
+        const sendBtn = (caps.canDigest || caps.canAnyMessage)
+          ? `<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`
           : "";
 
         return `<tr>

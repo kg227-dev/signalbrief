@@ -6,6 +6,7 @@
  */
 
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -152,6 +153,50 @@ async function sendMagicLinkEmail(user) {
       <p style="margin-top:20px;font-size:13px;color:#6B7280;">Or view your <a href="${archiveUrl}" style="color:#2563EB;">past digests</a>.<br>This link is personal — keep it private.</p>
     </div>`;
   await sendEmail(user.email, "Your SignalBrief access link", html);
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function sendTelegramText(chatId, text) {
+  const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
+  if (!token) return Promise.reject(new Error("Telegram bot token not configured"));
+  const body = JSON.stringify({
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+  });
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: "api.telegram.org",
+      path: `/bot${token}/sendMessage`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    }, (r) => {
+      let out = "";
+      r.on("data", c => out += c);
+      r.on("end", () => {
+        try {
+          const data = JSON.parse(out || "{}");
+          if (!data.ok) return reject(new Error(data.description || "telegram send failed"));
+          resolve(data);
+        } catch {
+          reject(new Error("telegram response parse failed"));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
 }
 
 // sendWelcomeEmail is defined in mailer.js and imported above
@@ -821,6 +866,81 @@ const server = http.createServer(async (req, res) => {
       ? `Digest triggered for chatId ${body.chatId}`
       : "Full scheduled digest run triggered";
     return json(res, { success: true, message: msg });
+  }
+
+  // POST /api/admin/message-user — send custom admin message via configured channels
+  if (pathname === "/api/admin/message-user" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await readBody(req);
+    const email = String(body.email || "").toLowerCase().trim();
+    const message = String(body.message || "").trim();
+    const subject = String(body.subject || "Message from SignalBrief").trim().slice(0, 140) || "Message from SignalBrief";
+    const channels = Array.isArray(body.channels)
+      ? body.channels.map(c => String(c).toLowerCase().trim()).filter(Boolean)
+      : [];
+
+    if (!email) return json(res, { error: "email required" }, 400);
+    if (message.length < 2) return json(res, { error: "message too short" }, 400);
+    if (message.length > 4000) return json(res, { error: "message too long (max 4000 chars)" }, 400);
+    if (!channels.length) return json(res, { error: "select at least one channel" }, 400);
+
+    const user = allUsers().find(u => (u.email || "").toLowerCase().trim() === email);
+    if (!user) return json(res, { error: "user not found" }, 404);
+
+    const prefs = user.preferences || {};
+    const emailReady = !!user.email && prefs.email_enabled !== false;
+    const tgReady = !!(user.chatId && !String(user.chatId).startsWith("email-") && prefs.telegram_enabled !== false);
+    const wantsEmail = channels.includes("email");
+    const wantsTelegram = channels.includes("telegram");
+
+    const sent = { email: false, telegram: false };
+    const errors = [];
+
+    if (wantsEmail) {
+      if (!emailReady) {
+        errors.push("email channel not available for this user");
+      } else {
+        try {
+          const html = `
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:28px 22px;color:#111;">
+              <div style="font-size:21px;font-weight:700;margin-bottom:12px;">☀️ SignalBrief</div>
+              <div style="font-size:14px;color:#6B7280;margin-bottom:14px;">Message from the SignalBrief team</div>
+              <div style="font-size:15px;line-height:1.65;color:#1F2937;white-space:pre-wrap;">${escapeHtml(message)}</div>
+            </div>`;
+          await sendEmail(user.email, subject, html, user.token || null);
+          sent.email = true;
+        } catch (e) {
+          errors.push(`email failed: ${e.message}`);
+        }
+      }
+    }
+
+    if (wantsTelegram) {
+      if (!tgReady) {
+        errors.push("telegram channel not available for this user");
+      } else {
+        try {
+          await sendTelegramText(user.chatId, `📣 SignalBrief update\n\n${message}`);
+          sent.telegram = true;
+        } catch (e) {
+          errors.push(`telegram failed: ${e.message}`);
+        }
+      }
+    }
+
+    if (!sent.email && !sent.telegram) {
+      return json(res, { error: errors.join(" | ") || "no channels succeeded" }, 400);
+    }
+
+    return json(res, {
+      success: true,
+      sent,
+      warnings: errors,
+      message: `Sent via ${[
+        sent.email ? "email" : null,
+        sent.telegram ? "telegram" : null,
+      ].filter(Boolean).join(" + ")}`,
+    });
   }
 
   // ── Static files ────────────────────────────────────────────────────────────

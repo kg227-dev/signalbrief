@@ -101,7 +101,13 @@ function json(res, data, status = 200) {
 function readBody(req) {
   return new Promise((resolve) => {
     let body = "";
-    req.on("data", c => body += c);
+    let size = 0;
+    const MAX = 1 * 1024 * 1024; // 1 MB guard against oversized payloads
+    req.on("data", c => {
+      size += c.length;
+      if (size > MAX) { req.destroy(); resolve({}); return; }
+      body += c;
+    });
     req.on("end", () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
   });
 }
@@ -241,6 +247,12 @@ const server = http.createServer(async (req, res) => {
       // Always restore protected fields from existing record
       ...Object.fromEntries(PROTECTED_FIELDS.map(k => [k, existing[k]])),
     };
+
+    // Track unsubscription timestamp when status changes to unsubscribed
+    if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
+      updated.email_unsubscribed_at = new Date().toISOString();
+    }
+
     writeUser(existing.chatId, updated);
     return json(res, { success: true });
   }
@@ -373,13 +385,15 @@ const server = http.createServer(async (req, res) => {
     const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
 
-    // Per-user rollup across all runs
+    // Per-user rollup across all runs — divide run cost by number of users served
     const userMap = {};
     for (const r of runs) {
+      const usersServed = r.users_served || 1;
       for (const u of (r.per_user || [])) {
         if (!userMap[u.id]) userMap[u.id] = { id: u.id, runs: 0, total_cost: 0 };
         userMap[u.id].runs++;
-        userMap[u.id].total_cost += r.total_cost_usd || 0;
+        // Attribute each user their fair share of the run cost
+        userMap[u.id].total_cost += (r.total_cost_usd || 0) / usersServed;
       }
     }
     const perUser = Object.values(userMap)
@@ -416,6 +430,13 @@ const server = http.createServer(async (req, res) => {
       };
     }).sort((a, b) => (b.digests - a.digests));
 
+    // Health / system status
+    const lastRun = runs[0] || null; // runs is newest-first
+    const serverUptimeSecs = Math.floor(process.uptime());
+    const uptimeHours = Math.floor(serverUptimeSecs / 3600);
+    const uptimeMins  = Math.floor((serverUptimeSecs % 3600) / 60);
+    const uptimeStr   = uptimeHours > 0 ? `${uptimeHours}h ${uptimeMins}m` : `${uptimeMins}m`;
+
     return json(res, {
       summary: {
         all_time_cost:      parseFloat(sum(runs, "total_cost_usd").toFixed(4)),
@@ -426,6 +447,13 @@ const server = http.createServer(async (req, res) => {
         month_users_served: sum(monthRuns, "users_served"),
         active_users:       allUsers().filter(u => u.status === "active").length,
         month_label:        monthLabel,
+      },
+      health: {
+        server_uptime:    uptimeStr,
+        last_run_at:      lastRun ? lastRun.run_at_et || lastRun.run_at : null,
+        last_run_users:   lastRun ? lastRun.users_served : null,
+        last_run_cost:    lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
+        cron_schedule:    "6:45 AM ET · Mon–Sat (LaunchAgent)",
       },
       runs: runs.slice(0, 30),
       per_user: perUser,
@@ -445,6 +473,27 @@ const server = http.createServer(async (req, res) => {
     const adminUser = allUsers().find(u => u.email.toLowerCase() === emailParam.toLowerCase().trim());
     if (!adminUser) return json(res, { error: "not found" }, 404);
     return json(res, adminUser);
+  }
+
+  // POST /api/admin/run-digest — trigger a digest run (localhost only)
+  if (pathname === "/api/admin/run-digest" && req.method === "POST") {
+    const clientIp = req.socket.remoteAddress || "";
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
+      return json(res, { error: "admin access only" }, 403);
+    }
+    const body = await readBody(req);
+    const digestPath = path.join(__dirname, "../digest.js");
+    const extraArgs  = body.chatId ? ["--chatId", String(body.chatId)] : [];
+    const child = spawn(process.execPath, [digestPath, ...extraArgs], {
+      detached: true,
+      stdio:    "ignore",
+      env:      { ...process.env },
+    });
+    child.unref();
+    const msg = body.chatId
+      ? `Digest triggered for chatId ${body.chatId}`
+      : "Full scheduled digest run triggered";
+    return json(res, { success: true, message: msg });
   }
 
   // ── Static files ────────────────────────────────────────────────────────────

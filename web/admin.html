@@ -76,6 +76,33 @@ tbody tr:hover td { background:#FAFAFA; }
     <p>API cost tracking — <span id="monthLabel">—</span></p>
   </div>
 
+  <!-- System health bar -->
+  <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:24px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Server uptime</div>
+      <div style="font-size:14px;font-weight:600;" id="healthUptime">—</div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Last run</div>
+      <div style="font-size:14px;font-weight:600;" id="healthLastRun">—</div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Last run cost</div>
+      <div style="font-size:14px;font-weight:600;" id="healthLastCost">—</div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Cron schedule</div>
+      <div style="font-size:14px;font-weight:600;" id="healthCron">—</div>
+    </div>
+    <div style="margin-left:auto;">
+      <button id="runDigestBtn" onclick="triggerDigest()"
+        style="background:#2563EB;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
+        ▶ Run digest now
+      </button>
+      <div id="runDigestMsg" style="font-size:12px;color:var(--green);margin-top:4px;display:none;"></div>
+    </div>
+  </div>
+
   <!-- Summary cards -->
   <div class="cards">
     <div class="card">
@@ -206,11 +233,19 @@ async function load() {
     return;
   }
 
-  const { summary, runs, per_user, roster } = data;
+  const { summary, health, runs, per_user, roster } = data;
 
   // Month label from server (ET timezone, not browser local)
   if (summary.month_label) {
     document.getElementById("monthLabel").textContent = summary.month_label;
+  }
+
+  // Health bar
+  if (health) {
+    document.getElementById("healthUptime").textContent   = health.server_uptime  || "—";
+    document.getElementById("healthLastRun").textContent  = health.last_run_at    || "No runs yet";
+    document.getElementById("healthLastCost").textContent = health.last_run_cost  || "—";
+    document.getElementById("healthCron").textContent     = health.cron_schedule  || "—";
   }
 
   // Summary cards
@@ -327,6 +362,32 @@ async function load() {
 }
 
 load();
+
+async function triggerDigest() {
+  const btn = document.getElementById("runDigestBtn");
+  const msg = document.getElementById("runDigestMsg");
+  btn.disabled = true;
+  btn.textContent = "Running…";
+  msg.style.display = "none";
+  try {
+    const res = await fetch("/api/admin/run-digest", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const data = await res.json();
+    if (data.success) {
+      msg.textContent = "✅ " + (data.message || "Digest triggered");
+      msg.style.color = "var(--green)";
+    } else {
+      msg.textContent = "❌ " + (data.error || "Failed");
+      msg.style.color = "var(--red)";
+    }
+  } catch (e) {
+    msg.textContent = "❌ Network error";
+    msg.style.color = "var(--red)";
+  }
+  msg.style.display = "block";
+  btn.disabled = false;
+  btn.textContent = "▶ Run digest now";
+}
 </script>
 </body>
 </html>

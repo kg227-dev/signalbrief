@@ -245,13 +245,18 @@ async function init() {
     // Topics
     renderChips(DEFAULT_TOPICS, user.topics || []);
 
-    // Custom topic add
+    // Custom topic add — normalise to canonical slug so digest.js routing works
     document.getElementById('addTopicBtn').addEventListener('click', function() {
       const input = document.getElementById('customTopicInput');
       const val = input.value.trim();
-      if (!val || selectedTopics.has(val)) { input.value = ''; return; }
-      const chip = renderChip(val, true);
-      selectedTopics.add(val);
+      if (!val) { input.value = ''; return; }
+      // If input matches a default topic (case-insensitive), use the canonical tag name
+      // Otherwise normalise to custom_<slug> for consistent storage
+      const matchDefault = DEFAULT_TOPICS.find(function(t) { return t.toLowerCase() === val.toLowerCase(); });
+      const topicKey = matchDefault || ('custom_' + val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''));
+      if (selectedTopics.has(topicKey)) { input.value = ''; return; }
+      const chip = renderChip(topicKey, true);
+      selectedTopics.add(topicKey);
       document.getElementById('topicGrid').appendChild(chip);
       updateTopicNote();
       input.value = '';
@@ -320,6 +325,7 @@ async function init() {
         });
         const data = await res.json();
         if (data.success) {
+          showError(''); // clear any previous error
           showBanner('✅ Preferences saved');
         } else {
           showError(data.error || 'Save failed.');
@@ -365,7 +371,8 @@ function showError(msg) {
   const el = document.getElementById('saveError');
   if (!el) return;
   el.textContent = msg;
-  el.style.display = 'block';
+  // Hide the element when there's no error message to display
+  el.style.display = msg ? 'block' : 'none';
 }
 
 function showBanner(msg) {

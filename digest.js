@@ -73,6 +73,7 @@ function httpsPost(hostname, path_, headers, body, isForm = false) {
       }
     );
     req.on("error", reject);
+    req.setTimeout(30000, () => { req.destroy(new Error("HTTP timeout after 30s")); });
     req.write(data);
     req.end();
   });
@@ -317,7 +318,7 @@ function formatTelegram(items, dateStr, state) {
     const rawWim = item.wim
       ? item.wim
           .replace(/<\/?[^>]+>/g, "")
-          .split(/(?<=[.!?])\s+(?=[A-Z])/)[0]
+          .split(/(?<=[a-z][.!?]|[!?])\s+(?=[A-Z])/)[0]
       : null;
     const wim = rawWim
       ? (rawWim.length > 250 ? rawWim.slice(0, 247).replace(/\s+\S*$/, "") + "…" : rawWim)
@@ -372,33 +373,39 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
       return `<span style="display:inline-block;font-size:10px;font-weight:700;color:${c.text};background:${c.bg};padding:2px 8px;border-radius:4px;letter-spacing:0.01em;">${score.toFixed(1)}</span>`;
     })() : "";
 
-    // Conditionally render WIM block — skip if null/undefined (e.g. headline_only depth)
+    // Conditionally render WIM block — inline styles for Gmail (strips <style> blocks)
     const wimHtml = item.wim
-      ? `<div class="item-wim-label">Why it matters</div>\n        <div class="item-wim">${item.wim}</div>`
+      ? `<div style="font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#2563EB;margin-bottom:5px;">Why it matters</div>\n        <div style="font-size:14px;color:#374151;line-height:1.65;margin-bottom:10px;">${item.wim}</div>`
       : "";
 
     // Deep mode extras: implications + watch_next (only for headline_plus_why / full depth)
     const isDeep = depth === "headline_plus_why" || depth === "full" || depth === "deep";
     const implHtml = (isDeep && item.implications)
-      ? `<div class="item-implication">→ ${item.implications}</div>`
+      ? `<div style="font-size:13px;color:#1D4ED8;line-height:1.6;margin-bottom:6px;font-weight:500;">→ ${item.implications}</div>`
       : "";
     const watchHtml = (isDeep && item.watch_next)
-      ? `<div class="item-watch">👀 ${item.watch_next}</div>`
+      ? `<div style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;font-style:italic;">👀 ${item.watch_next}</div>`
       : "";
 
+    // Lead item (first) gets blue left border accent
+    const isLead = i === 0;
+    const itemStyle = isLead
+      ? "padding:32px 0;border-bottom:1px solid #E5E7EB;border-left:3px solid #2563EB;padding-left:16px;margin-left:-16px;"
+      : "padding:32px 0;border-bottom:1px solid #E5E7EB;";
+
     return `
-      <div class="item">
-        <div class="item-meta">
-          <span class="item-number">${i + 1}</span>
-          <span class="item-tag">${item.tag}</span>
+      <div class="item" style="${itemStyle}">
+        <div style="margin-bottom:8px;">
+          <span style="font-size:13px;color:#9CA3AF;font-weight:600;margin-right:6px;">${i + 1}</span>
+          <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#2563EB;background:#EFF6FF;padding:2px 8px;border-radius:4px;margin-right:6px;">${item.tag}</span>
           ${scoreHtml}
         </div>
-        <div class="item-title">${item.headline}</div>
-        <div class="item-lede">${item.summary}</div>
+        <div style="font-size:16px;font-weight:700;color:#1A1A1A;line-height:1.4;margin-bottom:8px;">${item.headline}</div>
+        <div style="font-size:15px;color:#374151;line-height:1.6;margin-bottom:12px;">${item.summary}</div>
         ${wimHtml}
         ${implHtml}
         ${watchHtml}
-        <div class="item-readmore"><a href="${linkUrl}">Read more → ${item.source}</a></div>
+        <div style="font-size:13px;"><a href="${linkUrl}" style="color:#2563EB;text-decoration:none;font-weight:500;">Read more → ${item.source}</a></div>
       </div>`;
   }).join("\n");
 
@@ -576,6 +583,10 @@ async function main() {
     .map((i) => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
   const subject = `SignalBrief — ${shortDate} | ${topThree.join(", ")}`;
 
+  // Archive once per run (shared, date-keyed) — uses full enriched set before user filtering
+  // Must happen before per-user loop so the archive reflects all fetched items, not one user's filtered view
+  saveToArchive(now, enriched, dateStr, quickScan);
+
   log(`Delivering to ${dueUsers.length} user(s)...`);
 
   for (const u of dueUsers) {
@@ -677,8 +688,6 @@ async function main() {
       if (!u.digest_dates.includes(todayDateKey)) u.digest_dates.push(todayDateKey);
       writeUser(u.chatId, u);
 
-      // 7. Save to archive (shared, date-keyed)
-      saveToArchive(now, userItems, dateStr, quickScan);
       log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth})`);
     } catch (err) {
       log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);

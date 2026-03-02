@@ -569,14 +569,36 @@ async function main() {
       if (!allowedDays.includes(todayDOW)) return false;
       // Skip if already delivered today (prevents double-delivery from 30-min cron)
       if (toETDateStr(u.last_digest_at) === todayET) return false;
-      // Match delivery time within ±25 min window
+      // Catch-up window: up to 4 hours after target handles Mac sleep/missed windows.
+      // 30-min look-ahead handles cron jitter so we don't need perfect clock alignment.
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       const userMinutes = dh * 60 + dm;
-      return Math.abs(nowMinutes - userMinutes) <= 25;
+      let diff = nowMinutes - userMinutes; // positive = we're past target time
+      // Midnight wraparound: e.g. target 23:45, now 00:05 → diff should be +20 not -1420
+      if (diff < -(12 * 60)) diff += 24 * 60;
+      if (diff > (12 * 60)) diff -= 24 * 60;
+      return diff >= -30 && diff <= 4 * 60;
     });
   }
 
-  if (dueUsers.length === 0) process.exit(0); // silent — no users due this window
+  // Log scheduling decisions on every cron fire — visible even on no-op runs.
+  // Helps diagnose missed deliveries without needing --diagnose flags.
+  if (!targetChatId && allActive.length > 0) {
+    const parts = allActive.map(u => {
+      const prefs = u.preferences || {};
+      const alreadyToday = toETDateStr(u.last_digest_at) === todayET;
+      if (alreadyToday) return `${u.email || u.chatId}: alreadyToday`;
+      const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+      let diff = nowMinutes - (dh * 60 + dm);
+      if (diff < -(12 * 60)) diff += 24 * 60;
+      if (diff > (12 * 60)) diff -= 24 * 60;
+      const isDue = dueUsers.some(d => d.chatId === u.chatId);
+      return `${u.email || u.chatId}: target=${prefs.delivery_time} diff=${diff >= 0 ? "+" : ""}${diff}min → ${isDue ? "DUE" : "skip"}`;
+    });
+    log(`[schedule] ${todayET} ${etNow.getHours().toString().padStart(2,"0")}:${etNow.getMinutes().toString().padStart(2,"0")} ET — ${parts.join(" | ")}`);
+  }
+
+  if (dueUsers.length === 0) process.exit(0); // no users due this window
 
   if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);
   else log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);

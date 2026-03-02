@@ -163,6 +163,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 .submit-btn:active { transform:translateY(0); }
 .submit-btn:disabled { background:#9CA3AF; cursor:not-allowed; transform:none; }
 .submit-note { text-align:center; color:var(--text-secondary); font-size:13px; margin-top:12px; line-height:1.5; }
+.submit-error { display:none; margin-top:10px; text-align:center; font-size:13px; color:#DC2626; font-weight:500; }
+.submit-error.visible { display:block; }
 
 /* Success */
 .success-card { display:none; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:48px 32px; text-align:center; box-shadow:var(--shadow-md); animation:fadeUp 0.5s ease both; }
@@ -444,6 +446,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     <div class="submit-section">
       <button type="submit" class="submit-btn">Start my SignalBrief →</button>
       <p class="submit-note">Free to use. Your digest arrives at your chosen time.<br>Update your preferences anytime from your settings page.</p>
+      <div class="submit-error" id="submitError"></div>
     </div>
 
   </form>
@@ -633,25 +636,50 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
   document.getElementById('name').addEventListener('input', updateProgress);
   document.getElementById('email').addEventListener('input', updateProgress);
 
+  function showSubmitError(msg) {
+    var el = document.getElementById('submitError');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function clearSubmitError() {
+    var el = document.getElementById('submitError');
+    if (!el) return;
+    el.textContent = '';
+    el.classList.remove('visible');
+  }
+
   // ── Form submit ───────────────────────────────────────────────────────────
   document.getElementById('onboardForm').addEventListener('submit', async function(e) {
     e.preventDefault();
+    clearSubmitError();
 
     const selectedTopics = Array.from(document.querySelectorAll('.topic-chip.selected'))
       .map(function(c) { return c.dataset.topic; });
 
     if (selectedTopics.length < 2) {
-      alert('Please select at least 2 topics.');
+      showSubmitError('Please select at least 2 topics.');
       return;
     }
 
     const name = document.getElementById('name').value.trim();
     const email = document.getElementById('email').value.trim();
-    if (!name || !email) { alert('Name and email are required.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Please enter a valid email address.'); return; }
+    if (!name || !email) {
+      showSubmitError('Name and email are required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showSubmitError('Please enter a valid email address.');
+      document.getElementById('email').focus();
+      return;
+    }
 
     const days = getSelectedDays();
-    if (days.length === 0) { alert('Please select at least one delivery day.'); return; }
+    if (days.length === 0) {
+      showSubmitError('Please select at least one delivery day.');
+      return;
+    }
 
     const btn = document.querySelector('.submit-btn');
     btn.disabled = true;
@@ -677,6 +705,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       });
       const result = await res.json();
       if (result.success) {
+        clearSubmitError();
         document.getElementById('onboardForm').style.display = 'none';
         document.getElementById('formFooter').style.display = 'none';
         document.getElementById('successCard').classList.add('visible');
@@ -694,12 +723,12 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         var timeStr = hour + ':' + String(m).padStart(2, '0') + ' ' + ampm + ' ET';
         document.getElementById('successDeliveryMsg').innerHTML = 'Your first SignalBrief arrives at <strong>' + timeStr + '</strong>. Here\'s a preview of what to expect:';
       } else {
-        alert(result.error || 'Something went wrong. Please try again.');
+        showSubmitError(result.error || 'Something went wrong. Please try again.');
         btn.disabled = false;
         btn.textContent = 'Start my SignalBrief →';
       }
     } catch(err) {
-      alert('Network error. Please try again.');
+      showSubmitError('Network error. Please try again.');
       btn.disabled = false;
       btn.textContent = 'Start my SignalBrief →';
     }

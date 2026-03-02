@@ -96,8 +96,10 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .gate-btn:hover { background:#1d4ed8; }
 .gate-btn:disabled { background:#9CA3AF; cursor:default; }
 .gate-success { font-size:14px; color:#15803D; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px 16px; display:none; }
+.gate-error { font-size:13px; color:#DC2626; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:10px 14px; display:none; }
 .gate-note { font-size:13px; color:#9CA3AF; margin-top:16px; }
 .gate-note a { color:var(--accent); text-decoration:none; }
+.detail-error { margin-bottom:16px; display:none; font-size:13px; color:#B91C1C; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:10px 14px; }
 
 .footer { text-align:center; margin-top:48px; font-size:13px; color:var(--text-secondary); }
 .footer a { color:var(--accent); text-decoration:none; }
@@ -135,6 +137,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
         <div class="gate-form">
           <input type="email" id="gateEmail" class="gate-input" placeholder="you@example.com" autocomplete="email">
           <button id="gateBtn" class="gate-btn" onclick="requestLink()">Send my access link</button>
+          <div id="gateError" class="gate-error"></div>
           <div id="gateSuccess" class="gate-success">✅ Check your inbox — your link is on the way.</div>
         </div>
         <p class="gate-note">Not subscribed yet? <a href="/">Sign up here →</a></p>
@@ -155,6 +158,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
     <!-- Detail view -->
     <div id="detailView" class="detail-view">
       <button class="back-btn" onclick="showList()">← Back to archive</button>
+      <div id="detailError" class="detail-error"></div>
       <div class="detail-header">
         <div class="detail-date" id="detailDate"></div>
         <div class="detail-title">SignalBrief</div>
@@ -194,7 +198,12 @@ let userToken = null;
 async function init() {
   const params = new URLSearchParams(window.location.search);
   userToken = params.get('token');
+  const emailHint = params.get('email');
   const subEl = document.getElementById('archiveSub');
+  if (emailHint) {
+    const gateEmail = document.getElementById('gateEmail');
+    if (gateEmail) gateEmail.value = String(emailHint).trim();
+  }
 
   if (!userToken) {
     subEl.textContent = 'Your past digests, personalized to your topics.';
@@ -210,6 +219,9 @@ async function init() {
     if (res.status === 401 || data.error) {
       subEl.textContent = 'Invalid or expired link.';
       document.getElementById('gateView').style.display = 'block';
+      const err = document.getElementById('gateError');
+      err.textContent = 'That archive link is invalid or expired. Enter your email and we will send a fresh one.';
+      err.style.display = 'block';
       return;
     }
 
@@ -243,10 +255,26 @@ function renderList() {
 }
 
 async function loadDetail(date) {
+  const detailErr = document.getElementById('detailError');
+  detailErr.style.display = 'none';
+  detailErr.textContent = '';
   const url = '/api/archive/' + date + (userToken ? '?token=' + encodeURIComponent(userToken) : '');
-  const res = await fetch(url);
-  const d = await res.json();
-  if (d.error) return;
+  let d;
+  try {
+    const res = await fetch(url);
+    d = await res.json();
+    if (!res.ok || d.error) {
+      detailErr.textContent = d.error === 'not found'
+        ? 'That digest is not available for this account.'
+        : (d.error || 'Could not load digest details right now.');
+      detailErr.style.display = 'block';
+      return;
+    }
+  } catch (e) {
+    detailErr.textContent = 'Network error loading digest details.';
+    detailErr.style.display = 'block';
+    return;
+  }
 
   document.getElementById('detailDate').textContent = d.dateStr || d.date;
   document.getElementById('detailScan').textContent = cleanQuickScan(d.quickScan || '');
@@ -290,14 +318,24 @@ async function loadDetail(date) {
 }
 
 function showList() {
+  const detailErr = document.getElementById('detailError');
+  detailErr.style.display = 'none';
+  detailErr.textContent = '';
   document.getElementById('detailView').style.display = 'none';
   document.getElementById('listView').style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function requestLink() {
-  const email = document.getElementById('gateEmail').value.trim();
-  if (!email) return;
+  const email = document.getElementById('gateEmail').value.trim().toLowerCase();
+  const errEl = document.getElementById('gateError');
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errEl.textContent = 'Please enter a valid email address.';
+    errEl.style.display = 'block';
+    return;
+  }
   const btn = document.getElementById('gateBtn');
   btn.disabled = true;
   btn.textContent = 'Sending…';

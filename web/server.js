@@ -754,6 +754,7 @@ const server = http.createServer(async (req, res) => {
       summary: {
         all_time_cost:      parseFloat(sum(runs, "total_cost_usd").toFixed(4)),
         all_time_runs:      runs.length,
+        all_time_deliveries: sum(runs, "users_served"),
         month_cost:         parseFloat(sum(monthRuns, "total_cost_usd").toFixed(4)),
         month_runs:         monthRuns.length,
         month_on_demand:    monthRuns.filter(r => r.on_demand).length,

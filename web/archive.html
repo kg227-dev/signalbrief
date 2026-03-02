@@ -166,6 +166,15 @@ function esc(s) {
   if (!s) return "";
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+function cleanQuickScan(s) {
+  if (!s) return "";
+  return String(s)
+    .replace(/&nbsp;/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s*·\s*/g, " · ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 let allDigests = [];
 let userToken = null;
 
@@ -211,7 +220,7 @@ function renderList() {
     <div class="digest-card" onclick="loadDetail('${esc(d.date)}')" style="animation-delay:${i * 0.05}s">
       <div class="digest-card-left">
         <div class="digest-date">${esc(d.dateStr || d.date)}</div>
-        <div class="digest-scan">${esc(d.quickScan || '')}</div>
+        <div class="digest-scan">${esc(cleanQuickScan(d.quickScan || ''))}</div>
       </div>
       <div class="digest-card-right">
         <div class="digest-count">${d.itemCount || 7} signals</div>
@@ -227,7 +236,7 @@ async function loadDetail(date) {
   if (d.error) return;
 
   document.getElementById('detailDate').textContent = d.dateStr || d.date;
-  document.getElementById('detailScan').textContent = d.quickScan || '';
+  document.getElementById('detailScan').textContent = cleanQuickScan(d.quickScan || '');
 
   document.getElementById('detailItems').innerHTML = d.items.map((item, i) => {
     const isLead = i === 0;

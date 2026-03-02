@@ -30,6 +30,9 @@ function getETNow() {
 function toETDateStr(iso) {
   return iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
 }
+function etDateKey(date) {
+  return date.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
 
 // API cost estimates
 const PERPLEXITY_COST_PER_CALL  = 0.005;   // Sonar model per call
@@ -514,13 +517,13 @@ async function sendEmail(subject, html, toEmail, token = null) {
 
 // ── Archive ───────────────────────────────────────────────────────────────────
 
-function saveToArchive(date, items, dateStr, quickScan) {
+function saveToArchive(date, items, dateStr, quickScan, opts = {}) {
+  const { overwrite = false } = opts;
   const archiveDir = path.join(__dirname, "archive");
   if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir);
-  const key = date.toISOString().slice(0, 10);
+  const key = etDateKey(date);
   const file = path.join(archiveDir, `${key}.json`);
-  // Don't overwrite if already saved today (scheduled run wins)
-  if (fs.existsSync(file)) return;
+  if (fs.existsSync(file) && !overwrite) return;
   const entry = {
     date: key,
     dateStr,
@@ -539,7 +542,7 @@ function saveToArchive(date, items, dateStr, quickScan) {
     generatedAt: date.toISOString(),
   };
   fs.writeFileSync(file, JSON.stringify(entry, null, 2));
-  log(`📁 Archived: ${key}`);
+  log(`📁 Archived: ${key}${overwrite ? " (overwrite)" : ""}`);
 }
 
 // ── MAIN ──────────────────────────────────────────────────────────────────────
@@ -668,7 +671,7 @@ async function main() {
 
   // Archive once per run (shared, date-keyed) — uses full enriched set before user filtering
   // Must happen before per-user loop so the archive reflects all fetched items, not one user's filtered view
-  saveToArchive(now, enriched, dateStr, quickScan);
+  saveToArchive(now, enriched, dateStr, quickScan, { overwrite: !targetChatId });
 
   log(`Delivering to ${dueUsers.length} user(s)...`);
 
@@ -765,16 +768,28 @@ async function main() {
         : `SignalBrief — ${shortDate} | ${uFirstName}'s daily signal across AI, strategy, and business`;
 
       // 5. Deliver
+      let delivered = false;
       if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
         const userTelegram = formatTelegram(userItems, shortDate, u);
-        await sendTelegram(userTelegram, u.chatId);
+        try {
+          await sendTelegram(userTelegram, u.chatId);
+          delivered = true;
+        } catch (err) {
+          log(`⚠️ Telegram delivery failed for ${u.email || u.chatId}: ${err.message}`);
+        }
       }
       if (u.email && prefs.email_enabled !== false) {
         const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth, u);
-        await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
-        if (isFirstDigest) u.welcome_email_sent = true; // never show again once sent
+        try {
+          await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
+          delivered = true;
+          if (isFirstDigest) u.welcome_email_sent = true; // never show again once sent
+        } catch (err) {
+          log(`⚠️ Email delivery failed for ${u.email || u.chatId}: ${err.message}`);
+        }
         await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }
+      if (!delivered) throw new Error("no channels succeeded");
 
       // 6. Persist state
       u.digests_received = (u.digests_received || 0) + 1;
@@ -783,7 +798,7 @@ async function main() {
         headline: i.headline, url: i.url, tag: i.tag, source: i.source,
       }));
       // Track which dates this user received a digest (for user-scoped archive)
-      const todayDateKey = now.toISOString().slice(0, 10);
+      const todayDateKey = etDateKey(now);
       if (!u.digest_dates) u.digest_dates = [];
       if (!u.digest_dates.includes(todayDateKey)) u.digest_dates.push(todayDateKey);
       writeUser(u.chatId, u);

@@ -357,11 +357,25 @@ const server = http.createServer(async (req, res) => {
     const archiveDir = path.join(__dirname, "../archive");
     if (!fs.existsSync(archiveDir)) return json(res, { digests: [] });
 
-    const allowedDates = new Set(user.digest_dates || []);
     const files = fs.readdirSync(archiveDir)
       .filter(f => f.endsWith(".json"))
       .sort()
       .reverse(); // newest first
+    let allowedList = Array.isArray(user.digest_dates) ? user.digest_dates.slice() : [];
+
+    // Legacy backfill: older users may have digests_received but no digest_dates.
+    if (allowedList.length === 0 && (user.digests_received || 0) > 0) {
+      const toETDate = iso => iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
+      const joinedET = toETDate(user.joined_at);
+      const inferred = files
+        .map(f => f.replace(".json", ""))
+        .filter(d => (!joinedET || d >= joinedET));
+      if (inferred.length > 0) {
+        allowedList = inferred;
+        writeUser(user.chatId, { ...user, digest_dates: inferred, last_updated: new Date().toISOString() });
+      }
+    }
+    const allowedDates = new Set(allowedList);
 
     const digests = files.flatMap(f => {
       const dateKey = f.replace(".json", "");
@@ -380,13 +394,12 @@ const server = http.createServer(async (req, res) => {
     // Sanitize: only allow YYYY-MM-DD format to prevent path traversal
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return json(res, { error: "invalid date" }, 400);
 
-    // Token auth: verify user received this digest
+    // Token auth required: verify user received this digest
     const token = url.searchParams.get("token");
-    if (token) {
-      const user = findUserByToken(token);
-      if (!user) return json(res, { error: "invalid token" }, 401);
-      if (!(user.digest_dates || []).includes(rawDate)) return json(res, { error: "not found" }, 404);
-    }
+    if (!token) return json(res, { error: "token required" }, 400);
+    const user = findUserByToken(token);
+    if (!user) return json(res, { error: "invalid token" }, 401);
+    if (!(user.digest_dates || []).includes(rawDate)) return json(res, { error: "not found" }, 404);
 
     const file = path.join(__dirname, "../archive", `${rawDate}.json`);
     if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);

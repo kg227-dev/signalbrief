@@ -153,6 +153,16 @@ function commandMenu(user) {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 async function handleDigest(chatId) {
+  const linkedUser = allUsers().find(u => String(u.chatId) === String(chatId));
+  if (!linkedUser) {
+    await send(chatId, `I couldn't find an account linked to this chat yet. Send /start and share your email to link your account.`);
+    return;
+  }
+  if (linkedUser.status !== "active") {
+    await send(chatId, `Your account is currently *${linkedUser.status}*. Send /start to re-link or reactivate before requesting a digest.`);
+    return;
+  }
+
   // Rate limit: 15-min cooldown between on-demand digest requests
   const now = Date.now();
   const cooldownEnd = DIGEST_COOLDOWN.get(chatId);
@@ -342,6 +352,14 @@ async function handleEmailCapture(chatId, text) {
 async function handleSave(chatId, items) {
   const user = readUser(chatId);
   const lastItems = user.last_digest_items || [];
+  if (!Array.isArray(items) || items.length === 0) {
+    await send(chatId, `Tell me which items to save — for example: *save 2* or *save 1, 3*.`);
+    return;
+  }
+  if (lastItems.length === 0) {
+    await send(chatId, `I don't have a recent digest to save from yet. After your next digest, reply *save 3*.`);
+    return;
+  }
 
   const saved = [];
   const already = [];

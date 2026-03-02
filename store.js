@@ -79,6 +79,9 @@ function readUser(chatId) {
     _writeUserFile(f, user);
     tokenIndex.set(user.token, String(chatId));
     console.log(`[store] Auto-generated token for ${chatId}`);
+  } else {
+    // Keep index hydrated even when records are loaded ad-hoc from disk.
+    tokenIndex.set(raw.token, String(chatId));
   }
   return user;
 }
@@ -113,9 +116,14 @@ function allUsers() {
 // O(1) token lookup via in-memory index (B-2).
 function findUserByToken(token) {
   if (!token) return null;
-  const chatId = tokenIndex.get(token);
-  if (!chatId) return null;
-  return readUser(chatId);
+  const hit = tokenIndex.get(token);
+  if (hit) return readUser(hit);
+
+  // Cross-process safety: another process may have written users after startup.
+  rebuildTokenIndex();
+  const refreshed = tokenIndex.get(token);
+  if (!refreshed) return null;
+  return readUser(refreshed);
 }
 
 module.exports = { readUser, writeUser, allUsers, defaultUser, generateToken, findUserByToken };

@@ -43,12 +43,15 @@ async function poll() {
       }
     );
     req.on("error", () => resolve([]));
+    // Socket timeout: 35s (5s headroom over the 30s Telegram long-poll timeout)
+    req.setTimeout(35000, () => { req.destroy(new Error("poll timeout")); });
     req.end();
   });
 }
 
 async function processUpdate(update) {
-  const msg = update.message || update.edited_message;
+  // Only handle new messages — skip edited_message to prevent double-handling
+  const msg = update.message;
   if (!msg || !msg.text) return;
 
   const chatId = String(msg.chat.id);

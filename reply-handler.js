@@ -34,6 +34,8 @@ function formatDeliveryTime(prefs) {
 // ── Telegram-first onboarding state ──────────────────────────────────────────
 // Maps chatId → true when we're waiting for the user to reply with their email
 const AWAITING_EMAIL = new Map();
+// Maps chatId → cooldown expiry timestamp for on-demand /digest rate limiting (15 min)
+const DIGEST_COOLDOWN = new Map();
 const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
 
 // ── HTTP ─────────────────────────────────────────────────────────────────────
@@ -151,6 +153,16 @@ function commandMenu(user) {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 async function handleDigest(chatId) {
+  // Rate limit: 15-min cooldown between on-demand digest requests
+  const now = Date.now();
+  const cooldownEnd = DIGEST_COOLDOWN.get(chatId);
+  if (cooldownEnd && cooldownEnd > now) {
+    const minsLeft = Math.ceil((cooldownEnd - now) / 60000);
+    await send(chatId, `⏱ Your last on-demand digest was recent. Try again in ${minsLeft} min${minsLeft !== 1 ? "s" : ""}.`);
+    return;
+  }
+  DIGEST_COOLDOWN.set(chatId, now + 15 * 60 * 1000);
+
   await send(chatId, `⏳ Pulling your digest now — takes about 45 seconds...`);
   try {
     // Spawn digest.js as a child process, scoped to this user
@@ -175,6 +187,9 @@ async function handleDigest(chatId) {
 }
 
 async function handleStart(chatId, email) {
+  // Always clear pending email capture state — /start resets it regardless
+  AWAITING_EMAIL.delete(chatId);
+
   // ── /start email@example.com — link Telegram to existing web signup ──────────
   if (email) {
     const normalised = email.toLowerCase().trim();
@@ -186,7 +201,8 @@ async function handleStart(chatId, email) {
     const users = allUsers();
     const match = users.find(u => u.email.toLowerCase() === normalised);
     if (!match) {
-      await send(chatId, `❌ *${normalised}* isn't signed up yet.\n\nSign up at getsignalbrief.com first, then come back and send:\n\`/start ${normalised}\``);
+      // Email unknown — create account inline (same as Telegram-first onboarding flow)
+      await handleEmailCapture(chatId, normalised);
       return;
     }
     if (match.chatId === chatId) {
@@ -240,8 +256,10 @@ async function handleStart(chatId, email) {
 
 // ── Telegram-first email capture ──────────────────────────────────────────────
 async function handleEmailCapture(chatId, text) {
-  const email = text.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  // Extract email from prose ("my email is foo@bar.com" → "foo@bar.com")
+  const emailMatch = text.match(/[^\s@]+@[^\s@]+\.[^\s@]+/);
+  const email = emailMatch ? emailMatch[0].toLowerCase().replace(/[.,;!?]+$/, "") : "";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     await send(chatId, `That doesn't look like a valid email. Try again — e.g. *you@gmail.com*`);
     return;
   }
@@ -327,8 +345,15 @@ async function handleSave(chatId, items) {
 
   const saved = [];
   const already = [];
+  const outOfBounds = [];
 
   items.forEach(n => {
+    // Bounds check: item numbers must be 1–10, and within the actual last digest size
+    if (n < 1 || n > 10 || (lastItems.length > 0 && n > lastItems.length)) {
+      outOfBounds.push(n);
+      return;
+    }
+
     const existing = user.bookmarks.find(b => {
       const today = new Date().toISOString().slice(0, 10);
       return b.date === today && b.item_num === n;
@@ -359,6 +384,9 @@ async function handleSave(chatId, items) {
   if (already.length > 0) {
     reply += `${reply ? "\n" : ""}ℹ️ ${alreadyList} already bookmarked.`;
   }
+  if (outOfBounds.length > 0) {
+    reply += `${reply ? "\n" : ""}❓ Item${outOfBounds.length > 1 ? "s" : ""} ${outOfBounds.map(n => `#${n}`).join(", ")} not found in your last digest.`;
+  }
   if (saved.length === 1) {
     reply += `\n\nWant to save any others from today? Just reply with the numbers.`;
   }
@@ -368,14 +396,16 @@ async function handleSave(chatId, items) {
 
 async function handleTopicMore(chatId, topic) {
   const user = readUser(chatId);
-  user.topic_weights[topic] = (user.topic_weights[topic] || 0) + 1;
+  // Cap at +5 to prevent unbounded drift
+  user.topic_weights[topic] = Math.min(5, (user.topic_weights[topic] || 0) + 1);
   writeUser(chatId, user);
   await send(chatId, `📊 Got it — more *${topic}* stories starting tomorrow.`);
 }
 
 async function handleTopicLess(chatId, topic) {
   const user = readUser(chatId);
-  user.topic_weights[topic] = (user.topic_weights[topic] || 0) - 1;
+  // Floor at -5 to prevent unbounded drift
+  user.topic_weights[topic] = Math.max(-5, (user.topic_weights[topic] || 0) - 1);
   writeUser(chatId, user);
   await send(chatId, `📉 Got it — fewer *${topic}* stories starting tomorrow.`);
 }

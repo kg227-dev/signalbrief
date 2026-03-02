@@ -673,7 +673,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
         document.getElementById('successCard').classList.add('visible');
         document.querySelectorAll('.progress-step').forEach(function(s) { s.className = 'progress-step filled'; });
         var settingsLink = document.getElementById('settingsLink');
-        if (settingsLink) settingsLink.href = '/settings?email=' + encodeURIComponent(email);
+        if (settingsLink && result.token) settingsLink.href = '/settings?token=' + encodeURIComponent(result.token);
         var archiveLink = document.getElementById('archiveLink');
         if (archiveLink && result.archiveUrl) archiveLink.href = result.archiveUrl;
         // Update delivery time in success message

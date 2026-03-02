@@ -19,7 +19,7 @@ function findUserByToken(token) {
   return allUsers().find(u => u.token === token) || null;
 }
 
-const PORT = 3003;
+const PORT = parseInt(process.env.PORT, 10) || 3003;
 const WEB_DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.json"), "utf8"));
 
@@ -101,7 +101,13 @@ function json(res, data, status = 200) {
 function readBody(req) {
   return new Promise((resolve) => {
     let body = "";
-    req.on("data", c => body += c);
+    let size = 0;
+    const MAX = 1 * 1024 * 1024; // 1 MB guard against oversized payloads
+    req.on("data", c => {
+      size += c.length;
+      if (size > MAX) { req.destroy(); resolve({}); return; }
+      body += c;
+    });
     req.on("end", () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
   });
 }
@@ -211,7 +217,7 @@ const server = http.createServer(async (req, res) => {
     child.unref();
     console.log(`[welcome digest] spawned for ${chatId}`);
 
-    return json(res, { success: true, chatId, archiveUrl: `${BASE_URL}/archive?token=${user.token}` });
+    return json(res, { success: true, chatId, token: user.token, archiveUrl: `${BASE_URL}/archive?token=${user.token}` });
   }
 
   // POST /api/settings — update existing user (token-authenticated)
@@ -241,22 +247,33 @@ const server = http.createServer(async (req, res) => {
       // Always restore protected fields from existing record
       ...Object.fromEntries(PROTECTED_FIELDS.map(k => [k, existing[k]])),
     };
+
+    // Track unsubscription timestamp when status changes to unsubscribed
+    if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
+      updated.email_unsubscribed_at = new Date().toISOString();
+    }
+
     writeUser(existing.chatId, updated);
     return json(res, { success: true });
   }
 
   // GET|POST /api/unsubscribe — one-click unsubscribe (RFC 8058)
-  // Supports: ?token=TOKEN (new) or ?email=... (legacy email links)
-  // GET:  human-readable redirect to settings page with unsubscribed=1
-  // POST: email client one-click (body: "List-Unsubscribe=One-Click")
+  // GET:  requires ?token=TOKEN (human-readable redirect to settings)
+  // POST: accepts ?token=TOKEN or ?email=... (email client one-click per RFC 8058)
   if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
     const tokenParam = url.searchParams.get("token") || "";
     const emailParam = url.searchParams.get("email") || "";
     let existing = null;
 
+    // GET requires token (no unauthenticated email-based unsubscribe)
+    if (req.method === "GET" && !tokenParam) {
+      return json(res, { error: "token required" }, 400);
+    }
+
     if (tokenParam) {
       existing = findUserByToken(decodeURIComponent(tokenParam));
-    } else if (emailParam) {
+    } else if (emailParam && req.method === "POST") {
+      // POST-only: email-based lookup for RFC 8058 one-click from email clients
       const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
       existing = allUsers().find(u => u.email.toLowerCase() === targetEmail);
     }
@@ -347,6 +364,10 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/admin/stats — cost dashboard data (localhost only)
   if (pathname === "/api/admin/stats" && req.method === "GET") {
+    const clientIp = req.socket.remoteAddress || "";
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
+      return json(res, { error: "admin access only" }, 403);
+    }
     const logPath = path.join(__dirname, "../data/cost-log.json");
     let runs = [];
     if (fs.existsSync(logPath)) {
@@ -364,13 +385,15 @@ const server = http.createServer(async (req, res) => {
     const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
 
-    // Per-user rollup across all runs
+    // Per-user rollup across all runs — divide run cost by number of users served
     const userMap = {};
     for (const r of runs) {
+      const usersServed = r.users_served || 1;
       for (const u of (r.per_user || [])) {
         if (!userMap[u.id]) userMap[u.id] = { id: u.id, runs: 0, total_cost: 0 };
         userMap[u.id].runs++;
-        userMap[u.id].total_cost += r.total_cost_usd || 0;
+        // Attribute each user their fair share of the run cost
+        userMap[u.id].total_cost += (r.total_cost_usd || 0) / usersServed;
       }
     }
     const perUser = Object.values(userMap)
@@ -388,24 +411,33 @@ const server = http.createServer(async (req, res) => {
       const hour = dh % 12 || 12;
       const min  = dm === 0 ? "" : `:${String(dm).padStart(2,"0")}`;
       return {
-        name:          u.name || "",
-        email:         u.email || "",
-        status:        u.status || "active",
-        joined:        toETDate(u.joined_at),
-        digests:       u.digests_received || 0,
-        last_digest:   toETDate(u.last_digest_at),
-        telegram:      !!(u.chatId && !u.chatId.startsWith("email-")),
-        topics:        (u.topics || []).length,
-        topics_list:   (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
-        bookmarks:     (u.bookmarks || []).length,
-        adjustments:   Object.keys(u.topic_weights || {}).length,
-        delivery_time: `${hour}${min} ${ampm} ET`,
-        depth:         depthLabel(prefs.depth),
+        name:               u.name || "",
+        email:              u.email || "",
+        status:             u.status || "active",
+        joined:             toETDate(u.joined_at),
+        digests:            u.digests_received || 0,
+        last_digest:        toETDate(u.last_digest_at),
+        telegram:           !!(u.chatId && !u.chatId.startsWith("email-")),
+        topics:             (u.topics || []).length,
+        topics_list:        (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
+        bookmarks:          (u.bookmarks || []).length,
+        adjustments:        Object.keys(u.topic_weights || {}).length,
+        delivery_time:      `${hour}${min} ${ampm} ET`,
+        delivery_time_raw:  prefs.delivery_time || "07:00",
+        days_of_week:       prefs.days_of_week || [1, 2, 3, 4, 5],
+        depth:              depthLabel(prefs.depth),
         // Use localhost so admin links always open directly on the local server
         // (avoids Cloudflare Tunnel round-trip and works even if tunnel is down)
-        settings_url:  u.email ? `http://localhost:${PORT}/settings?email=${encodeURIComponent(u.email)}` : null,
+        settings_url:       u.email ? `http://localhost:${PORT}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
+
+    // Health / system status
+    const lastRun = runs[0] || null; // runs is newest-first
+    const serverUptimeSecs = Math.floor(process.uptime());
+    const uptimeHours = Math.floor(serverUptimeSecs / 3600);
+    const uptimeMins  = Math.floor((serverUptimeSecs % 3600) / 60);
+    const uptimeStr   = uptimeHours > 0 ? `${uptimeHours}h ${uptimeMins}m` : `${uptimeMins}m`;
 
     return json(res, {
       summary: {
@@ -418,6 +450,13 @@ const server = http.createServer(async (req, res) => {
         active_users:       allUsers().filter(u => u.status === "active").length,
         month_label:        monthLabel,
       },
+      health: {
+        server_uptime:    uptimeStr,
+        last_run_at:      lastRun ? lastRun.run_at_et || lastRun.run_at : null,
+        last_run_users:   lastRun ? lastRun.users_served : null,
+        last_run_cost:    lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
+        cron_schedule:    "6:45 AM ET · Mon–Sat (LaunchAgent)",
+      },
       runs: runs.slice(0, 30),
       per_user: perUser,
       roster,
@@ -425,7 +464,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // GET /api/admin/user-by-email?email=... — admin user lookup (localhost only)
-  // Used by settings.html when opened from the admin roster (?email=... param)
+  // Used by admin-user.html to load a user's full data for editing
   if (pathname === "/api/admin/user-by-email" && req.method === "GET") {
     const clientIp = req.socket.remoteAddress || "";
     if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
@@ -436,6 +475,27 @@ const server = http.createServer(async (req, res) => {
     const adminUser = allUsers().find(u => u.email.toLowerCase() === emailParam.toLowerCase().trim());
     if (!adminUser) return json(res, { error: "not found" }, 404);
     return json(res, adminUser);
+  }
+
+  // POST /api/admin/run-digest — trigger a digest run (localhost only)
+  if (pathname === "/api/admin/run-digest" && req.method === "POST") {
+    const clientIp = req.socket.remoteAddress || "";
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
+      return json(res, { error: "admin access only" }, 403);
+    }
+    const body = await readBody(req);
+    const digestPath = path.join(__dirname, "../digest.js");
+    const extraArgs  = body.chatId ? ["--chatId", String(body.chatId)] : [];
+    const child = spawn(process.execPath, [digestPath, ...extraArgs], {
+      detached: true,
+      stdio:    "ignore",
+      env:      { ...process.env },
+    });
+    child.unref();
+    const msg = body.chatId
+      ? `Digest triggered for chatId ${body.chatId}`
+      : "Full scheduled digest run triggered";
+    return json(res, { success: true, message: msg });
   }
 
   // ── Static files ────────────────────────────────────────────────────────────
@@ -451,6 +511,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/admin" || pathname === "/admin.html") {
     return serveFile(res, path.join(WEB_DIR, "admin.html"));
+  }
+  if (pathname === "/admin/user") {
+    return serveFile(res, path.join(WEB_DIR, "admin-user.html"));
   }
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
   if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));

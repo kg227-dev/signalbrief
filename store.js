@@ -48,7 +48,8 @@ function readUser(chatId) {
   let raw;
   try { raw = JSON.parse(fs.readFileSync(f, "utf8")); }
   catch { return defaultUser(chatId); }
-  const user = { ...defaultUser(chatId), ...raw };
+  const defaults = defaultUser(chatId);
+  const user = { ...defaults, ...raw, preferences: { ...defaults.preferences, ...(raw.preferences || {}) } };
   // Auto-generate and persist token for existing users who don't have one
   if (!raw.token) {
     user.token = generateToken();
@@ -66,10 +67,13 @@ function allUsers() {
   if (!fs.existsSync(DATA_DIR)) return [];
   return fs.readdirSync(DATA_DIR)
     .filter(f => f.startsWith("user-") && f.endsWith(".json"))
-    .flatMap(f => {
-      try { return [JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"))]; }
-      catch { return []; } // skip malformed user files silently
-    });
+    .map(f => {
+      // Use readUser() so each user gets full default-merging and auto-token generation
+      const chatId = f.replace("user-", "").replace(".json", "");
+      try { return readUser(chatId); }
+      catch { return null; }
+    })
+    .filter(Boolean);
 }
 
 module.exports = { readUser, writeUser, allUsers, defaultUser, generateToken };

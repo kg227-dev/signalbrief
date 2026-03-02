@@ -410,15 +410,32 @@ async function handleTopicLess(chatId, topic) {
   await send(chatId, `📉 Got it — fewer *${topic}* stories starting tomorrow.`);
 }
 
+const STANDARD_TOPICS = [
+  'HEALTHCARE', 'FINANCIAL SERVICES', 'PE×M&A', 'ENERGY', 'CONSUMER',
+  'LIFE SCIENCES', 'TECHNOLOGY', 'INDUSTRIALS', 'REAL ESTATE', 'PUBLIC SECTOR',
+  'AI×TECH', 'STRATEGY', 'POLICY×REGULATORY', 'SUSTAINABILITY',
+  'DIGITAL', 'M&A ADVISORY', 'TALENT',
+];
+
 async function handleTopicAdd(chatId, topic) {
+  if (!topic) return;
   const user = readUser(chatId);
-  // Add to custom_topics (for display/labeling in /topics and settings)
-  if (!user.custom_topics.includes(topic)) user.custom_topics.push(topic);
+
+  // Normalize: if it matches a standard topic (case-insensitive), use the canonical tag.
+  // Otherwise normalize to custom_<slug> — matches how web/settings.js stores custom topics.
+  const matchStandard = STANDARD_TOPICS.find(t => t.toLowerCase() === topic.toLowerCase());
+  const topicKey = matchStandard || ('custom_' + topic.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''));
+  const displayLabel = matchStandard || topic.replace(/[_]/g, ' ');
+
+  // Add to custom_topics (for display in /topics and settings) — only for non-standard topics
+  if (!matchStandard) {
+    if (!user.custom_topics.includes(topicKey)) user.custom_topics.push(topicKey);
+  }
   // Also add to topics[] so digest.js includes it in relevance filtering
   if (!user.topics) user.topics = [];
-  if (!user.topics.includes(topic)) user.topics.push(topic);
+  if (!user.topics.includes(topicKey)) user.topics.push(topicKey);
   writeUser(chatId, user);
-  await send(chatId, `➕ Added *${topic}* to your topics. You'll see it in tomorrow's digest.`);
+  await send(chatId, `➕ Added *${displayLabel}* to your topics. You'll see it in tomorrow's digest.`);
 }
 
 async function handleSettings(chatId) {

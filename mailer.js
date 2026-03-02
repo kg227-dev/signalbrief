@@ -16,10 +16,28 @@
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 const WELCOME_TEMPLATE = fs.readFileSync(path.join(__dirname, "templates/welcome.html"), "utf8");
+
+// ── HMAC helpers (B-3) ────────────────────────────────────────────────────────
+// Sign email addresses for the RFC 8058 fallback unsubscribe URL.
+// Uses the last 32 chars of the Anthropic key as a stable HMAC secret.
+// Verified in server.js before allowing email-based unsubscribes.
+function _unsubSecret() {
+  return (CONFIG.keys.anthropic || "").slice(-32) || "signalbrief-unsub-secret";
+}
+
+function signUnsubEmail(email) {
+  return crypto.createHmac("sha256", _unsubSecret())
+    .update(email.toLowerCase().trim())
+    .digest("hex")
+    .slice(0, 16);
+}
+
+module.exports.signUnsubEmail = signUnsubEmail;
 
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
@@ -29,7 +47,7 @@ async function sendViaResend(to, subject, html, token = null) {
   const fromName = CONFIG.keys.fromName || "SignalBrief";
   const unsubUrl = token
     ? `${BASE_URL}/api/unsubscribe?token=${encodeURIComponent(token)}`
-    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
+    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}&sig=${signUnsubEmail(to)}`;
 
   const body = JSON.stringify({
     from: `${fromName} <${fromEmail}>`,
@@ -103,7 +121,7 @@ async function sendViaGmail(to, subject, html, token = null) {
   const fromName = CONFIG.keys.fromName || "SignalBrief";
   const unsubUrl = token
     ? `${BASE_URL}/api/unsubscribe?token=${encodeURIComponent(token)}`
-    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}`;
+    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}&sig=${signUnsubEmail(to)}`;
 
   const mime = [
     `To: ${to}`,

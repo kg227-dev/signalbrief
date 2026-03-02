@@ -42,6 +42,29 @@ function defaultUser(chatId) {
   };
 }
 
+// ── In-memory token→chatId index (B-2) ───────────────────────────────────────
+// Avoids O(n) disk scan on every authenticated request. Rebuilt at startup,
+// kept current by writeUser(). Each process maintains its own index.
+
+const tokenIndex = new Map(); // token → chatId (string)
+
+function rebuildTokenIndex() {
+  tokenIndex.clear();
+  if (!fs.existsSync(DATA_DIR)) return;
+  fs.readdirSync(DATA_DIR)
+    .filter(f => f.startsWith("user-") && f.endsWith(".json"))
+    .forEach(f => {
+      try {
+        const raw = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
+        if (raw.token) tokenIndex.set(raw.token, raw.chatId || f.replace("user-", "").replace(".json", ""));
+      } catch { /* skip corrupt files */ }
+    });
+}
+
+rebuildTokenIndex();
+
+// ── Core store functions ──────────────────────────────────────────────────────
+
 function readUser(chatId) {
   const f = userFile(chatId);
   if (!fs.existsSync(f)) return defaultUser(chatId);
@@ -53,14 +76,25 @@ function readUser(chatId) {
   // Auto-generate and persist token for existing users who don't have one
   if (!raw.token) {
     user.token = generateToken();
-    fs.writeFileSync(f, JSON.stringify(user, null, 2));
+    _writeUserFile(f, user);
+    tokenIndex.set(user.token, String(chatId));
     console.log(`[store] Auto-generated token for ${chatId}`);
   }
   return user;
 }
 
+// Atomic write: write to .tmp then rename — prevents partial-write corruption (B-7).
+// fs.renameSync is atomic on POSIX (macOS/Linux) when src and dst are on the same fs.
+function _writeUserFile(file, data) {
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, file);
+}
+
 function writeUser(chatId, data) {
-  fs.writeFileSync(userFile(chatId), JSON.stringify(data, null, 2));
+  _writeUserFile(userFile(chatId), data);
+  // Keep token index current
+  if (data.token) tokenIndex.set(data.token, String(chatId));
 }
 
 function allUsers() {
@@ -76,4 +110,12 @@ function allUsers() {
     .filter(Boolean);
 }
 
-module.exports = { readUser, writeUser, allUsers, defaultUser, generateToken };
+// O(1) token lookup via in-memory index (B-2).
+function findUserByToken(token) {
+  if (!token) return null;
+  const chatId = tokenIndex.get(token);
+  if (!chatId) return null;
+  return readUser(chatId);
+}
+
+module.exports = { readUser, writeUser, allUsers, defaultUser, generateToken, findUserByToken };

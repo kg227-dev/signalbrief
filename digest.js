@@ -510,6 +510,7 @@ function saveToArchive(date, items, dateStr, quickScan) {
       watch_next:  i.watch_next || null,
       url:         i.url,
       source:      i.source,
+      baseScore:   i.baseScore != null ? i.baseScore : null,
     })),
     generatedAt: date.toISOString(),
   };
@@ -565,8 +566,21 @@ async function main() {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
 
-  // Fetch all standard topics in parallel
-  const allResults = await Promise.all(CONFIG.topics.map(fetchTopicNews));
+  // For on-demand single-user runs, only fetch topics the user actually tracks.
+  // For scheduled multi-user runs, fetch all 17 standard topics.
+  let topicsToFetch = CONFIG.topics;
+  if (targetChatId && dueUsers.length === 1) {
+    const userStandardTopics = new Set(
+      (dueUsers[0].topics || []).filter(t => !t.startsWith("custom_"))
+    );
+    if (userStandardTopics.size > 0) {
+      topicsToFetch = CONFIG.topics.filter(t => userStandardTopics.has(t.tag));
+      log(`On-demand: fetching ${topicsToFetch.length}/${CONFIG.topics.length} topic(s) for user`);
+    }
+  }
+
+  // Fetch standard topics in parallel
+  const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
   const allItems = allResults.flat();
   log(`Fetched ${allItems.length} raw items`);
 

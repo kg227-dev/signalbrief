@@ -552,6 +552,7 @@ async function main() {
   const args = process.argv.slice(2);
   const chatIdIdx = args.indexOf("--chatId");
   const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
+  const suppressWelcome = args.includes("--suppressWelcome");
 
   // ── Check who's due BEFORE any API calls ──────────────────────────────────
   const etNow = getETNow();
@@ -761,8 +762,8 @@ async function main() {
       }).join("\n");
       // Clean subject: first name + tagline (headlines get cut off and look ugly)
       const uFirstName = ((u.name || "").split(" ")[0]) || u.email.split("@")[0];
-      // Use welcome_email_sent flag (not digests_received) so test runs don't consume the first-email slot
-      const isFirstDigest = !u.welcome_email_sent;
+      // Admin-triggered sends can force regular framing (no first-briefing subject/banner).
+      const isFirstDigest = !u.welcome_email_sent && !suppressWelcome;
       const userSubject = isFirstDigest
         ? `Welcome to SignalBrief, ${uFirstName} 👋 — your first briefing is ready`
         : `SignalBrief — ${shortDate} | ${uFirstName}'s daily signal across AI, strategy, and business`;
@@ -783,7 +784,7 @@ async function main() {
         try {
           await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
           delivered = true;
-          if (isFirstDigest) u.welcome_email_sent = true; // never show again once sent
+          if (isFirstDigest || suppressWelcome) u.welcome_email_sent = true; // avoid future welcome framing after manual/admin send
         } catch (err) {
           log(`⚠️ Email delivery failed for ${u.email || u.chatId}: ${err.message}`);
         }

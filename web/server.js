@@ -764,7 +764,7 @@ const server = http.createServer(async (req, res) => {
     TEST_DIGEST_STATUS.finished_at = null;
     TEST_DIGEST_STATUS.message = "Digest run in progress";
 
-    const child = spawn(process.execPath, [digestPath, "--chatId", targetChatId], {
+    const child = spawn(process.execPath, [digestPath, "--chatId", targetChatId, "--suppressWelcome"], {
       env: { ...process.env },
       stdio: ["ignore", "ignore", "pipe"],
     });
@@ -798,7 +798,7 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const digestPath = path.join(__dirname, "../digest.js");
     const extraArgs  = body.chatId ? ["--chatId", String(body.chatId)] : [];
-    const child = spawn(process.execPath, [digestPath, ...extraArgs], {
+    const child = spawn(process.execPath, [digestPath, ...extraArgs, "--suppressWelcome"], {
       detached: true,
       stdio:    "ignore",
       env:      { ...process.env },

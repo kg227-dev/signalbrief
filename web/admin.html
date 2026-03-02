@@ -550,10 +550,25 @@ function renderTestDigestStatus(status) {
   msg.style.display = "block";
 }
 
+async function parseApiJson(res) {
+  const raw = await res.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const short = raw.trim().slice(0, 180);
+    const isHtml = /<html|<!doctype/i.test(short);
+    return {
+      error: isHtml ? `Unexpected server response (HTTP ${res.status})` : short || `Request failed (HTTP ${res.status})`,
+    };
+  }
+}
+
 async function refreshTestDigestStatus(silent = false) {
   try {
     const res = await fetch("/api/admin/test-digest-status");
-    const status = await res.json();
+    const status = await parseApiJson(res);
+    if (!res.ok) throw new Error(status.error || `Failed to load status (HTTP ${res.status})`);
     renderTestDigestStatus(status);
     if (status.state === "running") {
       if (!testDigestPoll) {
@@ -566,7 +581,7 @@ async function refreshTestDigestStatus(silent = false) {
   } catch (e) {
     if (!silent) {
       const msg = document.getElementById("testDigestMsg");
-      msg.textContent = "❌ Could not load test digest status";
+      msg.textContent = `❌ ${e.message || "Could not load test digest status"}`;
       msg.style.color = "var(--red)";
       msg.style.display = "block";
     }
@@ -580,20 +595,26 @@ async function triggerTestDigest() {
   btn.textContent = "🧪 Starting…";
   msg.style.display = "none";
   try {
-    const res = await fetch("/api/admin/run-test-digest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const data = await res.json();
+    // Primary path: POST. Fallback to GET for environments/proxies that block POST.
+    let res;
+    try {
+      res = await fetch("/api/admin/run-test-digest", { method: "POST", credentials: "same-origin" });
+    } catch (postErr) {
+      res = await fetch("/api/admin/run-test-digest", { method: "GET", credentials: "same-origin" });
+    }
+    const data = await parseApiJson(res);
     if (!res.ok || !data.success) {
-      renderTestDigestStatus({ state: "failed", message: data.error || "Failed to start test digest" });
+      let errorMsg = data.error || `Failed to start test digest (HTTP ${res.status})`;
+      if (res.status === 404) {
+        errorMsg = "Test-digest endpoint not found on server. Restart web service on latest main.";
+      }
+      renderTestDigestStatus({ state: "failed", message: errorMsg });
       return;
     }
     renderTestDigestStatus(data.status || { state: "running", message: "Digest run in progress" });
     await refreshTestDigestStatus(true);
   } catch (e) {
-    renderTestDigestStatus({ state: "failed", message: "Network error starting test digest" });
+    renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
   }
 }
 

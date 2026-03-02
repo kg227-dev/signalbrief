@@ -741,8 +741,8 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // POST /api/admin/run-test-digest — trigger digest for admin account with job status tracking
-  if (pathname === "/api/admin/run-test-digest" && req.method === "POST") {
+  // POST/GET /api/admin/run-test-digest — trigger digest for admin account with job status tracking
+  if (pathname === "/api/admin/run-test-digest" && (req.method === "POST" || req.method === "GET")) {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     if (TEST_DIGEST_STATUS.state === "running") {
       return json(res, { error: "Test digest already running", status: TEST_DIGEST_STATUS }, 409);

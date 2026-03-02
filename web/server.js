@@ -594,6 +594,13 @@ const server = http.createServer(async (req, res) => {
     const monthLabel  = now.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
     const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
+    const monthDeliveries = sum(monthRuns, "users_served");
+    const monthUniqueUsers = new Set();
+    for (const r of monthRuns) {
+      for (const u of (r.per_user || [])) {
+        if (u && u.id) monthUniqueUsers.add(String(u.id));
+      }
+    }
 
     // Per-user rollup across all runs — divide run cost by number of users served
     const userMap = {};
@@ -683,6 +690,8 @@ const server = http.createServer(async (req, res) => {
         settings_url:       u.email ? `${BASE_URL}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
+    const activeUsersCount = roster.filter(u => u.status === "active").length;
+    const activeTelegramUsersCount = roster.filter(u => u.status === "active" && u.telegram).length;
 
     // Users whose deliveries appear to be falling behind (2+ scheduled days missed)
     const deliveryWarnings = roster
@@ -703,8 +712,12 @@ const server = http.createServer(async (req, res) => {
         month_cost:         parseFloat(sum(monthRuns, "total_cost_usd").toFixed(4)),
         month_runs:         monthRuns.length,
         month_on_demand:    monthRuns.filter(r => r.on_demand).length,
-        month_users_served: sum(monthRuns, "users_served"),
-        active_users:       allUsers().filter(u => u.status === "active").length,
+        month_users_served: monthUniqueUsers.size || monthDeliveries,
+        month_unique_users: monthUniqueUsers.size,
+        month_deliveries:   monthDeliveries,
+        total_users:        roster.length,
+        active_users:       activeUsersCount,
+        active_tg_users:    activeTelegramUsersCount,
         month_label:        monthLabel,
       },
       health: {

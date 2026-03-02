@@ -236,7 +236,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div class="card-sub" id="allTimeRuns">— runs total</div>
     </div>
     <div class="card">
-      <div class="card-label">Users served (month)</div>
+      <div class="card-label">Users reached (month)</div>
       <div class="card-value" id="monthUsers">—</div>
       <div class="card-sub" id="monthOnDemand">— on-demand</div>
     </div>
@@ -364,6 +364,12 @@ function setLastRefreshed(dateObj) {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+function countActiveUsers(roster) {
+  return (roster || []).filter(u => u.status === "active").length;
+}
+function countActiveTelegramUsers(roster) {
+  return (roster || []).filter(u => u.status === "active" && u.telegram).length;
 }
 let latestRoster = [];
 let testDigestPoll = null;
@@ -706,15 +712,24 @@ async function load(silent = false) {
     document.getElementById("monthRuns").innerHTML    = `<strong>${summary.month_runs}</strong> runs this month`;
     document.getElementById("allTimeCost").textContent = fmt$(summary.all_time_cost);
     document.getElementById("allTimeRuns").innerHTML  = `<strong>${summary.all_time_runs}</strong> runs total`;
-    document.getElementById("monthUsers").textContent  = summary.month_users_served;
-    document.getElementById("monthOnDemand").innerHTML = `<strong>${summary.month_on_demand}</strong> on-demand`;
+    const monthUniqueUsers = summary.month_unique_users != null
+      ? summary.month_unique_users
+      : summary.month_users_served;
+    const monthDeliveries = summary.month_deliveries != null
+      ? summary.month_deliveries
+      : summary.month_users_served;
+    document.getElementById("monthUsers").innerHTML =
+      `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${monthUniqueUsers}</a>`;
+    document.getElementById("monthOnDemand").innerHTML =
+      `<strong>${monthDeliveries}</strong> deliveries · <strong>${summary.month_on_demand}</strong> on-demand runs`;
 
-    if (roster) {
-      const active = roster.filter(u => u.status === "active").length;
-      const tgLinked = roster.filter(u => u.telegram).length;
-      document.getElementById("activeUsers").textContent = active;
-      document.getElementById("telegramUsers").innerHTML = `<strong>${tgLinked}</strong> on Telegram`;
-    }
+    const totalUsers = roster ? roster.length : (summary.total_users || 0);
+    const activeUsers = roster ? countActiveUsers(roster) : (summary.active_users || 0);
+    const activeTelegramUsers = roster ? countActiveTelegramUsers(roster) : (summary.active_tg_users || 0);
+    document.getElementById("activeUsers").innerHTML =
+      `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${activeUsers}</a>`;
+    document.getElementById("telegramUsers").innerHTML =
+      `<strong>${activeTelegramUsers}</strong> active on Telegram · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
 
     // ── Run log (condensed to 6 columns) ────────────────────────────────────────
     const runsBody = document.getElementById("runsBody");

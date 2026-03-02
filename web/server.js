@@ -8,6 +8,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawn } = require("child_process");
 const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
 const { sendEmail, sendWelcomeEmail, signUnsubEmail } = require("../mailer");
@@ -48,6 +49,56 @@ function checkRateLimit(ip, email) {
   RATE_EMAIL.set(email.toLowerCase(), now + EMAIL_COOLDOWN);
 
   return { limited: false };
+}
+
+// ── Admin auth (session-based, in-memory) ────────────────────────────────────
+const ADMIN_SESSIONS = new Map(); // token → { email, createdAt }
+const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const LOGIN_RATE = new Map(); // ip → { count, resetAt }
+const LOGIN_LIMIT = 5;
+const LOGIN_WINDOW = 15 * 60 * 1000;
+
+function verifyAdminPassword(password) {
+  const { salt, passwordHash } = CONFIG.admin || {};
+  if (!salt || !passwordHash) return false;
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(passwordHash, "hex"));
+}
+
+function createAdminSession(email) {
+  const token = crypto.randomBytes(32).toString("hex");
+  ADMIN_SESSIONS.set(token, { email, createdAt: Date.now() });
+  return token;
+}
+
+function validateAdminSession(req) {
+  const cookieHeader = req.headers.cookie || "";
+  const match = cookieHeader.match(/(?:^|;\s*)sb_admin=([a-f0-9]{64})/);
+  if (!match) return false;
+  const session = ADMIN_SESSIONS.get(match[1]);
+  if (!session) return false;
+  if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) {
+    ADMIN_SESSIONS.delete(match[1]);
+    return false;
+  }
+  return true;
+}
+
+function isAdminAuthed(req) {
+  const ip = req.socket.remoteAddress || "";
+  const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+  return isLocal || validateAdminSession(req);
+}
+
+function checkLoginRate(ip) {
+  const now = Date.now();
+  for (const [k, v] of LOGIN_RATE) if (v.resetAt < now) LOGIN_RATE.delete(k);
+  const entry = LOGIN_RATE.get(ip) || { count: 0, resetAt: now + LOGIN_WINDOW };
+  if (entry.resetAt < now) { entry.count = 0; entry.resetAt = now + LOGIN_WINDOW; }
+  if (entry.count >= LOGIN_LIMIT) return true;
+  entry.count++;
+  LOGIN_RATE.set(ip, entry);
+  return false;
 }
 
 const MIME = {
@@ -361,12 +412,68 @@ const server = http.createServer(async (req, res) => {
     return json(res, { success: true });
   }
 
-  // GET /api/admin/stats — cost dashboard data (localhost only)
-  if (pathname === "/api/admin/stats" && req.method === "GET") {
-    const clientIp = req.socket.remoteAddress || "";
-    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
-      return json(res, { error: "admin access only" }, 403);
+  // POST /api/admin/login — authenticate admin user
+  if (pathname === "/api/admin/login" && req.method === "POST") {
+    const ip = getClientIp(req);
+    if (checkLoginRate(ip)) return json(res, { error: "Too many attempts. Try again in 15 minutes." }, 429);
+
+    const body = await readBody(req);
+    const { email, password } = body;
+    if (!email || !password) return json(res, { error: "Email and password required" }, 400);
+
+    const adminEmail = (CONFIG.admin && CONFIG.admin.email) || "";
+    if (email.toLowerCase().trim() !== adminEmail.toLowerCase() || !verifyAdminPassword(password)) {
+      return json(res, { error: "Invalid credentials" }, 401);
     }
+
+    const sessionToken = createAdminSession(email);
+    const isSecure = BASE_URL.startsWith("https");
+    const cookieFlags = [
+      `sb_admin=${sessionToken}`,
+      "HttpOnly",
+      "Path=/",
+      `Max-Age=${7 * 24 * 60 * 60}`,
+      "SameSite=Strict",
+      isSecure ? "Secure" : "",
+    ].filter(Boolean).join("; ");
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Set-Cookie": cookieFlags,
+    });
+    return res.end(JSON.stringify({ success: true }));
+  }
+
+  // POST /api/admin/logout — clear admin session
+  if (pathname === "/api/admin/logout" && req.method === "POST") {
+    const cookieHeader = req.headers.cookie || "";
+    const match = cookieHeader.match(/(?:^|;\s*)sb_admin=([a-f0-9]{64})/);
+    if (match) ADMIN_SESSIONS.delete(match[1]);
+
+    const isSecure = BASE_URL.startsWith("https");
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Set-Cookie": [
+        "sb_admin=deleted",
+        "HttpOnly",
+        "Path=/",
+        "Max-Age=0",
+        "SameSite=Strict",
+        isSecure ? "Secure" : "",
+      ].filter(Boolean).join("; "),
+    });
+    return res.end(JSON.stringify({ success: true }));
+  }
+
+  // GET /api/admin/check — check if current session is authenticated
+  if (pathname === "/api/admin/check" && req.method === "GET") {
+    return json(res, { authenticated: isAdminAuthed(req) });
+  }
+
+  // GET /api/admin/stats — cost dashboard data
+  if (pathname === "/api/admin/stats" && req.method === "GET") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const logPath = path.join(__dirname, "../data/cost-log.json");
     let runs = [];
     if (fs.existsSync(logPath)) {
@@ -462,9 +569,7 @@ const server = http.createServer(async (req, res) => {
         delivery_time_raw:  prefs.delivery_time || "07:00",
         days_of_week:       allowedDays,
         depth:              depthLabel(prefs.depth),
-        // Use localhost so admin links always open directly on the local server
-        // (avoids Cloudflare Tunnel round-trip and works even if tunnel is down)
-        settings_url:       u.email ? `http://localhost:${PORT}/admin/user?email=${encodeURIComponent(u.email)}` : null,
+        settings_url:       u.email ? `${BASE_URL}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
 
@@ -505,13 +610,9 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // GET /api/admin/user-by-email?email=... — admin user lookup (localhost only)
-  // Used by admin-user.html to load a user's full data for editing
+  // GET /api/admin/user-by-email?email=... — admin user lookup
   if (pathname === "/api/admin/user-by-email" && req.method === "GET") {
-    const clientIp = req.socket.remoteAddress || "";
-    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
-      return json(res, { error: "admin access only" }, 403);
-    }
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const emailParam = url.searchParams.get("email");
     if (!emailParam) return json(res, { error: "email required" }, 400);
     const adminUser = allUsers().find(u => u.email.toLowerCase() === emailParam.toLowerCase().trim());
@@ -519,12 +620,9 @@ const server = http.createServer(async (req, res) => {
     return json(res, adminUser);
   }
 
-  // POST /api/admin/run-digest — trigger a digest run (localhost only)
+  // POST /api/admin/run-digest — trigger a digest run
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
-    const clientIp = req.socket.remoteAddress || "";
-    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
-      return json(res, { error: "admin access only" }, 403);
-    }
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const body = await readBody(req);
     const digestPath = path.join(__dirname, "../digest.js");
     const extraArgs  = body.chatId ? ["--chatId", String(body.chatId)] : [];
@@ -550,6 +648,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/archive" || pathname === "/archive.html") {
     return serveFile(res, path.join(WEB_DIR, "archive.html"));
+  }
+  if (pathname === "/admin/login") {
+    return serveFile(res, path.join(WEB_DIR, "admin-login.html"));
   }
   if (pathname === "/admin" || pathname === "/admin.html") {
     return serveFile(res, path.join(WEB_DIR, "admin.html"));

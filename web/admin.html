@@ -177,6 +177,16 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .btn-action-teal { background:#0F766E; color:#fff; }
 .btn-action-teal:hover { background:#0D6B63; }
 .btn-action-teal:disabled { background:var(--text-secondary); cursor:not-allowed; }
+.test-target-wrap { width:100%; display:flex; flex-direction:column; gap:4px; margin-top:2px; }
+.test-target-label {
+  font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase;
+  color:var(--text-secondary); text-align:right;
+}
+.test-target-select {
+  width:100%; border:1.5px solid var(--border); border-radius:8px; padding:7px 10px;
+  font-size:12px; font-family:inherit; color:var(--text-2); background:#fff;
+}
+.test-target-select:focus { outline:none; border-color:var(--accent); }
 
 /* Export CSV / small secondary buttons */
 .btn-secondary {
@@ -230,7 +240,13 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:260px;">
       <button id="runDigestBtn" class="btn-action btn-action-primary" onclick="triggerDigest()">▶ Run digest now</button>
       <div id="runDigestMsg" style="font-size:12px;color:var(--green);display:none;"></div>
-      <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest (me)</button>
+      <div class="test-target-wrap">
+        <div class="test-target-label">Test target</div>
+        <select id="testDigestTarget" class="test-target-select" aria-label="Test digest target">
+          <option value="">Loading targets…</option>
+        </select>
+      </div>
+      <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest</button>
       <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
     </div>
   </div>
@@ -430,6 +446,32 @@ function csvEscape(v) {
   const s = v == null ? "" : String(v);
   return `"${s.replace(/"/g, '""')}"`;
 }
+function renderTestTargets(roster) {
+  const sel = document.getElementById("testDigestTarget");
+  const btn = document.getElementById("testDigestBtn");
+  if (!sel) return;
+  const prev = sel.value;
+  const targets = (roster || []).filter(u =>
+    u.status === "active" &&
+    u.chat_id &&
+    !String(u.chat_id).startsWith("email-")
+  );
+  if (!targets.length) {
+    sel.innerHTML = `<option value="">No Telegram-linked users</option>`;
+    sel.disabled = true;
+    if (btn) btn.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  if (btn) btn.disabled = false;
+  sel.innerHTML = targets.map(u => {
+    const label = `${u.name || "User"} · ${u.email || u.chat_id}`;
+    return `<option value="${esc(u.chat_id)}">${esc(label)}</option>`;
+  }).join("");
+  if (prev && targets.some(u => String(u.chat_id) === prev)) {
+    sel.value = prev;
+  }
+}
 function renderRunRecipients(run) {
   const recipients = Array.isArray(run?.per_user)
     ? run.per_user.map(u => (u && u.id ? String(u.id) : "")).filter(Boolean)
@@ -467,7 +509,6 @@ function countActiveTelegramUsers(roster) {
   return (roster || []).filter(u => u.status === "active" && u.telegram).length;
 }
 let latestRoster = [];
-let testDigestPoll = null;
 let autoRefreshTimer = null;
 let loadInFlight = false;
 const AUTO_REFRESH_MS = 60000;
@@ -785,9 +826,11 @@ function downloadScheduleCsv() {
 function renderTestDigestStatus(status) {
   const btn = document.getElementById("testDigestBtn");
   const msg = document.getElementById("testDigestMsg");
-  const baseLabel = "🧪 Send test digest (me)";
+  const targetSel = document.getElementById("testDigestTarget");
+  const canRun = !!(targetSel && !targetSel.disabled && targetSel.value);
+  const baseLabel = "🧪 Send test digest";
   if (!status || !status.state || status.state === "idle") {
-    btn.disabled = false;
+    btn.disabled = !canRun;
     btn.textContent = baseLabel;
     msg.style.display = "none";
     return;
@@ -821,55 +864,33 @@ async function parseApiJson(res) {
   }
 }
 
-async function refreshTestDigestStatus(silent = false) {
-  try {
-    const res = await fetch("/api/admin/test-digest-status");
-    const status = await parseApiJson(res);
-    if (!res.ok) throw new Error(status.error || `Failed to load status (HTTP ${res.status})`);
-    renderTestDigestStatus(status);
-    if (status.state === "running") {
-      if (!testDigestPoll) {
-        testDigestPoll = setInterval(() => { refreshTestDigestStatus(true); }, 2500);
-      }
-    } else if (testDigestPoll) {
-      clearInterval(testDigestPoll);
-      testDigestPoll = null;
-    }
-  } catch (e) {
-    if (!silent) {
-      const msg = document.getElementById("testDigestMsg");
-      msg.textContent = `❌ ${e.message || "Could not load test digest status"}`;
-      msg.style.color = "var(--red)";
-      msg.style.display = "block";
-    }
-  }
-}
-
 async function triggerTestDigest() {
   const btn = document.getElementById("testDigestBtn");
   const msg = document.getElementById("testDigestMsg");
+  const targetSel = document.getElementById("testDigestTarget");
+  const targetChatId = targetSel ? targetSel.value : "";
+  const targetLabel = (targetSel && targetSel.selectedOptions && targetSel.selectedOptions[0])
+    ? targetSel.selectedOptions[0].textContent
+    : targetChatId;
+  if (!targetChatId) {
+    renderTestDigestStatus({ state: "failed", message: "Choose a Telegram-linked test target first." });
+    return;
+  }
   btn.disabled = true;
   btn.textContent = "🧪 Starting…";
   msg.style.display = "none";
   try {
-    // Primary path: POST. Fallback to GET for environments/proxies that block POST.
-    let res;
-    try {
-      res = await fetch("/api/admin/run-test-digest", { method: "POST", credentials: "same-origin" });
-    } catch (postErr) {
-      res = await fetch("/api/admin/run-test-digest", { method: "GET", credentials: "same-origin" });
-    }
+    const res = await fetch("/api/admin/run-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId: targetChatId }),
+    });
     const data = await parseApiJson(res);
     if (!res.ok || !data.success) {
-      let errorMsg = data.error || `Failed to start test digest (HTTP ${res.status})`;
-      if (res.status === 404) {
-        errorMsg = "Test-digest endpoint not found on server. Restart web service on latest main.";
-      }
-      renderTestDigestStatus({ state: "failed", message: errorMsg });
+      renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${res.status})` });
       return;
     }
-    renderTestDigestStatus(data.status || { state: "running", message: "Digest run in progress" });
-    await refreshTestDigestStatus(true);
+    renderTestDigestStatus({ state: "success", message: `Digest queued for ${targetLabel}` });
   } catch (e) {
     renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
   }
@@ -913,7 +934,8 @@ async function load(silent = false) {
 
     renderSchedule(roster || []);
     renderScheduleDashboard(roster || []);
-    await refreshTestDigestStatus(true);
+    renderTestTargets(roster || []);
+    renderTestDigestStatus({ state: "idle" });
 
     if (summary.month_label) {
       document.getElementById("monthLabel").textContent = summary.month_label;

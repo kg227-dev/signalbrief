@@ -42,6 +42,7 @@ tbody td { font-size:13px; padding:11px 16px; border-bottom:1px solid var(--bord
 tbody tr:last-child td { border-bottom:none; }
 tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
+.topics-cell { white-space:normal; line-height:1.45; min-width:280px; max-width:460px; }
 
 .badge-on-demand { font-size:10px; font-weight:700; color:#fff; background:#7C3AED; padding:2px 7px; border-radius:100px; letter-spacing:0.03em; }
 .badge-scheduled { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
@@ -481,7 +482,6 @@ function renderScheduleDashboard(roster) {
 
   body.innerHTML = active.map(u => {
     const topics = u.topics_list || "—";
-    const topicsShort = topics.length > 48 ? topics.slice(0, 48) + "…" : topics;
     const action = u.settings_url ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;">edit →</a>` : "—";
     return `<tr>
       <td style="font-weight:600;">${esc(u.name || "—")}</td>
@@ -489,7 +489,7 @@ function renderScheduleDashboard(roster) {
       <td>${esc(u.days_label || "—")}</td>
       <td class="mono">${esc(u.delivery_time || "—")}</td>
       <td class="mono">${esc(u.timezone || "America/New_York")}</td>
-      <td title="${esc(topics)}" style="max-width:240px;">${esc(topicsShort)}</td>
+      <td class="topics-cell">${esc(topics)}</td>
       <td>${u.items_per_digest || 5}</td>
       <td>${esc(u.depth || "Deep")}</td>
       <td class="mono">${esc(u.next_delivery_et || "—")}</td>

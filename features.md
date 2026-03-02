@@ -10,8 +10,7 @@ All P0 ship-blocking bugs (P0-1 through P0-6) have been fixed.
 All P1 MVP features (P1-1 through P1-12) have been implemented.
 All P2 post-launch fixes (P2-1 through P2-15) have been implemented.
 Admin user editor page (admin-user.html) has been built.
-All B-1 through B-7 bugs have been fixed (2026-03-02).
-B-8 (topic weight impact) is the next item to address.
+All B-1 through B-8 bugs have been fixed (2026-03-02).
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -42,10 +41,8 @@ HMAC signature (`?sig=...`) now required on email-based unsubscribe URLs. Genera
 ### ✅ B-7: Concurrent writes can clobber user data — **Fixed**
 `store.js` `writeUser()` now uses atomic write: write to `.tmp` then `fs.renameSync()` (POSIX-atomic).
 
-### B-8: Topic weights have limited impact on ranking — **Next up**
-Users can adjust topic weights via "more/less", but the scores don't strongly reflect these preferences. `topic_weights` is stored but its influence on final ranking is marginal. Users may not perceive personalization working at all.
-- Files: `digest.js` (applyRelevanceScores), `reply-handler.js`
-- Fix: Incorporate `topic_weights` directly into the relevance scoring formula with a measurable impact. Log before/after item ordering for validation during development.
+### ✅ B-8: Topic weights have limited impact on ranking — **Fixed**
+`applyRelevanceScores()` now accepts `topic_weights` and applies ±0.5 pts per weight unit via `matchWeightToTag()` (fuzzy key→tag matching). Digest logs before/after item order whenever a user has non-zero weights.
 
 ---
 

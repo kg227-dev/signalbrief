@@ -197,7 +197,6 @@ function getSettingsFrequency() {
 async function init() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token');
-  const adminEmail = params.get('email'); // admin-only: localhost bypass via email lookup
   const loadingEl = document.getElementById('loadingState');
   const formEl = document.getElementById('settingsForm');
   const notFoundEl = document.getElementById('notFoundState');
@@ -215,24 +214,17 @@ async function init() {
     return;
   }
 
-  if (!token && !adminEmail) {
+  if (!token) {
     loadingEl.style.display = 'none';
     notFoundEl.style.display = 'block';
     return;
   }
 
   try {
-    let res;
-    if (adminEmail) {
-      // Admin mode: fetch by email (only works from localhost — server enforces IP check)
-      res = await fetch('/api/admin/user-by-email?email=' + encodeURIComponent(adminEmail));
-    } else {
-      res = await fetch('/api/user?token=' + encodeURIComponent(token));
-    }
+    const res = await fetch('/api/user?token=' + encodeURIComponent(token));
     if (!res.ok) throw new Error('not found');
     const user = await res.json();
-    // In admin mode, use the user's actual token for saves (falls back gracefully if missing)
-    const effectiveToken = token || user.token || '';
+    const effectiveToken = token;
 
     loadingEl.style.display = 'none';
     formEl.style.display = 'block';
@@ -284,14 +276,6 @@ async function init() {
     // Day circles — populate from saved days_of_week, fall back to frequency string
     const savedDays = prefs.days_of_week || daysFromFrequency(prefs.frequency);
     initSettingsDays(savedDays);
-
-    // Show admin banner when editing on behalf of a user
-    if (adminEmail) {
-      const banner = document.createElement('div');
-      banner.style.cssText = 'background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#92400E;font-weight:500;';
-      banner.innerHTML = '⚙️ Admin view — editing settings for <strong>' + user.email + '</strong>';
-      formEl.insertBefore(banner, formEl.firstChild);
-    }
 
     // Save
     document.getElementById('saveBtn').addEventListener('click', async function() {

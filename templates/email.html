@@ -76,19 +76,32 @@
     </div>
 
     <!-- Footer -->
-    <div class="footer" style="padding:20px 40px 28px;background:#F9FAFB;border-top:1px solid #E5E7EB;">
-      {{SETTINGS_FOOTER}}
-      <div style="font-size:11px;color:#9CA3AF;text-align:center;line-height:1.7;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #E5E7EB;">
-        <span style="font-weight:600;color:#6B7280;">About relevance scores</span> — Each item is scored 0–10 based on your selected topics (40%), market significance (35%), and strategic utility for consultants (25%).&nbsp;
-        <span style="display:inline-block;width:8px;height:8px;background:#16A34A;border-radius:2px;vertical-align:middle;"></span>&nbsp;8.5+&nbsp;
-        <span style="display:inline-block;width:8px;height:8px;background:#EAB308;border-radius:2px;vertical-align:middle;"></span>&nbsp;5–8.4&nbsp;
-        <span style="display:inline-block;width:8px;height:8px;background:#EF4444;border-radius:2px;vertical-align:middle;"></span>&nbsp;below 5
+    <div class="footer" style="padding:0;background:#F9FAFB;border-top:1px solid #E5E7EB;">
+
+      <!-- Forward CTA -->
+      <div style="padding:24px 40px 20px;text-align:center;border-bottom:1px solid #E5E7EB;">
+        <div style="font-size:13px;color:#6B7280;margin-bottom:12px;">Know a colleague who'd find this useful?</div>
+        <a href="mailto:?subject=You%20should%20read%20SignalBrief&body=I%20get%20a%20daily%20AI-curated%20briefing%20for%20strategy%20professionals%20%E2%80%94%20signals%20across%20healthcare%2C%20PE%2C%20AI%2C%20policy%2C%20and%20more.%20Worth%20a%20look%3A%20https%3A%2F%2Fgetsignalbrief.com"
+          style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 28px;border-radius:100px;">
+          Forward to a colleague →
+        </a>
       </div>
-      <div class="footer-legal" style="font-size:11px;color:#9CA3AF;text-align:center;line-height:1.7;">
-        SignalBrief is curated daily for strategy professionals.<br>
-        <a href="{{BASE_URL}}/archive?token={{SETTINGS_TOKEN}}" style="color:#9CA3AF;">Browse past digests</a> &nbsp;·&nbsp; <a href="{{BASE_URL}}/settings?token={{SETTINGS_TOKEN}}" style="color:#9CA3AF;">Update preferences</a> &nbsp;·&nbsp; <a href="{{BASE_URL}}/settings?token={{SETTINGS_TOKEN}}#unsub" style="color:#9CA3AF;">Unsubscribe</a><br><br>
-        SignalBrief · Daily intelligence for strategy professionals
+
+      <!-- Settings card + nav links -->
+      <div style="padding:20px 40px 28px;">
+        {{SETTINGS_FOOTER}}
+        <div style="text-align:center;padding-top:16px;border-top:1px solid #E5E7EB;">
+          <a href="{{BASE_URL}}/archive?token={{SETTINGS_TOKEN}}" style="font-size:12px;color:#6B7280;text-decoration:none;font-weight:500;">Browse past digests</a>
+          <span style="color:#D1D5DB;margin:0 8px;">·</span>
+          <a href="{{BASE_URL}}/settings?token={{SETTINGS_TOKEN}}" style="font-size:12px;color:#6B7280;text-decoration:none;font-weight:500;">Update preferences</a>
+          <span style="color:#D1D5DB;margin:0 8px;">·</span>
+          <a href="{{BASE_URL}}/settings?token={{SETTINGS_TOKEN}}#unsub" style="font-size:12px;color:#6B7280;text-decoration:none;font-weight:500;">Unsubscribe</a>
+        </div>
+        <div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:12px;">
+          SignalBrief · Daily intelligence for strategy professionals
+        </div>
       </div>
+
     </div>
 
   </div>

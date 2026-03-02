@@ -2,7 +2,7 @@
 
 > AI-curated daily news digest for strategy professionals — across AI, healthcare, finance, PE, policy, and more.
 
-Each user gets a personalized briefing: choose your topics, delivery time, how deep you want the analysis, and how many items. Sharp consultant-grade "why it matters" on every story. Built to be forwarded.
+Each user gets a personalized briefing: choose your topics, delivery time, analysis depth, and item count. Sharp consultant-grade "why it matters" on every story. Built to be forwarded.
 
 ---
 
@@ -16,8 +16,8 @@ Each user gets a personalized briefing: choose your topics, delivery time, how d
 - Tracks bookmarks and topic preferences per user
 - On-demand digest via `/digest` Telegram command
 - Telegram-first onboarding — sign up directly in the bot with `/start your@email.com`
-- Past digests browsable at `/archive`
-- Admin cost dashboard at `/admin` — per-run API spend tracking
+- Past digests browsable at `/archive` (token-gated)
+- Admin dashboard at `/admin` — cost tracking, upcoming schedule, user roster
 
 ---
 
@@ -28,18 +28,18 @@ Perplexity Sonar (17 topics in parallel)
         ↓
    selectItems() — dedup + interleave + tag cap
         ↓
-   Claude Haiku — "why it matters" enrichment + base relevance score
+   Claude Haiku — "why it matters" enrichment + base relevance score (0–10)
         ↓
-  ┌──────────────────────────────────────┐
-  │  Per-user delivery fan-out           │
-  │  - relevance sort (baseScore + topicMatch) │
-  │  - topic filter                      │
-  │  - items_per_digest (5 or 10)        │
-  │  - depth preference                  │
-  │  → Telegram bot (@signalbrief29bot)  │
-  │  → Resend API → HTML email           │
-  │     (Gmail OAuth fallback)           │
-  └──────────────────────────────────────┘
+  ┌──────────────────────────────────────────┐
+  │  Per-user delivery fan-out               │
+  │  - relevance sort (baseScore 60% + topicMatch 40%) │
+  │  - topic filter                          │
+  │  - items_per_digest (5 or 10)            │
+  │  - depth preference                      │
+  │  → Telegram bot (@signalbrief29bot)      │
+  │  → Resend API → HTML email               │
+  │     (Gmail OAuth fallback)               │
+  └──────────────────────────────────────────┘
         ↓
    saveToArchive() — archive/YYYY-MM-DD.json
    logCosts() — data/cost-log.json
@@ -62,13 +62,14 @@ Perplexity Sonar (17 topics in parallel)
 | `config.example.json` | Template — copy to config.json and fill in keys |
 | `web/server.js` | Onboarding + settings + archive + admin API server (port 3003) |
 | `web/index.html` | New user onboarding (4-step form) |
-| `web/settings.html` | Self-serve preferences page |
-| `web/archive.html` | Digest archive — list + detail reader |
-| `web/admin.html` | Admin dashboard — API cost tracking + user roster |
+| `web/settings.html` | Self-serve preferences page (token-gated) |
+| `web/archive.html` | Digest archive — list + detail reader (token-gated) |
+| `web/admin.html` | Admin dashboard — cost tracking, upcoming schedule, user roster |
+| `web/admin-user.html` | Admin per-user editor — edit settings, pause/resume/unsub on behalf of user |
 | `CLAUDE.md` | Codebase context for Claude Code |
-| `FORMAT-RULES.md` | Editorial format rules |
-| `SPEC.md` | Full product specification |
-| `ROADMAP.md` | Batch-based build roadmap |
+| `FORMAT-RULES.md` | Editorial format rules (locked) |
+| `SPEC.md` | Full product specification + principles |
+| `features.md` | Feature backlog — known bugs + P1–P4 roadmap |
 
 ---
 
@@ -117,20 +118,37 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 
 ## Web Layer
 
+### User-facing pages
+
 | URL | Purpose |
 |-----|---------|
-| `/` | New user onboarding |
-| `/settings?email=you@co.com` | Self-serve preferences |
-| `/archive` | Browse past digests |
-| `/admin` | API cost dashboard + user roster (local only) |
-| `GET /api/user?email=...` | Load user profile |
-| `POST /api/signup` | Create/update user from onboarding form |
-| `POST /api/settings` | Update preferences from settings page |
-| `GET /api/topics` | All 17 topics (flat + grouped by industry/capability) |
+| `/` | New user onboarding (4-step: details, topics, depth, schedule) |
+| `/settings?token=...` | Self-serve preferences editor |
+| `/archive` | Browse and read past digests (prompts for magic link if no token) |
+
+### API — public
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/signup` | Create user from onboarding form, returns token |
+| `GET /api/user?token=...` | Load user profile by token |
+| `POST /api/settings` | Update preferences (requires token) |
+| `GET /api/topics` | All 17 topics — flat list + grouped by industry/capability |
 | `GET /api/archive` | List all archived digest dates |
 | `GET /api/archive/:date` | Full digest for a specific date (YYYY-MM-DD) |
-| `GET /api/admin/stats` | Cost summary, run log, per-user costs, user roster |
-| `GET\|POST /api/unsubscribe?email=...` | One-click unsubscribe (RFC 8058 compliant) |
+| `GET /api/unsubscribe?token=...` | One-click unsubscribe via email link |
+| `POST /api/unsubscribe` | Machine-initiated unsubscribe (RFC 8058 compliant, email param) |
+| `POST /api/request-link` | Send a magic settings link to an email address |
+
+### API — admin (localhost only)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/admin` | Cost dashboard, upcoming schedule, run log, user roster |
+| `/admin/user?email=...` | Per-user admin editor |
+| `GET /api/admin/stats` | Full stats payload: summary, health, runs, per-user costs, roster |
+| `GET /api/admin/user-by-email?email=...` | Load user data by email |
+| `POST /api/admin/run-digest` | Trigger a digest run immediately |
 
 ---
 
@@ -238,13 +256,7 @@ Existing web signups link their Telegram account by sending `/start their@email.
 | `M&A ADVISORY` | Deal advisory, integration, valuation trends |
 | `TALENT` | Workforce, hiring, org restructuring, compensation |
 
-Custom topics also supported (e.g. "GLP-1", "quantum computing", "DOGE").
-
----
-
-## Archive
-
-Every digest run saves to `archive/YYYY-MM-DD.json`. The `/archive` web page lets you browse and read past issues. Archive files are gitignored.
+Custom topics also supported (e.g. "GLP-1", "quantum computing", "DOGE"). Stored with `custom_` prefix; dedicated Perplexity fetch not yet wired (see features.md P2-1).
 
 ---
 
@@ -252,7 +264,7 @@ Every digest run saves to `archive/YYYY-MM-DD.json`. The `/archive` web page let
 
 - **Node.js** — stdlib only, zero npm dependencies, no build step
 - **Perplexity Sonar** — real-time news with citations
-- **Claude Haiku** — editorial enrichment, relevance scoring + intent parsing
+- **Claude Haiku** (`claude-haiku-4-5`) — editorial enrichment, relevance scoring + intent parsing
 - **Resend** — branded transactional email
 - **Gmail OAuth** — email fallback
 - **Telegram Bot API** — daily digest + reply handling

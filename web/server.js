@@ -411,22 +411,24 @@ const server = http.createServer(async (req, res) => {
       const hour = dh % 12 || 12;
       const min  = dm === 0 ? "" : `:${String(dm).padStart(2,"0")}`;
       return {
-        name:          u.name || "",
-        email:         u.email || "",
-        status:        u.status || "active",
-        joined:        toETDate(u.joined_at),
-        digests:       u.digests_received || 0,
-        last_digest:   toETDate(u.last_digest_at),
-        telegram:      !!(u.chatId && !u.chatId.startsWith("email-")),
-        topics:        (u.topics || []).length,
-        topics_list:   (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
-        bookmarks:     (u.bookmarks || []).length,
-        adjustments:   Object.keys(u.topic_weights || {}).length,
-        delivery_time: `${hour}${min} ${ampm} ET`,
-        depth:         depthLabel(prefs.depth),
+        name:               u.name || "",
+        email:              u.email || "",
+        status:             u.status || "active",
+        joined:             toETDate(u.joined_at),
+        digests:            u.digests_received || 0,
+        last_digest:        toETDate(u.last_digest_at),
+        telegram:           !!(u.chatId && !u.chatId.startsWith("email-")),
+        topics:             (u.topics || []).length,
+        topics_list:        (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
+        bookmarks:          (u.bookmarks || []).length,
+        adjustments:        Object.keys(u.topic_weights || {}).length,
+        delivery_time:      `${hour}${min} ${ampm} ET`,
+        delivery_time_raw:  prefs.delivery_time || "07:00",
+        days_of_week:       prefs.days_of_week || [1, 2, 3, 4, 5],
+        depth:              depthLabel(prefs.depth),
         // Use localhost so admin links always open directly on the local server
         // (avoids Cloudflare Tunnel round-trip and works even if tunnel is down)
-        settings_url:  u.email ? `http://localhost:${PORT}/admin/user?email=${encodeURIComponent(u.email)}` : null,
+        settings_url:       u.email ? `http://localhost:${PORT}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
 
@@ -462,7 +464,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // GET /api/admin/user-by-email?email=... — admin user lookup (localhost only)
-  // Used by settings.html when opened from the admin roster (?email=... param)
+  // Used by admin-user.html to load a user's full data for editing
   if (pathname === "/api/admin/user-by-email" && req.method === "GET") {
     const clientIp = req.socket.remoteAddress || "";
     if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {

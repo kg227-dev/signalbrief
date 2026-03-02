@@ -58,6 +58,32 @@ tbody tr:hover td { background:#FAFAFA; }
 .tg-yes  { color:var(--green); font-size:15px; }
 .tg-no   { color:#D1D5DB;     font-size:15px; }
 
+/* Upcoming deliveries */
+.schedule-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:36px; }
+.schedule-day  { border-bottom:1px solid var(--border); }
+.schedule-day:last-child { border-bottom:none; }
+.schedule-day-header {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 16px; background:#F9FAFB;
+  font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary);
+  border-bottom:1px solid var(--border);
+}
+.schedule-today-badge {
+  font-size:10px; font-weight:700; color:#fff; background:var(--accent);
+  padding:1px 7px; border-radius:100px; letter-spacing:0.03em; text-transform:uppercase;
+}
+.schedule-row {
+  display:flex; align-items:center; gap:16px; padding:10px 16px;
+  border-bottom:1px solid #F3F4F6; font-size:13px;
+}
+.schedule-row:last-child { border-bottom:none; }
+.schedule-time { font-family:ui-monospace,monospace; font-size:12px; font-weight:600; color:var(--text); min-width:80px; }
+.schedule-name { font-weight:600; min-width:100px; }
+.schedule-meta { color:var(--text-secondary); font-size:12px; }
+.schedule-link { margin-left:auto; color:var(--accent); font-size:12px; font-weight:500; text-decoration:none; }
+.schedule-link:hover { text-decoration:underline; }
+.schedule-empty { padding:24px 16px; text-align:center; color:var(--text-secondary); font-size:13px; }
+
 @media (max-width:640px) {
   .cards { grid-template-columns:1fr 1fr; }
   table { font-size:12px; }
@@ -101,6 +127,12 @@ tbody tr:hover td { background:#FAFAFA; }
       </button>
       <div id="runDigestMsg" style="font-size:12px;color:var(--green);margin-top:4px;display:none;"></div>
     </div>
+  </div>
+
+  <!-- Upcoming deliveries -->
+  <div class="section-title">Upcoming deliveries (next 7 days)</div>
+  <div class="schedule-wrap" id="scheduleWrap">
+    <div class="schedule-empty">Loading…</div>
   </div>
 
   <!-- Summary cards -->
@@ -217,6 +249,94 @@ function costClass(n) {
   return "cost-low";
 }
 
+// ── Upcoming schedule ─────────────────────────────────────────────────────────
+function renderSchedule(roster) {
+  const wrap = document.getElementById("scheduleWrap");
+  const active = roster.filter(u => u.status === "active");
+
+  if (!active.length) {
+    wrap.innerHTML = `<div class="schedule-empty">No active subscribers.</div>`;
+    return;
+  }
+
+  // Current ET date and time-of-day in minutes
+  const etNowStr = new Date().toLocaleString("en-US", {
+    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit",
+    hour12: false, year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  // Parse: "MM/DD/YYYY, HH:MM"
+  const [datePart, timePart] = etNowStr.split(", ");
+  const [mo, dy, yr] = datePart.split("/").map(Number);
+  const [nowH, nowM] = timePart.split(":").map(Number);
+  const nowMinutes = nowH * 60 + nowM;
+
+  // Build events for next 7 days
+  const events = [];
+  for (let i = 0; i < 7; i++) {
+    // Compute ET calendar date for today+i
+    const d = new Date(yr, mo - 1, dy + i);
+    const dayOfWeek = d.getDay(); // 0=Sun,1=Mon…6=Sat
+    const isToday = i === 0;
+    const dateKey = d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const dateLabel = `${dayNames[dayOfWeek]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+
+    for (const u of active) {
+      const days = u.days_of_week || [1, 2, 3, 4, 5];
+      if (!days.includes(dayOfWeek)) continue;
+
+      const [dh, dm] = (u.delivery_time_raw || "07:00").split(":").map(Number);
+      const deliveryMinutes = dh * 60 + dm;
+
+      // Skip if today and delivery time has already passed
+      if (isToday && deliveryMinutes <= nowMinutes) continue;
+
+      events.push({ dateKey, dateLabel, isToday, timeSortKey: deliveryMinutes,
+        time: u.delivery_time, name: u.name || u.email, topics: u.topics,
+        depth: u.depth, settings_url: u.settings_url, email: u.email });
+    }
+  }
+
+  if (!events.length) {
+    wrap.innerHTML = `<div class="schedule-empty">No scheduled deliveries in the next 7 days.</div>`;
+    return;
+  }
+
+  // Sort by date then time
+  events.sort((a, b) => a.dateKey < b.dateKey ? -1 : a.dateKey > b.dateKey ? 1 : a.timeSortKey - b.timeSortKey);
+
+  // Group by date
+  const byDate = [];
+  let lastKey = null;
+  for (const ev of events) {
+    if (ev.dateKey !== lastKey) {
+      byDate.push({ dateKey: ev.dateKey, dateLabel: ev.dateLabel, isToday: ev.isToday, rows: [] });
+      lastKey = ev.dateKey;
+    }
+    byDate[byDate.length - 1].rows.push(ev);
+  }
+
+  wrap.innerHTML = byDate.map(day => `
+    <div class="schedule-day">
+      <div class="schedule-day-header">
+        ${esc(day.dateLabel)}
+        ${day.isToday ? `<span class="schedule-today-badge">Today</span>` : ""}
+      </div>
+      ${day.rows.map(ev => `
+        <div class="schedule-row">
+          <span class="schedule-time">${esc(ev.time)}</span>
+          <span class="schedule-name">${esc(ev.name)}</span>
+          <span class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</span>
+          ${ev.settings_url
+            ? `<a href="${esc(ev.settings_url)}" target="_blank" class="schedule-link">edit →</a>`
+            : `<span style="margin-left:auto;color:var(--text-secondary);font-size:12px;">—</span>`}
+        </div>
+      `).join("")}
+    </div>
+  `).join("");
+}
+
 async function load() {
   // Set month label
   const now = new Date();
@@ -234,6 +354,9 @@ async function load() {
   }
 
   const { summary, health, runs, per_user, roster } = data;
+
+  // Upcoming deliveries schedule
+  renderSchedule(roster || []);
 
   // Month label from server (ET timezone, not browser local)
   if (summary.month_label) {

@@ -432,18 +432,18 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
       .join(" · ") || "—";
     const sSettingsUrl = `${BASE_URL}/settings?token=${userToken}`;
     settingsFooter = `
-    <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E5E7EB;">
-      <tr valign="top">
+    <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:16px;background:#F3F4F6;border-radius:8px;padding:14px 16px;">
+      <tr valign="middle">
         <td>
           <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px;">Your digest settings</div>
-          <div style="font-size:11px;color:#6B7280;line-height:1.9;">
+          <div style="font-size:12px;color:#6B7280;line-height:1.9;">
             <span style="color:#374151;font-weight:600;">Topics</span>&nbsp;&nbsp;${sTopics}<br>
             <span style="color:#374151;font-weight:600;">Delivery</span>&nbsp;&nbsp;${sTimeStr} · ${sDaysStr}<br>
             <span style="color:#374151;font-weight:600;">Depth</span>&nbsp;&nbsp;${sDepth}
           </div>
         </td>
-        <td style="text-align:right;vertical-align:middle;padding-left:12px;">
-          <a href="${sSettingsUrl}" style="font-size:11px;font-weight:600;color:#2563EB;text-decoration:none;white-space:nowrap;">Edit settings →</a>
+        <td style="text-align:right;vertical-align:middle;padding-left:12px;white-space:nowrap;">
+          <a href="${sSettingsUrl}" style="display:inline-block;font-size:12px;font-weight:600;color:#2563EB;text-decoration:none;border:1.5px solid #BFDBFE;background:#EFF6FF;padding:7px 16px;border-radius:100px;">Edit settings →</a>
         </td>
       </tr>
     </table>`;
@@ -565,10 +565,33 @@ async function main() {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
 
-  // Fetch all topics in parallel
+  // Fetch all standard topics in parallel
   const allResults = await Promise.all(CONFIG.topics.map(fetchTopicNews));
   const allItems = allResults.flat();
   log(`Fetched ${allItems.length} raw items`);
+
+  // Fetch custom topics for due users — deduplicated, capped at 5 queries per run
+  // Each custom topic gets a targeted Perplexity query so it actually appears in the digest
+  const customTopicSlugs = [...new Set(
+    dueUsers.flatMap(u => (u.topics || []).filter(t => t.startsWith("custom_")))
+  )].slice(0, 5);
+
+  if (customTopicSlugs.length > 0) {
+    const customFetchTargets = customTopicSlugs.map(slug => {
+      const keyword = slug.replace(/^custom_/, "").replace(/_/g, " ").trim();
+      return {
+        tag: keyword.toUpperCase(),   // e.g. "PFIZER", "GLP-1"
+        queries: [`${keyword} company news business strategy developments last 48 hours`],
+      };
+    });
+    log(`Fetching ${customFetchTargets.length} custom topic(s): ${customFetchTargets.map(t => t.tag).join(", ")}`);
+    const customResults = await Promise.all(customFetchTargets.map(fetchTopicNews));
+    const customItems = customResults.flat();
+    log(`Fetched ${customItems.length} custom topic item(s)`);
+    // Prepend so selectItems() sees custom items first — they have unique tags so they
+    // won't crowd out standard items; prepending ensures they're selected
+    allItems.unshift(...customItems);
+  }
 
   const selected = selectItems(allItems);
   log(`Selected ${selected.length} items`);
@@ -662,7 +685,11 @@ async function main() {
       }).join("\n");
       // Clean subject: first name + tagline (headlines get cut off and look ugly)
       const uFirstName = ((u.name || "").split(" ")[0]) || u.email.split("@")[0];
-      const userSubject = `SignalBrief — ${shortDate} | ${uFirstName}'s daily signal across AI, strategy, and business`;
+      // Use welcome_email_sent flag (not digests_received) so test runs don't consume the first-email slot
+      const isFirstDigest = !u.welcome_email_sent;
+      const userSubject = isFirstDigest
+        ? `Welcome to SignalBrief, ${uFirstName} 👋 — your first briefing is ready`
+        : `SignalBrief — ${shortDate} | ${uFirstName}'s daily signal across AI, strategy, and business`;
 
       // 5. Deliver
       if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
@@ -670,9 +697,9 @@ async function main() {
         await sendTelegram(userTelegram, u.chatId);
       }
       if (u.email && prefs.email_enabled !== false) {
-        const isFirstDigest = (u.digests_received || 0) === 0;
         const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth, u);
         await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
+        if (isFirstDigest) u.welcome_email_sent = true; // never show again once sent
         await new Promise(r => setTimeout(r, 600)); // Resend: 2 req/sec limit
       }
 

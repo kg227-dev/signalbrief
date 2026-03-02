@@ -412,7 +412,7 @@ const server = http.createServer(async (req, res) => {
         depth:         depthLabel(prefs.depth),
         // Use localhost so admin links always open directly on the local server
         // (avoids Cloudflare Tunnel round-trip and works even if tunnel is down)
-        settings_url:  u.email ? `http://localhost:${PORT}/settings?email=${encodeURIComponent(u.email)}` : null,
+        settings_url:  u.email ? `http://localhost:${PORT}/admin/user?email=${encodeURIComponent(u.email)}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
 
@@ -460,6 +460,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (pathname === "/admin" || pathname === "/admin.html") {
     return serveFile(res, path.join(WEB_DIR, "admin.html"));
+  }
+  if (pathname === "/admin/user") {
+    return serveFile(res, path.join(WEB_DIR, "admin-user.html"));
   }
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
   if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));

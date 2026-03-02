@@ -305,7 +305,7 @@ async function load() {
         ? `<span title="${esc(u.topics_list)}" style="cursor:default;">${u.topics} topics</span>`
         : `${u.topics || 0}`;
       const settingsLink = u.settings_url
-        ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;">open →</a>`
+        ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;">edit →</a>`
         : `<span style="color:var(--text-secondary);">—</span>`;
       return `<tr>
         <td style="font-weight:600;">${esc(u.name) || "—"}</td>

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edit User — SignalBrief Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FAFAF8; --card: #FFFFFF; --text: #1A1A1A; --text-secondary: #6B7280;
+  --accent: #2563EB; --accent-light: #EFF6FF;
+  --border: #E5E7EB; --radius: 12px;
+  --green: #16A34A; --yellow: #D97706; --red: #DC2626;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+.container { max-width:860px; margin:0 auto; padding:32px 24px 80px; }
+
+/* Header — matches admin.html */
+.header { margin-bottom:28px; padding-bottom:20px; border-bottom:1px solid var(--border); }
+.header-top { display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
+.header h1 { font-size:22px; font-weight:700; letter-spacing:-0.3px; }
+.header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; }
+.back-link { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-secondary); text-decoration:none; font-weight:500; margin-bottom:16px; }
+.back-link:hover { color:var(--accent); }
+
+/* User metadata bar */
+.meta-bar {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:16px 20px; margin-bottom:24px; display:flex; flex-wrap:wrap; gap:20px; align-items:center;
+}
+.meta-item { display:flex; flex-direction:column; gap:2px; }
+.meta-label { font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-secondary); }
+.meta-value { font-size:13px; font-weight:600; color:var(--text); }
+.meta-value.mono { font-family:ui-monospace,monospace; font-size:12px; }
+.status-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:100px; }
+.status-active   { color:#fff; background:var(--green); }
+.status-paused   { color:#fff; background:var(--yellow); }
+.status-unsubscribed { color:#fff; background:var(--red); }
+
+/* Form cards */
+.form-card {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:24px; margin-bottom:16px;
+}
+.card-title { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
+.card-heading { font-size:18px; font-weight:600; margin-bottom:16px; }
+
+/* Fields */
+.field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+.field { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+.field:last-child { margin-bottom:0; }
+label { font-size:12px; font-weight:600; color:var(--text-secondary); letter-spacing:0.02em; }
+input[type=text], input[type=email], select {
+  padding:9px 12px; border:1.5px solid var(--border); border-radius:8px;
+  font-size:14px; font-family:inherit; color:var(--text); background:#fff; outline:none;
+  transition:border-color 0.15s;
+}
+input[type=text]:focus, select:focus { border-color:var(--accent); }
+input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:default; }
+
+/* Topics */
+.section-subtitle { font-size:12px; color:var(--text-secondary); margin-bottom:12px; }
+.topic-group-label { width:100%; font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); padding:8px 0 4px; }
+.topic-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+.chip {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:6px 13px; border-radius:100px; font-size:13px; font-weight:500;
+  border:1.5px solid var(--border); cursor:pointer; transition:all 0.15s;
+  color:var(--text-secondary); background:#fff; user-select:none;
+}
+.chip:hover { border-color:#94A3B8; color:var(--text); }
+.chip.selected { background:var(--accent); border-color:var(--accent); color:#fff; }
+.chip-check { font-size:11px; opacity:0; }
+.chip.selected .chip-check { opacity:1; }
+.chip-custom { border-style:dashed; }
+.custom-row { display:flex; gap:8px; margin-top:10px; }
+.custom-row input { flex:1; }
+.btn-add { padding:9px 14px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.btn-add:hover { background:#1D4ED8; }
+.topic-note { font-size:11px; color:var(--text-secondary); margin-top:4px; }
+
+/* Depth */
+.depth-option {
+  display:flex; align-items:flex-start; gap:12px; padding:12px 14px;
+  border:1.5px solid var(--border); border-radius:8px; cursor:pointer;
+  margin-bottom:8px; transition:border-color 0.15s;
+}
+.depth-option.selected { border-color:var(--accent); background:var(--accent-light); }
+.depth-option input[type=radio] { display:none; }
+.depth-dot { width:16px; height:16px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; transition:border-color 0.15s; }
+.depth-option.selected .depth-dot { border-color:var(--accent); background:var(--accent); }
+.depth-inner { width:6px; height:6px; border-radius:50%; background:#fff; }
+.depth-label { font-size:14px; font-weight:600; margin-bottom:2px; }
+.depth-desc { font-size:12px; color:var(--text-secondary); }
+
+/* Schedule */
+.day-presets { display:flex; gap:8px; margin-bottom:10px; }
+.day-preset-btn {
+  padding:6px 14px; border-radius:100px; border:1.5px solid var(--border);
+  font-size:12px; font-weight:600; cursor:pointer; background:#fff; color:var(--text-secondary); font-family:inherit;
+}
+.day-preset-btn.active { border-color:var(--accent); background:var(--accent-light); color:var(--accent); }
+.day-circles { display:flex; gap:6px; flex-wrap:wrap; }
+.day-circle {
+  width:36px; height:36px; border-radius:50%; border:1.5px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:700; cursor:pointer; color:var(--text-secondary);
+  transition:all 0.15s; user-select:none;
+}
+.day-circle.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* Action bar */
+.action-bar {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 24px; margin-bottom:16px;
+}
+.action-bar-title { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:14px; }
+.action-row { display:flex; flex-wrap:wrap; gap:10px; }
+.btn { padding:9px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; border:1.5px solid transparent; transition:all 0.15s; }
+.btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.btn-primary:hover { background:#1D4ED8; }
+.btn-primary:disabled { opacity:0.6; cursor:not-allowed; }
+.btn-secondary { background:#fff; color:var(--text); border-color:var(--border); }
+.btn-secondary:hover { border-color:#94A3B8; }
+.btn-warn { background:#fff; color:var(--yellow); border-color:#FDE68A; }
+.btn-warn:hover { background:#FFFBEB; }
+.btn-danger-soft { background:#fff; color:var(--red); border-color:#FECACA; }
+.btn-danger-soft:hover { background:#FEF2F2; }
+
+.error-msg { font-size:13px; color:var(--red); margin-bottom:10px; display:none; }
+.saved-banner {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:#065F46; color:#fff; padding:12px 24px;
+  border-radius:100px; font-size:14px; font-weight:500;
+  display:none; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:100;
+}
+.saved-banner.visible { display:block; }
+.loading-state { text-align:center; padding:60px 24px; color:var(--text-secondary); }
+.error-state { text-align:center; padding:60px 24px; }
+
+@media (max-width:600px) {
+  .field-row { grid-template-columns:1fr; }
+  .meta-bar { gap:14px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <a href="/admin" class="back-link">← Back to Admin</a>
+
+  <div class="header">
+    <div class="header-top">
+      <h1>⚙️ Edit User</h1>
+      <span class="badge">localhost only</span>
+    </div>
+    <p id="headerSub" style="font-size:14px;color:var(--text-secondary);">Loading…</p>
+  </div>
+
+  <div id="loadingState" class="loading-state">Loading user…</div>
+  <div id="errorState" class="error-state" style="display:none">
+    <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
+    <div style="font-weight:600;font-size:17px;margin-bottom:8px;">User not found</div>
+    <div style="color:var(--text-secondary);margin-bottom:20px;font-size:14px;">This email doesn't match any user. <a href="/admin" style="color:var(--accent);">Back to Admin →</a></div>
+  </div>
+
+  <div id="mainContent" style="display:none">
+
+    <!-- Metadata bar -->
+    <div class="meta-bar" id="metaBar"></div>
+
+    <!-- Account -->
+    <div class="form-card">
+      <div class="card-title">Account</div>
+      <div class="card-heading">User details</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="name" placeholder="—">
+        </div>
+        <div class="field">
+          <label>Email address</label>
+          <input type="email" id="email" readonly>
+        </div>
+      </div>
+      <div class="field">
+        <label>Telegram username</label>
+        <input type="text" id="telegram" placeholder="@handle (or blank)">
+      </div>
+    </div>
+
+    <!-- Topics -->
+    <div class="form-card">
+      <div class="card-title">Topics</div>
+      <div class="card-heading">What they track</div>
+      <div class="section-subtitle">Minimum 2 required.</div>
+      <div class="topic-grid" id="topicGrid"></div>
+      <div class="topic-note" id="topicNote"></div>
+      <div class="custom-row">
+        <input type="text" id="customTopicInput" placeholder="Add a custom topic">
+        <button type="button" class="btn-add" id="addTopicBtn">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Depth -->
+    <div class="form-card">
+      <div class="card-title">Depth</div>
+      <div class="card-heading">Analysis depth</div>
+      <label class="depth-option" data-depth="headline_only">
+        <input type="radio" name="depth" value="headline_only">
+        <div class="depth-dot"><div class="depth-inner"></div></div>
+        <div><div class="depth-label">Scan</div><div class="depth-desc">Headline + source link. 60-second read.</div></div>
+      </label>
+      <label class="depth-option" data-depth="headline_plus_oneliner">
+        <input type="radio" name="depth" value="headline_plus_oneliner">
+        <div class="depth-dot"><div class="depth-inner"></div></div>
+        <div><div class="depth-label">Brief</div><div class="depth-desc">Headline + one-line takeaway. 2-minute read.</div></div>
+      </label>
+      <label class="depth-option" data-depth="headline_plus_why">
+        <input type="radio" name="depth" value="headline_plus_why">
+        <div class="depth-dot"><div class="depth-inner"></div></div>
+        <div><div class="depth-label">Deep</div><div class="depth-desc">Headline + strategic "why it matters." 4-minute read.</div></div>
+      </label>
+    </div>
+
+    <!-- Schedule -->
+    <div class="form-card">
+      <div class="card-title">Schedule</div>
+      <div class="card-heading">Delivery schedule</div>
+      <div class="field">
+        <label>Delivery time</label>
+        <select id="deliveryTime">
+          <option value="05:00">5:00 AM ET</option><option value="05:30">5:30 AM ET</option>
+          <option value="06:00">6:00 AM ET</option><option value="06:30">6:30 AM ET</option>
+          <option value="07:00">7:00 AM ET</option><option value="07:30">7:30 AM ET</option>
+          <option value="08:00">8:00 AM ET</option><option value="08:30">8:30 AM ET</option>
+          <option value="09:00">9:00 AM ET</option><option value="09:30">9:30 AM ET</option>
+          <option value="10:00">10:00 AM ET</option><option value="10:30">10:30 AM ET</option>
+          <option value="11:00">11:00 AM ET</option><option value="12:00">12:00 PM ET</option>
+          <option value="13:00">1:00 PM ET</option><option value="14:00">2:00 PM ET</option>
+          <option value="15:00">3:00 PM ET</option><option value="16:00">4:00 PM ET</option>
+          <option value="17:00">5:00 PM ET</option><option value="18:00">6:00 PM ET</option>
+          <option value="19:00">7:00 PM ET</option><option value="20:00">8:00 PM ET</option>
+          <option value="21:00">9:00 PM ET</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Delivery days</label>
+        <div class="day-presets">
+          <button type="button" class="day-preset-btn" id="preset-weekdays" onclick="setDays('weekdays')">Weekdays</button>
+          <button type="button" class="day-preset-btn" id="preset-everyday" onclick="setDays('everyday')">Every day</button>
+        </div>
+        <div class="day-circles" id="dayCircles">
+          <div class="day-circle" data-day="1" onclick="toggleDay(this)">M</div>
+          <div class="day-circle" data-day="2" onclick="toggleDay(this)">T</div>
+          <div class="day-circle" data-day="3" onclick="toggleDay(this)">W</div>
+          <div class="day-circle" data-day="4" onclick="toggleDay(this)">T</div>
+          <div class="day-circle" data-day="5" onclick="toggleDay(this)">F</div>
+          <div class="day-circle" data-day="6" onclick="toggleDay(this)">S</div>
+          <div class="day-circle" data-day="0" onclick="toggleDay(this)">S</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Items per digest</label>
+        <select id="itemsPerDigest">
+          <option value="5">5 items — quick scan</option>
+          <option value="10">10 items — full picture</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Admin actions -->
+    <div class="action-bar">
+      <div class="action-bar-title">Admin actions</div>
+      <div class="action-row">
+        <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
+        <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
+        <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
+        <button type="button" class="btn btn-danger-soft" id="unsubBtn">Mark unsubscribed</button>
+      </div>
+      <div class="error-msg" id="saveError"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="saved-banner" id="savedBanner"></div>
+
+<script>
+const INDUSTRY_TOPICS = [
+  'HEALTHCARE','FINANCIAL SERVICES','PE×M&A','ENERGY','CONSUMER',
+  'LIFE SCIENCES','TECHNOLOGY','INDUSTRIALS','REAL ESTATE','PUBLIC SECTOR',
+];
+const CAPABILITY_TOPICS = [
+  'AI×TECH','STRATEGY','POLICY×REGULATORY','SUSTAINABILITY',
+  'DIGITAL','M&A ADVISORY','TALENT',
+];
+const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+const TOPIC_LABELS = {
+  'HEALTHCARE':'Healthcare','FINANCIAL SERVICES':'Financial Services','PE×M&A':'Private Equity & M&A',
+  'ENERGY':'Energy','CONSUMER':'Consumer & Retail','LIFE SCIENCES':'Life Sciences',
+  'TECHNOLOGY':'Technology','INDUSTRIALS':'Industrials','REAL ESTATE':'Real Estate',
+  'PUBLIC SECTOR':'Public Sector','AI×TECH':'AI & Technology','STRATEGY':'Strategy',
+  'POLICY×REGULATORY':'Policy & Regulatory','SUSTAINABILITY':'Sustainability & ESG',
+  'DIGITAL':'Digital Transformation','M&A ADVISORY':'M&A Advisory','TALENT':'Talent & Workforce',
+};
+
+let selectedTopics = new Set();
+let userToken = '';
+let userEmail = '';
+let userStatus = 'active';
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function topicLabel(t) {
+  if (DEFAULT_TOPICS.includes(t)) return TOPIC_LABELS[t] || t;
+  return t.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+
+function isCustom(t) { return !DEFAULT_TOPICS.includes(t); }
+
+function updateTopicNote() {
+  const n = selectedTopics.size;
+  const el = document.getElementById('topicNote');
+  if (!el) return;
+  el.textContent = n + ' selected' + (n < 2 ? ' — minimum 2 required' : '');
+  el.style.color = (n < 2 && n > 0) ? 'var(--red)' : 'var(--text-secondary)';
+}
+
+function renderChip(topic, selected) {
+  const chip = document.createElement('div');
+  chip.className = 'chip' + (selected ? ' selected' : '') + (isCustom(topic) ? ' chip-custom' : '');
+  chip.dataset.topic = topic;
+  chip.innerHTML = '<span class="chip-check">✓</span> ' + esc(topicLabel(topic));
+  chip.addEventListener('click', function() {
+    if (selectedTopics.has(topic)) { selectedTopics.delete(topic); chip.classList.remove('selected'); }
+    else { selectedTopics.add(topic); chip.classList.add('selected'); }
+    updateTopicNote();
+  });
+  return chip;
+}
+
+function renderGroupLabel(text) {
+  const el = document.createElement('div');
+  el.className = 'topic-group-label';
+  el.textContent = text;
+  return el;
+}
+
+function renderChips(userTopics) {
+  const container = document.getElementById('topicGrid');
+  container.innerHTML = '';
+  container.appendChild(renderGroupLabel('Industries'));
+  INDUSTRY_TOPICS.forEach(t => {
+    const sel = userTopics.includes(t);
+    if (sel) selectedTopics.add(t);
+    container.appendChild(renderChip(t, sel));
+  });
+  container.appendChild(renderGroupLabel('Capabilities'));
+  CAPABILITY_TOPICS.forEach(t => {
+    const sel = userTopics.includes(t);
+    if (sel) selectedTopics.add(t);
+    container.appendChild(renderChip(t, sel));
+  });
+  const customs = userTopics.filter(t => !DEFAULT_TOPICS.includes(t));
+  if (customs.length) {
+    container.appendChild(renderGroupLabel('Custom'));
+    customs.forEach(t => {
+      selectedTopics.add(t);
+      container.appendChild(renderChip(t, true));
+    });
+  }
+  updateTopicNote();
+}
+
+// Day helpers
+function getDays() {
+  return Array.from(document.querySelectorAll('#dayCircles .day-circle.active'))
+    .map(c => parseInt(c.dataset.day));
+}
+function initDays(days) {
+  document.querySelectorAll('#dayCircles .day-circle').forEach(c => {
+    c.classList.toggle('active', days.includes(parseInt(c.dataset.day)));
+  });
+  syncPresets();
+}
+function toggleDay(el) { el.classList.toggle('active'); syncPresets(); }
+function setDays(preset) {
+  document.querySelectorAll('#dayCircles .day-circle').forEach(c => {
+    const d = parseInt(c.dataset.day);
+    c.classList.toggle('active', preset === 'everyday' ? true : (d >= 1 && d <= 5));
+  });
+  syncPresets();
+}
+function syncPresets() {
+  const active = getDays();
+  const isWD = active.length === 5 && [1,2,3,4,5].every(d => active.includes(d));
+  const isED = active.length === 7;
+  document.getElementById('preset-weekdays').classList.toggle('active', isWD);
+  document.getElementById('preset-everyday').classList.toggle('active', isED);
+}
+function getFrequency() {
+  const d = getDays();
+  if (d.length === 5 && [1,2,3,4,5].every(x => d.includes(x))) return 'daily_weekday';
+  if (d.length === 7) return 'daily_all';
+  return 'custom';
+}
+
+// Depth
+function selectDepth(el) {
+  document.querySelectorAll('.depth-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function getDepth() {
+  const el = document.querySelector('.depth-option.selected');
+  return el ? el.dataset.depth : 'headline_plus_why';
+}
+
+function showBanner(msg, isError) {
+  const el = document.getElementById('savedBanner');
+  el.textContent = msg;
+  el.style.background = isError ? '#991B1B' : '#065F46';
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 3500);
+}
+
+function showError(msg) {
+  const el = document.getElementById('saveError');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function updatePauseBtn(status) {
+  const btn = document.getElementById('pauseBtn');
+  if (status === 'paused') {
+    btn.textContent = 'Resume deliveries';
+    btn.className = 'btn btn-secondary';
+  } else if (status === 'unsubscribed') {
+    btn.textContent = 'Re-activate';
+    btn.className = 'btn btn-secondary';
+  } else {
+    btn.textContent = 'Pause deliveries';
+    btn.className = 'btn btn-warn';
+  }
+}
+
+function buildMetaBar(user) {
+  const prefs = user.preferences || {};
+  const tgLinked = user.chatId && !user.chatId.startsWith('email-');
+  const toETDate = iso => iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : '—';
+  const statusClass = { active:'status-active', paused:'status-paused', unsubscribed:'status-unsubscribed' }[user.status] || 'status-paused';
+  const items = [
+    { label: 'Status', value: `<span class="status-badge ${statusClass}">${esc(user.status || 'active')}</span>` },
+    { label: 'Joined', value: esc(toETDate(user.joined_at)) },
+    { label: 'Digests', value: esc(String(user.digests_received || 0)) },
+    { label: 'Last digest', value: esc(toETDate(user.last_digest_at)) },
+    { label: 'Telegram', value: tgLinked ? '<span style="color:var(--green);font-weight:700;">✓ linked</span>' : '<span style="color:#D1D5DB;">—</span>' },
+    { label: 'Chat ID', value: `<span class="mono">${esc(user.chatId || '—')}</span>` },
+    { label: 'Bookmarks', value: esc(String((user.bookmarks || []).length)) },
+  ];
+  document.getElementById('metaBar').innerHTML = items.map(i =>
+    `<div class="meta-item"><div class="meta-label">${i.label}</div><div class="meta-value">${i.value}</div></div>`
+  ).join('');
+}
+
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const email = params.get('email');
+  if (!email) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('errorState').style.display = 'block';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/admin/user-by-email?email=' + encodeURIComponent(email));
+    if (!res.ok) throw new Error('not found');
+    const user = await res.json();
+
+    userToken = user.token || '';
+    userEmail = user.email || '';
+    userStatus = user.status || 'active';
+
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    document.getElementById('headerSub').textContent = 'Editing: ' + userEmail;
+
+    buildMetaBar(user);
+
+    // Account fields
+    document.getElementById('name').value = user.name || '';
+    document.getElementById('email').value = userEmail;
+    document.getElementById('telegram').value = user.telegram ? '@' + user.telegram : '';
+
+    // Topics
+    renderChips(user.topics || []);
+    document.getElementById('addTopicBtn').addEventListener('click', function() {
+      const input = document.getElementById('customTopicInput');
+      const val = input.value.trim();
+      if (!val || selectedTopics.has(val)) { input.value = ''; return; }
+      const chip = renderChip(val, true);
+      selectedTopics.add(val);
+      document.getElementById('topicGrid').appendChild(chip);
+      updateTopicNote();
+      input.value = '';
+    });
+    document.getElementById('customTopicInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addTopicBtn').click(); }
+    });
+
+    // Depth
+    const depth = (user.preferences || {}).depth || 'headline_plus_why';
+    document.querySelectorAll('.depth-option').forEach(opt => {
+      opt.classList.toggle('selected', opt.dataset.depth === depth);
+      opt.addEventListener('click', () => selectDepth(opt));
+    });
+
+    // Schedule
+    const prefs = user.preferences || {};
+    const timeEl = document.getElementById('deliveryTime');
+    if (prefs.delivery_time) timeEl.value = prefs.delivery_time;
+    const itemsEl = document.getElementById('itemsPerDigest');
+    if (prefs.items_per_digest) itemsEl.value = String(prefs.items_per_digest);
+
+    const savedDays = prefs.days_of_week || (prefs.frequency === 'daily_all' ? [0,1,2,3,4,5,6] : [1,2,3,4,5]);
+    initDays(savedDays);
+
+    // Pause button state
+    updatePauseBtn(userStatus);
+
+    // --- Save preferences ---
+    document.getElementById('saveBtn').addEventListener('click', async function() {
+      if (selectedTopics.size < 2) { showError('Select at least 2 topics.'); return; }
+      const btn = this;
+      btn.disabled = true; btn.textContent = 'Saving…';
+      showError('');
+      try {
+        const r = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: userToken,
+            name: document.getElementById('name').value.trim(),
+            telegram: document.getElementById('telegram').value.replace('@','').trim() || null,
+            topics: Array.from(selectedTopics),
+            preferences: {
+              depth: getDepth(),
+              delivery_time: document.getElementById('deliveryTime').value,
+              frequency: getFrequency(),
+              days_of_week: getDays(),
+              items_per_digest: parseInt(document.getElementById('itemsPerDigest').value),
+              email_enabled: true,
+              telegram_enabled: !!(document.getElementById('telegram').value.trim()),
+            }
+          })
+        });
+        const data = await r.json();
+        if (data.success) showBanner('✅ Preferences saved');
+        else showError(data.error || 'Save failed.');
+      } catch { showError('Network error.'); }
+      btn.disabled = false; btn.textContent = 'Save preferences';
+    });
+
+    // --- Resend settings link ---
+    document.getElementById('resendLinkBtn').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        await fetch('/api/request-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail })
+        });
+        showBanner('✅ Settings link sent to ' + userEmail);
+      } catch { showBanner('❌ Failed to send link', true); }
+      btn.disabled = false; btn.textContent = 'Resend settings link';
+    });
+
+    // --- Pause / Resume / Re-activate ---
+    document.getElementById('pauseBtn').addEventListener('click', async function() {
+      const btn = this;
+      let newStatus;
+      if (userStatus === 'active') newStatus = 'paused';
+      else newStatus = 'active'; // resume or re-activate
+
+      if (!confirm((newStatus === 'paused' ? 'Pause' : 'Resume') + ' deliveries for ' + userEmail + '?')) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, status: newStatus })
+        });
+        const data = await r.json();
+        if (data.success) {
+          userStatus = newStatus;
+          updatePauseBtn(userStatus);
+          // Refresh meta bar status badge
+          const badge = document.querySelector('#metaBar .meta-item .status-badge');
+          if (badge) {
+            badge.className = 'status-badge ' + ({ active:'status-active', paused:'status-paused', unsubscribed:'status-unsubscribed' }[newStatus] || '');
+            badge.textContent = newStatus;
+          }
+          showBanner(newStatus === 'paused' ? '⏸ Deliveries paused' : '▶ Deliveries resumed');
+        } else { showBanner('❌ ' + (data.error || 'Failed'), true); }
+      } catch { showBanner('❌ Network error', true); }
+      btn.disabled = false;
+    });
+
+    // --- Mark unsubscribed ---
+    document.getElementById('unsubBtn').addEventListener('click', async function() {
+      if (!confirm('Mark ' + userEmail + ' as unsubscribed? They will stop receiving digests.')) return;
+      const btn = this;
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, status: 'unsubscribed' })
+        });
+        const data = await r.json();
+        if (data.success) {
+          userStatus = 'unsubscribed';
+          updatePauseBtn(userStatus);
+          btn.disabled = true;
+          btn.textContent = 'Unsubscribed';
+          const badge = document.querySelector('#metaBar .meta-item .status-badge');
+          if (badge) { badge.className = 'status-badge status-unsubscribed'; badge.textContent = 'unsubscribed'; }
+          showBanner('👋 User unsubscribed');
+        } else { showBanner('❌ ' + (data.error || 'Failed'), true); }
+      } catch { showBanner('❌ Network error', true); }
+    });
+
+  } catch (e) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('errorState').style.display = 'block';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -48,7 +48,8 @@ function readUser(chatId) {
   let raw;
   try { raw = JSON.parse(fs.readFileSync(f, "utf8")); }
   catch { return defaultUser(chatId); }
-  const user = { ...defaultUser(chatId), ...raw };
+  const defaults = defaultUser(chatId);
+  const user = { ...defaults, ...raw, preferences: { ...defaults.preferences, ...(raw.preferences || {}) } };
   // Auto-generate and persist token for existing users who don't have one
   if (!raw.token) {
     user.token = generateToken();

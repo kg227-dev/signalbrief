@@ -162,6 +162,10 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 </div>
 
 <script>
+function esc(s) {
+  if (!s) return "";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
 let allDigests = [];
 let userToken = null;
 
@@ -204,10 +208,10 @@ function renderList() {
   const el = document.getElementById('digestList');
   if (!allDigests.length) return; // keep empty state
   el.innerHTML = allDigests.map((d, i) => `
-    <div class="digest-card" onclick="loadDetail('${d.date}')" style="animation-delay:${i * 0.05}s">
+    <div class="digest-card" onclick="loadDetail('${esc(d.date)}')" style="animation-delay:${i * 0.05}s">
       <div class="digest-card-left">
-        <div class="digest-date">${d.dateStr || d.date}</div>
-        <div class="digest-scan">${d.quickScan || ''}</div>
+        <div class="digest-date">${esc(d.dateStr || d.date)}</div>
+        <div class="digest-scan">${esc(d.quickScan || '')}</div>
       </div>
       <div class="digest-card-right">
         <div class="digest-count">${d.itemCount || 7} signals</div>
@@ -223,25 +227,25 @@ async function loadDetail(date) {
   if (d.error) return;
 
   document.getElementById('detailDate').textContent = d.dateStr || d.date;
-  document.getElementById('detailScan').innerHTML = d.quickScan || '';
+  document.getElementById('detailScan').textContent = d.quickScan || '';
 
   document.getElementById('detailItems').innerHTML = d.items.map((item, i) => {
     const isLead = i === 0;
-    const linkUrl = item.url && item.url !== '#' ? item.url : 'https://' + item.source;
+    const linkUrl = item.url && item.url !== '#' ? item.url : '';
     const wimHtml = item.wim ? `
       <div class="item-wim-label">Why it matters</div>
-      <div class="item-wim">${item.wim}</div>
+      <div class="item-wim">${esc(item.wim)}</div>
     ` : '';
     return `
       <div class="item-card${isLead ? ' item-lead' : ''}">
         <div class="item-meta">
           ${isLead ? '<span class="item-lead-badge">★ LEAD</span>' : `<span style="font-size:13px;color:#9CA3AF;font-weight:600;">${i+1}</span>`}
-          <span class="item-tag">${item.tag}</span>
+          <span class="item-tag">${esc(item.tag)}</span>
         </div>
-        <div class="item-headline">${item.headline}</div>
-        <div class="item-summary">${item.summary}</div>
+        <div class="item-headline">${esc(item.headline)}</div>
+        <div class="item-summary">${esc(item.summary)}</div>
         ${wimHtml}
-        <div class="item-link"><a href="${linkUrl}" target="_blank" rel="noopener">Read more → ${item.source}</a></div>
+        <div class="item-link">${linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener">Read more → ${esc(item.source)}</a>` : `<span>Source: ${esc(item.source)}</span>`}</div>
       </div>
     `;
   }).join('');

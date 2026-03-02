@@ -473,10 +473,10 @@ async function sendTelegram(text, chatId) {
 
 // ── 7. Send Email (via mailer.js — Resend if configured, Gmail fallback) ──────
 
-async function sendEmail(subject, html, toEmail) {
+async function sendEmail(subject, html, toEmail, token = null) {
   const target = toEmail || CONFIG.user.email;
   log(`Sending email to ${target}...`);
-  const result = await sendEmailViaMailer(target, subject, html);
+  const result = await sendEmailViaMailer(target, subject, html, token);
   if (result.ok) log(`✅ Email sent via ${result.via}`);
   else log(`❌ Email failed`);
 }

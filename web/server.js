@@ -19,7 +19,7 @@ function findUserByToken(token) {
   return allUsers().find(u => u.token === token) || null;
 }
 
-const PORT = 3003;
+const PORT = parseInt(process.env.PORT, 10) || 3003;
 const WEB_DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.json"), "utf8"));
 
@@ -211,7 +211,7 @@ const server = http.createServer(async (req, res) => {
     child.unref();
     console.log(`[welcome digest] spawned for ${chatId}`);
 
-    return json(res, { success: true, chatId, archiveUrl: `${BASE_URL}/archive?token=${user.token}` });
+    return json(res, { success: true, chatId, token: user.token, archiveUrl: `${BASE_URL}/archive?token=${user.token}` });
   }
 
   // POST /api/settings — update existing user (token-authenticated)
@@ -246,17 +246,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   // GET|POST /api/unsubscribe — one-click unsubscribe (RFC 8058)
-  // Supports: ?token=TOKEN (new) or ?email=... (legacy email links)
-  // GET:  human-readable redirect to settings page with unsubscribed=1
-  // POST: email client one-click (body: "List-Unsubscribe=One-Click")
+  // GET:  requires ?token=TOKEN (human-readable redirect to settings)
+  // POST: accepts ?token=TOKEN or ?email=... (email client one-click per RFC 8058)
   if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
     const tokenParam = url.searchParams.get("token") || "";
     const emailParam = url.searchParams.get("email") || "";
     let existing = null;
 
+    // GET requires token (no unauthenticated email-based unsubscribe)
+    if (req.method === "GET" && !tokenParam) {
+      return json(res, { error: "token required" }, 400);
+    }
+
     if (tokenParam) {
       existing = findUserByToken(decodeURIComponent(tokenParam));
-    } else if (emailParam) {
+    } else if (emailParam && req.method === "POST") {
+      // POST-only: email-based lookup for RFC 8058 one-click from email clients
       const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
       existing = allUsers().find(u => u.email.toLowerCase() === targetEmail);
     }
@@ -347,6 +352,10 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/admin/stats — cost dashboard data (localhost only)
   if (pathname === "/api/admin/stats" && req.method === "GET") {
+    const clientIp = req.socket.remoteAddress || "";
+    if (clientIp !== "127.0.0.1" && clientIp !== "::1" && clientIp !== "::ffff:127.0.0.1") {
+      return json(res, { error: "admin access only" }, 403);
+    }
     const logPath = path.join(__dirname, "../data/cost-log.json");
     let runs = [];
     if (fs.existsSync(logPath)) {

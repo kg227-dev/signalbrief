@@ -172,6 +172,10 @@ tbody tr:hover td { background:#FAFAFA; }
 </div>
 
 <script>
+function esc(s) {
+  if (!s) return "";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
 function fmt$(n) {
   if (n === undefined || n === null) return "—";
   return "$" + n.toFixed(4);
@@ -198,7 +202,7 @@ async function load() {
     data = await res.json();
   } catch (e) {
     document.getElementById("runsBody").innerHTML =
-      `<tr><td colspan="9" class="empty">Error loading stats: ${e.message}</td></tr>`;
+      `<tr><td colspan="10" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;
     return;
   }
 
@@ -271,7 +275,7 @@ async function load() {
     usersBody.innerHTML = per_user.map(u => {
       const avg = u.runs > 0 ? u.total_cost / u.runs : 0;
       return `<tr>
-        <td>${u.id}</td>
+        <td>${esc(u.id)}</td>
         <td>${u.runs}</td>
         <td class="cost-cell ${costClass(u.total_cost)}">${fmt$(u.total_cost)}</td>
         <td class="mono">${fmt$(avg)}</td>
@@ -298,14 +302,14 @@ async function load() {
         ? `<span style="color:var(--accent);font-weight:600;">${u.adjustments}</span>`
         : `<span style="color:var(--text-secondary);">0</span>`;
       const topicsCell = u.topics_list
-        ? `<span title="${u.topics_list}" style="cursor:default;">${u.topics} topics</span>`
+        ? `<span title="${esc(u.topics_list)}" style="cursor:default;">${u.topics} topics</span>`
         : `${u.topics || 0}`;
       const settingsLink = u.settings_url
-        ? `<a href="${u.settings_url}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;">open →</a>`
+        ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;">open →</a>`
         : `<span style="color:var(--text-secondary);">—</span>`;
       return `<tr>
-        <td style="font-weight:600;">${u.name || "—"}</td>
-        <td class="mono" style="font-size:12px;">${u.email || "—"}</td>
+        <td style="font-weight:600;">${esc(u.name) || "—"}</td>
+        <td class="mono" style="font-size:12px;">${esc(u.email) || "—"}</td>
         <td>${statusBadge}</td>
         <td class="mono">${u.joined || "—"}</td>
         <td style="font-weight:600;">${u.digests}</td>

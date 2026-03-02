@@ -257,12 +257,13 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
           <th>Time (ET)</th>
           <th>Type</th>
           <th>Users</th>
+          <th>Sent to</th>
           <th>Tokens (in / out)</th>
           <th>Total</th>
         </tr>
       </thead>
       <tbody id="runsBody">
-        <tr><td colspan="6" class="empty">Loading…</td></tr>
+        <tr><td colspan="7" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -333,6 +334,23 @@ function costClass(n) {
 function csvEscape(v) {
   const s = v == null ? "" : String(v);
   return `"${s.replace(/"/g, '""')}"`;
+}
+function renderRunRecipients(run) {
+  const recipients = Array.isArray(run?.per_user)
+    ? run.per_user.map(u => (u && u.id ? String(u.id) : "")).filter(Boolean)
+    : [];
+  if (!recipients.length) return "—";
+  const preview = recipients.slice(0, 3).map(id => {
+    if (id.includes("@")) {
+      const href = "/admin/user?email=" + encodeURIComponent(id);
+      return `<a href="${href}" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:500;">${esc(id)}</a>`;
+    }
+    return `<span class="mono">${esc(id)}</span>`;
+  }).join(", ");
+  const extra = recipients.length > 3
+    ? ` <span style="color:var(--text-secondary);">+${recipients.length - 3}</span>`
+    : "";
+  return `<span title="${esc(recipients.join(", "))}">${preview}${extra}</span>`;
 }
 function setLastRefreshed(dateObj) {
   const el = document.getElementById("lastRefreshed");
@@ -647,7 +665,7 @@ async function load(silent = false) {
     } catch (e) {
       if (!silent) {
         document.getElementById("runsBody").innerHTML =
-          `<tr><td colspan="6" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;
+          `<tr><td colspan="7" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;
       }
       setLastRefreshed(null);
       return;
@@ -701,7 +719,7 @@ async function load(silent = false) {
     // ── Run log (condensed to 6 columns) ────────────────────────────────────────
     const runsBody = document.getElementById("runsBody");
     if (!runs || runs.length === 0) {
-      runsBody.innerHTML = `<tr><td colspan="6" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
+      runsBody.innerHTML = `<tr><td colspan="7" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
     } else {
       runsBody.innerHTML = runs.map(r => {
         const typeBadge = r.on_demand
@@ -728,11 +746,13 @@ async function load(silent = false) {
         }
         const tokensIn  = r.claude_tokens_in  || 0;
         const tokensOut = r.claude_tokens_out || 0;
+        const recipients = renderRunRecipients(r);
         return `<tr>
           <td class="mono">${dateEt}</td>
           <td class="mono" style="color:#6B7280;">${timeEt}</td>
           <td>${typeBadge}</td>
           <td>${r.users_served || 0}</td>
+          <td style="font-size:12px;line-height:1.4;">${recipients}</td>
           <td class="mono" style="color:#6B7280;">${fmtTokens(tokensIn)} / ${fmtTokens(tokensOut)}</td>
           <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(r.total_cost_usd)}</td>
         </tr>`;

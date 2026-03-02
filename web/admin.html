@@ -37,10 +37,11 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; margin-bottom:36px; }
 table { width:100%; border-collapse:collapse; }
 thead th { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); padding:12px 16px; background:#F9FAFB; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
-tbody td { font-size:13px; padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text); vertical-align:middle; }
+tbody td { font-size:13px; padding:11px 16px; border-bottom:1px solid var(--border); color:var(--text); vertical-align:middle; }
 tbody tr:last-child td { border-bottom:none; }
 tbody tr:hover td { background:#FAFAFA; }
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
+
 .badge-on-demand { font-size:10px; font-weight:700; color:#fff; background:#7C3AED; padding:2px 7px; border-radius:100px; letter-spacing:0.03em; }
 .badge-scheduled { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
 
@@ -52,11 +53,35 @@ tbody tr:hover td { background:#FAFAFA; }
 .empty { padding:32px; text-align:center; color:var(--text-secondary); font-size:14px; }
 
 /* Roster status badges */
-.badge-active   { font-size:10px; font-weight:700; color:#fff; background:var(--green); padding:2px 7px; border-radius:100px; }
-.badge-unsub    { font-size:10px; font-weight:700; color:#fff; background:var(--red);   padding:2px 7px; border-radius:100px; }
-.badge-pending  { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
-.tg-yes  { color:var(--green); font-size:15px; }
-.tg-no   { color:#D1D5DB;     font-size:15px; }
+.badge-active  { font-size:10px; font-weight:700; color:#fff; background:var(--green); padding:2px 7px; border-radius:100px; }
+.badge-unsub   { font-size:10px; font-weight:700; color:#fff; background:var(--red);   padding:2px 7px; border-radius:100px; }
+.badge-paused  { font-size:10px; font-weight:700; color:#fff; background:var(--yellow); padding:2px 7px; border-radius:100px; }
+.badge-pending { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
+
+/* Delivery channel icons */
+.ch-icon { font-size:13px; display:inline-block; }
+.ch-on  { opacity:1; }
+.ch-off { opacity:0.22; filter:grayscale(1); }
+
+/* Delivery health warning */
+.warn-badge { font-size:11px; font-weight:700; color:var(--yellow); }
+.missed-flag { color:var(--yellow); font-size:12px; font-weight:600; }
+
+/* Topic weights pill */
+.weights-pill {
+  display:inline-block; font-size:11px; font-weight:600; font-family:ui-monospace,monospace;
+  background:#EFF6FF; color:var(--accent); padding:2px 7px; border-radius:100px;
+  margin-left:6px; cursor:default; white-space:nowrap;
+}
+
+/* Send digest button (inline in roster) */
+.send-btn {
+  font-size:11px; font-weight:600; padding:4px 10px; border-radius:6px;
+  border:1.5px solid var(--border); background:#fff; color:var(--accent);
+  cursor:pointer; font-family:inherit; white-space:nowrap; transition:all 0.15s;
+}
+.send-btn:hover { border-color:var(--accent); background:var(--accent-light); }
+.send-btn:disabled { opacity:0.5; cursor:not-allowed; }
 
 /* Upcoming deliveries */
 .schedule-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:36px; }
@@ -120,12 +145,17 @@ tbody tr:hover td { background:#FAFAFA; }
       <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Cron schedule</div>
       <div style="font-size:14px;font-weight:600;" id="healthCron">—</div>
     </div>
-    <div style="margin-left:auto;">
+    <!-- Delivery health — populated by JS -->
+    <div id="healthDelivery" style="display:none;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:3px;">Delivery health</div>
+      <div style="font-size:14px;font-weight:600;" id="healthDeliveryVal">—</div>
+    </div>
+    <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
       <button id="runDigestBtn" onclick="triggerDigest()"
         style="background:#2563EB;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
         ▶ Run digest now
       </button>
-      <div id="runDigestMsg" style="font-size:12px;color:var(--green);margin-top:4px;display:none;"></div>
+      <div id="runDigestMsg" style="font-size:12px;color:var(--green);display:none;"></div>
     </div>
   </div>
 
@@ -169,16 +199,12 @@ tbody tr:hover td { background:#FAFAFA; }
           <th>Time (ET)</th>
           <th>Type</th>
           <th>Users</th>
-          <th>Perp. calls</th>
-          <th>Claude in</th>
-          <th>Claude out</th>
-          <th>Perp. cost</th>
-          <th>Claude cost</th>
+          <th>Tokens (in / out)</th>
           <th>Total</th>
         </tr>
       </thead>
       <tbody id="runsBody">
-        <tr><td colspan="10" class="empty">Loading…</td></tr>
+        <tr><td colspan="6" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -202,7 +228,7 @@ tbody tr:hover td { background:#FAFAFA; }
   </div>
 
   <!-- User roster -->
-  <div class="section-title">User roster</div>
+  <div class="section-title" id="rosterSection">User roster</div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -213,17 +239,15 @@ tbody tr:hover td { background:#FAFAFA; }
           <th>Joined</th>
           <th>Digests</th>
           <th>Last digest</th>
-          <th>TG</th>
+          <th>Channels</th>
           <th>Delivery</th>
-          <th>Depth</th>
           <th>Topics</th>
-          <th>Saves</th>
-          <th>Tuned</th>
-          <th>Settings</th>
+          <th>Last items</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="rosterBody">
-        <tr><td colspan="13" class="empty">Loading…</td></tr>
+        <tr><td colspan="11" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -249,6 +273,39 @@ function costClass(n) {
   return "cost-low";
 }
 
+// ── Topic weights summary string ───────────────────────────────────────────────
+function weightsSummary(weights) {
+  if (!weights || !Object.keys(weights).length) return "";
+  return Object.entries(weights)
+    .filter(([, v]) => v !== 0)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])) // highest magnitude first
+    .slice(0, 3) // cap at 3 for space
+    .map(([k, v]) => {
+      const label = k.replace(/^custom_/,"").replace(/_/g," ").split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ").slice(0, 10);
+      return `${label} ${v > 0 ? "+" : ""}${v}`;
+    })
+    .join(" · ");
+}
+
+// ── Per-user digest trigger ────────────────────────────────────────────────────
+async function sendDigest(chatId, btnEl) {
+  if (!chatId) { btnEl.textContent = "❌ no ID"; return; }
+  btnEl.disabled = true;
+  btnEl.textContent = "…";
+  try {
+    const res = await fetch("/api/admin/run-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId }),
+    });
+    const d = await res.json();
+    btnEl.textContent = d.success ? "✅" : "❌";
+  } catch {
+    btnEl.textContent = "❌";
+  }
+  setTimeout(() => { btnEl.textContent = "Send →"; btnEl.disabled = false; }, 3000);
+}
+
 // ── Upcoming schedule ─────────────────────────────────────────────────────────
 function renderSchedule(roster) {
   const wrap = document.getElementById("scheduleWrap");
@@ -259,25 +316,21 @@ function renderSchedule(roster) {
     return;
   }
 
-  // Current ET date and time-of-day in minutes
   const etNowStr = new Date().toLocaleString("en-US", {
     timeZone: "America/New_York", hour: "2-digit", minute: "2-digit",
     hour12: false, year: "numeric", month: "2-digit", day: "2-digit",
   });
-  // Parse: "MM/DD/YYYY, HH:MM"
   const [datePart, timePart] = etNowStr.split(", ");
   const [mo, dy, yr] = datePart.split("/").map(Number);
   const [nowH, nowM] = timePart.split(":").map(Number);
   const nowMinutes = nowH * 60 + nowM;
 
-  // Build events for next 7 days
   const events = [];
   for (let i = 0; i < 7; i++) {
-    // Compute ET calendar date for today+i
     const d = new Date(yr, mo - 1, dy + i);
-    const dayOfWeek = d.getDay(); // 0=Sun,1=Mon…6=Sat
+    const dayOfWeek = d.getDay();
     const isToday = i === 0;
-    const dateKey = d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const dateKey = d.toLocaleDateString("en-CA");
     const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const dateLabel = `${dayNames[dayOfWeek]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
@@ -285,13 +338,9 @@ function renderSchedule(roster) {
     for (const u of active) {
       const days = u.days_of_week || [1, 2, 3, 4, 5];
       if (!days.includes(dayOfWeek)) continue;
-
       const [dh, dm] = (u.delivery_time_raw || "07:00").split(":").map(Number);
       const deliveryMinutes = dh * 60 + dm;
-
-      // Skip if today and delivery time has already passed
       if (isToday && deliveryMinutes <= nowMinutes) continue;
-
       events.push({ dateKey, dateLabel, isToday, timeSortKey: deliveryMinutes,
         time: u.delivery_time, name: u.name || u.email, topics: u.topics,
         depth: u.depth, settings_url: u.settings_url, email: u.email });
@@ -303,10 +352,8 @@ function renderSchedule(roster) {
     return;
   }
 
-  // Sort by date then time
   events.sort((a, b) => a.dateKey < b.dateKey ? -1 : a.dateKey > b.dateKey ? 1 : a.timeSortKey - b.timeSortKey);
 
-  // Group by date
   const byDate = [];
   let lastKey = null;
   for (const ev of events) {
@@ -338,7 +385,6 @@ function renderSchedule(roster) {
 }
 
 async function load() {
-  // Set month label
   const now = new Date();
   document.getElementById("monthLabel").textContent =
     now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -349,16 +395,14 @@ async function load() {
     data = await res.json();
   } catch (e) {
     document.getElementById("runsBody").innerHTML =
-      `<tr><td colspan="10" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;
+      `<tr><td colspan="6" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;
     return;
   }
 
   const { summary, health, runs, per_user, roster } = data;
 
-  // Upcoming deliveries schedule
   renderSchedule(roster || []);
 
-  // Month label from server (ET timezone, not browser local)
   if (summary.month_label) {
     document.getElementById("monthLabel").textContent = summary.month_label;
   }
@@ -369,6 +413,18 @@ async function load() {
     document.getElementById("healthLastRun").textContent  = health.last_run_at    || "No runs yet";
     document.getElementById("healthLastCost").textContent = health.last_run_cost  || "—";
     document.getElementById("healthCron").textContent     = health.cron_schedule  || "—";
+
+    // Delivery health indicator
+    const warnings = health.users_delivery_warning || [];
+    const delivDiv = document.getElementById("healthDelivery");
+    const delivVal = document.getElementById("healthDeliveryVal");
+    delivDiv.style.display = "";
+    if (warnings.length === 0) {
+      delivVal.innerHTML = `<span style="color:var(--green);">✅ All on schedule</span>`;
+    } else {
+      const names = warnings.map(w => `${esc(w.name || w.email)} (${w.days_missed}d)`).join(", ");
+      delivVal.innerHTML = `<a href="#rosterSection" style="color:var(--yellow);font-weight:700;text-decoration:none;" title="${names}">⚠️ ${warnings.length} user${warnings.length > 1 ? "s" : ""} missed 2+ days</a>`;
+    }
   }
 
   // Summary cards
@@ -386,23 +442,27 @@ async function load() {
     document.getElementById("telegramUsers").innerHTML = `<strong>${tgLinked}</strong> on Telegram`;
   }
 
-  // Run log
+  // ── Run log (condensed to 6 columns) ────────────────────────────────────────
   const runsBody = document.getElementById("runsBody");
   if (!runs || runs.length === 0) {
-    runsBody.innerHTML = `<tr><td colspan="10" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
+    runsBody.innerHTML = `<tr><td colspan="6" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
   } else {
     runsBody.innerHTML = runs.map(r => {
       const typeBadge = r.on_demand
         ? `<span class="badge-on-demand">on-demand</span>`
         : `<span class="badge-scheduled">scheduled</span>`;
       const totalClass = costClass(r.total_cost_usd || 0);
-      // Derive both date and time in ET from run_at (covers old entries where date was saved in UTC)
+      // Cost breakdown on hover
+      const perpFmt  = r.perplexity_cost_usd != null ? `$${r.perplexity_cost_usd.toFixed(4)}` : "—";
+      const claudeFmt = r.claude_cost_usd != null ? `$${r.claude_cost_usd.toFixed(4)}` : "—";
+      const costTitle = `Perplexity ${perpFmt} + Claude ${claudeFmt}`;
+      // ET date/time
       let dateEt = r.date;
       let timeEt = r.run_at_et || "—";
       if (r.run_at) {
         try {
           const d = new Date(r.run_at);
-          dateEt = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD in ET
+          dateEt = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
           if (!r.run_at_et) {
             timeEt = d.toLocaleString("en-US", {
               timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true
@@ -410,22 +470,20 @@ async function load() {
           }
         } catch {}
       }
+      const tokensIn  = r.claude_tokens_in  || 0;
+      const tokensOut = r.claude_tokens_out || 0;
       return `<tr>
         <td class="mono">${dateEt}</td>
-        <td class="mono" style="font-size:12px;color:#6B7280;">${timeEt}</td>
+        <td class="mono" style="color:#6B7280;">${timeEt}</td>
         <td>${typeBadge}</td>
         <td>${r.users_served || 0}</td>
-        <td>${r.perplexity_calls || 0}</td>
-        <td class="mono">${fmtTokens(r.claude_tokens_in)}</td>
-        <td class="mono">${fmtTokens(r.claude_tokens_out)}</td>
-        <td class="mono">${fmt$(r.perplexity_cost_usd)}</td>
-        <td class="mono">${fmt$(r.claude_cost_usd)}</td>
-        <td class="cost-cell ${totalClass}">${fmt$(r.total_cost_usd)}</td>
+        <td class="mono" style="color:#6B7280;">${fmtTokens(tokensIn)} / ${fmtTokens(tokensOut)}</td>
+        <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(r.total_cost_usd)}</td>
       </tr>`;
     }).join("");
   }
 
-  // Per-user table
+  // ── Per-user cost table ──────────────────────────────────────────────────────
   const usersBody = document.getElementById("usersBody");
   if (!per_user || per_user.length === 0) {
     usersBody.innerHTML = `<tr><td colspan="4" class="empty">No user data yet.</td></tr>`;
@@ -441,44 +499,71 @@ async function load() {
     }).join("");
   }
 
-  // Roster table
+  // ── Roster table ─────────────────────────────────────────────────────────────
   const rosterBody = document.getElementById("rosterBody");
   if (!roster || roster.length === 0) {
-    rosterBody.innerHTML = `<tr><td colspan="13" class="empty">No users yet.</td></tr>`;
+    rosterBody.innerHTML = `<tr><td colspan="11" class="empty">No users yet.</td></tr>`;
   } else {
     rosterBody.innerHTML = roster.map(u => {
-      const statusBadge = u.status === "active"
-        ? `<span class="badge-active">active</span>`
-        : u.status === "unsubscribed"
-          ? `<span class="badge-unsub">unsub</span>`
-          : `<span class="badge-pending">${u.status || "—"}</span>`;
-      const tgIcon = u.telegram
-        ? `<span class="tg-yes" title="Telegram linked">✓</span>`
-        : `<span class="tg-no">—</span>`;
+
+      // Status badge
+      const statusBadge =
+        u.status === "active"       ? `<span class="badge-active">active</span>` :
+        u.status === "unsubscribed" ? `<span class="badge-unsub">unsub</span>` :
+        u.status === "paused"       ? `<span class="badge-paused">paused</span>` :
+                                      `<span class="badge-pending">${u.status || "—"}</span>`;
+
+      // Delivery channel icons
+      const emailIcon = `<span class="ch-icon ${u.email_enabled ? "ch-on" : "ch-off"}" title="Email ${u.email_enabled ? "enabled" : "disabled"}">📧</span>`;
+      const tgIcon    = `<span class="ch-icon ${u.telegram_enabled ? "ch-on" : "ch-off"}" title="Telegram ${u.telegram_enabled ? "linked & enabled" : u.telegram ? "linked but disabled" : "not linked"}">💬</span>`;
+
+      // Last digest + missed flag
       const lastDig = u.last_digest || "—";
-      const tuned = u.adjustments > 0
-        ? `<span style="color:var(--accent);font-weight:600;">${u.adjustments}</span>`
-        : `<span style="color:var(--text-secondary);">0</span>`;
-      const topicsCell = u.topics_list
-        ? `<span title="${esc(u.topics_list)}" style="cursor:default;">${u.topics} topics</span>`
-        : `${u.topics || 0}`;
-      const settingsLink = u.settings_url
-        ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;">edit →</a>`
+      const missedHtml = u.days_missed >= 2
+        ? ` <span class="missed-flag" title="Missed ${u.days_missed} scheduled delivery day${u.days_missed > 1 ? "s" : ""}">⚠️</span>`
+        : "";
+
+      // Topics cell: show up to 3 topic names + tooltip with full list
+      const topicNames = (u.topics_list && u.topics_list !== "—") ? u.topics_list.split(", ") : [];
+      const topicsShort = topicNames.slice(0, 3).join(", ") + (topicNames.length > 3 ? ` +${topicNames.length - 3}` : "");
+      const topicsCell = topicNames.length
+        ? `<span title="${esc(u.topics_list)}" style="cursor:help;">${esc(topicsShort)}</span>`
         : `<span style="color:var(--text-secondary);">—</span>`;
+
+      // Topic weights pill
+      const wSummary = weightsSummary(u.topic_weights || {});
+      const weightsPill = wSummary
+        ? `<span class="weights-pill" title="Personalization: ${esc(wSummary)}">${esc(wSummary)}</span>`
+        : "";
+
+      // Last digest preview: up to 3 headlines as tooltip lines
+      const preview = (u.last_digest_preview || []);
+      const previewHtml = preview.length
+        ? `<span style="color:var(--accent);font-size:12px;cursor:help;" title="${esc(preview.map((p,i) => `${i+1}. [${p.tag}] ${p.headline}`).join("\n"))}">${preview.length} item${preview.length > 1 ? "s" : ""} ↗</span>`
+        : `<span style="color:var(--text-secondary);font-size:12px;">—</span>`;
+
+      // Settings link
+      const settingsLink = u.settings_url
+        ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;margin-right:8px;">edit →</a>`
+        : "";
+
+      // Send digest button — only for active users with a chatId
+      const sendBtn = (u.status === "active" && u.chat_id)
+        ? `<button class="send-btn" onclick="sendDigest(${JSON.stringify(u.chat_id)}, this)">Send →</button>`
+        : "";
+
       return `<tr>
-        <td style="font-weight:600;">${esc(u.name) || "—"}</td>
+        <td style="font-weight:600;">${esc(u.name) || "<span style='color:#9CA3AF'>—</span>"}</td>
         <td class="mono" style="font-size:12px;">${esc(u.email) || "—"}</td>
         <td>${statusBadge}</td>
         <td class="mono">${u.joined || "—"}</td>
         <td style="font-weight:600;">${u.digests}</td>
-        <td class="mono">${lastDig}</td>
-        <td style="text-align:center;">${tgIcon}</td>
+        <td class="mono">${lastDig}${missedHtml}</td>
+        <td style="letter-spacing:2px;">${emailIcon}${tgIcon}</td>
         <td style="font-size:12px;white-space:nowrap;">${u.delivery_time || "—"}</td>
-        <td style="font-size:12px;">${u.depth || "—"}</td>
-        <td>${topicsCell}</td>
-        <td>${u.bookmarks}</td>
-        <td>${tuned}</td>
-        <td>${settingsLink}</td>
+        <td style="font-size:12px;">${topicsCell}${weightsPill}</td>
+        <td>${previewHtml}</td>
+        <td style="white-space:nowrap;">${settingsLink}${sendBtn}</td>
       </tr>`;
     }).join("");
   }

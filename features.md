@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-03 (rev 6)
+Last updated: 2026-03-03 (rev 7)
 
 ---
 
@@ -32,6 +32,7 @@ Shipped in the current cycle (2026-03-03):
 - Signup/request-link/admin user lookup email matching is now null-safe + case-normalized.
 - Telegram bookmark dates now use ET day keys (not UTC day rollover).
 - Perplexity run logging now uses actual fetch-call counts (standard + custom) instead of a fixed topic count.
+- Admin outbound custom messages are now audit-logged (JSONL) and visible in a dedicated admin table.
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -39,15 +40,11 @@ The remaining items below are **new features and improvements** organized by pri
 
 ## Known Remaining Issues
 
-B-1 through B-15 are resolved except B-10 and B-12. Current follow-up audit found these remaining gaps.
+B-1 through B-15 are resolved except B-10. Current follow-up audit found these remaining gaps.
 
 ### ⚠️ B-10: Legacy `/api/admin/run-test-digest` path still exists but is no longer primary flow — **Open**
 The UI now uses roster target + `/api/admin/run-digest`, but old test-digest endpoints remain in `web/server.js:793-804` and can create confusion during debugging.
 - Suggested fix: deprecate/remove `GET/POST /api/admin/run-test-digest` and `/api/admin/test-digest-status`, or internally route both to one canonical implementation.
-
-### ⚠️ B-12: Admin outbound custom messages are not auditable — **Open**
-`/api/admin/message-user` sends messages but does not persist who sent what, when, and via which channel(s).
-- Suggested fix: append JSONL audit records to `data/admin-message-log.json` and add an "Admin comms log" section in dashboard.
 
 ### ✅ B-9: Monthly users-reached stat drift vs roster — **Fixed**
 Admin summary now keys monthly unique users to current roster delivery state and also exposes a log-based comparator (`month_unique_users_log`) for diagnostics.
@@ -87,6 +84,9 @@ Session auth is now required by default; localhost bypass only applies when `ADM
 
 ### ✅ B-15: Perplexity cost/call logging inaccurate for filtered runs — **Fixed**
 `digest.js` now records actual call volume from the current run (`perplexity_calls_standard`, `perplexity_calls_custom`, and total `perplexity_calls`) and derives cost from that real count.
+
+### ✅ B-12: Admin outbound custom messages auditability — **Fixed**
+`/api/admin/message-user` now appends JSONL audit records (`data/admin-message-log.json`) and `/api/admin/stats` exposes recent entries, rendered in an "Admin outbound messages" table on the dashboard.
 
 ---
 
@@ -372,7 +372,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | **B-13 Admin auth localhost bypass** | Very High | Small | **Done** | — |
 | **B-14 Delivery stats overcount attempted sends** | High | Small-Med | **Done** | — |
 | **B-15 Perplexity cost/call mis-logging** | High | Small | **Done** | — |
-| **B-12 Admin message auditability** | High | Small-Med | **Now** | — |
+| **B-12 Admin message auditability** | High | Small-Med | **Done** | — |
 | **B-10 Legacy test endpoint cleanup** | Medium | Small | **Now** | — |
 | **B-9 Legacy unique-user fallback** | Medium | Small | **Done** | — |
 | P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
@@ -417,7 +417,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ## Recommended Build Order
 
-**Immediate (now):** B-12 admin comms auditability, B-10 legacy test endpoint cleanup
+**Immediate (now):** B-10 legacy test endpoint cleanup
 **Sprint 1 (stability + trust):** P4-11 retire legacy test endpoint, P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates
 **Sprint 2 (personalization):** P1-1 implicit learning, P2-6 inline keyboards, P2-2 company watchlist
 **Sprint 3 (differentiation):** P2-9 Consultant Lens, P2-10 source corroboration, P2-1 custom topic queries

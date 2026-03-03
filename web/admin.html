@@ -334,6 +334,27 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     </table>
   </div>
 
+  <!-- Admin outbound message log -->
+  <div class="section-title" id="adminMsgSection">Admin outbound messages (last 30)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Time (ET)</th>
+          <th>Admin</th>
+          <th>User</th>
+          <th>Requested</th>
+          <th>Sent</th>
+          <th>Status</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="adminMsgBody">
+        <tr><td colspan="7" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- Per-user breakdown -->
   <div class="section-title">Per-user cost breakdown (all-time)</div>
   <div class="table-wrap">
@@ -488,6 +509,51 @@ function renderRunRecipients(run) {
     ? ` <span style="color:var(--text-secondary);">+${recipients.length - 3}</span>`
     : "";
   return `<span title="${esc(recipients.join(", "))}">${preview}${extra}</span>`;
+}
+function renderAdminMessages(entries) {
+  const body = document.getElementById("adminMsgBody");
+  if (!body) return;
+  if (!entries || entries.length === 0) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">No admin outbound messages yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = entries.map(e => {
+    let timeEt = "—";
+    if (e.at) {
+      try {
+        timeEt = new Date(e.at).toLocaleString("en-US", {
+          timeZone: "America/New_York",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch {}
+    }
+    const actor = e.actor || "unknown";
+    const requested = (e.requested_channels || []).length ? e.requested_channels.join(" + ") : "—";
+    const sent = (e.sent_channels || []).length ? e.sent_channels.join(" + ") : "—";
+    const status = e.success
+      ? `<span style="color:var(--green);font-weight:700;">sent</span>`
+      : `<span style="color:var(--red);font-weight:700;">failed</span>`;
+    const target = e.target_email
+      ? `<a href="/admin/user?email=${encodeURIComponent(e.target_email)}" target="_blank" style="color:var(--accent);text-decoration:none;">${esc(e.target_email_masked || e.target_email)}</a>`
+      : (e.target_chat_id ? `<span class="mono">${esc(e.target_chat_id)}</span>` : "—");
+    const notes = (e.errors && e.errors.length)
+      ? esc(e.errors.join(" | "))
+      : (e.message_preview ? esc(e.message_preview) : "—");
+    const title = `hash: ${(e.payload_hash || "—").slice(0, 12)}`;
+    return `<tr>
+      <td class="mono" style="font-size:12px;color:#6B7280;">${timeEt}</td>
+      <td>${esc(actor)}</td>
+      <td>${target}</td>
+      <td class="mono" style="font-size:12px;">${esc(requested)}</td>
+      <td class="mono" style="font-size:12px;">${esc(sent)}</td>
+      <td>${status}</td>
+      <td style="font-size:12px;max-width:300px;" title="${esc(title)}">${notes}</td>
+    </tr>`;
+  }).join("");
 }
 function setLastRefreshed(dateObj) {
   const el = document.getElementById("lastRefreshed");
@@ -930,12 +996,13 @@ async function load(silent = false) {
       return;
     }
 
-    const { summary, health, runs, per_user, roster } = data;
+    const { summary, health, runs, per_user, roster, admin_messages } = data;
 
     renderSchedule(roster || []);
     renderScheduleDashboard(roster || []);
     renderTestTargets(roster || []);
     renderTestDigestStatus({ state: "idle" });
+    renderAdminMessages(admin_messages || []);
 
     if (summary.month_label) {
       document.getElementById("monthLabel").textContent = summary.month_label;

@@ -59,6 +59,7 @@ const LOGIN_RATE = new Map(); // ip → { count, resetAt }
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
+const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const TEST_DIGEST_STATUS = {
   state: "idle", // idle | running | success | failed
   job_id: null,
@@ -81,25 +82,85 @@ function createAdminSession(email) {
   return token;
 }
 
-function validateAdminSession(req) {
+function getAdminSession(req) {
   const cookieHeader = req.headers.cookie || "";
   const match = cookieHeader.match(/(?:^|;\s*)sb_admin=([a-f0-9]{64})/);
-  if (!match) return false;
+  if (!match) return null;
   const session = ADMIN_SESSIONS.get(match[1]);
-  if (!session) return false;
+  if (!session) return null;
   if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) {
     ADMIN_SESSIONS.delete(match[1]);
-    return false;
+    return null;
   }
-  return true;
+  return session;
+}
+
+function validateAdminSession(req) {
+  return !!getAdminSession(req);
+}
+
+function isLocalRequest(req) {
+  const ip = req.socket.remoteAddress || "";
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
+function getAdminActor(req) {
+  const session = getAdminSession(req);
+  if (session?.email) return session.email;
+  if (ADMIN_LOCAL_BYPASS && isLocalRequest(req)) return "local-bypass";
+  return "unknown";
+}
+
+function appendAdminMessageLog(entry) {
+  try {
+    const dir = path.dirname(ADMIN_MESSAGE_LOG);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(ADMIN_MESSAGE_LOG, JSON.stringify(entry) + "\n");
+  } catch (e) {
+    console.error("[admin-message-log]", e.message);
+  }
+}
+
+function readAdminMessageLog(limit = 30) {
+  if (!fs.existsSync(ADMIN_MESSAGE_LOG)) return [];
+  const rows = fs.readFileSync(ADMIN_MESSAGE_LOG, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map(line => { try { return JSON.parse(line); } catch { return null; } })
+    .filter(Boolean)
+    .reverse();
+  return rows.slice(0, limit);
+}
+
+function maskEmail(email) {
+  const value = String(email || "").trim();
+  const at = value.indexOf("@");
+  if (at <= 1) return value;
+  return value.slice(0, 2) + "***" + value.slice(at);
+}
+
+function summarizeMessage(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean.length > 120 ? clean.slice(0, 117) + "..." : clean;
+}
+
+function hashText(text) {
+  return crypto.createHash("sha256").update(String(text || "")).digest("hex");
+}
+
+function logAdminMessageEvent(req, payload) {
+  appendAdminMessageLog({
+    at: new Date().toISOString(),
+    actor: getAdminActor(req),
+    ...payload,
+  });
 }
 
 function isAdminAuthed(req) {
   if (validateAdminSession(req)) return true;
   if (!ADMIN_LOCAL_BYPASS) return false;
-  const ip = req.socket.remoteAddress || "";
-  const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-  return isLocal;
+  return isLocalRequest(req);
 }
 
 function checkLoginRate(ip) {
@@ -755,6 +816,20 @@ const server = http.createServer(async (req, res) => {
     const uptimeHours = Math.floor(serverUptimeSecs / 3600);
     const uptimeMins  = Math.floor((serverUptimeSecs % 3600) / 60);
     const uptimeStr   = uptimeHours > 0 ? `${uptimeHours}h ${uptimeMins}m` : `${uptimeMins}m`;
+    const adminMessages = readAdminMessageLog(30).map(m => ({
+      at: m.at || null,
+      actor: m.actor || "unknown",
+      action: m.action || "message_user",
+      target_email: m.target_email || null,
+      target_email_masked: maskEmail(m.target_email || ""),
+      target_chat_id: m.target_chat_id || null,
+      requested_channels: Array.isArray(m.requested_channels) ? m.requested_channels : [],
+      sent_channels: Array.isArray(m.sent_channels) ? m.sent_channels : [],
+      success: !!m.success,
+      errors: Array.isArray(m.errors) ? m.errors : [],
+      message_preview: m.message_preview || "",
+      payload_hash: m.payload_hash || null,
+    }));
 
     return json(res, {
       summary: {
@@ -784,6 +859,7 @@ const server = http.createServer(async (req, res) => {
       runs: runs.slice(0, 30),
       per_user: perUser,
       roster,
+      admin_messages: adminMessages,
     });
   }
 
@@ -926,14 +1002,46 @@ const server = http.createServer(async (req, res) => {
     const channels = Array.isArray(body.channels)
       ? body.channels.map(c => String(c).toLowerCase().trim()).filter(Boolean)
       : [];
+    const messagePreview = summarizeMessage(message);
+    const payloadHash = hashText(message);
+    const writeAudit = (extra = {}) => {
+      logAdminMessageEvent(req, {
+        action: "message_user",
+        target_email: email || null,
+        target_chat_id: extra.target_chat_id || null,
+        requested_channels: channels,
+        sent_channels: Array.isArray(extra.sent_channels) ? extra.sent_channels : [],
+        subject,
+        message_length: message.length,
+        message_preview: messagePreview,
+        payload_hash: payloadHash,
+        success: !!extra.success,
+        errors: Array.isArray(extra.errors) ? extra.errors : [],
+      });
+    };
 
-    if (!email) return json(res, { error: "email required" }, 400);
-    if (message.length < 2) return json(res, { error: "message too short" }, 400);
-    if (message.length > 4000) return json(res, { error: "message too long (max 4000 chars)" }, 400);
-    if (!channels.length) return json(res, { error: "select at least one channel" }, 400);
+    if (!email) {
+      writeAudit({ success: false, errors: ["email required"] });
+      return json(res, { error: "email required" }, 400);
+    }
+    if (message.length < 2) {
+      writeAudit({ success: false, errors: ["message too short"] });
+      return json(res, { error: "message too short" }, 400);
+    }
+    if (message.length > 4000) {
+      writeAudit({ success: false, errors: ["message too long (max 4000 chars)"] });
+      return json(res, { error: "message too long (max 4000 chars)" }, 400);
+    }
+    if (!channels.length) {
+      writeAudit({ success: false, errors: ["select at least one channel"] });
+      return json(res, { error: "select at least one channel" }, 400);
+    }
 
     const user = allUsers().find(u => (u.email || "").toLowerCase().trim() === email);
-    if (!user) return json(res, { error: "user not found" }, 404);
+    if (!user) {
+      writeAudit({ success: false, errors: ["user not found"] });
+      return json(res, { error: "user not found" }, 404);
+    }
 
     const prefs = user.preferences || {};
     const emailReady = !!user.email && prefs.email_enabled !== false;
@@ -977,8 +1085,24 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (!sent.email && !sent.telegram) {
+      writeAudit({
+        target_chat_id: user.chatId || null,
+        sent_channels: [],
+        success: false,
+        errors,
+      });
       return json(res, { error: errors.join(" | ") || "no channels succeeded" }, 400);
     }
+
+    writeAudit({
+      target_chat_id: user.chatId || null,
+      sent_channels: [
+        sent.email ? "email" : null,
+        sent.telegram ? "telegram" : null,
+      ].filter(Boolean),
+      success: true,
+      errors,
+    });
 
     return json(res, {
       success: true,

@@ -685,7 +685,12 @@ function toast(message) {
 }
 
 function updateBookmarkTab() {
-  const count = state.bookmarks.size;
+  const archiveUrls = new Set(
+    state.allItems
+      .map((item) => normalizeUrl(item && item.url))
+      .filter(Boolean)
+  );
+  const count = Array.from(state.bookmarks).filter((url) => archiveUrls.has(url)).length;
   document.getElementById("bookmarkTabCount").textContent = String(count);
 }
 

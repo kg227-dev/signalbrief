@@ -1246,7 +1246,7 @@ async function init() {
     primaryAction.textContent = "Settings";
     primaryAction.href = "/settings?token=" + encodeURIComponent(state.token);
     secondaryAction.textContent = "Home";
-    secondaryAction.href = "/";
+    secondaryAction.href = "/settings?token=" + encodeURIComponent(state.token);
   }
 
   let userData;

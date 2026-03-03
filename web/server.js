@@ -264,6 +264,68 @@ function archiveRelevanceScore(item, userTopics, topicWeights) {
   return Math.min(10, Math.max(0, Math.round(raw * 10) / 10));
 }
 
+function readArchiveFiles(archiveDir) {
+  if (!fs.existsSync(archiveDir)) return [];
+  return fs.readdirSync(archiveDir)
+    .filter(f => f.endsWith(".json"))
+    .sort()
+    .reverse(); // newest first
+}
+
+function getAllowedArchiveDates(user, archiveDir, files) {
+  let allowedList = Array.isArray(user.digest_dates) ? user.digest_dates.slice() : [];
+  let changed = false;
+
+  // Legacy backfill: older users may have digests_received ahead of digest_dates.
+  if ((user.digests_received || 0) > allowedList.length) {
+    const joinedET = toEtDateKey(user.joined_at);
+    const inferred = files
+      .map(f => f.replace(".json", ""))
+      .filter(d => (!joinedET || d >= joinedET));
+    const merged = [...new Set([...allowedList, ...inferred])].sort();
+    if (merged.length > allowedList.length) {
+      allowedList = merged;
+      changed = true;
+    }
+  }
+
+  // Safety backfill: include most recent delivered digest date from last_digest_at.
+  // This covers cases where digest_dates missed a write on manual/on-demand sends.
+  const lastDigestDate = toEtDateKey(user.last_digest_at);
+  if (lastDigestDate && !allowedList.includes(lastDigestDate)) {
+    const lastFile = path.join(archiveDir, `${lastDigestDate}.json`);
+    if (fs.existsSync(lastFile)) {
+      allowedList = [...new Set([...allowedList, lastDigestDate])].sort();
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    writeUser(user.chatId, {
+      ...user,
+      digest_dates: allowedList,
+      last_updated: new Date().toISOString(),
+    });
+  }
+
+  return new Set(allowedList);
+}
+
+function normalizeBookmarkUrl(rawUrl) {
+  const raw = String(rawUrl || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
+      parsed.pathname = parsed.pathname.slice(0, -1);
+    }
+    return parsed.toString().toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
 function sendTelegramText(chatId, text) {
   const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
   if (!token) return Promise.reject(new Error("Telegram bot token not configured"));
@@ -579,49 +641,77 @@ const server = http.createServer(async (req, res) => {
     if (!user) return json(res, { error: "invalid token" }, 401);
 
     const archiveDir = path.join(__dirname, "../archive");
-    if (!fs.existsSync(archiveDir)) return json(res, { digests: [] });
+    const files = readArchiveFiles(archiveDir);
+    if (files.length === 0) return json(res, { digests: [] });
 
-    const files = fs.readdirSync(archiveDir)
-      .filter(f => f.endsWith(".json"))
-      .sort()
-      .reverse(); // newest first
-    let allowedList = Array.isArray(user.digest_dates) ? user.digest_dates.slice() : [];
-
-    // Legacy backfill: older users may have digests_received ahead of digest_dates.
-    if ((user.digests_received || 0) > allowedList.length) {
-      const toETDate = iso => iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
-      const joinedET = toETDate(user.joined_at);
-      const inferred = files
-        .map(f => f.replace(".json", ""))
-        .filter(d => (!joinedET || d >= joinedET));
-      const merged = [...new Set([...allowedList, ...inferred])].sort();
-      if (merged.length > allowedList.length) {
-        allowedList = merged;
-        writeUser(user.chatId, { ...user, digest_dates: merged, last_updated: new Date().toISOString() });
-      }
-    }
-    // Safety backfill: include most recent delivered digest date from last_digest_at.
-    // This covers cases where digest_dates missed a write on manual/on-demand sends.
-    const lastDigestDate = toEtDateKey(user.last_digest_at);
-    if (lastDigestDate && !allowedList.includes(lastDigestDate)) {
-      const lastFile = path.join(archiveDir, `${lastDigestDate}.json`);
-      if (fs.existsSync(lastFile)) {
-        const merged = [...new Set([...allowedList, lastDigestDate])].sort();
-        allowedList = merged;
-        writeUser(user.chatId, { ...user, digest_dates: merged, last_updated: new Date().toISOString() });
-      }
-    }
-    const allowedDates = new Set(allowedList);
-
+    const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
     const digests = files.flatMap(f => {
       const dateKey = f.replace(".json", "");
       if (!allowedDates.has(dateKey)) return [];
       try {
         const d = JSON.parse(fs.readFileSync(path.join(archiveDir, f), "utf8"));
         return [{ date: d.date, dateStr: d.dateStr, quickScan: d.quickScan, itemCount: d.items?.length || 0 }];
-      } catch { return []; }
+      } catch {
+        return [];
+      }
     });
     return json(res, { digests });
+  }
+
+  // GET /api/archive/all?token=... — flattened archive feed for search/discovery
+  if (pathname === "/api/archive/all" && req.method === "GET") {
+    const token = url.searchParams.get("token");
+    if (!token) return json(res, { items: [], requiresAuth: true });
+
+    const user = findUserByToken(token);
+    if (!user) return json(res, { error: "invalid token" }, 401);
+
+    const archiveDir = path.join(__dirname, "../archive");
+    const files = readArchiveFiles(archiveDir);
+    if (files.length === 0) return json(res, { items: [], digestCount: 0 });
+
+    const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
+    const userTopics = Array.isArray(user.topics) ? user.topics : [];
+    const topicWeights = user.topic_weights || {};
+    const items = [];
+    let digestCount = 0;
+
+    for (const f of files) {
+      const dateKey = f.replace(".json", "");
+      if (!allowedDates.has(dateKey)) continue;
+      try {
+        const d = JSON.parse(fs.readFileSync(path.join(archiveDir, f), "utf8"));
+        digestCount++;
+        const digestItems = Array.isArray(d.items) ? d.items : [];
+        digestItems.forEach((item, idx) => {
+          items.push({
+            date: d.date || dateKey,
+            dateStr: d.dateStr || dateKey,
+            generatedAt: d.generatedAt || null,
+            rank: idx + 1,
+            tag: item?.tag || "",
+            headline: item?.headline || "",
+            summary: item?.summary || "",
+            wim: item?.wim || null,
+            implications: item?.implications || null,
+            watch_next: item?.watch_next || null,
+            url: item?.url || "",
+            source: item?.source || "",
+            baseScore: typeof item?.baseScore === "number" ? item.baseScore : null,
+            relevanceScore: archiveRelevanceScore(item, userTopics, topicWeights),
+          });
+        });
+      } catch {
+        // Skip malformed files so one bad archive does not break discovery feed.
+      }
+    }
+
+    items.sort((a, b) => {
+      if (a.date === b.date) return (a.rank || 0) - (b.rank || 0);
+      return a.date < b.date ? 1 : -1;
+    });
+
+    return json(res, { items, digestCount });
   }
 
   // GET /api/archive/:date?token=... — full digest for a specific date
@@ -635,12 +725,13 @@ const server = http.createServer(async (req, res) => {
     if (!token) return json(res, { error: "token required" }, 400);
     const user = findUserByToken(token);
     if (!user) return json(res, { error: "invalid token" }, 401);
-    const allowedDates = new Set(Array.isArray(user.digest_dates) ? user.digest_dates : []);
-    const lastDigestDate = toEtDateKey(user.last_digest_at);
-    if (lastDigestDate) allowedDates.add(lastDigestDate);
+
+    const archiveDir = path.join(__dirname, "../archive");
+    const files = readArchiveFiles(archiveDir);
+    const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
     if (!allowedDates.has(rawDate)) return json(res, { error: "not found" }, 404);
 
-    const file = path.join(__dirname, "../archive", `${rawDate}.json`);
+    const file = path.join(archiveDir, `${rawDate}.json`);
     if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -664,6 +755,64 @@ const server = http.createServer(async (req, res) => {
     } catch {
       return json(res, { error: "malformed archive file" }, 500);
     }
+  }
+
+  // POST /api/bookmarks — add/remove bookmark by URL
+  if (pathname === "/api/bookmarks" && req.method === "POST") {
+    const body = await readBody(req);
+    const token = String(body.token || "").trim();
+    const action = String(body.action || "").toLowerCase().trim();
+    const item = body.item || {};
+    const itemUrl = String(item.url || "").trim();
+
+    if (!token) return json(res, { error: "token required" }, 400);
+    if (action !== "add" && action !== "remove") return json(res, { error: "action must be add or remove" }, 400);
+    if (!itemUrl) return json(res, { error: "item.url required" }, 400);
+
+    const user = findUserByToken(token);
+    if (!user) return json(res, { error: "invalid token" }, 401);
+
+    const bookmarks = Array.isArray(user.bookmarks) ? user.bookmarks.slice() : [];
+    const target = normalizeBookmarkUrl(itemUrl);
+
+    if (action === "add") {
+      const exists = bookmarks.some(b => normalizeBookmarkUrl(b?.url) === target);
+      if (!exists) {
+        bookmarks.push({
+          date: String(item.date || ""),
+          headline: String(item.headline || "").trim() || itemUrl,
+          url: itemUrl,
+          tag: item.tag ? String(item.tag) : null,
+          source: item.source ? String(item.source) : null,
+          saved_at: new Date().toISOString(),
+        });
+      }
+      writeUser(user.chatId, {
+        ...user,
+        bookmarks,
+        last_updated: new Date().toISOString(),
+      });
+      return json(res, {
+        success: true,
+        bookmarked: true,
+        deduped: exists,
+        count: bookmarks.length,
+      });
+    }
+
+    const filtered = bookmarks.filter(b => normalizeBookmarkUrl(b?.url) !== target);
+    const removed = filtered.length !== bookmarks.length;
+    writeUser(user.chatId, {
+      ...user,
+      bookmarks: filtered,
+      last_updated: new Date().toISOString(),
+    });
+    return json(res, {
+      success: true,
+      bookmarked: false,
+      removed,
+      count: filtered.length,
+    });
   }
 
   // POST /api/request-link — send magic access link to user's email

@@ -3,394 +3,1148 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalBrief — Your Archive</title>
+<title>SignalBrief — Signal Search</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:#FAFAF8; --card:#FFFFFF; --text:#111111; --text-secondary:#6B7280;
-  --text-2:#374151; --text-light:#9CA3AF;
-  --accent:#2563EB; --accent-hover:#1D4ED8; --accent-light:#EFF6FF;
-  --border:rgba(0,0,0,0.08); --border-subtle:rgba(0,0,0,0.05);
-  --shadow-sm:0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
-  --radius:12px; --radius-sm:8px;
+  --bg: #FAFAF8;
+  --card: #FFFFFF;
+  --text: #111111;
+  --text-secondary: #6B7280;
+  --text-light: #9CA3AF;
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-light: #EFF6FF;
+  --border: #E5E7EB;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --radius: 12px;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
-.container { max-width:720px; margin:0 auto; padding:40px 24px 80px; }
-
-/* Header */
-.header { margin-bottom:40px; animation:fadeUp 0.5s ease both; }
-.header-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-.brand-link { font-family:'Instrument Serif',serif; font-size:24px; color:var(--text); text-decoration:none; display:flex; align-items:center; gap:8px; }
-.subscribe-link { font-size:14px; font-weight:600; color:var(--accent); text-decoration:none; padding:8px 16px; border:1.5px solid var(--accent); border-radius:100px; transition:all 0.2s; }
-.subscribe-link:hover { background:var(--accent-light); }
-.archive-title { font-family:'Instrument Serif',serif; font-size:36px; font-weight:400; letter-spacing:-0.4px; margin-bottom:6px; }
-.archive-sub { color:var(--text-secondary); font-size:15px; }
-
-/* List view */
-.digest-list { display:flex; flex-direction:column; gap:12px; }
-.digest-card {
-  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
-  padding:20px 24px; cursor:pointer; transition:all 0.2s ease;
-  box-shadow:var(--shadow-sm); animation:fadeUp 0.4s ease both;
-  display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
-.digest-card:hover { border-color:rgba(37,99,235,0.3); box-shadow:var(--shadow-md); transform:translateY(-1px); }
-.digest-card-left {}
-.digest-date { font-size:13px; font-weight:600; color:var(--accent); margin-bottom:4px; letter-spacing:0.2px; }
-.digest-scan { font-size:14px; color:var(--text-secondary); line-height:1.5; }
-.digest-card-right { flex-shrink:0; }
-.digest-count { font-size:12px; color:var(--text-secondary); background:var(--bg); padding:4px 10px; border-radius:100px; border:1px solid var(--border); white-space:nowrap; }
+.container { max-width: 940px; margin: 0 auto; padding: 34px 20px 80px; }
 
-/* Detail view */
-.detail-view { display:none; }
-.back-btn { display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:500; color:var(--accent); cursor:pointer; margin-bottom:24px; background:none; border:none; padding:0; font-family:inherit; }
-.back-btn:hover { opacity:0.7; }
-.detail-header { margin-bottom:32px; }
-.detail-date { font-size:13px; font-weight:600; color:var(--accent); margin-bottom:4px; }
-.detail-title { font-family:'Instrument Serif',serif; font-size:28px; font-weight:400; letter-spacing:-0.3px; margin-bottom:10px; }
-.detail-scan-box { background:rgba(0,0,0,0.025); border:1px solid var(--border-subtle); border-left:3px solid rgba(37,99,235,0.2); border-radius:0 8px 8px 0; padding:14px 18px; font-size:13px; color:var(--text-2); line-height:1.7; font-style:italic; }
+.header { margin-bottom: 24px; animation: fadeUp 0.5s ease both; }
+.header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.brand-link {
+  font-family: 'Instrument Serif', serif;
+  font-size: 24px;
+  color: var(--text);
+  text-decoration: none;
+}
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.header-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 8px 14px;
+  border: 1px solid rgba(37,99,235,0.25);
+  border-radius: 100px;
+  background: #fff;
+}
+.header-link:hover { background: var(--accent-light); }
+.archive-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.4px;
+  margin-bottom: 6px;
+}
+.archive-sub { color: var(--text-secondary); font-size: 14px; }
 
-.item-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:12px; box-shadow:var(--shadow-md); }
-.item-meta { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
-.item-rank { font-size:13px; color:#9CA3AF; font-weight:600; }
-.item-tag { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; }
-.item-score { font-size:10px; font-weight:700; color:#fff; background:#16A34A; padding:2px 7px; border-radius:4px; letter-spacing:0.03em; }
-.item-headline { font-size:17px; font-weight:600; line-height:1.3; margin-bottom:8px; letter-spacing:-0.2px; }
-.item-summary { font-size:14px; color:var(--text-secondary); line-height:1.6; margin-bottom:12px; }
-.item-wim-label { font-size:11px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--accent); margin-bottom:5px; }
-.item-wim { font-size:14px; color:var(--text-2); line-height:1.65; margin-bottom:10px; }
-.item-wim strong { color:#111827; font-weight:700; }
-.item-implication { font-size:13px; color:#1D4ED8; line-height:1.6; margin-bottom:6px; font-weight:500; }
-.item-watch { font-size:12px; color:#6B7280; line-height:1.6; margin-bottom:12px; font-style:italic; }
-.item-link a { font-size:13px; color:var(--accent); text-decoration:none; font-weight:500; }
-.item-link a:hover { text-decoration:underline; }
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
 
-/* Empty / auth states */
-.empty-state { text-align:center; padding:60px 24px; color:var(--text-secondary); }
-.empty-icon { font-size:36px; margin-bottom:12px; }
-.empty-title { font-size:18px; font-weight:600; color:var(--text); margin-bottom:8px; }
+.view-main { display: none; }
+.controls {
+  padding: 18px;
+  margin-bottom: 14px;
+}
 
-/* Request-link gate */
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #F3F4F6;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mode-btn.active {
+  background: #FFFFFF;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.search-wrap { position: relative; }
+.search-input {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 40px 12px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  background: #FFFFFF;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.search-input:focus { border-color: rgba(37,99,235,0.45); }
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: #F3F4F6;
+  color: #6B7280;
+  font-size: 16px;
+  line-height: 24px;
+  cursor: pointer;
+  display: none;
+}
+.search-clear.visible { display: inline-block; }
+
+.sort-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sort-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.sort-select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 32px 10px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B7280' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  outline: none;
+}
+
+.result-meta {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.filter-stack { display: grid; gap: 10px; margin-top: 12px; }
+.filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.filter-label {
+  flex: 0 0 70px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-light);
+  font-weight: 700;
+  padding-top: 7px;
+}
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+}
+.filter-pill {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.filter-pill:hover { border-color: rgba(37,99,235,0.35); }
+.filter-pill.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: rgba(37,99,235,0.28);
+}
+
+.tag-pill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-light);
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.results-feed {
+  display: grid;
+  gap: 10px;
+}
+.signal-card {
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  animation: fadeUp 0.35s ease both;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.signal-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: rgba(37,99,235,0.22);
+  transform: translateY(-1px);
+}
+.signal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.signal-top-right {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.signal-date {
+  font-size: 12px;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+.bookmark-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #9CA3AF;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bookmark-btn.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.signal-headline {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 1.34;
+  margin-bottom: 5px;
+}
+.signal-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.analysis-toggle {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.analysis-body {
+  margin-top: 8px;
+  border-top: 1px solid #EFF1F3;
+  padding-top: 8px;
+}
+.analysis-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.analysis-copy {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.58;
+  margin-bottom: 6px;
+}
+.analysis-copy strong { color: #111827; font-weight: 700; }
+.analysis-extra {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.55;
+  margin-bottom: 5px;
+}
+.source-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.source-link:hover { text-decoration: underline; }
+
+mark {
+  background: #FEF3C7;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.empty-state {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-secondary);
+}
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.empty-sub {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.toast {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #B91C1C;
+  display: none;
+}
+.toast.visible { display: block; }
+
+/* Gate */
+.gate-view { display: none; }
 .gate-card {
-  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
-  padding:48px 40px; text-align:center; max-width:480px; margin:0 auto;
-  box-shadow:var(--shadow-md);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  max-width: 500px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 42px 28px;
 }
-.gate-icon { font-size:40px; margin-bottom:16px; }
-.gate-title { font-family:'Instrument Serif',serif; font-size:28px; font-weight:400; letter-spacing:-0.3px; margin-bottom:10px; }
-.gate-sub { font-size:15px; color:var(--text-secondary); line-height:1.6; margin-bottom:28px; }
-.gate-form { display:flex; flex-direction:column; gap:12px; align-items:stretch; }
+.gate-icon { font-size: 38px; margin-bottom: 12px; }
+.gate-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: -0.2px;
+  margin-bottom: 8px;
+}
+.gate-sub {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.gate-form { display: grid; gap: 10px; }
 .gate-input {
-  width:100%; padding:12px 16px; border:1.5px solid var(--border); border-radius:8px;
-  font-size:15px; font-family:inherit; outline:none; transition:border-color 0.2s;
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 15px;
+  outline: none;
 }
-.gate-input:focus { border-color:var(--accent); }
+.gate-input:focus { border-color: rgba(37,99,235,0.45); }
 .gate-btn {
-  background:var(--accent); color:#fff; border:none; border-radius:100px;
-  padding:14px 32px; font-size:14px; font-weight:600; font-family:inherit;
-  cursor:pointer; transition:background 0.2s;
+  border: none;
+  border-radius: 999px;
+  padding: 13px 20px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
 }
-.gate-btn:hover { background:#1d4ed8; }
-.gate-btn:disabled { background:#9CA3AF; cursor:default; }
-.gate-success { font-size:14px; color:#15803D; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px 16px; display:none; }
-.gate-error { font-size:13px; color:#DC2626; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:10px 14px; display:none; }
-.gate-note { font-size:13px; color:#9CA3AF; margin-top:16px; }
-.gate-note a { color:var(--accent); text-decoration:none; }
-.detail-error { margin-bottom:16px; display:none; font-size:13px; color:#B91C1C; background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:10px 14px; }
+.gate-btn:disabled { background: #9CA3AF; cursor: default; }
+.gate-success {
+  display: none;
+  font-size: 13px;
+  color: #065F46;
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.gate-error {
+  display: none;
+  font-size: 13px;
+  color: #B91C1C;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.gate-note {
+  margin-top: 14px;
+  color: var(--text-light);
+  font-size: 13px;
+}
+.gate-note a { color: var(--accent); text-decoration: none; }
 
-.footer { text-align:center; margin-top:48px; font-size:13px; color:var(--text-secondary); }
-.footer a { color:var(--accent); text-decoration:none; }
+.footer {
+  text-align: center;
+  margin-top: 40px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
 
-@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-@media (max-width:600px) {
-  .container { padding:24px 16px 60px; }
-  .archive-title { font-size:28px; }
-  .digest-card { flex-direction:column; gap:8px; }
-  .gate-card { padding:36px 24px; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 760px) {
+  .container { padding: 26px 14px 60px; }
+  .archive-title { font-size: 31px; }
+  .search-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .sort-wrap { justify-content: space-between; }
+  .filter-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .filter-label {
+    flex: none;
+    padding-top: 0;
+  }
+  .signal-summary {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: initial;
+  }
 }
 </style>
 </head>
 <body>
 <div class="container">
-
   <div class="header">
     <div class="header-top">
       <a href="/" class="brand-link">☀️ SignalBrief</a>
-      <a href="/" class="subscribe-link">Subscribe →</a>
+      <div class="header-actions">
+        <a href="/settings" id="settingsLink" class="header-link">Settings</a>
+        <a href="/" class="header-link">Subscribe</a>
+      </div>
     </div>
-    <h1 class="archive-title">Your Past Digests</h1>
+    <h1 class="archive-title">Signal Search</h1>
     <p class="archive-sub" id="archiveSub">Loading your archive…</p>
   </div>
 
-  <!-- Token-gated content area -->
-  <div id="mainContent">
+  <div id="gateView" class="gate-view">
+    <div class="gate-card">
+      <div class="gate-icon">🔒</div>
+      <div class="gate-title">Your personal archive</div>
+      <div class="gate-sub">Enter your email and we will send your private access link.</div>
+      <div class="gate-form">
+        <input type="email" id="gateEmail" class="gate-input" placeholder="you@example.com" autocomplete="email">
+        <button id="gateBtn" class="gate-btn" type="button">Send my access link</button>
+        <div id="gateError" class="gate-error"></div>
+        <div id="gateSuccess" class="gate-success">✅ Check your inbox. Your link is on the way.</div>
+      </div>
+      <p class="gate-note">Not subscribed yet? <a href="/">Sign up here →</a></p>
+    </div>
+  </div>
 
-    <!-- Gate: no token — request access link -->
-    <div id="gateView" style="display:none;">
-      <div class="gate-card">
-        <div class="gate-icon">🔒</div>
-        <div class="gate-title">Your personal archive</div>
-        <div class="gate-sub">Enter your email and we'll send you a link to access your past digests.</div>
-        <div class="gate-form">
-          <input type="email" id="gateEmail" class="gate-input" placeholder="you@example.com" autocomplete="email">
-          <button id="gateBtn" class="gate-btn" onclick="requestLink()">Send my access link</button>
-          <div id="gateError" class="gate-error"></div>
-          <div id="gateSuccess" class="gate-success">✅ Check your inbox — your link is on the way.</div>
+  <div id="mainView" class="view-main">
+    <div class="controls panel">
+      <div class="mode-toggle" role="tablist" aria-label="Feed mode">
+        <button type="button" class="mode-btn active" data-mode="all">All signals</button>
+        <button type="button" class="mode-btn" data-mode="bookmarks">My bookmarks (<span id="bookmarkTabCount">0</span>)</button>
+      </div>
+
+      <div class="search-row">
+        <div class="search-wrap">
+          <input id="searchInput" class="search-input" type="text" placeholder="Search headlines, summaries, and analysis…" autocomplete="off">
+          <button id="searchClear" class="search-clear" type="button" aria-label="Clear search">×</button>
         </div>
-        <p class="gate-note">Not subscribed yet? <a href="/">Sign up here →</a></p>
-      </div>
-    </div>
-
-    <!-- List view (authed) -->
-    <div id="listView" style="display:none;">
-      <div class="digest-list" id="digestList">
-        <div class="empty-state">
-          <div class="empty-icon">📭</div>
-          <div class="empty-title">No digests yet</div>
-          <p>Your first digest will appear here after it's delivered.</p>
+        <div class="sort-wrap">
+          <span class="sort-label">Sort</span>
+          <select id="sortSelect" class="sort-select">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
         </div>
       </div>
-    </div>
 
-    <!-- Detail view -->
-    <div id="detailView" class="detail-view">
-      <button class="back-btn" onclick="showList()">← Back to archive</button>
-      <div id="detailError" class="detail-error"></div>
-      <div class="detail-header">
-        <div class="detail-date" id="detailDate"></div>
-        <div class="detail-title">SignalBrief</div>
-        <div class="detail-scan-box" id="detailScan"></div>
+      <div id="resultMeta" class="result-meta">0 signals</div>
+
+      <div class="filter-stack">
+        <div class="filter-row">
+          <div class="filter-label">Date</div>
+          <div class="pill-row" id="dateFilters">
+            <button type="button" class="filter-pill" data-range="week">This week</button>
+            <button type="button" class="filter-pill" data-range="7d">Last 7 days</button>
+            <button type="button" class="filter-pill" data-range="30d">Last 30 days</button>
+            <button type="button" class="filter-pill active" data-range="all">All time</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="filter-label">Tags</div>
+          <div class="pill-row" id="tagFilters"></div>
+        </div>
+        <div class="filter-row" id="sourceRow" style="display:none;">
+          <div class="filter-label">Sources</div>
+          <div class="pill-row" id="sourceFilters"></div>
+        </div>
       </div>
-      <div id="detailItems"></div>
+
+      <div id="actionToast" class="toast"></div>
     </div>
 
+    <div id="resultsFeed" class="results-feed"></div>
   </div>
 
   <div class="footer">Powered by SignalBrief</div>
 </div>
 
 <script>
-function esc(s) {
-  if (!s) return "";
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const state = {
+  token: null,
+  allItems: [],
+  bookmarks: new Set(),
+  expanded: new Set(),
+  searchText: "",
+  sort: "newest",
+  mode: "all",
+  dateRange: "all",
+  selectedTags: new Set(),
+  selectedSources: new Set(),
+  tagCounts: new Map(),
+  sourceCounts: new Map(),
+  visibleItems: [],
+  keyToItem: new Map(),
+};
+
+let searchDebounce = null;
+
+function esc(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
-function cleanQuickScan(s) {
-  if (!s) return "";
-  return String(s)
-    .replace(/&nbsp;/g, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s*·\s*/g, " · ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-function sanitizeWimHtml(s) {
-  if (!s) return "";
-  return esc(String(s))
+
+function sanitizeWimHtml(value) {
+  if (!value) return "";
+  return esc(String(value))
     .replace(/&lt;strong&gt;/g, "<strong>")
     .replace(/&lt;\/strong&gt;/g, "</strong>");
 }
-let allDigests = [];
-let userToken = null;
-let requestedCurrentDate = null;
 
-async function init() {
-  const params = new URLSearchParams(window.location.search);
-  userToken = params.get('token');
-  requestedCurrentDate = params.get('current');
-  const emailHint = params.get('email');
-  const subEl = document.getElementById('archiveSub');
-  if (emailHint) {
-    const gateEmail = document.getElementById('gateEmail');
-    if (gateEmail) gateEmail.value = String(emailHint).trim();
+function stripHtml(value) {
+  return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    u.hash = "";
+    if (u.pathname.length > 1 && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
+    return u.toString().toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
+function parseDateKey(dateKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ""))) return null;
+  const [y, m, d] = String(dateKey).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatDateShort(dateKey) {
+  const parsed = parseDateKey(dateKey);
+  if (!parsed) return String(dateKey || "");
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function makeItemKey(item) {
+  const url = normalizeUrl(item.url || "");
+  return `${item.date || ""}|${url || (item.headline || "").toLowerCase()}`;
+}
+
+function highlightText(value, query) {
+  return highlightHtml(esc(String(value || "")), query);
+}
+
+function highlightHtml(html, query) {
+  if (!query) return html;
+  const cleanQuery = String(query).trim();
+  if (!cleanQuery) return html;
+
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+  const lowerNeedle = cleanQuery.toLowerCase();
+  const textNodes = [];
+  let node = walker.nextNode();
+
+  while (node) {
+    textNodes.push(node);
+    node = walker.nextNode();
   }
 
-  if (!userToken) {
-    subEl.textContent = 'Your past digests, personalized to your topics.';
-    document.getElementById('gateView').style.display = 'block';
+  textNodes.forEach((textNode) => {
+    const raw = textNode.nodeValue || "";
+    const lower = raw.toLowerCase();
+    if (!lower.includes(lowerNeedle)) return;
+
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+    let idx = lower.indexOf(lowerNeedle);
+    while (idx !== -1) {
+      if (idx > cursor) frag.appendChild(document.createTextNode(raw.slice(cursor, idx)));
+      const mark = document.createElement("mark");
+      mark.textContent = raw.slice(idx, idx + cleanQuery.length);
+      frag.appendChild(mark);
+      cursor = idx + cleanQuery.length;
+      idx = lower.indexOf(lowerNeedle, cursor);
+    }
+    if (cursor < raw.length) frag.appendChild(document.createTextNode(raw.slice(cursor)));
+    textNode.parentNode.replaceChild(frag, textNode);
+  });
+
+  return template.innerHTML;
+}
+
+function toast(message) {
+  const el = document.getElementById("actionToast");
+  if (!el) return;
+  if (!message) {
+    el.classList.remove("visible");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = message;
+  el.classList.add("visible");
+  setTimeout(() => {
+    if (el.textContent === message) toast("");
+  }, 2200);
+}
+
+function updateBookmarkTab() {
+  const count = state.bookmarks.size;
+  document.getElementById("bookmarkTabCount").textContent = String(count);
+}
+
+function buildFacetCounts() {
+  const tagMap = new Map();
+  const sourceMap = new Map();
+  state.allItems.forEach((item) => {
+    const tag = String(item.tag || "").trim();
+    const source = String(item.source || "").trim();
+    if (tag) tagMap.set(tag, (tagMap.get(tag) || 0) + 1);
+    if (source) sourceMap.set(source, (sourceMap.get(source) || 0) + 1);
+  });
+  state.tagCounts = tagMap;
+  state.sourceCounts = sourceMap;
+}
+
+function renderTagFilters() {
+  const tagWrap = document.getElementById("tagFilters");
+  const tags = Array.from(state.tagCounts.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return a[0].localeCompare(b[0]);
+  });
+  if (!tags.length) {
+    tagWrap.innerHTML = '<span style="font-size:12px;color:#9CA3AF;">No tags yet</span>';
+    return;
+  }
+  tagWrap.innerHTML = tags.map(([tag, count]) => {
+    const active = state.selectedTags.has(tag) ? " active" : "";
+    return `<button type="button" class="filter-pill${active}" data-filter="tag" data-value="${esc(tag)}">${esc(tag)} (${count})</button>`;
+  }).join("");
+}
+
+function renderSourceFilters() {
+  const sourceRow = document.getElementById("sourceRow");
+  const sourceWrap = document.getElementById("sourceFilters");
+  const all = Array.from(state.sourceCounts.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return a[0].localeCompare(b[0]);
+  });
+
+  if (all.length < 3) {
+    sourceRow.style.display = "none";
+    sourceWrap.innerHTML = "";
+    state.selectedSources.clear();
     return;
   }
 
-  // Load user's archive
-  try {
-    const res = await fetch('/api/archive?token=' + encodeURIComponent(userToken));
-    const data = await res.json();
+  sourceRow.style.display = "flex";
+  const top = all.slice(0, 8);
+  sourceWrap.innerHTML = top.map(([source, count]) => {
+    const active = state.selectedSources.has(source) ? " active" : "";
+    return `<button type="button" class="filter-pill${active}" data-filter="source" data-value="${esc(source)}">${esc(source)} (${count})</button>`;
+  }).join("");
+}
 
-    if (res.status === 401 || data.error) {
-      subEl.textContent = 'Invalid or expired link.';
-      document.getElementById('gateView').style.display = 'block';
-      const err = document.getElementById('gateError');
-      err.textContent = 'That archive link is invalid or expired. Enter your email and we will send a fresh one.';
-      err.style.display = 'block';
-      return;
+function matchesDateRange(itemDateKey) {
+  if (state.dateRange === "all") return true;
+  const itemDate = parseDateKey(itemDateKey);
+  if (!itemDate) return false;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (state.dateRange === "7d") {
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 6);
+    return itemDate >= cutoff;
+  }
+
+  if (state.dateRange === "30d") {
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 29);
+    return itemDate >= cutoff;
+  }
+
+  if (state.dateRange === "week") {
+    const day = today.getDay();
+    const mondayOffset = day === 0 ? 6 : day - 1;
+    const start = new Date(today);
+    start.setDate(start.getDate() - mondayOffset);
+    return itemDate >= start;
+  }
+
+  return true;
+}
+
+function applyFilters() {
+  const query = state.searchText.trim().toLowerCase();
+  const filtered = state.allItems.filter((item) => {
+    const bookmarked = state.bookmarks.has(normalizeUrl(item.url));
+    if (state.mode === "bookmarks" && !bookmarked) return false;
+
+    if (query) {
+      const haystack = [
+        item.headline,
+        item.summary,
+        stripHtml(item.wim),
+        item.implications,
+        item.watch_next,
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(query)) return false;
     }
 
-    allDigests = data.digests || [];
-    await prioritizeCurrentDigest();
-    subEl.textContent = allDigests.length
-      ? allDigests.length + ' issue' + (allDigests.length !== 1 ? 's' : '') + ' in your archive'
-      : 'Your digests will appear here after delivery.';
+    if (state.selectedTags.size > 0 && !state.selectedTags.has(item.tag)) return false;
+    if (state.selectedSources.size > 0 && !state.selectedSources.has(item.source)) return false;
+    if (!matchesDateRange(item.date)) return false;
+    return true;
+  });
 
-    document.getElementById('listView').style.display = 'block';
-    renderList();
-  } catch (e) {
-    subEl.textContent = 'Could not load archive.';
-    document.getElementById('gateView').style.display = 'block';
-  }
-}
-
-function isDateKey(s) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
-}
-
-async function prioritizeCurrentDigest() {
-  if (!userToken || !isDateKey(requestedCurrentDate)) return;
-  const idx = allDigests.findIndex(d => d && d.date === requestedCurrentDate);
-  if (idx > 0) {
-    const [hit] = allDigests.splice(idx, 1);
-    allDigests.unshift(hit);
-    return;
-  }
-  if (idx === 0) return;
-
-  try {
-    const res = await fetch('/api/archive/' + requestedCurrentDate + '?token=' + encodeURIComponent(userToken));
-    const d = await res.json();
-    if (!res.ok || d.error) return;
-    allDigests.unshift({
-      date: d.date || requestedCurrentDate,
-      dateStr: d.dateStr || requestedCurrentDate,
-      quickScan: d.quickScan || '',
-      itemCount: Array.isArray(d.items) ? d.items.length : 0,
-    });
-  } catch (_) {}
-}
-
-function renderList() {
-  const el = document.getElementById('digestList');
-  if (!allDigests.length) return; // keep empty state
-  el.innerHTML = allDigests.map((d, i) => `
-    <div class="digest-card" onclick="loadDetail('${esc(d.date)}')" style="animation-delay:${i * 0.05}s">
-      <div class="digest-card-left">
-        <div class="digest-date">${esc(d.dateStr || d.date)}</div>
-        <div class="digest-scan">${esc(cleanQuickScan(d.quickScan || ''))}</div>
-      </div>
-      <div class="digest-card-right">
-        <div class="digest-count">${d.itemCount || 7} signals</div>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function loadDetail(date) {
-  const detailErr = document.getElementById('detailError');
-  detailErr.style.display = 'none';
-  detailErr.textContent = '';
-  const url = '/api/archive/' + date + (userToken ? '?token=' + encodeURIComponent(userToken) : '');
-  let d;
-  try {
-    const res = await fetch(url);
-    d = await res.json();
-    if (!res.ok || d.error) {
-      detailErr.textContent = d.error === 'not found'
-        ? 'That digest is not available for this account.'
-        : (d.error || 'Could not load digest details right now.');
-      detailErr.style.display = 'block';
-      return;
+  filtered.sort((a, b) => {
+    if (a.date !== b.date) {
+      if (state.sort === "newest") return a.date < b.date ? 1 : -1;
+      return a.date > b.date ? 1 : -1;
     }
-  } catch (e) {
-    detailErr.textContent = 'Network error loading digest details.';
-    detailErr.style.display = 'block';
+    const rankA = Number(a.rank || 0);
+    const rankB = Number(b.rank || 0);
+    if (state.sort === "newest") return rankA - rankB;
+    return rankA - rankB;
+  });
+
+  state.visibleItems = filtered;
+}
+
+function renderMeta() {
+  const count = state.visibleItems.length;
+  const q = state.searchText.trim();
+  const noun = count === 1 ? "signal" : "signals";
+  const base = `${count} ${noun}`;
+  const text = q ? `${base} matching '${q}'` : base;
+  document.getElementById("resultMeta").textContent = text;
+}
+
+function renderEmptyState() {
+  const feed = document.getElementById("resultsFeed");
+  if (state.mode === "bookmarks" && state.bookmarks.size === 0) {
+    feed.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-title">No bookmarks yet</div>
+        <p class="empty-sub">You haven't bookmarked any signals yet. Hit 🔖 on any item to save it for later.</p>
+      </div>`;
     return;
   }
 
-  document.getElementById('detailDate').textContent = d.dateStr || d.date;
-  document.getElementById('detailScan').textContent = cleanQuickScan(d.quickScan || '');
+  if (state.allItems.length === 0) {
+    feed.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-title">No archive data yet</div>
+        <p class="empty-sub">Your digests will show up here after delivery.</p>
+      </div>`;
+    return;
+  }
 
-  document.getElementById('detailItems').innerHTML = d.items.map((item, i) => {
-    const linkUrl = item.url && item.url !== '#' ? item.url : '';
-    const score = typeof item.relevanceScore === 'number'
-      ? item.relevanceScore
-      : (typeof item.baseScore === 'number' ? item.baseScore : null);
-    const scoreHtml = typeof score === 'number'
-      ? `<span class="item-score">${score.toFixed(1)}</span>`
-      : '';
-    const wimHtml = item.wim ? `
-      <div class="item-wim-label">Why it matters</div>
-      <div class="item-wim">${sanitizeWimHtml(item.wim)}</div>
-    ` : '';
-    const implicationHtml = item.implications
-      ? `<div class="item-implication">→ ${esc(item.implications)}</div>`
-      : '';
-    const watchHtml = item.watch_next
-      ? `<div class="item-watch">👀 ${esc(item.watch_next)}</div>`
-      : '';
+  feed.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-title">No matches</div>
+      <p class="empty-sub">No signals match your search. Try broader terms or clear your filters.</p>
+    </div>`;
+}
+
+function renderResults() {
+  renderMeta();
+  const feed = document.getElementById("resultsFeed");
+  state.keyToItem.clear();
+
+  if (!state.visibleItems.length) {
+    renderEmptyState();
+    return;
+  }
+
+  const query = state.searchText.trim();
+  feed.innerHTML = state.visibleItems.map((item, idx) => {
+    const key = makeItemKey(item);
+    state.keyToItem.set(key, item);
+    const bookmarked = state.bookmarks.has(normalizeUrl(item.url));
+    const expanded = state.expanded.has(key);
+
+    const safeWim = sanitizeWimHtml(item.wim || "");
+    const wimHtml = safeWim ? highlightHtml(safeWim, query) : "";
+    const implication = item.implications ? `<div class="analysis-extra">→ ${highlightText(item.implications, query)}</div>` : "";
+    const watchNext = item.watch_next ? `<div class="analysis-extra">👀 ${highlightText(item.watch_next, query)}</div>` : "";
+
     return `
-      <div class="item-card">
-        <div class="item-meta">
-          <span class="item-rank">${i + 1}</span>
-          <span class="item-tag">${esc(item.tag)}</span>
-          ${scoreHtml}
+      <article class="signal-card" style="animation-delay:${Math.min(idx * 0.02, 0.28)}s;">
+        <div class="signal-top">
+          <span class="tag-pill">${esc(item.tag || "UNTAGGED")}</span>
+          <div class="signal-top-right">
+            <span class="signal-date">${esc(formatDateShort(item.date))}</span>
+            <button type="button" class="bookmark-btn${bookmarked ? " active" : ""}" data-action="bookmark" data-key="${esc(key)}" aria-pressed="${bookmarked ? "true" : "false"}">🔖</button>
+          </div>
         </div>
-        <div class="item-headline">${esc(item.headline)}</div>
-        <div class="item-summary">${esc(item.summary)}</div>
-        ${wimHtml}
-        ${implicationHtml}
-        ${watchHtml}
-        <div class="item-link">${linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener">Read more → ${esc(item.source)}</a>` : `<span>Source: ${esc(item.source)}</span>`}</div>
-      </div>
-    `;
-  }).join('');
-
-  document.getElementById('listView').style.display = 'none';
-  document.getElementById('detailView').style.display = 'block';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+        <h3 class="signal-headline">${highlightText(item.headline, query)}</h3>
+        <p class="signal-summary">${highlightText(item.summary, query)}</p>
+        ${wimHtml ? `<button type="button" class="analysis-toggle" data-action="analysis" data-key="${esc(key)}">${expanded ? "Hide analysis ↑" : "Show analysis ↓"}</button>` : ""}
+        ${expanded && wimHtml ? `
+          <div class="analysis-body">
+            <div class="analysis-label">Why It Matters</div>
+            <div class="analysis-copy">${wimHtml}</div>
+            ${implication}
+            ${watchNext}
+          </div>` : ""}
+        <div style="margin-top:${expanded && wimHtml ? "8px" : "6px"};">
+          ${item.url ? `<a class="source-link" href="${esc(item.url)}" target="_blank" rel="noopener">Read more → ${esc(item.source || "source")}</a>` : `<span style="font-size:13px;color:#6B7280;">Source: ${esc(item.source || "n/a")}</span>`}
+        </div>
+      </article>`;
+  }).join("");
 }
 
-function showList() {
-  const detailErr = document.getElementById('detailError');
-  detailErr.style.display = 'none';
-  detailErr.textContent = '';
-  document.getElementById('detailView').style.display = 'none';
-  document.getElementById('listView').style.display = 'block';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function renderAll() {
+  applyFilters();
+  renderResults();
+  updateBookmarkTab();
+}
+
+async function persistBookmark(action, item) {
+  const res = await fetch("/api/bookmarks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token: state.token,
+      action,
+      item: {
+        date: item.date,
+        headline: item.headline,
+        url: item.url,
+        tag: item.tag,
+        source: item.source,
+      },
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.error) throw new Error(body.error || "Bookmark update failed");
+}
+
+async function toggleBookmark(key) {
+  const item = state.keyToItem.get(key);
+  if (!item || !item.url) return;
+  const normalized = normalizeUrl(item.url);
+  const currently = state.bookmarks.has(normalized);
+
+  if (currently) state.bookmarks.delete(normalized);
+  else state.bookmarks.add(normalized);
+
+  renderAll();
+
+  try {
+    await persistBookmark(currently ? "remove" : "add", item);
+  } catch (err) {
+    if (currently) state.bookmarks.add(normalized);
+    else state.bookmarks.delete(normalized);
+    renderAll();
+    toast(err.message || "Could not update bookmark");
+  }
+}
+
+function toggleAnalysis(key) {
+  if (state.expanded.has(key)) state.expanded.delete(key);
+  else state.expanded.add(key);
+  renderResults();
+}
+
+function setDateRange(range) {
+  state.dateRange = range;
+  document.querySelectorAll("#dateFilters .filter-pill").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.range === range);
+  });
+  renderAll();
+}
+
+function bindEvents() {
+  document.getElementById("searchInput").addEventListener("input", (event) => {
+    const value = event.target.value || "";
+    const clearBtn = document.getElementById("searchClear");
+    clearBtn.classList.toggle("visible", value.length > 0);
+
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      state.searchText = value;
+      renderAll();
+    }, 200);
+  });
+
+  document.getElementById("searchClear").addEventListener("click", () => {
+    const input = document.getElementById("searchInput");
+    input.value = "";
+    state.searchText = "";
+    document.getElementById("searchClear").classList.remove("visible");
+    renderAll();
+    input.focus();
+  });
+
+  document.getElementById("sortSelect").addEventListener("change", (event) => {
+    state.sort = event.target.value || "newest";
+    renderAll();
+  });
+
+  document.querySelectorAll(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.mode = btn.dataset.mode === "bookmarks" ? "bookmarks" : "all";
+      document.querySelectorAll(".mode-btn").forEach((node) => {
+        node.classList.toggle("active", node === btn);
+      });
+      renderAll();
+    });
+  });
+
+  document.getElementById("dateFilters").addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-range]");
+    if (!btn) return;
+    setDateRange(btn.dataset.range);
+  });
+
+  document.getElementById("tagFilters").addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-filter='tag']");
+    if (!btn) return;
+    const value = btn.dataset.value || "";
+    if (state.selectedTags.has(value)) state.selectedTags.delete(value);
+    else state.selectedTags.add(value);
+    renderTagFilters();
+    renderAll();
+  });
+
+  document.getElementById("sourceFilters").addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-filter='source']");
+    if (!btn) return;
+    const value = btn.dataset.value || "";
+    if (state.selectedSources.has(value)) state.selectedSources.delete(value);
+    else state.selectedSources.add(value);
+    renderSourceFilters();
+    renderAll();
+  });
+
+  document.getElementById("resultsFeed").addEventListener("click", (event) => {
+    const analysisBtn = event.target.closest("[data-action='analysis']");
+    if (analysisBtn) {
+      toggleAnalysis(analysisBtn.dataset.key || "");
+      return;
+    }
+    const bookmarkBtn = event.target.closest("[data-action='bookmark']");
+    if (bookmarkBtn) {
+      toggleBookmark(bookmarkBtn.dataset.key || "");
+    }
+  });
+
+  document.getElementById("gateBtn").addEventListener("click", requestLink);
+  const gateEmail = document.getElementById("gateEmail");
+  if (gateEmail) {
+    gateEmail.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") requestLink();
+    });
+  }
 }
 
 async function requestLink() {
-  const email = document.getElementById('gateEmail').value.trim().toLowerCase();
-  const errEl = document.getElementById('gateError');
-  errEl.style.display = 'none';
-  errEl.textContent = '';
+  const email = String(document.getElementById("gateEmail").value || "").trim().toLowerCase();
+  const errorEl = document.getElementById("gateError");
+  const successEl = document.getElementById("gateSuccess");
+  const btn = document.getElementById("gateBtn");
+
+  errorEl.style.display = "none";
+  errorEl.textContent = "";
+  successEl.style.display = "none";
+
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errEl.textContent = 'Please enter a valid email address.';
-    errEl.style.display = 'block';
+    errorEl.textContent = "Please enter a valid email address.";
+    errorEl.style.display = "block";
     return;
   }
-  const btn = document.getElementById('gateBtn');
+
   btn.disabled = true;
-  btn.textContent = 'Sending…';
-
+  btn.textContent = "Sending…";
   try {
-    await fetch('/api/request-link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+    await fetch("/api/request-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     });
-  } catch (e) {}
-
-  // Always show success (don't leak whether email exists)
-  document.getElementById('gateSuccess').style.display = 'block';
-  btn.textContent = 'Sent!';
+    successEl.style.display = "block";
+    btn.textContent = "Sent";
+  } catch {
+    errorEl.textContent = "Could not send link right now.";
+    errorEl.style.display = "block";
+    btn.disabled = false;
+    btn.textContent = "Send my access link";
+  }
 }
 
-// Allow Enter key in email input
-document.addEventListener('DOMContentLoaded', function() {
-  const input = document.getElementById('gateEmail');
-  if (input) input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') requestLink();
+function showGate(message) {
+  document.getElementById("mainView").style.display = "none";
+  document.getElementById("gateView").style.display = "block";
+  document.getElementById("archiveSub").textContent = "Search your past signals anytime.";
+  if (message) {
+    const err = document.getElementById("gateError");
+    err.textContent = message;
+    err.style.display = "block";
+  }
+}
+
+async function init() {
+  bindEvents();
+
+  const params = new URLSearchParams(window.location.search);
+  state.token = params.get("token");
+  const emailHint = params.get("email");
+
+  if (emailHint) {
+    const gateEmail = document.getElementById("gateEmail");
+    if (gateEmail) gateEmail.value = String(emailHint).trim();
+  }
+
+  if (!state.token) {
+    showGate();
+    return;
+  }
+
+  document.getElementById("settingsLink").href = "/settings?token=" + encodeURIComponent(state.token);
+
+  let archiveData;
+  let userData;
+  try {
+    const [archiveRes, userRes] = await Promise.all([
+      fetch("/api/archive/all?token=" + encodeURIComponent(state.token)),
+      fetch("/api/user?token=" + encodeURIComponent(state.token)),
+    ]);
+
+    archiveData = await archiveRes.json();
+    userData = await userRes.json();
+
+    if (!archiveRes.ok || archiveData.error || !userRes.ok || userData.error) {
+      showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
+      return;
+    }
+  } catch {
+    showGate("Could not load archive right now. Please try again.");
+    return;
+  }
+
+  state.allItems = Array.isArray(archiveData.items) ? archiveData.items : [];
+  const userBookmarks = Array.isArray(userData.bookmarks) ? userData.bookmarks : [];
+  userBookmarks.forEach((b) => {
+    const normalized = normalizeUrl(b && b.url);
+    if (normalized) state.bookmarks.add(normalized);
   });
-});
+
+  buildFacetCounts();
+  renderTagFilters();
+  renderSourceFilters();
+
+  document.getElementById("gateView").style.display = "none";
+  document.getElementById("mainView").style.display = "block";
+
+  const digestCount = Number(archiveData.digestCount || 0);
+  if (state.allItems.length > 0) {
+    document.getElementById("archiveSub").textContent = `${state.allItems.length} signals across ${digestCount} digest${digestCount === 1 ? "" : "s"}.`;
+  } else {
+    document.getElementById("archiveSub").textContent = "No signals yet. Your future digests will appear here.";
+  }
+
+  renderAll();
+}
 
 init();
 </script>

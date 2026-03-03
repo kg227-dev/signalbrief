@@ -197,6 +197,12 @@ function getSettingsFrequency() {
 async function init() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token');
+  const archiveNavLink = document.getElementById('archiveNavLink');
+  if (archiveNavLink) {
+    archiveNavLink.href = token
+      ? '/archive?token=' + encodeURIComponent(token)
+      : '/archive';
+  }
   const loadingEl = document.getElementById('loadingState');
   const formEl = document.getElementById('settingsForm');
   const notFoundEl = document.getElementById('notFoundState');

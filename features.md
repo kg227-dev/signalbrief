@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-03 (rev 5)
+Last updated: 2026-03-03 (rev 6)
 
 ---
 
@@ -31,6 +31,7 @@ Shipped in the current cycle (2026-03-03):
 - Settings saves no longer accidentally disable Telegram delivery for linked users.
 - Signup/request-link/admin user lookup email matching is now null-safe + case-normalized.
 - Telegram bookmark dates now use ET day keys (not UTC day rollover).
+- Perplexity run logging now uses actual fetch-call counts (standard + custom) instead of a fixed topic count.
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -38,7 +39,7 @@ The remaining items below are **new features and improvements** organized by pri
 
 ## Known Remaining Issues
 
-B-1 through B-9 and B-11 through B-14 are resolved. Current follow-up audit found these remaining gaps.
+B-1 through B-15 are resolved except B-10 and B-12. Current follow-up audit found these remaining gaps.
 
 ### ⚠️ B-10: Legacy `/api/admin/run-test-digest` path still exists but is no longer primary flow — **Open**
 The UI now uses roster target + `/api/admin/run-digest`, but old test-digest endpoints remain in `web/server.js:793-804` and can create confusion during debugging.
@@ -47,10 +48,6 @@ The UI now uses roster target + `/api/admin/run-digest`, but old test-digest end
 ### ⚠️ B-12: Admin outbound custom messages are not auditable — **Open**
 `/api/admin/message-user` sends messages but does not persist who sent what, when, and via which channel(s).
 - Suggested fix: append JSONL audit records to `data/admin-message-log.json` and add an "Admin comms log" section in dashboard.
-
-### ⚠️ B-15: Perplexity cost/call logging is inaccurate for filtered runs — **Open**
-`digest.js` hard-codes `perplexity_calls` to `CONFIG.topics.length` (`digest.js:814-818`) for every run, even when on-demand runs fetch fewer topics (or include extra custom-topic fetches).
-- Suggested fix: log actual call count from real fetch targets and derive cost from the actual count.
 
 ### ✅ B-9: Monthly users-reached stat drift vs roster — **Fixed**
 Admin summary now keys monthly unique users to current roster delivery state and also exposes a log-based comparator (`month_unique_users_log`) for diagnostics.
@@ -87,6 +84,9 @@ Session auth is now required by default; localhost bypass only applies when `ADM
 
 ### ✅ B-14: Run logs counted attempted recipients, not successful deliveries — **Fixed**
 `digest.js` now tracks `users_targeted`, `users_served`, `per_user` (success), and `per_user_failed` (failures), and targeted runs return non-zero when no delivery succeeds.
+
+### ✅ B-15: Perplexity cost/call logging inaccurate for filtered runs — **Fixed**
+`digest.js` now records actual call volume from the current run (`perplexity_calls_standard`, `perplexity_calls_custom`, and total `perplexity_calls`) and derives cost from that real count.
 
 ---
 
@@ -369,12 +369,12 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 | Feature | Impact | Effort | Priority | Depends On |
 |---------|--------|--------|----------|------------|
-| **B-13 Admin auth localhost bypass** | Very High | Small | **Now** | — |
-| **B-14 Delivery stats overcount attempted sends** | High | Small-Med | **Now** | — |
-| **B-15 Perplexity cost/call mis-logging** | High | Small | **Now** | — |
+| **B-13 Admin auth localhost bypass** | Very High | Small | **Done** | — |
+| **B-14 Delivery stats overcount attempted sends** | High | Small-Med | **Done** | — |
+| **B-15 Perplexity cost/call mis-logging** | High | Small | **Done** | — |
 | **B-12 Admin message auditability** | High | Small-Med | **Now** | — |
 | **B-10 Legacy test endpoint cleanup** | Medium | Small | **Now** | — |
-| **B-9 Legacy unique-user fallback** | Medium | Small | **Next** | — |
+| **B-9 Legacy unique-user fallback** | Medium | Small | **Done** | — |
 | P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
 | P1-1 Implicit learning | High | Medium | **Next** | B-8 |
 | P1-11 Delivery confidence + resend failures | High | Medium | **Next** | B-14 |
@@ -386,7 +386,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | P2-12 Roster search + filters | Medium | Small | **Next** | — |
 | P4-10 Admin comms audit log | High | Small-Med | **Next** | B-12 |
 | P4-11 Retire legacy test endpoint | Medium | Small | **Next** | B-10 |
-| P4-13 Environment-safe admin auth mode | Very High | Small | **Next** | B-13 |
+| P4-13 Environment-safe admin auth mode | Very High | Small | **Done** | B-13 |
 | P2-1 Custom topic queries | High | Large | **Soon** | — |
 | P2-2 Company watchlist | High | Medium | **Soon** | — |
 | P2-5 Source diversity | Medium | Small | **Soon** | — |
@@ -417,8 +417,8 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ## Recommended Build Order
 
-**Immediate (now):** B-13 admin auth hardening, B-14 delivery-log accuracy, B-15 cost-log accuracy, B-12 admin comms auditability, B-10 legacy endpoint cleanup
-**Sprint 1 (stability + trust):** B-9 unique-user fallback, P4-11 retire legacy test endpoint, P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates, P4-13 env-safe auth mode
+**Immediate (now):** B-12 admin comms auditability, B-10 legacy test endpoint cleanup
+**Sprint 1 (stability + trust):** P4-11 retire legacy test endpoint, P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates
 **Sprint 2 (personalization):** P1-1 implicit learning, P2-6 inline keyboards, P2-2 company watchlist
 **Sprint 3 (differentiation):** P2-9 Consultant Lens, P2-10 source corroboration, P2-1 custom topic queries
 **Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution, P2-12 roster filters

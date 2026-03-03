@@ -642,6 +642,8 @@ async function main() {
       log(`On-demand: fetching ${topicsToFetch.length}/${CONFIG.topics.length} topic(s) for user`);
     }
   }
+  const standardFetchCalls = topicsToFetch.length;
+  let customFetchCalls = 0;
 
   // Fetch standard topics in parallel
   const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
@@ -662,6 +664,7 @@ async function main() {
         queries: [`${keyword} company news business strategy developments last 48 hours`],
       };
     });
+    customFetchCalls = customFetchTargets.length;
     log(`Fetching ${customFetchTargets.length} custom topic(s): ${customFetchTargets.map(t => t.tag).join(", ")}`);
     const customResults = await Promise.all(customFetchTargets.map(fetchTopicNews));
     const customItems = customResults.flat();
@@ -829,7 +832,7 @@ async function main() {
   }
 
   // ── Cost tracking ─────────────────────────────────────────────────────────
-  const perplexityCalls = CONFIG.topics.length;
+  const perplexityCalls = standardFetchCalls + customFetchCalls;
   const perplexityCost  = perplexityCalls * PERPLEXITY_COST_PER_CALL;
   const claudeCost = (claudeUsage.input_tokens  / 1_000_000 * CLAUDE_HAIKU_IN_PER_MTOK)
                    + (claudeUsage.output_tokens / 1_000_000 * CLAUDE_HAIKU_OUT_PER_MTOK);
@@ -841,6 +844,8 @@ async function main() {
     run_at_et:             now.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }),
     on_demand:             !!targetChatId,
     perplexity_calls:      perplexityCalls,
+    perplexity_calls_standard: standardFetchCalls,
+    perplexity_calls_custom: customFetchCalls,
     perplexity_cost_usd:   parseFloat(perplexityCost.toFixed(5)),
     claude_tokens_in:      claudeUsage.input_tokens,
     claude_tokens_out:     claudeUsage.output_tokens,

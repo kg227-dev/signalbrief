@@ -485,7 +485,7 @@ mark {
         <a href="/" id="secondaryActionLink" class="header-link">Home</a>
       </div>
     </div>
-    <h1 class="archive-title">Signal Search</h1>
+    <h1 class="archive-title" id="archiveTitle">Signal Search</h1>
     <p class="archive-sub" id="archiveSub">Loading your archive…</p>
   </div>
 
@@ -1132,6 +1132,18 @@ function sanitizeInternalPath(value, fallback) {
   return candidate;
 }
 
+function firstNameFromUser(user) {
+  const raw = String((user && user.name) || "").trim();
+  if (!raw) return "";
+  return raw.split(/\s+/)[0] || "";
+}
+
+function possessiveLabel(name) {
+  const clean = String(name || "").trim();
+  if (!clean) return "";
+  return /s$/i.test(clean) ? `${clean}'` : `${clean}'s`;
+}
+
 async function loadArchiveFlatWithFallback(token) {
   const tokenParam = encodeURIComponent(token);
 
@@ -1273,6 +1285,13 @@ async function init() {
   }
 
   state.allItems = Array.isArray(archiveData.items) ? archiveData.items : [];
+  const archiveTitleEl = document.getElementById("archiveTitle");
+  if (archiveTitleEl) {
+    const firstName = firstNameFromUser(userData);
+    archiveTitleEl.textContent = firstName
+      ? `${possessiveLabel(firstName)} Signal Search`
+      : "Your Signal Search";
+  }
   const userBookmarks = Array.isArray(userData.bookmarks) ? userData.bookmarks : [];
   userBookmarks.forEach((b) => {
     const normalized = normalizeUrl(b && b.url);

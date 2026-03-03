@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node digest.js",
     "test": "node digest.js --dry-run",
-    "qa:harness": "node test-harness/run-tests.js"
+    "qa:harness": "node test-harness/run-tests.js",
+    "qa:matrix": "node test-harness/run-matrix.js"
   },
   "engines": { "node": ">=22" }
 }

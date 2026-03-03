@@ -8,6 +8,9 @@
   "digest": {
     "itemCount": 7,
     "maxItemsPerTag": 2,
+    "maxItemsPerSourceDomain": 2,
+    "crossDayDedupDays": 3,
+    "maxCustomItemsPerRun": 3,
     "lookbackHours": 48
   },
   "topics": [

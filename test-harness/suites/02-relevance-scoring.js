@@ -36,18 +36,20 @@ module.exports = {
       const corr = spearmanCorrelation(weightValues, scoreValues);
       const spread = stddev(scoreValues);
       const highLowAnomalies = rows.filter((r) => (r.weight <= -2 && r.relevance > 8) || (r.weight >= 4 && r.relevance < 5));
+      const anomalyRate = rows.length ? highLowAnomalies.length / rows.length : 0;
 
       const corrNorm = ((corr + 1) / 2) * 100;
       const spreadScore = Math.max(0, Math.min(100, (spread / 2.0) * 100));
-      const anomalyPenalty = highLowAnomalies.length * 12;
+      const anomalyPenalty = Math.min(50, anomalyRate * 100);
       const score = Math.max(0, Math.min(100, 0.7 * corrNorm + 0.3 * spreadScore - anomalyPenalty));
 
-      const passed = corr >= 0.6 || rows.length < 3;
+      const passed = corr >= 0.65 && anomalyRate <= 0.05;
 
       perPersona[persona.id] = {
         persona: persona.name,
         correlation_spearman: Number(corr.toFixed(3)),
         score_spread_stddev: Number(spread.toFixed(3)),
+        anomaly_rate: Number(anomalyRate.toFixed(3)),
         anomalies: highLowAnomalies,
         score: Number(score.toFixed(2)),
         passed,
@@ -58,7 +60,7 @@ module.exports = {
       if (!passed && persona.id === "weight_tweaker") {
         failures.push({
           persona: persona.name,
-          issue: `Weight-to-score correlation below target (actual ${corr.toFixed(2)}, target > 0.6).`,
+          issue: `Weight-to-score gate missed (corr=${corr.toFixed(2)} target>=0.65, anomalyRate=${(anomalyRate * 100).toFixed(1)}% target<=5%).`,
           evidence: highLowAnomalies,
         });
       }
@@ -68,15 +70,15 @@ module.exports = {
     const tweaker = perPersona.weight_tweaker;
 
     let status = "pass";
-    if (tweaker && tweaker.correlation_spearman < 0.6 && suiteScore >= 60) status = "warn";
-    else if (tweaker && tweaker.correlation_spearman < 0.6) status = "fail";
+    if (tweaker && (tweaker.correlation_spearman < 0.65 || tweaker.anomaly_rate > 0.05) && suiteScore >= 70) status = "warn";
+    else if (tweaker && (tweaker.correlation_spearman < 0.65 || tweaker.anomaly_rate > 0.05)) status = "fail";
 
     if (status !== "pass") {
       suggestions.push(
         "Increase separation between exact-tag and partial-tag topicMatch scores to improve ordering sensitivity."
       );
       suggestions.push(
-        "Audit weight matching for ambiguous labels (for example AI matching AIxTECH and unrelated variants)."
+        "Audit weight matching for ambiguous labels and ensure strong positive weights do not lose to weak base-score noise."
       );
     }
 
@@ -90,10 +92,11 @@ module.exports = {
       failures,
       suggestions,
       details: {
-        target: "Spearman correlation > 0.6 for Weight Tweaker",
+        target: "Weight Tweaker Spearman >= 0.65 and anomaly rate <= 5%",
         weight_tweaker_correlation: tweaker ? tweaker.correlation_spearman : null,
+        weight_tweaker_anomaly_rate: tweaker ? tweaker.anomaly_rate : null,
       },
-      confidence: 0.82,
+      confidence: 0.84,
     };
   },
 };

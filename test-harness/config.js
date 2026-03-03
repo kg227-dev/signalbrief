@@ -20,6 +20,53 @@ const COSTS = {
   claude_judge_estimate_usd: 0.004,
 };
 
+const JUDGE_MODELS = {
+  haiku: "claude-haiku-4-5",
+  sonnet: "claude-sonnet-4-5",
+};
+
+const MODEL_PRICING = {
+  "claude-haiku-4-5": {
+    input_per_mtok_usd: 0.8,
+    output_per_mtok_usd: 4.0,
+    judge_estimate_usd: 0.004,
+  },
+  "claude-sonnet-4-5": {
+    input_per_mtok_usd: 3.0,
+    output_per_mtok_usd: 15.0,
+    judge_estimate_usd: 0.02,
+  },
+};
+
+const CONFIDENCE_GATES = {
+  certification_runs_required: 3,
+  suites_must_pass_all: true,
+  composite_avg_min: 85,
+  composite_floor_min: 75,
+  core_personas_min_80_count: 8,
+  topic_leak_rate_max: 0.01,
+  tweaker_spearman_min: 0.65,
+  relevance_anomaly_rate_max: 0.05,
+  analysis_mean_min: 4.0,
+  analysis_p25_min: 3.6,
+  analysis_min_n: 250,
+  depth_insight_min: 3.5,
+  depth_padding_max: 0.2,
+  depth_min_pairs: 40,
+  freshness_overlap_max: 0.2,
+  median_live_run_cost_max: 0.15,
+};
+
+const MATRIX_DEFAULTS = {
+  total_windows: 55,
+  dayparts: ["morning", "midday", "evening"],
+  distinct_days_target: 7,
+  max_analysis_samples: 24,
+  max_depth_pairs: 8,
+  confidence_bootstrap: 1000,
+  refresh_every: 0,
+};
+
 const SUITE_IDS = [
   "01-topic-matching",
   "02-relevance-scoring",
@@ -81,6 +128,10 @@ function parseArgs(argv) {
     no_judge: false,
     max_analysis_samples: 12,
     max_depth_pairs: 5,
+    judge_model: "haiku",
+    matrix: null,
+    confidence_bootstrap: MATRIX_DEFAULTS.confidence_bootstrap,
+    run_label: null,
   };
 
   for (const token of argv) {
@@ -101,6 +152,18 @@ function parseArgs(argv) {
     } else if (token.startsWith("--max-depth-pairs=")) {
       const n = Number(token.replace("--max-depth-pairs=", ""));
       if (Number.isFinite(n) && n > 0) args.max_depth_pairs = Math.floor(n);
+    } else if (token.startsWith("--judge-model=")) {
+      const raw = token.replace("--judge-model=", "").trim().toLowerCase();
+      if (JUDGE_MODELS[raw]) args.judge_model = raw;
+    } else if (token.startsWith("--matrix=")) {
+      const raw = token.replace("--matrix=", "").trim();
+      if (raw) args.matrix = raw;
+    } else if (token.startsWith("--confidence-bootstrap=")) {
+      const n = Number(token.replace("--confidence-bootstrap=", ""));
+      if (Number.isFinite(n) && n > 49) args.confidence_bootstrap = Math.floor(n);
+    } else if (token.startsWith("--run-label=")) {
+      const raw = token.replace("--run-label=", "").trim();
+      if (raw) args.run_label = raw;
     }
   }
 
@@ -130,6 +193,10 @@ module.exports = {
   IMPROVEMENT_LOG_FILE,
   BUDGET_CAP_USD,
   COSTS,
+  JUDGE_MODELS,
+  MODEL_PRICING,
+  CONFIDENCE_GATES,
+  MATRIX_DEFAULTS,
   SUITE_IDS,
   COMPOSITE_WEIGHTS,
   etDateKey,

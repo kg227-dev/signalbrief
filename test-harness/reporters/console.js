@@ -13,13 +13,14 @@ function statusLabel(status) {
   return "FAIL";
 }
 
-function printConsoleReport({ timestamp, suites, budget, compositeSummary }) {
+function printConsoleReport({ timestamp, runLabel, suites, budget, compositeSummary, rollingSummary }) {
   const title = "SignalBrief QA Results";
   const width = 66;
   const divider = "=".repeat(width);
 
   console.log("\n" + divider);
   console.log(`${title} | Run: ${timestamp}`);
+  if (runLabel) console.log(`Label: ${runLabel}`);
   console.log(divider);
   console.log(`${pad("Suite", 32)} | ${pad("Score", 10, true)} | ${pad("Status", 8)}`);
   console.log("-".repeat(width));
@@ -42,6 +43,10 @@ function printConsoleReport({ timestamp, suites, budget, compositeSummary }) {
       const worstName = compositeSummary.worst_persona.name || compositeSummary.worst_persona.persona || "unknown";
       console.log(`Lowest persona: ${worstName} (${Number(compositeSummary.worst_persona.score || 0).toFixed(1)})`);
     }
+  }
+
+  if (rollingSummary && Number.isFinite(Number(rollingSummary.pass_streak))) {
+    console.log(`Rolling pass streak: ${Number(rollingSummary.pass_streak)} run(s)`);
   }
 
   console.log(divider + "\n");

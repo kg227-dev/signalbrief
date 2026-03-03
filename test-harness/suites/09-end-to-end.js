@@ -75,6 +75,7 @@ module.exports = {
       const status = final >= 80 ? "pass" : final >= 65 ? "warn" : "fail";
       perPersona[persona.id] = {
         persona: persona.name,
+        is_stress: !!persona.is_stress,
         score: Number(final.toFixed(2)),
         status,
         components: components.map((c) => ({
@@ -88,22 +89,27 @@ module.exports = {
     }
 
     const ranked = Object.values(perPersona).sort((a, b) => b.score - a.score);
-    const suiteScore = Number(mean(scores).toFixed(2));
+    const coreRows = ranked.filter((r) => !r.is_stress);
+    const coreScores = coreRows.map((r) => r.score);
+    const allSuiteScore = Number(mean(scores).toFixed(2));
+    const coreAvg = Number(mean(coreScores).toFixed(2));
+    const coreFloor = coreScores.length ? Number(Math.min(...coreScores).toFixed(2)) : 0;
+    const coreAt80 = coreScores.filter((s) => s >= 80).length;
 
     let status = "pass";
-    if (suiteScore < 80 && suiteScore >= 65) status = "warn";
-    else if (suiteScore < 65) status = "fail";
+    if ((coreAvg < 80 || coreFloor < 70) && coreAvg >= 70) status = "warn";
+    else if (coreAvg < 70 || coreFloor < 65) status = "fail";
 
-    const failures = ranked
+    const failures = coreRows
       .filter((r) => r.score < 65)
       .map((r) => ({ persona: r.persona, issue: `Composite score ${r.score.toFixed(1)} below 65.` }));
 
     const suggestions = [];
-    if (ranked.length > 0) {
-      const bottom = ranked[ranked.length - 1];
+    if (coreRows.length > 0) {
+      const bottom = coreRows[coreRows.length - 1];
       if (bottom.score < 80) {
         suggestions.push(
-          `Prioritize fixes for ${bottom.persona}; it has the lowest composite score (${bottom.score.toFixed(1)}).`
+          `Prioritize fixes for ${bottom.persona}; it has the lowest core composite score (${bottom.score.toFixed(1)}).`
         );
       }
     }
@@ -111,17 +117,24 @@ module.exports = {
     return {
       id: this.id,
       name: this.name,
-      score: suiteScore,
-      score_label: `${suiteScore.toFixed(1)}`,
+      score: coreAvg,
+      score_label: `${coreAvg.toFixed(1)}`,
       status,
       per_persona: perPersona,
       failures,
       suggestions,
       details: {
-        target: "Composite >= 80 for all core personas.",
+        target: "Core personas: avg >= 85, floor >= 75, at least 8/10 >= 80 for certification.",
         ranking: ranked,
+        core_persona_summary: {
+          count: coreRows.length,
+          average: coreAvg,
+          floor: coreFloor,
+          at_or_above_80: coreAt80,
+        },
+        all_persona_average: allSuiteScore,
       },
-      confidence: 0.84,
+      confidence: 0.86,
     };
   },
 };

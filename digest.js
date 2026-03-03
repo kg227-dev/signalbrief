@@ -144,11 +144,96 @@ IMPORTANT: Use the direct article URLs from your search citations. Do not use ho
   }
 }
 
-// ── 2. Select best N (interleaved, max per tag, capped custom share) ─────────
+// ── 2. Select best N (interleaved, max per tag/source, capped custom share) ──
+
+function parseSourceDomain(item) {
+  const rawUrl = String(item?.url || "").trim();
+  if (rawUrl) {
+    try {
+      return new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {}
+  }
+
+  const rawSource = String(item?.source || "").trim().toLowerCase();
+  if (!rawSource) return "unknown";
+  return rawSource.replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[\/\s]/)[0] || "unknown";
+}
+
+function normalizeUrlForDedup(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) parsed.pathname = parsed.pathname.slice(0, -1);
+    return parsed.toString().toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
+function headlineFingerprint(text, width = 60) {
+  return normalizeMatchText(text).slice(0, width);
+}
+
+function loadRecentArchiveItems(days = 3) {
+  const archiveDir = path.join(__dirname, "archive");
+  if (!fs.existsSync(archiveDir)) return [];
+  const files = fs.readdirSync(archiveDir).filter((f) => f.endsWith(".json")).sort();
+  if (!files.length) return [];
+
+  const recent = files.slice(-Math.max(1, Number(days || 3)));
+  const items = [];
+  for (const file of recent) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(archiveDir, file), "utf8"));
+      items.push(...(parsed?.items || []));
+    } catch {}
+  }
+  return items;
+}
+
+function dedupAgainstRecentArchives(items, opts = {}) {
+  const dedupDays = Math.max(1, Number(opts.days || 3));
+  const target = Math.max(1, Number(opts.targetCount || 7));
+  const recentItems = loadRecentArchiveItems(dedupDays);
+  if (!recentItems.length) {
+    return { items: items || [], removed: 0, archive_days_used: 0 };
+  }
+
+  const seenUrls = new Set(
+    recentItems.map((i) => normalizeUrlForDedup(i?.url)).filter(Boolean)
+  );
+  const seenHeadlines = new Set(
+    recentItems.map((i) => headlineFingerprint(i?.headline)).filter(Boolean)
+  );
+
+  const kept = [];
+  const removed = [];
+  for (const item of (items || [])) {
+    const urlKey = normalizeUrlForDedup(item?.url);
+    const headKey = headlineFingerprint(item?.headline);
+    const duplicate = (urlKey && seenUrls.has(urlKey)) || (headKey && seenHeadlines.has(headKey));
+    if (duplicate) removed.push(item);
+    else kept.push(item);
+  }
+
+  if (kept.length < target && removed.length > 0) {
+    const backfill = removed.slice(0, target - kept.length);
+    kept.push(...backfill);
+  }
+
+  return {
+    items: kept,
+    removed: removed.length,
+    archive_days_used: dedupDays,
+  };
+}
 
 function selectItems(allItems, opts = {}) {
   const maxItems = Math.max(1, Number(opts.maxItems || CONFIG.digest.itemCount || 7));
   const maxItemsPerTag = Math.max(1, Number(opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2));
+  const maxItemsPerSourceDomain = Math.max(1, Number(opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2));
   const customTagOrder = [...new Set((opts.customTags || []).map((t) => String(t || "").toLowerCase()).filter(Boolean))];
   const customTags = new Set(customTagOrder);
   const tagPriority = opts.tagPriority && typeof opts.tagPriority === "object" ? opts.tagPriority : {};
@@ -158,16 +243,21 @@ function selectItems(allItems, opts = {}) {
     : (customTags.size > 0 ? Math.max(1, Math.floor(maxItems * 0.4)) : Infinity);
 
   const seen = new Set();
+  const seenUrls = new Set();
   const deduped = (allItems || []).filter((item) => {
     const headline = String(item?.headline || "").toLowerCase().trim();
     if (!headline) return false;
     const key = headline.slice(0, 40);
     if (seen.has(key)) return false;
+    const urlKey = normalizeUrlForDedup(item?.url);
+    if (urlKey && seenUrls.has(urlKey)) return false;
     seen.add(key);
+    if (urlKey) seenUrls.add(urlKey);
     return true;
   });
 
   const tagCounts = {};
+  const domainCounts = {};
   let customCount = 0;
   const selected = [];
   const pool = [...deduped];
@@ -177,12 +267,15 @@ function selectItems(allItems, opts = {}) {
     if (!tag) return false;
     if ((tagCounts[tag] || 0) >= maxItemsPerTag) return false;
     if (customTags.size > 0 && customTags.has(tag.toLowerCase()) && customCount >= maxCustomItems) return false;
+    const domain = parseSourceDomain(item);
+    if ((domainCounts[domain] || 0) >= maxItemsPerSourceDomain) return false;
     return true;
   };
 
   const pickIndex = (lastTag, allowAdjacentTag = false) => {
     let bestIdx = -1;
     let bestCount = Infinity;
+    let bestDomainCount = Infinity;
     let bestPriority = -Infinity;
     for (let i = 0; i < pool.length; i++) {
       const item = pool[i];
@@ -190,9 +283,15 @@ function selectItems(allItems, opts = {}) {
       const tag = String(item?.tag || "");
       if (!allowAdjacentTag && lastTag && tag === lastTag) continue;
       const count = tagCounts[tag] || 0;
+      const domainCount = domainCounts[parseSourceDomain(item)] || 0;
       const priority = Number(tagPriority[normalizeTopicToken(tag)] || 0);
-      if (count < bestCount || (count === bestCount && priority > bestPriority)) {
+      if (
+        count < bestCount
+        || (count === bestCount && domainCount < bestDomainCount)
+        || (count === bestCount && domainCount === bestDomainCount && priority > bestPriority)
+      ) {
         bestCount = count;
+        bestDomainCount = domainCount;
         bestPriority = priority;
         bestIdx = i;
       }
@@ -210,9 +309,11 @@ function selectItems(allItems, opts = {}) {
       });
       if (idx === -1) continue;
       const item = pool.splice(idx, 1)[0];
+      const domain = parseSourceDomain(item);
       tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
       customCount += 1;
-      selected.push(item);
+      selected.push({ ...item, source_domain: item.source_domain || domain });
     }
   }
 
@@ -222,9 +323,11 @@ function selectItems(allItems, opts = {}) {
     const fallback = idx === -1 ? pickIndex(lastTag, true) : idx;
     if (fallback === -1) break;
     const item = pool.splice(fallback, 1)[0];
+    const domain = parseSourceDomain(item);
     tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+    domainCounts[domain] = (domainCounts[domain] || 0) + 1;
     if (customTags.has(String(item.tag || "").toLowerCase())) customCount += 1;
-    selected.push(item);
+    selected.push({ ...item, source_domain: item.source_domain || domain });
   }
 
   return selected;
@@ -352,13 +455,15 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
 // ── 3b. Score items by relevance (zero extra API cost) ───────────────────────
 // baseScore comes from enrichItems (already paid for in that call).
 // topicMatch is computed locally — free.
-// finalScore = baseScore (60%) + topicMatch (40%) + weightBonus (user preference)
+// finalScore = baseScore (60%) + topicMatch (40%) + weightBonus (+ optional specialist bonus)
 //
 // topic_weights (from "more X" / "less X" commands) are keyed by whatever string
 // Claude returns from intent parsing (e.g., "AI", "healthcare") — not necessarily
 // the canonical tag. matchWeightToTag() does case-insensitive substring matching
 // so "AI" matches "AI×TECH" and "health" matches "HEALTHCARE".
 // Each weight unit = ±0.5 points on the 0–10 scale (range: -5 to +5 → -2.5 to +2.5).
+// Specialist mode adds an additional boost/penalty for narrow-topic users so exact matches
+// are preserved at the top of the ranking before broad balancing.
 
 function scoreColor(score) {
   if (score >= 8.5) return { bg: "#16A34A", text: "#fff" };    // strong green
@@ -380,10 +485,13 @@ function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
 }
 
-function computeTopicMatch(item, userTopics) {
+function computeTopicSignals(item, userTopics) {
   const tagNormalized = normalizeTopicToken(item?.tag || "");
   const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
   let best = 3;
+  let customKeywordMatch = false;
+  let exactMatch = false;
+  let partialMatch = false;
 
   for (const topic of (userTopics || [])) {
     const rawTopic = String(topic || "");
@@ -394,15 +502,30 @@ function computeTopicMatch(item, userTopics) {
     const partial = tagNormalized && !exact
       && (tagNormalized.includes(topicNormalized) || topicNormalized.includes(tagNormalized));
 
-    if (exact) best = Math.max(best, 10);
-    else if (partial) best = Math.max(best, 7);
+    if (exact) {
+      exactMatch = true;
+      best = Math.max(best, 10);
+    } else if (partial) {
+      partialMatch = true;
+      best = Math.max(best, 7);
+    }
 
     if (rawTopic.toLowerCase().startsWith("custom_") && bodyText.includes(topicNormalized)) {
+      customKeywordMatch = true;
       best = Math.max(best, 10);
     }
   }
 
-  return best;
+  return {
+    topicMatch: best,
+    customKeywordMatch,
+    exactMatch,
+    partialMatch,
+  };
+}
+
+function computeTopicMatch(item, userTopics) {
+  return computeTopicSignals(item, userTopics).topicMatch;
 }
 
 // Find the total weight adjustment for a given item tag from the user's topic_weights map.
@@ -422,14 +545,37 @@ function matchWeightToTag(tag, topicWeights) {
   return total;
 }
 
-function applyRelevanceScores(items, userTopics, topicWeights = {}) {
+function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
+  const specialistMode = !!opts.specialistMode;
   return items.map(item => {
-    const topicMatch  = computeTopicMatch(item, userTopics);
+    const signals     = computeTopicSignals(item, userTopics);
+    const topicMatch  = signals.topicMatch;
     const base        = typeof item.baseScore === "number" ? item.baseScore : 5.0;
     const weight      = matchWeightToTag(item.tag, topicWeights);
     const weightBonus = weight * 0.5; // ±0.5 pts per "more"/"less" step
-    const raw         = base * 0.6 + topicMatch * 0.4 + weightBonus;
-    return { ...item, relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)) };
+    let specialistBonus = 0;
+    if (specialistMode) {
+      if (topicMatch >= 10) specialistBonus = 1.1;
+      else if (topicMatch >= 7) specialistBonus = 0.45;
+      else specialistBonus = -0.6;
+    }
+    const raw         = base * 0.6 + topicMatch * 0.4 + weightBonus + specialistBonus;
+
+    const whyShown = [];
+    if (topicMatch >= 7) whyShown.push("topic_match");
+    if (signals.customKeywordMatch) whyShown.push("custom_keyword");
+    if (weightBonus > 0.25) whyShown.push("weight_boost");
+    if (base >= 8.0) whyShown.push("high_base_score");
+
+    return {
+      ...item,
+      source_domain: item.source_domain || parseSourceDomain(item),
+      topicMatch,
+      weightBonus,
+      specialistBonus,
+      why_shown: whyShown,
+      relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)),
+    };
   });
 }
 
@@ -483,6 +629,10 @@ function formatTelegram(items, dateStr, state) {
     } else {
       lines.push(`→ ${item.source}`);
     }
+    const whyShown = Array.isArray(item.why_shown) && item.why_shown.length
+      ? item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(", ")
+      : null;
+    if (whyShown) lines.push(`· why shown: ${whyShown}`);
     lines.push("");
   });
   lines.push(buildCommandMenu(state));
@@ -539,6 +689,9 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
     const watchHtml = (isDeep && item.watch_next)
       ? `<div style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;font-style:italic;">👀 ${item.watch_next}</div>`
       : "";
+    const whyShownHtml = Array.isArray(item.why_shown) && item.why_shown.length
+      ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why shown: ${item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ")}</div>`
+      : "";
 
     const itemStyle = "padding:32px 0;border-bottom:1px solid #E5E7EB;";
 
@@ -554,6 +707,7 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
         ${wimHtml}
         ${implHtml}
         ${watchHtml}
+        ${whyShownHtml}
         <div style="font-size:13px;"><a href="${linkUrl}" style="color:#2563EB;text-decoration:none;font-weight:500;">Read more → ${item.source}</a></div>
       </div>`;
   }).join("\n");
@@ -662,12 +816,15 @@ function saveToArchive(date, items, dateStr, quickScan, opts = {}) {
       tag:         i.tag,
       headline:    i.headline,
       summary:     i.summary,
+      wim_brief:   i.wim_brief || null,
       wim:         i.wim,
       implications: i.implications || null,
       watch_next:  i.watch_next || null,
       url:         i.url,
       source:      i.source,
+      source_domain: i.source_domain || parseSourceDomain(i),
       baseScore:   i.baseScore != null ? i.baseScore : null,
+      why_shown:   Array.isArray(i.why_shown) ? i.why_shown : [],
     })),
     generatedAt: date.toISOString(),
   };
@@ -785,7 +942,7 @@ async function main() {
 
   // Fetch standard topics in parallel
   const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
-  const allItems = allResults.flat();
+  let allItems = allResults.flat();
   log(`Fetched ${allItems.length} raw items`);
 
   // Fetch custom topics for due users — deduplicated, capped at 5 queries per run
@@ -814,6 +971,16 @@ async function main() {
     allItems.unshift(...customItems);
   }
 
+  const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
+  const dedupRes = dedupAgainstRecentArchives(allItems, {
+    days: crossDayDedupDays,
+    targetCount: selectionTarget,
+  });
+  allItems = dedupRes.items;
+  if (dedupRes.removed > 0) {
+    log(`Cross-day dedup removed ${dedupRes.removed} repeat item(s) using last ${dedupRes.archive_days_used} day(s) of archive history`);
+  }
+
   const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
   const defaultMaxCustom = customTags.length > 0
     ? Math.max(1, Math.floor(selectionTarget * 0.4))
@@ -827,8 +994,9 @@ async function main() {
     customTags,
     maxCustomItems,
     tagPriority,
+    maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
   });
-  log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems})`);
+  log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
 
   const { items: enriched, usage: claudeUsage } = await enrichItems(selected);
 
@@ -855,9 +1023,10 @@ async function main() {
       // 1. Filter items by user's topic list (if set)
       let wasFiltered = false;
       let userItems = enriched;
+      let standardTopicsLower = [];
       if (u.topics && u.topics.length >= 1) {
         // Standard topics: match against article tag
-        const standardTopicsLower = u.topics
+        standardTopicsLower = u.topics
           .filter(t => !String(t).toLowerCase().startsWith("custom_"))
           .map(t => normalizeTopicToken(t))
           .filter(Boolean);
@@ -897,6 +1066,10 @@ async function main() {
       // 2. Score by relevance (free — uses baseScore + local topic match + user weight adjustments)
       const weights = u.topic_weights || {};
       const hasWeights = Object.values(weights).some(w => w !== 0);
+      const specialistMode = standardTopicsLower.length > 0 && (
+        standardTopicsLower.length <= 2
+        || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5)
+      );
 
       // Log pre-sort order when user has weight adjustments — lets us verify ranking is working
       if (hasWeights) {
@@ -904,7 +1077,9 @@ async function main() {
         log(`  [pre-sort] ${userItems.map(i => `${i.tag}(${i.baseScore})`).join(", ")}`);
       }
 
-      userItems = applyRelevanceScores(userItems, u.topics || [], weights);
+      userItems = applyRelevanceScores(userItems, u.topics || [], weights, {
+        specialistMode,
+      });
       userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
       if (hasWeights) {
@@ -970,7 +1145,12 @@ async function main() {
       u.digests_received = (u.digests_received || 0) + 1;
       u.last_digest_at = now.toISOString();
       u.last_digest_items = userItems.map(i => ({
-        headline: i.headline, url: i.url, tag: i.tag, source: i.source,
+        headline: i.headline,
+        url: i.url,
+        tag: i.tag,
+        source: i.source,
+        source_domain: i.source_domain || parseSourceDomain(i),
+        why_shown: Array.isArray(i.why_shown) ? i.why_shown : [],
       }));
       // Track which dates this user received a digest (for user-scoped archive)
       const todayDateKey = etDateKey(now);

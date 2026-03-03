@@ -10,6 +10,43 @@ function mean(values) {
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
+function percentile(values, p = 0.5) {
+  const arr = (values || []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (!arr.length) return 0;
+  const clamped = Math.max(0, Math.min(1, Number(p)));
+  const pos = (arr.length - 1) * clamped;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return arr[lo];
+  const weight = pos - lo;
+  return arr[lo] * (1 - weight) + arr[hi] * weight;
+}
+
+function bootstrapMeanCI(values, iterations = 1000, alpha = 0.05) {
+  const arr = (values || []).filter((v) => Number.isFinite(v));
+  if (!arr.length) return { mean: 0, low: 0, high: 0, n: 0 };
+  const n = arr.length;
+  const reps = Math.max(50, Math.floor(Number(iterations) || 1000));
+  const sampledMeans = [];
+  for (let i = 0; i < reps; i++) {
+    let sum = 0;
+    for (let j = 0; j < n; j++) {
+      const pick = arr[Math.floor(Math.random() * n)];
+      sum += pick;
+    }
+    sampledMeans.push(sum / n);
+  }
+  sampledMeans.sort((a, b) => a - b);
+  const low = percentile(sampledMeans, alpha / 2);
+  const high = percentile(sampledMeans, 1 - alpha / 2);
+  return {
+    mean: mean(arr),
+    low,
+    high,
+    n,
+  };
+}
+
 function toRank(values) {
   const pairs = values.map((v, idx) => ({ v, idx })).sort((a, b) => a.v - b.v);
   const ranks = Array(values.length).fill(0);
@@ -159,7 +196,7 @@ function normalizeDepthJudgeResult(result, pair) {
 }
 
 async function judgeAnalysisSample(sample, deps) {
-  const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs } = deps;
+  const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs, judgeModel } = deps;
   if (noJudge) return heuristicAnalysisScore(sample.item);
 
   const prompt = [
@@ -191,6 +228,7 @@ async function judgeAnalysisSample(sample, deps) {
       },
       prompt,
       maxTokens: 500,
+      model: judgeModel,
       appConfig,
       budget,
       allowLiveApi,
@@ -212,7 +250,7 @@ async function judgeAnalysisSample(sample, deps) {
 }
 
 async function judgeDepthPair(pair, deps) {
-  const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs } = deps;
+  const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs, judgeModel } = deps;
   if (noJudge) return normalizeDepthJudgeResult(null, pair);
 
   const prompt = [
@@ -230,6 +268,7 @@ async function judgeDepthPair(pair, deps) {
       payload: pair,
       prompt,
       maxTokens: 450,
+      model: judgeModel,
       appConfig,
       budget,
       allowLiveApi,
@@ -250,6 +289,65 @@ async function judgeDepthPair(pair, deps) {
   }
 }
 
+function normalizePairwiseResult(result) {
+  if (!result || typeof result !== "object") {
+    return {
+      winner: "tie",
+      confidence: 0.5,
+      rationale: "Heuristic fallback (no live pairwise judge result).",
+      judged: false,
+    };
+  }
+  const winnerRaw = String(result.winner || "tie").toUpperCase();
+  const winner = winnerRaw === "A" || winnerRaw === "B" ? winnerRaw : "tie";
+  return {
+    winner,
+    confidence: clamp(Number(result.confidence || 0.5), 0, 1),
+    rationale: String(result.rationale || ""),
+    judged: true,
+  };
+}
+
+async function judgePairwiseComparison(payload, deps) {
+  const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs, judgeModel } = deps;
+  if (noJudge) return normalizePairwiseResult(null);
+
+  const prompt = [
+    "You are a strict pairwise QA judge for SignalBrief analysis quality.",
+    "Compare candidate A vs candidate B for the same story context.",
+    "Select the better candidate for consultant-grade strategic usefulness.",
+    "Return ONLY JSON: {\"winner\":\"A\"|\"B\"|\"tie\", \"confidence\":0..1, \"rationale\":\"...\"}.",
+    "Input:",
+    JSON.stringify(payload, null, 2),
+  ].join("\n");
+
+  try {
+    const judged = await judgeWithClaudeCached({
+      kind: "pairwise_quality_v1",
+      payload,
+      prompt,
+      maxTokens: 420,
+      model: judgeModel,
+      appConfig,
+      budget,
+      allowLiveApi,
+      refreshCache,
+      costs,
+    });
+
+    if (judged?.budget) {
+      deps.budget.spent = judged.budget.spent;
+      deps.budget.remaining = judged.budget.remaining;
+      deps.budget.calls = judged.budget.calls;
+      deps.budget.cap = judged.budget.cap;
+    }
+
+    return normalizePairwiseResult(judged.result);
+  } catch {
+    return normalizePairwiseResult(null);
+  }
+}
+
 function buildEvaluator(deps) {
   return {
     spearmanCorrelation,
@@ -257,14 +355,19 @@ function buildEvaluator(deps) {
     sentenceCount,
     readingGradeLevel,
     mean,
+    percentile,
+    bootstrapMeanCI,
     judgeAnalysisSample: (sample) => judgeAnalysisSample(sample, deps),
     judgeDepthPair: (pair) => judgeDepthPair(pair, deps),
+    judgePairwiseComparison: (payload) => judgePairwiseComparison(payload, deps),
   };
 }
 
 module.exports = {
   clamp,
   mean,
+  percentile,
+  bootstrapMeanCI,
   spearmanCorrelation,
   wordCount,
   sentenceCount,

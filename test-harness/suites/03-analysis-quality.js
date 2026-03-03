@@ -38,6 +38,10 @@ module.exports = {
       judgedItems.push({ ...sample, score });
     }
 
+    const overallScores = judgedItems.map((x) => Number(x.score.overall)).filter(Number.isFinite);
+    const p25 = evaluator.percentile(overallScores, 0.25);
+    const p10 = evaluator.percentile(overallScores, 0.1);
+
     const dimensionAverages = {
       specificity: mean(judgedItems.map((x) => x.score.specificity)),
       strategic_framing: mean(judgedItems.map((x) => x.score.strategic_framing)),
@@ -72,25 +76,27 @@ module.exports = {
     const suiteScore = Number((((overall - 1) / 4) * 100).toFixed(2));
 
     let status = "pass";
-    if (overall < 3.8 && overall >= 3.2) status = "warn";
-    else if (overall < 3.2) status = "fail";
+    if ((overall < 4.0 || p25 < 3.6) && overall >= 3.7 && p25 >= 3.3) status = "warn";
+    else if (overall < 4.0 || p25 < 3.6) status = "fail";
 
     const failures = [];
     if (status !== "pass") {
       failures.push({
-        issue: `Average analysis quality ${overall.toFixed(2)}/5 below target 3.8/5.`,
+        issue: `Analysis quality below gate (mean ${overall.toFixed(2)}/5, p25 ${p25.toFixed(2)}/5; target mean>=4.0 and p25>=3.6).`,
         evidence: {
           dimension_averages: Object.fromEntries(
             Object.entries(dimensionAverages).map(([k, v]) => [k, Number(v.toFixed(3))])
           ),
           sample_count: judgedItems.length,
+          p25: Number(p25.toFixed(3)),
+          p10: Number(p10.toFixed(3)),
         },
       });
     }
 
     const suggestions = [];
     const lowDims = Object.entries(dimensionAverages)
-      .filter(([k, v]) => k !== "overall" && v < 3.5)
+      .filter(([k, v]) => k !== "overall" && v < 3.8)
       .map(([k]) => k);
 
     if (lowDims.includes("specificity")) {
@@ -119,8 +125,10 @@ module.exports = {
       failures,
       suggestions,
       details: {
-        target: "Average overall >= 3.8/5",
+        target: "Average overall >= 4.0/5 and P25 >= 3.6/5",
         sample_count: judgedItems.length,
+        p25: Number(p25.toFixed(3)),
+        p10: Number(p10.toFixed(3)),
         dimension_averages: Object.fromEntries(
           Object.entries(dimensionAverages).map(([k, v]) => [k, Number(v.toFixed(3))])
         ),
@@ -131,7 +139,7 @@ module.exports = {
           judged: !!row.score.judged,
         })),
       },
-      confidence: judgedItems.some((x) => x.score.judged) ? 0.86 : 0.55,
+      confidence: judgedItems.some((x) => x.score.judged) ? 0.88 : 0.55,
     };
   },
 };

@@ -71,40 +71,43 @@ module.exports = {
 
     const avgRatio = mean(pairRows.map((r) => r.char_ratio));
     const avgInsight = mean(judgedPairs.map((r) => r.judge.insight_gain));
+    const paddingRate = mean(judgedPairs.map((r) => (r.judge.likely_padding ? 1 : 0)));
     const meaningfulPairs = judgedPairs.filter((r) => r.char_ratio >= 2 && r.judge.deep_more_insight && !r.judge.likely_padding).length;
     const meaningfulRatio = judgedPairs.length ? meaningfulPairs / judgedPairs.length : 0;
 
     const lengthScore = Math.max(0, Math.min(100, (avgRatio / 2.5) * 100));
     const insightScore = Math.max(0, Math.min(100, ((avgInsight - 1) / 4) * 100));
     const meaningfulScore = meaningfulRatio * 100;
-    const suiteScore = Number((0.4 * lengthScore + 0.4 * insightScore + 0.2 * meaningfulScore).toFixed(2));
-    const lowSample = judgedPairs.length < Math.min(3, Number(runtime.max_depth_pairs || 5));
+    const paddingPenalty = Math.max(0, (paddingRate - 0.2) * 80);
+    const suiteScore = Number(Math.max(0, 0.35 * lengthScore + 0.45 * insightScore + 0.2 * meaningfulScore - paddingPenalty).toFixed(2));
 
+    const lowSample = judgedPairs.length < Math.min(3, Number(runtime.max_depth_pairs || 5));
     let status = "pass";
-    if ((avgRatio < 2 || avgInsight < 3.5) && suiteScore >= 55) status = "warn";
-    else if (avgRatio < 2 || avgInsight < 3.5) status = "fail";
+    if ((avgRatio < 2 || avgInsight < 3.5 || paddingRate > 0.2) && suiteScore >= 60) status = "warn";
+    else if (avgRatio < 2 || avgInsight < 3.5 || paddingRate > 0.2) status = "fail";
     if (lowSample && status === "fail") status = "warn";
 
     const failures = [];
+    const suggestions = [];
+
     if (status !== "pass") {
       failures.push({
-        issue: `Depth difference is weak (avg ratio ${avgRatio.toFixed(2)}x, avg insight ${avgInsight.toFixed(2)}/5).`,
+        issue: `Depth quality below target (ratio ${avgRatio.toFixed(2)}x, insight ${avgInsight.toFixed(2)}/5, padding ${(paddingRate * 100).toFixed(1)}%).`,
         evidence: judgedPairs.map((r) => ({
           headline: r.headline,
           ratio: r.char_ratio,
           insight_gain: r.judge.insight_gain,
           padding: r.judge.likely_padding,
+          judged: !!r.judge.judged,
         })),
       });
-    }
-    if (lowSample) {
-      suggestions.push("Depth comparison confidence is limited by low overlap; increase selected pool/topic overlap for depth personas.");
+
+      suggestions.push("Generate depth-specific enrichment prompts instead of truncating deep output for brief mode.");
+      suggestions.push("Require deep mode to add at least one extra mechanism or near-term catalyst beyond brief output.");
     }
 
-    const suggestions = [];
-    if (status !== "pass") {
-      suggestions.push("Generate depth-specific enrichment prompts instead of truncating deep output for brief mode.");
-      suggestions.push("Require deep mode to add at least one extra mechanism or forward-looking signal beyond brief output.");
+    if (lowSample) {
+      suggestions.push("Depth comparison confidence is limited by low overlap; increase selected pool/topic overlap for depth personas.");
     }
 
     return {
@@ -128,9 +131,11 @@ module.exports = {
       failures,
       suggestions,
       details: {
-        target: "Deep should be ~2-3x longer and higher quality than brief.",
+        target: "Deep should be 2-3x longer, insight >=3.5/5, likely_padding <=20%.",
+        sample_count: judgedPairs.length,
         avg_char_ratio: Number(avgRatio.toFixed(3)),
         avg_insight_gain: Number(avgInsight.toFixed(3)),
+        likely_padding: Number(paddingRate.toFixed(3)),
         meaningful_ratio: Number(meaningfulRatio.toFixed(3)),
         judged_pairs: judgedPairs.map((r) => ({
           headline: r.headline,
@@ -141,7 +146,7 @@ module.exports = {
           judged: !!r.judge.judged,
         })),
       },
-      confidence: judgedPairs.some((p) => p.judge.judged) ? 0.82 : 0.58,
+      confidence: judgedPairs.some((p) => p.judge.judged) ? 0.84 : 0.58,
     };
   },
 };

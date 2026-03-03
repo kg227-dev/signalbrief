@@ -9,6 +9,8 @@ const {
   BUDGET_FILE,
   BUDGET_CAP_USD,
   COSTS,
+  JUDGE_MODELS,
+  MODEL_PRICING,
   sanitizeCacheKey,
   writeJson,
   readJson,
@@ -123,11 +125,36 @@ function recordBudgetCall(budget, entry) {
   return next;
 }
 
-function estimateClaudeCost(usage, costs = COSTS) {
+function resolveAnthropicModel(model) {
+  const raw = String(model || "").trim().toLowerCase();
+  if (!raw) return JUDGE_MODELS.haiku;
+  if (JUDGE_MODELS[raw]) return JUDGE_MODELS[raw];
+  if (raw.includes("sonnet")) return JUDGE_MODELS.sonnet;
+  if (raw.includes("haiku")) return JUDGE_MODELS.haiku;
+  return model;
+}
+
+function modelRateCard(model, costs = COSTS) {
+  const normalized = resolveAnthropicModel(model);
+  const map = {
+    ...MODEL_PRICING,
+    ...(costs && costs.model_pricing ? costs.model_pricing : {}),
+  };
+  const card = map[normalized];
+  if (card) return card;
+  return {
+    input_per_mtok_usd: Number(costs.claude_in_per_mtok_usd || COSTS.claude_in_per_mtok_usd),
+    output_per_mtok_usd: Number(costs.claude_out_per_mtok_usd || COSTS.claude_out_per_mtok_usd),
+    judge_estimate_usd: Number(costs.claude_judge_estimate_usd || COSTS.claude_judge_estimate_usd),
+  };
+}
+
+function estimateClaudeCost(usage, costs = COSTS, model = JUDGE_MODELS.haiku) {
   const inTokens = Number(usage?.input_tokens || 0);
   const outTokens = Number(usage?.output_tokens || 0);
-  const inCost = (inTokens / 1_000_000) * Number(costs.claude_in_per_mtok_usd || COSTS.claude_in_per_mtok_usd);
-  const outCost = (outTokens / 1_000_000) * Number(costs.claude_out_per_mtok_usd || COSTS.claude_out_per_mtok_usd);
+  const card = modelRateCard(model, costs);
+  const inCost = (inTokens / 1_000_000) * Number(card.input_per_mtok_usd || COSTS.claude_in_per_mtok_usd);
+  const outCost = (outTokens / 1_000_000) * Number(card.output_per_mtok_usd || COSTS.claude_out_per_mtok_usd);
   return Number((inCost + outCost).toFixed(6));
 }
 
@@ -428,10 +455,11 @@ async function enrichItemsCached({
   refreshCache,
   costs = COSTS,
 }) {
+  const enrichModel = JUDGE_MODELS.haiku;
   const prompt = buildEnrichmentPrompt(items || []);
   const hash = stableHash({
     type: "enrichment",
-    model: "claude-haiku-4-5",
+    model: enrichModel,
     prompt_version: ENRICH_PROMPT_VERSION,
     prompt,
     items: (items || []).map((i) => ({ headline: i.headline, summary: i.summary, tag: i.tag })),
@@ -472,7 +500,7 @@ async function enrichItemsCached({
       "anthropic-version": "2023-06-01",
     },
     {
-      model: "claude-haiku-4-5",
+      model: enrichModel,
       max_tokens: 4500,
       messages: [{ role: "user", content: prompt }],
     }
@@ -518,13 +546,13 @@ async function enrichItemsCached({
         : null,
   }));
 
-  const costUsd = estimateClaudeCost(usage, costs);
+  const costUsd = estimateClaudeCost(usage, costs, enrichModel);
 
   writeJson(file, {
     timestamp: new Date().toISOString(),
     api: "anthropic.messages",
     endpoint: "/v1/messages",
-    model: "claude-haiku-4-5",
+    model: enrichModel,
     input: {
       item_count: (items || []).length,
       hash,
@@ -540,7 +568,7 @@ async function enrichItemsCached({
     provider: "anthropic",
     purpose: "enrich",
     cache_key: path.basename(file),
-    model: "claude-haiku-4-5",
+    model: enrichModel,
     endpoint: "/v1/messages",
     input_tokens: usage.input_tokens,
     output_tokens: usage.output_tokens,
@@ -564,13 +592,15 @@ async function judgeWithClaudeCached({
   payload,
   prompt,
   maxTokens = 700,
+  model = JUDGE_MODELS.haiku,
   appConfig,
   budget,
   allowLiveApi,
   refreshCache,
   costs = COSTS,
 }) {
-  const keyHash = stableHash({ kind, payload, prompt, maxTokens, model: "claude-haiku-4-5" });
+  const judgeModel = resolveAnthropicModel(model);
+  const keyHash = stableHash({ kind, payload, prompt, maxTokens, model: judgeModel });
   const file = path.join(CACHE_CLAUDE_DIR, `judge_${sanitizeCacheKey(kind)}_${keyHash}.json`);
 
   if (!refreshCache && fs.existsSync(file)) {
@@ -594,8 +624,8 @@ async function judgeWithClaudeCached({
 
   ensureBudget(
     budget,
-    Number(costs.claude_judge_estimate_usd || COSTS.claude_judge_estimate_usd),
-    `Claude judge (${kind})`
+    Number(modelRateCard(judgeModel, costs).judge_estimate_usd || COSTS.claude_judge_estimate_usd),
+    `Claude judge (${kind}) [${judgeModel}]`
   );
 
   const res = await httpsPost(
@@ -607,7 +637,7 @@ async function judgeWithClaudeCached({
       "anthropic-version": "2023-06-01",
     },
     {
-      model: "claude-haiku-4-5",
+      model: judgeModel,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
     }
@@ -624,13 +654,13 @@ async function judgeWithClaudeCached({
 
   const rawText = res.body?.content?.[0]?.text || "";
   const parsed = parseJsonObjectLenient(rawText);
-  const costUsd = estimateClaudeCost(usage, costs);
+  const costUsd = estimateClaudeCost(usage, costs, judgeModel);
 
   writeJson(file, {
     timestamp: new Date().toISOString(),
     api: "anthropic.messages",
     endpoint: "/v1/messages",
-    model: "claude-haiku-4-5",
+    model: judgeModel,
     kind,
     input: {
       payload,
@@ -648,7 +678,7 @@ async function judgeWithClaudeCached({
     provider: "anthropic",
     purpose: `judge:${kind}`,
     cache_key: path.basename(file),
-    model: "claude-haiku-4-5",
+    model: judgeModel,
     endpoint: "/v1/messages",
     input_tokens: usage.input_tokens,
     output_tokens: usage.output_tokens,

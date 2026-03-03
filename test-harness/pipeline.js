@@ -10,9 +10,43 @@ function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
 }
 
+function parseItemDomain(item) {
+  const urlRaw = String(item?.url || "").trim();
+  if (urlRaw) {
+    try {
+      const parsed = new URL(urlRaw);
+      return parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {
+      // fall back to source
+    }
+  }
+
+  const sourceRaw = String(item?.source || "").trim().toLowerCase();
+  if (!sourceRaw) return "unknown";
+  const noProto = sourceRaw.replace(/^https?:\/\//, "").replace(/^www\./, "");
+  return noProto.split(/[\s/]/)[0] || "unknown";
+}
+
+function normalizeUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
+      parsed.pathname = parsed.pathname.slice(0, -1);
+    }
+    return parsed.toString().toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
 function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
   const maxItems = Math.max(1, Number(itemCount || 7));
   const perTagCap = Math.max(1, Number(maxItemsPerTag || 2));
+  const perSourceCap = Math.max(1, Number(opts.maxItemsPerSourceDomain || Infinity));
+
   const customTagOrder = [...new Set((opts.customTags || []).map((t) => String(t || "").toLowerCase()).filter(Boolean))];
   const customTags = new Set(customTagOrder);
   const tagPriority = opts.tagPriority && typeof opts.tagPriority === "object" ? opts.tagPriority : {};
@@ -21,16 +55,22 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
     ? Math.max(0, explicitCustomCap)
     : (customTags.size > 0 ? Math.max(1, Math.floor(maxItems * 0.4)) : Infinity);
 
-  const seen = new Set();
+  const seenHeadline = new Set();
+  const seenUrl = new Set();
   const deduped = (allItems || []).filter((item) => {
-    const key = String(item?.headline || "").toLowerCase().slice(0, 40);
-    if (!key) return false;
-    if (seen.has(key)) return false;
-    seen.add(key);
+    const headline = String(item?.headline || "").toLowerCase().trim();
+    const urlKey = normalizeUrl(item?.url || "");
+    if (!headline && !urlKey) return false;
+    const headlineKey = headline.slice(0, 40);
+    if (headlineKey && seenHeadline.has(headlineKey)) return false;
+    if (urlKey && seenUrl.has(urlKey)) return false;
+    if (headlineKey) seenHeadline.add(headlineKey);
+    if (urlKey) seenUrl.add(urlKey);
     return true;
   });
 
   const tagCounts = {};
+  const domainCounts = {};
   let customCount = 0;
   const selected = [];
   const pool = [...deduped];
@@ -42,6 +82,8 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
     if (customTags.size > 0 && customTags.has(tag.toLowerCase()) && customCount >= maxCustomItems) {
       return false;
     }
+    const domain = parseItemDomain(item);
+    if (Number.isFinite(perSourceCap) && (domainCounts[domain] || 0) >= perSourceCap) return false;
     return true;
   };
 
@@ -49,6 +91,8 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
     let bestIdx = -1;
     let bestCount = Infinity;
     let bestPriority = -Infinity;
+    let bestDomainCount = Infinity;
+
     for (let i = 0; i < pool.length; i++) {
       const item = pool[i];
       if (!underCaps(item)) continue;
@@ -56,8 +100,15 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
       if (!allowAdjacentTag && lastTag && tag === lastTag) continue;
       const count = tagCounts[tag] || 0;
       const priority = Number(tagPriority[normalizeTopicToken(tag)] || 0);
-      if (count < bestCount || (count === bestCount && priority > bestPriority)) {
+      const domainCount = domainCounts[parseItemDomain(item)] || 0;
+
+      if (
+        count < bestCount
+        || (count === bestCount && domainCount < bestDomainCount)
+        || (count === bestCount && domainCount === bestDomainCount && priority > bestPriority)
+      ) {
         bestCount = count;
+        bestDomainCount = domainCount;
         bestPriority = priority;
         bestIdx = i;
       }
@@ -74,9 +125,11 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
       });
       if (idx === -1) continue;
       const item = pool.splice(idx, 1)[0];
+      const domain = parseItemDomain(item);
       tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
       customCount += 1;
-      selected.push(item);
+      selected.push({ ...item, source_domain: item.source_domain || domain });
     }
   }
 
@@ -86,35 +139,57 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
     const fallback = idx === -1 ? pickIndex(lastTag, true) : idx;
     if (fallback === -1) break;
     const item = pool.splice(fallback, 1)[0];
+    const domain = parseItemDomain(item);
     tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+    domainCounts[domain] = (domainCounts[domain] || 0) + 1;
     if (customTags.has(String(item?.tag || "").toLowerCase())) customCount += 1;
-    selected.push(item);
+    selected.push({ ...item, source_domain: item.source_domain || domain });
   }
 
   return selected;
 }
 
-function computeTopicMatch(item, userTopics) {
+function computeTopicSignals(item, userTopics) {
   const tagToken = normalizeTopicToken(item?.tag || "");
   const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
+
   let best = 3;
+  let exact = false;
+  let partial = false;
+  let customKeywordMatch = false;
 
   for (const topic of (userTopics || [])) {
     const rawTopic = String(topic || "");
     const topicToken = normalizeTopicToken(rawTopic);
     if (!topicToken) continue;
 
-    const exact = tagToken && topicToken === tagToken;
-    const partial = tagToken && !exact && (tagToken.includes(topicToken) || topicToken.includes(tagToken));
-    if (exact) best = Math.max(best, 10);
-    else if (partial) best = Math.max(best, 7);
+    const isExact = tagToken && topicToken === tagToken;
+    const isPartial = tagToken && !isExact && (tagToken.includes(topicToken) || topicToken.includes(tagToken));
+
+    if (isExact) {
+      exact = true;
+      best = Math.max(best, 10);
+    } else if (isPartial) {
+      partial = true;
+      best = Math.max(best, 7);
+    }
 
     if (rawTopic.toLowerCase().startsWith("custom_") && bodyText.includes(topicToken)) {
+      customKeywordMatch = true;
       best = Math.max(best, 10);
     }
   }
 
-  return best;
+  return {
+    topicMatch: best,
+    exactMatch: exact,
+    partialMatch: partial,
+    customKeywordMatch,
+  };
+}
+
+function computeTopicMatch(item, userTopics) {
+  return computeTopicSignals(item, userTopics).topicMatch;
 }
 
 function matchWeightToTag(tag, topicWeights) {
@@ -137,18 +212,38 @@ function matchWeightToTag(tag, topicWeights) {
   return total;
 }
 
-function applyRelevanceScores(items, userTopics, topicWeights = {}) {
+function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
+  const specialistMode = !!opts.specialist_mode;
+
   return (items || []).map((item) => {
-    const topicMatch = computeTopicMatch(item, userTopics);
+    const signals = computeTopicSignals(item, userTopics);
     const base = typeof item?.baseScore === "number" ? item.baseScore : 5.0;
     const weight = matchWeightToTag(item?.tag, topicWeights);
     const weightBonus = weight * 0.5;
-    const raw = base * 0.6 + topicMatch * 0.4 + weightBonus;
+
+    let specialistBonus = 0;
+    if (specialistMode) {
+      if (signals.topicMatch >= 10) specialistBonus = 1.1;
+      else if (signals.topicMatch >= 7) specialistBonus = 0.45;
+      else specialistBonus = -0.6;
+    }
+
+    const raw = base * 0.6 + signals.topicMatch * 0.4 + weightBonus + specialistBonus;
+
+    const whyShown = [];
+    if (signals.topicMatch >= 7) whyShown.push("topic_match");
+    if (signals.customKeywordMatch) whyShown.push("custom_keyword");
+    if (weightBonus > 0.25) whyShown.push("weight_boost");
+    if (base >= 8.0) whyShown.push("high_base_score");
+
     return {
       ...item,
-      topicMatch,
+      source_domain: item?.source_domain || parseItemDomain(item),
+      topicMatch: signals.topicMatch,
       weightBonus,
+      specialistBonus,
       relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)),
+      why_shown: whyShown,
     };
   });
 }
@@ -248,7 +343,15 @@ function applyDepth(items, depth) {
 function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   const prefs = persona?.preferences || {};
   const filterRes = filterItemsForPersona(enrichedItems, persona?.topics || [], runtime.minFilteredItems || 3);
-  let scored = applyRelevanceScores(filterRes.items, persona?.topics || [], persona?.topic_weights || {});
+
+  const { standardTopicsLower } = splitUserTopics(persona?.topics || []);
+  const specialistMode = standardTopicsLower.length > 0
+    && (standardTopicsLower.length <= 2 || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5));
+
+  let scored = applyRelevanceScores(filterRes.items, persona?.topics || [], persona?.topic_weights || {}, {
+    specialist_mode: specialistMode,
+    standard_topic_count: standardTopicsLower.length,
+  });
   scored = scored.sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0));
 
   const requested = Number(prefs.items_per_digest) || Number(runtime.defaultItemCount) || 5;
@@ -267,6 +370,7 @@ function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
     was_filtered: filterRes.wasFiltered,
     filter_mode: filterRes.mode,
     filtered_match_count: filterRes.filteredCount,
+    specialist_mode: specialistMode,
     items: finalItems,
     scored_items: scored,
     raw_filtered_items: filterRes.items,
@@ -312,17 +416,20 @@ function statusFromScore(score, pass = 80, warn = 60) {
 
 module.exports = {
   selectItems,
+  parseItemDomain,
   computeTopicMatch,
   matchWeightToTag,
   applyRelevanceScores,
   splitUserTopics,
   itemMatchesPersonaTopic,
   filterItemsForPersona,
+  normalizeCustomKeyword,
   applyDepth,
   buildDigestForPersona,
   countAdjacencyViolations,
   tagDistribution,
   jaccardSimilarity,
   statusFromScore,
-  normalizeCustomKeyword,
+  normalizeTopicToken,
+  normalizeMatchText,
 };

@@ -82,13 +82,34 @@ function httpsPost(hostname, path_, headers, body, isForm = false) {
   });
 }
 
+async function httpsPostWithRetry(hostname, path_, headers, body, opts = {}) {
+  const retries = Math.max(0, Number(opts.retries ?? 2));
+  const retryDelayMs = Math.max(100, Number(opts.retryDelayMs ?? 1200));
+  const isForm = !!opts.isForm;
+
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await httpsPost(hostname, path_, headers, body, isForm);
+    } catch (err) {
+      lastErr = err;
+      const msg = String(err?.message || "");
+      const retryable = /timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(msg);
+      if (!retryable || attempt >= retries) break;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+    }
+  }
+
+  throw lastErr || new Error("HTTP request failed");
+}
+
 // ── 1. Fetch news via Perplexity Sonar (with real URLs from citations) ───────
 
 async function fetchTopicNews(topic) {
   log(`Fetching: ${topic.tag}`);
   const query = topic.queries[0];
 
-  const res = await httpsPost(
+  const res = await httpsPostWithRetry(
     "api.perplexity.ai", "/chat/completions",
     { "Content-Type": "application/json", "Authorization": `Bearer ${CONFIG.keys.perplexity}` },
     {
@@ -352,7 +373,9 @@ TASK: For each news item below, return five fields:
    RULES:
    - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
    - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
-   - Second sentence: a concrete second-order effect that names at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Second sentence: start with "For <role>," and state a concrete action for that role. Name at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Include at least one concrete proper noun in sentence 1 or 2 (company, regulator, buyer segment, or fund type).
+   - Include one concrete quantitative anchor when available from the source context (deal value, percentage, timeline, or count). If not available, use a bounded near-term qualifier (for example "next 2 quarters").
    - Third sentence (optional): must start with "Watch:" and name a specific catalyst in the next 2-4 weeks (filing, ruling, earnings call, close date, or vote). Skip only if no concrete catalyst exists.
 
 3. "baseScore" — a number 0.0–10.0 measuring the story's strategic importance and consultant relevance, independent of any user's topic preferences.
@@ -379,7 +402,7 @@ Return ONLY a JSON array with the same items plus "wim_brief", "wim", "baseScore
 Items:
 ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag: i.tag })), null, 2)}`;
 
-  const res = await httpsPost(
+  const res = await httpsPostWithRetry(
     "api.anthropic.com", "/v1/messages",
     { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
     { model: "claude-haiku-4-5", max_tokens: 4500, messages: [{ role: "user", content: prompt }] }
@@ -461,7 +484,7 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
 // Claude returns from intent parsing (e.g., "AI", "healthcare") — not necessarily
 // the canonical tag. matchWeightToTag() does case-insensitive substring matching
 // so "AI" matches "AI×TECH" and "health" matches "HEALTHCARE".
-// Each weight unit = ±0.5 points on the 0–10 scale (range: -5 to +5 → -2.5 to +2.5).
+// Each weight unit = ±0.6 points on the 0–10 scale (range: -5 to +5 → -3.0 to +3.0).
 // Specialist mode adds an additional boost/penalty for narrow-topic users so exact matches
 // are preserved at the top of the ranking before broad balancing.
 
@@ -510,7 +533,7 @@ function computeTopicSignals(item, userTopics) {
       best = Math.max(best, 7);
     }
 
-    if (rawTopic.toLowerCase().startsWith("custom_") && bodyText.includes(topicNormalized)) {
+    if (rawTopic.toLowerCase().startsWith("custom_") && (bodyText.includes(topicNormalized) || tagNormalized.includes(topicNormalized))) {
       customKeywordMatch = true;
       best = Math.max(best, 10);
     }
@@ -552,7 +575,7 @@ function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
     const topicMatch  = signals.topicMatch;
     const base        = typeof item.baseScore === "number" ? item.baseScore : 5.0;
     const weight      = matchWeightToTag(item.tag, topicWeights);
-    const weightBonus = weight * 0.5; // ±0.5 pts per "more"/"less" step
+    const weightBonus = weight * 0.6; // ±0.6 pts per "more"/"less" step
     let specialistBonus = 0;
     if (specialistMode) {
       if (topicMatch >= 10) specialistBonus = 1.1;
@@ -773,7 +796,7 @@ async function sendTelegram(text, chatId) {
   const targetId = chatId || CONFIG.user.telegramChatId;
   log(`Sending Telegram to ${targetId}...`);
   const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
-  const res = await httpsPost(
+  const res = await httpsPostWithRetry(
     "api.telegram.org", `/bot${token}/sendMessage`,
     { "Content-Type": "application/json" },
     { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false }
@@ -1024,12 +1047,17 @@ async function main() {
       let wasFiltered = false;
       let userItems = enriched;
       let standardTopicsLower = [];
+      let specialistMode = false;
       if (u.topics && u.topics.length >= 1) {
         // Standard topics: match against article tag
         standardTopicsLower = u.topics
           .filter(t => !String(t).toLowerCase().startsWith("custom_"))
           .map(t => normalizeTopicToken(t))
           .filter(Boolean);
+        specialistMode = standardTopicsLower.length > 0 && (
+          standardTopicsLower.length <= 2
+          || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5)
+        );
         const standardTopicSet = new Set(standardTopicsLower);
         // Custom topics: match keyword against headline + summary text
         const customKeywords = u.topics
@@ -1044,7 +1072,7 @@ async function main() {
           const tag = normalizeTopicToken(item.tag || "");
           const text = normalizeMatchText(`${item.headline || ""} ${item.summary || ""}`);
           const tagMatch = standardTopicsLower.some(t => tag.includes(t) || t.includes(tag));
-          const customMatch = customKeywords.some(kw => text.includes(kw));
+          const customMatch = customKeywords.some(kw => text.includes(kw) || tag.includes(kw) || kw.includes(tag));
           return tagMatch || customMatch;
         });
         const MIN_ITEMS = 3;
@@ -1056,6 +1084,10 @@ async function main() {
           // Keep strict preference fidelity: avoid padding with unrelated items.
           userItems = filtered;
           wasFiltered = true;
+        } else if (specialistMode) {
+          // Sparse-topic users should not receive unrelated filler when no direct matches exist.
+          userItems = [];
+          wasFiltered = true;
         } else {
           // Zero topic matches — full fallback (banner reflects this)
           userItems = enriched;
@@ -1066,10 +1098,6 @@ async function main() {
       // 2. Score by relevance (free — uses baseScore + local topic match + user weight adjustments)
       const weights = u.topic_weights || {};
       const hasWeights = Object.values(weights).some(w => w !== 0);
-      const specialistMode = standardTopicsLower.length > 0 && (
-        standardTopicsLower.length <= 2
-        || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5)
-      );
 
       // Log pre-sort order when user has weight adjustments — lets us verify ranking is working
       if (hasWeights) {

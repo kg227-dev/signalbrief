@@ -12,7 +12,12 @@ module.exports = {
     const candidates = [];
     for (const persona of personas) {
       const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime);
-      digest.items.forEach((item) => {
+      const sourceItems = Array.isArray(digest.pre_depth_items) && digest.pre_depth_items.length
+        ? digest.pre_depth_items
+        : (Array.isArray(digest.scored_items)
+          ? digest.scored_items.slice(0, Number(digest.requested_count || 0))
+          : digest.items);
+      sourceItems.forEach((item) => {
         if (!item.wim) return;
         candidates.push({
           persona_id: persona.id,

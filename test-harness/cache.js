@@ -16,7 +16,7 @@ const {
   readJson,
 } = require("./config");
 
-const ENRICH_PROMPT_VERSION = "2026-03-03-depth-v5";
+const ENRICH_PROMPT_VERSION = "2026-03-03-depth-v6";
 
 function stableHash(payload) {
   return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 16);
@@ -49,10 +49,30 @@ function httpsPost(hostname, pathName, headers, body, isForm = false) {
     );
 
     req.on("error", reject);
-    req.setTimeout(30000, () => req.destroy(new Error("HTTP timeout after 30s")));
+    req.setTimeout(60000, () => req.destroy(new Error("HTTP timeout after 60s")));
     req.write(data);
     req.end();
   });
+}
+
+async function httpsPostWithRetry(hostname, pathName, headers, body, opts = {}) {
+  const retries = Math.max(0, Number(opts.retries ?? 2));
+  const retryDelayMs = Math.max(100, Number(opts.retryDelayMs ?? 1200));
+
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await httpsPost(hostname, pathName, headers, body, opts.isForm === true);
+    } catch (err) {
+      lastErr = err;
+      const msg = String(err?.message || "");
+      const retryable = /timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(msg);
+      if (!retryable || attempt >= retries) break;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+    }
+  }
+
+  throw lastErr || new Error("HTTP request failed");
 }
 
 function normalizeBudget(raw = {}) {
@@ -349,17 +369,46 @@ async function fetchTopicNewsCached({
   ensureBudget(budget, estimated, `Perplexity fetch (${topicTag})`);
 
   const payload = buildPerplexityPayload(topicTag, query);
-  const res = await httpsPost(
-    "api.perplexity.ai",
-    "/chat/completions",
-    {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    payload
-  );
+  let res;
+  try {
+    res = await httpsPostWithRetry(
+      "api.perplexity.ai",
+      "/chat/completions",
+      {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      payload
+    );
+  } catch (err) {
+    if (fs.existsSync(file)) {
+      const cached = readJson(file, {});
+      return {
+        items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
+        from_cache: true,
+        cache_file: file,
+        stale_fallback: true,
+        cost_usd: 0,
+        raw_response: cached.raw_response || null,
+        topic_tag: topicTag,
+      };
+    }
+    throw err;
+  }
 
   if (res.status < 200 || res.status >= 300) {
+    if (fs.existsSync(file)) {
+      const cached = readJson(file, {});
+      return {
+        items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
+        from_cache: true,
+        cache_file: file,
+        stale_fallback: true,
+        cost_usd: 0,
+        raw_response: cached.raw_response || null,
+        topic_tag: topicTag,
+      };
+    }
     throw new Error(`Perplexity fetch failed for ${topicTag}: status ${res.status}`);
   }
 
@@ -419,7 +468,9 @@ TASK: For each news item below, return five fields:
    RULES:
    - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
    - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
-   - Second sentence: a concrete second-order effect that names at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Second sentence: start with "For <role>," and state a concrete action for that role. Name at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Include at least one concrete proper noun in sentence 1 or 2 (company, regulator, buyer segment, or fund type).
+   - Include one concrete quantitative anchor when available from the source context (deal value, percentage, timeline, or count). If not available, use a bounded near-term qualifier (for example "next 2 quarters").
    - Third sentence (optional): must start with "Watch:" and name a specific catalyst in the next 2-4 weeks (filing, ruling, earnings call, close date, or vote). Skip only if no concrete catalyst exists.
 
 3. "baseScore" — a number 0.0–10.0 measuring the story's strategic importance and consultant relevance, independent of any user's topic preferences.
@@ -491,7 +542,7 @@ async function enrichItemsCached({
     "Claude enrichment"
   );
 
-  const res = await httpsPost(
+  const res = await httpsPostWithRetry(
     "api.anthropic.com",
     "/v1/messages",
     {
@@ -628,7 +679,7 @@ async function judgeWithClaudeCached({
     `Claude judge (${kind}) [${judgeModel}]`
   );
 
-  const res = await httpsPost(
+  const res = await httpsPostWithRetry(
     "api.anthropic.com",
     "/v1/messages",
     {

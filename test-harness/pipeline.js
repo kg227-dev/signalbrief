@@ -174,7 +174,7 @@ function computeTopicSignals(item, userTopics) {
       best = Math.max(best, 7);
     }
 
-    if (rawTopic.toLowerCase().startsWith("custom_") && bodyText.includes(topicToken)) {
+    if (rawTopic.toLowerCase().startsWith("custom_") && (bodyText.includes(topicToken) || tagToken.includes(topicToken))) {
       customKeywordMatch = true;
       best = Math.max(best, 10);
     }
@@ -219,7 +219,7 @@ function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
     const signals = computeTopicSignals(item, userTopics);
     const base = typeof item?.baseScore === "number" ? item.baseScore : 5.0;
     const weight = matchWeightToTag(item?.tag, topicWeights);
-    const weightBonus = weight * 0.5;
+    const weightBonus = weight * 0.6;
 
     let specialistBonus = 0;
     if (specialistMode) {
@@ -276,13 +276,14 @@ function itemMatchesPersonaTopic(item, standardTopicsLower, customKeywords) {
   const tag = normalizeTopicToken(item?.tag || "");
   const text = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
   const tagMatch = (standardTopicsLower || []).some((t) => tag.includes(t) || t.includes(tag));
-  const customMatch = (customKeywords || []).some((kw) => text.includes(kw));
+  const customMatch = (customKeywords || []).some((kw) => text.includes(kw) || tag.includes(kw) || kw.includes(tag));
   return { tagMatch, customMatch, matched: tagMatch || customMatch };
 }
 
-function filterItemsForPersona(enrichedItems, userTopics, minItems = 3) {
+function filterItemsForPersona(enrichedItems, userTopics, minItems = 3, opts = {}) {
   const items = Array.isArray(enrichedItems) ? enrichedItems : [];
   const topics = Array.isArray(userTopics) ? userTopics : [];
+  const strictZeroFallback = !!opts.strictZeroFallback;
 
   if (topics.length < 1) {
     return {
@@ -315,10 +316,10 @@ function filterItemsForPersona(enrichedItems, userTopics, minItems = 3) {
   }
 
   return {
-    items,
-    wasFiltered: false,
+    items: strictZeroFallback ? [] : items,
+    wasFiltered: strictZeroFallback,
     filteredCount: 0,
-    mode: "zero-match-fallback",
+    mode: strictZeroFallback ? "zero-match-strict" : "zero-match-fallback",
   };
 }
 
@@ -342,11 +343,15 @@ function applyDepth(items, depth) {
 
 function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   const prefs = persona?.preferences || {};
-  const filterRes = filterItemsForPersona(enrichedItems, persona?.topics || [], runtime.minFilteredItems || 3);
-
   const { standardTopicsLower } = splitUserTopics(persona?.topics || []);
   const specialistMode = standardTopicsLower.length > 0
     && (standardTopicsLower.length <= 2 || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5));
+  const filterRes = filterItemsForPersona(
+    enrichedItems,
+    persona?.topics || [],
+    runtime.minFilteredItems || 3,
+    { strictZeroFallback: specialistMode }
+  );
 
   let scored = applyRelevanceScores(filterRes.items, persona?.topics || [], persona?.topic_weights || {}, {
     specialist_mode: specialistMode,
@@ -357,6 +362,7 @@ function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   const requested = Number(prefs.items_per_digest) || Number(runtime.defaultItemCount) || 5;
   const preTrimCount = scored.length;
   const trimmed = scored.slice(0, requested);
+  const preDepthItems = trimmed.map((i) => ({ ...i }));
   const depth = prefs.depth || "headline_plus_why";
   const finalItems = applyDepth(trimmed, depth);
 
@@ -371,6 +377,7 @@ function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
     filter_mode: filterRes.mode,
     filtered_match_count: filterRes.filteredCount,
     specialist_mode: specialistMode,
+    pre_depth_items: preDepthItems,
     items: finalItems,
     scored_items: scored,
     raw_filtered_items: filterRes.items,

@@ -900,23 +900,45 @@ function renderAll() {
 }
 
 async function persistBookmark(action, item) {
-  const res = await fetch("/api/bookmarks", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      token: state.token,
-      action,
-      item: {
-        date: item.date,
-        headline: item.headline,
-        url: item.url,
-        tag: item.tag,
-        source: item.source,
-      },
-    }),
+  const payload = JSON.stringify({
+    token: state.token,
+    action,
+    item: {
+      date: item.date,
+      headline: item.headline,
+      url: item.url,
+      tag: item.tag,
+      source: item.source,
+    },
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok || body.error) throw new Error(body.error || "Bookmark update failed");
+
+  const endpoints = ["/api/bookmarks", "/api/bookmarks/"];
+  let lastError = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      });
+
+      const text = await res.text();
+      let body = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
+
+      if (res.ok && !body.error) return;
+      lastError = new Error(body.error || (res.status === 404 ? "bookmark route unavailable" : "Bookmark update failed"));
+
+      // If the first endpoint 404s, try the trailing-slash variant before failing.
+      if (res.status === 404) continue;
+      throw lastError;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Bookmark update failed");
 }
 
 async function toggleBookmark(key) {

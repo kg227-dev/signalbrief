@@ -758,7 +758,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // POST /api/bookmarks — add/remove bookmark by URL
-  if (pathname === "/api/bookmarks" && req.method === "POST") {
+  if ((pathname === "/api/bookmarks" || pathname === "/api/bookmarks/") && req.method === "POST") {
     const body = await readBody(req);
     const token = String(body.token || "").trim();
     const action = String(body.action || "").toLowerCase().trim();

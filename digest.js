@@ -452,11 +452,7 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
       ? `<div style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;font-style:italic;">👀 ${item.watch_next}</div>`
       : "";
 
-    // Lead item (first) gets blue left border accent
-    const isLead = i === 0;
-    const itemStyle = isLead
-      ? "padding:32px 0;border-bottom:1px solid #E5E7EB;border-left:3px solid #2563EB;padding-left:16px;margin-left:-16px;"
-      : "padding:32px 0;border-bottom:1px solid #E5E7EB;";
+    const itemStyle = "padding:32px 0;border-bottom:1px solid #E5E7EB;";
 
     return `
       <div class="item" style="${itemStyle}">

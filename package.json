@@ -5,7 +5,8 @@
   "main": "digest.js",
   "scripts": {
     "start": "node digest.js",
-    "test": "node digest.js --dry-run"
+    "test": "node digest.js --dry-run",
+    "qa:harness": "node test-harness/run-tests.js"
   },
   "engines": { "node": ">=22" }
 }

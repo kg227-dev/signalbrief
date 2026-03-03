@@ -144,39 +144,87 @@ IMPORTANT: Use the direct article URLs from your search citations. Do not use ho
   }
 }
 
-// ── 2. Select best 7 (interleaved, max 2 per tag) ───────────────────────────
+// ── 2. Select best N (interleaved, max per tag, capped custom share) ─────────
 
-function selectItems(allItems) {
+function selectItems(allItems, opts = {}) {
+  const maxItems = Math.max(1, Number(opts.maxItems || CONFIG.digest.itemCount || 7));
+  const maxItemsPerTag = Math.max(1, Number(opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2));
+  const customTagOrder = [...new Set((opts.customTags || []).map((t) => String(t || "").toLowerCase()).filter(Boolean))];
+  const customTags = new Set(customTagOrder);
+  const tagPriority = opts.tagPriority && typeof opts.tagPriority === "object" ? opts.tagPriority : {};
+  const explicitCustomCap = Number(opts.maxCustomItems);
+  const maxCustomItems = Number.isFinite(explicitCustomCap)
+    ? Math.max(0, explicitCustomCap)
+    : (customTags.size > 0 ? Math.max(1, Math.floor(maxItems * 0.4)) : Infinity);
+
   const seen = new Set();
-  const deduped = allItems.filter((item) => {
-    const key = item.headline.toLowerCase().slice(0, 40);
+  const deduped = (allItems || []).filter((item) => {
+    const headline = String(item?.headline || "").toLowerCase().trim();
+    if (!headline) return false;
+    const key = headline.slice(0, 40);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
   const tagCounts = {};
+  let customCount = 0;
   const selected = [];
   const pool = [...deduped];
 
-  while (selected.length < CONFIG.digest.itemCount && pool.length > 0) {
-    const lastTag = selected.length > 0 ? selected[selected.length - 1].tag : null;
-    const idx = pool.findIndex((item) => {
-      const count = tagCounts[item.tag] || 0;
-      return item.tag !== lastTag && count < CONFIG.digest.maxItemsPerTag;
-    });
-    if (idx === -1) {
-      // Relax adjacency constraint if stuck
-      const fallback = pool.findIndex((item) => (tagCounts[item.tag] || 0) < CONFIG.digest.maxItemsPerTag);
-      if (fallback === -1) break;
-      const item = pool.splice(fallback, 1)[0];
-      tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
-      selected.push(item);
-    } else {
+  const underCaps = (item) => {
+    const tag = String(item?.tag || "");
+    if (!tag) return false;
+    if ((tagCounts[tag] || 0) >= maxItemsPerTag) return false;
+    if (customTags.size > 0 && customTags.has(tag.toLowerCase()) && customCount >= maxCustomItems) return false;
+    return true;
+  };
+
+  const pickIndex = (lastTag, allowAdjacentTag = false) => {
+    let bestIdx = -1;
+    let bestCount = Infinity;
+    let bestPriority = -Infinity;
+    for (let i = 0; i < pool.length; i++) {
+      const item = pool[i];
+      if (!underCaps(item)) continue;
+      const tag = String(item?.tag || "");
+      if (!allowAdjacentTag && lastTag && tag === lastTag) continue;
+      const count = tagCounts[tag] || 0;
+      const priority = Number(tagPriority[normalizeTopicToken(tag)] || 0);
+      if (count < bestCount || (count === bestCount && priority > bestPriority)) {
+        bestCount = count;
+        bestPriority = priority;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  };
+
+  // Guarantee baseline custom-topic coverage without letting custom tags dominate.
+  if (customTagOrder.length > 0 && maxCustomItems > 0) {
+    for (const customTag of customTagOrder) {
+      if (selected.length >= maxItems || customCount >= maxCustomItems) break;
+      const idx = pool.findIndex((item) => {
+        const tag = String(item?.tag || "").toLowerCase();
+        return tag === customTag && underCaps(item);
+      });
+      if (idx === -1) continue;
       const item = pool.splice(idx, 1)[0];
       tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+      customCount += 1;
       selected.push(item);
     }
+  }
+
+  while (selected.length < maxItems && pool.length > 0) {
+    const lastTag = selected.length > 0 ? selected[selected.length - 1].tag : null;
+    const idx = pickIndex(lastTag, false);
+    const fallback = idx === -1 ? pickIndex(lastTag, true) : idx;
+    if (fallback === -1) break;
+    const item = pool.splice(fallback, 1)[0];
+    tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+    if (customTags.has(String(item.tag || "").toLowerCase())) customCount += 1;
+    selected.push(item);
   }
 
   return selected;
@@ -189,32 +237,41 @@ async function enrichItems(items) {
 
   const prompt = `You are the editorial voice of SignalBrief — a daily news digest for senior strategy consultants and business professionals. Your readers work at MBB, Big 4, boutique strategy firms, corporate strategy functions, and PE/investment shops. They work across multiple industries and need to sound informed in client meetings across healthcare, tech, financial services, PE, energy, consumer, and policy. They are time-pressed, sophisticated, and allergic to generic analysis.
 
-TASK: For each news item below, return two fields:
+TASK: For each news item below, return five fields:
 
-1. "wim" — a "why it matters" analysis of exactly 2-3 sentences.
+1. "wim_brief" — one sentence, max 18 words.
    RULES:
-   - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
-   - Second sentence: a concrete second-order effect — name the specific player type, role, or market segment that feels it.
-   - Third sentence (optional): a forward-looking signal — what to watch for next. Skip if vague.
+   - Capture only the core strategic punchline for a busy executive.
+   - No filler, no hedging, no repetition of the headline.
+   - Do not use HTML tags in this field.
 
-2. "baseScore" — a number 0.0–10.0 measuring the story's strategic importance and consultant relevance, independent of any user's topic preferences.
+2. "wim" — a "why it matters" analysis of exactly 2-3 sentences.
+   RULES:
+   - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
+   - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
+   - Second sentence: a concrete second-order effect that names at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Third sentence (optional): must start with "Watch:" and name a specific catalyst in the next 2-4 weeks (filing, ruling, earnings call, close date, or vote). Skip only if no concrete catalyst exists.
+
+3. "baseScore" — a number 0.0–10.0 measuring the story's strategic importance and consultant relevance, independent of any user's topic preferences.
    - 8.5–10.0: Major development (landmark M&A, significant policy shift, key earnings miss with broad implications)
    - 7.0–8.4: Notable development (meaningful deal, regulatory move, sector-level change)
    - 5.0–6.9: Moderate interest (incremental update, early-stage signal worth watching)
    - Below 5.0: Routine or narrow-interest item
 
-3. "implications" — one actionable sentence naming a specific role (e.g. "CFO", "deal team", "payer CMO", "PE portfolio team") and the concrete action, question, or client meeting flag this story creates. Return null if it is fully covered by the wim already.
+4. "implications" — one actionable sentence naming a specific role (e.g. "CFO", "deal team", "payer CMO", "PE portfolio team") and the concrete action, question, or client meeting flag this story creates. Return null if it is fully covered by the wim already.
 
-4. "watch_next" — one forward-looking sentence: name the specific signal, filing, earnings call, or regulatory decision to monitor in the next 2–4 weeks. Start with an entity name or date. Return null if this is a one-time development with no near-term pending catalysts.
+5. "watch_next" — one forward-looking sentence: name the specific signal, filing, earnings call, or regulatory decision to monitor in the next 2–4 weeks. Start with an entity name or date. Return null if this is a one-time development with no near-term pending catalysts.
 
 WHAT TO AVOID (too generic):
 ❌ "This could have significant implications for the industry." (says nothing)
 ❌ "Companies should pay attention to this trend." (empty filler)
+❌ "This may affect stakeholders over time." (vague hedge)
+❌ "Keep an eye on developments." (no actionable signal)
 
 WHAT TO AIM FOR (specific, implication-forward):
 ✅ "<strong>Another payer going full care-delivery stack — point-solution vendors in drug management will feel it.</strong> Your buyer is now also your competitor's parent company. Any vendor with Cigna in their top-3 logos needs to stress-test that relationship."
 
-Return ONLY a JSON array with the same items plus "wim", "baseScore", "implications", and "watch_next" fields. No markdown, no explanation.
+Return ONLY a JSON array with the same items plus "wim_brief", "wim", "baseScore", "implications", and "watch_next" fields. No markdown, no explanation.
 
 Items:
 ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag: i.tag })), null, 2)}`;
@@ -274,6 +331,7 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
     return {
       items: items.map((item, i) => ({
         ...item,
+        wim_brief:    typeof enriched[i]?.wim_brief === "string" && enriched[i].wim_brief.trim() ? enriched[i].wim_brief.trim() : null,
         wim:          typeof enriched[i]?.wim === "string" && enriched[i].wim.trim() ? enriched[i].wim.trim() : null,
         baseScore:    typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
         implications: typeof enriched[i]?.implications === "string" && enriched[i].implications.trim() ? enriched[i].implications.trim() : null,
@@ -310,24 +368,54 @@ function scoreColor(score) {
   return { bg: "#EF4444", text: "#fff" };                       // red
 }
 
+function normalizeMatchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeTopicToken(value) {
+  return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
+}
+
 function computeTopicMatch(item, userTopics) {
-  const tagLower = (item.tag || "").toLowerCase();
-  const topicsLower = (userTopics || []).map(t => t.toLowerCase());
-  if (topicsLower.some(t => t === tagLower)) return 10;           // exact
-  if (topicsLower.some(t => tagLower.includes(t) || t.includes(tagLower))) return 7; // partial
-  return 3;                                                        // unrelated
+  const tagNormalized = normalizeTopicToken(item?.tag || "");
+  const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
+  let best = 3;
+
+  for (const topic of (userTopics || [])) {
+    const rawTopic = String(topic || "");
+    const topicNormalized = normalizeTopicToken(rawTopic);
+    if (!topicNormalized) continue;
+
+    const exact = tagNormalized && topicNormalized === tagNormalized;
+    const partial = tagNormalized && !exact
+      && (tagNormalized.includes(topicNormalized) || topicNormalized.includes(tagNormalized));
+
+    if (exact) best = Math.max(best, 10);
+    else if (partial) best = Math.max(best, 7);
+
+    if (rawTopic.toLowerCase().startsWith("custom_") && bodyText.includes(topicNormalized)) {
+      best = Math.max(best, 10);
+    }
+  }
+
+  return best;
 }
 
 // Find the total weight adjustment for a given item tag from the user's topic_weights map.
 // Weight keys may be partial/informal ("AI" → "AI×TECH"), so we fuzzy-match.
 function matchWeightToTag(tag, topicWeights) {
   if (!topicWeights || typeof topicWeights !== "object") return 0;
-  const tagLower = tag.toLowerCase();
+  const tagToken = normalizeTopicToken(tag);
   let total = 0;
   for (const [key, w] of Object.entries(topicWeights)) {
     if (!w) continue;
-    const keyLower = key.toLowerCase();
-    if (tagLower === keyLower || tagLower.includes(keyLower) || keyLower.includes(tagLower)) {
+    const keyToken = normalizeTopicToken(key);
+    if (!keyToken) continue;
+    if (tagToken === keyToken || tagToken.includes(keyToken) || keyToken.includes(tagToken)) {
       total += w;
     }
   }
@@ -664,6 +752,21 @@ async function main() {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
   const digestDateKey = etDateKey(now);
+  const requestedCounts = dueUsers
+    .map((u) => Number(u?.preferences?.items_per_digest))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const selectionTarget = Math.max(
+    Number(CONFIG.digest.itemCount || 7),
+    requestedCounts.length ? Math.max(...requestedCounts) : 0
+  );
+  const tagPriority = {};
+  for (const u of dueUsers) {
+    for (const topic of (u.topics || [])) {
+      const key = normalizeTopicToken(topic);
+      if (!key) continue;
+      tagPriority[key] = (tagPriority[key] || 0) + 1;
+    }
+  }
 
   // For on-demand single-user runs, only fetch topics the user actually tracks.
   // For scheduled multi-user runs, fetch all 17 standard topics.
@@ -690,6 +793,7 @@ async function main() {
   const customTopicSlugs = [...new Set(
     dueUsers.flatMap(u => (u.topics || []).filter(t => t.startsWith("custom_")))
   )].slice(0, 5);
+  let customTags = [];
 
   if (customTopicSlugs.length > 0) {
     const customFetchTargets = customTopicSlugs.map(slug => {
@@ -699,6 +803,7 @@ async function main() {
         queries: [`${keyword} company news business strategy developments last 48 hours`],
       };
     });
+    customTags = customFetchTargets.map((t) => t.tag);
     customFetchCalls = customFetchTargets.length;
     log(`Fetching ${customFetchTargets.length} custom topic(s): ${customFetchTargets.map(t => t.tag).join(", ")}`);
     const customResults = await Promise.all(customFetchTargets.map(fetchTopicNews));
@@ -709,8 +814,21 @@ async function main() {
     allItems.unshift(...customItems);
   }
 
-  const selected = selectItems(allItems);
-  log(`Selected ${selected.length} items`);
+  const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
+  const defaultMaxCustom = customTags.length > 0
+    ? Math.max(1, Math.floor(selectionTarget * 0.4))
+    : 0;
+  const maxCustomItems = Number.isFinite(configuredMaxCustom) && configuredMaxCustom >= 0
+    ? configuredMaxCustom
+    : defaultMaxCustom;
+  const selected = selectItems(allItems, {
+    maxItems: selectionTarget,
+    maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
+    customTags,
+    maxCustomItems,
+    tagPriority,
+  });
+  log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems})`);
 
   const { items: enriched, usage: claudeUsage } = await enrichItems(selected);
 
@@ -737,22 +855,27 @@ async function main() {
       // 1. Filter items by user's topic list (if set)
       let wasFiltered = false;
       let userItems = enriched;
-      if (u.topics && u.topics.length >= 2) {
+      if (u.topics && u.topics.length >= 1) {
         // Standard topics: match against article tag
         const standardTopicsLower = u.topics
-          .filter(t => !t.startsWith("custom_"))
-          .map(t => t.toLowerCase());
+          .filter(t => !String(t).toLowerCase().startsWith("custom_"))
+          .map(t => normalizeTopicToken(t))
+          .filter(Boolean);
+        const standardTopicSet = new Set(standardTopicsLower);
         // Custom topics: match keyword against headline + summary text
         const customKeywords = u.topics
-          .filter(t => t.startsWith("custom_") || !standardTopicsLower.includes(t.toLowerCase()))
-          .map(t => t.toLowerCase().replace(/^custom_/, "").replace(/_/g, " ").trim())
+          .filter((t) => {
+            const raw = String(t || "");
+            const normalized = normalizeTopicToken(raw);
+            return raw.toLowerCase().startsWith("custom_") || !standardTopicSet.has(normalized);
+          })
+          .map(t => normalizeTopicToken(t))
           .filter(Boolean);
         const filtered = enriched.filter(item => {
-          const tag = (item.tag || "").toLowerCase();
-          const headline = (item.headline || "").toLowerCase();
-          const summary = (item.summary || "").toLowerCase();
+          const tag = normalizeTopicToken(item.tag || "");
+          const text = normalizeMatchText(`${item.headline || ""} ${item.summary || ""}`);
           const tagMatch = standardTopicsLower.some(t => tag.includes(t) || t.includes(tag));
-          const customMatch = customKeywords.some(kw => headline.includes(kw) || summary.includes(kw));
+          const customMatch = customKeywords.some(kw => text.includes(kw));
           return tagMatch || customMatch;
         });
         const MIN_ITEMS = 3;
@@ -761,14 +884,9 @@ async function main() {
           userItems = filtered;
           wasFiltered = true;
         } else if (filtered.length >= 1) {
-          // Some topic matches but below floor — pad with highest-baseScore unmatched items
-          const filteredSet = new Set(filtered.map(i => i.headline));
-          const topups = enriched
-            .filter(i => !filteredSet.has(i.headline))
-            .sort((a, b) => (b.baseScore || 5) - (a.baseScore || 5))
-            .slice(0, MIN_ITEMS - filtered.length);
-          userItems = [...filtered, ...topups];
-          wasFiltered = true; // topics still used to prioritize
+          // Keep strict preference fidelity: avoid padding with unrelated items.
+          userItems = filtered;
+          wasFiltered = true;
         } else {
           // Zero topic matches — full fallback (banner reflects this)
           userItems = enriched;
@@ -802,10 +920,12 @@ async function main() {
       if (depth === "headline_only" || depth === "headlines" || depth === "scan") {
         userItems = userItems.map(i => ({ ...i, wim: null }));
       } else if (depth === "oneliner" || depth === "headline_plus_oneliner") {
-        // Keep only first sentence of wim
+        // Prefer model-authored brief sentence; fallback to first sentence of wim.
         userItems = userItems.map(i => ({
           ...i,
-          wim: i.wim ? i.wim.replace(/<strong>(.*?)<\/strong>/s, "$1").split(".")[0] + "." : null
+          wim: i.wim_brief
+            ? i.wim_brief
+            : (i.wim ? i.wim.replace(/<strong>(.*?)<\/strong>/s, "$1").split(".")[0] + "." : null)
         }));
       }
 

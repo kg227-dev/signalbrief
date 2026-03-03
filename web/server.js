@@ -187,6 +187,13 @@ function serveFile(res, filePath) {
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:3003";
 
+function toEtDateKey(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
 async function sendMagicLinkEmail(user) {
   const settingsUrl = `${BASE_URL}/settings?token=${user.token}`;
   const archiveUrl  = `${BASE_URL}/archive?token=${user.token}`;
@@ -206,6 +213,55 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function normalizeArchiveTopic(topic) {
+  return String(topic || "")
+    .toLowerCase()
+    .replace(/^custom_/, "")
+    .replace(/_/g, " ")
+    .trim();
+}
+
+function archiveTopicMatch(itemTag, itemHeadline, itemSummary, userTopics) {
+  const tag = String(itemTag || "").toLowerCase();
+  const headline = String(itemHeadline || "").toLowerCase();
+  const summary = String(itemSummary || "").toLowerCase();
+  const topics = (userTopics || []).map(normalizeArchiveTopic).filter(Boolean);
+  if (topics.length === 0) return 3;
+
+  for (const topic of topics) {
+    if (tag === topic || topic === tag) return 10;
+  }
+  for (const topic of topics) {
+    if (tag.includes(topic) || topic.includes(tag)) return 7;
+  }
+  for (const topic of topics) {
+    if (headline.includes(topic) || summary.includes(topic)) return 7;
+  }
+  return 3;
+}
+
+function archiveWeightBonus(itemTag, topicWeights) {
+  if (!topicWeights || typeof topicWeights !== "object") return 0;
+  const tag = String(itemTag || "").toLowerCase();
+  let total = 0;
+  for (const [rawKey, rawWeight] of Object.entries(topicWeights)) {
+    const weight = Number(rawWeight);
+    if (!weight) continue;
+    const key = normalizeArchiveTopic(rawKey);
+    if (!key) continue;
+    if (tag === key || tag.includes(key) || key.includes(tag)) total += weight;
+  }
+  return total;
+}
+
+function archiveRelevanceScore(item, userTopics, topicWeights) {
+  const base = typeof item?.baseScore === "number" ? item.baseScore : 5;
+  const topicMatch = archiveTopicMatch(item?.tag, item?.headline, item?.summary, userTopics);
+  const weightBonus = archiveWeightBonus(item?.tag, topicWeights) * 0.5;
+  const raw = base * 0.6 + topicMatch * 0.4 + weightBonus;
+  return Math.min(10, Math.max(0, Math.round(raw * 10) / 10));
 }
 
 function sendTelegramText(chatId, text) {
@@ -544,6 +600,17 @@ const server = http.createServer(async (req, res) => {
         writeUser(user.chatId, { ...user, digest_dates: merged, last_updated: new Date().toISOString() });
       }
     }
+    // Safety backfill: include most recent delivered digest date from last_digest_at.
+    // This covers cases where digest_dates missed a write on manual/on-demand sends.
+    const lastDigestDate = toEtDateKey(user.last_digest_at);
+    if (lastDigestDate && !allowedList.includes(lastDigestDate)) {
+      const lastFile = path.join(archiveDir, `${lastDigestDate}.json`);
+      if (fs.existsSync(lastFile)) {
+        const merged = [...new Set([...allowedList, lastDigestDate])].sort();
+        allowedList = merged;
+        writeUser(user.chatId, { ...user, digest_dates: merged, last_updated: new Date().toISOString() });
+      }
+    }
     const allowedDates = new Set(allowedList);
 
     const digests = files.flatMap(f => {
@@ -568,12 +635,17 @@ const server = http.createServer(async (req, res) => {
     if (!token) return json(res, { error: "token required" }, 400);
     const user = findUserByToken(token);
     if (!user) return json(res, { error: "invalid token" }, 401);
-    if (!(user.digest_dates || []).includes(rawDate)) return json(res, { error: "not found" }, 404);
+    const allowedDates = new Set(Array.isArray(user.digest_dates) ? user.digest_dates : []);
+    const lastDigestDate = toEtDateKey(user.last_digest_at);
+    if (lastDigestDate) allowedDates.add(lastDigestDate);
+    if (!allowedDates.has(rawDate)) return json(res, { error: "not found" }, 404);
 
     const file = path.join(__dirname, "../archive", `${rawDate}.json`);
     if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+      const userTopics = Array.isArray(user.topics) ? user.topics : [];
+      const topicWeights = user.topic_weights || {};
       if (Array.isArray(raw.items)) {
         raw.items = raw.items.map(item => ({
           tag: item?.tag || "",
@@ -585,6 +657,7 @@ const server = http.createServer(async (req, res) => {
           url: item?.url || "",
           source: item?.source || "",
           baseScore: typeof item?.baseScore === "number" ? item.baseScore : null,
+          relevanceScore: archiveRelevanceScore(item, userTopics, topicWeights),
         }));
       }
       return json(res, raw);

@@ -403,7 +403,7 @@ function formatTelegram(items, dateStr, state) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false, wasFiltered = true, depth = "headline_plus_why", user = null) {
+function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false, wasFiltered = true, depth = "headline_plus_why", user = null, digestDateKey = "") {
   const filterNote = wasFiltered
     ? "filtered to your selected topics"
     : "today's top signals across all areas";
@@ -518,6 +518,7 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
     .replace("{{SETTINGS_FOOTER}}", settingsFooter)
     .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
     .replace(/\{\{SETTINGS_TOKEN\}\}/g, userToken)
+    .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, digestDateKey || "")
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
       `<!-- Items -->\n    <div class="items">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
@@ -662,6 +663,7 @@ async function main() {
   const shortDate = now.toLocaleDateString("en-US", {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
+  const digestDateKey = etDateKey(now);
 
   // For on-demand single-user runs, only fetch topics the user actually tracks.
   // For scheduled multi-user runs, fetch all 17 standard topics.
@@ -832,7 +834,7 @@ async function main() {
         }
       }
       if (u.email && prefs.email_enabled !== false) {
-        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth, u);
+        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth, u, digestDateKey);
         try {
           await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
           delivered = true;

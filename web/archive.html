@@ -53,9 +53,8 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .detail-scan-box { background:rgba(0,0,0,0.025); border:1px solid var(--border-subtle); border-left:3px solid rgba(37,99,235,0.2); border-radius:0 8px 8px 0; padding:14px 18px; font-size:13px; color:var(--text-2); line-height:1.7; font-style:italic; }
 
 .item-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:12px; box-shadow:var(--shadow-md); }
-.item-lead { padding-left:0; }
 .item-meta { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
-.item-lead-badge { font-size:11px; font-weight:700; letter-spacing:0.05em; color:var(--accent); }
+.item-rank { font-size:13px; color:#9CA3AF; font-weight:600; }
 .item-tag { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; }
 .item-score { font-size:10px; font-weight:700; color:#fff; background:#16A34A; padding:2px 7px; border-radius:4px; letter-spacing:0.03em; }
 .item-headline { font-size:17px; font-weight:600; line-height:1.3; margin-bottom:8px; letter-spacing:-0.2px; }
@@ -194,10 +193,12 @@ function sanitizeWimHtml(s) {
 }
 let allDigests = [];
 let userToken = null;
+let requestedCurrentDate = null;
 
 async function init() {
   const params = new URLSearchParams(window.location.search);
   userToken = params.get('token');
+  requestedCurrentDate = params.get('current');
   const emailHint = params.get('email');
   const subEl = document.getElementById('archiveSub');
   if (emailHint) {
@@ -226,6 +227,7 @@ async function init() {
     }
 
     allDigests = data.digests || [];
+    await prioritizeCurrentDigest();
     subEl.textContent = allDigests.length
       ? allDigests.length + ' issue' + (allDigests.length !== 1 ? 's' : '') + ' in your archive'
       : 'Your digests will appear here after delivery.';
@@ -236,6 +238,33 @@ async function init() {
     subEl.textContent = 'Could not load archive.';
     document.getElementById('gateView').style.display = 'block';
   }
+}
+
+function isDateKey(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+}
+
+async function prioritizeCurrentDigest() {
+  if (!userToken || !isDateKey(requestedCurrentDate)) return;
+  const idx = allDigests.findIndex(d => d && d.date === requestedCurrentDate);
+  if (idx > 0) {
+    const [hit] = allDigests.splice(idx, 1);
+    allDigests.unshift(hit);
+    return;
+  }
+  if (idx === 0) return;
+
+  try {
+    const res = await fetch('/api/archive/' + requestedCurrentDate + '?token=' + encodeURIComponent(userToken));
+    const d = await res.json();
+    if (!res.ok || d.error) return;
+    allDigests.unshift({
+      date: d.date || requestedCurrentDate,
+      dateStr: d.dateStr || requestedCurrentDate,
+      quickScan: d.quickScan || '',
+      itemCount: Array.isArray(d.items) ? d.items.length : 0,
+    });
+  } catch (_) {}
 }
 
 function renderList() {
@@ -280,10 +309,12 @@ async function loadDetail(date) {
   document.getElementById('detailScan').textContent = cleanQuickScan(d.quickScan || '');
 
   document.getElementById('detailItems').innerHTML = d.items.map((item, i) => {
-    const isLead = i === 0;
     const linkUrl = item.url && item.url !== '#' ? item.url : '';
-    const scoreHtml = typeof item.baseScore === 'number'
-      ? `<span class="item-score">${item.baseScore.toFixed(1)}</span>`
+    const score = typeof item.relevanceScore === 'number'
+      ? item.relevanceScore
+      : (typeof item.baseScore === 'number' ? item.baseScore : null);
+    const scoreHtml = typeof score === 'number'
+      ? `<span class="item-score">${score.toFixed(1)}</span>`
       : '';
     const wimHtml = item.wim ? `
       <div class="item-wim-label">Why it matters</div>
@@ -296,9 +327,9 @@ async function loadDetail(date) {
       ? `<div class="item-watch">👀 ${esc(item.watch_next)}</div>`
       : '';
     return `
-      <div class="item-card${isLead ? ' item-lead' : ''}">
+      <div class="item-card">
         <div class="item-meta">
-          ${isLead ? '<span class="item-lead-badge">★ LEAD</span>' : `<span style="font-size:13px;color:#9CA3AF;font-weight:600;">${i+1}</span>`}
+          <span class="item-rank">${i + 1}</span>
           <span class="item-tag">${esc(item.tag)}</span>
           ${scoreHtml}
         </div>

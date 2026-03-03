@@ -589,9 +589,10 @@ async function init() {
     document.getElementById('headerSub').textContent = 'Editing: ' + userEmail;
     const archiveQuickLink = document.getElementById('archiveQuickLink');
     if (archiveQuickLink) {
+      const adminReturn = '/admin/user?email=' + encodeURIComponent(userEmail);
       archiveQuickLink.href = userToken
-        ? '/archive?token=' + encodeURIComponent(userToken)
-        : '/archive?email=' + encodeURIComponent(userEmail);
+        ? '/archive?token=' + encodeURIComponent(userToken) + '&admin=1&admin_return=' + encodeURIComponent(adminReturn)
+        : '/archive?email=' + encodeURIComponent(userEmail) + '&admin=1&admin_return=' + encodeURIComponent(adminReturn);
       archiveQuickLink.style.display = 'inline-block';
     }
 

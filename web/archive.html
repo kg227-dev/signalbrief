@@ -481,8 +481,8 @@ mark {
     <div class="header-top">
       <a href="/" class="brand-link">☀️ SignalBrief</a>
       <div class="header-actions">
-        <a href="/settings" id="settingsLink" class="header-link">Settings</a>
-        <a href="/" class="header-link">Subscribe</a>
+        <a href="/settings" id="primaryActionLink" class="header-link">Settings</a>
+        <a href="/" id="secondaryActionLink" class="header-link">Home</a>
       </div>
     </div>
     <h1 class="archive-title">Signal Search</h1>
@@ -1105,6 +1105,14 @@ function showGate(message) {
   }
 }
 
+function sanitizeInternalPath(value, fallback) {
+  const candidate = String(value || "").trim();
+  if (!candidate) return fallback;
+  if (!candidate.startsWith("/")) return fallback;
+  if (candidate.startsWith("//")) return fallback;
+  return candidate;
+}
+
 async function loadArchiveFlatWithFallback(token) {
   const tokenParam = encodeURIComponent(token);
 
@@ -1195,6 +1203,10 @@ async function init() {
   const params = new URLSearchParams(window.location.search);
   state.token = params.get("token");
   const emailHint = params.get("email");
+  const isAdminView = params.get("admin") === "1";
+  const primaryAction = document.getElementById("primaryActionLink");
+  const secondaryAction = document.getElementById("secondaryActionLink");
+  const adminReturn = sanitizeInternalPath(params.get("admin_return"), "/admin");
 
   if (emailHint) {
     const gateEmail = document.getElementById("gateEmail");
@@ -1206,7 +1218,17 @@ async function init() {
     return;
   }
 
-  document.getElementById("settingsLink").href = "/settings?token=" + encodeURIComponent(state.token);
+  if (isAdminView) {
+    primaryAction.textContent = "Back to Admin";
+    primaryAction.href = adminReturn;
+    secondaryAction.textContent = "Admin Dashboard";
+    secondaryAction.href = "/admin";
+  } else {
+    primaryAction.textContent = "Settings";
+    primaryAction.href = "/settings?token=" + encodeURIComponent(state.token);
+    secondaryAction.textContent = "Home";
+    secondaryAction.href = "/";
+  }
 
   let userData;
   try {

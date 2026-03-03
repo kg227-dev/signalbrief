@@ -531,7 +531,8 @@ mark {
         <div class="filter-row">
           <div class="filter-label">Date</div>
           <div class="pill-row" id="dateFilters">
-            <button type="button" class="filter-pill" data-range="week">This week</button>
+            <button type="button" class="filter-pill" data-range="24h">Last 24 hours</button>
+            <button type="button" class="filter-pill" data-range="72h">Last 72 hours</button>
             <button type="button" class="filter-pill" data-range="7d">Last 7 days</button>
             <button type="button" class="filter-pill" data-range="30d">Last 30 days</button>
             <button type="button" class="filter-pill active" data-range="all">All time</button>
@@ -746,32 +747,45 @@ function renderSourceFilters() {
   }).join("");
 }
 
-function matchesDateRange(itemDateKey) {
+function getItemTimestamp(item) {
+  const generated = item && item.generatedAt ? new Date(item.generatedAt) : null;
+  if (generated && !Number.isNaN(generated.getTime())) return generated.getTime();
+  const day = parseDateKey(item && item.date);
+  if (!day) return null;
+  day.setHours(23, 59, 59, 999);
+  return day.getTime();
+}
+
+function matchesDateRange(item) {
   if (state.dateRange === "all") return true;
-  const itemDate = parseDateKey(itemDateKey);
-  if (!itemDate) return false;
+  const itemTs = getItemTimestamp(item);
+  if (!itemTs) return false;
 
   const now = new Date();
+  const nowTs = now.getTime();
+
+  if (state.dateRange === "24h") {
+    return itemTs >= nowTs - (24 * 60 * 60 * 1000);
+  }
+
+  if (state.dateRange === "72h") {
+    return itemTs >= nowTs - (72 * 60 * 60 * 1000);
+  }
+
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const itemDate = new Date(itemTs);
+  const itemDay = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
 
   if (state.dateRange === "7d") {
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() - 6);
-    return itemDate >= cutoff;
+    return itemDay >= cutoff;
   }
 
   if (state.dateRange === "30d") {
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() - 29);
-    return itemDate >= cutoff;
-  }
-
-  if (state.dateRange === "week") {
-    const day = today.getDay();
-    const mondayOffset = day === 0 ? 6 : day - 1;
-    const start = new Date(today);
-    start.setDate(start.getDate() - mondayOffset);
-    return itemDate >= start;
+    return itemDay >= cutoff;
   }
 
   return true;
@@ -796,7 +810,7 @@ function applyFilters() {
 
     if (state.selectedTags.size > 0 && !state.selectedTags.has(item.tag)) return false;
     if (state.selectedSources.size > 0 && !state.selectedSources.has(item.source)) return false;
-    if (!matchesDateRange(item.date)) return false;
+    if (!matchesDateRange(item)) return false;
     return true;
   });
 

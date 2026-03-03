@@ -659,7 +659,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // GET /api/archive/all?token=... — flattened archive feed for search/discovery
-  if (pathname === "/api/archive/all" && req.method === "GET") {
+  if ((pathname === "/api/archive/all" || pathname === "/api/archive/all/") && req.method === "GET") {
     const token = url.searchParams.get("token");
     if (!token) return json(res, { items: [], requiresAuth: true });
 
@@ -716,7 +716,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/archive/:date?token=... — full digest for a specific date
   if (pathname.startsWith("/api/archive/") && req.method === "GET") {
-    const rawDate = pathname.replace("/api/archive/", "");
+    const rawDate = pathname.replace("/api/archive/", "").replace(/\/+$/, "");
     // Sanitize: only allow YYYY-MM-DD format to prevent path traversal
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return json(res, { error: "invalid date" }, 400);
 

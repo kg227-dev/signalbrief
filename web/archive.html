@@ -1083,6 +1083,90 @@ function showGate(message) {
   }
 }
 
+async function loadArchiveFlatWithFallback(token) {
+  const tokenParam = encodeURIComponent(token);
+
+  // Primary path: new flattened endpoint.
+  try {
+    const flatRes = await fetch("/api/archive/all?token=" + tokenParam);
+    const flatData = await flatRes.json().catch(() => ({}));
+
+    if (flatRes.ok && !flatData.error && Array.isArray(flatData.items)) {
+      return {
+        items: flatData.items,
+        digestCount: Number(flatData.digestCount || 0),
+      };
+    }
+
+    // Auth failures should still gate immediately.
+    if (flatRes.status === 401 || flatData.error === "invalid token") {
+      return { authError: true };
+    }
+  } catch (_) {
+    // Continue to legacy fallback.
+  }
+
+  // Compatibility fallback for older servers that only expose /api/archive + /api/archive/:date.
+  try {
+    const listRes = await fetch("/api/archive?token=" + tokenParam);
+    const listData = await listRes.json().catch(() => ({}));
+    if (listRes.status === 401 || listData.error === "invalid token") {
+      return { authError: true };
+    }
+    if (!listRes.ok || listData.error) return { loadError: true };
+
+    const digests = Array.isArray(listData.digests) ? listData.digests : [];
+    if (!digests.length) return { items: [], digestCount: 0 };
+
+    const detailLoads = await Promise.all(digests.map(async (digest) => {
+      const dateKey = String(digest && digest.date || "");
+      if (!dateKey) return null;
+      try {
+        const detailRes = await fetch("/api/archive/" + encodeURIComponent(dateKey) + "?token=" + tokenParam);
+        const detailData = await detailRes.json().catch(() => ({}));
+        if (!detailRes.ok || detailData.error) return null;
+        return detailData;
+      } catch {
+        return null;
+      }
+    }));
+
+    const items = [];
+    detailLoads.filter(Boolean).forEach((digest) => {
+      const digestDate = digest.date || "";
+      const digestDateStr = digest.dateStr || digestDate;
+      const digestItems = Array.isArray(digest.items) ? digest.items : [];
+      digestItems.forEach((item, idx) => {
+        items.push({
+          date: digestDate,
+          dateStr: digestDateStr,
+          generatedAt: digest.generatedAt || null,
+          rank: idx + 1,
+          tag: item && item.tag || "",
+          headline: item && item.headline || "",
+          summary: item && item.summary || "",
+          wim: item && item.wim || null,
+          implications: item && item.implications || null,
+          watch_next: item && item.watch_next || null,
+          url: item && item.url || "",
+          source: item && item.source || "",
+          baseScore: typeof (item && item.baseScore) === "number" ? item.baseScore : null,
+          relevanceScore: typeof (item && item.relevanceScore) === "number" ? item.relevanceScore : null,
+        });
+      });
+    });
+
+    items.sort((a, b) => {
+      if (a.date === b.date) return (a.rank || 0) - (b.rank || 0);
+      return a.date < b.date ? 1 : -1;
+    });
+
+    return { items, digestCount: digests.length };
+  } catch {
+    return { loadError: true };
+  }
+}
+
 async function init() {
   bindEvents();
 
@@ -1102,22 +1186,25 @@ async function init() {
 
   document.getElementById("settingsLink").href = "/settings?token=" + encodeURIComponent(state.token);
 
-  let archiveData;
   let userData;
   try {
-    const [archiveRes, userRes] = await Promise.all([
-      fetch("/api/archive/all?token=" + encodeURIComponent(state.token)),
-      fetch("/api/user?token=" + encodeURIComponent(state.token)),
-    ]);
-
-    archiveData = await archiveRes.json();
+    const userRes = await fetch("/api/user?token=" + encodeURIComponent(state.token));
     userData = await userRes.json();
-
-    if (!archiveRes.ok || archiveData.error || !userRes.ok || userData.error) {
+    if (!userRes.ok || userData.error) {
       showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
       return;
     }
   } catch {
+    showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
+    return;
+  }
+
+  const archiveData = await loadArchiveFlatWithFallback(state.token);
+  if (archiveData && archiveData.authError) {
+    showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
+    return;
+  }
+  if (!archiveData || archiveData.loadError) {
     showGate("Could not load archive right now. Please try again.");
     return;
   }

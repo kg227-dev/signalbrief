@@ -913,7 +913,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   // POST /api/admin/message-user — send custom admin message via configured channels
-  if (pathname === "/api/admin/message-user" && req.method === "POST") {
+  // Accept trailing slash variant for proxy/canonicalization compatibility.
+  if ((pathname === "/api/admin/message-user" || pathname === "/api/admin/message-user/") && req.method === "POST") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const body = await readBody(req);
     const email = String(body.email || "").toLowerCase().trim();

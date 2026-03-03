@@ -724,18 +724,32 @@ async function submitSendModal() {
     if (document.getElementById("sendViaTelegram").checked) channels.push("telegram");
     const body = document.getElementById("sendCustomBody").value.trim();
     const subject = document.getElementById("sendCustomSubject").value.trim();
-    const res = await fetch("/api/admin/message-user", {
+    const payload = JSON.stringify({
+      email: sendModalUser.email,
+      channels,
+      subject,
+      message: body,
+    });
+    let res = await fetch("/api/admin/message-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: sendModalUser.email,
-        channels,
-        subject,
-        message: body,
-      }),
+      body: payload,
     });
-    const data = await parseApiJson(res);
+    let data = await parseApiJson(res);
+    // Retry once against trailing-slash variant for reverse-proxy compatibility.
+    if (res.status === 404 && /not found/i.test(String(data.error || ""))) {
+      res = await fetch("/api/admin/message-user/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      });
+      data = await parseApiJson(res);
+    }
     if (!res.ok || !data.success) {
+      if (res.status === 404 && /not found/i.test(String(data.error || ""))) {
+        setSendModalFeedback("err", "Message endpoint not found on server. Restart web service on latest main.");
+        return;
+      }
       setSendModalFeedback("err", data.error || "Failed to send message");
       return;
     }

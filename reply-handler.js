@@ -51,6 +51,80 @@ const CAPABILITY_TOPICS = [
   "DIGITAL", "M&A ADVISORY", "TALENT",
 ];
 const STANDARD_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+const LINK_VERIFY_TTL_MS = 10 * 60 * 1000; // 10 minutes
+// chatId -> { email, code, expiresAt }
+const PENDING_LINK_VERIFICATIONS = new Map();
+
+function generateVerificationCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendLinkVerificationEmail(email, code) {
+  const target = String(email || "").toLowerCase().trim();
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:540px;margin:0 auto;padding:32px 22px;color:#111;">
+      <div style="font-size:22px;font-weight:700;margin-bottom:10px;">☀️ SignalBrief</div>
+      <div style="font-size:15px;color:#374151;line-height:1.6;margin-bottom:14px;">
+        Someone requested to link a Telegram chat to your SignalBrief account.
+      </div>
+      <div style="font-size:14px;color:#6B7280;margin-bottom:8px;">Verification code (expires in 10 minutes):</div>
+      <div style="font-size:32px;letter-spacing:0.08em;font-weight:700;color:#2563EB;margin-bottom:14px;">${code}</div>
+      <div style="font-size:14px;color:#374151;line-height:1.6;">
+        In Telegram, reply with: <strong>/verify ${code}</strong><br>
+        If this wasn't you, ignore this email.
+      </div>
+    </div>`;
+  const result = await sendEmailViaMailer(target, "Your SignalBrief verification code", html);
+  if (!result.ok) throw new Error(`verification email failed via ${result.via || "mailer"}`);
+}
+
+async function startLinkVerification(chatId, user) {
+  const email = String(user?.email || "").toLowerCase().trim();
+  if (!email) {
+    await send(chatId, "I couldn't start verification because this account has no email on file. Contact support.");
+    return false;
+  }
+
+  const code = generateVerificationCode();
+  PENDING_LINK_VERIFICATIONS.set(String(chatId), {
+    email,
+    code,
+    expiresAt: Date.now() + LINK_VERIFY_TTL_MS,
+  });
+
+  try {
+    await sendLinkVerificationEmail(email, code);
+  } catch (e) {
+    PENDING_LINK_VERIFICATIONS.delete(String(chatId));
+    await send(chatId, `I couldn't send the verification code right now (${e.message}). Try again in a minute.`);
+    return false;
+  }
+
+  await send(chatId,
+    `🔐 I sent a 6-digit verification code to *${email}*.\n\n` +
+    `Reply here with \`/verify 123456\` to link this Telegram chat to your existing account.\n\n` +
+    `Code expires in 10 minutes.`
+  );
+  return true;
+}
+
+function relinkExistingUserToChat(existing, chatId) {
+  const oldChatId = existing.chatId;
+  const updated = {
+    ...existing,
+    chatId,
+    status: "active",
+    joined_at: existing.joined_at || new Date().toISOString(),
+    preferences: { ...(existing.preferences || {}), telegram_enabled: true },
+    last_updated: new Date().toISOString(),
+  };
+  writeUser(chatId, updated);
+  if (oldChatId && String(oldChatId) !== String(chatId)) {
+    const oldFile = path.join(__dirname, "data", `user-${oldChatId}.json`);
+    if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+  }
+  return updated;
+}
 
 // ── HTTP ─────────────────────────────────────────────────────────────────────
 
@@ -97,6 +171,10 @@ async function parseIntent(message) {
   if (m === "/bookmarks") return { action: "bookmarks" };
   if (m === "/topics") return { action: "topics" };
   if (m === "/help") return { action: "help" };
+  if (m.startsWith("/verify")) {
+    const parts = message.trim().split(/\s+/);
+    return { action: "verify_link", code: parts[1] || null };
+  }
 
   const prompt = `The user replied to their SignalBrief news digest with: "${message}"
 
@@ -210,9 +288,53 @@ async function handleDigest(chatId) {
   }
 }
 
+async function handleVerifyLink(chatId, codeRaw) {
+  const key = String(chatId);
+  const pending = PENDING_LINK_VERIFICATIONS.get(key);
+  if (!pending) {
+    await send(chatId, "No pending verification request. Start with `/start your@email.com`.");
+    return;
+  }
+
+  if (Date.now() > pending.expiresAt) {
+    PENDING_LINK_VERIFICATIONS.delete(key);
+    await send(chatId, "That verification code expired. Run `/start your@email.com` again to get a new code.");
+    return;
+  }
+
+  const code = String(codeRaw || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    await send(chatId, "Please provide a 6-digit code, e.g. `/verify 123456`.");
+    return;
+  }
+  if (code !== pending.code) {
+    await send(chatId, "That code doesn't match. Check your email and try again.");
+    return;
+  }
+
+  const existing = allUsers().find(u => (u.email || "").toLowerCase().trim() === pending.email);
+  if (!existing) {
+    PENDING_LINK_VERIFICATIONS.delete(key);
+    await send(chatId, "I couldn't find that account anymore. Try `/start your@email.com`.");
+    return;
+  }
+
+  const updated = relinkExistingUserToChat(existing, chatId);
+  PENDING_LINK_VERIFICATIONS.delete(key);
+  AWAITING_EMAIL.delete(chatId);
+
+  const firstName = (updated.name || "").split(" ")[0] || "there";
+  await send(chatId,
+    `✅ *Verified, ${firstName}!* Telegram is now linked to your SignalBrief account.\n\n` +
+    `Digest arrives at *${formatDeliveryTime(updated.preferences)}*. Or get one now:\n\n` +
+    `⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
+  );
+}
+
 async function handleStart(chatId, email) {
   // Always clear pending email capture state — /start resets it regardless
   AWAITING_EMAIL.delete(chatId);
+  PENDING_LINK_VERIFICATIONS.delete(String(chatId));
 
   // ── /start email@example.com — link Telegram to existing web signup ──────────
   if (email) {
@@ -244,28 +366,8 @@ async function handleStart(chatId, email) {
       return;
     }
 
-    // Migrate from placeholder email-xxx chatId → real Telegram chatId
-    const oldChatId = match.chatId;
-    const updated = {
-      ...match,
-      chatId,
-      status: "active",
-      joined_at: match.joined_at || new Date().toISOString(),
-      preferences: { ...(match.preferences || {}), telegram_enabled: true },
-      last_updated: new Date().toISOString(),
-    };
-    writeUser(chatId, updated);
-    if (oldChatId && String(oldChatId) !== String(chatId)) {
-      const oldFile = require("path").join(__dirname, "data", `user-${oldChatId}.json`);
-      if (require("fs").existsSync(oldFile)) require("fs").unlinkSync(oldFile);
-    }
-
-    const firstName = (match.name || "").split(" ")[0] || "there";
-    await send(chatId,
-      `✅ *Linked, ${firstName}!* Telegram is now connected to your SignalBrief account.\n\n` +
-      `Your digest arrives at *${formatDeliveryTime(updated.preferences)}*. Or get one now:\n\n` +
-      `⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
-    );
+    // Existing account is linked to a different chat — require email verification
+    await startLinkVerification(chatId, match);
     return;
   }
 
@@ -326,16 +428,8 @@ async function handleEmailCapture(chatId, text) {
   if (existing) {
     const oldChatId = existing.chatId;
     if (oldChatId !== chatId) {
-      existing.chatId = chatId;
-      existing.status = "active";
-      existing.joined_at = existing.joined_at || new Date().toISOString();
-      existing.preferences = { ...(existing.preferences || {}), telegram_enabled: true };
-      existing.last_updated = new Date().toISOString();
-      writeUser(chatId, existing);
-      if (oldChatId && String(oldChatId) !== String(chatId)) {
-        const oldFile = path.join(__dirname, "data", `user-${oldChatId}.json`);
-        if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-      }
+      await startLinkVerification(chatId, existing);
+      return;
     } else {
       existing.status = "active";
       existing.preferences = { ...(existing.preferences || {}), telegram_enabled: true };
@@ -588,6 +682,7 @@ async function handleHelp(chatId) {
     `• \`less pharma\` — fewer pharma stories\n` +
     `• \`add GLP-1\` — track a new topic\n\n` +
     `*Other commands:*\n` +
+    `• /verify 123456 — confirm Telegram account linking\n` +
     `• /bookmarks — view saved items\n` +
     `• /topics — view tracked topics\n` +
     `• /settings — view all preferences\n\n` +
@@ -627,6 +722,7 @@ async function handle(message, chatId) {
 
   switch (intent.action) {
     case "start":     return handleStart(chatId, intent.email);
+    case "verify_link": return handleVerifyLink(chatId, intent.code);
     case "digest":    return handleDigest(chatId);
     case "save":      return handleSave(chatId, intent.items);
     case "topic_more": return handleTopicMore(chatId, intent.topic);

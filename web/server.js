@@ -499,27 +499,40 @@ const server = http.createServer(async (req, res) => {
     // Sanitize telegram: strip leading @ characters
     const telegramClean = telegram ? String(telegram).replace(/^@+/, "").trim() : null;
 
-    // Check existing
-    const existing = allUsers().find(u => (u.email || "").toLowerCase().trim() === emailNorm);
-    const chatId = existing?.chatId || `email-${Date.now()}`;
+    const users = allUsers();
+    const existingEmail = users.find(u => (u.email || "").toLowerCase().trim() === emailNorm);
+    if (existingEmail) {
+      return json(res, {
+        error: "An account with this email already exists. Use your existing settings link to access it.",
+      }, 409);
+    }
+
+    if (telegramClean) {
+      const telegramKey = telegramClean.toLowerCase();
+      const existingTelegram = users.find(u => String(u.telegram || "").toLowerCase() === telegramKey);
+      if (existingTelegram) {
+        return json(res, { error: "That Telegram username is already linked to another account." }, 409);
+      }
+    }
+
+    const chatId = `email-${Date.now()}`;
 
     const user = {
-      ...(existing || {}),
       chatId,
       name,
       email: emailNorm,
       telegram: telegramClean || null,
       topics,
       status: "active",
-      token: existing?.token || generateToken(),
-      joined_at: existing?.joined_at || new Date().toISOString(),
+      token: generateToken(),
+      joined_at: new Date().toISOString(),
       last_updated: new Date().toISOString(),
-      digests_received: existing?.digests_received || 0,
-      bookmarks: existing?.bookmarks || [],
-      topic_weights: existing?.topic_weights || {},
+      digests_received: 0,
+      bookmarks: [],
+      topic_weights: {},
       custom_topics: topics.filter(t => !DEFAULT_TOPICS.includes(t)),
-      digest_dates: existing?.digest_dates || [],
-      last_digest_items: existing?.last_digest_items || [],
+      digest_dates: [],
+      last_digest_items: [],
       preferences: {
         depth: depth || "headline_plus_why",
         delivery_time: delivery_time || "07:00",
@@ -568,6 +581,32 @@ const server = http.createServer(async (req, res) => {
     // Sanitize telegram if present
     if (safeBody.telegram != null) {
       safeBody.telegram = String(safeBody.telegram).replace(/^@+/, "").trim() || null;
+      if (safeBody.telegram) {
+        const telegramKey = safeBody.telegram.toLowerCase();
+        const telegramConflict = allUsers().find(u =>
+          String(u.telegram || "").toLowerCase() === telegramKey &&
+          String(u.chatId || "") !== String(existing.chatId || "")
+        );
+        if (telegramConflict) {
+          return json(res, { error: "That Telegram username is already linked to another account." }, 409);
+        }
+      }
+    }
+
+    // Sanitize + protect email uniqueness if present
+    if (safeBody.email != null) {
+      const nextEmail = String(safeBody.email).toLowerCase().trim();
+      if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+        return json(res, { error: "invalid email address" }, 400);
+      }
+      const emailConflict = allUsers().find(u =>
+        String(u.email || "").toLowerCase().trim() === nextEmail &&
+        String(u.chatId || "") !== String(existing.chatId || "")
+      );
+      if (emailConflict) {
+        return json(res, { error: "That email is already linked to another account." }, 409);
+      }
+      safeBody.email = nextEmail;
     }
 
     const updated = {

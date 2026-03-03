@@ -60,14 +60,6 @@ const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
-const TEST_DIGEST_STATUS = {
-  state: "idle", // idle | running | success | failed
-  job_id: null,
-  target_chat_id: null,
-  started_at: null,
-  finished_at: null,
-  message: null,
-};
 
 function verifyAdminPassword(password) {
   const { salt, passwordHash } = CONFIG.admin || {};
@@ -172,17 +164,6 @@ function checkLoginRate(ip) {
   entry.count++;
   LOGIN_RATE.set(ip, entry);
   return false;
-}
-
-function resolveAdminTestChatId() {
-  const explicit = process.env.ADMIN_TEST_CHAT_ID || CONFIG.admin?.testChatId || CONFIG.admin?.test_chat_id;
-  if (explicit) return String(explicit);
-  const adminEmail = (CONFIG.admin?.email || "").toLowerCase().trim();
-  if (!adminEmail) return null;
-  const match = allUsers().find(u => (u.email || "").toLowerCase().trim() === adminEmail);
-  if (!match?.chatId) return null;
-  if (String(match.chatId).startsWith("email-")) return null; // not linked to Telegram
-  return String(match.chatId);
 }
 
 const MIME = {
@@ -872,67 +853,6 @@ const server = http.createServer(async (req, res) => {
     const adminUser = allUsers().find(u => (u.email || "").toLowerCase().trim() === lookup);
     if (!adminUser) return json(res, { error: "not found" }, 404);
     return json(res, adminUser);
-  }
-
-  // GET /api/admin/test-digest-status — status for "Send test digest" job
-  if (pathname === "/api/admin/test-digest-status" && req.method === "GET") {
-    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    return json(res, {
-      ...TEST_DIGEST_STATUS,
-      admin_email: CONFIG.admin?.email || null,
-      resolved_chat_id: resolveAdminTestChatId(),
-    });
-  }
-
-  // POST/GET /api/admin/run-test-digest — trigger digest for admin account with job status tracking
-  if (pathname === "/api/admin/run-test-digest" && (req.method === "POST" || req.method === "GET")) {
-    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    if (TEST_DIGEST_STATUS.state === "running") {
-      return json(res, { error: "Test digest already running", status: TEST_DIGEST_STATUS }, 409);
-    }
-
-    const digestPath = path.join(__dirname, "../digest.js");
-    const targetChatId = resolveAdminTestChatId();
-    if (!targetChatId) {
-      return json(res, {
-        error: "No admin Telegram chat ID found. Link your admin email to Telegram with /start email@... or set ADMIN_TEST_CHAT_ID.",
-      }, 400);
-    }
-
-    const jobId = crypto.randomBytes(8).toString("hex");
-    TEST_DIGEST_STATUS.state = "running";
-    TEST_DIGEST_STATUS.job_id = jobId;
-    TEST_DIGEST_STATUS.target_chat_id = targetChatId;
-    TEST_DIGEST_STATUS.started_at = new Date().toISOString();
-    TEST_DIGEST_STATUS.finished_at = null;
-    TEST_DIGEST_STATUS.message = "Digest run in progress";
-
-    const child = spawn(process.execPath, [digestPath, "--chatId", targetChatId, "--suppressWelcome"], {
-      env: { ...process.env },
-      stdio: ["ignore", "ignore", "pipe"],
-    });
-
-    let stderr = "";
-    child.stderr.on("data", c => {
-      stderr += c.toString();
-      if (stderr.length > 4000) stderr = stderr.slice(-4000);
-    });
-
-    child.on("error", err => {
-      TEST_DIGEST_STATUS.state = "failed";
-      TEST_DIGEST_STATUS.finished_at = new Date().toISOString();
-      TEST_DIGEST_STATUS.message = `Failed to start: ${err.message}`;
-    });
-
-    child.on("close", code => {
-      TEST_DIGEST_STATUS.state = code === 0 ? "success" : "failed";
-      TEST_DIGEST_STATUS.finished_at = new Date().toISOString();
-      TEST_DIGEST_STATUS.message = code === 0
-        ? "Digest sent successfully"
-        : `Digest process exited with code ${code}${stderr ? ` — ${stderr.slice(-240)}` : ""}`;
-    });
-
-    return json(res, { success: true, status: TEST_DIGEST_STATUS });
   }
 
   // POST /api/admin/run-digest — trigger a digest run

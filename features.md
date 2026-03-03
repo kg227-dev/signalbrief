@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-03 (rev 7)
+Last updated: 2026-03-03 (rev 8)
 
 ---
 
@@ -33,6 +33,7 @@ Shipped in the current cycle (2026-03-03):
 - Telegram bookmark dates now use ET day keys (not UTC day rollover).
 - Perplexity run logging now uses actual fetch-call counts (standard + custom) instead of a fixed topic count.
 - Admin outbound custom messages are now audit-logged (JSONL) and visible in a dedicated admin table.
+- Legacy `/api/admin/run-test-digest` and `/api/admin/test-digest-status` paths removed; admin now uses one canonical send endpoint.
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -40,11 +41,7 @@ The remaining items below are **new features and improvements** organized by pri
 
 ## Known Remaining Issues
 
-B-1 through B-15 are resolved except B-10. Current follow-up audit found these remaining gaps.
-
-### ⚠️ B-10: Legacy `/api/admin/run-test-digest` path still exists but is no longer primary flow — **Open**
-The UI now uses roster target + `/api/admin/run-digest`, but old test-digest endpoints remain in `web/server.js:793-804` and can create confusion during debugging.
-- Suggested fix: deprecate/remove `GET/POST /api/admin/run-test-digest` and `/api/admin/test-digest-status`, or internally route both to one canonical implementation.
+B-1 through B-15 are resolved. Current follow-up audit has no remaining known ship bugs.
 
 ### ✅ B-9: Monthly users-reached stat drift vs roster — **Fixed**
 Admin summary now keys monthly unique users to current roster delivery state and also exposes a log-based comparator (`month_unique_users_log`) for diagnostics.
@@ -87,6 +84,9 @@ Session auth is now required by default; localhost bypass only applies when `ADM
 
 ### ✅ B-12: Admin outbound custom messages auditability — **Fixed**
 `/api/admin/message-user` now appends JSONL audit records (`data/admin-message-log.json`) and `/api/admin/stats` exposes recent entries, rendered in an "Admin outbound messages" table on the dashboard.
+
+### ✅ B-10: Legacy test-digest endpoint cleanup — **Fixed**
+Removed deprecated test endpoints from `web/server.js`; admin digest testing now goes only through `/api/admin/run-digest`.
 
 ---
 
@@ -373,7 +373,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | **B-14 Delivery stats overcount attempted sends** | High | Small-Med | **Done** | — |
 | **B-15 Perplexity cost/call mis-logging** | High | Small | **Done** | — |
 | **B-12 Admin message auditability** | High | Small-Med | **Done** | — |
-| **B-10 Legacy test endpoint cleanup** | Medium | Small | **Now** | — |
+| **B-10 Legacy test endpoint cleanup** | Medium | Small | **Done** | — |
 | **B-9 Legacy unique-user fallback** | Medium | Small | **Done** | — |
 | P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
 | P1-1 Implicit learning | High | Medium | **Next** | B-8 |
@@ -385,7 +385,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | P2-11 Admin message templates | Medium | Small-Med | **Next** | — |
 | P2-12 Roster search + filters | Medium | Small | **Next** | — |
 | P4-10 Admin comms audit log | High | Small-Med | **Next** | B-12 |
-| P4-11 Retire legacy test endpoint | Medium | Small | **Next** | B-10 |
+| P4-11 Retire legacy test endpoint | Medium | Small | **Done** | B-10 |
 | P4-13 Environment-safe admin auth mode | Very High | Small | **Done** | B-13 |
 | P2-1 Custom topic queries | High | Large | **Soon** | — |
 | P2-2 Company watchlist | High | Medium | **Soon** | — |
@@ -417,8 +417,8 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ## Recommended Build Order
 
-**Immediate (now):** B-10 legacy test endpoint cleanup
-**Sprint 1 (stability + trust):** P4-11 retire legacy test endpoint, P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates
+**Immediate (now):** none (all known ship bugs resolved)
+**Sprint 1 (stability + trust):** P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates
 **Sprint 2 (personalization):** P1-1 implicit learning, P2-6 inline keyboards, P2-2 company watchlist
 **Sprint 3 (differentiation):** P2-9 Consultant Lens, P2-10 source corroboration, P2-1 custom topic queries
 **Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution, P2-12 roster filters

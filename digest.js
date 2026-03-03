@@ -333,13 +333,14 @@ function buildCommandMenu(state) {
 }
 
 function formatTelegram(items, dateStr, state) {
+  const NUM_LABELS = ["1⃣","2⃣","3⃣","4⃣","5⃣","6⃣","7⃣","8⃣","9⃣","🔟"];
   const lines = [
     `☀️ *SignalBrief — ${dateStr}*`,
     `_Your daily signal across AI, strategy, and business_`,
     "",
   ];
   items.forEach((item, i) => {
-    const num = ["1⃣","2⃣","3⃣","4⃣","5⃣","6⃣","7⃣","8⃣"][i];
+    const num = NUM_LABELS[i] || `${i + 1}.`;
     // Strip ALL HTML first (including <strong>) before splitting — bold asterisks break
     // the sentence-boundary lookbehind. Cap at 250 chars (plaintext sentence avg ~200).
     const rawWim = item.wim
@@ -501,8 +502,12 @@ async function sendTelegram(text, chatId) {
     { "Content-Type": "application/json" },
     { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false }
   );
-  if (res.body?.ok) log(`✅ Telegram sent to ${targetId}`);
-  else log(`❌ Telegram failed: ${JSON.stringify(res.body)}`);
+  if (res.body?.ok) {
+    log(`✅ Telegram sent to ${targetId}`);
+    return;
+  }
+  const detail = res.body?.description || JSON.stringify(res.body) || `status ${res.status}`;
+  throw new Error(`telegram send failed: ${detail}`);
 }
 
 // ── 7. Send Email (via mailer.js — Resend if configured, Gmail fallback) ──────
@@ -511,8 +516,11 @@ async function sendEmail(subject, html, toEmail, token = null) {
   const target = toEmail || CONFIG.user.email;
   log(`Sending email to ${target}...`);
   const result = await sendEmailViaMailer(target, subject, html, token);
-  if (result.ok) log(`✅ Email sent via ${result.via}`);
-  else log(`❌ Email failed`);
+  if (result.ok) {
+    log(`✅ Email sent via ${result.via}`);
+    return;
+  }
+  throw new Error(`email send failed via ${result.via || "mailer"}`);
 }
 
 // ── Archive ───────────────────────────────────────────────────────────────────
@@ -602,7 +610,13 @@ async function main() {
     log(`[schedule] ${todayET} ${etNow.getHours().toString().padStart(2,"0")}:${etNow.getMinutes().toString().padStart(2,"0")} ET — ${parts.join(" | ")}`);
   }
 
-  if (dueUsers.length === 0) process.exit(0); // no users due this window
+  if (dueUsers.length === 0) {
+    if (targetChatId) {
+      log(`No active user found for on-demand chatId ${targetChatId}`);
+      process.exit(2);
+    }
+    process.exit(0); // no users due this window
+  }
 
   if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);
   else log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
@@ -675,6 +689,8 @@ async function main() {
   saveToArchive(now, enriched, dateStr, quickScan, { overwrite: !targetChatId });
 
   log(`Delivering to ${dueUsers.length} user(s)...`);
+  const deliveredUsers = [];
+  const failedUsers = [];
 
   for (const u of dueUsers) {
     try {
@@ -803,9 +819,11 @@ async function main() {
       if (!u.digest_dates) u.digest_dates = [];
       if (!u.digest_dates.includes(todayDateKey)) u.digest_dates.push(todayDateKey);
       writeUser(u.chatId, u);
+      deliveredUsers.push({ id: u.email || u.chatId, on_demand: !!targetChatId });
 
       log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth})`);
     } catch (err) {
+      failedUsers.push({ id: u.email || u.chatId, error: err.message, on_demand: !!targetChatId });
       log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);
     }
   }
@@ -828,12 +846,15 @@ async function main() {
     claude_tokens_out:     claudeUsage.output_tokens,
     claude_cost_usd:       parseFloat(claudeCost.toFixed(6)),
     total_cost_usd:        parseFloat(totalCost.toFixed(5)),
-    users_served:          dueUsers.length,
-    per_user:              dueUsers.map(u => ({ id: u.email || u.chatId, on_demand: !!targetChatId })),
+    users_targeted:        dueUsers.length,
+    users_served:          deliveredUsers.length,
+    per_user:              deliveredUsers,
+    per_user_failed:       failedUsers,
   });
   log(`💰 Run cost: $${totalCost.toFixed(4)} (Perplexity $${perplexityCost.toFixed(3)} · Claude in=${claudeUsage.input_tokens} out=${claudeUsage.output_tokens} $${claudeCost.toFixed(4)})`);
 
-  log(`=== SignalBrief complete — ${dueUsers.length} user(s) delivered ===`);
+  log(`=== SignalBrief complete — ${deliveredUsers.length}/${dueUsers.length} user(s) delivered ===`);
+  if (targetChatId && deliveredUsers.length === 0) process.exit(3);
 }
 
 main().catch((e) => {

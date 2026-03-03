@@ -877,7 +877,7 @@ async function triggerTestDigest() {
     return;
   }
   btn.disabled = true;
-  btn.textContent = "🧪 Starting…";
+  btn.textContent = "🧪 Sending…";
   msg.style.display = "none";
   try {
     const res = await fetch("/api/admin/run-digest", {
@@ -890,7 +890,7 @@ async function triggerTestDigest() {
       renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${res.status})` });
       return;
     }
-    renderTestDigestStatus({ state: "success", message: `Digest queued for ${targetLabel}` });
+    renderTestDigestStatus({ state: "success", message: data.message || `Digest sent to ${targetLabel}` });
   } catch (e) {
     renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
   }

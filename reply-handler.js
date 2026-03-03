@@ -31,12 +31,26 @@ function formatDeliveryTime(prefs) {
   return `${hour}${min} ${ampm} ET`;
 }
 
+function etDateKeyNow() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
 // ── Telegram-first onboarding state ──────────────────────────────────────────
 // Maps chatId → true when we're waiting for the user to reply with their email
 const AWAITING_EMAIL = new Map();
 // Maps chatId → cooldown expiry timestamp for on-demand /digest rate limiting (15 min)
 const DIGEST_COOLDOWN = new Map();
 const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
+
+const INDUSTRY_TOPICS = [
+  "HEALTHCARE", "FINANCIAL SERVICES", "PE×M&A", "ENERGY", "CONSUMER",
+  "LIFE SCIENCES", "TECHNOLOGY", "INDUSTRIALS", "REAL ESTATE", "PUBLIC SECTOR",
+];
+const CAPABILITY_TOPICS = [
+  "AI×TECH", "STRATEGY", "POLICY×REGULATORY", "SUSTAINABILITY",
+  "DIGITAL", "M&A ADVISORY", "TALENT",
+];
+const STANDARD_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
 // ── HTTP ─────────────────────────────────────────────────────────────────────
 
@@ -209,23 +223,42 @@ async function handleStart(chatId, email) {
     }
 
     const users = allUsers();
-    const match = users.find(u => u.email.toLowerCase() === normalised);
+    const match = users.find(u => (u.email || "").toLowerCase() === normalised);
     if (!match) {
       // Email unknown — create account inline (same as Telegram-first onboarding flow)
       await handleEmailCapture(chatId, normalised);
       return;
     }
     if (match.chatId === chatId) {
-      await send(chatId, `✅ Already linked! Your digest arrives at *${formatDeliveryTime(match.preferences)}* on weekdays.\n\n💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`);
+      const wasInactive = (match.status || "active") !== "active";
+      const refreshed = {
+        ...match,
+        status: "active",
+        joined_at: match.joined_at || new Date().toISOString(),
+        preferences: { ...(match.preferences || {}), telegram_enabled: true },
+        last_updated: new Date().toISOString(),
+      };
+      writeUser(chatId, refreshed);
+      const lead = wasInactive ? "✅ Re-activated and linked." : "✅ Already linked.";
+      await send(chatId, `${lead} Your digest arrives at *${formatDeliveryTime(refreshed.preferences)}* on weekdays.\n\n💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`);
       return;
     }
 
     // Migrate from placeholder email-xxx chatId → real Telegram chatId
     const oldChatId = match.chatId;
-    const updated = { ...match, chatId, preferences: { ...(match.preferences || {}), telegram_enabled: true }, last_updated: new Date().toISOString() };
+    const updated = {
+      ...match,
+      chatId,
+      status: "active",
+      joined_at: match.joined_at || new Date().toISOString(),
+      preferences: { ...(match.preferences || {}), telegram_enabled: true },
+      last_updated: new Date().toISOString(),
+    };
     writeUser(chatId, updated);
-    const oldFile = require("path").join(__dirname, "data", `user-${oldChatId}.json`);
-    if (require("fs").existsSync(oldFile)) require("fs").unlinkSync(oldFile);
+    if (oldChatId && String(oldChatId) !== String(chatId)) {
+      const oldFile = require("path").join(__dirname, "data", `user-${oldChatId}.json`);
+      if (require("fs").existsSync(oldFile)) require("fs").unlinkSync(oldFile);
+    }
 
     const firstName = (match.name || "").split(" ")[0] || "there";
     await send(chatId,
@@ -238,20 +271,32 @@ async function handleStart(chatId, email) {
 
   // ── Plain /start — existing or new user ─────────────────────────────────────
   const user = readUser(chatId);
-  if (user.digests_received > 0) {
-    await send(chatId, `Welcome back! You've received *${user.digests_received}* digests so far.\n\nUse /settings to update your preferences or /bookmarks to see saved items.`);
-    return;
-  }
-
-  // Already a linked, active account
   if (user.email) {
-    writeUser(chatId, { ...user, status: "active", joined_at: user.joined_at || new Date().toISOString() });
+    const wasInactive = (user.status || "active") !== "active";
+    const refreshed = {
+      ...user,
+      status: "active",
+      joined_at: user.joined_at || new Date().toISOString(),
+      preferences: { ...(user.preferences || {}), telegram_enabled: true },
+      last_updated: new Date().toISOString(),
+    };
+    writeUser(chatId, refreshed);
+    if (refreshed.digests_received > 0) {
+      const intro = wasInactive ? "✅ You're active again." : "Welcome back!";
+      await send(chatId, `${intro} You've received *${refreshed.digests_received}* digests so far.\n\nUse /settings to update your preferences or /bookmarks to see saved items.`);
+      return;
+    }
     await send(chatId,
       `☀️ *Welcome to SignalBrief*\n\n` +
-      `Your daily signal across AI, strategy, and business — every morning at *${formatDeliveryTime(user.preferences)}*.\n\n` +
+      `Your daily signal across AI, strategy, and business — every morning at *${formatDeliveryTime(refreshed.preferences)}*.\n\n` +
       `📊 *more AI* · 📉 *less pharma* · ➕ *add topic* · ⚙️ /settings\n\n` +
       `First digest arrives at your scheduled time. See you then.`
     );
+    return;
+  }
+
+  if (user.digests_received > 0) {
+    await send(chatId, `Welcome back! You've received *${user.digests_received}* digests so far.\n\nUse /settings to update your preferences or /bookmarks to see saved items.`);
     return;
   }
 
@@ -277,16 +322,25 @@ async function handleEmailCapture(chatId, text) {
   AWAITING_EMAIL.delete(chatId);
 
   // Check if already signed up via web — link instead of creating duplicate
-  const existing = allUsers().find(u => u.email.toLowerCase() === email);
+  const existing = allUsers().find(u => (u.email || "").toLowerCase() === email);
   if (existing) {
     const oldChatId = existing.chatId;
     if (oldChatId !== chatId) {
       existing.chatId = chatId;
+      existing.status = "active";
+      existing.joined_at = existing.joined_at || new Date().toISOString();
       existing.preferences = { ...(existing.preferences || {}), telegram_enabled: true };
       existing.last_updated = new Date().toISOString();
       writeUser(chatId, existing);
-      const oldFile = path.join(__dirname, "data", `user-${oldChatId}.json`);
-      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+      if (oldChatId && String(oldChatId) !== String(chatId)) {
+        const oldFile = path.join(__dirname, "data", `user-${oldChatId}.json`);
+        if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+      }
+    } else {
+      existing.status = "active";
+      existing.preferences = { ...(existing.preferences || {}), telegram_enabled: true };
+      existing.last_updated = new Date().toISOString();
+      writeUser(chatId, existing);
     }
     const firstName = (existing.name || "").split(" ")[0] || "there";
     await send(chatId,
@@ -373,13 +427,13 @@ async function handleSave(chatId, items) {
     }
 
     const existing = user.bookmarks.find(b => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = etDateKeyNow();
       return b.date === today && b.item_num === n;
     });
     if (existing) { already.push(n); return; }
 
     const digestItem = lastItems[n - 1];
-    const today = new Date().toISOString().slice(0, 10);
+    const today = etDateKeyNow();
     user.bookmarks.push({
       date: today,
       item_num: n,
@@ -428,13 +482,6 @@ async function handleTopicLess(chatId, topic) {
   await send(chatId, `📉 Got it — fewer *${topic}* stories starting tomorrow.`);
 }
 
-const STANDARD_TOPICS = [
-  'HEALTHCARE', 'FINANCIAL SERVICES', 'PE×M&A', 'ENERGY', 'CONSUMER',
-  'LIFE SCIENCES', 'TECHNOLOGY', 'INDUSTRIALS', 'REAL ESTATE', 'PUBLIC SECTOR',
-  'AI×TECH', 'STRATEGY', 'POLICY×REGULATORY', 'SUSTAINABILITY',
-  'DIGITAL', 'M&A ADVISORY', 'TALENT',
-];
-
 async function handleTopicAdd(chatId, topic) {
   if (!topic) return;
   const user = readUser(chatId);
@@ -458,6 +505,9 @@ async function handleTopicAdd(chatId, topic) {
 
 async function handleSettings(chatId) {
   const user = readUser(chatId);
+  const topics = Array.isArray(user.topics) ? user.topics : [];
+  const industries = topics.filter(t => INDUSTRY_TOPICS.includes(t));
+  const capabilities = topics.filter(t => CAPABILITY_TOPICS.includes(t));
   const weights = Object.entries(user.topic_weights || {});
   const adjustments = weights.length
     ? weights.map(([k, v]) => `${v > 0 ? "↑".repeat(Math.min(v,3)) : "↓".repeat(Math.min(-v,3))} ${k}`).join(" · ")
@@ -476,6 +526,8 @@ async function handleSettings(chatId) {
     `📬 Digests received: *${user.digests_received}*\n` +
     `📅 Delivery: *${formatDeliveryTime(user.preferences)}*\n` +
     `💾 Bookmarks saved: *${user.bookmarks?.length || 0}*\n\n` +
+    `🏭 Industries: ${industries.length ? industries.join(", ") : "none"}\n` +
+    `🧰 Capabilities: ${capabilities.length ? capabilities.join(", ") : "none"}\n` +
     `📊 Topic adjustments: ${adjustments}\n` +
     `➕ Custom topics: ${customTopics}` +
     settingsLine + `\n\n` +

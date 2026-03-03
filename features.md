@@ -1,16 +1,36 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-02 (rev 2)
+Last updated: 2026-03-03 (rev 5)
 
 ---
 
 ## Status of Previous Audit
 
-All P0 ship-blocking bugs (P0-1 through P0-6) have been fixed.
-All P1 MVP features (P1-1 through P1-12) have been implemented.
-All P2 post-launch fixes (P2-1 through P2-15) have been implemented.
-Admin user editor page (admin-user.html) has been built.
-All B-1 through B-8 bugs have been fixed (2026-03-02).
+All P0 ship-blocking workflow bugs from the launch audit are fixed.
+All B-1 through B-8 bugs are fixed.
+
+Shipped in the current cycle (2026-03-02):
+- Signup/settings/unsubscribe/archiving flows repaired end-to-end (including magic-link and redirect issues).
+- Admin schedule dashboard shipped (active users, next delivery ET, CSV export).
+- Archive page now renders full digest detail view from archive JSON (with compatibility normalization for older files).
+- Admin "Send digest now" now always sends regular digest framing (no first-briefing copy).
+- Manual digest targeting verified for both Telegram-linked and email-only users (via `email-*` chat IDs).
+- Admin user page now includes direct "Open user archive" quick link.
+- Recent runs now show recipient(s) in a dedicated "Sent to" column.
+- Roster actions now include custom outbound messaging (email, Telegram, or both).
+- Admin summary cards now align with roster semantics (unique users vs deliveries) and include a "Digests sent" stat.
+- Test digest UX revamped to select a Telegram-linked target and trigger via stable `/api/admin/run-digest`.
+
+Shipped in the current cycle (2026-03-03):
+- Delivery accounting now tracks actual successful sends only (not attempted targets), including failed-recipient logging.
+- `/start` now reliably re-activates paused/unsubscribed Telegram-linked users.
+- Admin auth now requires session by default; localhost bypass is opt-in via `ADMIN_LOCAL_BYPASS=1`.
+- Admin targeted "send digest now" now validates target status/channels and returns failure if digest delivery does not complete.
+- Archive backfill now repairs partially-migrated `digest_dates` (not only fully-empty histories).
+- Telegram digest numbering now supports 10 items (`1`–`10`) correctly.
+- Settings saves no longer accidentally disable Telegram delivery for linked users.
+- Signup/request-link/admin user lookup email matching is now null-safe + case-normalized.
+- Telegram bookmark dates now use ET day keys (not UTC day rollover).
 
 The remaining items below are **new features and improvements** organized by priority.
 
@@ -18,7 +38,22 @@ The remaining items below are **new features and improvements** organized by pri
 
 ## Known Remaining Issues
 
-All B-series bugs have been resolved. See commit history for details.
+B-1 through B-9 and B-11 through B-14 are resolved. Current follow-up audit found these remaining gaps.
+
+### ⚠️ B-10: Legacy `/api/admin/run-test-digest` path still exists but is no longer primary flow — **Open**
+The UI now uses roster target + `/api/admin/run-digest`, but old test-digest endpoints remain in `web/server.js:793-804` and can create confusion during debugging.
+- Suggested fix: deprecate/remove `GET/POST /api/admin/run-test-digest` and `/api/admin/test-digest-status`, or internally route both to one canonical implementation.
+
+### ⚠️ B-12: Admin outbound custom messages are not auditable — **Open**
+`/api/admin/message-user` sends messages but does not persist who sent what, when, and via which channel(s).
+- Suggested fix: append JSONL audit records to `data/admin-message-log.json` and add an "Admin comms log" section in dashboard.
+
+### ⚠️ B-15: Perplexity cost/call logging is inaccurate for filtered runs — **Open**
+`digest.js` hard-codes `perplexity_calls` to `CONFIG.topics.length` (`digest.js:814-818`) for every run, even when on-demand runs fetch fewer topics (or include extra custom-topic fetches).
+- Suggested fix: log actual call count from real fetch targets and derive cost from the actual count.
+
+### ✅ B-9: Monthly users-reached stat drift vs roster — **Fixed**
+Admin summary now keys monthly unique users to current roster delivery state and also exposes a log-based comparator (`month_unique_users_log`) for diagnostics.
 
 ### ✅ B-1: Settings page shows "request a link" if /api/user fetch fails — **Fixed**
 Catch block now distinguishes network errors (shows retry button) from 404 (shows magic link form).
@@ -43,6 +78,15 @@ HMAC signature (`?sig=...`) now required on email-based unsubscribe URLs. Genera
 
 ### ✅ B-8: Topic weights have limited impact on ranking — **Fixed**
 `applyRelevanceScores()` now accepts `topic_weights` and applies ±0.5 pts per weight unit via `matchWeightToTag()` (fuzzy key→tag matching). Digest logs before/after item order whenever a user has non-zero weights.
+
+### ✅ B-11: Manual digest trigger for email-only users — **Fixed**
+Current behavior already supports email-only users because they still have `chatId` placeholders (`email-*`) and `/api/admin/run-digest` accepts those targets.
+
+### ✅ B-13: Admin auth localhost bypass by default — **Fixed**
+Session auth is now required by default; localhost bypass only applies when `ADMIN_LOCAL_BYPASS=1`.
+
+### ✅ B-14: Run logs counted attempted recipients, not successful deliveries — **Fixed**
+`digest.js` now tracks `users_targeted`, `users_served`, `per_user` (success), and `per_user_failed` (failures), and targeted runs return non-zero when no delivery succeeds.
 
 ---
 
@@ -110,6 +154,13 @@ These features directly improve the daily experience for the first 10 beta users
 - Complexity: **Small**
 - Depends on: P1-1 (weights working meaningfully), B-8
 
+### P1-11: Delivery confidence view + one-click resend for failures
+**Problem:** Admin-triggered sends currently return "queued" feedback but don't show a clear per-user success/failure outcome.
+**Feature:** Add run outcome status per recipient in admin (delivered/failed + reason) and a one-click "resend failed users" action.
+- Files: `digest.js`, `web/server.js`, `web/admin.html`
+- Complexity: **Medium**
+- Depends on: B-14
+
 ---
 
 ## P2: Differentiation — Features That Make SignalBrief Unique
@@ -175,6 +226,19 @@ These features distinguish SignalBrief from generic news aggregators and make it
 **Feature:** If multiple reputable domains report the same story (detected during the Perplexity fetch step), show a small "3 sources" badge next to the item. Boost the item's baseScore weighting slightly to reflect broader consensus.
 - Files: `digest.js` (selection logic, scoring)
 - Complexity: **Medium**
+
+### P2-11: Admin outbound message templates + snippets
+**Problem:** Custom messaging is now possible, but every message is authored from scratch, which is slow and inconsistent.
+**Feature:** Add saved templates/snippets in admin composer (e.g., outage notice, schedule update, onboarding nudge), with variable placeholders (`{{name}}`, `{{delivery_time}}`).
+- Files: `web/admin.html`, `web/server.js` (template config endpoint), optional `config.json` templates block
+- Complexity: **Small–Medium**
+- Depends on: current `/api/admin/message-user` implementation
+
+### P2-12: Admin roster search + segment filters
+**Problem:** The roster is becoming harder to scan quickly as users increase.
+**Feature:** Add search and quick filters (status, channel, delivery time window, topic contains) with shareable URL state for support/debug handoffs.
+- Files: `web/admin.html`
+- Complexity: **Small**
 
 ---
 
@@ -272,19 +336,57 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 - Files: `store.js` (flags field in defaultUser), `digest.js`, `web/server.js`, `web/admin-user.html`
 - Complexity: **Small–Medium**
 
+### P4-10: Admin communication audit log
+**Problem:** No system-of-record for manual admin messages (custom sends) or ad hoc trigger actions.
+**Feature:** Log every admin outbound action (digest trigger, custom message) with actor/session, target user, channels, payload hash, and result status. Expose searchable UI.
+- Files: `web/server.js`, `data/admin-message-log.json`, `web/admin.html`
+- Complexity: **Small–Medium**
+- Depends on: B-12
+
+### P4-11: Consolidate and retire legacy test-digest endpoint
+**Problem:** Two parallel test-send paths increase maintenance burden and incident confusion.
+**Feature:** Keep a single canonical admin send path and remove stale APIs/UI hooks.
+- Files: `web/server.js`, `web/admin.html`
+- Complexity: **Small**
+- Depends on: B-10
+
+### P4-12: Delivery reconciliation checks
+**Problem:** Cost-log run metrics and user-level counters can drift silently over time.
+**Feature:** Add a daily reconciliation job that compares `cost-log` delivered counts vs `digests_received` increments, and flags mismatches in admin health.
+- Files: new `reconcile.js`, `web/server.js` health summary, `web/admin.html`
+- Complexity: **Medium**
+
+### P4-13: Environment-safe admin auth mode
+**Problem:** Localhost auth bypass is useful in dev but risky in production topologies that proxy traffic to localhost.
+**Feature:** Make auth mode explicit by environment; default to strict session auth, with an opt-in local bypass only in development.
+- Files: `web/server.js`, deployment env config
+- Complexity: **Small**
+- Depends on: B-13
+
 ---
 
 ## Prioritization Matrix
 
 | Feature | Impact | Effort | Priority | Depends On |
 |---------|--------|--------|----------|------------|
-| **B-8 Topic weight impact** | High | Small | **Now** | — |
+| **B-13 Admin auth localhost bypass** | Very High | Small | **Now** | — |
+| **B-14 Delivery stats overcount attempted sends** | High | Small-Med | **Now** | — |
+| **B-15 Perplexity cost/call mis-logging** | High | Small | **Now** | — |
+| **B-12 Admin message auditability** | High | Small-Med | **Now** | — |
+| **B-10 Legacy test endpoint cleanup** | Medium | Small | **Now** | — |
+| **B-9 Legacy unique-user fallback** | Medium | Small | **Next** | — |
 | P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
 | P1-1 Implicit learning | High | Medium | **Next** | B-8 |
+| P1-11 Delivery confidence + resend failures | High | Medium | **Next** | B-14 |
 | P1-2 Weekly synthesis | High | Large | **Next** | — |
 | P1-5 Digest reactions | High | Medium | **Next** | — |
 | P1-8 Cross-day dedup | Medium | Small | **Next** | — |
 | P4-9 Feature flags | High | Small-Med | **Next** | — |
+| P2-11 Admin message templates | Medium | Small-Med | **Next** | — |
+| P2-12 Roster search + filters | Medium | Small | **Next** | — |
+| P4-10 Admin comms audit log | High | Small-Med | **Next** | B-12 |
+| P4-11 Retire legacy test endpoint | Medium | Small | **Next** | B-10 |
+| P4-13 Environment-safe admin auth mode | Very High | Small | **Next** | B-13 |
 | P2-1 Custom topic queries | High | Large | **Soon** | — |
 | P2-2 Company watchlist | High | Medium | **Soon** | — |
 | P2-5 Source diversity | Medium | Small | **Soon** | — |
@@ -315,10 +417,10 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ## Recommended Build Order
 
-**Immediate (now):** B-8 topic weight impact — small fix, high perceptible value, unblocks P1-1 and P1-10
-**Sprint 1 (stickiness):** P1-10 why you're seeing this, P1-8 cross-day dedup, P2-5 source diversity, P1-5 digest reactions, P4-9 feature flags
+**Immediate (now):** B-13 admin auth hardening, B-14 delivery-log accuracy, B-15 cost-log accuracy, B-12 admin comms auditability, B-10 legacy endpoint cleanup
+**Sprint 1 (stability + trust):** B-9 unique-user fallback, P4-11 retire legacy test endpoint, P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates, P4-13 env-safe auth mode
 **Sprint 2 (personalization):** P1-1 implicit learning, P2-6 inline keyboards, P2-2 company watchlist
 **Sprint 3 (differentiation):** P2-9 Consultant Lens, P2-10 source corroboration, P2-1 custom topic queries
-**Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution
-**Sprint 5 (infrastructure):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation
+**Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution, P2-12 roster filters
+**Sprint 5 (infrastructure):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation, P4-12 reconciliation checks
 **Sprint 6 (scale):** P3-2 referrals, P3-3 public archive, P2-7 click tracking, P3-7 winback emails

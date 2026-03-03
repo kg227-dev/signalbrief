@@ -58,6 +58,7 @@ const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 const LOGIN_RATE = new Map(); // ip → { count, resetAt }
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
+const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
 const TEST_DIGEST_STATUS = {
   state: "idle", // idle | running | success | failed
   job_id: null,
@@ -94,9 +95,11 @@ function validateAdminSession(req) {
 }
 
 function isAdminAuthed(req) {
+  if (validateAdminSession(req)) return true;
+  if (!ADMIN_LOCAL_BYPASS) return false;
   const ip = req.socket.remoteAddress || "";
   const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-  return isLocal || validateAdminSession(req);
+  return isLocal;
 }
 
 function checkLoginRate(ip) {
@@ -322,28 +325,29 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/signup" && req.method === "POST") {
     const body = await readBody(req);
     const { name, email, telegram, topics, depth, delivery_time, frequency, days_of_week, items_per_digest } = body;
+    const emailNorm = String(email || "").toLowerCase().trim();
 
-    if (!email || !name) return json(res, { error: "name and email required" }, 400);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, { error: "invalid email address" }, 400);
+    if (!emailNorm || !name) return json(res, { error: "name and email required" }, 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) return json(res, { error: "invalid email address" }, 400);
     if (!topics || topics.length < 2) return json(res, { error: "select at least 2 topics" }, 400);
 
     // Rate limiting
     const ip = getClientIp(req);
-    const rl = checkRateLimit(ip, email);
+    const rl = checkRateLimit(ip, emailNorm);
     if (rl.limited) return json(res, { error: rl.reason }, 429);
 
     // Sanitize telegram: strip leading @ characters
     const telegramClean = telegram ? String(telegram).replace(/^@+/, "").trim() : null;
 
     // Check existing
-    const existing = allUsers().find(u => u.email === email);
+    const existing = allUsers().find(u => (u.email || "").toLowerCase().trim() === emailNorm);
     const chatId = existing?.chatId || `email-${Date.now()}`;
 
     const user = {
       ...(existing || {}),
       chatId,
       name,
-      email,
+      email: emailNorm,
       telegram: telegramClean || null,
       topics,
       status: "active",
@@ -485,16 +489,17 @@ const server = http.createServer(async (req, res) => {
       .reverse(); // newest first
     let allowedList = Array.isArray(user.digest_dates) ? user.digest_dates.slice() : [];
 
-    // Legacy backfill: older users may have digests_received but no digest_dates.
-    if (allowedList.length === 0 && (user.digests_received || 0) > 0) {
+    // Legacy backfill: older users may have digests_received ahead of digest_dates.
+    if ((user.digests_received || 0) > allowedList.length) {
       const toETDate = iso => iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
       const joinedET = toETDate(user.joined_at);
       const inferred = files
         .map(f => f.replace(".json", ""))
         .filter(d => (!joinedET || d >= joinedET));
-      if (inferred.length > 0) {
-        allowedList = inferred;
-        writeUser(user.chatId, { ...user, digest_dates: inferred, last_updated: new Date().toISOString() });
+      const merged = [...new Set([...allowedList, ...inferred])].sort();
+      if (merged.length > allowedList.length) {
+        allowedList = merged;
+        writeUser(user.chatId, { ...user, digest_dates: merged, last_updated: new Date().toISOString() });
       }
     }
     const allowedDates = new Set(allowedList);
@@ -549,12 +554,12 @@ const server = http.createServer(async (req, res) => {
   // POST /api/request-link — send magic access link to user's email
   if (pathname === "/api/request-link" && req.method === "POST") {
     const body = await readBody(req);
-    const { email } = body;
+    const email = String(body.email || "").toLowerCase().trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return json(res, { error: "valid email required" }, 400);
     }
     // Always return success (don't reveal whether email exists)
-    const user = allUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
+    const user = allUsers().find(u => (u.email || "").toLowerCase().trim() === email);
     if (user && user.token) {
       sendMagicLinkEmail(user).catch(e => console.error("[magic link]", e));
     }
@@ -640,10 +645,10 @@ const server = http.createServer(async (req, res) => {
     const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
     const monthDeliveries = sum(monthRuns, "users_served");
-    const monthUniqueUsers = new Set();
+    const monthUniqueUsersLog = new Set();
     for (const r of monthRuns) {
       for (const u of (r.per_user || [])) {
-        if (u && u.id) monthUniqueUsers.add(String(u.id));
+        if (u && u.id) monthUniqueUsersLog.add(String(u.id));
       }
     }
 
@@ -737,6 +742,7 @@ const server = http.createServer(async (req, res) => {
     }).sort((a, b) => (b.digests - a.digests));
     const activeUsersCount = roster.filter(u => u.status === "active").length;
     const activeTelegramUsersCount = roster.filter(u => u.status === "active" && u.telegram).length;
+    const monthUsersServedFromRoster = roster.filter(u => u.last_digest && u.last_digest.startsWith(monthPrefix)).length;
 
     // Users whose deliveries appear to be falling behind (2+ scheduled days missed)
     const deliveryWarnings = roster
@@ -758,8 +764,9 @@ const server = http.createServer(async (req, res) => {
         month_cost:         parseFloat(sum(monthRuns, "total_cost_usd").toFixed(4)),
         month_runs:         monthRuns.length,
         month_on_demand:    monthRuns.filter(r => r.on_demand).length,
-        month_users_served: monthUniqueUsers.size || monthDeliveries,
-        month_unique_users: monthUniqueUsers.size,
+        month_users_served: monthUsersServedFromRoster,
+        month_unique_users: monthUsersServedFromRoster,
+        month_unique_users_log: monthUniqueUsersLog.size,
         month_deliveries:   monthDeliveries,
         total_users:        roster.length,
         active_users:       activeUsersCount,
@@ -785,7 +792,8 @@ const server = http.createServer(async (req, res) => {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const emailParam = url.searchParams.get("email");
     if (!emailParam) return json(res, { error: "email required" }, 400);
-    const adminUser = allUsers().find(u => u.email.toLowerCase() === emailParam.toLowerCase().trim());
+    const lookup = emailParam.toLowerCase().trim();
+    const adminUser = allUsers().find(u => (u.email || "").toLowerCase().trim() === lookup);
     if (!adminUser) return json(res, { error: "not found" }, 404);
     return json(res, adminUser);
   }
@@ -856,17 +864,56 @@ const server = http.createServer(async (req, res) => {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const body = await readBody(req);
     const digestPath = path.join(__dirname, "../digest.js");
-    const extraArgs  = body.chatId ? ["--chatId", String(body.chatId)] : [];
-    const child = spawn(process.execPath, [digestPath, ...extraArgs, "--suppressWelcome"], {
+    const targetChatId = body.chatId ? String(body.chatId).trim() : "";
+
+    // Targeted admin sends are awaited so UI only reports success on real delivery.
+    if (targetChatId) {
+      const targetUser = allUsers().find(u => String(u.chatId || "").trim() === targetChatId);
+      if (!targetUser) return json(res, { error: `No user found for chatId ${targetChatId}` }, 404);
+      if ((targetUser.status || "active") !== "active") {
+        return json(res, { error: `User is ${targetUser.status}; re-activate before sending.` }, 400);
+      }
+      const prefs = targetUser.preferences || {};
+      const emailReady = !!targetUser.email && prefs.email_enabled !== false;
+      const tgReady = !!(targetUser.chatId && !String(targetUser.chatId).startsWith("email-") && prefs.telegram_enabled !== false);
+      if (!emailReady && !tgReady) {
+        return json(res, { error: "No enabled delivery channels for this user." }, 400);
+      }
+
+      try {
+        const run = await new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, [digestPath, "--chatId", targetChatId, "--suppressWelcome"], {
+            env: { ...process.env },
+            stdio: ["ignore", "ignore", "pipe"],
+          });
+          let stderr = "";
+          child.stderr.on("data", c => {
+            stderr += c.toString();
+            if (stderr.length > 4000) stderr = stderr.slice(-4000);
+          });
+          child.on("error", reject);
+          child.on("close", code => resolve({ code, stderr }));
+        });
+        if (run.code !== 0) {
+          const detail = run.stderr ? run.stderr.slice(-240) : `exit ${run.code}`;
+          return json(res, { error: `Digest failed for ${targetChatId}`, detail }, 500);
+        }
+        return json(res, {
+          success: true,
+          message: `Digest sent to ${targetUser.email || targetChatId}`,
+        });
+      } catch (e) {
+        return json(res, { error: `Failed to run digest: ${e.message}` }, 500);
+      }
+    }
+
+    const child = spawn(process.execPath, [digestPath, "--suppressWelcome"], {
       detached: true,
-      stdio:    "ignore",
-      env:      { ...process.env },
+      stdio: "ignore",
+      env: { ...process.env },
     });
     child.unref();
-    const msg = body.chatId
-      ? `Digest triggered for chatId ${body.chatId}`
-      : "Full scheduled digest run triggered";
-    return json(res, { success: true, message: msg });
+    return json(res, { success: true, message: "Full scheduled digest run triggered" });
   }
 
   // POST /api/admin/message-user — send custom admin message via configured channels

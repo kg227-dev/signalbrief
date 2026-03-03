@@ -303,7 +303,7 @@ async function init() {
               days_of_week: getSettingsDays(),
               items_per_digest: parseInt(document.getElementById('itemsPerDigest').value),
               email_enabled: true,
-              telegram_enabled: !!document.getElementById('telegram').value.trim(),
+              telegram_enabled: !!(user.chatId && !String(user.chatId).startsWith('email-') && (user.preferences || {}).telegram_enabled !== false),
             }
           })
         });

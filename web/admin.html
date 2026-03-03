@@ -44,6 +44,20 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
 .topics-cell { white-space:normal; line-height:1.45; min-width:280px; max-width:460px; }
 .topics-cell-tight { white-space:normal; line-height:1.45; max-width:320px; }
+.topic-chip-wrap {
+  display:flex; flex-wrap:wrap; gap:6px; align-items:center; max-width:100%;
+}
+.topic-chip {
+  display:inline-block; border-radius:999px; padding:2px 8px;
+  font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+  border:1px solid transparent; white-space:nowrap;
+}
+.topic-chip-preset {
+  background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE;
+}
+.topic-chip-custom {
+  background:#ECFDF5; color:#047857; border-color:#A7F3D0;
+}
 
 .badge-on-demand { font-size:10px; font-weight:700; color:#fff; background:#7C3AED; padding:2px 7px; border-radius:100px; letter-spacing:0.03em; }
 .badge-scheduled { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
@@ -510,6 +524,17 @@ function renderRunRecipients(run) {
     : "";
   return `<span title="${esc(recipients.join(", "))}">${preview}${extra}</span>`;
 }
+function topicLabel(raw) {
+  return String(raw || "").replace(/^custom_/, "").replace(/_/g, " ");
+}
+function renderTopicChips(rawTopics) {
+  const topics = Array.isArray(rawTopics) ? rawTopics.filter(Boolean) : [];
+  if (!topics.length) return `<span style="color:var(--text-secondary);">—</span>`;
+  return `<span class="topic-chip-wrap">${topics.map(t => {
+    const cls = String(t).startsWith("custom_") ? "topic-chip-custom" : "topic-chip-preset";
+    return `<span class="topic-chip ${cls}">${esc(topicLabel(t))}</span>`;
+  }).join("")}</span>`;
+}
 function renderAdminMessages(entries) {
   const body = document.getElementById("adminMsgBody");
   if (!body) return;
@@ -859,7 +884,7 @@ function renderScheduleDashboard(roster) {
   }
 
   body.innerHTML = active.map(u => {
-    const topics = u.topics_list || "—";
+    const topics = renderTopicChips(u.topics_raw || []);
     const action = u.settings_url ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;">edit →</a>` : "—";
     return `<tr>
       <td style="font-weight:600;">${esc(u.name || "—")}</td>
@@ -867,7 +892,7 @@ function renderScheduleDashboard(roster) {
       <td>${esc(u.days_label || "—")}</td>
       <td class="mono">${esc(u.delivery_time || "—")}</td>
       <td class="mono">${esc(u.timezone || "America/New_York")}</td>
-      <td class="topics-cell">${esc(topics)}</td>
+      <td class="topics-cell">${topics}</td>
       <td>${u.items_per_digest || 5}</td>
       <td>${esc(u.depth || "Deep")}</td>
       <td class="mono">${esc(u.next_delivery_et || "—")}</td>
@@ -1155,11 +1180,8 @@ async function load(silent = false) {
           ? ` <span class="missed-flag" title="Missed ${u.days_missed} scheduled delivery day${u.days_missed > 1 ? "s" : ""}">⚠️</span>`
           : "";
 
-      // Topics cell: show full list, wrapped for readability
-      const topicNames = (u.topics_list && u.topics_list !== "—") ? u.topics_list.split(", ") : [];
-      const topicsCell = topicNames.length
-        ? `<span class="topics-cell-tight">${esc(u.topics_list)}</span>`
-        : `<span style="color:var(--text-secondary);">—</span>`;
+      // Topics cell: render preset vs custom as separate chips
+      const topicsCell = renderTopicChips(u.topics_raw || []);
 
         // Topic weights pill
         const wSummary = weightsSummary(u.topic_weights || {});

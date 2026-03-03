@@ -760,6 +760,7 @@ const server = http.createServer(async (req, res) => {
         email_enabled:      prefs.email_enabled !== false,
         telegram_enabled:   !!(prefs.telegram_enabled && tgLinked),
         topics:             (u.topics || []).length,
+        topics_raw:         Array.isArray(u.topics) ? u.topics : [],
         topics_list:        (u.topics || []).map(t => t.replace(/^custom_/,"").replace(/_/g," ")).join(", ") || "—",
         bookmarks:          (u.bookmarks || []).length,
         adjustments:        Object.keys(u.topic_weights || {}).length,

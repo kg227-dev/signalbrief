@@ -230,25 +230,62 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
     output_tokens: res.body?.usage?.output_tokens || 0,
   };
 
+  function parseJsonArrayLenient(raw) {
+    const cleaned = String(raw || "")
+      .replace(/```json\n?/gi, "")
+      .replace(/```\n?/g, "")
+      .trim();
+    if (!cleaned) return [];
+    try {
+      return JSON.parse(cleaned);
+    } catch (err) {
+      // Claude occasionally appends prose after a valid JSON array.
+      const start = cleaned.indexOf("[");
+      if (start === -1) throw err;
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      for (let i = start; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (ch === "\\") escaped = true;
+          else if (ch === "\"") inString = false;
+          continue;
+        }
+        if (ch === "\"") { inString = true; continue; }
+        if (ch === "[") depth++;
+        else if (ch === "]") {
+          depth--;
+          if (depth === 0) {
+            const candidate = cleaned.slice(start, i + 1);
+            return JSON.parse(candidate);
+          }
+        }
+      }
+      throw err;
+    }
+  }
+
   try {
-    let content = res.body?.content?.[0]?.text || "[]";
-    content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const enriched = JSON.parse(content);
+    const enriched = parseJsonArrayLenient(res.body?.content?.[0]?.text || "[]");
+    if (!Array.isArray(enriched)) throw new Error("Claude response was not a JSON array");
     // Merge wim + baseScore back onto original items (which have URLs)
     return {
       items: items.map((item, i) => ({
         ...item,
-        wim:          enriched[i]?.wim || "Analysis unavailable.",
+        wim:          typeof enriched[i]?.wim === "string" && enriched[i].wim.trim() ? enriched[i].wim.trim() : null,
         baseScore:    typeof enriched[i]?.baseScore === "number" ? enriched[i].baseScore : 5.0,
-        implications: enriched[i]?.implications || null,
-        watch_next:   enriched[i]?.watch_next   || null,
+        implications: typeof enriched[i]?.implications === "string" && enriched[i].implications.trim() ? enriched[i].implications.trim() : null,
+        watch_next:   typeof enriched[i]?.watch_next === "string" && enriched[i].watch_next.trim() ? enriched[i].watch_next.trim() : null,
       })),
       usage,
     };
   } catch (e) {
     log(`Claude parse error: ${e.message}`);
     return {
-      items: items.map((i) => ({ ...i, wim: "Analysis unavailable.", implications: null, watch_next: null })),
+      // Degrade gracefully (no "analysis unavailable" placeholder shown to end users).
+      items: items.map((i) => ({ ...i, wim: null, implications: null, watch_next: null })),
       usage,
     };
   }

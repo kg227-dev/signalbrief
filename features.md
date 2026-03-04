@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-04 (rev 10)
+Last updated: 2026-03-04 (rev 11)
 
 ---
 
@@ -36,6 +36,28 @@ Shipped in the current cycle (2026-03-03):
 - Legacy `/api/admin/run-test-digest` and `/api/admin/test-digest-status` paths removed; admin now uses one canonical send endpoint.
 
 The remaining items below are **new features and improvements** organized by priority.
+
+## Unified Strategy & Sequencing
+
+This document now has one roadmap system: **P1-P4 is canonical**, and tier sequencing is used only to decide order of execution.
+
+Testing done right -> prove quality with numbers -> ship with confidence -> users stay -> product becomes portfolio credibility -> better career opportunities.
+
+### Tier 1 Quality Gate (must pass before growth work)
+
+- [ ] Test harness benchmark complete and repeatable
+- [ ] Analysis quality improved from generic -> specific
+- [ ] Relevance scoring validated and tuned
+- [ ] Cross-day freshness enforced (minimal repetition)
+- [ ] Custom topics validated end-to-end
+- [ ] Depth settings produce materially different output quality/depth
+
+### Tier-to-Backlog Mapping
+
+- Tier 1 (Quality Foundation): harness + `P1-8`, `P2-1` hardening, `P1-10`, `P1-12`
+- Tier 2 (Show-It-Off): `P1-1`, `P1-5`, `P2-6`, `P2-7`, `P1-2`
+- Tier 3 (Productization): `P3-3`, `P2-8`, `P3-4`, `P3-8`
+- Tier 4 (Scale Depth): `P2-1` optimization, `P2-5`, `P3-9` (with `P3-1` foundation)
 
 ## P1: Retention — Make Beta Users Come Back Every Day
 
@@ -108,6 +130,13 @@ These features directly improve the daily experience for the first 10 beta users
 - Complexity: **Medium**
 - Depends on: B-14
 
+### P1-12: Digest quality score (visible + trend)
+**Problem:** Personalization quality is invisible to users and difficult to track longitudinally. Users cannot tell if the digest is genuinely tuned to their interests.
+**Feature:** Compute a per-user digest quality score from the same rubric used in the test harness. Surface a subtle confidence indicator in Telegram/email (e.g., "Digest match: 94%") and track score trend in admin.
+- Files: `digest.js`, `templates/email.html`, `web/server.js`, `web/admin.html`
+- Complexity: **Medium**
+- Depends on: Tier 1 harness baseline + rubric lock
+
 ---
 
 ## P2: Differentiation — Features That Make SignalBrief Unique
@@ -138,11 +167,11 @@ These features distinguish SignalBrief from generic news aggregators and make it
 - Files: `reply-handler.js` (new "deep dive" intent)
 - Complexity: **Medium**
 
-### P2-5: Source diversity scoring
-**Problem:** Some digests end up with 4/7 items from the same source (e.g., all from Reuters). Feels like reading one publication, not a curated brief.
-**Feature:** During `selectItems()`, penalize items from the same source domain. Ensure no more than 2 items per source in the final selection. Add source diversity as a visible metric in the admin dashboard.
-- Files: `digest.js` (selectItems)
-- Complexity: **Small**
+### P2-5: Source quality + diversity scoring
+**Problem:** Some digests over-index on one domain and treat all publishers as equal quality. That can reduce trust and strategic usefulness.
+**Feature:** Add source reputation weighting (e.g., tier-1 publications weighted above low-signal aggregators) and diversity controls in `selectItems()` so no single source dominates. Show both source diversity and source-quality mix in admin metrics.
+- Files: `digest.js` (selectItems/ranking), optional `data/source-quality.json`, `web/server.js`, `web/admin.html`
+- Complexity: **Medium**
 
 ### P2-6: Telegram inline keyboards for save/more/less
 **Problem:** Users have to type "save 3" or "more AI" — friction that reduces engagement. Most Telegram bots use inline buttons.
@@ -202,10 +231,10 @@ These features distinguish SignalBrief from generic news aggregators and make it
 - Files: `web/server.js` (signup), `store.js` (referral tracking)
 - Complexity: **Medium**
 
-### P3-3: Public archive for SEO and lead generation
-**Problem:** SignalBrief content is locked behind authentication. No public presence for organic discovery.
-**Feature:** Create a public `/signals` page that shows headlines + tags from the last 7 days (no WIM, no deep analysis — that's the paid value). Each signal has a "Get the full analysis in your inbox" CTA. Good for SEO ("healthcare M&A news this week") and converts organic traffic to signups.
-- Files: New `web/signals.html`, `web/server.js` (public archive endpoint)
+### P3-3: Shareable public digest pages
+**Problem:** SignalBrief content is mostly locked behind delivery channels. Users cannot easily share a specific digest with colleagues.
+**Feature:** Create shareable public digest links (per day/per brief) with a clean web reader and signup CTA. Keep premium depth limited if needed, but make the page compelling enough to drive referrals and organic discovery. Include a "Share this brief" action in Telegram/email.
+- Files: New public digest page (`web/digest-public.html` or `web/signals.html`), `web/server.js`, `digest.js` (share link generation)
 - Complexity: **Medium**
 
 ### P3-4: Slack integration
@@ -231,6 +260,19 @@ These features distinguish SignalBrief from generic news aggregators and make it
 - Files: `digest.js`, `mailer.js`
 - Complexity: **Small–Medium**
 - Depends on: P2-7 (click tracking for email engagement signal)
+
+### P3-8: Simple paywall (optional revenue layer)
+**Problem:** There is no monetization path to test willingness-to-pay or demonstrate revenue signal.
+**Feature:** Add a single-plan Stripe Checkout flow and gate richer analysis depth for free users while preserving a useful core digest. Keep pricing and plan logic simple (one plan, one CTA, one upgrade path).
+- Files: `web/server.js`, `digest.js`, billing webhook handler, email/Telegram templates
+- Complexity: **Medium**
+
+### P3-9: Multi-user comparison dashboard
+**Problem:** Team-level intelligence is not visible. Shared trends and overlap across users are hard to analyze.
+**Feature:** Add a team/segment dashboard showing common bookmarks, emerging shared themes, and divergence by user/topic. This is the bridge from single-user digesting to team intelligence product value.
+- Files: `web/server.js` (aggregates), `web/admin.html` or new team dashboard page
+- Complexity: **Large**
+- Depends on: P3-1 foundation + P2-7/P1-5 engagement signals
 
 ---
 
@@ -322,10 +364,10 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | **B-12 Admin message auditability** | High | Small-Med | **Done** | — |
 | **B-10 Legacy test endpoint cleanup** | Medium | Small | **Done** | — |
 | **B-9 Legacy unique-user fallback** | Medium | Small | **Done** | — |
+| P1-12 Digest quality score | High | Medium | **Next** | Tier 1 rubric lock |
 | P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
 | P1-1 Implicit learning | High | Medium | **Next** | B-8 |
 | P1-11 Delivery confidence + resend failures | High | Medium | **Next** | B-14 |
-| P1-2 Weekly synthesis | High | Large | **Next** | — |
 | P1-5 Digest reactions | High | Medium | **Next** | — |
 | P1-8 Cross-day dedup | Medium | Small | **Next** | — |
 | P4-9 Feature flags | High | Small-Med | **Next** | — |
@@ -336,18 +378,20 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | P4-13 Environment-safe admin auth mode | Very High | Small | **Done** | B-13 |
 | P2-1 Custom topic queries | High | Large | **Soon** | — |
 | P2-2 Company watchlist | High | Medium | **Soon** | — |
-| P2-5 Source diversity | Medium | Small | **Soon** | — |
+| P2-5 Source quality + diversity | High | Medium | **Soon** | — |
 | P2-6 Inline keyboards | High | Medium | **Soon** | — |
+| P2-7 Click tracking | High | Medium | **Soon** | — |
 | P2-9 Consultant Lens Mode | Medium | Medium | **Soon** | — |
 | P2-10 Source corroboration | Medium | Medium | **Soon** | — |
+| P1-2 Weekly synthesis | High | Large | **Soon** | — |
 | P1-6 Archive search | Medium | Medium | **Soon** | — |
 | P1-9 Timezone support | Medium | Medium | **Soon** | — |
+| P3-3 Shareable public digest pages | High | Medium | **Soon** | — |
 | P3-6 Smart onboarding | High | Medium | **Soon** | — |
 | P4-8 Cost attribution | Medium | Small | **Soon** | — |
-| P2-7 Click tracking | Medium | Medium | **Later** | — |
 | P2-8 Share a signal | Medium | Medium | **Later** | — |
 | P3-2 Referral system | High | Medium | **Later** | — |
-| P3-3 Public archive | Medium | Medium | **Later** | — |
+| P3-8 Simple paywall | Medium | Medium | **Later** | P3-3 |
 | P3-7 Winback emails | Medium | Small-Med | **Later** | P2-7 |
 | P4-1 SQLite migration | High | Medium | **Later** | — |
 | P4-2 Token rotation | Medium | Medium | **Later** | P4-1 |
@@ -357,6 +401,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | P2-3 Calendar integration | Medium | Large | **Later** | — |
 | P2-4 Ask about this | Medium | Medium | **Later** | — |
 | P3-1 Team accounts | High | Very Large | **Future** | P4-1 |
+| P3-9 Multi-user comparison dashboard | Medium | Large | **Future** | P3-1, P2-7 |
 | P3-4 Slack integration | Medium | Very Large | **Future** | — |
 | P3-5 Public API | Low | Medium | **Future** | P4-1 |
 
@@ -364,160 +409,13 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ## Recommended Build Order
 
-**Immediate (now):** none (all known ship bugs resolved)
-**Sprint 1 (stability + trust):** P4-10 admin comms audit log, P1-11 delivery confidence + resend, P2-11 message templates
-**Sprint 2 (personalization):** P1-1 implicit learning, P2-6 inline keyboards, P2-2 company watchlist
-**Sprint 3 (differentiation):** P2-9 Consultant Lens, P2-10 source corroboration, P2-1 custom topic queries
-**Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution, P2-12 roster filters
-**Sprint 5 (infrastructure):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation, P4-12 reconciliation checks
-**Sprint 6 (scale):** P3-2 referrals, P3-3 public archive, P2-7 click tracking, P3-7 winback emails
+**Immediate (now):** Phase 0 planning pack (rubric lock, signal schema, digest quality formula, owners/success metrics)
+**Sprint 1 (Tier 1 quality foundation):** Harness baseline + 2-4 quality iterations, P1-8 cross-day dedup, P2-1 custom-topic hardening, P1-10 transparency notes, P1-12 (admin-visible)
+**Sprint 2 (Tier 2 personalization proof):** P1-1 implicit learning, P2-6 inline keyboards, P2-7 click tracking, P1-5 digest reactions, P1-12 user-visible rollout
+**Sprint 3 (Tier 3 shareability):** P3-3 shareable public digest pages, P2-8 share command, P1-2 weekly synthesis
+**Sprint 4 (distribution + monetization):** P3-4 Slack integration, P3-8 simple paywall, P3-2 referrals, P3-7 winback
+**Sprint 5 (differentiation depth):** P2-5 source quality/diversity, P2-9 consultant lens, P2-10 corroboration, P3-9 team comparison
+**Sprint 6 (infrastructure hardening):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation, P4-12 reconciliation checks
 
----
-
-## Strategic Direction: From QA to Career-Defining Product (2026-03-04)
-
-This section is a planning overlay on top of the P1-P4 backlog above. It clarifies why the roadmap exists and what sequence maximizes product quality, credibility, and career upside.
-
-### The Logic Chain
-
-Testing done right
--> prove the product is good with numbers
--> show it to people with confidence
--> users come and stay because it is genuinely useful
--> product becomes portfolio, story, and credibility
--> doors open (roles, collaborators, investors, next projects)
-
-The primary outcome of robust testing is earned confidence backed by evidence.
-
-### Product Excellence Bar (Tier 1 Exit Criteria)
-
-Before broad demos, SignalBrief should credibly support all of the below:
-- "Every item is relevant to your interests, with a measurable relevance score."
-- "Analysis is specific and decision-useful, not generic AI filler."
-- "Daily output stays fresh: diverse stories, sectors, and minimal repetition."
-- "Digest quality remains strong across narrow and broad topic sets."
-
-### Tiered Feature Roadmap (Strategic Sequence)
-
-#### Tier 1: Quality Foundation (must complete first)
-
-- [ ] Test harness built and first benchmark run complete
-- [ ] Analysis quality improved from generic -> specific
-- [ ] Relevance scoring validated and tuned
-- [ ] Cross-day freshness enforced (no repetitive digests)
-- [ ] Custom topics verified end-to-end
-- [ ] Depth control is materially different by setting
-
-Why first: no feature roadmap matters if daily core output is not excellent.
-
-#### Tier 2: "Show It Off" Features
-
-##### 2A. Feedback loop that learns
-What: Use implicit behavior (save/click/ignore plus "more/less" replies) to improve per-user topic weights over time.
-Why it matters: Proves real personalization system design, not static prompting.
-Build focus:
-- Track click/save/ignore signals by topic and item.
-- Feed signals into automatic weight updates.
-- Measure relevance score trend over first 2 weeks per user.
-- Show digest quality trend in admin.
-Backlog mapping: `P1-1`, `P1-5`, `P2-6`, `P2-7`.
-
-##### 2B. Digest quality score visible to users
-What: Show subtle per-digest confidence indicator (example: "Your digest match: 94%").
-Why it matters: User trust signal and visible proof of personalization quality.
-Build focus:
-- Compute per-user digest quality score from harness rubric.
-- Surface score in Telegram and email templates.
-- Track score trend in admin dashboard.
-Backlog mapping: new feature; adjacent to `P1-10` and harness metrics.
-
-##### 2C. Weekly insight rollup
-What: Weekly "This Week in Your World" synthesis across prior daily digests.
-Why it matters: Moves product from daily feed to strategic intelligence.
-Build focus:
-- Load weekly archive for each user.
-- Extract 3 key themes and trend direction.
-- Deliver on Sunday evening or Monday morning.
-Backlog mapping: `P1-2` (scope expansion for stronger strategic synthesis).
-
-#### Tier 3: "This Could Be a Real Product" Features
-
-##### 3A. Shareable digest links
-What: Public URL per digest with clean web reader and CTA.
-Why it matters: Primary distribution and growth mechanic.
-Build focus:
-- Generate deterministic/public digest URLs.
-- Add web digest reader page.
-- Add share CTA in Telegram and email output.
-Backlog mapping: `P3-3` + `P2-8`.
-
-##### 3B. Slack delivery
-What: Deliver digest to Slack DM/channel in addition to Telegram/email.
-Why it matters: Fits professional workflow where users already spend time.
-Build focus:
-- Slack OAuth + bot install.
-- Slack message formatting via blocks.
-- Per-user delivery channel preferences.
-Backlog mapping: `P3-4`.
-
-##### 3C. Simple paywall (optional revenue layer)
-What: Single-tier freemium gate (analysis depth behind paid plan).
-Why it matters: Even small paid usage changes external perception of viability.
-Build focus:
-- Stripe Checkout.
-- Gated enrichment path in digest generation.
-- Upgrade CTA in free digests.
-Backlog mapping: new feature.
-
-#### Tier 4: "Impressive at Scale" Features
-
-##### 4A. Custom topic intelligence
-What: Per-user custom topics trigger dedicated source fetches, not just filtering shared pool.
-Why it matters: Demonstrates per-user compute/caching architecture decisions.
-Backlog mapping: `P2-1` (already activated; continue hardening and optimization).
-
-##### 4B. Source quality ranking
-What: Weight source reputation (top-tier publications vs. low-signal aggregators).
-Why it matters: Shows information-quality reasoning, not just quantity aggregation.
-Backlog mapping: `P2-5` expansion.
-
-##### 4C. Multi-user comparison dashboard
-What: Team-level overlap/divergence view of saved stories and topic trends.
-Why it matters: Foundation for team intelligence product and enterprise value.
-Backlog mapping: future extension of `P3-1`.
-
-### Feature Sequencing Rule
-
-Tier 1 -> must complete before serious external demos  
-Tier 2 -> makes the product portfolio-worthy and conversation-starting  
-Tier 3 -> makes it a product users can choose and share  
-Tier 4 -> demonstrates technical depth and scale thinking
-
-Minimum high-leverage path:
-Tier 1 -> 2A -> 3A
-
-### Next-Step Planning (No Implementation Yet)
-
-#### Phase 0: Planning Pack (1-2 days)
-- Freeze the Tier 1 rubric into explicit scoring dimensions and pass/fail thresholds.
-- Define event schema for feedback signals (`clicked`, `saved`, `ignored`, `more`, `less`).
-- Define digest quality score formula shared by harness + production metrics.
-- Confirm ownership and success metrics for Tier 1, 2A, and 3A.
-
-#### Phase 1: Tier 1 Execution Plan (week 1-2)
-- Run baseline harness on recent digests and capture current quality distribution.
-- Prioritize top 3 failure modes (expected: analysis specificity, freshness, custom-topic precision).
-- Plan 2-4 iteration cycles with re-test after each cycle.
-- Exit only when Tier 1 checklist is complete and trend is stable.
-
-#### Phase 2: Tier 2A Design Plan (week 3)
-- Define update cadence for auto-learning (daily vs. every N interactions).
-- Add guardrails to avoid oscillation in topic weights.
-- Define per-user "first 14 days" improvement chart for admin.
-- Set launch criteria: measurable improvement without relevance drift.
-
-#### Phase 3: Tier 3A Design Plan (week 4)
-- Specify URL/slug model and access/security constraints for public digest pages.
-- Define share CTA placement and attribution tracking.
-- Define conversion path from shared page -> signup/settings flow.
-- Set launch criteria: public page quality, reliability, and tracking completeness.
+Minimum high-leverage path to portfolio-grade product:
+Tier 1 quality gate -> Tier 2 feedback loop (`P1-1` + `P2-6` + `P2-7`) -> Tier 3 shareable digest pages (`P3-3`)

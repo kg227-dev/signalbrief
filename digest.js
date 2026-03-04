@@ -18,8 +18,9 @@ const EMAIL_TEMPLATE = fs.readFileSync(
 );
 const { readUser, writeUser, allUsers } = require("./store");
 const { sendEmail: sendEmailViaMailer } = require("./mailer");
-const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
+const { appendEngagementEvent, buildDigestId, loadEngagementEvents } = require("./engagement-events");
 const { computeDigestQualityScore } = require("./quality-score");
+const { applyAutoTopicLearning } = require("./personalization");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
@@ -1159,9 +1160,24 @@ async function main() {
   log(`Delivering to ${dueUsers.length} user(s)...`);
   const deliveredUsers = [];
   const failedUsers = [];
+  const engagementEvents = loadEngagementEvents({ max_age_days: 45, dedupe: true });
 
-  for (const u of dueUsers) {
+  for (let u of dueUsers) {
     try {
+      const autoLearning = applyAutoTopicLearning(u, {
+        events: engagementEvents,
+        now,
+        date_key: digestDateKey,
+        run_id: runId,
+      });
+      if (autoLearning.changed) {
+        writeUser(u.chatId, u);
+        const changes = autoLearning.adjustments
+          .map((a) => `${a.topic}:${a.prev}->${a.next}`)
+          .join(", ");
+        log(`  [auto-learning] ${u.email || u.chatId}: ${changes} (events=${autoLearning.processed_events})`);
+      }
+
       const prefs = u.preferences || {};
 
       // 1. Filter items by user's topic list (if set)

@@ -35,6 +35,13 @@ function defaultUser(chatId) {
     last_digest_items: [],      // snapshot of last digest for save-by-number
     quality_history: [],        // [{ digest_id, date_et, score, band, components }]
     last_quality_score: null,   // latest entry from quality_history for quick reads
+    auto_learning: {
+      enabled: true,
+      last_processed_ts: null,
+      last_checked_at: null,
+      last_applied_at: null,
+      total_auto_adjustments: 0,
+    },
     preferences: {
       delivery_time: "07:00",
       timezone: "America/New_York",

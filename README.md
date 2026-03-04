@@ -6,9 +6,20 @@ Each user gets a personalized briefing: choose your topics, delivery time, analy
 
 ---
 
+## Current Focus (March 2026)
+
+- Tier 1 quality foundation: measurable relevance, stronger analysis specificity, cross-day freshness, and custom-topic reliability
+- Tier 2A personalization loop: use save/click/reply signals to improve per-user relevance over time
+- Tier 3A distribution: shareable digest pages to unlock organic growth
+
+Roadmap details: [`features.md`](./features.md)
+
+---
+
 ## What It Does
 
-- Pulls top news across 17 topics (10 industries + 7 capabilities) from the last 48 hours via Perplexity Sonar
+- Pulls top news across 17 standard topics (10 industries + 7 capabilities) from the last 48 hours via Perplexity Sonar
+- Pulls additional dedicated fetches for active user custom topics in the same run (e.g., `custom_glp_1`)
 - Scores and ranks items per user with a relevance algorithm (Claude base score + per-user topic match)
 - Selects 5 or 10 items with interleaved sector coverage — no two adjacent items from the same tag
 - Enriches each item with a "why it matters" analysis at senior consultant level (Claude Haiku)
@@ -69,7 +80,7 @@ Perplexity Sonar (17 topics in parallel)
 | `CLAUDE.md` | Codebase context for Claude Code |
 | `FORMAT-RULES.md` | Editorial format rules (locked) |
 | `SPEC.md` | Full product specification + principles |
-| `features.md` | Feature backlog — known bugs + P1–P4 roadmap |
+| `features.md` | Strategic roadmap + execution phases (tiered plan mapped to P1–P4 backlog) |
 
 ---
 
@@ -140,14 +151,22 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 | `POST /api/unsubscribe` | Machine-initiated unsubscribe (RFC 8058 compliant, email param) |
 | `POST /api/request-link` | Send a magic settings link to an email address |
 
-### API — admin (localhost only)
+### API — admin (authenticated session)
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/admin` | Cost dashboard, upcoming schedule, run log, user roster |
+| `/admin/login` | Admin login page (email + password) |
+| `/admin` | Cost dashboard, upcoming schedule, run log, user roster (requires session) |
 | `/admin/user?email=...` | Per-user admin editor |
+| `POST /api/admin/login` | Create admin session cookie |
+| `POST /api/admin/logout` | Clear admin session |
+| `GET /api/admin/check` | Auth check for current admin session |
 | `GET /api/admin/stats` | Full stats payload: summary, health, runs, per-user costs, roster |
 | `GET /api/admin/user-by-email?email=...` | Load user data by email |
+| `GET /api/admin/audit?email=...` | Unified user-level admin timeline |
+| `POST /api/admin/message-user` | Send admin outbound message via email/Telegram |
+| `POST /api/admin/update-delivery-time` | Inline admin schedule update for a user |
+| `POST /api/admin/bulk-action` | Safe dry-run/apply bulk admin actions |
 | `POST /api/admin/run-digest` | Trigger a digest run immediately |
 
 ---
@@ -256,7 +275,7 @@ Existing web signups link their Telegram account by sending `/start their@email.
 | `M&A ADVISORY` | Deal advisory, integration, valuation trends |
 | `TALENT` | Workforce, hiring, org restructuring, compensation |
 
-Custom topics also supported (e.g. "GLP-1", "quantum computing", "DOGE"). Stored with `custom_` prefix; dedicated Perplexity fetch not yet wired (see features.md P2-1).
+Custom topics also supported (e.g. "GLP-1", "quantum computing", "DOGE"). Stored with `custom_` prefix and fetched as dedicated Perplexity queries during digest runs.
 
 ---
 

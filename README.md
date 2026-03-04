@@ -27,7 +27,7 @@ Roadmap details: [`features.md`](./features.md)
 - Tracks bookmarks and topic preferences per user
 - Supports inline Telegram actions per item (`Save`, `More`, `Less`) plus one-tap digest feedback
 - Logs engagement events (sent/saved/clicked/ignored/weight-adjusted) for personalization analytics
-- Computes per-digest Digest Quality Score (DQS) and stores user-level quality history
+- Computes per-digest Digest Quality Score (DQS), shows digest match in delivery, and stores user-level quality history
 - Applies automatic topic-weight learning from engagement signals (with guardrails)
 - On-demand digest via `/digest` Telegram command
 - Telegram-first onboarding — sign up directly in the bot with `/start your@email.com`

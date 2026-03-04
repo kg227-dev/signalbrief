@@ -704,13 +704,63 @@ function buildCommandMenu(state) {
   ].join("\n");
 }
 
-function formatTelegram(items, dateStr, state) {
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatTopicDisplay(topic) {
+  const raw = String(topic || "")
+    .replace(/^custom_/i, "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw) return "topic";
+  return raw.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function buildLearningSummary(adjustments, maxTopics = 2) {
+  const rows = (Array.isArray(adjustments) ? adjustments : [])
+    .map((adj) => ({
+      topic: formatTopicDisplay(adj?.topic),
+      delta: Number(adj?.delta),
+    }))
+    .filter((row) => row.topic && Number.isFinite(row.delta) && row.delta !== 0);
+  if (!rows.length) return "";
+
+  const shown = rows.slice(0, Math.max(1, Number(maxTopics) || 2));
+  const parts = shown.map((row) => `${row.topic} ${row.delta > 0 ? `+${row.delta}` : row.delta}`);
+  const remaining = rows.length - shown.length;
+  const suffix = remaining > 0 ? ` · +${remaining} more` : "";
+  return `Applied from your recent saves, clicks, and skips: ${parts.join(" · ")}${suffix}.`;
+}
+
+function digestQualityLabel(digestQuality) {
+  const score = Number(digestQuality?.score);
+  if (!Number.isFinite(score)) return null;
+  const rounded = Math.max(0, Math.min(100, Math.round(score)));
+  const band = String(digestQuality?.band || "").toLowerCase();
+  const bandLabel = band === "strong" ? "strong" : (band === "watch" ? "watch" : "tuning");
+  return {
+    score: rounded,
+    band: bandLabel,
+  };
+}
+
+function formatTelegram(items, dateStr, state, opts = {}) {
   const NUM_LABELS = ["1⃣","2⃣","3⃣","4⃣","5⃣","6⃣","7⃣","8⃣","9⃣","🔟"];
+  const quality = digestQualityLabel(opts.digestQuality);
+  const learningSummary = String(opts.learningSummary || "").trim();
   const lines = [
     `☀️ *SignalBrief — ${dateStr}*`,
     `_Your daily signal across AI, strategy, and business_`,
-    "",
   ];
+  if (quality) lines.push(`🎯 Digest match: ${quality.score}% · ${quality.band}`);
+  if (learningSummary) lines.push(`🧠 ${learningSummary}`);
+  lines.push("");
   items.forEach((item, i) => {
     const num = NUM_LABELS[i] || `${i + 1}.`;
     // Strip ALL HTML first (including <strong>) before splitting — bold asterisks break
@@ -775,11 +825,14 @@ function buildEmail(
   depth = "headline_plus_why",
   user = null,
   digestDateKey = "",
-  digestId = ""
+  digestId = "",
+  opts = {}
 ) {
   const filterNote = wasFiltered
     ? "filtered to your selected topics"
     : "today's top signals across all areas";
+  const quality = digestQualityLabel(opts.digestQuality);
+  const learningSummary = String(opts.learningSummary || "").trim();
 
   // ── Welcome banner (first digest only — placed BEFORE Quick Scan via template placeholder) ──
   const welcomeBanner = isFirstDigest ? `
@@ -801,6 +854,11 @@ function buildEmail(
       </div>
     </div>
     <a href="${BASE_URL}/settings?token=${userToken}" style="display:inline-block;background:#15803D;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 28px;border-radius:100px;">Update preferences →</a>
+  </div>` : "";
+  const personalizationNote = learningSummary ? `
+  <div style="padding:12px 40px;background:#F8FAFC;border-bottom:1px solid #E5E7EB;">
+    <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748B;margin-bottom:4px;">Personalization update</div>
+    <div style="font-size:13px;line-height:1.5;color:#334155;">🧠 ${escapeHtml(learningSummary)}</div>
   </div>` : "";
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
@@ -851,6 +909,7 @@ function buildEmail(
   }).join("\n");
 
   const readMins = Math.max(2, Math.ceil(items.length * 0.6));
+  const headerMeta = `${items.length} signals · ${readMins} min read${quality ? ` · Match ${quality.score}%` : ""}`;
 
   // ── Per-user settings footer (shown in every digest) ──
   let settingsFooter = "";
@@ -892,9 +951,10 @@ function buildEmail(
 
   return EMAIL_TEMPLATE
     .replace(/\{\{DATE\}\}/g, dateStr)
-    .replace("{{ITEM_COUNT}}", `${items.length} signals · ${readMins} min read`)
+    .replace("{{ITEM_COUNT}}", headerMeta)
     .replace("{{QUICK_SCAN}}", quickScan)
     .replace("{{WELCOME_BANNER}}", welcomeBanner)
+    .replace("{{PERSONALIZATION_NOTE}}", personalizationNote)
     .replace("{{SETTINGS_FOOTER}}", settingsFooter)
     .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
     .replace(/\{\{SETTINGS_TOKEN\}\}/g, userToken)
@@ -1200,6 +1260,9 @@ async function main() {
           .join(", ");
         log(`  [auto-learning] ${u.email || u.chatId}: ${changes} (events=${autoLearning.processed_events})`);
       }
+      const learningSummary = autoLearning.changed
+        ? buildLearningSummary(autoLearning.adjustments, 2)
+        : "";
 
       const prefs = u.preferences || {};
 
@@ -1333,7 +1396,10 @@ async function main() {
       // 5. Deliver
       let delivered = false;
       if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
-        const userTelegram = formatTelegram(userItems, shortDate, u);
+        const userTelegram = formatTelegram(userItems, shortDate, u, {
+          digestQuality,
+          learningSummary,
+        });
         const userKeyboard = buildDigestInlineKeyboard(userItems);
         try {
           await sendTelegram(userTelegram, u.chatId, { reply_markup: userKeyboard });
@@ -1372,7 +1438,11 @@ async function main() {
           depth,
           u,
           digestDateKey,
-          userDigestId
+          userDigestId,
+          {
+            digestQuality,
+            learningSummary,
+          }
         );
         try {
           await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);

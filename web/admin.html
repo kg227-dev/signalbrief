@@ -801,6 +801,11 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div class="health-metric-label">Last run cost</div>
       <div class="health-metric-value" id="healthLastCost">—</div>
     </div>
+    <div class="health-metric" id="healthDqs" style="display:none;min-width:260px;">
+      <div class="health-metric-label">Digest quality (14d)</div>
+      <div class="health-metric-value" id="healthDqsVal">—</div>
+      <div class="health-metric-sub" id="healthDqsSub">—</div>
+    </div>
     <!-- Delivery health — populated by JS -->
     <div class="health-metric" id="healthDelivery" style="display:none;">
       <div class="health-metric-label">Delivery health</div>
@@ -2610,6 +2615,7 @@ async function load(silent = false) {
     }
 
     const { summary, health, runs, per_user, roster, admin_messages } = data;
+    const qualitySummary = summary && summary.quality ? summary.quality : null;
     latestHealth = health || null;
     launchAgentActionLog = Array.isArray(health?.launch_agent_actions) ? health.launch_agent_actions : [];
 
@@ -2636,6 +2642,24 @@ async function load(silent = false) {
       document.getElementById("healthUptime").textContent   = health.server_uptime  || "—";
       document.getElementById("healthLastRun").textContent  = health.last_run_at    || "No runs yet";
       document.getElementById("healthLastCost").textContent = health.last_run_cost  || "—";
+
+      const dqsDiv = document.getElementById("healthDqs");
+      const dqsVal = document.getElementById("healthDqsVal");
+      const dqsSub = document.getElementById("healthDqsSub");
+      if (dqsDiv && dqsVal && dqsSub) {
+        if (!qualitySummary || !Number.isFinite(Number(qualitySummary.dqs_current_avg))) {
+          dqsDiv.style.display = "none";
+        } else {
+          const avg = Number(qualitySummary.dqs_current_avg || 0);
+          const tone = avg >= 85 ? "var(--green)" : avg >= 75 ? "var(--yellow)" : "var(--red)";
+          const improving = Number(qualitySummary.improving_14d || 0);
+          const atRisk = Number(qualitySummary.at_risk || 0);
+          const usersScored = Number(qualitySummary.users_scored || 0);
+          dqsDiv.style.display = "";
+          dqsVal.innerHTML = `<span style="color:${tone};">${avg.toFixed(1)}</span> avg`;
+          dqsSub.textContent = `${improving} improving (14d) · ${atRisk} at risk · ${usersScored} users scored`;
+        }
+      }
 
       // Delivery health indicator
       const warnings = health.users_delivery_warning || [];

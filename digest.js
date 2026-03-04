@@ -18,6 +18,8 @@ const EMAIL_TEMPLATE = fs.readFileSync(
 );
 const { readUser, writeUser, allUsers } = require("./store");
 const { sendEmail: sendEmailViaMailer } = require("./mailer");
+const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
+const { computeDigestQualityScore } = require("./quality-score");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
@@ -739,7 +741,18 @@ function formatTelegram(items, dateStr, state) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = false, wasFiltered = true, depth = "headline_plus_why", user = null, digestDateKey = "") {
+function buildEmail(
+  items,
+  dateStr,
+  quickScan,
+  userToken = "",
+  isFirstDigest = false,
+  wasFiltered = true,
+  depth = "headline_plus_why",
+  user = null,
+  digestDateKey = "",
+  digestId = ""
+) {
   const filterNote = wasFiltered
     ? "filtered to your selected topics"
     : "today's top signals across all areas";
@@ -767,6 +780,9 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
   </div>` : "";
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
+    const trackedLinkUrl = userToken && digestId
+      ? `${BASE_URL}/api/click?token=${encodeURIComponent(userToken)}&did=${encodeURIComponent(digestId)}&item=${i + 1}&url=${encodeURIComponent(linkUrl)}`
+      : linkUrl;
     // Relevance score badge (color-coded, embedded in enrichment — no extra API cost)
     const score = item.relevanceScore;
     const scoreHtml = score !== undefined ? (() => {
@@ -806,7 +822,7 @@ function buildEmail(items, dateStr, quickScan, userToken = "", isFirstDigest = f
         ${implHtml}
         ${watchHtml}
         ${whyShownHtml}
-        <div style="font-size:13px;"><a href="${linkUrl}" style="color:#2563EB;text-decoration:none;font-weight:500;">Read more → ${item.source}</a></div>
+        <div style="font-size:13px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:500;">Read more → ${item.source}</a></div>
       </div>`;
   }).join("\n");
 
@@ -939,6 +955,7 @@ async function main() {
   const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
   const suppressWelcome = args.includes("--suppressWelcome");
   const runMode = targetChatId ? "targeted" : "scheduled";
+  const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
   const lock = acquireDigestLock(runMode);
   if (!lock.ok) {
@@ -1244,6 +1261,23 @@ async function main() {
         }));
       }
 
+      const previousDigestItems = Array.isArray(u.last_digest_items) ? u.last_digest_items : [];
+      const digestQuality = computeDigestQualityScore({
+        items: userItems,
+        user: u,
+        previous_items: previousDigestItems,
+      });
+      const userDigestId = buildDigestId(digestDateKey, u.chatId);
+      const eventItems = userItems.map((item, idx) => ({
+        index: idx + 1,
+        headline: item?.headline || null,
+        url: item?.url || null,
+        tag: item?.tag || null,
+        base_score: Number.isFinite(Number(item?.baseScore)) ? Number(item.baseScore) : null,
+        topic_match: Number.isFinite(Number(item?.topicMatch)) ? Number(item.topicMatch) : null,
+        relevance_score: Number.isFinite(Number(item?.relevanceScore)) ? Number(item.relevanceScore) : null,
+      }));
+
       // 5. Build per-user quick scan + subject
       const userQuickScan = userItems.map((i, idx) => {
         const short = i.headline.split(":")[0].split("—")[0].trim();
@@ -1263,15 +1297,64 @@ async function main() {
         const userTelegram = formatTelegram(userItems, shortDate, u);
         try {
           await sendTelegram(userTelegram, u.chatId);
+          appendEngagementEvent({
+            event_type: "digest_sent",
+            event_key: `digest_sent:${userDigestId}:telegram`,
+            date_et: digestDateKey,
+            user_chat_id: String(u.chatId),
+            user_email: u.email || null,
+            digest_id: userDigestId,
+            run_id: runId,
+            channel: "telegram",
+            source: targetChatId ? "on-demand" : "scheduled-job",
+            metadata: {
+              item_count: userItems.length,
+              depth,
+              quality_score: digestQuality.score,
+              quality_band: digestQuality.band,
+              quality_components: digestQuality.components,
+              items: eventItems,
+            },
+          });
           delivered = true;
         } catch (err) {
           log(`⚠️ Telegram delivery failed for ${u.email || u.chatId}: ${err.message}`);
         }
       }
       if (u.email && prefs.email_enabled !== false) {
-        const userEmailHtml = buildEmail(userItems, dateStr, userQuickScan, u.token || "", isFirstDigest, wasFiltered, depth, u, digestDateKey);
+        const userEmailHtml = buildEmail(
+          userItems,
+          dateStr,
+          userQuickScan,
+          u.token || "",
+          isFirstDigest,
+          wasFiltered,
+          depth,
+          u,
+          digestDateKey,
+          userDigestId
+        );
         try {
           await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
+          appendEngagementEvent({
+            event_type: "digest_sent",
+            event_key: `digest_sent:${userDigestId}:email`,
+            date_et: digestDateKey,
+            user_chat_id: String(u.chatId),
+            user_email: u.email || null,
+            digest_id: userDigestId,
+            run_id: runId,
+            channel: "email",
+            source: targetChatId ? "on-demand" : "scheduled-job",
+            metadata: {
+              item_count: userItems.length,
+              depth,
+              quality_score: digestQuality.score,
+              quality_band: digestQuality.band,
+              quality_components: digestQuality.components,
+              items: eventItems,
+            },
+          });
           delivered = true;
           if (isFirstDigest || suppressWelcome) u.welcome_email_sent = true; // avoid future welcome framing after manual/admin send
         } catch (err) {
@@ -1296,10 +1379,22 @@ async function main() {
       const todayDateKey = etDateKey(now);
       if (!u.digest_dates) u.digest_dates = [];
       if (!u.digest_dates.includes(todayDateKey)) u.digest_dates.push(todayDateKey);
+      const history = Array.isArray(u.quality_history) ? u.quality_history.slice() : [];
+      history.push({
+        digest_id: userDigestId,
+        date_et: digestDateKey,
+        ts_utc: now.toISOString(),
+        score: digestQuality.score,
+        band: digestQuality.band,
+        components: digestQuality.components,
+      });
+      if (history.length > 120) history.splice(0, history.length - 120);
+      u.quality_history = history;
+      u.last_quality_score = history[history.length - 1] || null;
       writeUser(u.chatId, u);
       deliveredUsers.push({ id: u.email || u.chatId, on_demand: !!targetChatId });
 
-      log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth})`);
+      log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth}, dqs=${digestQuality.score.toFixed(1)})`);
     } catch (err) {
       failedUsers.push({ id: u.email || u.chatId, error: err.message, on_demand: !!targetChatId });
       log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);

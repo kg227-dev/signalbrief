@@ -13,6 +13,13 @@ const crypto = require("crypto");
 const { spawn, execFileSync } = require("child_process");
 const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
 const { sendEmail, sendWelcomeEmail, signUnsubEmail } = require("../mailer");
+const {
+  appendEngagementEvent,
+  buildDigestId,
+  normalizeUrl: normalizeEngagementUrl,
+  emitIgnoredEventsIfDue,
+} = require("../engagement-events");
+const { computeQualityTrend } = require("../quality-score");
 
 const PORT = parseInt(process.env.PORT, 10) || 3003;
 const WEB_DIR = __dirname;
@@ -1199,6 +1206,53 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // GET /api/click?token=...&did=...&item=...&url=... — tracked outbound link redirect
+  if (pathname === "/api/click" && req.method === "GET") {
+    const rawUrl = String(url.searchParams.get("url") || "").trim();
+    if (!rawUrl) return json(res, { error: "url required" }, 400);
+
+    let target;
+    try {
+      target = new URL(rawUrl);
+      if (!/^https?:$/i.test(target.protocol)) throw new Error("unsupported protocol");
+    } catch {
+      return json(res, { error: "invalid url" }, 400);
+    }
+
+    const token = String(url.searchParams.get("token") || "").trim();
+    const itemIndex = Number(url.searchParams.get("item") || 0);
+    const did = String(url.searchParams.get("did") || "").trim();
+    const user = token ? findUserByToken(token) : null;
+
+    if (user) {
+      const fallbackDate = toEtDateKey(new Date().toISOString()) || new Date().toISOString().slice(0, 10);
+      const dateKey = did ? String(did.split(":")[0]).trim() : fallbackDate;
+      const digestId = did || buildDigestId(dateKey, user.chatId);
+      const normalizedUrl = normalizeEngagementUrl(target.toString());
+      const indexToken = Number.isFinite(itemIndex) && itemIndex > 0 ? itemIndex : "unknown";
+      appendEngagementEvent({
+        event_type: "item_clicked",
+        event_key: `item_clicked:${digestId}:${indexToken}:${normalizedUrl}`,
+        date_et: dateKey,
+        user_chat_id: String(user.chatId),
+        user_email: user.email || null,
+        digest_id: digestId,
+        channel: "email",
+        source: "email-click",
+        item: {
+          index: Number.isFinite(itemIndex) && itemIndex > 0 ? itemIndex : null,
+          url: target.toString(),
+        },
+      });
+    }
+
+    res.writeHead(302, {
+      Location: target.toString(),
+      "Cache-Control": "no-store",
+    });
+    return res.end();
+  }
+
   // POST /api/bookmarks — add/remove bookmark by URL
   if ((pathname === "/api/bookmarks" || pathname === "/api/bookmarks/") && req.method === "POST") {
     const body = await readBody(req);
@@ -1220,6 +1274,11 @@ const server = http.createServer(async (req, res) => {
     if (action === "add") {
       const exists = bookmarks.some(b => normalizeBookmarkUrl(b?.url) === target);
       if (!exists) {
+        const itemDate = String(item.date || "").trim();
+        const digestDateKey = /^\d{4}-\d{2}-\d{2}$/.test(itemDate)
+          ? itemDate
+          : toEtDateKey(new Date().toISOString());
+        const digestId = buildDigestId(digestDateKey, user.chatId);
         bookmarks.push({
           date: String(item.date || ""),
           headline: String(item.headline || "").trim() || itemUrl,
@@ -1227,6 +1286,27 @@ const server = http.createServer(async (req, res) => {
           tag: item.tag ? String(item.tag) : null,
           source: item.source ? String(item.source) : null,
           saved_at: new Date().toISOString(),
+        });
+        const itemIndex = Number(item.item_num || item.index || 0);
+        appendEngagementEvent({
+          event_type: "item_saved",
+          event_key: `item_saved:${digestId}:${itemIndex > 0 ? itemIndex : normalizeBookmarkUrl(itemUrl)}`,
+          date_et: digestDateKey,
+          user_chat_id: String(user.chatId),
+          user_email: user.email || null,
+          digest_id: digestId,
+          channel: "web",
+          source: "web-ui",
+          item: {
+            index: itemIndex > 0 ? itemIndex : null,
+            headline: String(item.headline || "").trim() || null,
+            url: itemUrl,
+            tag: item.tag ? String(item.tag) : null,
+          },
+          metadata: {
+            action: "bookmark_add",
+            from: "archive",
+          },
         });
       }
       writeUser(user.chatId, {
@@ -1334,6 +1414,15 @@ const server = http.createServer(async (req, res) => {
   // GET /api/admin/stats — cost dashboard data
   if (pathname === "/api/admin/stats" && req.method === "GET") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    let ignoredBackfill = { emitted: 0, considered: 0 };
+    try {
+      ignoredBackfill = emitIgnoredEventsIfDue({
+        window_hours: Number(CONFIG?.digest?.ignoredWindowHours || 24),
+        max_age_days: 45,
+      }) || ignoredBackfill;
+    } catch {
+      // Keep stats endpoint resilient if engagement backfill fails.
+    }
     const runs = loadCostRunsNewest();
 
     const now = new Date();
@@ -1396,6 +1485,7 @@ const server = http.createServer(async (req, res) => {
 
     const roster = allUsers().map(u => {
       const prefs = u.preferences || {};
+      const qualityTrend = computeQualityTrend(u.quality_history || []);
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       const ampm = dh >= 12 ? "PM" : "AM";
       const hour = dh % 12 || 12;
@@ -1444,6 +1534,12 @@ const server = http.createServer(async (req, res) => {
         next_delivery_key:  nextDelivery?.key || null,
         settings_url:       adminUserPath ? `${BASE_URL}${adminUserPath}` : null,
         archive_url:        archivePath ? `${BASE_URL}${archivePath}` : null,
+        dqs_current:        qualityTrend.current,
+        dqs_7d_avg:         qualityTrend.avg_7d,
+        dqs_14d_delta:      qualityTrend.delta_14d,
+        dqs_floor_14d:      qualityTrend.floor_14d,
+        dqs_band:           qualityTrend.band || null,
+        dqs_sample_14d:     qualityTrend.sample_14d || 0,
       };
     }).sort((a, b) => (b.digests - a.digests));
     const activeUsersCount = roster.filter(u => u.status === "active").length;
@@ -1568,6 +1664,16 @@ const server = http.createServer(async (req, res) => {
       payload_hash: m.payload_hash || null,
     }));
 
+    const qualityUsers = roster.filter((u) => Number.isFinite(Number(u.dqs_current)));
+    const qualityCurrentAvg = qualityUsers.length
+      ? Number((qualityUsers.reduce((sum, u) => sum + Number(u.dqs_current || 0), 0) / qualityUsers.length).toFixed(2))
+      : null;
+    const quality7dAvg = qualityUsers.length
+      ? Number((qualityUsers.reduce((sum, u) => sum + Number(u.dqs_7d_avg || u.dqs_current || 0), 0) / qualityUsers.length).toFixed(2))
+      : null;
+    const qualityImproving14d = qualityUsers.filter((u) => Number(u.dqs_14d_delta || 0) >= 5).length;
+    const qualityAtRisk = qualityUsers.filter((u) => Number(u.dqs_current || 0) < 75).length;
+
     return json(res, {
       summary: {
         all_time_cost:      parseFloat(sum(runs, "total_cost_usd").toFixed(4)),
@@ -1584,6 +1690,13 @@ const server = http.createServer(async (req, res) => {
         active_users:       activeUsersCount,
         active_tg_users:    activeTelegramUsersCount,
         month_label:        monthLabel,
+        quality: {
+          users_scored: qualityUsers.length,
+          dqs_current_avg: qualityCurrentAvg,
+          dqs_7d_avg: quality7dAvg,
+          improving_14d: qualityImproving14d,
+          at_risk: qualityAtRisk,
+        },
       },
       health: {
         server_uptime:            uptimeStr,
@@ -1618,6 +1731,10 @@ const server = http.createServer(async (req, res) => {
             pid: digestRun.lock.pid || null,
           }
           : { running: false },
+        engagement_events: {
+          ignored_backfill_emitted: ignoredBackfill.emitted || 0,
+          ignored_backfill_considered: ignoredBackfill.considered || 0,
+        },
       },
       runs: runs.slice(0, 30),
       per_user: perUser,

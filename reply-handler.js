@@ -15,6 +15,7 @@ const path = require("path");
 const https = require("https");
 const { readUser, writeUser, allUsers, generateToken } = require("./store");
 const { sendEmail: sendEmailViaMailer, sendWelcomeEmail } = require("./mailer");
+const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
 const { spawn } = require("child_process");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
@@ -33,6 +34,11 @@ function formatDeliveryTime(prefs) {
 
 function etDateKeyNow() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function etDateKeyFromIso(iso) {
+  if (!iso) return etDateKeyNow();
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
 // ── Telegram-first onboarding state ──────────────────────────────────────────
@@ -512,6 +518,8 @@ async function handleSave(chatId, items) {
   const saved = [];
   const already = [];
   const outOfBounds = [];
+  const digestDateKey = etDateKeyFromIso(user.last_digest_at);
+  const digestId = buildDigestId(digestDateKey, chatId);
 
   items.forEach(n => {
     // Bounds check: item numbers must be 1–10, and within the actual last digest size
@@ -534,6 +542,25 @@ async function handleSave(chatId, items) {
       headline: digestItem?.headline || `Item ${n}`,
       url: digestItem?.url || null,
       tag: digestItem?.tag || null,
+    });
+    appendEngagementEvent({
+      event_type: "item_saved",
+      event_key: `item_saved:${digestId}:${n}`,
+      date_et: digestDateKey,
+      user_chat_id: String(chatId),
+      user_email: user.email || null,
+      digest_id: digestId,
+      channel: "telegram",
+      source: "bot-command",
+      item: {
+        index: n,
+        headline: digestItem?.headline || null,
+        url: digestItem?.url || null,
+        tag: digestItem?.tag || null,
+      },
+      metadata: {
+        command: "save",
+      },
     });
     saved.push(n);
   });
@@ -562,17 +589,55 @@ async function handleSave(chatId, items) {
 
 async function handleTopicMore(chatId, topic) {
   const user = readUser(chatId);
+  const prev = Number(user.topic_weights[topic] || 0);
+  const dateKey = etDateKeyNow();
   // Cap at +5 to prevent unbounded drift
   user.topic_weights[topic] = Math.min(5, (user.topic_weights[topic] || 0) + 1);
   writeUser(chatId, user);
+  const next = Number(user.topic_weights[topic] || 0);
+  appendEngagementEvent({
+    event_type: "topic_weight_adjusted",
+    event_key: `weight:${dateKey}:${chatId}:${topic}:manual:${next}:${Date.now()}`,
+    date_et: dateKey,
+    user_chat_id: String(chatId),
+    user_email: user.email || null,
+    digest_id: buildDigestId(dateKey, chatId),
+    channel: "telegram",
+    source: "bot-command",
+    topic: {
+      key: topic,
+      delta: next - prev,
+      mode: "manual",
+      reason: "more command",
+    },
+  });
   await send(chatId, `📊 Got it — more *${topic}* stories starting tomorrow.`);
 }
 
 async function handleTopicLess(chatId, topic) {
   const user = readUser(chatId);
+  const prev = Number(user.topic_weights[topic] || 0);
+  const dateKey = etDateKeyNow();
   // Floor at -5 to prevent unbounded drift
   user.topic_weights[topic] = Math.max(-5, (user.topic_weights[topic] || 0) - 1);
   writeUser(chatId, user);
+  const next = Number(user.topic_weights[topic] || 0);
+  appendEngagementEvent({
+    event_type: "topic_weight_adjusted",
+    event_key: `weight:${dateKey}:${chatId}:${topic}:manual:${next}:${Date.now()}`,
+    date_et: dateKey,
+    user_chat_id: String(chatId),
+    user_email: user.email || null,
+    digest_id: buildDigestId(dateKey, chatId),
+    channel: "telegram",
+    source: "bot-command",
+    topic: {
+      key: topic,
+      delta: next - prev,
+      mode: "manual",
+      reason: "less command",
+    },
+  });
   await send(chatId, `📉 Got it — fewer *${topic}* stories starting tomorrow.`);
 }
 

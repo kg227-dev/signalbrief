@@ -73,6 +73,7 @@
       "enum": [
         "telegram",
         "email",
+        "web",
         "admin",
         "system"
       ]
@@ -84,6 +85,7 @@
         "on-demand",
         "bot-command",
         "inline-button",
+        "web-ui",
         "email-click",
         "admin-action",
         "derived-processor"

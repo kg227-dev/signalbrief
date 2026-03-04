@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getsignalbrief.com/schemas/engagement-event-v1.json",
+  "title": "SignalBrief Engagement Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_version",
+    "event_id",
+    "event_type",
+    "event_key",
+    "ts_utc",
+    "date_et",
+    "user_chat_id",
+    "digest_id",
+    "channel",
+    "source"
+  ],
+  "properties": {
+    "event_version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "event_id": {
+      "type": "string",
+      "description": "UUIDv4 recommended."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "digest_sent",
+        "item_saved",
+        "item_clicked",
+        "item_ignored_computed",
+        "topic_weight_adjusted",
+        "digest_feedback_submitted"
+      ]
+    },
+    "event_key": {
+      "type": "string",
+      "description": "Idempotency key."
+    },
+    "ts_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "date_et": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "user_chat_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_email": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "digest_id": {
+      "type": "string",
+      "description": "Suggested format: <date_et>:<chat_id>:<run_id>"
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "telegram",
+        "email",
+        "admin",
+        "system"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "scheduled-job",
+        "on-demand",
+        "bot-command",
+        "inline-button",
+        "email-click",
+        "admin-action",
+        "derived-processor"
+      ]
+    },
+    "item": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "headline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "topic_match": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "relevance_score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "topic": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delta": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "manual",
+            "auto",
+            null
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "feedback": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "great",
+        "fine",
+        "meh",
+        null
+      ]
+    },
+    "window_hours": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional free-form diagnostics.",
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-04 (rev 12)
+Last updated: 2026-03-04 (rev 13)
 
 ---
 
@@ -411,7 +411,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 
 ## Recommended Build Order
 
-**Immediate (now):** Phase 0 planning pack (rubric lock, signal schema, digest quality formula, owners/success metrics)
+**Immediate (now):** Phase 0 planning pack drafted (see `planning/phase-0-planning-pack.md` and `planning/engagement-event-schema.v1.json`)
 **Sprint 1 (Tier 1 quality foundation):** Harness baseline + 2-4 quality iterations, P1-8 cross-day dedup, P2-1 custom-topic hardening, P1-10 transparency notes, P1-12 (admin-visible)
 **Sprint 2 (Tier 2 personalization proof):** P1-1 implicit learning, P2-6 inline keyboards, P2-7 click tracking, P1-5 digest reactions, P1-12 user-visible rollout
 **Sprint 3 (Tier 3 shareability):** P3-3 shareable public digest pages, P2-8 share command, P1-2 weekly synthesis

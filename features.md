@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-04 (rev 9)
+Last updated: 2026-03-04 (rev 10)
 
 ---
 
@@ -36,59 +36,6 @@ Shipped in the current cycle (2026-03-03):
 - Legacy `/api/admin/run-test-digest` and `/api/admin/test-digest-status` paths removed; admin now uses one canonical send endpoint.
 
 The remaining items below are **new features and improvements** organized by priority.
-
----
-
-## Known Remaining Issues
-
-B-1 through B-15 are resolved. Current follow-up audit has no remaining known ship bugs.
-
-### ✅ B-9: Monthly users-reached stat drift vs roster — **Fixed**
-Admin summary now keys monthly unique users to current roster delivery state and also exposes a log-based comparator (`month_unique_users_log`) for diagnostics.
-
-### ✅ B-1: Settings page shows "request a link" if /api/user fetch fails — **Fixed**
-Catch block now distinguishes network errors (shows retry button) from 404 (shows magic link form).
-
-### ✅ B-2: `findUserByToken()` does O(n) full disk scan on every request — **Fixed**
-`store.js` now builds an in-memory `tokenIndex` Map on startup, updated on every write. O(1) lookup.
-
-### ✅ B-3: Unauthenticated email-based POST unsubscribe (RFC 8058) — **Fixed**
-HMAC signature (`?sig=...`) now required on email-based unsubscribe URLs. Generated in `mailer.js`, verified in `server.js`.
-
-### ✅ B-4: Custom topic normalization inconsistency between web and Telegram — **Fixed**
-`reply-handler.js` now normalizes `add [topic]` to `custom_<slug>` matching web storage format.
-
-### ✅ B-5: Archive doesn't store per-item relevance scores or baseScore — **Fixed**
-`saveToArchive()` now includes `baseScore` in each archived item.
-
-### ✅ B-6: On-demand digest fetches all 17 topics even for single user — **Fixed**
-`digest.js` now filters `topicsToFetch` to the target user's tracked topics for `--chatId` runs.
-
-### ✅ B-7: Concurrent writes can clobber user data — **Fixed**
-`store.js` `writeUser()` now uses atomic write: write to `.tmp` then `fs.renameSync()` (POSIX-atomic).
-
-### ✅ B-8: Topic weights have limited impact on ranking — **Fixed**
-`applyRelevanceScores()` now accepts `topic_weights` and applies ±0.5 pts per weight unit via `matchWeightToTag()` (fuzzy key→tag matching). Digest logs before/after item order whenever a user has non-zero weights.
-
-### ✅ B-11: Manual digest trigger for email-only users — **Fixed**
-Current behavior already supports email-only users because they still have `chatId` placeholders (`email-*`) and `/api/admin/run-digest` accepts those targets.
-
-### ✅ B-13: Admin auth localhost bypass by default — **Fixed**
-Session auth is now required by default; localhost bypass only applies when `ADMIN_LOCAL_BYPASS=1`.
-
-### ✅ B-14: Run logs counted attempted recipients, not successful deliveries — **Fixed**
-`digest.js` now tracks `users_targeted`, `users_served`, `per_user` (success), and `per_user_failed` (failures), and targeted runs return non-zero when no delivery succeeds.
-
-### ✅ B-15: Perplexity cost/call logging inaccurate for filtered runs — **Fixed**
-`digest.js` now records actual call volume from the current run (`perplexity_calls_standard`, `perplexity_calls_custom`, and total `perplexity_calls`) and derives cost from that real count.
-
-### ✅ B-12: Admin outbound custom messages auditability — **Fixed**
-`/api/admin/message-user` now appends JSONL audit records (`data/admin-message-log.json`) and `/api/admin/stats` exposes recent entries, rendered in an "Admin outbound messages" table on the dashboard.
-
-### ✅ B-10: Legacy test-digest endpoint cleanup — **Fixed**
-Removed deprecated test endpoints from `web/server.js`; admin digest testing now goes only through `/api/admin/run-digest`.
-
----
 
 ## P1: Retention — Make Beta Users Come Back Every Day
 

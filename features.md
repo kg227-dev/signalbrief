@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-03 (rev 8)
+Last updated: 2026-03-04 (rev 9)
 
 ---
 
@@ -424,3 +424,153 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 **Sprint 4 (depth + growth):** P1-2 weekly synthesis, P1-6 archive search, P3-6 smart onboarding, P4-8 cost attribution, P2-12 roster filters
 **Sprint 5 (infrastructure):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation, P4-12 reconciliation checks
 **Sprint 6 (scale):** P3-2 referrals, P3-3 public archive, P2-7 click tracking, P3-7 winback emails
+
+---
+
+## Strategic Direction: From QA to Career-Defining Product (2026-03-04)
+
+This section is a planning overlay on top of the P1-P4 backlog above. It clarifies why the roadmap exists and what sequence maximizes product quality, credibility, and career upside.
+
+### The Logic Chain
+
+Testing done right
+-> prove the product is good with numbers
+-> show it to people with confidence
+-> users come and stay because it is genuinely useful
+-> product becomes portfolio, story, and credibility
+-> doors open (roles, collaborators, investors, next projects)
+
+The primary outcome of robust testing is earned confidence backed by evidence.
+
+### Product Excellence Bar (Tier 1 Exit Criteria)
+
+Before broad demos, SignalBrief should credibly support all of the below:
+- "Every item is relevant to your interests, with a measurable relevance score."
+- "Analysis is specific and decision-useful, not generic AI filler."
+- "Daily output stays fresh: diverse stories, sectors, and minimal repetition."
+- "Digest quality remains strong across narrow and broad topic sets."
+
+### Tiered Feature Roadmap (Strategic Sequence)
+
+#### Tier 1: Quality Foundation (must complete first)
+
+- [ ] Test harness built and first benchmark run complete
+- [ ] Analysis quality improved from generic -> specific
+- [ ] Relevance scoring validated and tuned
+- [ ] Cross-day freshness enforced (no repetitive digests)
+- [ ] Custom topics verified end-to-end
+- [ ] Depth control is materially different by setting
+
+Why first: no feature roadmap matters if daily core output is not excellent.
+
+#### Tier 2: "Show It Off" Features
+
+##### 2A. Feedback loop that learns
+What: Use implicit behavior (save/click/ignore plus "more/less" replies) to improve per-user topic weights over time.
+Why it matters: Proves real personalization system design, not static prompting.
+Build focus:
+- Track click/save/ignore signals by topic and item.
+- Feed signals into automatic weight updates.
+- Measure relevance score trend over first 2 weeks per user.
+- Show digest quality trend in admin.
+Backlog mapping: `P1-1`, `P1-5`, `P2-6`, `P2-7`.
+
+##### 2B. Digest quality score visible to users
+What: Show subtle per-digest confidence indicator (example: "Your digest match: 94%").
+Why it matters: User trust signal and visible proof of personalization quality.
+Build focus:
+- Compute per-user digest quality score from harness rubric.
+- Surface score in Telegram and email templates.
+- Track score trend in admin dashboard.
+Backlog mapping: new feature; adjacent to `P1-10` and harness metrics.
+
+##### 2C. Weekly insight rollup
+What: Weekly "This Week in Your World" synthesis across prior daily digests.
+Why it matters: Moves product from daily feed to strategic intelligence.
+Build focus:
+- Load weekly archive for each user.
+- Extract 3 key themes and trend direction.
+- Deliver on Sunday evening or Monday morning.
+Backlog mapping: `P1-2` (scope expansion for stronger strategic synthesis).
+
+#### Tier 3: "This Could Be a Real Product" Features
+
+##### 3A. Shareable digest links
+What: Public URL per digest with clean web reader and CTA.
+Why it matters: Primary distribution and growth mechanic.
+Build focus:
+- Generate deterministic/public digest URLs.
+- Add web digest reader page.
+- Add share CTA in Telegram and email output.
+Backlog mapping: `P3-3` + `P2-8`.
+
+##### 3B. Slack delivery
+What: Deliver digest to Slack DM/channel in addition to Telegram/email.
+Why it matters: Fits professional workflow where users already spend time.
+Build focus:
+- Slack OAuth + bot install.
+- Slack message formatting via blocks.
+- Per-user delivery channel preferences.
+Backlog mapping: `P3-4`.
+
+##### 3C. Simple paywall (optional revenue layer)
+What: Single-tier freemium gate (analysis depth behind paid plan).
+Why it matters: Even small paid usage changes external perception of viability.
+Build focus:
+- Stripe Checkout.
+- Gated enrichment path in digest generation.
+- Upgrade CTA in free digests.
+Backlog mapping: new feature.
+
+#### Tier 4: "Impressive at Scale" Features
+
+##### 4A. Custom topic intelligence
+What: Per-user custom topics trigger dedicated source fetches, not just filtering shared pool.
+Why it matters: Demonstrates per-user compute/caching architecture decisions.
+Backlog mapping: `P2-1` (already activated; continue hardening and optimization).
+
+##### 4B. Source quality ranking
+What: Weight source reputation (top-tier publications vs. low-signal aggregators).
+Why it matters: Shows information-quality reasoning, not just quantity aggregation.
+Backlog mapping: `P2-5` expansion.
+
+##### 4C. Multi-user comparison dashboard
+What: Team-level overlap/divergence view of saved stories and topic trends.
+Why it matters: Foundation for team intelligence product and enterprise value.
+Backlog mapping: future extension of `P3-1`.
+
+### Feature Sequencing Rule
+
+Tier 1 -> must complete before serious external demos  
+Tier 2 -> makes the product portfolio-worthy and conversation-starting  
+Tier 3 -> makes it a product users can choose and share  
+Tier 4 -> demonstrates technical depth and scale thinking
+
+Minimum high-leverage path:
+Tier 1 -> 2A -> 3A
+
+### Next-Step Planning (No Implementation Yet)
+
+#### Phase 0: Planning Pack (1-2 days)
+- Freeze the Tier 1 rubric into explicit scoring dimensions and pass/fail thresholds.
+- Define event schema for feedback signals (`clicked`, `saved`, `ignored`, `more`, `less`).
+- Define digest quality score formula shared by harness + production metrics.
+- Confirm ownership and success metrics for Tier 1, 2A, and 3A.
+
+#### Phase 1: Tier 1 Execution Plan (week 1-2)
+- Run baseline harness on recent digests and capture current quality distribution.
+- Prioritize top 3 failure modes (expected: analysis specificity, freshness, custom-topic precision).
+- Plan 2-4 iteration cycles with re-test after each cycle.
+- Exit only when Tier 1 checklist is complete and trend is stable.
+
+#### Phase 2: Tier 2A Design Plan (week 3)
+- Define update cadence for auto-learning (daily vs. every N interactions).
+- Add guardrails to avoid oscillation in topic weights.
+- Define per-user "first 14 days" improvement chart for admin.
+- Set launch criteria: measurable improvement without relevance drift.
+
+#### Phase 3: Tier 3A Design Plan (week 4)
+- Specify URL/slug model and access/security constraints for public digest pages.
+- Define share CTA placement and attribution tracking.
+- Define conversion path from shared page -> signup/settings flow.
+- Set launch criteria: public page quality, reliability, and tracking completeness.

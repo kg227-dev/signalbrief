@@ -740,6 +740,29 @@ function formatTelegram(items, dateStr, state) {
   return lines.join("\n");
 }
 
+function buildDigestInlineKeyboard(items) {
+  const inlineKeyboard = [];
+  const safeItems = Array.isArray(items) ? items : [];
+
+  safeItems.slice(0, 10).forEach((_, idx) => {
+    const itemNum = idx + 1;
+    inlineKeyboard.push([
+      { text: `💾 ${itemNum}`, callback_data: `sb:save:${itemNum}` },
+      { text: `➕ ${itemNum}`, callback_data: `sb:more:${itemNum}` },
+      { text: `➖ ${itemNum}`, callback_data: `sb:less:${itemNum}` },
+    ]);
+  });
+
+  // P1-5 feedback capture row (one response per digest).
+  inlineKeyboard.push([
+    { text: "🔥 Great", callback_data: "sb:fb:great" },
+    { text: "👍 Fine", callback_data: "sb:fb:fine" },
+    { text: "👎 Meh", callback_data: "sb:fb:meh" },
+  ]);
+
+  return { inline_keyboard: inlineKeyboard };
+}
+
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
 function buildEmail(
@@ -884,14 +907,14 @@ function buildEmail(
 
 // ── 6. Send via SignalBrief bot ───────────────────────────────────────────────
 
-async function sendTelegram(text, chatId) {
+async function sendTelegram(text, chatId, extra = {}) {
   const targetId = chatId || CONFIG.user.telegramChatId;
   log(`Sending Telegram to ${targetId}...`);
   const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
   const res = await httpsPostWithRetry(
     "api.telegram.org", `/bot${token}/sendMessage`,
     { "Content-Type": "application/json" },
-    { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false }
+    { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false, ...extra }
   );
   if (res.body?.ok) {
     log(`✅ Telegram sent to ${targetId}`);
@@ -1311,8 +1334,9 @@ async function main() {
       let delivered = false;
       if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
         const userTelegram = formatTelegram(userItems, shortDate, u);
+        const userKeyboard = buildDigestInlineKeyboard(userItems);
         try {
-          await sendTelegram(userTelegram, u.chatId);
+          await sendTelegram(userTelegram, u.chatId, { reply_markup: userKeyboard });
           appendEngagementEvent({
             event_type: "digest_sent",
             event_key: `digest_sent:${userDigestId}:telegram`,

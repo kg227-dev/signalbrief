@@ -33,6 +33,7 @@ function defaultUser(chatId) {
     digest_dates: [],           // ["2026-03-01", ...] — dates user received a digest (for archive scoping)
     bookmarks: [],              // [{ date, item_num, headline, url, tag }]
     last_digest_items: [],      // snapshot of last digest for save-by-number
+    digest_feedback: [],        // [{ digest_id, date_et, ts_utc, label, score, channel }]
     quality_history: [],        // [{ digest_id, date_et, score, band, components }]
     last_quality_score: null,   // latest entry from quality_history for quick reads
     auto_learning: {

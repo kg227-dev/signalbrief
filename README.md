@@ -25,6 +25,7 @@ Roadmap details: [`features.md`](./features.md)
 - Enriches each item with a "why it matters" analysis at senior consultant level (Claude Haiku)
 - Delivers a tight Telegram message and a full HTML email simultaneously
 - Tracks bookmarks and topic preferences per user
+- Supports inline Telegram actions per item (`Save`, `More`, `Less`) plus one-tap digest feedback
 - Logs engagement events (sent/saved/clicked/ignored/weight-adjusted) for personalization analytics
 - Computes per-digest Digest Quality Score (DQS) and stores user-level quality history
 - Applies automatic topic-weight learning from engagement signals (with guardrails)
@@ -246,6 +247,10 @@ Users can also reply in natural language — intent is parsed by Claude:
 | `less pharma` | Decreases pharma story weight |
 | `add DOGE` | Adds DOGE as a custom topic |
 | Any question | Answered by Claude in a strategy/consulting context |
+
+Each digest message also includes inline buttons for:
+- Per-item actions: `💾 Save`, `➕ More like this`, `➖ Less like this`
+- Daily reaction: `🔥 Great`, `👍 Fine`, `👎 Meh`
 
 ### Telegram-first Onboarding
 

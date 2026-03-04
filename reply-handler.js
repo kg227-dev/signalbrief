@@ -641,6 +641,78 @@ async function handleTopicLess(chatId, topic) {
   await send(chatId, `📉 Got it — fewer *${topic}* stories starting tomorrow.`);
 }
 
+function getTopicFromLastDigestItem(user, itemIndex) {
+  const idx = Number(itemIndex || 0);
+  if (!Number.isFinite(idx) || idx < 1) return null;
+  const items = Array.isArray(user?.last_digest_items) ? user.last_digest_items : [];
+  const item = items[idx - 1];
+  const tag = String(item?.tag || "").trim();
+  return tag || null;
+}
+
+async function handleDigestFeedback(chatId, reactionKey) {
+  const FEEDBACK = {
+    great: { label: "great", emoji: "🔥", score: 2, ack: "Love it — keep those coming." },
+    fine:  { label: "fine",  emoji: "👍", score: 1, ack: "Noted — we will keep tuning." },
+    meh:   { label: "meh",   emoji: "👎", score: 0, ack: "Thanks — we will sharpen tomorrow's brief." },
+  };
+  const chosen = FEEDBACK[String(reactionKey || "").toLowerCase()];
+  if (!chosen) {
+    await send(chatId, "I couldn't record that reaction. Try one of the digest feedback buttons again.");
+    return;
+  }
+
+  const user = readUser(chatId);
+  if (!user.last_digest_at) {
+    await send(chatId, "I don't have a recent digest to score yet.");
+    return;
+  }
+
+  const dateKey = etDateKeyFromIso(user.last_digest_at);
+  const digestId = buildDigestId(dateKey, chatId);
+  if (!Array.isArray(user.digest_feedback)) user.digest_feedback = [];
+
+  const existing = user.digest_feedback.find((row) => String(row?.digest_id || "") === digestId);
+  if (existing) {
+    await send(chatId, `Feedback already recorded for this digest (${existing.emoji || existing.label || "saved"}).`);
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const entry = {
+    digest_id: digestId,
+    date_et: dateKey,
+    ts_utc: nowIso,
+    label: chosen.label,
+    emoji: chosen.emoji,
+    score: chosen.score,
+    channel: "telegram",
+  };
+  user.digest_feedback.push(entry);
+  if (user.digest_feedback.length > 120) {
+    user.digest_feedback.splice(0, user.digest_feedback.length - 120);
+  }
+  writeUser(chatId, user);
+
+  appendEngagementEvent({
+    event_type: "digest_feedback_submitted",
+    event_key: `feedback:${digestId}`,
+    date_et: dateKey,
+    user_chat_id: String(chatId),
+    user_email: user.email || null,
+    digest_id: digestId,
+    channel: "telegram",
+    source: "inline-keyboard",
+    feedback: {
+      label: chosen.label,
+      score: chosen.score,
+      emoji: chosen.emoji,
+    },
+  });
+
+  await send(chatId, `${chosen.emoji} Feedback saved. ${chosen.ack}`);
+}
+
 async function handleTopicAdd(chatId, topic) {
   if (!topic) return;
   const user = readUser(chatId);
@@ -774,6 +846,56 @@ async function handleQuestion(chatId, question) {
   await send(chatId, answer);
 }
 
+function parseInlineCallbackData(data) {
+  const raw = String(data || "").trim();
+  const parts = raw.split(":");
+  if (parts.length < 3) return null;
+  if (parts[0] !== "sb") return null;
+
+  const action = parts[1];
+  if (action === "save" || action === "more" || action === "less") {
+    const item = Number(parts[2]);
+    if (!Number.isFinite(item) || item < 1 || item > 10) return null;
+    return { action, item };
+  }
+  if (action === "fb") {
+    return { action, reaction: parts[2] || "" };
+  }
+  return null;
+}
+
+async function handleCallback(data, chatId) {
+  const parsed = parseInlineCallbackData(data);
+  if (!parsed) return { ok: false, notice: "Unsupported action" };
+
+  if (parsed.action === "save") {
+    await handleSave(chatId, [parsed.item]);
+    return { ok: true, notice: `Saved #${parsed.item}` };
+  }
+
+  if (parsed.action === "more" || parsed.action === "less") {
+    const user = readUser(chatId);
+    const topic = getTopicFromLastDigestItem(user, parsed.item);
+    if (!topic) {
+      await send(chatId, `I couldn't resolve item #${parsed.item} from your last digest.`);
+      return { ok: false, notice: "Item unavailable" };
+    }
+    if (parsed.action === "more") {
+      await handleTopicMore(chatId, topic);
+      return { ok: true, notice: `More ${topic}` };
+    }
+    await handleTopicLess(chatId, topic);
+    return { ok: true, notice: `Less ${topic}` };
+  }
+
+  if (parsed.action === "fb") {
+    await handleDigestFeedback(chatId, parsed.reaction);
+    return { ok: true, notice: "Feedback saved" };
+  }
+
+  return { ok: false, notice: "Unsupported action" };
+}
+
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
 async function handle(message, chatId) {
@@ -811,4 +933,4 @@ if (require.main === module) {
   handle(message, chatId).catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { handle };
+module.exports = { handle, handleCallback };

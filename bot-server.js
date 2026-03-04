@@ -12,7 +12,7 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
-const { handle } = require("./reply-handler");
+const { handle, handleCallback } = require("./reply-handler");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
 const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
@@ -50,20 +50,83 @@ async function poll() {
 }
 
 async function processUpdate(update) {
-  // Only handle new messages — skip edited_message to prevent double-handling
+  // Message updates
   const msg = update.message;
-  if (!msg || !msg.text) return;
-
-  const chatId = String(msg.chat.id);
-  const text = msg.text.trim();
-
-  console.log(`[${new Date().toISOString()}] [${chatId}] ${text}`);
-
-  try {
-    await handle(text, chatId);
-  } catch (e) {
-    console.error(`Error handling message: ${e.message}`);
+  if (msg && msg.text) {
+    const chatId = String(msg.chat.id);
+    const text = msg.text.trim();
+    console.log(`[${new Date().toISOString()}] [${chatId}] ${text}`);
+    try {
+      await handle(text, chatId);
+    } catch (e) {
+      console.error(`Error handling message: ${e.message}`);
+    }
+    return;
   }
+
+  // Inline callback updates
+  const callback = update.callback_query;
+  if (callback && callback.data) {
+    const chatId = String(callback?.message?.chat?.id || callback?.from?.id || "");
+    const data = String(callback.data || "").trim();
+    if (!chatId || !data) return;
+
+    console.log(`[${new Date().toISOString()}] [${chatId}] callback ${data}`);
+    let notice = "Saved";
+    try {
+      const result = await handleCallback(data, chatId);
+      if (result && result.notice) notice = String(result.notice);
+    } catch (e) {
+      notice = "Action failed";
+      console.error(`Error handling callback: ${e.message}`);
+    }
+    try {
+      await answerCallbackQuery(callback.id, notice);
+    } catch (e) {
+      console.error(`Error answering callback query: ${e.message}`);
+    }
+  }
+}
+
+function telegramPost(pathname, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload || {});
+    const req = https.request(
+      {
+        hostname: "api.telegram.org",
+        path: `/bot${BOT_TOKEN}/${pathname}`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let out = "";
+        res.on("data", (c) => out += c);
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(out));
+          } catch {
+            resolve({ ok: false, raw: out });
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.setTimeout(15000, () => req.destroy(new Error("telegram post timeout")));
+    req.write(body);
+    req.end();
+  });
+}
+
+async function answerCallbackQuery(callbackQueryId, text) {
+  if (!callbackQueryId) return;
+  await telegramPost("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    text: String(text || "Done").slice(0, 180),
+    show_alert: false,
+  });
 }
 
 async function runLoop() {

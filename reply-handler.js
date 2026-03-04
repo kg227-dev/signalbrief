@@ -659,13 +659,13 @@ async function handleDigestFeedback(chatId, reactionKey) {
   const chosen = FEEDBACK[String(reactionKey || "").toLowerCase()];
   if (!chosen) {
     await send(chatId, "I couldn't record that reaction. Try one of the digest feedback buttons again.");
-    return;
+    return { ok: false, notice: "Invalid feedback" };
   }
 
   const user = readUser(chatId);
   if (!user.last_digest_at) {
     await send(chatId, "I don't have a recent digest to score yet.");
-    return;
+    return { ok: false, notice: "No recent digest" };
   }
 
   const dateKey = etDateKeyFromIso(user.last_digest_at);
@@ -675,7 +675,7 @@ async function handleDigestFeedback(chatId, reactionKey) {
   const existing = user.digest_feedback.find((row) => String(row?.digest_id || "") === digestId);
   if (existing) {
     await send(chatId, `Feedback already recorded for this digest (${existing.emoji || existing.label || "saved"}).`);
-    return;
+    return { ok: false, notice: "Already recorded" };
   }
 
   const nowIso = new Date().toISOString();
@@ -711,6 +711,7 @@ async function handleDigestFeedback(chatId, reactionKey) {
   });
 
   await send(chatId, `${chosen.emoji} Feedback saved. ${chosen.ack}`);
+  return { ok: true, notice: "Feedback saved" };
 }
 
 async function handleTopicAdd(chatId, topic) {
@@ -889,8 +890,8 @@ async function handleCallback(data, chatId) {
   }
 
   if (parsed.action === "fb") {
-    await handleDigestFeedback(chatId, parsed.reaction);
-    return { ok: true, notice: "Feedback saved" };
+    const result = await handleDigestFeedback(chatId, parsed.reaction);
+    return result || { ok: false, notice: "Feedback failed" };
   }
 
   return { ok: false, notice: "Unsupported action" };

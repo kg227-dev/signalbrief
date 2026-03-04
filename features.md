@@ -1,6 +1,6 @@
 # SignalBrief — Feature Roadmap
 
-Last updated: 2026-03-04 (rev 11)
+Last updated: 2026-03-04 (rev 12)
 
 ---
 
@@ -364,37 +364,40 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | **B-12 Admin message auditability** | High | Small-Med | **Done** | — |
 | **B-10 Legacy test endpoint cleanup** | Medium | Small | **Done** | — |
 | **B-9 Legacy unique-user fallback** | Medium | Small | **Done** | — |
-| P1-12 Digest quality score | High | Medium | **Next** | Tier 1 rubric lock |
-| P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
-| P1-1 Implicit learning | High | Medium | **Next** | B-8 |
-| P1-11 Delivery confidence + resend failures | High | Medium | **Next** | B-14 |
-| P1-5 Digest reactions | High | Medium | **Next** | — |
 | P1-8 Cross-day dedup | Medium | Small | **Next** | — |
-| P4-9 Feature flags | High | Small-Med | **Next** | — |
-| P2-11 Admin message templates | Medium | Small-Med | **Next** | — |
-| P2-12 Roster search + filters | Medium | Small | **Next** | — |
-| P4-10 Admin comms audit log | High | Small-Med | **Next** | B-12 |
+| P2-1 Custom topic queries (hardening) | High | Large | **Next** | — |
+| P1-10 Why you're seeing this | Medium | Small | **Next** | B-8 |
+| P1-12 Digest quality score | High | Medium | **Next** | Tier 1 rubric lock |
+| P1-1 Implicit learning | High | Medium | **Next** | B-8 |
+| P2-6 Inline keyboards | High | Medium | **Next** | — |
+| P2-7 Click tracking | High | Medium | **Next** | — |
+| P1-5 Digest reactions | High | Medium | **Next** | — |
 | P4-11 Retire legacy test endpoint | Medium | Small | **Done** | B-10 |
 | P4-13 Environment-safe admin auth mode | Very High | Small | **Done** | B-13 |
-| P2-1 Custom topic queries | High | Large | **Soon** | — |
-| P2-2 Company watchlist | High | Medium | **Soon** | — |
-| P2-5 Source quality + diversity | High | Medium | **Soon** | — |
-| P2-6 Inline keyboards | High | Medium | **Soon** | — |
-| P2-7 Click tracking | High | Medium | **Soon** | — |
-| P2-9 Consultant Lens Mode | Medium | Medium | **Soon** | — |
-| P2-10 Source corroboration | Medium | Medium | **Soon** | — |
-| P1-2 Weekly synthesis | High | Large | **Soon** | — |
-| P1-6 Archive search | Medium | Medium | **Soon** | — |
-| P1-9 Timezone support | Medium | Medium | **Soon** | — |
 | P3-3 Shareable public digest pages | High | Medium | **Soon** | — |
-| P3-6 Smart onboarding | High | Medium | **Soon** | — |
-| P4-8 Cost attribution | Medium | Small | **Soon** | — |
-| P2-8 Share a signal | Medium | Medium | **Later** | — |
-| P3-2 Referral system | High | Medium | **Later** | — |
-| P3-8 Simple paywall | Medium | Medium | **Later** | P3-3 |
-| P3-7 Winback emails | Medium | Small-Med | **Later** | P2-7 |
+| P2-8 Share a signal | Medium | Medium | **Soon** | — |
+| P1-2 Weekly synthesis | High | Large | **Soon** | — |
+| P3-4 Slack integration | Medium | Very Large | **Soon** | — |
+| P3-8 Simple paywall | Medium | Medium | **Soon** | P3-3 |
+| P3-2 Referral system | High | Medium | **Soon** | — |
+| P3-7 Winback emails | Medium | Small-Med | **Soon** | P2-7 |
+| P2-5 Source quality + diversity | High | Medium | **Later** | — |
+| P2-9 Consultant Lens Mode | Medium | Medium | **Later** | — |
+| P2-10 Source corroboration | Medium | Medium | **Later** | — |
+| P2-2 Company watchlist | High | Medium | **Later** | — |
 | P4-1 SQLite migration | High | Medium | **Later** | — |
+| P4-3 Health monitoring + alerting | High | Small | **Later** | — |
 | P4-2 Token rotation | Medium | Medium | **Later** | P4-1 |
+| P4-12 Delivery reconciliation checks | Medium | Medium | **Later** | — |
+| P1-11 Delivery confidence + resend failures | High | Medium | **Later** | B-14 |
+| P4-9 Feature flags | High | Small-Med | **Later** | — |
+| P2-11 Admin message templates | Medium | Small-Med | **Later** | — |
+| P2-12 Roster search + filters | Medium | Small | **Later** | — |
+| P4-10 Admin comms audit log | High | Small-Med | **Later** | B-12 |
+| P1-6 Archive search | Medium | Medium | **Later** | — |
+| P1-9 Timezone support | Medium | Medium | **Later** | — |
+| P3-6 Smart onboarding | High | Medium | **Later** | — |
+| P4-8 Cost attribution | Medium | Small | **Later** | — |
 | P1-3 Client briefing | High | Large | **Later** | P1-2 |
 | P1-4 Signal threading | Medium | Large | **Later** | — |
 | P1-7 Breaking alerts | Medium | Large | **Later** | — |
@@ -402,7 +405,6 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 | P2-4 Ask about this | Medium | Medium | **Later** | — |
 | P3-1 Team accounts | High | Very Large | **Future** | P4-1 |
 | P3-9 Multi-user comparison dashboard | Medium | Large | **Future** | P3-1, P2-7 |
-| P3-4 Slack integration | Medium | Very Large | **Future** | — |
 | P3-5 Public API | Low | Medium | **Future** | P4-1 |
 
 ---
@@ -414,7 +416,7 @@ Replace `console.log` and flat file logging with structured JSON logs. Add log l
 **Sprint 2 (Tier 2 personalization proof):** P1-1 implicit learning, P2-6 inline keyboards, P2-7 click tracking, P1-5 digest reactions, P1-12 user-visible rollout
 **Sprint 3 (Tier 3 shareability):** P3-3 shareable public digest pages, P2-8 share command, P1-2 weekly synthesis
 **Sprint 4 (distribution + monetization):** P3-4 Slack integration, P3-8 simple paywall, P3-2 referrals, P3-7 winback
-**Sprint 5 (differentiation depth):** P2-5 source quality/diversity, P2-9 consultant lens, P2-10 corroboration, P3-9 team comparison
+**Sprint 5 (differentiation depth):** P2-5 source quality/diversity, P2-9 consultant lens, P2-10 corroboration, P2-2 company watchlist
 **Sprint 6 (infrastructure hardening):** P4-1 SQLite, P4-3 health monitoring, P4-2 token rotation, P4-12 reconciliation checks
 
 Minimum high-leverage path to portfolio-grade product:

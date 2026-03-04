@@ -25,6 +25,9 @@ Roadmap details: [`features.md`](./features.md)
 - Enriches each item with a "why it matters" analysis at senior consultant level (Claude Haiku)
 - Delivers a tight Telegram message and a full HTML email simultaneously
 - Tracks bookmarks and topic preferences per user
+- Logs engagement events (sent/saved/clicked/ignored/weight-adjusted) for personalization analytics
+- Computes per-digest Digest Quality Score (DQS) and stores user-level quality history
+- Applies automatic topic-weight learning from engagement signals (with guardrails)
 - On-demand digest via `/digest` Telegram command
 - Telegram-first onboarding — sign up directly in the bot with `/start your@email.com`
 - Past digests browsable at `/archive` (token-gated)
@@ -47,10 +50,14 @@ Perplexity Sonar (17 topics in parallel)
   │  - topic filter                          │
   │  - items_per_digest (5 or 10)            │
   │  - depth preference                      │
+  │  - auto topic learning (save/click/ignore) │
   │  → Telegram bot (@signalbrief29bot)      │
   │  → Resend API → HTML email               │
   │     (Gmail OAuth fallback)               │
   └──────────────────────────────────────────┘
+        ↓
+   quality-score.js — per-user DQS + trend history
+   engagement-events.js — append-only engagement telemetry
         ↓
    saveToArchive() — archive/YYYY-MM-DD.json
    logCosts() — data/cost-log.json
@@ -63,6 +70,9 @@ Perplexity Sonar (17 topics in parallel)
 | File | Purpose |
 |------|---------|
 | `digest.js` | Main pipeline — fetch, score, select, enrich, deliver, archive, log costs |
+| `engagement-events.js` | Engagement event logger + loader (`data/engagement-events.jsonl`) |
+| `personalization.js` | Automatic topic-weight learning from save/click/ignored signals |
+| `quality-score.js` | Digest Quality Score (DQS) computation + trend helpers |
 | `mailer.js` | Email delivery — Resend (branded domain) with Gmail OAuth fallback + RFC 8058 unsubscribe headers |
 | `reply-handler.js` | Fuzzy intent parser for Telegram replies, `/digest` on-demand, Telegram-first onboarding |
 | `bot-server.js` | Long-poll Telegram bot server |
@@ -147,6 +157,7 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 | `GET /api/topics` | All 17 topics — flat list + grouped by industry/capability |
 | `GET /api/archive` | List all archived digest dates |
 | `GET /api/archive/:date` | Full digest for a specific date (YYYY-MM-DD) |
+| `GET /api/click?token=...&did=...&item=...&url=...` | Tracked redirect for email click instrumentation |
 | `GET /api/unsubscribe?token=...` | One-click unsubscribe via email link |
 | `POST /api/unsubscribe` | Machine-initiated unsubscribe (RFC 8058 compliant, email param) |
 | `POST /api/request-link` | Send a magic settings link to an email address |
@@ -162,7 +173,7 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 | `POST /api/admin/logout` | Clear admin session |
 | `GET /api/admin/check` | Auth check for current admin session |
 | `GET /api/admin/stats` | Full stats payload: summary, health, runs, per-user costs, roster |
-| `GET /api/admin/user-by-email?email=...` | Load user data by email |
+| `GET /api/admin/user-by-email?email=...` | Load user data by email (includes auto-learning state and recent auto adjustments) |
 | `GET /api/admin/audit?email=...` | Unified user-level admin timeline |
 | `POST /api/admin/message-user` | Send admin outbound message via email/Telegram |
 | `POST /api/admin/update-delivery-time` | Inline admin schedule update for a user |

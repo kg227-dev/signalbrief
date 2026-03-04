@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Edit User — SignalBrief Admin</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -121,6 +122,31 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 .weight-up   { color:#16A34A; background:#F0FDF4; border-color:#BBF7D0; }
 .weight-down { color:#DC2626; background:#FEF2F2; border-color:#FECACA; }
 .weight-signal { font-size:11px; letter-spacing:0.02em; }
+
+/* Auto-learning panel */
+.learning-summary {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+  gap:8px; margin-bottom:14px;
+}
+.learning-metric {
+  background:#F9FAFB; border:1px solid var(--border); border-radius:8px; padding:10px 11px;
+}
+.learning-metric-label {
+  font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:4px;
+}
+.learning-metric-value {
+  font-size:13px; color:var(--text); font-weight:600; line-height:1.35;
+}
+.adjustment-list { display:flex; flex-direction:column; gap:8px; }
+.adjustment-row {
+  display:flex; justify-content:space-between; gap:10px; align-items:flex-start;
+  background:#F9FAFB; border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+}
+.adjustment-main { min-width:0; flex:1; }
+.adjustment-topic { font-size:13px; font-weight:600; color:var(--text); margin-bottom:2px; }
+.adjustment-meta { font-size:11px; color:var(--text-secondary); line-height:1.45; }
+.adjustment-time { font-size:11px; color:var(--text-secondary); text-align:right; white-space:nowrap; }
+.adjustment-delta { font-size:12px; font-weight:700; margin-bottom:4px; }
 
 /* Last digest item rows */
 .digest-item-row {
@@ -302,7 +328,16 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="card-title">Topic preferences</div>
       <div class="card-heading">Personalization signals</div>
       <div id="weightsList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
-      <div style="font-size:12px;color:var(--text-secondary);">Set via Telegram "more" and "less" commands. Read-only here.</div>
+      <div style="font-size:12px;color:var(--text-secondary);">Set via manual "more/less" commands plus automatic learning from saves/clicks. Read-only here.</div>
+    </div>
+
+    <!-- Auto-learning state -->
+    <div class="form-card" id="autoLearningCard" style="display:none;">
+      <div class="card-title">Auto learning</div>
+      <div class="card-heading">Feedback loop status</div>
+      <div id="autoLearningSummary" class="learning-summary"></div>
+      <div id="autoLearningList" class="adjustment-list"></div>
+      <div id="autoLearningEmpty" style="font-size:12px;color:var(--text-secondary);display:none;">No automatic adjustments yet. The model has not crossed thresholds for this user.</div>
     </div>
 
     <!-- Last digest preview — shown only if user has last_digest_items -->
@@ -365,6 +400,20 @@ function topicLabel(t) {
 }
 
 function isCustom(t) { return !DEFAULT_TOPICS.includes(t); }
+
+function formatEtDateTime(iso) {
+  if (!iso) return '—';
+  const ts = Date.parse(String(iso));
+  if (!Number.isFinite(ts)) return String(iso);
+  return new Date(ts).toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
 
 function updateTopicNote() {
   const n = selectedTopics.size;
@@ -537,6 +586,69 @@ function buildWeightsPanel(user) {
     }).join('');
 }
 
+function buildAutoLearningPanel(user) {
+  const state = user.auto_learning && typeof user.auto_learning === 'object' ? user.auto_learning : null;
+  const recent = Array.isArray(user.auto_adjustments_recent) ? user.auto_adjustments_recent : [];
+  if (!state && !recent.length) return;
+
+  document.getElementById('autoLearningCard').style.display = '';
+  const summary = document.getElementById('autoLearningSummary');
+  const list = document.getElementById('autoLearningList');
+  const empty = document.getElementById('autoLearningEmpty');
+
+  const statusHtml = state && state.enabled === false
+    ? '<span style="color:var(--red);">disabled</span>'
+    : '<span style="color:var(--green);">enabled</span>';
+  const metrics = [
+    { label: 'Status', value: statusHtml },
+    { label: 'Total auto adjustments', value: esc(String(state?.total_auto_adjustments || 0)) },
+    { label: 'Last processed', value: esc(formatEtDateTime(state?.last_processed_ts)) },
+    { label: 'Last applied', value: esc(formatEtDateTime(state?.last_applied_at)) },
+    { label: 'Last checked', value: esc(formatEtDateTime(state?.last_checked_at)) },
+    { label: 'Lookback window', value: esc(String(state?.lookback_days || 14) + ' days') },
+  ];
+  summary.innerHTML = metrics.map((metric) => `
+    <div class="learning-metric">
+      <div class="learning-metric-label">${metric.label}</div>
+      <div class="learning-metric-value">${metric.value}</div>
+    </div>
+  `).join('');
+
+  if (!recent.length) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  list.innerHTML = recent.map((row) => {
+    const topic = topicLabel(String(row.topic_key || 'topic'));
+    const delta = Number(row.delta || 0);
+    const deltaClass = delta > 0 ? 'weight-up' : (delta < 0 ? 'weight-down' : '');
+    const deltaPrefix = delta > 0 ? '+' : '';
+    const net = Number.isFinite(Number(row.net)) ? Number(row.net) : 0;
+    const count = Number.isFinite(Number(row.count)) ? Number(row.count) : 0;
+    const saved = Number.isFinite(Number(row.saved)) ? Number(row.saved) : 0;
+    const clicked = Number.isFinite(Number(row.clicked)) ? Number(row.clicked) : 0;
+    const ignored = Number.isFinite(Number(row.ignored)) ? Number(row.ignored) : 0;
+    const whenLabel = row.ts_utc
+      ? formatEtDateTime(row.ts_utc)
+      : (row.date_et || '—');
+    return `
+      <div class="adjustment-row">
+        <div class="adjustment-main">
+          <div class="adjustment-topic">${esc(topic)}</div>
+          <div class="adjustment-meta">Signals: ${saved} saves · ${clicked} clicks · ${ignored} ignored · net ${net} across ${count} events</div>
+        </div>
+        <div class="adjustment-time">
+          <div class="adjustment-delta ${deltaClass}">${deltaPrefix}${delta}</div>
+          <div>${esc(whenLabel)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function buildLastDigestPanel(user) {
   const items = user.last_digest_items || [];
   if (!items.length) return;
@@ -598,6 +710,7 @@ async function init() {
 
     buildMetaBar(user);
     buildWeightsPanel(user);
+    buildAutoLearningPanel(user);
     buildLastDigestPanel(user);
 
     // Account fields

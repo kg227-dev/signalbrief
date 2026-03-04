@@ -15,3 +15,7 @@ spend_state.json
 system_state.json
 archive/
 test-results/
+
+# Private strategy docs
+features.md
+planning/monetization-playbook.private.md

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — SignalBrief</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -15,16 +16,39 @@
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
-.container { max-width:1200px; margin:0 auto; padding:40px 24px 80px; }
+.container { max-width:1560px; margin:0 auto; padding:40px 24px 80px; }
 
 .header { margin-bottom:36px; padding-bottom:20px; border-bottom:1px solid var(--border); }
 .header-top { display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
 .header h1 { font-size:22px; font-weight:700; letter-spacing:-0.3px; }
 .header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; }
 .header p { font-size:14px; color:var(--text-secondary); }
+.stale-badge {
+  display:none;
+  margin-left:8px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:#B45309;
+  background:#FFFBEB;
+  border:1px solid #FDE68A;
+  border-radius:999px;
+  padding:2px 8px;
+}
+.stale-badge.show { display:inline-flex; align-items:center; }
 
 /* Summary cards */
 .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:36px; }
+.kpi-board { margin-bottom:36px; display:flex; flex-direction:column; gap:14px; }
+.kpi-row-title {
+  font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+  color:var(--text-secondary); margin-bottom:10px;
+}
+.cards-kpi {
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  margin-bottom:0;
+}
 .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; }
 .card-label { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:10px; }
 .card-value { font-size:28px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
@@ -41,6 +65,294 @@ thead th { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transfor
 tbody td { font-size:13px; padding:11px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text); vertical-align:middle; }
 tbody tr:last-child td { border-bottom:none; }
 tbody tr:hover td { background:rgba(0,0,0,0.015); }
+.th-sort {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  border:none;
+  background:none;
+  color:inherit;
+  font:inherit;
+  text-transform:inherit;
+  letter-spacing:inherit;
+  cursor:pointer;
+  padding:0;
+}
+.th-sort:hover { color:var(--text-2); }
+.th-sort-ind {
+  font-size:10px;
+  color:var(--text-light);
+}
+.th-sort.active .th-sort-ind { color:var(--accent); }
+.table-wrap-subscribers thead th {
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:#F8F8F8;
+}
+.table-toolbar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+}
+.table-toolbar-controls {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-left:auto;
+}
+.table-search,
+.table-filter {
+  border:1.5px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+  color:var(--text-2);
+  font-size:12px;
+  font-family:inherit;
+  padding:7px 10px;
+}
+.table-search:focus,
+.table-filter:focus {
+  outline:none;
+  border-color:var(--accent);
+}
+.table-search { width:min(320px, 72vw); }
+.table-meta {
+  font-size:12px;
+  color:var(--text-secondary);
+}
+.table-wrap-subscribers table { table-layout:fixed; }
+.table-wrap-subscribers th:nth-child(1) { width:36px; }
+.table-wrap-subscribers th:nth-child(2) { width:24%; }
+.table-wrap-subscribers th:nth-child(3) { width:10%; }
+.table-wrap-subscribers th:nth-child(4) { width:16%; }
+.table-wrap-subscribers th:nth-child(5) { width:18%; }
+.table-wrap-subscribers th:nth-child(6) { width:16%; }
+.table-wrap-subscribers th:nth-child(7) { width:8%; }
+.table-wrap-subscribers th:nth-child(8) { width:8%; }
+.table-wrap-subscribers td {
+  vertical-align:top;
+  padding:10px 12px;
+}
+.table-checkbox {
+  width:15px;
+  height:15px;
+  accent-color: var(--accent);
+}
+.subscriber-main { font-size:15px; font-weight:600; line-height:1.25; }
+.subscriber-sub {
+  margin-top:3px;
+  font-size:11px;
+  color:var(--text-secondary);
+  line-height:1.35;
+  word-break:break-word;
+}
+.subscriber-sub.mono { font-size:11px; }
+.delivery-cell .subscriber-main { font-family:ui-monospace,monospace; font-size:13px; }
+.table-wrap-subscribers .topics-cell {
+  min-width:0;
+  max-width:none;
+}
+.channels-cell {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+}
+.subscriber-actions {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.table-action-link {
+  display:inline-flex;
+  align-items:center;
+  font-size:11px;
+  font-weight:600;
+  padding:4px 10px;
+  border-radius:6px;
+  border:1.5px solid var(--border);
+  background:#fff;
+  color:var(--accent);
+  text-decoration:none;
+  white-space:nowrap;
+}
+.table-action-link:hover { border-color:var(--accent); background:var(--accent-light); }
+.expand-btn {
+  width:18px;
+  height:18px;
+  border:1px solid var(--border);
+  border-radius:5px;
+  background:#fff;
+  color:var(--text-secondary);
+  font-size:11px;
+  cursor:pointer;
+  line-height:1;
+  margin-right:7px;
+}
+.expand-btn:hover { border-color:var(--accent); color:var(--accent); }
+.subscriber-name-row {
+  display:flex;
+  align-items:flex-start;
+}
+.subscriber-row-main.expanded td {
+  background:rgba(37,99,235,0.03);
+}
+.subscriber-row-main.expanded:hover td {
+  background:rgba(37,99,235,0.04);
+}
+.drawer-row td {
+  padding:0;
+  background:#FCFCFD;
+}
+.row-drawer {
+  padding:14px 14px 12px;
+  border-top:1px solid var(--border-subtle);
+}
+.drawer-grid {
+  display:grid;
+  grid-template-columns:2fr 2fr 1.5fr;
+  gap:14px;
+}
+.drawer-card {
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:#fff;
+  padding:11px 12px;
+}
+.drawer-card-title {
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
+  margin-bottom:8px;
+}
+.drawer-list {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-size:12px;
+  line-height:1.4;
+  color:var(--text-2);
+}
+.drawer-list-row {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px;
+}
+.drawer-list-label {
+  color:var(--text-secondary);
+  font-size:11px;
+}
+.drawer-list-value { text-align:right; }
+.drawer-preview-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.drawer-preview-item {
+  font-size:12px;
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  padding:8px;
+  line-height:1.4;
+}
+.drawer-actions {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.row-action-status {
+  margin-top:6px;
+  font-size:11px;
+  color:var(--text-secondary);
+}
+.row-action-status.ok { color:var(--green); }
+.row-action-status.err { color:var(--red); }
+.audit-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:220px;
+  overflow:auto;
+}
+.audit-item {
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  padding:8px;
+  background:#fff;
+}
+.audit-item-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:4px;
+}
+.audit-item-time {
+  font-size:11px;
+  color:var(--text-secondary);
+}
+.audit-item-summary {
+  font-size:12px;
+  color:var(--text-2);
+}
+.bulk-bar {
+  display:none;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:8px 0 10px;
+  padding:10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:#fff;
+}
+.bulk-pill {
+  font-size:11px;
+  font-weight:700;
+  color:var(--accent);
+  background:var(--accent-light);
+  border:1px solid #BFDBFE;
+  border-radius:999px;
+  padding:3px 10px;
+}
+.bulk-select, .bulk-input {
+  border:1.5px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+  color:var(--text-2);
+  font-size:12px;
+  font-family:inherit;
+  padding:7px 10px;
+}
+.bulk-input { width:120px; }
+.bulk-select:focus, .bulk-input:focus {
+  outline:none;
+  border-color:var(--accent);
+}
+.bulk-preview-list {
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+  max-height:220px;
+  overflow:auto;
+  padding:8px;
+}
+.bulk-preview-row {
+  font-size:12px;
+  padding:6px 4px;
+  border-bottom:1px solid var(--border-subtle);
+}
+.bulk-preview-row:last-child { border-bottom:none; }
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
 .topics-cell { white-space:normal; line-height:1.45; min-width:280px; max-width:460px; }
 .topics-cell-tight { white-space:normal; line-height:1.45; max-width:320px; }
@@ -107,6 +419,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   width:min(620px, 100%); background:var(--card); border:1px solid var(--border);
   border-radius:12px; box-shadow:0 16px 44px rgba(0,0,0,0.2); padding:18px;
 }
+.time-modal-card { width:min(460px, 100%); }
 .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
 .modal-kicker { font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:3px; }
 .modal-title { font-size:18px; font-weight:700; letter-spacing:-0.2px; }
@@ -146,30 +459,98 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .modal-btn.primary:disabled { background:#9CA3AF; border-color:#9CA3AF; cursor:not-allowed; }
 
 /* Upcoming deliveries */
-.schedule-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:36px; }
-.schedule-day  { border-bottom:1px solid var(--border); }
-.schedule-day:last-child { border-bottom:none; }
+.schedule-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:36px; padding:12px; }
+.schedule-calendar {
+  display:grid;
+  grid-template-columns:repeat(7, minmax(0, 1fr));
+  gap:10px;
+}
+.schedule-day-card {
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:#fff;
+  min-height:180px;
+  display:flex;
+  flex-direction:column;
+}
 .schedule-day-header {
-  display:flex; align-items:center; gap:10px;
-  padding:10px 16px; background:rgba(0,0,0,0.02);
-  font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:9px 10px;
+  background:rgba(0,0,0,0.02);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
   border-bottom:1px solid var(--border);
 }
 .schedule-today-badge {
   font-size:10px; font-weight:700; color:#fff; background:var(--accent);
   padding:1px 7px; border-radius:100px; letter-spacing:0.03em; text-transform:uppercase;
 }
+.schedule-day-body { padding:8px; display:flex; flex-direction:column; gap:8px; }
 .schedule-row {
-  display:flex; align-items:center; gap:16px; padding:10px 16px;
-  border-bottom:1px solid var(--border-subtle); font-size:13px;
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  padding:8px;
+  font-size:12px;
+  background:#fff;
 }
-.schedule-row:last-child { border-bottom:none; }
-.schedule-time { font-family:ui-monospace,monospace; font-size:12px; font-weight:600; color:var(--text); min-width:80px; }
-.schedule-name { font-weight:600; min-width:100px; }
-.schedule-meta { color:var(--text-secondary); font-size:12px; }
-.schedule-link { margin-left:auto; color:var(--accent); font-size:12px; font-weight:500; text-decoration:none; }
-.schedule-link:hover { text-decoration:underline; }
+.schedule-time { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.schedule-name { font-weight:600; line-height:1.3; }
+.schedule-meta { color:var(--text-secondary); font-size:11px; margin-top:2px; line-height:1.35; }
+.schedule-actions { margin-top:6px; display:flex; justify-content:flex-end; }
+.schedule-set-btn {
+  font-size:11px;
+  font-weight:600;
+  padding:3px 8px;
+  border-radius:6px;
+  border:1.5px solid var(--border);
+  background:#fff;
+  color:var(--accent);
+  cursor:pointer;
+  font-family:inherit;
+  white-space:nowrap;
+}
+.schedule-set-btn:hover { border-color:var(--accent); background:var(--accent-light); }
+.schedule-set-btn:disabled { opacity:0.6; cursor:not-allowed; }
 .schedule-empty { padding:24px 16px; text-align:center; color:var(--text-secondary); font-size:13px; }
+.schedule-empty-day {
+  border:1px dashed var(--border);
+  border-radius:8px;
+  padding:9px 8px;
+  text-align:center;
+  color:var(--text-secondary);
+  font-size:11px;
+}
+.schedule-more {
+  border:1px dashed var(--border);
+  border-radius:8px;
+  padding:8px;
+  text-align:center;
+  font-size:11px;
+  color:var(--text-secondary);
+  background:rgba(0,0,0,0.01);
+}
+.schedule-more button {
+  margin-top:5px;
+  border:1.5px solid var(--border);
+  border-radius:6px;
+  padding:3px 8px;
+  background:#fff;
+  color:var(--accent);
+  font-size:11px;
+  font-weight:600;
+  font-family:inherit;
+  cursor:pointer;
+}
+.schedule-more button:hover {
+  border-color:var(--accent);
+  background:var(--accent-light);
+}
 
 /* Health bar metrics */
 .health-metric { }
@@ -178,6 +559,119 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   color:var(--text-secondary); margin-bottom:3px;
 }
 .health-metric-value { font-size:14px; font-weight:600; }
+.health-metric-sub {
+  margin-top:4px;
+  font-size:12px;
+  color:var(--text-secondary);
+  line-height:1.4;
+}
+.health-launch-stack {
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.health-launch-summary {
+  font-size:14px;
+  font-weight:700;
+  line-height:1.25;
+}
+.health-launch-summary.healthy { color:var(--green); }
+.health-launch-summary.degraded { color:var(--yellow); }
+.health-launch-summary.unknown { color:var(--text-secondary); }
+.health-launch-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.health-launch-chip {
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:2px 8px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  border:1px solid transparent;
+  white-space:nowrap;
+}
+.health-launch-chip.ok {
+  color:#047857;
+  border-color:#A7F3D0;
+  background:#ECFDF5;
+}
+.health-launch-chip.info {
+  color:#1D4ED8;
+  border-color:#BFDBFE;
+  background:#EFF6FF;
+}
+.health-launch-chip.warn {
+  color:#B45309;
+  border-color:#FDE68A;
+  background:#FFFBEB;
+}
+.health-launch-chip.err {
+  color:#B91C1C;
+  border-color:#FECACA;
+  background:#FEF2F2;
+}
+.health-launch-chip.neutral {
+  color:#4B5563;
+  border-color:#E5E7EB;
+  background:#F3F4F6;
+}
+.health-launch-controls {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.health-launch-ctrl-btn {
+  border:1.5px solid var(--border);
+  border-radius:7px;
+  padding:4px 9px;
+  background:#fff;
+  color:var(--text-2);
+  font-size:11px;
+  font-weight:700;
+  cursor:pointer;
+  font-family:inherit;
+  letter-spacing:0.02em;
+}
+.health-launch-ctrl-btn:hover { border-color:var(--accent); color:var(--accent); }
+.health-launch-log {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.health-launch-log-row {
+  font-size:11px;
+  color:var(--text-secondary);
+}
+.health-launch-log-row strong { color:var(--text-2); }
+
+.toast-wrap {
+  position:fixed;
+  right:16px;
+  top:16px;
+  z-index:160;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-width:min(400px, 92vw);
+}
+.toast {
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:#fff;
+  box-shadow:0 10px 24px rgba(0,0,0,0.12);
+  padding:10px 12px;
+  font-size:12px;
+  line-height:1.35;
+  color:var(--text-2);
+}
+.toast.ok { border-color:#A7F3D0; background:#ECFDF5; color:#065F46; }
+.toast.err { border-color:#FECACA; background:#FEF2F2; color:#B91C1C; }
+.toast.warn { border-color:#FDE68A; background:#FFFBEB; color:#92400E; }
 
 /* Action buttons */
 .btn-action {
@@ -212,8 +706,23 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 
 @media (max-width:640px) {
   .cards { grid-template-columns:1fr 1fr; }
+  .cards-kpi { grid-template-columns:1fr; }
+  .schedule-calendar { grid-template-columns:1fr; }
+  .table-toolbar-controls { width:100%; margin-left:0; }
+  .table-search { width:100%; }
+  .bulk-bar { align-items:stretch; }
+  .bulk-select, .bulk-input { width:100%; }
+  .drawer-grid { grid-template-columns:1fr; }
+  .table-wrap-subscribers table { table-layout:auto; }
   table { font-size:12px; }
   thead th, tbody td { padding:10px 12px; }
+}
+@media (min-width:641px) and (max-width:980px) {
+  .cards-kpi { grid-template-columns:1fr 1fr; }
+  .schedule-calendar { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width:981px) and (max-width:1280px) {
+  .schedule-calendar { grid-template-columns:repeat(4, minmax(0, 1fr)); }
 }
 </style>
 </head>
@@ -225,7 +734,57 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <h1>⚙️ SignalBrief Admin</h1>
       <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
     </div>
-    <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span></p>
+    <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="kpi-board">
+    <div>
+      <div class="kpi-row-title">This month</div>
+      <div class="cards cards-kpi">
+        <div class="card">
+          <div class="card-label">Cost</div>
+          <div class="card-value" id="monthCost">—</div>
+          <div class="card-sub" id="monthRuns">— runs</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Digests sent</div>
+          <div class="card-value" id="monthDigestsSent">—</div>
+          <div class="card-sub" id="monthDigestsSub">— this month</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Users reached</div>
+          <div class="card-value" id="monthUsers">—</div>
+          <div class="card-sub" id="monthOnDemand">— on-demand</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="kpi-row-title">All time</div>
+      <div class="cards cards-kpi">
+        <div class="card">
+          <div class="card-label">Total cost</div>
+          <div class="card-value" id="allTimeCost">—</div>
+          <div class="card-sub" id="allTimeRuns">— runs total</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Digests sent</div>
+          <div class="card-value" id="allTimeDigestsSent">—</div>
+          <div class="card-sub" id="allTimeDigestsSub">— deliveries total</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Active subscribers</div>
+          <div class="card-value" id="activeUsers">—</div>
+          <div class="card-sub" id="telegramUsers">— on Telegram</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upcoming deliveries -->
+  <div class="section-title">Upcoming deliveries (next 7 days)</div>
+  <div class="schedule-wrap" id="scheduleWrap">
+    <div class="schedule-empty">Loading…</div>
   </div>
 
   <!-- System health bar -->
@@ -242,18 +801,26 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div class="health-metric-label">Last run cost</div>
       <div class="health-metric-value" id="healthLastCost">—</div>
     </div>
-    <div class="health-metric">
-      <div class="health-metric-label">Cron schedule</div>
-      <div class="health-metric-value" id="healthCron">—</div>
-    </div>
     <!-- Delivery health — populated by JS -->
     <div class="health-metric" id="healthDelivery" style="display:none;">
       <div class="health-metric-label">Delivery health</div>
       <div class="health-metric-value" id="healthDeliveryVal">—</div>
     </div>
+    <div class="health-metric" id="healthReliability" style="display:none;min-width:280px;">
+      <div class="health-metric-label">Delivery reliability (7d)</div>
+      <div class="health-metric-value" id="healthReliabilityVal">—</div>
+      <div class="health-metric-sub" id="healthReliabilitySub">—</div>
+    </div>
+    <div class="health-metric" id="healthDigestRunner" style="display:none;min-width:220px;">
+      <div class="health-metric-label">Digest runner</div>
+      <div class="health-metric-value" id="healthDigestRunnerVal">—</div>
+      <div class="health-metric-sub" id="healthDigestRunnerSub">—</div>
+    </div>
+    <div class="health-metric" id="healthLaunchAgents" style="display:none;min-width:280px;">
+      <div class="health-metric-label">LaunchAgents</div>
+      <div class="health-metric-value" id="healthLaunchAgentsVal">—</div>
+    </div>
     <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:260px;">
-      <button id="runDigestBtn" class="btn-action btn-action-primary" onclick="triggerDigest()">▶ Run digest now</button>
-      <div id="runDigestMsg" style="font-size:12px;color:var(--green);display:none;"></div>
       <div class="test-target-wrap">
         <div class="test-target-label">Test target</div>
         <select id="testDigestTarget" class="test-target-select" aria-label="Test digest target">
@@ -265,66 +832,82 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     </div>
   </div>
 
-  <!-- Upcoming deliveries -->
-  <div class="section-title">Upcoming deliveries (next 7 days)</div>
-  <div class="schedule-wrap" id="scheduleWrap">
-    <div class="schedule-empty">Loading…</div>
+  <!-- Subscriber table -->
+  <div id="rosterSection" class="table-toolbar">
+    <div class="section-title" style="margin-bottom:0;">Subscribers</div>
+    <div class="table-toolbar-controls">
+      <input
+        id="subscriberSearch"
+        class="table-search"
+        type="search"
+        placeholder="Search name, email, topic, or schedule"
+        oninput="onSubscriberSearchInput(this.value)"
+      >
+      <select id="subscriberStatusFilter" class="table-filter" onchange="onSubscriberStatusFilter(this.value)">
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="paused">Paused</option>
+        <option value="unsubscribed">Unsubscribed</option>
+      </select>
+      <button id="scheduleCsvBtn" class="btn-secondary" onclick="downloadScheduleCsv()">Export CSV</button>
+    </div>
   </div>
-
-  <!-- Schedule dashboard -->
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
-    <div class="section-title" style="margin-bottom:0;">Schedule dashboard (active users)</div>
-    <button id="scheduleCsvBtn" class="btn-secondary" onclick="downloadScheduleCsv()">Export CSV</button>
+  <div id="subscriberTableMeta" class="table-meta" style="margin-bottom:10px;">Loading…</div>
+  <div id="bulkActionBar" class="bulk-bar">
+    <span class="bulk-pill" id="bulkCountPill">0 selected</span>
+    <select id="bulkActionSelect" class="bulk-select" onchange="onBulkActionChange(this.value)">
+      <option value="set_time">Set delivery time</option>
+      <option value="pause">Pause deliveries</option>
+      <option value="resume">Resume deliveries</option>
+      <option value="resend_link">Resend settings link</option>
+    </select>
+    <input id="bulkTimeInput" class="bulk-input" type="text" placeholder="07:00 ET" value="07:00">
+    <button class="btn-secondary" onclick="previewBulkAction()">Preview</button>
+    <button class="btn-secondary" onclick="clearBulkSelection()">Clear</button>
+    <div id="bulkActionHint" class="table-meta" style="margin-left:auto;">Choose users to enable bulk actions.</div>
   </div>
-  <div class="table-wrap">
+  <div class="table-wrap table-wrap-subscribers">
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Days</th>
-          <th>Time</th>
-          <th>Timezone</th>
-          <th>Topics</th>
-          <th>Items</th>
-          <th>Depth</th>
-          <th>Next delivery (ET)</th>
-          <th>Action</th>
+          <th><input id="selectAllSubscribers" class="table-checkbox" type="checkbox" onclick="toggleSelectAllVisible(this.checked)" aria-label="Select all visible subscribers"></th>
+          <th>
+            <button class="th-sort" type="button" onclick="onSubscriberSort('subscriber')">
+              Subscriber <span id="sortInd-subscriber" class="th-sort-ind">↕</span>
+            </button>
+          </th>
+          <th>
+            <button class="th-sort" type="button" onclick="onSubscriberSort('status')">
+              Status <span id="sortInd-status" class="th-sort-ind">↕</span>
+            </button>
+          </th>
+          <th>
+            <button class="th-sort" type="button" onclick="onSubscriberSort('schedule')">
+              Schedule <span id="sortInd-schedule" class="th-sort-ind">↕</span>
+            </button>
+          </th>
+          <th>
+            <button class="th-sort" type="button" onclick="onSubscriberSort('next_delivery')">
+              Next delivery (ET) <span id="sortInd-next_delivery" class="th-sort-ind">↕</span>
+            </button>
+          </th>
+          <th>
+            <button class="th-sort" type="button" onclick="onSubscriberSort('topics')">
+              Topics <span id="sortInd-topics" class="th-sort-ind">↕</span>
+            </button>
+          </th>
+          <th>
+            <button class="th-sort" type="button" onclick="onSubscriberSort('digests')">
+              Digests <span id="sortInd-digests" class="th-sort-ind">↕</span>
+            </button>
+          </th>
+          <th>Actions</th>
         </tr>
       </thead>
-      <tbody id="scheduleRosterBody">
-        <tr><td colspan="10" class="empty">Loading…</td></tr>
+      <tbody id="subscriberBody">
+        <tr><td colspan="8" class="empty">Loading…</td></tr>
       </tbody>
     </table>
-  </div>
-
-  <!-- Summary cards -->
-  <div class="cards">
-    <div class="card">
-      <div class="card-label">This month</div>
-      <div class="card-value" id="monthCost">—</div>
-      <div class="card-sub" id="monthRuns">— runs</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Digests sent</div>
-      <div class="card-value" id="monthDigestsSent">—</div>
-      <div class="card-sub" id="allTimeDigestsSent">— all-time</div>
-    </div>
-    <div class="card">
-      <div class="card-label">All-time total</div>
-      <div class="card-value" id="allTimeCost">—</div>
-      <div class="card-sub" id="allTimeRuns">— runs total</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Users reached (month)</div>
-      <div class="card-value" id="monthUsers">—</div>
-      <div class="card-sub" id="monthOnDemand">— on-demand</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Active subscribers</div>
-      <div class="card-value" id="activeUsers">—</div>
-      <div class="card-sub" id="telegramUsers">— on Telegram</div>
-    </div>
   </div>
 
   <!-- Run log -->
@@ -387,31 +970,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     </table>
   </div>
 
-  <!-- User roster -->
-  <div class="section-title" id="rosterSection">User roster</div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Status</th>
-          <th>Joined</th>
-          <th>Digests</th>
-          <th>Last digest</th>
-          <th>Channels</th>
-          <th>Delivery</th>
-          <th>Topics</th>
-          <th>Last items</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="rosterBody">
-        <tr><td colspan="11" class="empty">Loading…</td></tr>
-      </tbody>
-    </table>
-  </div>
-
 </div>
 
 <div id="sendModal" class="modal-backdrop" onclick="if (event.target === this) closeSendModal();">
@@ -458,6 +1016,79 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     </div>
   </div>
 </div>
+
+<div id="deliveryTimeModal" class="modal-backdrop" onclick="if (event.target === this) closeDeliveryTimeModal();">
+  <div class="modal-card time-modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Schedule editor</div>
+        <div class="modal-title" id="deliveryTimeModalTitle">Set delivery time</div>
+      </div>
+      <button class="modal-close" onclick="closeDeliveryTimeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-panel">
+      <div id="deliveryTimeModalHint" class="modal-help" style="margin-bottom:10px;"></div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label for="deliveryTimeModalInput">Delivery time (ET)</label>
+        <input
+          id="deliveryTimeModalInput"
+          class="modal-input"
+          type="text"
+          placeholder="07:00 or 7:00 AM"
+          oninput="setDeliveryTimeModalFeedback(null, '')"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();submitDeliveryTimeModal();}"
+        >
+      </div>
+    </div>
+    <div id="deliveryTimeModalFeedback" class="modal-feedback"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeDeliveryTimeModal()">Cancel</button>
+      <button id="deliveryTimeModalSubmit" class="modal-btn primary" onclick="submitDeliveryTimeModal()">Save time</button>
+    </div>
+  </div>
+</div>
+
+<div id="bulkPreviewModal" class="modal-backdrop" onclick="if (event.target === this) closeBulkPreviewModal();">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Bulk actions</div>
+        <div class="modal-title" id="bulkPreviewTitle">Preview bulk action</div>
+      </div>
+      <button class="modal-close" onclick="closeBulkPreviewModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-panel">
+      <div id="bulkPreviewSummary" class="modal-help" style="margin-bottom:10px;">Loading preview…</div>
+      <div id="bulkPreviewAffected" class="bulk-preview-list"></div>
+    </div>
+    <div id="bulkPreviewFeedback" class="modal-feedback"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeBulkPreviewModal()">Cancel</button>
+      <button id="bulkPreviewApplyBtn" class="modal-btn primary" onclick="applyBulkAction()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal-backdrop" onclick="if (event.target === this) closeConfirmModal(false);">
+  <div class="modal-card time-modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Confirm action</div>
+        <div class="modal-title" id="confirmModalTitle">Are you sure?</div>
+      </div>
+      <button class="modal-close" onclick="closeConfirmModal(false)" aria-label="Close">×</button>
+    </div>
+    <div class="modal-panel">
+      <div id="confirmModalBody" class="modal-help"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeConfirmModal(false)">Cancel</button>
+      <button id="confirmModalAcceptBtn" class="modal-btn primary" onclick="closeConfirmModal(true)">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
 
 <script>
 function esc(s) {
@@ -527,13 +1158,145 @@ function renderRunRecipients(run) {
 function topicLabel(raw) {
   return String(raw || "").replace(/^custom_/, "").replace(/_/g, " ");
 }
-function renderTopicChips(rawTopics) {
+function renderTopicChips(rawTopics, limit = Infinity) {
   const topics = Array.isArray(rawTopics) ? rawTopics.filter(Boolean) : [];
   if (!topics.length) return `<span style="color:var(--text-secondary);">—</span>`;
-  return `<span class="topic-chip-wrap">${topics.map(t => {
+  const max = Number.isFinite(limit) ? Math.max(0, limit) : topics.length;
+  const visible = topics.slice(0, max);
+  const hiddenCount = Math.max(0, topics.length - visible.length);
+  const chips = visible.map(t => {
     const cls = String(t).startsWith("custom_") ? "topic-chip-custom" : "topic-chip-preset";
     return `<span class="topic-chip ${cls}">${esc(topicLabel(t))}</span>`;
-  }).join("")}</span>`;
+  });
+  if (hiddenCount > 0) {
+    chips.push(`<span class="topic-chip topic-chip-preset">+${hiddenCount}</span>`);
+  }
+  return `<span class="topic-chip-wrap">${chips.join("")}</span>`;
+}
+function formatEtDateTime(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return String(iso);
+  }
+}
+
+function renderLaunchAgentActionLog(entries) {
+  if (!Array.isArray(entries) || !entries.length) return "";
+  const rows = entries.slice(0, 4).map(entry => {
+    const at = formatEtDateTime(entry.at);
+    const svc = String(entry.service_key || "service");
+    const result = entry.success ? "ok" : "failed";
+    return `<div class="health-launch-log-row"><strong>${esc(svc)}</strong> restart ${result} · ${esc(at)}</div>`;
+  }).join("");
+  return `<div class="health-launch-log">${rows}</div>`;
+}
+
+function renderLaunchAgentDetail(launch) {
+  const overall = String(launch?.overall || "").toLowerCase();
+  const overallIcon = overall === "healthy" ? "✅" : overall === "degraded" ? "⚠️" : "ℹ️";
+  const overallClass = overall === "healthy" ? "healthy" : overall === "degraded" ? "degraded" : "unknown";
+  const summary = esc(launch?.summary || "Status unavailable");
+  const services = Array.isArray(launch?.services) ? launch.services : [];
+
+  if (!services.length) {
+    const detail = launch?.error
+      ? `<div class="health-launch-chips"><span class="health-launch-chip neutral">${esc(String(launch.error).slice(0, 120))}</span></div>`
+      : "";
+    const log = renderLaunchAgentActionLog(launchAgentActionLog);
+    return `<div class="health-launch-stack"><div class="health-launch-summary ${overallClass}">${overallIcon} ${summary}</div>${detail}${log}</div>`;
+  }
+
+  const nameMap = { web: "Web", bot: "Bot", digest: "Digest", tunnel: "Tunnel" };
+  const chips = services.map(svc => {
+    const key = String(svc?.key || "service").toLowerCase();
+    const displayName = nameMap[key] || key.replace(/[_-]/g, " ");
+    const state = String(svc?.state || "unknown").toLowerCase();
+    let tone = "neutral";
+    let stateLabel = state;
+
+    if (state === "running" && svc?.expected_running) {
+      tone = "ok";
+      stateLabel = "running";
+    } else if (state === "running") {
+      tone = "info";
+      stateLabel = "running";
+    } else if (state === "loaded") {
+      tone = "info";
+      stateLabel = "loaded";
+    } else if (state === "stopped") {
+      tone = "warn";
+      stateLabel = "stopped";
+    } else if (state === "error") {
+      tone = "err";
+      stateLabel = svc?.last_exit != null ? `exit ${svc.last_exit}` : "error";
+    } else if (state === "missing") {
+      tone = "err";
+      stateLabel = "missing";
+    }
+
+    const details = [`${displayName} (${svc?.label || "service"})`, `state ${state}`];
+    if (svc?.pid) details.push(`pid ${svc.pid}`);
+    if (svc?.last_exit != null) details.push(`exit ${svc.last_exit}`);
+    return `<span class="health-launch-chip ${tone}" title="${esc(details.join(" · "))}">${esc(displayName)} · ${esc(stateLabel)}</span>`;
+  }).join("");
+  const controls = services.map(svc => {
+    const key = String(svc?.key || "").toLowerCase();
+    const label = nameMap[key] || key || "Service";
+    return `<button class="health-launch-ctrl-btn" onclick='restartLaunchAgentService(${JSON.stringify(key)})'>restart ${esc(label)}</button>`;
+  }).join("");
+  const log = renderLaunchAgentActionLog(launchAgentActionLog);
+
+  return `
+    <div class="health-launch-stack">
+      <div class="health-launch-summary ${overallClass}">${overallIcon} ${summary}</div>
+      <div class="health-launch-chips">${chips}</div>
+      <div class="health-launch-controls">${controls}</div>
+      ${log}
+    </div>
+  `;
+}
+
+async function restartLaunchAgentService(key) {
+  const normalized = String(key || "").toLowerCase().trim();
+  if (!normalized) return;
+  const accepted = await openConfirmModal(
+    "Restart LaunchAgent",
+    `Restart ${normalized} service now? This may interrupt in-flight jobs for a few seconds.`,
+    "Restart"
+  );
+  if (!accepted) return;
+  showToast("warn", `Restarting ${normalized}…`, 1800);
+  const response = await apiFetchJson("/api/admin/launch-agent-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: normalized, action: "restart" }),
+  }, 1);
+  const data = response.data || {};
+  if (!response.ok || data.success === false) {
+    showToast("err", data.error || `Failed to restart ${normalized}`);
+    return;
+  }
+  if (data.launch_agents) {
+    if (!latestHealth) latestHealth = {};
+    latestHealth.launch_agents = data.launch_agents;
+  }
+  launchAgentActionLog = Array.isArray(data.launch_agent_actions) ? data.launch_agent_actions : launchAgentActionLog;
+  const launchDiv = document.getElementById("healthLaunchAgents");
+  const launchVal = document.getElementById("healthLaunchAgentsVal");
+  if (launchDiv && launchVal) {
+    launchDiv.style.display = "";
+    launchVal.innerHTML = renderLaunchAgentDetail((latestHealth && latestHealth.launch_agents) || data.launch_agents || {});
+  }
+  showToast("ok", `${normalized} restarted`);
 }
 function renderAdminMessages(entries) {
   const body = document.getElementById("adminMsgBody");
@@ -582,9 +1345,11 @@ function renderAdminMessages(entries) {
 }
 function setLastRefreshed(dateObj) {
   const el = document.getElementById("lastRefreshed");
+  const stale = document.getElementById("staleBadge");
   if (!el) return;
   if (!dateObj) {
     el.textContent = "refresh failed";
+    if (stale) stale.classList.add("show");
     return;
   }
   el.textContent = "last refreshed " + dateObj.toLocaleTimeString("en-US", {
@@ -592,6 +1357,7 @@ function setLastRefreshed(dateObj) {
     minute: "2-digit",
     second: "2-digit",
   });
+  if (stale) stale.classList.remove("show");
 }
 function countActiveUsers(roster) {
   return (roster || []).filter(u => u.status === "active").length;
@@ -600,11 +1366,177 @@ function countActiveTelegramUsers(roster) {
   return (roster || []).filter(u => u.status === "active" && u.telegram).length;
 }
 let latestRoster = [];
+let latestHealth = null;
 let autoRefreshTimer = null;
 let loadInFlight = false;
-const AUTO_REFRESH_MS = 60000;
+const AUTO_REFRESH_MS = 30000;
 let sendModalUser = null;
 let sendMode = "digest";
+let deliveryTimeModalState = { email: "", current: "07:00", triggerBtn: null };
+let subscriberSearchQuery = "";
+let subscriberStatusFilter = "all";
+let subscriberSortKey = "next_delivery";
+let subscriberSortDir = "asc";
+let expandedSubscriberEmail = "";
+const expandedScheduleDays = new Set();
+const selectedSubscriberEmails = new Set();
+const rowActionStatusByEmail = new Map();
+const auditTimelineByEmail = new Map();
+const loadingAuditEmails = new Set();
+let launchAgentActionLog = [];
+let pendingBulkPreview = null;
+let confirmResolve = null;
+let retryToastAt = 0;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function showToast(type, message, ttlMs = 3600) {
+  const wrap = document.getElementById("toastWrap");
+  if (!wrap || !message) return;
+  const toast = document.createElement("div");
+  toast.className = `toast ${type || ""}`.trim();
+  toast.textContent = String(message);
+  wrap.appendChild(toast);
+  setTimeout(() => {
+    if (toast.parentNode) toast.parentNode.removeChild(toast);
+  }, ttlMs);
+}
+
+function setRowActionStatus(email, type, message) {
+  const key = String(email || "").toLowerCase().trim();
+  if (!key) return;
+  rowActionStatusByEmail.set(key, {
+    type: type || "info",
+    message: String(message || ""),
+    at: Date.now(),
+  });
+  renderSubscriberTable();
+}
+
+function getRowActionStatus(email) {
+  const key = String(email || "").toLowerCase().trim();
+  const entry = rowActionStatusByEmail.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > 90000) {
+    rowActionStatusByEmail.delete(key);
+    return null;
+  }
+  return entry;
+}
+
+function readSubscriberStateFromUrl() {
+  const p = new URLSearchParams(window.location.search);
+  subscriberSearchQuery = p.get("q") || "";
+  subscriberStatusFilter = p.get("status") || "all";
+  subscriberSortKey = p.get("sort") || "next_delivery";
+  subscriberSortDir = p.get("dir") || "asc";
+  if (!["all", "active", "paused", "unsubscribed", "pending"].includes(subscriberStatusFilter)) {
+    subscriberStatusFilter = "all";
+  }
+  if (!["subscriber", "status", "schedule", "next_delivery", "topics", "digests", "last_digest"].includes(subscriberSortKey)) {
+    subscriberSortKey = "next_delivery";
+  }
+  if (!["asc", "desc"].includes(subscriberSortDir)) {
+    subscriberSortDir = "asc";
+  }
+}
+
+function syncSubscriberStateToUrl() {
+  const url = new URL(window.location.href);
+  const p = url.searchParams;
+  if (subscriberSearchQuery.trim()) p.set("q", subscriberSearchQuery.trim());
+  else p.delete("q");
+  if (subscriberStatusFilter && subscriberStatusFilter !== "all") p.set("status", subscriberStatusFilter);
+  else p.delete("status");
+  if (subscriberSortKey && subscriberSortKey !== "next_delivery") p.set("sort", subscriberSortKey);
+  else p.delete("sort");
+  if (subscriberSortDir && subscriberSortDir !== "asc") p.set("dir", subscriberSortDir);
+  else p.delete("dir");
+  history.replaceState({}, "", `${url.pathname}${p.toString() ? `?${p.toString()}` : ""}`);
+}
+
+function applySubscriberInputsFromState() {
+  const search = document.getElementById("subscriberSearch");
+  const status = document.getElementById("subscriberStatusFilter");
+  if (search) search.value = subscriberSearchQuery;
+  if (status) status.value = subscriberStatusFilter;
+}
+
+function updateSortIndicators() {
+  ["subscriber", "status", "schedule", "next_delivery", "topics", "digests"].forEach(key => {
+    const ind = document.getElementById(`sortInd-${key}`);
+    if (!ind) return;
+    const active = subscriberSortKey === key;
+    ind.textContent = active ? (subscriberSortDir === "asc" ? "↑" : "↓") : "↕";
+    const btn = ind.closest(".th-sort");
+    if (btn) btn.classList.toggle("active", active);
+  });
+}
+
+function onSubscriberSort(key) {
+  if (subscriberSortKey === key) {
+    subscriberSortDir = subscriberSortDir === "asc" ? "desc" : "asc";
+  } else {
+    subscriberSortKey = key;
+    subscriberSortDir = key === "digests" ? "desc" : "asc";
+  }
+  syncSubscriberStateToUrl();
+  updateSortIndicators();
+  renderSubscriberTable();
+}
+
+async function openConfirmModal(title, message, acceptLabel = "Confirm") {
+  const modal = document.getElementById("confirmModal");
+  document.getElementById("confirmModalTitle").textContent = title || "Confirm action";
+  document.getElementById("confirmModalBody").textContent = message || "";
+  document.getElementById("confirmModalAcceptBtn").textContent = acceptLabel;
+  modal.style.display = "flex";
+  return new Promise(resolve => { confirmResolve = resolve; });
+}
+
+function closeConfirmModal(accepted) {
+  const modal = document.getElementById("confirmModal");
+  if (modal) modal.style.display = "none";
+  if (confirmResolve) {
+    confirmResolve(!!accepted);
+    confirmResolve = null;
+  }
+}
+
+function isTransientStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function apiFetchJson(url, options = {}, maxRetries = 2) {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    attempt += 1;
+    try {
+      const res = await fetch(url, options);
+      const data = await parseApiJson(res);
+      if (res.ok || !isTransientStatus(res.status) || attempt > maxRetries) {
+        return { ok: res.ok, status: res.status, data, attempts: attempt };
+      }
+      if (Date.now() - retryToastAt > 12000) {
+        showToast("warn", "Transient API issue. Retrying…", 2200);
+        retryToastAt = Date.now();
+      }
+      await sleep(220 * Math.pow(2, attempt - 1));
+    } catch (e) {
+      if (attempt > maxRetries) {
+        return { ok: false, status: 0, data: { error: e.message || "Network error" }, attempts: attempt };
+      }
+      if (Date.now() - retryToastAt > 12000) {
+        showToast("warn", "Network hiccup. Retrying…", 2200);
+        retryToastAt = Date.now();
+      }
+      await sleep(220 * Math.pow(2, attempt - 1));
+    }
+  }
+  return { ok: false, status: 0, data: { error: "Request failed" }, attempts: maxRetries + 1 };
+}
 
 // ── Topic weights summary string ───────────────────────────────────────────────
 function weightsSummary(weights) {
@@ -634,13 +1566,12 @@ function getSendCapabilities(user) {
 }
 
 async function runDigestForChat(chatId) {
-  const res = await fetch("/api/admin/run-digest", {
+  const resp = await apiFetchJson("/api/admin/run-digest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chatId }),
   });
-  const data = await parseApiJson(res);
-  return { ok: res.ok, data };
+  return { ok: resp.ok, data: resp.data, status: resp.status };
 }
 
 function findRosterUser(email, chatId) {
@@ -732,14 +1663,18 @@ async function submitSendModal() {
   const submitBtn = document.getElementById("sendModalSubmit");
   submitBtn.disabled = true;
   setSendModalFeedback(null, "");
+  const userEmailKey = String(sendModalUser.email || "").toLowerCase().trim();
 
   try {
     if (sendMode === "digest") {
       const { ok, data } = await runDigestForChat(sendModalUser.chat_id);
       if (!ok || !data.success) {
         setSendModalFeedback("err", data.error || "Failed to trigger digest");
+        setRowActionStatus(userEmailKey, "err", data.error || "Digest trigger failed");
       } else {
         setSendModalFeedback("ok", data.message || "Digest triggered");
+        setRowActionStatus(userEmailKey, "ok", "Digest triggered");
+        showToast("ok", `Digest triggered for ${sendModalUser.name || sendModalUser.email || "user"}`);
       }
       return;
     }
@@ -755,37 +1690,158 @@ async function submitSendModal() {
       subject,
       message: body,
     });
-    let res = await fetch("/api/admin/message-user", {
+    let resp = await apiFetchJson("/api/admin/message-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
     });
-    let data = await parseApiJson(res);
+    let data = resp.data;
     // Retry once against trailing-slash variant for reverse-proxy compatibility.
-    if (res.status === 404 && /not found/i.test(String(data.error || ""))) {
-      res = await fetch("/api/admin/message-user/", {
+    if (resp.status === 404 && /not found/i.test(String(data.error || ""))) {
+      resp = await apiFetchJson("/api/admin/message-user/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: payload,
       });
-      data = await parseApiJson(res);
+      data = resp.data;
     }
-    if (!res.ok || !data.success) {
-      if (res.status === 404 && /not found/i.test(String(data.error || ""))) {
+    if (!resp.ok || !data.success) {
+      if (resp.status === 404 && /not found/i.test(String(data.error || ""))) {
         setSendModalFeedback("err", "Message endpoint not found on server. Restart web service on latest main.");
+        setRowActionStatus(userEmailKey, "err", "Message endpoint not found");
         return;
       }
       setSendModalFeedback("err", data.error || "Failed to send message");
+      setRowActionStatus(userEmailKey, "err", data.error || "Message failed");
       return;
     }
     const warn = (data.warnings && data.warnings.length) ? ` (${data.warnings.join("; ")})` : "";
     setSendModalFeedback("ok", (data.message || "Message sent") + warn);
+    setRowActionStatus(userEmailKey, "ok", "Message sent");
+    showToast("ok", `Message sent to ${sendModalUser.name || sendModalUser.email || "user"}`);
     document.getElementById("sendCustomBody").value = "";
   } catch (e) {
     setSendModalFeedback("err", e.message || "Network error sending message");
+    setRowActionStatus(userEmailKey, "err", e.message || "Network error");
   } finally {
     syncSendModalState();
   }
+}
+
+function normalizeAdminTimeInput(raw) {
+  const clean = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s*et\s*$/i, "")
+    .replace(/\s+/g, " ");
+  if (!clean) return null;
+
+  let h;
+  let m;
+  let match = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (match) {
+    h = parseInt(match[1], 10);
+    m = parseInt(match[2], 10);
+    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  match = clean.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+  if (!match) return null;
+  h = parseInt(match[1], 10);
+  m = match[2] != null ? parseInt(match[2], 10) : 0;
+  const meridiem = match[3];
+  if (h < 1 || h > 12 || m < 0 || m > 59) return null;
+  if (meridiem === "am") {
+    if (h === 12) h = 0;
+  } else if (h !== 12) {
+    h += 12;
+  }
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function setDeliveryTimeModalFeedback(type, text) {
+  const box = document.getElementById("deliveryTimeModalFeedback");
+  box.className = "modal-feedback";
+  box.textContent = "";
+  if (!text) return;
+  box.classList.add(type === "ok" ? "ok" : "err");
+  box.textContent = text;
+}
+
+function openDeliveryTimeModal(email, currentDeliveryTime, btn) {
+  const emailKey = String(email || "").toLowerCase().trim();
+  if (!emailKey) return;
+  const defaultTime = /^\d{2}:\d{2}$/.test(String(currentDeliveryTime || "")) ? currentDeliveryTime : "07:00";
+  deliveryTimeModalState = { email: emailKey, current: defaultTime, triggerBtn: btn || null };
+  document.getElementById("deliveryTimeModalTitle").textContent = "Set delivery time";
+  document.getElementById("deliveryTimeModalHint").textContent = `Update delivery time for ${emailKey}`;
+  const input = document.getElementById("deliveryTimeModalInput");
+  input.value = defaultTime;
+  setDeliveryTimeModalFeedback(null, "");
+  document.getElementById("deliveryTimeModalSubmit").disabled = false;
+  document.getElementById("deliveryTimeModalSubmit").textContent = "Save time";
+  document.getElementById("deliveryTimeModal").style.display = "flex";
+  setTimeout(() => { input.focus(); input.select(); }, 0);
+}
+
+function closeDeliveryTimeModal() {
+  document.getElementById("deliveryTimeModal").style.display = "none";
+  deliveryTimeModalState = { email: "", current: "07:00", triggerBtn: null };
+  setDeliveryTimeModalFeedback(null, "");
+}
+
+async function submitDeliveryTimeModal() {
+  const emailKey = String(deliveryTimeModalState.email || "").toLowerCase().trim();
+  if (!emailKey) return;
+
+  const input = document.getElementById("deliveryTimeModalInput");
+  const submitBtn = document.getElementById("deliveryTimeModalSubmit");
+  const normalized = normalizeAdminTimeInput(input.value);
+  if (!normalized) {
+    setDeliveryTimeModalFeedback("err", "Invalid time. Use HH:MM (24h) or H:MM AM/PM.");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Saving...";
+
+  try {
+    const resp = await apiFetchJson("/api/admin/update-delivery-time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailKey, delivery_time: normalized }),
+    });
+    const data = resp.data;
+    if (!resp.ok || !data.success) {
+      setDeliveryTimeModalFeedback("err", data.error || `Failed to update delivery time (HTTP ${resp.status})`);
+      setRowActionStatus(emailKey, "err", data.error || "Time update failed");
+      return;
+    }
+    setDeliveryTimeModalFeedback("ok", `Saved: ${data.delivery_time_label || normalized} for ${emailKey}`);
+    setRowActionStatus(emailKey, "ok", `Time set to ${data.delivery_time_label || normalized}`);
+    showToast("ok", `Delivery time updated for ${emailKey}`);
+    await load(true);
+    closeDeliveryTimeModal();
+  } catch (e) {
+    setDeliveryTimeModalFeedback("err", e.message || "Network error updating delivery time");
+    setRowActionStatus(emailKey, "err", e.message || "Network error");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Save time";
+  }
+}
+
+function editDeliveryTime(email, currentDeliveryTime, btn) {
+  openDeliveryTimeModal(email, currentDeliveryTime, btn);
+}
+
+function toggleScheduleDay(dateKey) {
+  const key = String(dateKey || "");
+  if (!key) return;
+  if (expandedScheduleDays.has(key)) expandedScheduleDays.delete(key);
+  else expandedScheduleDays.add(key);
+  renderSchedule(latestRoster || []);
 }
 
 // ── Upcoming schedule ─────────────────────────────────────────────────────────
@@ -807,7 +1863,8 @@ function renderSchedule(roster) {
   const [nowH, nowM] = timePart.split(":").map(Number);
   const nowMinutes = nowH * 60 + nowM;
 
-  const events = [];
+  const days = [];
+  const eventsByDate = {};
   for (let i = 0; i < 7; i++) {
     const d = new Date(yr, mo - 1, dy + i);
     const dayOfWeek = d.getDay();
@@ -816,104 +1873,619 @@ function renderSchedule(roster) {
     const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const dateLabel = `${dayNames[dayOfWeek]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+    days.push({ dateKey, dateLabel, isToday });
+    eventsByDate[dateKey] = [];
 
     for (const u of active) {
-      const days = u.days_of_week || [1, 2, 3, 4, 5];
-      if (!days.includes(dayOfWeek)) continue;
+      const allowedDays = u.days_of_week || [1, 2, 3, 4, 5];
+      if (!allowedDays.includes(dayOfWeek)) continue;
       const [dh, dm] = (u.delivery_time_raw || "07:00").split(":").map(Number);
       const deliveryMinutes = dh * 60 + dm;
       if (isToday && deliveryMinutes <= nowMinutes) continue;
-      events.push({ dateKey, dateLabel, isToday, timeSortKey: deliveryMinutes,
-        time: u.delivery_time, name: u.name || u.email, topics: u.topics,
-        depth: u.depth, settings_url: u.settings_url, email: u.email });
+      eventsByDate[dateKey].push({
+        dateKey,
+        dateLabel,
+        isToday,
+        timeSortKey: deliveryMinutes,
+        time: u.delivery_time,
+        name: u.name || u.email,
+        topics: u.topics,
+        depth: u.depth,
+        email: u.email,
+        delivery_time_raw: u.delivery_time_raw || "07:00",
+      });
     }
   }
 
-  if (!events.length) {
+  const totalEvents = Object.values(eventsByDate).reduce((sum, rows) => sum + rows.length, 0);
+  if (!totalEvents) {
     wrap.innerHTML = `<div class="schedule-empty">No scheduled deliveries in the next 7 days.</div>`;
     return;
   }
 
-  events.sort((a, b) => a.dateKey < b.dateKey ? -1 : a.dateKey > b.dateKey ? 1 : a.timeSortKey - b.timeSortKey);
-
-  const byDate = [];
-  let lastKey = null;
-  for (const ev of events) {
-    if (ev.dateKey !== lastKey) {
-      byDate.push({ dateKey: ev.dateKey, dateLabel: ev.dateLabel, isToday: ev.isToday, rows: [] });
-      lastKey = ev.dateKey;
-    }
-    byDate[byDate.length - 1].rows.push(ev);
+  for (const dateKey of Object.keys(eventsByDate)) {
+    eventsByDate[dateKey].sort((a, b) => a.timeSortKey - b.timeSortKey);
   }
 
-  wrap.innerHTML = byDate.map(day => `
-    <div class="schedule-day">
+  wrap.innerHTML = `<div class="schedule-calendar">${days.map(day => {
+    const dayRows = eventsByDate[day.dateKey] || [];
+    const isExpanded = expandedScheduleDays.has(day.dateKey);
+    const maxVisible = 12;
+    const visibleRows = isExpanded ? dayRows : dayRows.slice(0, maxVisible);
+    const hiddenCount = Math.max(0, dayRows.length - visibleRows.length);
+    return `
+    <div class="schedule-day-card">
       <div class="schedule-day-header">
-        ${esc(day.dateLabel)}
+        <span>${esc(day.dateLabel)}</span>
         ${day.isToday ? `<span class="schedule-today-badge">Today</span>` : ""}
       </div>
-      ${day.rows.map(ev => `
+      <div class="schedule-day-body">
+      ${dayRows.length ? visibleRows.map(ev => `
         <div class="schedule-row">
-          <span class="schedule-time">${esc(ev.time)}</span>
-          <span class="schedule-name">${esc(ev.name)}</span>
-          <span class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</span>
-          ${ev.settings_url
-            ? `<a href="${esc(ev.settings_url)}" target="_blank" class="schedule-link">edit →</a>`
-            : `<span style="margin-left:auto;color:var(--text-secondary);font-size:12px;">—</span>`}
+          <div class="schedule-time">${esc(ev.time)}</div>
+          <div class="schedule-name">${esc(ev.name)}</div>
+          <div class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</div>
+          <div class="schedule-actions">
+            ${ev.email
+              ? `<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(ev.email || "")}, ${JSON.stringify(ev.delivery_time_raw || "07:00")}, this)'>set time</button>`
+              : `<span style="color:var(--text-secondary);font-size:11px;">—</span>`}
+          </div>
         </div>
-      `).join("")}
+      `).join("") : `<div class="schedule-empty-day">No deliveries</div>`}
+      ${hiddenCount > 0 ? `
+        <div class="schedule-more">
+          +${hiddenCount} more delivery${hiddenCount === 1 ? "" : "ies"}
+          <div>
+            <button type="button" onclick='toggleScheduleDay(${JSON.stringify(day.dateKey)})'>show all</button>
+          </div>
+        </div>
+      ` : ""}
+      ${isExpanded && dayRows.length > maxVisible ? `
+        <div class="schedule-more">
+          Showing all ${dayRows.length} deliveries
+          <div>
+            <button type="button" onclick='toggleScheduleDay(${JSON.stringify(day.dateKey)})'>collapse</button>
+          </div>
+        </div>
+      ` : ""}
+      </div>
     </div>
-  `).join("");
+  `;
+  }).join("")}</div>`;
 }
 
-function renderScheduleDashboard(roster) {
-  latestRoster = Array.isArray(roster) ? roster.slice() : [];
-  const body = document.getElementById("scheduleRosterBody");
-  const active = latestRoster
-    .filter(u => u.status === "active")
-    .sort((a, b) => {
-      const ka = a.next_delivery_key || "zzzz";
-      const kb = b.next_delivery_key || "zzzz";
-      if (ka !== kb) return ka.localeCompare(kb);
-      return (a.name || a.email || "").localeCompare(b.name || b.email || "");
-    });
+function normalizeUserStatus(status) {
+  const value = String(status || "").toLowerCase().trim();
+  if (value === "unsub") return "unsubscribed";
+  return value || "pending";
+}
 
-  if (!active.length) {
-    body.innerHTML = `<tr><td colspan="10" class="empty">No active users.</td></tr>`;
+function renderStatusBadge(status) {
+  const normalized = normalizeUserStatus(status);
+  if (normalized === "active") return `<span class="badge-active">active</span>`;
+  if (normalized === "unsubscribed") return `<span class="badge-unsub">unsub</span>`;
+  if (normalized === "paused") return `<span class="badge-paused">paused</span>`;
+  return `<span class="badge-pending">${esc(normalized)}</span>`;
+}
+
+function getFilteredSubscribers() {
+  const query = subscriberSearchQuery.trim().toLowerCase();
+  const statusFilter = normalizeUserStatus(subscriberStatusFilter === "all" ? "all" : subscriberStatusFilter);
+  const statusOrder = { active: 0, paused: 1, pending: 2, unsubscribed: 3, unsub: 3 };
+  const getSortValue = (u, key) => {
+    if (key === "subscriber") return (u.name || u.email || "").toLowerCase();
+    if (key === "status") return statusOrder[normalizeUserStatus(u.status)] ?? 99;
+    if (key === "schedule") {
+      const [h, m] = String(u.delivery_time_raw || "00:00").split(":").map(v => parseInt(v, 10));
+      return ((h || 0) * 60 + (m || 0));
+    }
+    if (key === "next_delivery") return u.next_delivery_key || "9999-12-31 23:59 ET";
+    if (key === "topics") return Number(u.topics || 0);
+    if (key === "digests") return Number(u.digests || 0);
+    if (key === "last_digest") return u.last_digest || "";
+    return (u.name || u.email || "").toLowerCase();
+  };
+  const dir = subscriberSortDir === "desc" ? -1 : 1;
+
+  return (latestRoster || [])
+    .filter(u => {
+      const userStatus = normalizeUserStatus(u.status);
+      if (statusFilter !== "all" && userStatus !== statusFilter) return false;
+      if (!query) return true;
+      const searchable = [
+        u.name,
+        u.email,
+        userStatus,
+        u.days_label,
+        u.delivery_time,
+        u.timezone,
+        u.depth,
+        u.next_delivery_et,
+        u.topics_list,
+        Array.isArray(u.topics_raw) ? u.topics_raw.map(topicLabel).join(" ") : "",
+        u.joined,
+        u.last_digest,
+      ].join(" ").toLowerCase();
+      return searchable.includes(query);
+    })
+    .sort((a, b) => {
+      const av = getSortValue(a, subscriberSortKey);
+      const bv = getSortValue(b, subscriberSortKey);
+      if (typeof av === "number" && typeof bv === "number" && av !== bv) {
+        return (av - bv) * dir;
+      }
+      const as = String(av || "");
+      const bs = String(bv || "");
+      if (as !== bs) return as.localeCompare(bs) * dir;
+      const an = (a.name || a.email || "").toLowerCase();
+      const bn = (b.name || b.email || "").toLowerCase();
+      return an.localeCompare(bn);
+    });
+}
+
+function onSubscriberSearchInput(value) {
+  subscriberSearchQuery = value || "";
+  syncSubscriberStateToUrl();
+  renderSubscriberTable();
+}
+
+function onSubscriberStatusFilter(value) {
+  subscriberStatusFilter = value || "all";
+  syncSubscriberStateToUrl();
+  renderSubscriberTable();
+}
+
+function toggleSubscriberSelection(email, checked) {
+  const emailKey = String(email || "").toLowerCase().trim();
+  if (!emailKey) return;
+  if (checked) selectedSubscriberEmails.add(emailKey);
+  else selectedSubscriberEmails.delete(emailKey);
+  updateBulkBar();
+  renderSubscriberTable();
+}
+
+function toggleSelectAllVisible(checked) {
+  const visible = getFilteredSubscribers();
+  if (checked) {
+    visible.forEach(u => {
+      const key = String(u.email || "").toLowerCase().trim();
+      if (key) selectedSubscriberEmails.add(key);
+    });
+  } else {
+    visible.forEach(u => {
+      const key = String(u.email || "").toLowerCase().trim();
+      if (key) selectedSubscriberEmails.delete(key);
+    });
+  }
+  updateBulkBar();
+  renderSubscriberTable();
+}
+
+function clearBulkSelection() {
+  selectedSubscriberEmails.clear();
+  pendingBulkPreview = null;
+  updateBulkBar();
+  renderSubscriberTable();
+}
+
+function onBulkActionChange(value) {
+  const action = String(value || "set_time");
+  const timeInput = document.getElementById("bulkTimeInput");
+  if (timeInput) {
+    timeInput.style.display = action === "set_time" ? "" : "none";
+  }
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById("bulkActionBar");
+  const countPill = document.getElementById("bulkCountPill");
+  const hint = document.getElementById("bulkActionHint");
+  if (!bar || !countPill || !hint) return;
+  const count = selectedSubscriberEmails.size;
+  bar.style.display = count ? "flex" : "none";
+  countPill.textContent = `${count} selected`;
+  hint.textContent = count
+    ? "Run preview before applying."
+    : "Choose users to enable bulk actions.";
+}
+
+function closeBulkPreviewModal() {
+  document.getElementById("bulkPreviewModal").style.display = "none";
+  document.getElementById("bulkPreviewFeedback").className = "modal-feedback";
+  document.getElementById("bulkPreviewFeedback").textContent = "";
+}
+
+function renderBulkPreview(data, actionLabel) {
+  const summaryEl = document.getElementById("bulkPreviewSummary");
+  const affectedEl = document.getElementById("bulkPreviewAffected");
+  const applyBtn = document.getElementById("bulkPreviewApplyBtn");
+  const applicable = Number(data.applicable || 0);
+  const requested = Number(data.requested || 0);
+  const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+  const affected = Array.isArray(data.affected) ? data.affected : [];
+  summaryEl.innerHTML = `<strong>${applicable}</strong> of <strong>${requested}</strong> users can be updated with <strong>${esc(actionLabel)}</strong>. ${skipped.length ? `${skipped.length} will be skipped.` : "No skips."}`;
+  applyBtn.disabled = applicable === 0;
+  applyBtn.textContent = applicable ? `Apply to ${applicable} user${applicable === 1 ? "" : "s"}` : "Nothing to apply";
+
+  const rows = [];
+  affected.slice(0, 80).forEach(item => {
+    const label = `${item.email || "unknown"}${item.from ? ` · ${item.from}` : ""}${item.to ? ` → ${item.to}` : ""}`;
+    rows.push(`<div class="bulk-preview-row">${esc(label)}</div>`);
+  });
+  skipped.slice(0, 40).forEach(item => {
+    rows.push(`<div class="bulk-preview-row" style="color:var(--text-secondary);">${esc(item.email || "unknown")} · skipped (${esc(item.reason || "n/a")})</div>`);
+  });
+  affectedEl.innerHTML = rows.length ? rows.join("") : `<div class="bulk-preview-row">No applicable users.</div>`;
+}
+
+async function previewBulkAction() {
+  const emails = Array.from(selectedSubscriberEmails);
+  if (!emails.length) {
+    showToast("warn", "Select at least one user first.");
+    return;
+  }
+  const action = document.getElementById("bulkActionSelect").value;
+  const actionLabelMap = {
+    set_time: "set delivery time",
+    pause: "pause deliveries",
+    resume: "resume deliveries",
+    resend_link: "resend settings link",
+  };
+  const payload = {
+    action,
+    emails,
+    dry_run: true,
+  };
+  if (action === "set_time") {
+    const normalized = normalizeAdminTimeInput(document.getElementById("bulkTimeInput").value);
+    if (!normalized) {
+      showToast("err", "Invalid bulk time. Use HH:MM or H:MM AM/PM.");
+      return;
+    }
+    payload.delivery_time = normalized;
+  }
+
+  document.getElementById("bulkPreviewTitle").textContent = "Preview bulk action";
+  document.getElementById("bulkPreviewSummary").textContent = "Running dry-run preview…";
+  document.getElementById("bulkPreviewAffected").innerHTML = "";
+  document.getElementById("bulkPreviewFeedback").className = "modal-feedback";
+  document.getElementById("bulkPreviewFeedback").textContent = "";
+  document.getElementById("bulkPreviewModal").style.display = "flex";
+
+  const resp = await apiFetchJson("/api/admin/bulk-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || !data.success) {
+    const box = document.getElementById("bulkPreviewFeedback");
+    box.className = "modal-feedback err";
+    box.textContent = data.error || `Preview failed (HTTP ${resp.status})`;
+    pendingBulkPreview = null;
+    return;
+  }
+  pendingBulkPreview = {
+    action,
+    emails,
+    delivery_time: payload.delivery_time || null,
+    preview: data,
+  };
+  renderBulkPreview(data, actionLabelMap[action] || action);
+}
+
+async function applyBulkAction() {
+  if (!pendingBulkPreview) {
+    await previewBulkAction();
+    if (!pendingBulkPreview) return;
+  }
+
+  const action = pendingBulkPreview.action;
+  const applicable = Number((pendingBulkPreview.preview && pendingBulkPreview.preview.applicable) || 0);
+  if (!applicable) {
+    showToast("warn", "No applicable users in this bulk action.");
     return;
   }
 
-  body.innerHTML = active.map(u => {
-    const topics = renderTopicChips(u.topics_raw || []);
-    const action = u.settings_url ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;">edit →</a>` : "—";
-    return `<tr>
-      <td style="font-weight:600;">${esc(u.name || "—")}</td>
-      <td class="mono" style="font-size:12px;">${esc(u.email || "—")}</td>
-      <td>${esc(u.days_label || "—")}</td>
-      <td class="mono">${esc(u.delivery_time || "—")}</td>
-      <td class="mono">${esc(u.timezone || "America/New_York")}</td>
-      <td class="topics-cell">${topics}</td>
-      <td>${u.items_per_digest || 5}</td>
-      <td>${esc(u.depth || "Deep")}</td>
-      <td class="mono">${esc(u.next_delivery_et || "—")}</td>
-      <td>${action}</td>
-    </tr>`;
-  }).join("");
+  const actionLabelMap = {
+    set_time: "set delivery time",
+    pause: "pause deliveries",
+    resume: "resume deliveries",
+    resend_link: "resend settings link",
+  };
+  const accepted = await openConfirmModal(
+    "Apply bulk action",
+    `Apply "${actionLabelMap[action] || action}" to ${applicable} user${applicable === 1 ? "" : "s"}?`,
+    "Apply"
+  );
+  if (!accepted) return;
+
+  const box = document.getElementById("bulkPreviewFeedback");
+  box.className = "modal-feedback";
+  box.textContent = "";
+  const applyBtn = document.getElementById("bulkPreviewApplyBtn");
+  applyBtn.disabled = true;
+  applyBtn.textContent = "Applying…";
+
+  const payload = {
+    action,
+    emails: pendingBulkPreview.emails,
+    dry_run: false,
+  };
+  if (pendingBulkPreview.delivery_time) payload.delivery_time = pendingBulkPreview.delivery_time;
+
+  const resp = await apiFetchJson("/api/admin/bulk-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || !data.success) {
+    box.className = "modal-feedback err";
+    box.textContent = data.error || `Apply failed (HTTP ${resp.status})`;
+    applyBtn.disabled = false;
+    applyBtn.textContent = "Apply";
+    return;
+  }
+
+  const affected = Array.isArray(data.affected) ? data.affected : [];
+  const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+  affected.forEach(item => setRowActionStatus(item.email, "ok", `${actionLabelMap[action] || action} applied`));
+  skipped.forEach(item => setRowActionStatus(item.email, "err", item.reason || "Skipped"));
+  box.className = "modal-feedback ok";
+  box.textContent = `Applied to ${data.applied || affected.length} user${(data.applied || affected.length) === 1 ? "" : "s"}.`;
+  showToast("ok", `Bulk action applied to ${data.applied || affected.length} user${(data.applied || affected.length) === 1 ? "" : "s"}.`);
+  pendingBulkPreview = null;
+  selectedSubscriberEmails.clear();
+  await load(true);
+  closeBulkPreviewModal();
 }
 
+function renderAuditTimeline(email) {
+  const key = String(email || "").toLowerCase().trim();
+  if (!key) return `<div class="subscriber-sub">No audit data.</div>`;
+  if (loadingAuditEmails.has(key)) {
+    return `<div class="subscriber-sub">Loading audit timeline…</div>`;
+  }
+  const rows = auditTimelineByEmail.get(key);
+  if (!rows) {
+    return `<div class="subscriber-sub">Audit timeline not loaded.</div>`;
+  }
+  if (rows.error) {
+    return `<div class="subscriber-sub" style="color:var(--red);">${esc(rows.error)}</div>`;
+  }
+  if (!rows.length) {
+    return `<div class="subscriber-sub">No audit events yet.</div>`;
+  }
+  return `<div class="audit-list">${
+    rows.slice(0, 10).map(entry => {
+      const at = formatEtDateTime(entry.at);
+      const summary = entry.summary || entry.action || entry.type || "event";
+      const actor = entry.actor || "unknown";
+      const tone = entry.success === false ? "var(--red)" : "var(--text-2)";
+      return `
+        <div class="audit-item">
+          <div class="audit-item-top">
+            <div class="audit-item-time">${esc(at)}</div>
+            <div class="audit-item-time">${esc(actor)}</div>
+          </div>
+          <div class="audit-item-summary" style="color:${tone};">${esc(summary)}</div>
+        </div>
+      `;
+    }).join("")
+  }</div>`;
+}
+
+async function ensureAuditTimeline(email) {
+  const key = String(email || "").toLowerCase().trim();
+  if (!key || auditTimelineByEmail.has(key) || loadingAuditEmails.has(key)) return;
+  loadingAuditEmails.add(key);
+  renderSubscriberTable();
+  const resp = await apiFetchJson(`/api/admin/audit?email=${encodeURIComponent(key)}&limit=20`, {}, 1);
+  if (!resp.ok) {
+    auditTimelineByEmail.set(key, { error: resp.data && resp.data.error ? resp.data.error : `HTTP ${resp.status}` });
+  } else {
+    auditTimelineByEmail.set(key, Array.isArray(resp.data.entries) ? resp.data.entries : []);
+  }
+  loadingAuditEmails.delete(key);
+  renderSubscriberTable();
+}
+
+function toggleSubscriberDrawer(email) {
+  const key = String(email || "").toLowerCase().trim();
+  if (!key) return;
+  expandedSubscriberEmail = expandedSubscriberEmail === key ? "" : key;
+  renderSubscriberTable();
+  if (expandedSubscriberEmail) ensureAuditTimeline(expandedSubscriberEmail);
+}
+
+function renderSubscriberDrawer(u) {
+  const emailKey = String(u.email || "").toLowerCase().trim();
+  const preview = Array.isArray(u.last_digest_preview) ? u.last_digest_preview : [];
+  const channels = [
+    `${u.email_enabled ? "✅" : "⛔"} Email ${u.email_enabled ? "enabled" : "disabled"}`,
+    `${u.telegram_enabled ? "✅" : "⛔"} Telegram ${u.telegram_enabled ? "enabled" : "disabled"}`,
+  ];
+  const wSummary = weightsSummary(u.topic_weights || {});
+  const previewHtml = preview.length
+    ? `<div class="drawer-preview-list">${preview.map((p, i) => {
+      const label = `[${p.tag || "news"}] ${p.headline || ""}`.trim();
+      if (p.url) {
+        return `<a class="drawer-preview-item" href="${esc(p.url)}" target="_blank" rel="noopener">${i + 1}. ${esc(label)}</a>`;
+      }
+      return `<div class="drawer-preview-item">${i + 1}. ${esc(label)}</div>`;
+    }).join("")}</div>`
+    : `<div class="subscriber-sub">No recent digest preview available.</div>`;
+
+  const actionParts = [];
+  if (u.settings_url) actionParts.push(`<a class="table-action-link" href="${esc(u.settings_url)}" target="_blank" rel="noopener">edit prefs</a>`);
+  if (u.archive_url) actionParts.push(`<a class="table-action-link" href="${esc(u.archive_url)}" target="_blank" rel="noopener">view digests</a>`);
+  if (u.email) actionParts.push(`<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.delivery_time_raw || "07:00")}, this)'>set time</button>`);
+  const caps = getSendCapabilities(u);
+  if (caps.canDigest || caps.canAnyMessage) {
+    actionParts.push(`<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`);
+  }
+  return `
+    <div class="row-drawer">
+      <div class="drawer-grid">
+        <div class="drawer-card">
+          <div class="drawer-card-title">Preferences</div>
+          <div class="drawer-list">
+            <div class="drawer-list-row"><span class="drawer-list-label">Schedule</span><span class="drawer-list-value">${esc(u.days_label || "—")} · ${esc(u.delivery_time || "—")}</span></div>
+            <div class="drawer-list-row"><span class="drawer-list-label">Timezone</span><span class="drawer-list-value mono">${esc(u.timezone || "America/New_York")}</span></div>
+            <div class="drawer-list-row"><span class="drawer-list-label">Depth</span><span class="drawer-list-value">${esc(u.depth || "Deep")}</span></div>
+            <div class="drawer-list-row"><span class="drawer-list-label">Items / digest</span><span class="drawer-list-value">${esc(u.items_per_digest || 5)}</span></div>
+            <div class="drawer-list-row"><span class="drawer-list-label">Channels</span><span class="drawer-list-value">${esc(channels.join(" · "))}</span></div>
+            <div class="drawer-list-row"><span class="drawer-list-label">Topic tuning</span><span class="drawer-list-value">${esc(wSummary || "None")}</span></div>
+          </div>
+        </div>
+        <div class="drawer-card">
+          <div class="drawer-card-title">Last digest preview</div>
+          ${previewHtml}
+        </div>
+        <div class="drawer-card">
+          <div class="drawer-card-title">Quick actions</div>
+          <div class="drawer-actions">${actionParts.length ? actionParts.join("") : `<span class="subscriber-sub">No actions available.</span>`}</div>
+          <div style="height:10px;"></div>
+          <div class="drawer-card-title">Audit timeline</div>
+          ${renderAuditTimeline(emailKey)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSubscriberTable(roster) {
+  if (Array.isArray(roster)) latestRoster = roster.slice();
+  const body = document.getElementById("subscriberBody");
+  const meta = document.getElementById("subscriberTableMeta");
+  const selectAllBox = document.getElementById("selectAllSubscribers");
+  if (!body || !meta) return;
+
+  const filtered = getFilteredSubscribers();
+  const hasFilters = subscriberSearchQuery.trim() || subscriberStatusFilter !== "all";
+  const total = latestRoster.length;
+  meta.textContent = `${filtered.length} of ${total} subscriber${total === 1 ? "" : "s"}`;
+
+  if (!filtered.length) {
+    body.innerHTML = `<tr><td colspan="8" class="empty">${hasFilters ? "No subscribers match your filters." : "No users yet."}</td></tr>`;
+    updateBulkBar();
+    return;
+  }
+
+  const rows = [];
+  filtered.forEach(u => {
+    const emailKey = String(u.email || "").toLowerCase().trim();
+    const isSelected = emailKey && selectedSubscriberEmails.has(emailKey);
+    const isExpanded = emailKey && expandedSubscriberEmail === emailKey;
+    const topicsCell = renderTopicChips(u.topics_raw || [], 4);
+    const wSummary = weightsSummary(u.topic_weights || {});
+    const weightsPill = wSummary
+      ? `<span class="weights-pill" title="Personalization: ${esc(wSummary)}">${esc(wSummary)}</span>`
+      : "";
+    const lastDig = u.last_digest || "—";
+    const missedHtml = u.days_missed >= 2
+      ? ` <span class="missed-flag" title="Missed ${u.days_missed} scheduled delivery day${u.days_missed > 1 ? "s" : ""}">⚠️</span>`
+      : "";
+    const actionParts = [];
+    if (u.email) {
+      actionParts.push(
+        `<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.delivery_time_raw || "07:00")}, this)'>set time</button>`
+      );
+    }
+    const caps = getSendCapabilities(u);
+    if (caps.canDigest || caps.canAnyMessage) {
+      actionParts.push(
+        `<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`
+      );
+    }
+    const statusMsg = getRowActionStatus(emailKey);
+    const statusHtml = statusMsg
+      ? `<div class="row-action-status ${statusMsg.type === "ok" ? "ok" : statusMsg.type === "err" ? "err" : ""}">${esc(statusMsg.message)}</div>`
+      : "";
+    rows.push(`
+      <tr class="subscriber-row-main ${isExpanded ? "expanded" : ""}">
+        <td>
+          <input
+            class="table-checkbox"
+            type="checkbox"
+            ${isSelected ? "checked" : ""}
+            ${emailKey ? "" : "disabled"}
+            onclick='event.stopPropagation();toggleSubscriberSelection(${JSON.stringify(emailKey)}, this.checked)'
+            aria-label="Select subscriber"
+          >
+        </td>
+        <td>
+          <div class="subscriber-name-row">
+            ${emailKey ? `<button class="expand-btn" onclick='toggleSubscriberDrawer(${JSON.stringify(emailKey)})' aria-label="${isExpanded ? "Collapse" : "Expand"}">${isExpanded ? "−" : "+"}</button>` : ""}
+            <div>
+              <div class="subscriber-main">${esc(u.name || "—")}</div>
+              <div class="subscriber-sub mono">${esc(u.email || "—")}</div>
+              <div class="subscriber-sub">Joined ${esc(u.joined || "—")}</div>
+            </div>
+          </div>
+        </td>
+        <td>${renderStatusBadge(u.status)}</td>
+        <td class="delivery-cell">
+          <div class="subscriber-main">${esc(u.delivery_time || "—")}</div>
+          <div class="subscriber-sub">${esc(u.days_label || "—")} · ${esc(u.timezone || "America/New_York")}</div>
+        </td>
+        <td class="mono" style="white-space:normal;line-height:1.4;">${esc(u.next_delivery_et || "—")}</td>
+        <td class="topics-cell">${topicsCell}${weightsPill ? `<div style="margin-top:6px;">${weightsPill}</div>` : ""}</td>
+        <td>
+          <div style="font-weight:700;">${u.digests || 0}</div>
+          <div class="subscriber-sub mono">${esc(lastDig)}${missedHtml}</div>
+        </td>
+        <td>
+          <div class="subscriber-actions">${actionParts.length ? actionParts.join("") : `<span style="color:var(--text-secondary);font-size:12px;">—</span>`}</div>
+          ${statusHtml}
+        </td>
+      </tr>
+    `);
+    if (isExpanded) {
+      rows.push(`<tr class="drawer-row"><td colspan="8">${renderSubscriberDrawer(u)}</td></tr>`);
+    }
+  });
+  body.innerHTML = rows.join("");
+
+  if (selectAllBox) {
+    const visibleEmails = filtered.map(u => String(u.email || "").toLowerCase().trim()).filter(Boolean);
+    const selectedVisible = visibleEmails.filter(email => selectedSubscriberEmails.has(email)).length;
+    selectAllBox.checked = visibleEmails.length > 0 && selectedVisible === visibleEmails.length;
+    selectAllBox.indeterminate = selectedVisible > 0 && selectedVisible < visibleEmails.length;
+  }
+  updateBulkBar();
+  updateSortIndicators();
+}
 function downloadScheduleCsv() {
-  const active = (latestRoster || []).filter(u => u.status === "active");
-  if (!active.length) return;
-  const headers = ["name", "email", "delivery_days", "delivery_time", "timezone", "topics", "items_per_digest", "depth", "next_delivery_et"];
-  const rows = active.map(u => [
+  const rowsForExport = getFilteredSubscribers();
+  if (!rowsForExport.length) return;
+  const headers = [
+    "name",
+    "email",
+    "status",
+    "delivery_days",
+    "delivery_time",
+    "timezone",
+    "items_per_digest",
+    "depth",
+    "topics",
+    "digests",
+    "last_digest",
+    "next_delivery_et",
+  ];
+  const rows = rowsForExport.map(u => [
     u.name || "",
     u.email || "",
+    normalizeUserStatus(u.status),
     u.days_label || "",
     u.delivery_time || "",
     u.timezone || "America/New_York",
-    u.topics_list || "",
     u.items_per_digest || 5,
     u.depth || "",
+    u.topics_list || "",
+    u.digests || 0,
+    u.last_digest || "",
     u.next_delivery_et || "",
   ]);
   const csv = [headers.join(","), ...rows.map(r => r.map(csvEscape).join(","))].join("\n");
@@ -985,19 +2557,22 @@ async function triggerTestDigest() {
   btn.textContent = "🧪 Sending…";
   msg.style.display = "none";
   try {
-    const res = await fetch("/api/admin/run-digest", {
+    const resp = await apiFetchJson("/api/admin/run-digest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId: targetChatId }),
     });
-    const data = await parseApiJson(res);
-    if (!res.ok || !data.success) {
-      renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${res.status})` });
+    const data = resp.data;
+    if (!resp.ok || !data.success) {
+      renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${resp.status})` });
+      showToast("err", data.error || "Test digest failed");
       return;
     }
     renderTestDigestStatus({ state: "success", message: data.message || `Digest sent to ${targetLabel}` });
+    showToast("ok", data.message || `Digest sent to ${targetLabel}`);
   } catch (e) {
     renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
+    showToast("err", e.message || "Network error starting test digest");
   }
 }
 
@@ -1011,34 +2586,43 @@ async function load(silent = false) {
   loadInFlight = true;
   try {
     // Auth check — redirect to login if not authenticated
-    try {
-      const authRes = await fetch("/api/admin/check");
-      const authData = await authRes.json();
-      if (!authData.authenticated) { window.location.href = "/admin/login"; return; }
-    } catch { window.location.href = "/admin/login"; return; }
+    const authResp = await apiFetchJson("/api/admin/check", {}, 1);
+    if (!authResp.ok || !(authResp.data && authResp.data.authenticated)) {
+      window.location.href = "/admin/login";
+      return;
+    }
 
     const now = new Date();
     document.getElementById("monthLabel").textContent =
       now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-    let data;
-    try {
-      const res = await fetch("/api/admin/stats");
-      data = await res.json();
+    const statsResp = await apiFetchJson("/api/admin/stats", {}, 2);
+    const data = statsResp.data || {};
+    if (!statsResp.ok || data.error) {
       if (data.error === "admin access only") { window.location.href = "/admin/login"; return; }
-    } catch (e) {
       if (!silent) {
         document.getElementById("runsBody").innerHTML =
-          `<tr><td colspan="7" class="empty">Error loading stats: ${esc(e.message)}</td></tr>`;
+          `<tr><td colspan="7" class="empty">Error loading stats: ${esc(data.error || `HTTP ${statsResp.status}`)}</td></tr>`;
+        showToast("err", data.error || "Failed to refresh admin stats");
       }
       setLastRefreshed(null);
       return;
     }
 
     const { summary, health, runs, per_user, roster, admin_messages } = data;
+    latestHealth = health || null;
+    launchAgentActionLog = Array.isArray(health?.launch_agent_actions) ? health.launch_agent_actions : [];
+
+    const rosterEmailSet = new Set((roster || []).map(u => String(u.email || "").toLowerCase().trim()).filter(Boolean));
+    for (const key of Array.from(selectedSubscriberEmails)) {
+      if (!rosterEmailSet.has(key)) selectedSubscriberEmails.delete(key);
+    }
+    if (expandedSubscriberEmail && !rosterEmailSet.has(expandedSubscriberEmail)) {
+      expandedSubscriberEmail = "";
+    }
 
     renderSchedule(roster || []);
-    renderScheduleDashboard(roster || []);
+    renderSubscriberTable(roster || []);
     renderTestTargets(roster || []);
     renderTestDigestStatus({ state: "idle" });
     renderAdminMessages(admin_messages || []);
@@ -1052,7 +2636,6 @@ async function load(silent = false) {
       document.getElementById("healthUptime").textContent   = health.server_uptime  || "—";
       document.getElementById("healthLastRun").textContent  = health.last_run_at    || "No runs yet";
       document.getElementById("healthLastCost").textContent = health.last_run_cost  || "—";
-      document.getElementById("healthCron").textContent     = health.cron_schedule  || "—";
 
       // Delivery health indicator
       const warnings = health.users_delivery_warning || [];
@@ -1065,6 +2648,59 @@ async function load(silent = false) {
         const names = warnings.map(w => `${esc(w.name || w.email)} (${w.days_missed}d)`).join(", ");
         delivVal.innerHTML = `<a href="#rosterSection" style="color:var(--yellow);font-weight:700;text-decoration:none;" title="${names}">⚠️ ${warnings.length} user${warnings.length > 1 ? "s" : ""} missed 2+ days</a>`;
       }
+
+      const reliabilityDiv = document.getElementById("healthReliability");
+      const reliabilityVal = document.getElementById("healthReliabilityVal");
+      const reliabilitySub = document.getElementById("healthReliabilitySub");
+      const rel = health.delivery_reliability || null;
+      if (reliabilityDiv && reliabilityVal && reliabilitySub) {
+        if (!rel) {
+          reliabilityDiv.style.display = "none";
+        } else {
+          reliabilityDiv.style.display = "";
+          const rate = Number(rel.success_rate_7d || 0);
+          const tone = rate >= 98 ? "var(--green)" : rate >= 90 ? "var(--yellow)" : "var(--red)";
+          reliabilityVal.innerHTML = `<span style="color:${tone};">${rate.toFixed(1)}%</span> (${rel.delivered_7d || 0}/${rel.expected_7d || 0})`;
+          const lastOk = rel.last_successful_scheduled_run
+            ? formatEtDateTime(rel.last_successful_scheduled_run)
+            : "—";
+          const nextExpected = rel.next_expected_delivery_et
+            ? `${rel.next_expected_delivery_et} (${rel.next_expected_countdown || "—"})`
+            : "—";
+          reliabilitySub.innerHTML = `${esc(rel.missed_trend_label || "—")} · last scheduled run ${esc(lastOk)} · next ${esc(nextExpected)}`;
+        }
+      }
+
+      const digestRunnerDiv = document.getElementById("healthDigestRunner");
+      const digestRunnerVal = document.getElementById("healthDigestRunnerVal");
+      const digestRunnerSub = document.getElementById("healthDigestRunnerSub");
+      const digestRunner = health.digest_runner || null;
+      if (digestRunnerDiv && digestRunnerVal && digestRunnerSub) {
+        if (!digestRunner || !digestRunner.running) {
+          digestRunnerDiv.style.display = "";
+          digestRunnerVal.innerHTML = `<span style="color:var(--green);">✅ idle</span>`;
+          digestRunnerSub.textContent = "No active digest run";
+        } else {
+          digestRunnerDiv.style.display = "";
+          const mode = digestRunner.mode || "scheduled";
+          const age = Number(digestRunner.age_seconds || 0);
+          const mins = Math.max(0, Math.floor(age / 60));
+          digestRunnerVal.innerHTML = `<span style="color:var(--yellow);">⏳ running (${esc(mode)})</span>`;
+          digestRunnerSub.textContent = `Started ${formatEtDateTime(digestRunner.started_at)} · ${mins}m elapsed`;
+        }
+      }
+
+      const launchDiv = document.getElementById("healthLaunchAgents");
+      const launchVal = document.getElementById("healthLaunchAgentsVal");
+      const launch = health.launch_agents || null;
+      if (launchDiv && launchVal) {
+        if (!launch) {
+          launchDiv.style.display = "none";
+        } else {
+          launchDiv.style.display = "";
+          launchVal.innerHTML = renderLaunchAgentDetail(launch);
+        }
+      }
     }
 
     // Summary cards
@@ -1074,10 +2710,14 @@ async function load(silent = false) {
     const allTimeDelivered = summary.all_time_deliveries != null ? summary.all_time_deliveries : monthDelivered;
     document.getElementById("monthDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${monthDelivered}</a>`;
+    document.getElementById("monthDigestsSub").innerHTML =
+      `<strong>${summary.month_on_demand}</strong> on-demand runs`;
     document.getElementById("allTimeDigestsSent").innerHTML =
-      `<strong>${allTimeDelivered}</strong> all-time deliveries`;
+      `<a href="#runsSection" style="color:inherit;text-decoration:none;">${allTimeDelivered}</a>`;
+    document.getElementById("allTimeDigestsSub").innerHTML =
+      `<strong>${summary.all_time_runs}</strong> runs total`;
     document.getElementById("allTimeCost").textContent = fmt$(summary.all_time_cost);
-    document.getElementById("allTimeRuns").innerHTML  = `<strong>${summary.all_time_runs}</strong> runs total`;
+    document.getElementById("allTimeRuns").innerHTML  = `<strong>${allTimeDelivered}</strong> deliveries total`;
     const monthUniqueUsers = summary.month_unique_users != null
       ? summary.month_unique_users
       : summary.month_users_served;
@@ -1156,108 +2796,26 @@ async function load(silent = false) {
       }).join("");
     }
 
-    // ── Roster table ─────────────────────────────────────────────────────────────
-    const rosterBody = document.getElementById("rosterBody");
-    if (!roster || roster.length === 0) {
-      rosterBody.innerHTML = `<tr><td colspan="11" class="empty">No users yet.</td></tr>`;
-    } else {
-      rosterBody.innerHTML = roster.map(u => {
-
-        // Status badge
-        const statusBadge =
-          u.status === "active"       ? `<span class="badge-active">active</span>` :
-          u.status === "unsubscribed" ? `<span class="badge-unsub">unsub</span>` :
-          u.status === "paused"       ? `<span class="badge-paused">paused</span>` :
-                                        `<span class="badge-pending">${u.status || "—"}</span>`;
-
-        // Delivery channel icons
-        const emailIcon = `<span class="ch-icon ${u.email_enabled ? "ch-on" : "ch-off"}" title="Email ${u.email_enabled ? "enabled" : "disabled"}">📧</span>`;
-        const tgIcon    = `<span class="ch-icon ${u.telegram_enabled ? "ch-on" : "ch-off"}" title="Telegram ${u.telegram_enabled ? "linked & enabled" : u.telegram ? "linked but disabled" : "not linked"}">💬</span>`;
-
-        // Last digest + missed flag
-        const lastDig = u.last_digest || "—";
-        const missedHtml = u.days_missed >= 2
-          ? ` <span class="missed-flag" title="Missed ${u.days_missed} scheduled delivery day${u.days_missed > 1 ? "s" : ""}">⚠️</span>`
-          : "";
-
-      // Topics cell: render preset vs custom as separate chips
-      const topicsCell = renderTopicChips(u.topics_raw || []);
-
-        // Topic weights pill
-        const wSummary = weightsSummary(u.topic_weights || {});
-        const weightsPill = wSummary
-          ? `<span class="weights-pill" title="Personalization: ${esc(wSummary)}">${esc(wSummary)}</span>`
-          : "";
-
-        // Last digest preview: up to 3 headlines as tooltip lines
-        const preview = (u.last_digest_preview || []);
-        const previewHtml = preview.length
-          ? `<span style="color:var(--accent);font-size:12px;cursor:help;" title="${esc(preview.map((p,i) => `${i+1}. [${p.tag}] ${p.headline}`).join("\n"))}">${preview.length} item${preview.length > 1 ? "s" : ""} ↗</span>`
-          : `<span style="color:var(--text-secondary);font-size:12px;">—</span>`;
-
-        // Settings link
-        const settingsLink = u.settings_url
-          ? `<a href="${esc(u.settings_url)}" target="_blank" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none;margin-right:8px;">edit →</a>`
-          : "";
-
-        // Send actions modal (digest + custom message), shown when at least one channel/action is available
-        const caps = getSendCapabilities(u);
-        const sendBtn = (caps.canDigest || caps.canAnyMessage)
-          ? `<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`
-          : "";
-
-        return `<tr>
-          <td style="font-weight:600;">${esc(u.name) || "<span style='color:#9CA3AF'>—</span>"}</td>
-          <td class="mono" style="font-size:12px;">${esc(u.email) || "—"}</td>
-          <td>${statusBadge}</td>
-          <td class="mono">${u.joined || "—"}</td>
-          <td style="font-weight:600;">${u.digests}</td>
-          <td class="mono">${lastDig}${missedHtml}</td>
-          <td style="letter-spacing:2px;">${emailIcon}${tgIcon}</td>
-          <td style="font-size:12px;white-space:nowrap;">${u.delivery_time || "—"}</td>
-          <td style="font-size:12px;">${topicsCell}${weightsPill}</td>
-          <td>${previewHtml}</td>
-          <td style="white-space:nowrap;">${settingsLink}${sendBtn}</td>
-        </tr>`;
-      }).join("");
-    }
-
     setLastRefreshed(new Date());
   } finally {
     loadInFlight = false;
   }
 }
 
+readSubscriberStateFromUrl();
+applySubscriberInputsFromState();
+onBulkActionChange(document.getElementById("bulkActionSelect") ? document.getElementById("bulkActionSelect").value : "set_time");
+updateSortIndicators();
 load();
 if (!autoRefreshTimer) {
-  autoRefreshTimer = setInterval(() => { load(true); }, AUTO_REFRESH_MS);
+  autoRefreshTimer = setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    load(true);
+  }, AUTO_REFRESH_MS);
 }
-
-async function triggerDigest() {
-  const btn = document.getElementById("runDigestBtn");
-  const msg = document.getElementById("runDigestMsg");
-  btn.disabled = true;
-  btn.textContent = "Running…";
-  msg.style.display = "none";
-  try {
-    const res = await fetch("/api/admin/run-digest", { method: "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-    const data = await res.json();
-    if (data.success) {
-      msg.textContent = "✅ " + (data.message || "Digest triggered");
-      msg.style.color = "var(--green)";
-    } else {
-      msg.textContent = "❌ " + (data.error || "Failed");
-      msg.style.color = "var(--red)";
-    }
-  } catch (e) {
-    msg.textContent = "❌ Network error";
-    msg.style.color = "var(--red)";
-  }
-  msg.style.display = "block";
-  btn.disabled = false;
-  btn.textContent = "▶ Run digest now";
-}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") load(true);
+});
 </script>
 </body>
 </html>

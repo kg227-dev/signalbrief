@@ -21,6 +21,8 @@ const { sendEmail: sendEmailViaMailer } = require("./mailer");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
+const DIGEST_RUN_LOCK = path.join(__dirname, "data", "digest-run.lock");
+const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
 // ET time helpers
@@ -53,6 +55,62 @@ function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
   fs.appendFileSync(LOG_FILE, line + "\n");
+}
+
+let digestLockOwned = false;
+function readDigestLock() {
+  if (!fs.existsSync(DIGEST_RUN_LOCK)) return null;
+  try {
+    const lock = JSON.parse(fs.readFileSync(DIGEST_RUN_LOCK, "utf8"));
+    const ts = Date.parse(lock?.startedAt || "");
+    if (!Number.isFinite(ts)) return { stale: true, raw: lock };
+    const ageMs = Date.now() - ts;
+    return { ...lock, ageMs, stale: ageMs > DIGEST_LOCK_STALE_MS };
+  } catch {
+    return { stale: true };
+  }
+}
+
+function clearDigestLock() {
+  try {
+    if (fs.existsSync(DIGEST_RUN_LOCK)) fs.unlinkSync(DIGEST_RUN_LOCK);
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function acquireDigestLock(mode) {
+  const existing = readDigestLock();
+  if (existing && !existing.stale) {
+    return { ok: false, lock: existing };
+  }
+  if (existing && existing.stale) clearDigestLock();
+  const dir = path.dirname(DIGEST_RUN_LOCK);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const payload = {
+    startedAt: new Date().toISOString(),
+    pid: process.pid,
+    mode: mode || "scheduled",
+  };
+  try {
+    const fd = fs.openSync(DIGEST_RUN_LOCK, "wx");
+    try {
+      fs.writeFileSync(fd, JSON.stringify(payload));
+    } finally {
+      fs.closeSync(fd);
+    }
+    digestLockOwned = true;
+    return { ok: true, lock: payload };
+  } catch {
+    const lock = readDigestLock();
+    return { ok: false, lock };
+  }
+}
+
+function releaseDigestLock() {
+  if (!digestLockOwned) return;
+  digestLockOwned = false;
+  clearDigestLock();
 }
 
 // ── User state helpers ────────────────────────────────────────────────────────
@@ -880,6 +938,15 @@ async function main() {
   const chatIdIdx = args.indexOf("--chatId");
   const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
   const suppressWelcome = args.includes("--suppressWelcome");
+  const runMode = targetChatId ? "targeted" : "scheduled";
+
+  const lock = acquireDigestLock(runMode);
+  if (!lock.ok) {
+    const started = lock.lock?.startedAt || "unknown";
+    const mode = lock.lock?.mode || "unknown";
+    log(`⏭️ Digest skipped: another run is active (mode=${mode}, started=${started})`);
+    process.exit(4);
+  }
 
   // ── Check who's due BEFORE any API calls ──────────────────────────────────
   const etNow = getETNow();
@@ -985,11 +1052,31 @@ async function main() {
   let allItems = allResults.flat();
   log(`Fetched ${allItems.length} raw items`);
 
-  // Fetch custom topics for due users — deduplicated, capped at 5 queries per run
-  // Each custom topic gets a targeted Perplexity query so it actually appears in the digest
-  const customTopicSlugs = [...new Set(
-    dueUsers.flatMap(u => (u.topics || []).filter(t => t.startsWith("custom_")))
-  )].slice(0, 5);
+  // Fetch custom topics for due users.
+  // Scale cap with user count so custom coverage doesn't collapse as users grow.
+  // Rank by demand frequency (how many due users follow each custom topic).
+  const customTopicCounts = new Map();
+  for (const u of dueUsers) {
+    for (const topic of (u.topics || [])) {
+      const topicRaw = String(topic || "");
+      if (!topicRaw.startsWith("custom_")) continue;
+      customTopicCounts.set(topicRaw, (customTopicCounts.get(topicRaw) || 0) + 1);
+    }
+  }
+  const configuredMaxCustomFetch = Number(CONFIG.digest.maxCustomFetchPerRun);
+  const dynamicCustomFetchCap = Number.isFinite(configuredMaxCustomFetch) && configuredMaxCustomFetch > 0
+    ? configuredMaxCustomFetch
+    : Math.min(18, Math.max(6, Math.ceil(dueUsers.length / 4)));
+  const rankedCustomTopicSlugs = [...customTopicCounts.entries()]
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([slug]) => slug);
+  const customTopicSlugs = rankedCustomTopicSlugs.slice(0, dynamicCustomFetchCap);
+  if (rankedCustomTopicSlugs.length > customTopicSlugs.length) {
+    log(`Custom topic fetch cap hit: ${customTopicSlugs.length}/${rankedCustomTopicSlugs.length} topics this run`);
+  }
   let customTags = [];
 
   if (customTopicSlugs.length > 0) {
@@ -1249,6 +1336,16 @@ async function main() {
   log(`=== SignalBrief complete — ${deliveredUsers.length}/${dueUsers.length} user(s) delivered ===`);
   if (targetChatId && deliveredUsers.length === 0) process.exit(3);
 }
+
+process.on("exit", () => {
+  releaseDigestLock();
+});
+["SIGINT", "SIGTERM"].forEach((sig) => {
+  process.on(sig, () => {
+    releaseDigestLock();
+    process.exit(1);
+  });
+});
 
 main().catch((e) => {
   log(`FATAL: ${e.message}`);

@@ -10,13 +10,15 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
 const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
 const { sendEmail, sendWelcomeEmail, signUnsubEmail } = require("../mailer");
 
 const PORT = parseInt(process.env.PORT, 10) || 3003;
 const WEB_DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.json"), "utf8"));
+const CANONICAL_HOST = "getsignalbrief.com";
+const PUBLIC_HOSTS = new Set([CANONICAL_HOST, `www.${CANONICAL_HOST}`]);
 
 // ── Rate limiting (in-memory, per-IP + per-email) ─────────────────────────────
 const RATE_IP    = new Map(); // ip  → { count, resetAt }
@@ -28,6 +30,28 @@ const EMAIL_COOLDOWN = 10 * 60 * 1000; // 10 min re-submit cooldown
 function getClientIp(req) {
   // Respect Cloudflare's real-IP header
   return (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+}
+
+function getRequestHost(req) {
+  return String(req.headers.host || "").split(":")[0].trim().toLowerCase();
+}
+
+function getRequestScheme(req) {
+  const cfVisitor = String(req.headers["cf-visitor"] || "").trim();
+  if (cfVisitor) {
+    try {
+      const parsed = JSON.parse(cfVisitor);
+      const scheme = String(parsed?.scheme || "").toLowerCase();
+      if (scheme === "http" || scheme === "https") return scheme;
+    } catch {
+      // Ignore malformed cf-visitor headers.
+    }
+  }
+
+  const xForwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  if (xForwardedProto === "http" || xForwardedProto === "https") return xForwardedProto;
+
+  return req.socket.encrypted ? "https" : "http";
 }
 
 function checkRateLimit(ip, email) {
@@ -60,6 +84,11 @@ const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
+const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
+const ADMIN_SERVICE_LOG = path.join(__dirname, "../data/admin-service-log.json");
+const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
+const DIGEST_RUN_LOCK_FILE = path.join(__dirname, "../data/digest-run.lock");
+const DIGEST_RUN_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 
 function verifyAdminPassword(password) {
   const { salt, passwordHash } = CONFIG.admin || {};
@@ -103,25 +132,155 @@ function getAdminActor(req) {
   return "unknown";
 }
 
-function appendAdminMessageLog(entry) {
+function appendJsonLineLog(filePath, entry, label) {
   try {
-    const dir = path.dirname(ADMIN_MESSAGE_LOG);
+    const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(ADMIN_MESSAGE_LOG, JSON.stringify(entry) + "\n");
+    fs.appendFileSync(filePath, JSON.stringify(entry) + "\n");
   } catch (e) {
-    console.error("[admin-message-log]", e.message);
+    console.error(`[${label}]`, e.message);
   }
 }
 
-function readAdminMessageLog(limit = 30) {
-  if (!fs.existsSync(ADMIN_MESSAGE_LOG)) return [];
-  const rows = fs.readFileSync(ADMIN_MESSAGE_LOG, "utf8")
+function readJsonLineTail(filePath, limit = 30, maxBytes = 512 * 1024) {
+  if (!fs.existsSync(filePath)) return [];
+  const requested = Math.max(1, Number(limit) || 1);
+  let bytesToRead = Math.max(32 * 1024, Number(maxBytes) || (512 * 1024));
+  const capBytes = 4 * 1024 * 1024; // hard ceiling to avoid large memory spikes
+
+  while (bytesToRead <= capBytes) {
+    const stat = fs.statSync(filePath);
+    const size = stat.size || 0;
+    if (size <= 0) return [];
+    const readSize = Math.min(size, bytesToRead);
+    const start = size - readSize;
+    const fd = fs.openSync(filePath, "r");
+    let raw = "";
+    try {
+      const buf = Buffer.alloc(readSize);
+      fs.readSync(fd, buf, 0, readSize, start);
+      raw = buf.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+    if (start > 0) {
+      const firstNl = raw.indexOf("\n");
+      raw = firstNl >= 0 ? raw.slice(firstNl + 1) : "";
+    }
+    if (!raw) return [];
+    const lines = raw.split("\n").filter(Boolean);
+    const out = [];
+    for (let i = lines.length - 1; i >= 0 && out.length < requested; i--) {
+      try {
+        const parsed = JSON.parse(lines[i]);
+        if (parsed) out.push(parsed);
+      } catch {
+        // skip bad line
+      }
+    }
+    if (out.length >= requested || start === 0) return out;
+    bytesToRead = Math.min(capBytes, bytesToRead * 2);
+  }
+  return [];
+}
+
+function readJsonLineLog(filePath, limit = 30) {
+  return readJsonLineTail(filePath, limit);
+}
+
+const COST_LOG_CACHE = {
+  mtimeMs: 0,
+  size: 0,
+  runsNewest: [],
+};
+
+function loadCostRunsNewest() {
+  if (!fs.existsSync(COST_LOG_PATH)) {
+    COST_LOG_CACHE.mtimeMs = 0;
+    COST_LOG_CACHE.size = 0;
+    COST_LOG_CACHE.runsNewest = [];
+    return [];
+  }
+  let stat;
+  try {
+    stat = fs.statSync(COST_LOG_PATH);
+  } catch {
+    return [];
+  }
+  if (
+    COST_LOG_CACHE.runsNewest.length &&
+    COST_LOG_CACHE.mtimeMs === stat.mtimeMs &&
+    COST_LOG_CACHE.size === stat.size
+  ) {
+    return COST_LOG_CACHE.runsNewest;
+  }
+  const runs = fs.readFileSync(COST_LOG_PATH, "utf8")
     .split("\n")
     .filter(Boolean)
     .map(line => { try { return JSON.parse(line); } catch { return null; } })
     .filter(Boolean)
-    .reverse();
-  return rows.slice(0, limit);
+    .reverse(); // newest first
+
+  COST_LOG_CACHE.mtimeMs = stat.mtimeMs;
+  COST_LOG_CACHE.size = stat.size;
+  COST_LOG_CACHE.runsNewest = runs;
+  return runs;
+}
+
+function readDigestRunLock() {
+  if (!fs.existsSync(DIGEST_RUN_LOCK_FILE)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(DIGEST_RUN_LOCK_FILE, "utf8"));
+    const startedAtIso = raw?.startedAt || null;
+    const startedAtTs = Date.parse(startedAtIso || "");
+    if (!Number.isFinite(startedAtTs)) return { stale: true, raw };
+    const ageMs = Date.now() - startedAtTs;
+    return { ...raw, startedAtIso, startedAtTs, ageMs, stale: ageMs > DIGEST_RUN_LOCK_STALE_MS };
+  } catch {
+    return { stale: true };
+  }
+}
+
+function clearDigestRunLock() {
+  try {
+    if (fs.existsSync(DIGEST_RUN_LOCK_FILE)) fs.unlinkSync(DIGEST_RUN_LOCK_FILE);
+  } catch {
+    // ignore lock cleanup failures
+  }
+}
+
+function digestRunStatus() {
+  const lock = readDigestRunLock();
+  if (!lock) return { running: false, lock: null };
+  if (lock.stale) {
+    clearDigestRunLock();
+    return { running: false, lock: null };
+  }
+  return { running: true, lock };
+}
+
+function appendAdminMessageLog(entry) {
+  appendJsonLineLog(ADMIN_MESSAGE_LOG, entry, "admin-message-log");
+}
+
+function readAdminMessageLog(limit = 30) {
+  return readJsonLineLog(ADMIN_MESSAGE_LOG, limit);
+}
+
+function appendAdminActionLog(entry) {
+  appendJsonLineLog(ADMIN_ACTION_LOG, entry, "admin-action-log");
+}
+
+function readAdminActionLog(limit = 60) {
+  return readJsonLineLog(ADMIN_ACTION_LOG, limit);
+}
+
+function appendAdminServiceLog(entry) {
+  appendJsonLineLog(ADMIN_SERVICE_LOG, entry, "admin-service-log");
+}
+
+function readAdminServiceLog(limit = 20) {
+  return readJsonLineLog(ADMIN_SERVICE_LOG, limit);
 }
 
 function maskEmail(email) {
@@ -143,6 +302,14 @@ function hashText(text) {
 
 function logAdminMessageEvent(req, payload) {
   appendAdminMessageLog({
+    at: new Date().toISOString(),
+    actor: getAdminActor(req),
+    ...payload,
+  });
+}
+
+function logAdminActionEvent(req, payload) {
+  appendAdminActionLog({
     at: new Date().toISOString(),
     actor: getAdminActor(req),
     ...payload,
@@ -171,6 +338,8 @@ const MIME = {
   ".css": "text/css",
   ".js": "application/javascript",
   ".json": "application/json",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
   ".ico": "image/x-icon",
 };
 
@@ -186,6 +355,162 @@ function serveFile(res, filePath) {
 }
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:3003";
+const LAUNCH_AGENT_SERVICES = [
+  { key: "web", label: "com.jarvis.signalbrief-web", expected_running: true },
+  { key: "bot", label: "com.jarvis.signalbrief-bot", expected_running: true },
+  { key: "digest", label: "com.jarvis.signalbrief-digest", expected_running: false },
+  { key: "tunnel", label: "com.jarvis.signalbrief-tunnel", expected_running: true },
+];
+const LAUNCH_AGENT_CACHE_MS = 15000;
+let launchAgentCache = { at: 0, data: null };
+
+function getLaunchAgentServiceByKey(key) {
+  const normalized = String(key || "").trim().toLowerCase();
+  return LAUNCH_AGENT_SERVICES.find(s => s.key === normalized) || null;
+}
+
+function parseLaunchctlList(raw) {
+  const rows = new Map();
+  for (const line of String(raw || "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || /^PID\s+Status\s+Label$/i.test(trimmed)) continue;
+    const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\S+)$/);
+    if (!match) continue;
+    const pidRaw = match[1];
+    const statusRaw = match[2];
+    const label = match[3];
+    const pid = pidRaw === "-" ? null : parseInt(pidRaw, 10);
+    const lastExit = statusRaw === "-" ? null : parseInt(statusRaw, 10);
+    rows.set(label, {
+      pid: Number.isFinite(pid) ? pid : null,
+      last_exit: Number.isFinite(lastExit) ? lastExit : null,
+    });
+  }
+  return rows;
+}
+
+function getLaunchAgentHealth(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && launchAgentCache.data && (now - launchAgentCache.at) < LAUNCH_AGENT_CACHE_MS) {
+    return launchAgentCache.data;
+  }
+
+  try {
+    const output = execFileSync("launchctl", ["list"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 1800,
+    });
+    const launchctlRows = parseLaunchctlList(output);
+
+    const services = LAUNCH_AGENT_SERVICES.map(service => {
+      const row = launchctlRows.get(service.label);
+      if (!row) {
+        return {
+          key: service.key,
+          label: service.label,
+          expected_running: service.expected_running,
+          loaded: false,
+          running: false,
+          ok: false,
+          state: "missing",
+          pid: null,
+          last_exit: null,
+        };
+      }
+
+      const running = Number.isInteger(row.pid) && row.pid > 0;
+      const loaded = true;
+      const hasErrorExit = row.last_exit != null && row.last_exit !== 0;
+      let state = "loaded";
+      let ok = true;
+
+      if (service.expected_running) {
+        if (running) {
+          state = "running";
+          ok = true;
+        } else if (hasErrorExit) {
+          state = "error";
+          ok = false;
+        } else {
+          state = "stopped";
+          ok = false;
+        }
+      } else if (running) {
+        state = "running";
+      } else if (hasErrorExit) {
+        state = "error";
+        ok = false;
+      }
+
+      return {
+        key: service.key,
+        label: service.label,
+        expected_running: service.expected_running,
+        loaded,
+        running,
+        ok,
+        state,
+        pid: row.pid,
+        last_exit: row.last_exit,
+      };
+    });
+
+    const total = services.length;
+    const loadedCount = services.filter(s => s.loaded).length;
+    const runningCount = services.filter(s => s.running).length;
+    const okCount = services.filter(s => s.ok).length;
+    const overall = okCount === total ? "healthy" : "degraded";
+    const summary = `${runningCount}/${total} running · ${loadedCount}/${total} loaded`;
+
+    const data = {
+      available: true,
+      overall,
+      summary,
+      checked_at: new Date().toISOString(),
+      services,
+    };
+    launchAgentCache = { at: now, data };
+    return data;
+  } catch (e) {
+    const err = String((e && (e.stderr || e.message)) || e || "").trim();
+    const data = {
+      available: false,
+      overall: "unknown",
+      summary: "LaunchAgent status unavailable",
+      checked_at: new Date().toISOString(),
+      error: err.slice(0, 180),
+      services: [],
+    };
+    launchAgentCache = { at: now, data };
+    return data;
+  }
+}
+
+function restartLaunchAgent(label) {
+  const attempts = [];
+  const uid = (typeof process.getuid === "function" && Number.isInteger(process.getuid()))
+    ? String(process.getuid())
+    : "";
+  const targets = uid
+    ? [`gui/${uid}/${label}`, label]
+    : [label];
+
+  for (const target of targets) {
+    try {
+      execFileSync("launchctl", ["kickstart", "-k", target], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 3500,
+      });
+      return { ok: true, target, attempts };
+    } catch (e) {
+      const stderr = String((e && (e.stderr || e.message)) || e || "").trim();
+      attempts.push({ target, error: stderr.slice(0, 220) });
+    }
+  }
+  return { ok: false, target: null, attempts };
+}
 
 function toEtDateKey(iso) {
   if (!iso) return null;
@@ -365,7 +690,11 @@ function sendTelegramText(chatId, text) {
 // sendWelcomeEmail is defined in mailer.js and imported above
 
 function json(res, data, status = 200) {
-  res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "X-Robots-Tag": "noindex, nofollow",
+  });
   res.end(JSON.stringify(data));
 }
 
@@ -417,6 +746,41 @@ function formatTimeEt(h, m) {
   return `${hour}:${String(m).padStart(2, "0")} ${ampm} ET`;
 }
 
+function normalizeDeliveryTimeInput(raw) {
+  const clean = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s*et\s*$/i, "")
+    .replace(/\s+/g, " ");
+  if (!clean) return null;
+
+  let h;
+  let m;
+
+  // 24-hour format: HH:MM
+  let match = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (match) {
+    h = parseInt(match[1], 10);
+    m = parseInt(match[2], 10);
+    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  // 12-hour format: H[:MM] AM/PM
+  match = clean.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+  if (!match) return null;
+  h = parseInt(match[1], 10);
+  m = match[2] != null ? parseInt(match[2], 10) : 0;
+  const meridiem = match[3];
+  if (h < 1 || h > 12 || m < 0 || m > 59) return null;
+  if (meridiem === "am") {
+    if (h === 12) h = 0;
+  } else if (h !== 12) {
+    h += 12;
+  }
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 function formatDaysLabel(days) {
   const list = Array.isArray(days) ? [...new Set(days.map(Number))].sort((a, b) => a - b) : [1, 2, 3, 4, 5];
   if (list.length === 7) return "Every day";
@@ -454,10 +818,49 @@ function computeNextDeliveryEt(preferences) {
   return null;
 }
 
+function runDigestChild(digestPath, args = [], opts = {}) {
+  const timeoutMs = Math.max(15_000, Number(opts.timeoutMs || (12 * 60 * 1000)));
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [digestPath, ...args], {
+      env: { ...process.env },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let stderr = "";
+    const timer = setTimeout(() => {
+      try { child.kill("SIGTERM"); } catch {}
+      setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, 1500);
+    }, timeoutMs);
+    child.stderr.on("data", c => {
+      stderr += c.toString();
+      if (stderr.length > 6000) stderr = stderr.slice(-6000);
+    });
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal, stderr });
+    });
+  });
+}
+
 const server = http.createServer(async (req, res) => {
  try {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
+  const host = getRequestHost(req);
+  const scheme = getRequestScheme(req);
+
+  // Enforce a single canonical public origin for SEO + cache consistency.
+  if (PUBLIC_HOSTS.has(host) && (host !== CANONICAL_HOST || scheme !== "https")) {
+    const location = `https://${CANONICAL_HOST}${pathname}${url.search}`;
+    res.writeHead(301, {
+      Location: location,
+      "Cache-Control": "public, max-age=300",
+    });
+    return res.end();
+  }
 
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -931,26 +1334,18 @@ const server = http.createServer(async (req, res) => {
   // GET /api/admin/stats — cost dashboard data
   if (pathname === "/api/admin/stats" && req.method === "GET") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    const logPath = path.join(__dirname, "../data/cost-log.json");
-    let runs = [];
-    if (fs.existsSync(logPath)) {
-      runs = fs.readFileSync(logPath, "utf8")
-        .split("\n").filter(Boolean)
-        .map(line => { try { return JSON.parse(line); } catch { return null; } })
-        .filter(Boolean)
-        .reverse(); // newest first
-    }
+    const runs = loadCostRunsNewest();
 
     const now = new Date();
     // Use ET date for month prefix so runs at 10 PM ET (= 3 AM UTC next day) aren't miscounted
     const monthPrefix = now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }).slice(0, 7);
     const monthLabel  = now.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
-    const monthRuns = runs.filter(r => r.date.startsWith(monthPrefix));
+    const monthRuns = runs.filter(r => String(r?.date || "").startsWith(monthPrefix));
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
     const monthDeliveries = sum(monthRuns, "users_served");
     const monthUniqueUsersLog = new Set();
     for (const r of monthRuns) {
-      for (const u of (r.per_user || [])) {
+      for (const u of (Array.isArray(r?.per_user) ? r.per_user : [])) {
         if (u && u.id) monthUniqueUsersLog.add(String(u.id));
       }
     }
@@ -959,7 +1354,7 @@ const server = http.createServer(async (req, res) => {
     const userMap = {};
     for (const r of runs) {
       const usersServed = r.users_served || 1;
-      for (const u of (r.per_user || [])) {
+      for (const u of (Array.isArray(r?.per_user) ? r.per_user : [])) {
         if (!userMap[u.id]) userMap[u.id] = { id: u.id, runs: 0, total_cost: 0 };
         userMap[u.id].runs++;
         // Attribute each user their fair share of the run cost
@@ -1009,6 +1404,12 @@ const server = http.createServer(async (req, res) => {
       const daysLabel = formatDaysLabel(allowedDays);
       const nextDelivery = u.status === "active" ? computeNextDeliveryEt(prefs) : null;
       const tgLinked = !!(u.chatId && !u.chatId.startsWith("email-"));
+      const adminUserPath = u.email ? `/admin/user?email=${encodeURIComponent(u.email)}` : null;
+      const archivePath = u.email
+        ? (u.token
+          ? `/archive?token=${encodeURIComponent(u.token)}&admin=1&admin_return=${encodeURIComponent(adminUserPath || "/admin")}`
+          : `/archive?email=${encodeURIComponent(u.email)}&admin=1&admin_return=${encodeURIComponent(adminUserPath || "/admin")}`)
+        : null;
       return {
         name:               u.name || "",
         email:              u.email || "",
@@ -1041,7 +1442,8 @@ const server = http.createServer(async (req, res) => {
         depth:              depthLabel(prefs.depth),
         next_delivery_et:   nextDelivery?.label || "—",
         next_delivery_key:  nextDelivery?.key || null,
-        settings_url:       u.email ? `${BASE_URL}/admin/user?email=${encodeURIComponent(u.email)}` : null,
+        settings_url:       adminUserPath ? `${BASE_URL}${adminUserPath}` : null,
+        archive_url:        archivePath ? `${BASE_URL}${archivePath}` : null,
       };
     }).sort((a, b) => (b.digests - a.digests));
     const activeUsersCount = roster.filter(u => u.status === "active").length;
@@ -1053,12 +1455,104 @@ const server = http.createServer(async (req, res) => {
       .filter(u => u.status === "active" && u.days_missed >= 2)
       .map(u => ({ name: u.name || u.email, email: u.email, days_missed: u.days_missed }));
 
+    // Delivery reliability snapshot (last 7 completed ET days vs previous 7)
+    const activeRoster = roster.filter(u => u.status === "active");
+    const activeEmailSet = new Set(
+      activeRoster
+        .map(u => String(u.email || "").toLowerCase().trim())
+        .filter(Boolean)
+    );
+    const nowEt = parseEtNowParts();
+    const toEtDateOffset = offset => {
+      const d = new Date(Date.UTC(nowEt.year, nowEt.month - 1, nowEt.day + offset));
+      return {
+        dateKey: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`,
+        dow: d.getUTCDay(),
+      };
+    };
+    const buildWindow = (startOffset, endOffset) => {
+      const rows = [];
+      for (let offset = startOffset; offset <= endOffset; offset++) rows.push(toEtDateOffset(offset));
+      return rows;
+    };
+    const currentWindow = buildWindow(-7, -1);
+    const previousWindow = buildWindow(-14, -8);
+    const expectedScheduledCount = (windowRows) => {
+      let total = 0;
+      for (const day of windowRows) {
+        for (const u of activeRoster) {
+          const allowedDays = Array.isArray(u.days_of_week) && u.days_of_week.length
+            ? u.days_of_week.map(Number)
+            : [1, 2, 3, 4, 5];
+          if (allowedDays.includes(day.dow)) total++;
+        }
+      }
+      return total;
+    };
+    const deliveredScheduledCount = (windowRows) => {
+      const allowedDates = new Set(windowRows.map(row => row.dateKey));
+      const deliveredSet = new Set();
+      for (const run of runs) {
+        if (run.on_demand) continue;
+        const dateKey = String(run.date || "");
+        if (!allowedDates.has(dateKey)) continue;
+        const perUsers = Array.isArray(run.per_user) ? run.per_user : [];
+        for (const pu of perUsers) {
+          const uid = String((pu && pu.id) || "").toLowerCase().trim();
+          if (!uid || !activeEmailSet.has(uid)) continue;
+          deliveredSet.add(`${dateKey}|${uid}`);
+        }
+      }
+      return deliveredSet.size;
+    };
+    const expectedCurrent7d = expectedScheduledCount(currentWindow);
+    const deliveredCurrent7d = deliveredScheduledCount(currentWindow);
+    const expectedPrevious7d = expectedScheduledCount(previousWindow);
+    const deliveredPrevious7d = deliveredScheduledCount(previousWindow);
+    const missedCurrent7d = Math.max(0, expectedCurrent7d - deliveredCurrent7d);
+    const missedPrevious7d = Math.max(0, expectedPrevious7d - deliveredPrevious7d);
+    const missedDelta7d = missedCurrent7d - missedPrevious7d;
+    const successRate7d = expectedCurrent7d > 0
+      ? Number(((deliveredCurrent7d / expectedCurrent7d) * 100).toFixed(1))
+      : 100;
+    const missedTrendLabel = missedDelta7d === 0
+      ? "Flat vs prior 7d"
+      : `${missedDelta7d > 0 ? "+" : ""}${missedDelta7d} missed vs prior 7d`;
+    const lastSuccessfulScheduledRun = runs.find(r => !r.on_demand && (r.users_served || 0) > 0) || null;
+    const nextExpectedActiveDelivery = activeRoster
+      .filter(u => u.next_delivery_key)
+      .sort((a, b) => String(a.next_delivery_key || "").localeCompare(String(b.next_delivery_key || "")))[0] || null;
+    const minutesUntilEtKey = key => {
+      const m = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}) ET$/);
+      if (!m) return null;
+      const [, yy, mo, dd, hh, mm] = m;
+      const nowStamp = Date.UTC(nowEt.year, nowEt.month - 1, nowEt.day, nowEt.hour, nowEt.minute);
+      const targetStamp = Date.UTC(parseInt(yy, 10), parseInt(mo, 10) - 1, parseInt(dd, 10), parseInt(hh, 10), parseInt(mm, 10));
+      return Math.max(0, Math.round((targetStamp - nowStamp) / 60000));
+    };
+    const formatCountdown = totalMinutes => {
+      if (totalMinutes == null) return "—";
+      const mins = Math.max(0, totalMinutes);
+      const days = Math.floor(mins / 1440);
+      const hours = Math.floor((mins % 1440) / 60);
+      const minutes = mins % 60;
+      if (days > 0) return `${days}d ${hours}h`;
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes}m`;
+    };
+    const nextExpectedCountdownMinutes = nextExpectedActiveDelivery
+      ? minutesUntilEtKey(nextExpectedActiveDelivery.next_delivery_key)
+      : null;
+    const serviceActionLog = readAdminServiceLog(12);
+    const digestRun = digestRunStatus();
+
     // Health / system status
     const lastRun = runs[0] || null; // runs is newest-first
     const serverUptimeSecs = Math.floor(process.uptime());
     const uptimeHours = Math.floor(serverUptimeSecs / 3600);
     const uptimeMins  = Math.floor((serverUptimeSecs % 3600) / 60);
     const uptimeStr   = uptimeHours > 0 ? `${uptimeHours}h ${uptimeMins}m` : `${uptimeMins}m`;
+    const launchAgents = getLaunchAgentHealth();
     const adminMessages = readAdminMessageLog(30).map(m => ({
       at: m.at || null,
       actor: m.actor || "unknown",
@@ -1098,6 +1592,32 @@ const server = http.createServer(async (req, res) => {
         last_run_cost:            lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
         cron_schedule:            "6:45 AM ET · Mon–Sat (LaunchAgent)",
         users_delivery_warning:   deliveryWarnings,
+        delivery_reliability: {
+          success_rate_7d: successRate7d,
+          delivered_7d: deliveredCurrent7d,
+          expected_7d: expectedCurrent7d,
+          missed_current_7d: missedCurrent7d,
+          missed_previous_7d: missedPrevious7d,
+          missed_delta_7d: missedDelta7d,
+          missed_trend_label: missedTrendLabel,
+          last_successful_scheduled_run: lastSuccessfulScheduledRun
+            ? (lastSuccessfulScheduledRun.run_at_et || lastSuccessfulScheduledRun.run_at || null)
+            : null,
+          next_expected_delivery_et: nextExpectedActiveDelivery?.next_delivery_et || null,
+          next_expected_countdown: formatCountdown(nextExpectedCountdownMinutes),
+          next_expected_countdown_minutes: nextExpectedCountdownMinutes,
+        },
+        launch_agents:            launchAgents,
+        launch_agent_actions:     serviceActionLog,
+        digest_runner: digestRun.running
+          ? {
+            running: true,
+            mode: digestRun.lock.mode || "scheduled",
+            started_at: digestRun.lock.startedAtIso || null,
+            age_seconds: Math.max(0, Math.round((digestRun.lock.ageMs || 0) / 1000)),
+            pid: digestRun.lock.pid || null,
+          }
+          : { running: false },
       },
       runs: runs.slice(0, 30),
       per_user: perUser,
@@ -1117,52 +1637,421 @@ const server = http.createServer(async (req, res) => {
     return json(res, adminUser);
   }
 
+  // GET /api/admin/audit?email=... — unified admin timeline per user
+  if (pathname === "/api/admin/audit" && req.method === "GET") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const email = String(url.searchParams.get("email") || "").toLowerCase().trim();
+    if (!email) return json(res, { error: "email required" }, 400);
+    const requestedLimit = parseInt(url.searchParams.get("limit"), 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 120) : 30;
+
+    const actionRows = readAdminActionLog(limit * 6)
+      .filter(row => String(row.target_email || "").toLowerCase().trim() === email)
+      .map(row => {
+        const action = String(row.action || "action");
+        const details = row.details && typeof row.details === "object" ? row.details : {};
+        let summary = action;
+        if (action === "set_delivery_time" && details.from && details.to) {
+          summary = `Delivery time ${details.from} → ${details.to}`;
+        } else if (action === "bulk_pause") {
+          summary = "Paused deliveries";
+        } else if (action === "bulk_resume") {
+          summary = "Resumed deliveries";
+        } else if (action === "bulk_resend_link") {
+          summary = "Resent settings link";
+        } else if (action === "bulk_set_time" && details.to) {
+          summary = `Set delivery time to ${details.to}`;
+        } else if (action === "run_digest_targeted") {
+          summary = row.success ? "Triggered digest run" : "Digest run failed";
+        }
+        return {
+          at: row.at || null,
+          actor: row.actor || "unknown",
+          type: "action",
+          action,
+          success: row.success !== false,
+          summary,
+          details,
+        };
+      });
+
+    const messageRows = readAdminMessageLog(limit * 6)
+      .filter(row => String(row.target_email || "").toLowerCase().trim() === email)
+      .map(row => ({
+        at: row.at || null,
+        actor: row.actor || "unknown",
+        type: "message",
+        action: "message_user",
+        success: !!row.success,
+        summary: row.success
+          ? `Message sent via ${(row.sent_channels || []).join(" + ") || "channel"}`
+          : `Message failed: ${(row.errors || []).join(" | ") || "unknown error"}`,
+        details: {
+          requested_channels: Array.isArray(row.requested_channels) ? row.requested_channels : [],
+          sent_channels: Array.isArray(row.sent_channels) ? row.sent_channels : [],
+          errors: Array.isArray(row.errors) ? row.errors : [],
+          message_preview: row.message_preview || "",
+        },
+      }));
+
+    const entries = [...actionRows, ...messageRows]
+      .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")))
+      .slice(0, limit);
+    return json(res, { entries });
+  }
+
+  // POST /api/admin/bulk-action — dry-run + apply safe admin bulk ops
+  if (pathname === "/api/admin/bulk-action" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await readBody(req);
+    const action = String(body.action || "").toLowerCase().trim();
+    const dryRun = body.dry_run !== false;
+    const emailsRaw = Array.isArray(body.emails) ? body.emails : [];
+    const uniqueEmails = [...new Set(
+      emailsRaw
+        .map(v => String(v || "").toLowerCase().trim())
+        .filter(Boolean)
+    )].slice(0, 200);
+
+    if (!uniqueEmails.length) return json(res, { error: "at least one email required" }, 400);
+    const allowedActions = new Set(["set_time", "pause", "resume", "resend_link"]);
+    if (!allowedActions.has(action)) return json(res, { error: "unsupported bulk action" }, 400);
+
+    let normalizedTime = null;
+    if (action === "set_time") {
+      normalizedTime = normalizeDeliveryTimeInput(body.delivery_time);
+      if (!normalizedTime) return json(res, { error: "invalid delivery_time" }, 400);
+    }
+
+    const usersByEmail = new Map(
+      allUsers()
+        .filter(u => u.email)
+        .map(u => [String(u.email).toLowerCase().trim(), u])
+    );
+
+    const planned = [];
+    const skipped = [];
+    for (const email of uniqueEmails) {
+      const user = usersByEmail.get(email);
+      if (!user) {
+        skipped.push({ email, reason: "user not found" });
+        continue;
+      }
+      if (action === "set_time") {
+        const from = String((user.preferences || {}).delivery_time || "07:00");
+        if (from === normalizedTime) {
+          skipped.push({ email, reason: "delivery time unchanged" });
+          continue;
+        }
+        planned.push({ email, user, kind: "bulk_set_time", from, to: normalizedTime });
+        continue;
+      }
+      if (action === "pause") {
+        const from = String(user.status || "active");
+        if (from === "paused") {
+          skipped.push({ email, reason: "already paused" });
+          continue;
+        }
+        planned.push({ email, user, kind: "bulk_pause", from, to: "paused" });
+        continue;
+      }
+      if (action === "resume") {
+        const from = String(user.status || "active");
+        if (from === "active") {
+          skipped.push({ email, reason: "already active" });
+          continue;
+        }
+        planned.push({ email, user, kind: "bulk_resume", from, to: "active" });
+        continue;
+      }
+      if (action === "resend_link") {
+        if (!user.token) {
+          skipped.push({ email, reason: "missing user token" });
+          continue;
+        }
+        planned.push({ email, user, kind: "bulk_resend_link" });
+      }
+    }
+
+    const affected = planned.map(item => ({
+      email: item.email,
+      name: item.user.name || item.user.email || item.user.chatId || "",
+      action: item.kind,
+      from: item.from || null,
+      to: item.to || null,
+      status: "planned",
+    }));
+
+    if (dryRun) {
+      return json(res, {
+        success: true,
+        dry_run: true,
+        action,
+        requested: uniqueEmails.length,
+        applicable: planned.length,
+        skipped,
+        affected,
+      });
+    }
+
+    const applied = [];
+    for (const item of planned) {
+      try {
+        if (item.kind === "bulk_set_time") {
+          const updated = {
+            ...item.user,
+            preferences: {
+              ...(item.user.preferences || {}),
+              delivery_time: item.to,
+            },
+            last_updated: new Date().toISOString(),
+          };
+          writeUser(item.user.chatId, updated);
+        } else if (item.kind === "bulk_pause" || item.kind === "bulk_resume") {
+          const updated = {
+            ...item.user,
+            status: item.to,
+            last_updated: new Date().toISOString(),
+          };
+          writeUser(item.user.chatId, updated);
+        } else if (item.kind === "bulk_resend_link") {
+          await sendMagicLinkEmail(item.user);
+        }
+        logAdminActionEvent(req, {
+          action: item.kind,
+          target_email: item.email,
+          success: true,
+          details: { from: item.from || null, to: item.to || null },
+        });
+        applied.push({ ...item, status: "applied" });
+      } catch (e) {
+        const reason = e.message || "failed";
+        skipped.push({ email: item.email, reason });
+        logAdminActionEvent(req, {
+          action: item.kind,
+          target_email: item.email,
+          success: false,
+          details: { reason, from: item.from || null, to: item.to || null },
+        });
+      }
+    }
+
+    return json(res, {
+      success: true,
+      dry_run: false,
+      action,
+      requested: uniqueEmails.length,
+      applicable: planned.length,
+      applied: applied.length,
+      skipped,
+      affected: applied.map(item => ({
+        email: item.email,
+        name: item.user.name || item.user.email || item.user.chatId || "",
+        action: item.kind,
+        from: item.from || null,
+        to: item.to || null,
+        status: "applied",
+      })),
+    });
+  }
+
+  // POST /api/admin/launch-agent-action — safe service controls (restart only)
+  if (pathname === "/api/admin/launch-agent-action" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await readBody(req);
+    const key = String(body.key || "").toLowerCase().trim();
+    const action = String(body.action || "restart").toLowerCase().trim();
+    if (action !== "restart") return json(res, { error: "unsupported service action" }, 400);
+    const service = getLaunchAgentServiceByKey(key);
+    if (!service) return json(res, { error: "unknown service key" }, 400);
+
+    const restart = restartLaunchAgent(service.label);
+    const latestHealth = getLaunchAgentHealth(true);
+    const latestService = (latestHealth.services || []).find(s => s.key === service.key) || null;
+    const serviceLogEntry = {
+      at: new Date().toISOString(),
+      actor: getAdminActor(req),
+      action: "restart",
+      service_key: service.key,
+      label: service.label,
+      success: !!restart.ok,
+      attempts: restart.attempts || [],
+      state_after: latestService?.state || null,
+    };
+    appendAdminServiceLog(serviceLogEntry);
+    logAdminActionEvent(req, {
+      action: "launch_agent_restart",
+      target_service: service.key,
+      success: !!restart.ok,
+      details: {
+        attempts: restart.attempts || [],
+        state_after: latestService?.state || null,
+      },
+    });
+
+    return json(res, {
+      success: !!restart.ok,
+      service: latestService || {
+        key: service.key,
+        label: service.label,
+        state: "unknown",
+      },
+      launch_agents: latestHealth,
+      launch_agent_actions: readAdminServiceLog(12),
+      error: restart.ok
+        ? null
+        : ((restart.attempts && restart.attempts[restart.attempts.length - 1] && restart.attempts[restart.attempts.length - 1].error) || "restart failed"),
+    }, restart.ok ? 200 : 500);
+  }
+
+  // POST /api/admin/update-delivery-time — admin inline schedule editor
+  if (pathname === "/api/admin/update-delivery-time" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+
+    const body = await readBody(req);
+    const email = String(body.email || "").toLowerCase().trim();
+    const deliveryTime = normalizeDeliveryTimeInput(body.delivery_time);
+
+    if (!email) return json(res, { error: "email required" }, 400);
+    if (!deliveryTime) {
+      return json(res, { error: "invalid delivery time (use HH:MM or H:MM AM/PM)" }, 400);
+    }
+
+    const user = allUsers().find(u => (u.email || "").toLowerCase().trim() === email);
+    if (!user) return json(res, { error: "user not found" }, 404);
+    const previousDeliveryTime = String((user.preferences || {}).delivery_time || "07:00");
+
+    const [h, m] = deliveryTime.split(":").map(Number);
+    const updated = {
+      ...user,
+      preferences: {
+        ...(user.preferences || {}),
+        delivery_time: deliveryTime,
+      },
+      last_updated: new Date().toISOString(),
+    };
+
+    writeUser(user.chatId, updated);
+    logAdminActionEvent(req, {
+      action: "set_delivery_time",
+      target_email: email,
+      success: true,
+      details: {
+        from: previousDeliveryTime,
+        to: deliveryTime,
+      },
+    });
+    return json(res, {
+      success: true,
+      email,
+      delivery_time: deliveryTime,
+      delivery_time_label: formatTimeEt(h, m),
+    });
+  }
+
   // POST /api/admin/run-digest — trigger a digest run
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const body = await readBody(req);
     const digestPath = path.join(__dirname, "../digest.js");
     const targetChatId = body.chatId ? String(body.chatId).trim() : "";
+    const digestLock = digestRunStatus();
+    const lockMsg = digestLock.running
+      ? `Digest run already in progress (${digestLock.lock.mode || "scheduled"}, started ${digestLock.lock.startedAtIso || "recently"}).`
+      : "";
 
     // Targeted admin sends are awaited so UI only reports success on real delivery.
     if (targetChatId) {
+      if (digestLock.running) {
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_chat_id: targetChatId,
+          success: false,
+          details: { reason: "digest lock active", mode: digestLock.lock.mode || "scheduled" },
+        });
+        return json(res, { error: lockMsg }, 409);
+      }
       const targetUser = allUsers().find(u => String(u.chatId || "").trim() === targetChatId);
       if (!targetUser) return json(res, { error: `No user found for chatId ${targetChatId}` }, 404);
       if ((targetUser.status || "active") !== "active") {
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { reason: `user status ${targetUser.status}` },
+        });
         return json(res, { error: `User is ${targetUser.status}; re-activate before sending.` }, 400);
       }
       const prefs = targetUser.preferences || {};
       const emailReady = !!targetUser.email && prefs.email_enabled !== false;
       const tgReady = !!(targetUser.chatId && !String(targetUser.chatId).startsWith("email-") && prefs.telegram_enabled !== false);
       if (!emailReady && !tgReady) {
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { reason: "no enabled delivery channels" },
+        });
         return json(res, { error: "No enabled delivery channels for this user." }, 400);
       }
 
       try {
-        const run = await new Promise((resolve, reject) => {
-          const child = spawn(process.execPath, [digestPath, "--chatId", targetChatId, "--suppressWelcome"], {
-            env: { ...process.env },
-            stdio: ["ignore", "ignore", "pipe"],
-          });
-          let stderr = "";
-          child.stderr.on("data", c => {
-            stderr += c.toString();
-            if (stderr.length > 4000) stderr = stderr.slice(-4000);
-          });
-          child.on("error", reject);
-          child.on("close", code => resolve({ code, stderr }));
+        const run = await runDigestChild(digestPath, ["--chatId", targetChatId, "--suppressWelcome"], {
+          timeoutMs: 12 * 60 * 1000,
         });
+        if (run.code === 4) {
+          const detail = run.stderr ? run.stderr.slice(-260) : "digest run lock active";
+          logAdminActionEvent(req, {
+            action: "run_digest_targeted",
+            target_email: targetUser.email || null,
+            target_chat_id: targetChatId,
+            success: false,
+            details: { detail, reason: "digest lock active" },
+          });
+          return json(res, { error: "Digest run already in progress. Try again shortly.", detail }, 409);
+        }
         if (run.code !== 0) {
           const detail = run.stderr ? run.stderr.slice(-240) : `exit ${run.code}`;
+          logAdminActionEvent(req, {
+            action: "run_digest_targeted",
+            target_email: targetUser.email || null,
+            target_chat_id: targetChatId,
+            success: false,
+            details: { detail },
+          });
           return json(res, { error: `Digest failed for ${targetChatId}`, detail }, 500);
         }
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: true,
+        });
         return json(res, {
           success: true,
           message: `Digest sent to ${targetUser.email || targetChatId}`,
         });
       } catch (e) {
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { detail: e.message },
+        });
         return json(res, { error: `Failed to run digest: ${e.message}` }, 500);
       }
+    }
+
+    if (digestLock.running) {
+      logAdminActionEvent(req, {
+        action: "run_digest_full",
+        success: false,
+        details: { reason: "digest lock active", mode: digestLock.lock.mode || "scheduled" },
+      });
+      return json(res, { error: lockMsg }, 409);
     }
 
     const child = spawn(process.execPath, [digestPath, "--suppressWelcome"], {
@@ -1171,6 +2060,10 @@ const server = http.createServer(async (req, res) => {
       env: { ...process.env },
     });
     child.unref();
+    logAdminActionEvent(req, {
+      action: "run_digest_full",
+      success: true,
+    });
     return json(res, { success: true, message: "Full scheduled digest run triggered" });
   }
 
@@ -1318,6 +2211,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/admin/user") {
     return serveFile(res, path.join(WEB_DIR, "admin-user.html"));
   }
+  if (pathname === "/robots.txt") return serveFile(res, path.join(WEB_DIR, "robots.txt"));
+  if (pathname === "/sitemap.xml") return serveFile(res, path.join(WEB_DIR, "sitemap.xml"));
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
   if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));
   if (pathname === "/settings.js") return serveFile(res, path.join(WEB_DIR, "settings.js"));

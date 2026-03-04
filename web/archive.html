@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SignalBrief — Signal Search</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1250,7 +1251,7 @@ async function init() {
   }
 
   if (isAdminView) {
-    primaryAction.textContent = "Back to Admin";
+    primaryAction.textContent = "User preferences";
     primaryAction.href = adminReturn;
     secondaryAction.textContent = "Admin Dashboard";
     secondaryAction.href = "/admin";

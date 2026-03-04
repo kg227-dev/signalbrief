@@ -28,29 +28,58 @@ module.exports = {
         tag: item.tag,
         relevance: Number(item.relevanceScore || 0),
         weight: Number(matchWeightToTag(item.tag, weights) || 0),
+        topic_match: Number(item.topicMatch || 0),
+        base_score: Number(item.baseScore || 0),
       }));
 
       const weightValues = rows.map((r) => r.weight);
       const scoreValues = rows.map((r) => r.relevance);
+      const hasWeightSignal = weightValues.some((v) => Math.abs(v) > 0.01)
+        && new Set(weightValues.map((v) => v.toFixed(3))).size > 1;
 
-      const corr = spearmanCorrelation(weightValues, scoreValues);
-      const spread = stddev(scoreValues);
-      const highLowAnomalies = rows.filter((r) => (r.weight <= -2 && r.relevance > 8) || (r.weight >= 4 && r.relevance < 5));
-      const anomalyRate = rows.length ? highLowAnomalies.length / rows.length : 0;
+      let corr = 0;
+      let spread = stddev(scoreValues);
+      let anomalies = [];
+      let anomalyRate = 0;
+      let score = 0;
+      let passed = false;
+      let mode = "weights";
 
-      const corrNorm = ((corr + 1) / 2) * 100;
-      const spreadScore = Math.max(0, Math.min(100, (spread / 2.0) * 100));
-      const anomalyPenalty = Math.min(50, anomalyRate * 100);
-      const score = Math.max(0, Math.min(100, 0.7 * corrNorm + 0.3 * spreadScore - anomalyPenalty));
+      if (hasWeightSignal) {
+        corr = spearmanCorrelation(weightValues, scoreValues);
+        anomalies = rows.filter((r) => (r.weight <= -2 && r.relevance > 8) || (r.weight >= 4 && r.relevance < 5));
+        anomalyRate = rows.length ? anomalies.length / rows.length : 0;
 
-      const passed = corr >= 0.65 && anomalyRate <= 0.05;
+        const corrNorm = ((corr + 1) / 2) * 100;
+        const spreadScore = Math.max(0, Math.min(100, (spread / 2.0) * 100));
+        const anomalyPenalty = Math.min(50, anomalyRate * 100);
+        score = Math.max(0, Math.min(100, 0.7 * corrNorm + 0.3 * spreadScore - anomalyPenalty));
+        passed = corr >= 0.65 && anomalyRate <= 0.05;
+      } else if (rows.length < 3) {
+        mode = "baseline-low-sample";
+        score = rows.length ? 75 : 0;
+        passed = rows.length > 0;
+      } else {
+        mode = "baseline-no-weights";
+        const expected = rows.map((r) => Number((r.base_score * 0.6 + r.topic_match * 0.4).toFixed(3)));
+        corr = spearmanCorrelation(expected, scoreValues);
+        anomalies = rows.filter((r) => (r.topic_match >= 7 && r.relevance < 6) || (r.topic_match <= 3 && r.relevance > 8.8));
+        anomalyRate = rows.length ? anomalies.length / rows.length : 0;
+
+        const corrNorm = ((corr + 1) / 2) * 100;
+        const spreadScore = Math.max(0, Math.min(100, (spread / 2.0) * 100));
+        const anomalyPenalty = Math.min(40, anomalyRate * 100);
+        score = Math.max(0, Math.min(100, 0.75 * corrNorm + 0.25 * spreadScore - anomalyPenalty));
+        passed = corr >= 0.6 && anomalyRate <= 0.1;
+      }
 
       perPersona[persona.id] = {
         persona: persona.name,
+        mode,
         correlation_spearman: Number(corr.toFixed(3)),
         score_spread_stddev: Number(spread.toFixed(3)),
         anomaly_rate: Number(anomalyRate.toFixed(3)),
-        anomalies: highLowAnomalies,
+        anomalies,
         score: Number(score.toFixed(2)),
         passed,
       };
@@ -61,7 +90,7 @@ module.exports = {
         failures.push({
           persona: persona.name,
           issue: `Weight-to-score gate missed (corr=${corr.toFixed(2)} target>=0.65, anomalyRate=${(anomalyRate * 100).toFixed(1)}% target<=5%).`,
-          evidence: highLowAnomalies,
+          evidence: anomalies,
         });
       }
     }

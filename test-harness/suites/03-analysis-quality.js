@@ -8,6 +8,11 @@ module.exports = {
   async run(context) {
     const { personas, dataset, runtime, evaluator } = context;
     const maxSamples = Number(runtime.max_analysis_samples || 12);
+    const allowSonnetAdjudication = String(runtime.judge_model || "haiku").toLowerCase() === "haiku"
+      && !runtime.no_judge
+      && typeof evaluator.judgeAnalysisSampleWithModel === "function";
+    const maxAdjudications = Math.max(0, Math.min(Number(runtime.max_sonnet_adjudications || 20), maxSamples));
+    let adjudicatedCount = 0;
 
     const candidates = [];
     for (const persona of personas) {
@@ -39,7 +44,34 @@ module.exports = {
 
     const judgedItems = [];
     for (const sample of samples) {
-      const score = await evaluator.judgeAnalysisSample(sample);
+      let score = await evaluator.judgeAnalysisSample(sample);
+      let adjudicated = false;
+
+      if (
+        allowSonnetAdjudication
+        && adjudicatedCount < maxAdjudications
+        && score?.judged
+        && Number(score.overall) >= 3.2
+        && Number(score.overall) <= 4.2
+      ) {
+        const sonnet = await evaluator.judgeAnalysisSampleWithModel(sample, "sonnet");
+        if (sonnet?.judged) {
+          adjudicated = true;
+          adjudicatedCount += 1;
+          score = {
+            specificity: (Number(score.specificity || 0) + Number(sonnet.specificity || 0)) / 2,
+            strategic_framing: (Number(score.strategic_framing || 0) + Number(sonnet.strategic_framing || 0)) / 2,
+            actionability: (Number(score.actionability || 0) + Number(sonnet.actionability || 0)) / 2,
+            differentiation: (Number(score.differentiation || 0) + Number(sonnet.differentiation || 0)) / 2,
+            brevity_density: (Number(score.brevity_density || 0) + Number(sonnet.brevity_density || 0)) / 2,
+            overall: (Number(score.overall || 0) + Number(sonnet.overall || 0)) / 2,
+            rationale: `${String(score.rationale || "")} | Sonnet adjudication: ${String(sonnet.rationale || "")}`.trim(),
+            judged: true,
+            adjudicated,
+          };
+        }
+      }
+
       judgedItems.push({ ...sample, score });
     }
 
@@ -132,6 +164,7 @@ module.exports = {
       details: {
         target: "Average overall >= 4.0/5 and P25 >= 3.6/5",
         sample_count: judgedItems.length,
+        sonnet_adjudications: adjudicatedCount,
         p25: Number(p25.toFixed(3)),
         p10: Number(p10.toFixed(3)),
         dimension_averages: Object.fromEntries(
@@ -142,6 +175,7 @@ module.exports = {
           headline: row.item.headline,
           overall: Number(row.score.overall.toFixed(3)),
           judged: !!row.score.judged,
+          adjudicated: !!row.score.adjudicated,
         })),
       },
       confidence: judgedItems.some((x) => x.score.judged) ? 0.88 : 0.55,

@@ -10,6 +10,23 @@ function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
 }
 
+const RELATED_TOPIC_GROUPS = [
+  ["healthcare", "life sciences"],
+  ["ai tech", "technology", "digital"],
+  ["pe m a", "m a advisory", "financial services"],
+  ["public sector", "policy regulatory"],
+  ["energy", "sustainability"],
+];
+
+function topicsRelated(a, b) {
+  const left = normalizeTopicToken(a);
+  const right = normalizeTopicToken(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.includes(right) || right.includes(left)) return true;
+  return RELATED_TOPIC_GROUPS.some((group) => group.includes(left) && group.includes(right));
+}
+
 function parseItemDomain(item) {
   const urlRaw = String(item?.url || "").trim();
   if (urlRaw) {
@@ -164,7 +181,7 @@ function computeTopicSignals(item, userTopics) {
     if (!topicToken) continue;
 
     const isExact = tagToken && topicToken === tagToken;
-    const isPartial = tagToken && !isExact && (tagToken.includes(topicToken) || topicToken.includes(tagToken));
+    const isPartial = tagToken && !isExact && topicsRelated(tagToken, topicToken);
 
     if (isExact) {
       exact = true;
@@ -202,9 +219,7 @@ function matchWeightToTag(tag, topicWeights) {
     const keyToken = normalizeTopicToken(key);
     if (!keyToken) continue;
     if (
-      tagToken === keyToken ||
-      tagToken.includes(keyToken) ||
-      keyToken.includes(tagToken)
+      topicsRelated(tagToken, keyToken)
     ) {
       total += w;
     }
@@ -275,7 +290,7 @@ function splitUserTopics(userTopics) {
 function itemMatchesPersonaTopic(item, standardTopicsLower, customKeywords) {
   const tag = normalizeTopicToken(item?.tag || "");
   const text = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
-  const tagMatch = (standardTopicsLower || []).some((t) => tag.includes(t) || t.includes(tag));
+  const tagMatch = (standardTopicsLower || []).some((t) => topicsRelated(tag, t));
   const customMatch = (customKeywords || []).some((kw) => text.includes(kw) || tag.includes(kw) || kw.includes(tag));
   return { tagMatch, customMatch, matched: tagMatch || customMatch };
 }
@@ -344,8 +359,7 @@ function applyDepth(items, depth) {
 function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   const prefs = persona?.preferences || {};
   const { standardTopicsLower } = splitUserTopics(persona?.topics || []);
-  const specialistMode = standardTopicsLower.length > 0
-    && (standardTopicsLower.length <= 2 || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5));
+  const specialistMode = standardTopicsLower.length > 0 && standardTopicsLower.length <= 2;
   const filterRes = filterItemsForPersona(
     enrichedItems,
     persona?.topics || [],
@@ -360,6 +374,14 @@ function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   scored = scored.sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0));
 
   const requested = Number(prefs.items_per_digest) || Number(runtime.defaultItemCount) || 5;
+  const minBaseScoreForFinal = Number(runtime.minBaseScoreForFinal || 6.5);
+  const minStrongItems = Math.max(2, Math.min(requested, 4));
+  const stronger = scored.filter((item) =>
+    Number(item?.baseScore || 0) >= minBaseScoreForFinal
+    || (Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword"))
+  );
+  if (stronger.length >= minStrongItems) scored = stronger;
+
   const preTrimCount = scored.length;
   const trimmed = scored.slice(0, requested);
   const preDepthItems = trimmed.map((i) => ({ ...i }));

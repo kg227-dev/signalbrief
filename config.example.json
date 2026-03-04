@@ -11,6 +11,7 @@
     "maxItemsPerSourceDomain": 2,
     "crossDayDedupDays": 3,
     "maxCustomItemsPerRun": 3,
+    "minBaseScoreForFinal": 6.5,
     "lookbackHours": 48
   },
   "topics": [

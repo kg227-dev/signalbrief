@@ -568,6 +568,7 @@ async function runHarness(argv = process.argv.slice(2)) {
     defaultItemCount: Number(dataset?.metadata?.selection_target || appConfig?.digest?.itemCount || 7),
     maxItemsPerTag: Number(appConfig?.digest?.maxItemsPerTag || 2),
     maxItemsPerSourceDomain: Number(appConfig?.digest?.maxItemsPerSourceDomain || 2),
+    minBaseScoreForFinal: Number(appConfig?.digest?.minBaseScoreForFinal || 6.5),
     minFilteredItems: 3,
     max_analysis_samples: args.max_analysis_samples,
     max_depth_pairs: args.max_depth_pairs,

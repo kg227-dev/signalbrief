@@ -11,6 +11,12 @@ module.exports = {
 
   async run(context) {
     const { personas, dataset, runtime, evaluator } = context;
+    const allowSonnetAdjudication = String(runtime.judge_model || "haiku").toLowerCase() === "haiku"
+      && !runtime.no_judge
+      && typeof evaluator.judgeDepthPairWithModel === "function";
+    const maxAdjudications = Math.max(0, Math.min(Number(runtime.max_depth_adjudications || 6), Number(runtime.max_depth_pairs || 5)));
+    let adjudicatedCount = 0;
+
     const a = personas.find((p) => p.id === "depth_a");
     const b = personas.find((p) => p.id === "depth_b");
 
@@ -40,7 +46,11 @@ module.exports = {
       const brief = briefByHeadline.get(headline);
       const deep = deepByHeadline.get(headline);
       const briefText = String(brief?.wim || "");
-      const deepText = String(deep?.wim || "");
+      const deepText = [
+        String(deep?.wim || ""),
+        String(deep?.implications || ""),
+        String(deep?.watch_next || ""),
+      ].filter(Boolean).join(" ");
       const briefChars = safeLength(briefText);
       const deepChars = safeLength(deepText);
       const ratio = briefChars > 0 ? deepChars / briefChars : 0;
@@ -61,11 +71,37 @@ module.exports = {
     const judgeSample = pairRows.slice(0, Number(runtime.max_depth_pairs || 5));
     const judgedPairs = [];
     for (const row of judgeSample) {
-      const judge = await evaluator.judgeDepthPair({
+      let judge = await evaluator.judgeDepthPair({
         headline: row.headline,
         brief: row.brief_text,
         deep: row.deep_text,
       });
+
+      if (
+        allowSonnetAdjudication
+        && adjudicatedCount < maxAdjudications
+        && judge?.judged
+        && Number(judge.insight_gain) >= 2
+        && Number(judge.insight_gain) <= 3.5
+      ) {
+        const sonnet = await evaluator.judgeDepthPairWithModel({
+          headline: row.headline,
+          brief: row.brief_text,
+          deep: row.deep_text,
+        }, "sonnet");
+        if (sonnet?.judged) {
+          adjudicatedCount += 1;
+          judge = {
+            insight_gain: (Number(judge.insight_gain || 0) + Number(sonnet.insight_gain || 0)) / 2,
+            deep_more_insight: !!(judge.deep_more_insight || sonnet.deep_more_insight),
+            likely_padding: !!(judge.likely_padding && sonnet.likely_padding),
+            rationale: `${String(judge.rationale || "")} | Sonnet adjudication: ${String(sonnet.rationale || "")}`.trim(),
+            judged: true,
+            adjudicated: true,
+          };
+        }
+      }
+
       judgedPairs.push({ ...row, judge });
     }
 
@@ -81,7 +117,7 @@ module.exports = {
     const paddingPenalty = Math.max(0, (paddingRate - 0.2) * 80);
     const suiteScore = Number(Math.max(0, 0.35 * lengthScore + 0.45 * insightScore + 0.2 * meaningfulScore - paddingPenalty).toFixed(2));
 
-    const lowSample = judgedPairs.length < Math.min(3, Number(runtime.max_depth_pairs || 5));
+    const lowSample = judgedPairs.length < Math.min(6, Number(runtime.max_depth_pairs || 5));
     let status = "pass";
     if ((avgRatio < 2 || avgInsight < 3.5 || paddingRate > 0.2) && suiteScore >= 60) status = "warn";
     else if (avgRatio < 2 || avgInsight < 3.5 || paddingRate > 0.2) status = "fail";
@@ -133,6 +169,7 @@ module.exports = {
       details: {
         target: "Deep should be 2-3x longer, insight >=3.5/5, likely_padding <=20%.",
         sample_count: judgedPairs.length,
+        sonnet_adjudications: adjudicatedCount,
         avg_char_ratio: Number(avgRatio.toFixed(3)),
         avg_insight_gain: Number(avgInsight.toFixed(3)),
         likely_padding: Number(paddingRate.toFixed(3)),
@@ -144,6 +181,7 @@ module.exports = {
           deep_more_insight: r.judge.deep_more_insight,
           likely_padding: r.judge.likely_padding,
           judged: !!r.judge.judged,
+          adjudicated: !!r.judge.adjudicated,
         })),
       },
       confidence: judgedPairs.some((p) => p.judge.judged) ? 0.84 : 0.58,

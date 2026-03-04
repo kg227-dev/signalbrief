@@ -195,9 +195,10 @@ function normalizeDepthJudgeResult(result, pair) {
   };
 }
 
-async function judgeAnalysisSample(sample, deps) {
+async function judgeAnalysisSample(sample, deps, overrideModel = null) {
   const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs, judgeModel } = deps;
   if (noJudge) return heuristicAnalysisScore(sample.item);
+  const model = overrideModel || judgeModel;
 
   const prompt = [
     "You are a strict QA evaluator for SignalBrief consultant-grade analysis.",
@@ -228,7 +229,7 @@ async function judgeAnalysisSample(sample, deps) {
       },
       prompt,
       maxTokens: 500,
-      model: judgeModel,
+      model,
       appConfig,
       budget,
       allowLiveApi,
@@ -249,9 +250,10 @@ async function judgeAnalysisSample(sample, deps) {
   }
 }
 
-async function judgeDepthPair(pair, deps) {
+async function judgeDepthPair(pair, deps, overrideModel = null) {
   const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs, judgeModel } = deps;
   if (noJudge) return normalizeDepthJudgeResult(null, pair);
+  const model = overrideModel || judgeModel;
 
   const prompt = [
     "You are evaluating depth quality differences for SignalBrief outputs.",
@@ -268,7 +270,7 @@ async function judgeDepthPair(pair, deps) {
       payload: pair,
       prompt,
       maxTokens: 450,
-      model: judgeModel,
+      model,
       appConfig,
       budget,
       allowLiveApi,
@@ -308,9 +310,10 @@ function normalizePairwiseResult(result) {
   };
 }
 
-async function judgePairwiseComparison(payload, deps) {
+async function judgePairwiseComparison(payload, deps, overrideModel = null) {
   const { appConfig, budget, allowLiveApi, refreshCache, noJudge, costs, judgeModel } = deps;
   if (noJudge) return normalizePairwiseResult(null);
+  const model = overrideModel || judgeModel;
 
   const prompt = [
     "You are a strict pairwise QA judge for SignalBrief analysis quality.",
@@ -327,7 +330,7 @@ async function judgePairwiseComparison(payload, deps) {
       payload,
       prompt,
       maxTokens: 420,
-      model: judgeModel,
+      model,
       appConfig,
       budget,
       allowLiveApi,
@@ -358,8 +361,11 @@ function buildEvaluator(deps) {
     percentile,
     bootstrapMeanCI,
     judgeAnalysisSample: (sample) => judgeAnalysisSample(sample, deps),
+    judgeAnalysisSampleWithModel: (sample, model) => judgeAnalysisSample(sample, deps, model),
     judgeDepthPair: (pair) => judgeDepthPair(pair, deps),
+    judgeDepthPairWithModel: (pair, model) => judgeDepthPair(pair, deps, model),
     judgePairwiseComparison: (payload) => judgePairwiseComparison(payload, deps),
+    judgePairwiseComparisonWithModel: (payload, model) => judgePairwiseComparison(payload, deps, model),
   };
 }
 

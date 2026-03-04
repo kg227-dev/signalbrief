@@ -508,6 +508,23 @@ function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
 }
 
+const RELATED_TOPIC_GROUPS = [
+  ["healthcare", "life sciences"],
+  ["ai tech", "technology", "digital"],
+  ["pe m a", "m a advisory", "financial services"],
+  ["public sector", "policy regulatory"],
+  ["energy", "sustainability"],
+];
+
+function topicsRelated(a, b) {
+  const left = normalizeTopicToken(a);
+  const right = normalizeTopicToken(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.includes(right) || right.includes(left)) return true;
+  return RELATED_TOPIC_GROUPS.some((group) => group.includes(left) && group.includes(right));
+}
+
 function computeTopicSignals(item, userTopics) {
   const tagNormalized = normalizeTopicToken(item?.tag || "");
   const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
@@ -523,7 +540,7 @@ function computeTopicSignals(item, userTopics) {
 
     const exact = tagNormalized && topicNormalized === tagNormalized;
     const partial = tagNormalized && !exact
-      && (tagNormalized.includes(topicNormalized) || topicNormalized.includes(tagNormalized));
+      && topicsRelated(tagNormalized, topicNormalized);
 
     if (exact) {
       exactMatch = true;
@@ -561,7 +578,7 @@ function matchWeightToTag(tag, topicWeights) {
     if (!w) continue;
     const keyToken = normalizeTopicToken(key);
     if (!keyToken) continue;
-    if (tagToken === keyToken || tagToken.includes(keyToken) || keyToken.includes(tagToken)) {
+    if (topicsRelated(tagToken, keyToken)) {
       total += w;
     }
   }
@@ -1054,10 +1071,7 @@ async function main() {
           .filter(t => !String(t).toLowerCase().startsWith("custom_"))
           .map(t => normalizeTopicToken(t))
           .filter(Boolean);
-        specialistMode = standardTopicsLower.length > 0 && (
-          standardTopicsLower.length <= 2
-          || (standardTopicsLower.length <= 3 && Number(prefs.items_per_digest || 0) <= 5)
-        );
+        specialistMode = standardTopicsLower.length > 0 && standardTopicsLower.length <= 2;
         const standardTopicSet = new Set(standardTopicsLower);
         // Custom topics: match keyword against headline + summary text
         const customKeywords = u.topics
@@ -1071,7 +1085,7 @@ async function main() {
         const filtered = enriched.filter(item => {
           const tag = normalizeTopicToken(item.tag || "");
           const text = normalizeMatchText(`${item.headline || ""} ${item.summary || ""}`);
-          const tagMatch = standardTopicsLower.some(t => tag.includes(t) || t.includes(tag));
+          const tagMatch = standardTopicsLower.some(t => topicsRelated(tag, t));
           const customMatch = customKeywords.some(kw => text.includes(kw) || tag.includes(kw) || kw.includes(tag));
           return tagMatch || customMatch;
         });
@@ -1110,12 +1124,23 @@ async function main() {
       });
       userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
+      const minBaseScoreForFinal = Number(CONFIG.digest.minBaseScoreForFinal || 6.5);
+      const requestedCount = Number(prefs.items_per_digest || CONFIG.digest.itemCount || 5);
+      const minStrongItems = Math.max(2, Math.min(requestedCount, 4));
+      const stronger = userItems.filter((i) =>
+        Number(i?.baseScore || 0) >= minBaseScoreForFinal
+        || (Array.isArray(i?.why_shown) && i.why_shown.includes("custom_keyword"))
+      );
+      if (stronger.length >= minStrongItems) {
+        userItems = stronger;
+      }
+
       if (hasWeights) {
         log(`  [post-sort] ${userItems.map(i => `${i.tag}(${i.relevanceScore})`).join(", ")}`);
       }
 
       // 3. Trim to user's items_per_digest (top-N by relevance)
-      const count = prefs.items_per_digest || CONFIG.digest.itemCount;
+      const count = requestedCount;
       userItems = userItems.slice(0, count);
 
       // 4. Apply depth — strip wim if user wants headlines only or one-liner

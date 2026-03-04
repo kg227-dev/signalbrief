@@ -137,7 +137,7 @@ function loadOfflineDataset(appConfig) {
 async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
   const digestConfig = appConfig.digest || {};
   const topics = appConfig.topics || [];
-  const dateKey = etDateKey();
+  const dateKey = String(args?.date_key || etDateKey());
   const selectionTarget = maxRequestedItems(personas, Number(digestConfig.itemCount || 7));
 
   const standardItemsByTopic = [];
@@ -576,6 +576,9 @@ async function runHarness(argv = process.argv.slice(2)) {
     refresh_cache: args.refresh_cache,
     no_judge: args.no_judge,
     judge_model: args.judge_model,
+    analysis_calibration_samples: Number(args.analysis_calibration_samples || 0),
+    freshness_max_snapshots: Number(args.freshness_max_snapshots || 120),
+    custom_persona_limit: Number(args.custom_persona_limit || 0),
     confidence_bootstrap: args.confidence_bootstrap,
     run_label: args.run_label,
   };
@@ -634,6 +637,15 @@ async function runHarness(argv = process.argv.slice(2)) {
 
   const timestamp = new Date().toISOString();
   const runId = timestamp.replace(/[:.]/g, "-");
+  const datasetSnapshotsDir = path.join(RESULTS_DIR, "datasets");
+  if (!fs.existsSync(datasetSnapshotsDir)) fs.mkdirSync(datasetSnapshotsDir, { recursive: true });
+  const datasetRunSnapshotPath = path.join(datasetSnapshotsDir, `dataset-${runId}.json`);
+  writeJson(datasetRunSnapshotPath, {
+    run_id: runId,
+    run_label: args.run_label || null,
+    timestamp,
+    ...dataset,
+  });
 
   const improvementPriorities = buildImprovementPriorities(suiteResults);
   const baselineReport = getLatestRunPayload(RUNS_DIR);
@@ -673,12 +685,14 @@ async function runHarness(argv = process.argv.slice(2)) {
 
   console.log(`Report written: ${report.file}`);
   console.log(`Dataset snapshot: ${datasetSnapshotPath}`);
+  console.log(`Dataset run snapshot: ${datasetRunSnapshotPath}`);
 
   return {
     args,
     report,
     dataset,
     datasetSnapshotPath,
+    datasetRunSnapshotPath,
     rolling,
     budget,
   };

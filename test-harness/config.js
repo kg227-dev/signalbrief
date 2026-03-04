@@ -132,6 +132,10 @@ function parseArgs(argv) {
     matrix: null,
     confidence_bootstrap: MATRIX_DEFAULTS.confidence_bootstrap,
     run_label: null,
+    analysis_calibration_samples: 0,
+    freshness_max_snapshots: 120,
+    custom_persona_limit: 0,
+    date_key: null,
   };
 
   for (const token of argv) {
@@ -164,6 +168,18 @@ function parseArgs(argv) {
     } else if (token.startsWith("--run-label=")) {
       const raw = token.replace("--run-label=", "").trim();
       if (raw) args.run_label = raw;
+    } else if (token.startsWith("--analysis-calibration=")) {
+      const n = Number(token.replace("--analysis-calibration=", ""));
+      if (Number.isFinite(n) && n >= 0) args.analysis_calibration_samples = Math.floor(n);
+    } else if (token.startsWith("--freshness-max-snapshots=")) {
+      const n = Number(token.replace("--freshness-max-snapshots=", ""));
+      if (Number.isFinite(n) && n > 0) args.freshness_max_snapshots = Math.floor(n);
+    } else if (token.startsWith("--custom-persona-limit=")) {
+      const n = Number(token.replace("--custom-persona-limit=", ""));
+      if (Number.isFinite(n) && n >= 0) args.custom_persona_limit = Math.floor(n);
+    } else if (token.startsWith("--date-key=")) {
+      const raw = token.replace("--date-key=", "").trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) args.date_key = raw;
     }
   }
 

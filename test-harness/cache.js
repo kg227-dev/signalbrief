@@ -329,6 +329,29 @@ function buildPerplexityPayload(topicTag, query) {
   };
 }
 
+function findLatestTopicCacheFile(topicTag) {
+  const prefix = `${sanitizeCacheKey(topicTag)}_`;
+  if (!fs.existsSync(CACHE_PERPLEXITY_DIR)) return null;
+  const candidates = fs.readdirSync(CACHE_PERPLEXITY_DIR)
+    .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
+    .sort();
+  if (!candidates.length) return null;
+  return path.join(CACHE_PERPLEXITY_DIR, candidates[candidates.length - 1]);
+}
+
+function readPerplexityCacheFile(file, topicTag, stale = false) {
+  const cached = readJson(file, {});
+  return {
+    items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
+    from_cache: true,
+    cache_file: file,
+    stale_fallback: stale,
+    cost_usd: 0,
+    raw_response: cached.raw_response || null,
+    topic_tag: topicTag,
+  };
+}
+
 async function fetchTopicNewsCached({
   topicTag,
   query,
@@ -343,17 +366,14 @@ async function fetchTopicNewsCached({
     CACHE_PERPLEXITY_DIR,
     `${sanitizeCacheKey(topicTag)}_${sanitizeCacheKey(dateKey || "run")}.json`
   );
+  const latestFallback = findLatestTopicCacheFile(topicTag);
 
   if (!refreshCache && fs.existsSync(file)) {
-    const cached = readJson(file, {});
-    return {
-      items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
-      from_cache: true,
-      cache_file: file,
-      cost_usd: 0,
-      raw_response: cached.raw_response || null,
-      topic_tag: topicTag,
-    };
+    return readPerplexityCacheFile(file, topicTag, false);
+  }
+
+  if (!refreshCache && latestFallback) {
+    return readPerplexityCacheFile(latestFallback, topicTag, true);
   }
 
   if (!allowLiveApi) {
@@ -382,32 +402,20 @@ async function fetchTopicNewsCached({
     );
   } catch (err) {
     if (fs.existsSync(file)) {
-      const cached = readJson(file, {});
-      return {
-        items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
-        from_cache: true,
-        cache_file: file,
-        stale_fallback: true,
-        cost_usd: 0,
-        raw_response: cached.raw_response || null,
-        topic_tag: topicTag,
-      };
+      return readPerplexityCacheFile(file, topicTag, true);
+    }
+    if (latestFallback) {
+      return readPerplexityCacheFile(latestFallback, topicTag, true);
     }
     throw err;
   }
 
   if (res.status < 200 || res.status >= 300) {
     if (fs.existsSync(file)) {
-      const cached = readJson(file, {});
-      return {
-        items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
-        from_cache: true,
-        cache_file: file,
-        stale_fallback: true,
-        cost_usd: 0,
-        raw_response: cached.raw_response || null,
-        topic_tag: topicTag,
-      };
+      return readPerplexityCacheFile(file, topicTag, true);
+    }
+    if (latestFallback) {
+      return readPerplexityCacheFile(latestFallback, topicTag, true);
     }
     throw new Error(`Perplexity fetch failed for ${topicTag}: status ${res.status}`);
   }

@@ -8,11 +8,16 @@ module.exports = {
   async run(context) {
     const { personas, dataset, runtime, evaluator } = context;
     const maxSamples = Number(runtime.max_analysis_samples || 12);
+    const runModel = String(runtime.judge_model || "haiku").toLowerCase();
     const allowSonnetAdjudication = String(runtime.judge_model || "haiku").toLowerCase() === "haiku"
       && !runtime.no_judge
       && typeof evaluator.judgeAnalysisSampleWithModel === "function";
     const maxAdjudications = Math.max(0, Math.min(Number(runtime.max_sonnet_adjudications || 20), maxSamples));
     let adjudicatedCount = 0;
+    const allowCalibration = runModel === "haiku"
+      && !runtime.no_judge
+      && typeof evaluator.judgeAnalysisSampleWithModel === "function";
+    const calibrationLimit = Math.max(0, Number(runtime.analysis_calibration_samples || 0));
 
     const candidates = [];
     for (const persona of personas) {
@@ -75,6 +80,45 @@ module.exports = {
       judgedItems.push({ ...sample, score });
     }
 
+    const calibrationRows = [];
+    if (allowCalibration && calibrationLimit > 0 && judgedItems.length > 0) {
+      const ranked = judgedItems
+        .map((row, idx) => ({
+          idx,
+          row,
+          boundary_delta: Math.abs(Number(row?.score?.overall || 0) - 4),
+        }))
+        .sort((a, b) => a.boundary_delta - b.boundary_delta);
+
+      const picks = [];
+      const nearCount = Math.ceil(calibrationLimit / 2);
+      picks.push(...ranked.slice(0, nearCount));
+      picks.push(...ranked.slice(-Math.floor(calibrationLimit / 2)));
+
+      const seen = new Set();
+      for (const pick of picks) {
+        const sampleRow = pick?.row;
+        if (!sampleRow) continue;
+        const key = `${sampleRow.persona_id}::${sampleRow.item?.headline || ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const sonnet = await evaluator.judgeAnalysisSampleWithModel(sampleRow, "sonnet");
+        if (!sonnet?.judged) continue;
+        const haikuOverall = Number(sampleRow?.score?.overall || 0);
+        const sonnetOverall = Number(sonnet.overall || 0);
+        const delta = Math.abs(haikuOverall - sonnetOverall);
+        calibrationRows.push({
+          persona: sampleRow.persona_name,
+          headline: sampleRow.item?.headline || "",
+          haiku_overall: Number(haikuOverall.toFixed(3)),
+          sonnet_overall: Number(sonnetOverall.toFixed(3)),
+          abs_delta: Number(delta.toFixed(3)),
+          agreement: delta <= 0.75,
+        });
+        if (calibrationRows.length >= calibrationLimit) break;
+      }
+    }
+
     const overallScores = judgedItems.map((x) => Number(x.score.overall)).filter(Number.isFinite);
     const p25 = evaluator.percentile(overallScores, 0.25);
     const p10 = evaluator.percentile(overallScores, 0.1);
@@ -111,10 +155,24 @@ module.exports = {
 
     const overall = Number(dimensionAverages.overall.toFixed(3));
     const suiteScore = Number((((overall - 1) / 4) * 100).toFixed(2));
+    const calibrationAgreement = calibrationRows.length
+      ? mean(calibrationRows.map((r) => (r.agreement ? 1 : 0)))
+      : null;
+    const calibrationDelta = calibrationRows.length
+      ? mean(calibrationRows.map((r) => Number(r.abs_delta || 0)))
+      : null;
 
     let status = "pass";
     if ((overall < 4.0 || p25 < 3.6) && overall >= 3.7 && p25 >= 3.3) status = "warn";
     else if (overall < 4.0 || p25 < 3.6) status = "fail";
+    if (
+      status === "pass"
+      && calibrationRows.length >= 3
+      && calibrationAgreement !== null
+      && calibrationAgreement < 0.55
+    ) {
+      status = "warn";
+    }
 
     const failures = [];
     if (status !== "pass") {
@@ -151,6 +209,11 @@ module.exports = {
         "Add anti-paraphrase guardrails in prompt to penalize headline restatement and require second-order effects."
       );
     }
+    if (calibrationRows.length >= 3 && calibrationAgreement !== null && calibrationAgreement < 0.65) {
+      suggestions.push(
+        "Haiku/Sonnet calibration agreement is low; escalate borderline analysis samples to Sonnet in certification runs."
+      );
+    }
 
     return {
       id: this.id,
@@ -165,6 +228,13 @@ module.exports = {
         target: "Average overall >= 4.0/5 and P25 >= 3.6/5",
         sample_count: judgedItems.length,
         sonnet_adjudications: adjudicatedCount,
+        calibration: {
+          enabled: allowCalibration && calibrationLimit > 0,
+          sample_count: calibrationRows.length,
+          mean_abs_delta: calibrationDelta === null ? null : Number(calibrationDelta.toFixed(3)),
+          agreement_rate: calibrationAgreement === null ? null : Number(calibrationAgreement.toFixed(3)),
+          rows: calibrationRows,
+        },
         p25: Number(p25.toFixed(3)),
         p10: Number(p10.toFixed(3)),
         dimension_averages: Object.fromEntries(
@@ -178,7 +248,11 @@ module.exports = {
           adjudicated: !!row.score.adjudicated,
         })),
       },
-      confidence: judgedItems.some((x) => x.score.judged) ? 0.88 : 0.55,
+      confidence: judgedItems.some((x) => x.score.judged)
+        ? (calibrationRows.length >= 3 && calibrationAgreement !== null
+          ? Math.max(0.72, Math.min(0.93, 0.72 + calibrationAgreement * 0.21))
+          : 0.88)
+        : 0.55,
     };
   },
 };

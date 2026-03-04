@@ -5,6 +5,18 @@ function safeLength(text) {
   return String(text || "").trim().length;
 }
 
+function toBriefText(item) {
+  const authored = String(item?.wim_brief || "").trim();
+  if (authored) return authored;
+  const wim = String(item?.wim || "");
+  if (!wim.trim()) return "";
+  return wim
+    .replace(/<strong>(.*?)<\/strong>/s, "$1")
+    .split(".")[0]
+    .trim()
+    .concat(".");
+}
+
 module.exports = {
   id: "06-depth-control",
   name: "Depth Control",
@@ -41,6 +53,7 @@ module.exports = {
     const briefByHeadline = new Map(briefDigest.items.map((i) => [i.headline, i]));
     const deepByHeadline = new Map(deepDigest.items.map((i) => [i.headline, i]));
     const sharedHeadlines = [...deepByHeadline.keys()].filter((h) => briefByHeadline.has(h));
+    const targetPairs = Math.max(1, Number(runtime.max_depth_pairs || 5));
 
     const pairRows = sharedHeadlines.map((headline) => {
       const brief = briefByHeadline.get(headline);
@@ -65,10 +78,50 @@ module.exports = {
         deep_sentences: evaluator.sentenceCount(deepText),
         brief_grade: Number(evaluator.readingGradeLevel(briefText).toFixed(2)),
         deep_grade: Number(evaluator.readingGradeLevel(deepText).toFixed(2)),
+        synthetic_brief: false,
       };
     });
 
-    const judgeSample = pairRows.slice(0, Number(runtime.max_depth_pairs || 5));
+    if (pairRows.length < targetPairs) {
+      const seen = new Set(pairRows.map((row) => row.headline));
+      const deepSource = Array.isArray(deepDigest.pre_depth_items) && deepDigest.pre_depth_items.length
+        ? deepDigest.pre_depth_items
+        : (Array.isArray(deepDigest.scored_items) && deepDigest.scored_items.length
+          ? deepDigest.scored_items
+          : deepDigest.items);
+      const fallbackUniverse = Array.isArray(dataset?.enriched_items) ? dataset.enriched_items : [];
+      const candidates = [...deepSource, ...fallbackUniverse];
+      for (const deep of candidates) {
+        if (!deep?.headline || seen.has(deep.headline)) continue;
+        const briefText = toBriefText(deep);
+        const deepText = [
+          String(deep?.wim || ""),
+          String(deep?.implications || ""),
+          String(deep?.watch_next || ""),
+        ].filter(Boolean).join(" ");
+        if (!briefText && !deepText) continue;
+        const briefChars = safeLength(briefText);
+        const deepChars = safeLength(deepText);
+        const ratio = briefChars > 0 ? deepChars / briefChars : 0;
+        pairRows.push({
+          headline: deep.headline,
+          brief_text: briefText,
+          deep_text: deepText,
+          brief_chars: briefChars,
+          deep_chars: deepChars,
+          char_ratio: Number(ratio.toFixed(3)),
+          brief_sentences: evaluator.sentenceCount(briefText),
+          deep_sentences: evaluator.sentenceCount(deepText),
+          brief_grade: Number(evaluator.readingGradeLevel(briefText).toFixed(2)),
+          deep_grade: Number(evaluator.readingGradeLevel(deepText).toFixed(2)),
+          synthetic_brief: true,
+        });
+        seen.add(deep.headline);
+        if (pairRows.length >= targetPairs) break;
+      }
+    }
+
+    const judgeSample = pairRows.slice(0, targetPairs);
     const judgedPairs = [];
     for (const row of judgeSample) {
       let judge = await evaluator.judgeDepthPair({
@@ -117,7 +170,7 @@ module.exports = {
     const paddingPenalty = Math.max(0, (paddingRate - 0.2) * 80);
     const suiteScore = Number(Math.max(0, 0.35 * lengthScore + 0.45 * insightScore + 0.2 * meaningfulScore - paddingPenalty).toFixed(2));
 
-    const lowSample = judgedPairs.length < Math.min(6, Number(runtime.max_depth_pairs || 5));
+    const lowSample = judgedPairs.length < Math.min(8, targetPairs);
     let status = "pass";
     if ((avgRatio < 2 || avgInsight < 3.5 || paddingRate > 0.2) && suiteScore >= 60) status = "warn";
     else if (avgRatio < 2 || avgInsight < 3.5 || paddingRate > 0.2) status = "fail";
@@ -169,6 +222,8 @@ module.exports = {
       details: {
         target: "Deep should be 2-3x longer, insight >=3.5/5, likely_padding <=20%.",
         sample_count: judgedPairs.length,
+        target_pairs: targetPairs,
+        synthetic_brief_pairs: judgedPairs.filter((r) => r.synthetic_brief).length,
         sonnet_adjudications: adjudicatedCount,
         avg_char_ratio: Number(avgRatio.toFixed(3)),
         avg_insight_gain: Number(avgInsight.toFixed(3)),
@@ -182,6 +237,7 @@ module.exports = {
           likely_padding: r.judge.likely_padding,
           judged: !!r.judge.judged,
           adjudicated: !!r.judge.adjudicated,
+          synthetic_brief: !!r.synthetic_brief,
         })),
       },
       confidence: judgedPairs.some((p) => p.judge.judged) ? 0.84 : 0.58,

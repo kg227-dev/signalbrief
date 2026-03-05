@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+Disallow: /settings
+Disallow: /archive
+Disallow: /settings.html
+Disallow: /archive.html
+
+Sitemap: https://getsignalbrief.com/sitemap.xml

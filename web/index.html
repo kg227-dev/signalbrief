@@ -4,6 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SignalBrief — Your Daily Signal</title>
+<meta name="description" content="SignalBrief is a daily AI-curated business news digest for strategy professionals across healthcare, finance, private equity, technology, and policy.">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">
+<link rel="canonical" href="https://getsignalbrief.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SignalBrief">
+<meta property="og:title" content="SignalBrief — Daily AI-Curated Briefings for Strategy Professionals">
+<meta property="og:description" content="Get a personalized morning digest across AI, strategy, healthcare, finance, private equity, and policy in under 5 minutes.">
+<meta property="og:url" content="https://getsignalbrief.com/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="SignalBrief — Daily AI-Curated Briefings">
+<meta name="twitter:description" content="Personalized strategy-grade news briefings delivered each morning.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "name": "SignalBrief",
+      "url": "https://getsignalbrief.com"
+    },
+    {
+      "@type": "WebSite",
+      "name": "SignalBrief",
+      "url": "https://getsignalbrief.com/",
+      "description": "Daily AI-curated business and strategy digest for professionals."
+    }
+  ]
+}
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -173,6 +202,31 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 .success-card h2 { font-family:'Instrument Serif',Georgia,serif; font-size:28px; font-weight:400; margin-bottom:12px; }
 .success-card p { color:var(--text-secondary); font-size:15px; line-height:1.6; max-width:400px; margin:0 auto; }
 
+/* SEO content */
+.seo-content {
+  margin-top: 28px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+  animation: fadeUp 0.5s ease 0.45s both;
+}
+.seo-content h2 {
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: -0.3px;
+  margin-bottom: 10px;
+}
+.seo-content p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+  margin-bottom: 10px;
+}
+.seo-content p:last-child { margin-bottom: 0; }
+
 /* Footer */
 .footer { text-align:center; margin-top:48px; padding-top:24px; border-top:1px solid var(--border); color:var(--text-secondary); font-size:13px; animation:fadeUp 0.5s ease 0.5s both; }
 .footer a { color:var(--accent); text-decoration:none; }
@@ -193,6 +247,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
   .topic-chip { font-size:13px; padding:8px 14px; }
   .frequency-row { gap:8px; }
   .day-circle { width:30px; height:30px; font-size:11px; }
+  .seo-content { padding:20px; }
+  .seo-content h2 { font-size:26px; }
 }
 </style>
 </head>
@@ -519,6 +575,13 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
   </div>
 
   </div><!-- /onboard-form -->
+
+  <section class="seo-content" aria-labelledby="why-signalbrief">
+    <h2 id="why-signalbrief">AI Briefings For Strategy Teams</h2>
+    <p>SignalBrief helps consultants, operators, and investors stay ahead with a daily strategy-grade digest across AI, healthcare, private equity, finance, policy, and technology.</p>
+    <p>Each briefing combines fresh reporting with concise analysis so you can quickly understand what changed, why it matters, and what to watch next.</p>
+    <p>Choose your focus areas, preferred delivery time, and depth level, then receive a personalized morning briefing by email and Telegram.</p>
+  </section>
 
   <!-- FOOTER -->
   <div class="footer" id="formFooter">

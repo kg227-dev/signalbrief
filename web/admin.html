@@ -498,7 +498,33 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   font-size:12px;
   background:#fff;
 }
+.schedule-row-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:6px;
+}
 .schedule-time { font-family:ui-monospace,monospace; font-size:11px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.schedule-status {
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:1px 7px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.03em;
+  text-transform:uppercase;
+}
+.schedule-status-sent {
+  color:#065F46;
+  background:#ECFDF5;
+  border:1px solid #A7F3D0;
+}
+.schedule-status-upcoming {
+  color:#1D4ED8;
+  background:#EFF6FF;
+  border:1px solid #BFDBFE;
+}
 .schedule-name { font-weight:600; line-height:1.3; }
 .schedule-meta { color:var(--text-secondary); font-size:11px; margin-top:2px; line-height:1.35; }
 .schedule-actions { margin-top:6px; display:flex; justify-content:flex-end; }
@@ -1889,7 +1915,8 @@ function renderSchedule(roster) {
       if (!allowedDays.includes(dayOfWeek)) continue;
       const [dh, dm] = (u.delivery_time_raw || "07:00").split(":").map(Number);
       const deliveryMinutes = dh * 60 + dm;
-      if (isToday && deliveryMinutes <= nowMinutes) continue;
+      const deliveredToday = isToday && String(u.last_digest || "") === dateKey;
+      if (isToday && deliveryMinutes <= nowMinutes && !deliveredToday) continue;
       eventsByDate[dateKey].push({
         dateKey,
         dateLabel,
@@ -1899,6 +1926,8 @@ function renderSchedule(roster) {
         name: u.name || u.email,
         topics: u.topics,
         depth: u.depth,
+        status: deliveredToday ? "sent" : "scheduled",
+        delivered_count: Number(u.last_digest_item_count || 0),
         email: u.email,
         delivery_time_raw: u.delivery_time_raw || "07:00",
       });
@@ -1912,7 +1941,13 @@ function renderSchedule(roster) {
   }
 
   for (const dateKey of Object.keys(eventsByDate)) {
-    eventsByDate[dateKey].sort((a, b) => a.timeSortKey - b.timeSortKey);
+    eventsByDate[dateKey].sort((a, b) => {
+      if (a.status !== b.status) {
+        if (a.status === "sent") return -1;
+        if (b.status === "sent") return 1;
+      }
+      return a.timeSortKey - b.timeSortKey;
+    });
   }
 
   wrap.innerHTML = `<div class="schedule-calendar">${days.map(day => {
@@ -1930,7 +1965,14 @@ function renderSchedule(roster) {
       <div class="schedule-day-body">
       ${dayRows.length ? visibleRows.map(ev => `
         <div class="schedule-row">
-          <div class="schedule-time">${esc(ev.time)}</div>
+          <div class="schedule-row-top">
+            <div class="schedule-time">${esc(ev.time)}</div>
+            ${ev.status === "sent"
+              ? `<span class="schedule-status schedule-status-sent">sent${ev.delivered_count > 0 ? ` · ${ev.delivered_count} signal${ev.delivered_count === 1 ? "" : "s"}` : ""}</span>`
+              : (day.isToday
+                ? `<span class="schedule-status schedule-status-upcoming">scheduled</span>`
+                : "")}
+          </div>
           <div class="schedule-name">${esc(ev.name)}</div>
           <div class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</div>
           <div class="schedule-actions">
@@ -1939,7 +1981,7 @@ function renderSchedule(roster) {
               : `<span style="color:var(--text-secondary);font-size:11px;">—</span>`}
           </div>
         </div>
-      `).join("") : `<div class="schedule-empty-day">No deliveries</div>`}
+      `).join("") : `<div class="schedule-empty-day">${day.isToday ? "No deliveries sent or scheduled" : "No deliveries"}</div>`}
       ${hiddenCount > 0 ? `
         <div class="schedule-more">
           +${hiddenCount} more delivery${hiddenCount === 1 ? "" : "ies"}

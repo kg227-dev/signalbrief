@@ -1819,6 +1819,7 @@ const server = http.createServer(async (req, res) => {
           tag:      item.tag || "",
           url:      item.url || "",
         })),
+        last_digest_item_count: Array.isArray(u.last_digest_items) ? u.last_digest_items.length : 0,
         days_missed:        u.status === "active" ? calcDaysMissed(u.last_digest_at, allowedDays) : 0,
         delivery_time:      `${hour}${min} ${ampm} ET`,
         delivery_time_raw:  prefs.delivery_time || "07:00",

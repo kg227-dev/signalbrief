@@ -892,6 +892,11 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div class="health-metric-value" id="healthDigestRunnerVal">—</div>
       <div class="health-metric-sub" id="healthDigestRunnerSub">—</div>
     </div>
+    <div class="health-metric" id="healthScheduler" style="display:none;min-width:260px;">
+      <div class="health-metric-label">Scheduler worker</div>
+      <div class="health-metric-value" id="healthSchedulerVal">—</div>
+      <div class="health-metric-sub" id="healthSchedulerSub">—</div>
+    </div>
     <div class="health-metric" id="healthLaunchAgents" style="display:none;min-width:280px;">
       <div class="health-metric-label">LaunchAgents</div>
       <div class="health-metric-value" id="healthLaunchAgentsVal">—</div>
@@ -3070,6 +3075,30 @@ async function load(silent = false) {
           const mins = Math.max(0, Math.floor(age / 60));
           digestRunnerVal.innerHTML = `<span style="color:var(--yellow);">⏳ running (${esc(mode)})</span>`;
           digestRunnerSub.textContent = `Started ${formatEtDateTime(digestRunner.started_at)} · ${mins}m elapsed`;
+        }
+      }
+
+      const schedulerDiv = document.getElementById("healthScheduler");
+      const schedulerVal = document.getElementById("healthSchedulerVal");
+      const schedulerSub = document.getElementById("healthSchedulerSub");
+      const scheduler = health.scheduler_worker || null;
+      if (schedulerDiv && schedulerVal && schedulerSub) {
+        if (!scheduler) {
+          schedulerDiv.style.display = "none";
+        } else {
+          schedulerDiv.style.display = "";
+          if (scheduler.available === false) {
+            schedulerVal.innerHTML = `<span style="color:var(--red);">❌ missing</span>`;
+            schedulerSub.textContent = scheduler.summary || "No heartbeat file";
+          } else if (scheduler.healthy) {
+            const age = Number(scheduler.age_seconds || 0);
+            schedulerVal.innerHTML = `<span style="color:var(--green);">✅ healthy</span>`;
+            schedulerSub.textContent = `Heartbeat ${age}s ago${scheduler.last_run && scheduler.last_run.finished_at ? ` · last run ${formatEtDateTime(scheduler.last_run.finished_at)}` : ""}`;
+          } else {
+            const age = Number(scheduler.age_seconds || 0);
+            schedulerVal.innerHTML = `<span style="color:var(--yellow);">⚠️ stale</span>`;
+            schedulerSub.textContent = scheduler.summary || `Last heartbeat ${age}s ago`;
+          }
         }
       }
 

@@ -8,6 +8,7 @@ services:
       - .env
     environment:
       - PORT=3003
+      - SCHEDULER_HEARTBEAT_FILE=/app/data/scheduler-heartbeat.json
     ports:
       - "3003:3003"
     volumes:
@@ -45,6 +46,7 @@ services:
       - DIGEST_POLL_MS=300000
       - DIGEST_STARTUP_DELAY_MS=5000
       - DIGEST_RUN_TIMEOUT_MS=1500000
+      - SCHEDULER_HEARTBEAT_FILE=/app/data/scheduler-heartbeat.json
     volumes:
       - ./config.json:/app/config.json:ro
       - ./data:/app/data
@@ -53,4 +55,3 @@ services:
       web:
         condition: service_started
     restart: unless-stopped
-

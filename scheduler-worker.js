@@ -7,11 +7,17 @@ const { spawn } = require("child_process");
 
 const ROOT = __dirname;
 const DIGEST_SCRIPT = path.join(ROOT, "digest.js");
-const HEARTBEAT_FILE = path.join(ROOT, "data", "scheduler-heartbeat.json");
+const HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
+  ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
+  : path.join(ROOT, "data", "scheduler-heartbeat.json");
 
 const POLL_MS = Math.max(60 * 1000, Number(process.env.DIGEST_POLL_MS || (5 * 60 * 1000)));
 const STARTUP_DELAY_MS = Math.max(0, Number(process.env.DIGEST_STARTUP_DELAY_MS || 3000));
 const RUN_TIMEOUT_MS = Math.max(60 * 1000, Number(process.env.DIGEST_RUN_TIMEOUT_MS || (25 * 60 * 1000)));
+const WORKER_ARGS = String(process.env.DIGEST_WORKER_ARGS || "")
+  .trim()
+  .split(/\s+/)
+  .filter(Boolean);
 
 let runInFlight = false;
 let lastRun = null;
@@ -35,6 +41,7 @@ function writeHeartbeat(extra = {}) {
       poll_ms: POLL_MS,
       startup_delay_ms: STARTUP_DELAY_MS,
       run_timeout_ms: RUN_TIMEOUT_MS,
+      digest_worker_args: WORKER_ARGS,
       in_flight: runInFlight,
       last_run: lastRun,
       ...extra,
@@ -66,7 +73,7 @@ function runDigest(trigger) {
   });
 
   log(`starting digest (${trigger})`);
-  const child = spawn(process.execPath, [DIGEST_SCRIPT], {
+  const child = spawn(process.execPath, [DIGEST_SCRIPT, ...WORKER_ARGS], {
     cwd: ROOT,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
@@ -114,9 +121,10 @@ function shutdown(sig) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-log(`boot (poll=${Math.round(POLL_MS / 1000)}s timeout=${Math.round(RUN_TIMEOUT_MS / 1000)}s)`);
+log(
+  `boot (poll=${Math.round(POLL_MS / 1000)}s timeout=${Math.round(RUN_TIMEOUT_MS / 1000)}s args=${WORKER_ARGS.join(" ") || "none"})`
+);
 writeHeartbeat({ status: "booting", booted_at: nowIso() });
 
 setTimeout(() => runDigest("startup"), STARTUP_DELAY_MS);
 setInterval(() => runDigest("interval"), POLL_MS);
-

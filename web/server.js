@@ -96,6 +96,9 @@ const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
 const ADMIN_SERVICE_LOG = path.join(__dirname, "../data/admin-service-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
 const DIGEST_RUN_LOCK_FILE = path.join(__dirname, "../data/digest-run.lock");
+const SCHEDULER_HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
+  ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
+  : path.join(__dirname, "../data/scheduler-heartbeat.json");
 const DIGEST_RUN_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 
 function verifyAdminPassword(password) {
@@ -397,6 +400,51 @@ function digestRunStatus() {
     return { running: false, lock: null };
   }
   return { running: true, lock };
+}
+
+function readSchedulerHeartbeat() {
+  if (!fs.existsSync(SCHEDULER_HEARTBEAT_FILE)) {
+    return {
+      available: false,
+      healthy: false,
+      summary: "No heartbeat file",
+    };
+  }
+  try {
+    const raw = JSON.parse(fs.readFileSync(SCHEDULER_HEARTBEAT_FILE, "utf8"));
+    const updatedTs = Date.parse(raw?.updated_at || "");
+    if (!Number.isFinite(updatedTs)) {
+      return {
+        available: true,
+        healthy: false,
+        summary: "Heartbeat malformed",
+      };
+    }
+    const ageMs = Math.max(0, Date.now() - updatedTs);
+    const pollMs = Math.max(60 * 1000, Number(raw?.poll_ms || 5 * 60 * 1000));
+    const staleMs = Math.max(15 * 60 * 1000, pollMs * 3);
+    const healthy = ageMs <= staleMs;
+    return {
+      available: true,
+      healthy,
+      pid: raw?.pid || null,
+      in_flight: !!raw?.in_flight,
+      poll_ms: pollMs,
+      worker: raw?.worker || "scheduler-worker",
+      updated_at: raw?.updated_at || null,
+      age_seconds: Math.round(ageMs / 1000),
+      last_run: raw?.last_run || null,
+      summary: healthy
+        ? `ok · heartbeat ${Math.round(ageMs / 1000)}s ago`
+        : `stale · last heartbeat ${Math.round(ageMs / 1000)}s ago`,
+    };
+  } catch {
+    return {
+      available: true,
+      healthy: false,
+      summary: "Heartbeat unreadable",
+    };
+  }
 }
 
 function appendAdminMessageLog(entry) {
@@ -1939,6 +1987,7 @@ const server = http.createServer(async (req, res) => {
       : null;
     const serviceActionLog = readAdminServiceLog(12);
     const digestRun = digestRunStatus();
+    const schedulerWorker = readSchedulerHeartbeat();
 
     // Health / system status
     const lastRun = runs[0] || null; // runs is newest-first
@@ -2022,6 +2071,7 @@ const server = http.createServer(async (req, res) => {
         },
         launch_agents:            launchAgents,
         launch_agent_actions:     serviceActionLog,
+        scheduler_worker:         schedulerWorker,
         digest_runner: digestRun.running
           ? {
             running: true,

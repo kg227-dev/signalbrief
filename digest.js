@@ -1138,6 +1138,7 @@ async function main() {
   const args = process.argv.slice(2);
   const chatIdIdx = args.indexOf("--chatId");
   const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
+  const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
   const suppressWelcome = args.includes("--suppressWelcome");
   const runMode = targetChatId ? "targeted" : "scheduled";
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -1208,6 +1209,12 @@ async function main() {
       process.exit(2);
     }
     process.exit(0); // no users due this window
+  }
+
+  if (dryRun) {
+    const dueList = dueUsers.map((u) => u.email || u.chatId).filter(Boolean);
+    log(`🧪 Dry run: ${dueUsers.length} user(s) due${dueList.length ? ` -> ${dueList.join(", ")}` : ""}`);
+    process.exit(0);
   }
 
   if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);

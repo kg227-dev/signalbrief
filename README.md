@@ -121,6 +121,10 @@ node web/server.js          # Onboarding + settings + archive UI (port 3003)
 node scheduler-worker.js    # Always-on scheduler loop (runs digest checks every 5 min)
 node digest.js              # Manual digest run (all active users)
 node digest.js --chatId 123 # On-demand digest for one user
+
+# Smoke checks (no live delivery sends)
+npm run smoke:worker
+npm run smoke:admin-scheduler
 ```
 
 ### Production deployment (recommended — no laptop dependency)
@@ -144,6 +148,8 @@ Services in `docker-compose.yml`:
 - `worker` — 24/7 scheduler loop that runs `digest.js` every 5 minutes
 
 Persistent state is mounted on disk (`./data`, `./archive`), so user state and digests survive restarts.
+
+Full VM cutover commands: [`planning/production-cutover-ubuntu.md`](./planning/production-cutover-ubuntu.md)
 
 ### macOS LaunchAgents (local fallback only)
 
@@ -210,6 +216,10 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 | `POST /api/admin/update-delivery-time` | Inline admin schedule update for a user |
 | `POST /api/admin/bulk-action` | Safe dry-run/apply bulk admin actions |
 | `POST /api/admin/run-digest` | Trigger a digest run immediately |
+
+`/api/admin/stats` health now includes:
+- `digest_runner` (in-flight lock state)
+- `scheduler_worker` (heartbeat freshness from `data/scheduler-heartbeat.json`)
 
 ---
 

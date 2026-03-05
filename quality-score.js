@@ -303,6 +303,22 @@ function computeDigestQualityScore(opts = {}) {
   const topics = Array.isArray(user.topics) ? user.topics : [];
   const topicWeights = user.topic_weights || {};
 
+  if (!items.length) {
+    return {
+      score: 0,
+      band: qualityBand(0),
+      components: {
+        topic_fit: 0,
+        relevance_fit: 0,
+        analysis_quality: 0,
+        freshness_diversity: 0,
+        custom_coverage: 0,
+        diversity: 0,
+        freshness: 0,
+      },
+    };
+  }
+
   const T = computeTopicFit(items, topics);
   const R = computeRelevanceFit(items, topics, topicWeights);
   const A = computeAnalysisQuality(items);

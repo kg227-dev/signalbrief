@@ -805,6 +805,11 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div class="health-metric-value" id="healthDqsVal">—</div>
       <div class="health-metric-sub" id="healthDqsSub">—</div>
     </div>
+    <div class="health-metric" id="healthFeedback" style="display:none;min-width:280px;">
+      <div class="health-metric-label">Digest satisfaction (14d)</div>
+      <div class="health-metric-value" id="healthFeedbackVal">—</div>
+      <div class="health-metric-sub" id="healthFeedbackSub">—</div>
+    </div>
     <!-- Delivery health — populated by JS -->
     <div class="health-metric" id="healthDelivery" style="display:none;">
       <div class="health-metric-label">Delivery health</div>
@@ -2608,6 +2613,7 @@ async function load(silent = false) {
 
     const { summary, health, runs, per_user, roster, admin_messages } = data;
     const qualitySummary = summary && summary.quality ? summary.quality : null;
+    const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
     latestHealth = health || null;
     launchAgentActionLog = Array.isArray(health?.launch_agent_actions) ? health.launch_agent_actions : [];
 
@@ -2650,6 +2656,27 @@ async function load(silent = false) {
           dqsDiv.style.display = "";
           dqsVal.innerHTML = `<span style="color:${tone};">${avg.toFixed(1)}</span> avg`;
           dqsSub.textContent = `${improving} improving (14d) · ${atRisk} at risk · ${usersScored} users scored`;
+        }
+      }
+
+      const feedbackDiv = document.getElementById("healthFeedback");
+      const feedbackVal = document.getElementById("healthFeedbackVal");
+      const feedbackSub = document.getElementById("healthFeedbackSub");
+      if (feedbackDiv && feedbackVal && feedbackSub) {
+        const responses = Number(feedbackSummary && feedbackSummary.responses_14d || 0);
+        const avg = Number(feedbackSummary && feedbackSummary.avg_score_14d);
+        if (!feedbackSummary || responses <= 0 || !Number.isFinite(avg)) {
+          feedbackDiv.style.display = "none";
+        } else {
+          const tone = avg >= 80 ? "var(--green)" : avg >= 65 ? "var(--yellow)" : "var(--red)";
+          const positiveRate = Number(feedbackSummary.positive_rate_14d || 0);
+          const trend = feedbackSummary.trend_label || "Baseline forming";
+          const great = Number(feedbackSummary.great_14d || 0);
+          const fine = Number(feedbackSummary.fine_14d || 0);
+          const meh = Number(feedbackSummary.meh_14d || 0);
+          feedbackDiv.style.display = "";
+          feedbackVal.innerHTML = `<span style="color:${tone};">${avg.toFixed(1)}</span> avg`;
+          feedbackSub.textContent = `${responses} reactions · ${positiveRate.toFixed(1)}% positive · ${trend} · 🔥${great} 👍${fine} 👎${meh}`;
         }
       }
 

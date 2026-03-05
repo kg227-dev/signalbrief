@@ -28,6 +28,12 @@ const DIGEST_RUN_LOCK = path.join(__dirname, "data", "digest-run.lock");
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
+function buildPublicDigestUrl(dateKey) {
+  const key = String(dateKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return "";
+  return `${BASE_URL}/digest/${key}`;
+}
+
 // ET time helpers
 function getETNow() {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
@@ -193,14 +199,26 @@ IMPORTANT: Use the direct article URLs from your search citations. Do not use ho
       max_tokens: 1000,
     }
   );
+  if (res.status >= 400) {
+    const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || `status ${res.status}`;
+    log(`⚠️ Perplexity ${topic.tag} request returned ${res.status}: ${String(errDetail).slice(0, 180)}`);
+  }
 
   // Extract article URLs from Perplexity citations if available
   const citations = res.body?.citations || [];
 
   try {
     let content = res.body?.choices?.[0]?.message?.content || "[]";
+    if (!res.body?.choices?.[0]?.message?.content) {
+      const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || "no choices content";
+      log(`⚠️ Perplexity returned empty payload for ${topic.tag}: ${String(errDetail).slice(0, 180)}`);
+    }
     content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     let items = JSON.parse(content);
+    if (!Array.isArray(items)) {
+      log(`⚠️ Perplexity payload for ${topic.tag} was not an array`);
+      return [];
+    }
 
     // Patch URLs: if item URL looks like a homepage (no path), try to match from citations
     items = items.map((item) => {
@@ -433,8 +451,9 @@ TASK: For each news item below, return five fields:
 2. "wim" — a "why it matters" analysis of exactly 2-3 sentences.
    RULES:
    - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
-   - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
-   - Second sentence: start with "For <role>," and state a concrete action for that role. Name at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - First sentence: sharp strategic implication with one named entity and one explicit business impact (pricing, margin, demand, cost, capex, valuation, or market share). Wrap in <strong> tags.
+   - Second sentence: start with "For <role>," and state a concrete action for the next 1-2 quarters. Name at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Avoid hedging and filler: do NOT use "could", "may", "might", "potentially", "likely", "industry broadly", "stakeholders", or "monitor developments".
    - Include at least one concrete proper noun in sentence 1 or 2 (company, regulator, buyer segment, or fund type).
    - Include one concrete quantitative anchor when available from the source context (deal value, percentage, timeline, or count). If not available, use a bounded near-term qualifier (for example "next 2 quarters").
    - Third sentence (optional): must start with "Watch:" and name a specific catalyst in the next 2-4 weeks (filing, ruling, earnings call, close date, or vote). Skip only if no concrete catalyst exists.
@@ -754,12 +773,14 @@ function formatTelegram(items, dateStr, state, opts = {}) {
   const NUM_LABELS = ["1⃣","2⃣","3⃣","4⃣","5⃣","6⃣","7⃣","8⃣","9⃣","🔟"];
   const quality = digestQualityLabel(opts.digestQuality);
   const learningSummary = String(opts.learningSummary || "").trim();
+  const publicDigestUrl = String(opts.publicDigestUrl || "").trim();
   const lines = [
     `☀️ *SignalBrief — ${dateStr}*`,
     `_Your daily signal across AI, strategy, and business_`,
   ];
   if (quality) lines.push(`🎯 Digest match: ${quality.score}% · ${quality.band}`);
   if (learningSummary) lines.push(`🧠 ${learningSummary}`);
+  if (publicDigestUrl) lines.push(`🔗 [Share today's brief](${publicDigestUrl})`);
   lines.push("");
   items.forEach((item, i) => {
     const num = NUM_LABELS[i] || `${i + 1}.`;
@@ -833,6 +854,10 @@ function buildEmail(
     : "today's top signals across all areas";
   const quality = digestQualityLabel(opts.digestQuality);
   const learningSummary = String(opts.learningSummary || "").trim();
+  const publicDigestUrl = String(opts.publicDigestUrl || "").trim()
+    || buildPublicDigestUrl(digestDateKey)
+    || BASE_URL;
+  const publicDigestUrlEncoded = encodeURIComponent(publicDigestUrl);
 
   // ── Welcome banner (first digest only — placed BEFORE Quick Scan via template placeholder) ──
   const welcomeBanner = isFirstDigest ? `
@@ -957,6 +982,8 @@ function buildEmail(
     .replace("{{PERSONALIZATION_NOTE}}", personalizationNote)
     .replace("{{SETTINGS_FOOTER}}", settingsFooter)
     .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
+    .replace(/\{\{PUBLIC_DIGEST_URL\}\}/g, publicDigestUrl)
+    .replace(/\{\{PUBLIC_DIGEST_URL_ENCODED\}\}/g, publicDigestUrlEncoded)
     .replace(/\{\{SETTINGS_TOKEN\}\}/g, userToken)
     .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, digestDateKey || "")
     .replace(
@@ -1001,6 +1028,11 @@ async function sendEmail(subject, html, toEmail, token = null) {
 
 function saveToArchive(date, items, dateStr, quickScan, opts = {}) {
   const { overwrite = false } = opts;
+  const safeItems = Array.isArray(items) ? items : [];
+  if (safeItems.length === 0) {
+    log("⚠️ Archive write skipped: no items");
+    return;
+  }
   const archiveDir = path.join(__dirname, "archive");
   if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir);
   const key = etDateKey(date);
@@ -1010,7 +1042,7 @@ function saveToArchive(date, items, dateStr, quickScan, opts = {}) {
     date: key,
     dateStr,
     quickScan,
-    items: items.map(i => ({
+    items: safeItems.map(i => ({
       tag:         i.tag,
       headline:    i.headline,
       summary:     i.summary,
@@ -1117,6 +1149,7 @@ async function main() {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
   const digestDateKey = etDateKey(now);
+  const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
   const requestedCounts = dueUsers
     .map((u) => Number(u?.preferences?.items_per_digest))
     .filter((n) => Number.isFinite(n) && n > 0);
@@ -1216,7 +1249,7 @@ async function main() {
   const maxCustomItems = Number.isFinite(configuredMaxCustom) && configuredMaxCustom >= 0
     ? configuredMaxCustom
     : defaultMaxCustom;
-  const selected = selectItems(allItems, {
+  let selected = selectItems(allItems, {
     maxItems: selectionTarget,
     maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
     customTags,
@@ -1224,6 +1257,23 @@ async function main() {
     tagPriority,
     maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
   });
+  if (selected.length === 0) {
+    const fallbackPool = loadRecentArchiveItems(5);
+    if (fallbackPool.length > 0) {
+      selected = selectItems(fallbackPool, {
+        maxItems: selectionTarget,
+        maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
+        customTags: [],
+        maxCustomItems: 0,
+        tagPriority,
+        maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
+      });
+      log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
+    }
+  }
+  if (selected.length === 0) {
+    throw new Error("No items available from live fetch or archive fallback; digest aborted");
+  }
   log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
 
   const { items: enriched, usage: claudeUsage } = await enrichItems(selected);
@@ -1349,6 +1399,24 @@ async function main() {
       const count = requestedCount;
       userItems = userItems.slice(0, count);
 
+      // Hard guardrail: never send an empty digest.
+      if (userItems.length === 0) {
+        const emergencyCount = Math.max(1, Math.min(3, count));
+        const emergency = applyRelevanceScores(enriched, u.topics || [], weights, {
+          specialistMode: false,
+        })
+          .sort((a, b) => b.relevanceScore - a.relevanceScore)
+          .slice(0, emergencyCount);
+        if (emergency.length > 0) {
+          userItems = emergency;
+          wasFiltered = false;
+          log(`⚠️ Emergency fallback items used for ${u.email || u.chatId} (count=${emergency.length})`);
+        }
+      }
+      if (userItems.length === 0) {
+        throw new Error("No deliverable items after emergency fallback");
+      }
+
       // 4. Apply depth — strip wim if user wants headlines only or one-liner
       const depth = prefs.depth || "full";
       if (depth === "headline_only" || depth === "headlines" || depth === "scan") {
@@ -1399,6 +1467,7 @@ async function main() {
         const userTelegram = formatTelegram(userItems, shortDate, u, {
           digestQuality,
           learningSummary,
+          publicDigestUrl,
         });
         const userKeyboard = buildDigestInlineKeyboard(userItems);
         try {
@@ -1442,6 +1511,7 @@ async function main() {
           {
             digestQuality,
             learningSummary,
+            publicDigestUrl,
           }
         );
         try {

@@ -576,6 +576,30 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   border-color:var(--accent);
   background:var(--accent-light);
 }
+.failed-delivery-panel { margin-bottom:24px; }
+.failed-delivery-list { display:flex; flex-direction:column; gap:8px; }
+.failed-delivery-row {
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  padding:10px 12px;
+  background:#fff;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.failed-delivery-main { min-width:0; }
+.failed-delivery-name { font-weight:700; line-height:1.35; }
+.failed-delivery-meta { margin-top:2px; color:var(--text-secondary); font-size:11px; line-height:1.4; }
+.failed-delivery-error {
+  margin-top:5px;
+  color:#B91C1C;
+  font-size:11px;
+  line-height:1.4;
+  word-break:break-word;
+}
+.failed-delivery-actions { display:flex; gap:6px; flex-shrink:0; }
+.failed-delivery-actions .schedule-set-btn { margin-top:0; }
 
 /* Health bar metrics */
 .health-metric { }
@@ -810,6 +834,18 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   <div class="section-title">Upcoming deliveries (next 7 days)</div>
   <div class="schedule-wrap" id="scheduleWrap">
     <div class="schedule-empty">Loading…</div>
+  </div>
+
+  <!-- Failed deliveries (today) -->
+  <div class="schedule-wrap failed-delivery-panel" id="failedDeliveryPanel" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+      <div>
+        <div class="section-title" style="margin:0 0 2px;">Failed deliveries (today)</div>
+        <div id="failedDeliverySummary" class="table-meta" style="margin:0;">No failed deliveries in today's scheduled runs.</div>
+      </div>
+      <button id="resendAllFailedBtn" class="btn-secondary" onclick="resendFailedDeliveries()" disabled>Resend failed users</button>
+    </div>
+    <div id="failedDeliveryList" class="failed-delivery-list"></div>
   </div>
 
   <!-- System health bar -->
@@ -1400,9 +1436,12 @@ function countActiveTelegramUsers(roster) {
   return (roster || []).filter(u => u.status === "active" && u.telegram).length;
 }
 let latestRoster = [];
+let latestRuns = [];
 let latestHealth = null;
+let latestFailedDeliveries = [];
 let autoRefreshTimer = null;
 let loadInFlight = false;
+let resendAllInFlight = false;
 const AUTO_REFRESH_MS = 30000;
 let sendModalUser = null;
 let sendMode = "digest";
@@ -1868,6 +1907,256 @@ async function submitDeliveryTimeModal() {
 
 function editDeliveryTime(email, currentDeliveryTime, btn) {
   openDeliveryTimeModal(email, currentDeliveryTime, btn);
+}
+
+function normalizeEmailKey(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function buildFailedDeliveryRows(roster, runs) {
+  const users = Array.isArray(roster) ? roster : [];
+  const runRows = Array.isArray(runs) ? runs : [];
+  const byEmail = new Map();
+  const byChat = new Map();
+  users.forEach((u) => {
+    const emailKey = normalizeEmailKey(u.email);
+    const chatKey = String(u.chat_id || "").trim();
+    if (emailKey) byEmail.set(emailKey, u);
+    if (chatKey) byChat.set(chatKey, u);
+  });
+
+  function resolveRecipient(rawId) {
+    const id = String(rawId || "").trim();
+    if (!id) return { key: "", user: null, emailKey: "", rawId: "" };
+    const asEmail = normalizeEmailKey(id);
+    if (id.includes("@")) {
+      const user = byEmail.get(asEmail) || null;
+      const emailKey = user ? normalizeEmailKey(user.email || id) : asEmail;
+      return {
+        key: emailKey ? `email:${emailKey}` : `id:${id}`,
+        user,
+        emailKey,
+        rawId: id,
+      };
+    }
+    const user = byChat.get(id) || byEmail.get(asEmail) || null;
+    if (user) {
+      const emailKey = normalizeEmailKey(user.email || "");
+      return {
+        key: emailKey ? `email:${emailKey}` : `chat:${String(user.chat_id || id).trim()}`,
+        user,
+        emailKey,
+        rawId: id,
+      };
+    }
+    return { key: `id:${id}`, user: null, emailKey: "", rawId: id };
+  }
+
+  const todayEt = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayScheduledRuns = runRows
+    .filter((run) => !run.on_demand && String(run.date || "") === todayEt)
+    .slice()
+    .sort((a, b) => {
+      const aTs = Date.parse(a.run_at || "");
+      const bTs = Date.parse(b.run_at || "");
+      if (Number.isFinite(aTs) && Number.isFinite(bTs)) return bTs - aTs;
+      if (Number.isFinite(bTs)) return 1;
+      if (Number.isFinite(aTs)) return -1;
+      return 0;
+    });
+
+  const latestOutcomeByUser = new Map();
+  for (const run of todayScheduledRuns) {
+    const runAtLabel = run.run_at_et || formatEtDateTime(run.run_at);
+    (Array.isArray(run.per_user) ? run.per_user : []).forEach((entry) => {
+      const resolved = resolveRecipient(entry && entry.id);
+      if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
+      latestOutcomeByUser.set(resolved.key, {
+        status: "delivered",
+        key: resolved.key,
+        runId: resolved.rawId,
+        user: resolved.user,
+        emailKey: resolved.emailKey,
+        runAtIso: run.run_at || null,
+        runAtLabel,
+      });
+    });
+    (Array.isArray(run.per_user_failed) ? run.per_user_failed : []).forEach((entry) => {
+      const resolved = resolveRecipient(entry && entry.id);
+      if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
+      latestOutcomeByUser.set(resolved.key, {
+        status: "failed",
+        key: resolved.key,
+        runId: resolved.rawId,
+        user: resolved.user,
+        emailKey: resolved.emailKey,
+        error: String((entry && entry.error) || "Delivery failed"),
+        runAtIso: run.run_at || null,
+        runAtLabel,
+      });
+    });
+  }
+
+  return Array.from(latestOutcomeByUser.values())
+    .filter((row) => row.status === "failed")
+    .map((row) => {
+      const resendChatId = row.user ? String(row.user.chat_id || "").trim() : "";
+      const canResend = !!(resendChatId && row.user && row.user.status === "active");
+      return {
+        ...row,
+        resendChatId,
+        canResend,
+      };
+    });
+}
+
+function renderFailedDeliveries(roster, runs) {
+  const panel = document.getElementById("failedDeliveryPanel");
+  const summary = document.getElementById("failedDeliverySummary");
+  const list = document.getElementById("failedDeliveryList");
+  const resendAllBtn = document.getElementById("resendAllFailedBtn");
+  if (!panel || !summary || !list || !resendAllBtn) return;
+
+  const failedRows = buildFailedDeliveryRows(roster, runs);
+  latestFailedDeliveries = failedRows;
+
+  if (!failedRows.length) {
+    panel.style.display = "none";
+    list.innerHTML = "";
+    summary.textContent = "No failed deliveries in today's scheduled runs.";
+    resendAllBtn.disabled = true;
+    resendAllBtn.textContent = "Resend failed users";
+    return;
+  }
+
+  panel.style.display = "";
+  const resendable = failedRows.filter((row) => row.canResend);
+  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs${resendable.length ? ` · ${resendable.length} ready to resend` : ""}.`;
+  resendAllBtn.disabled = resendAllInFlight || resendable.length === 0;
+  resendAllBtn.textContent = resendAllInFlight ? "Resending..." : "Resend failed users";
+
+  list.innerHTML = failedRows.map((row) => {
+    const displayName = row.user
+      ? (row.user.name || row.user.email || row.user.chat_id || row.runId)
+      : (row.runId || "Unknown user");
+    const email = row.user && row.user.email ? String(row.user.email) : "";
+    const userLink = email
+      ? `<a href="/admin/user?email=${encodeURIComponent(email)}" style="color:var(--accent);text-decoration:none;">${esc(displayName)}</a>`
+      : esc(displayName);
+    const deliveryTarget = email
+      ? esc(email)
+      : (row.user && row.user.chat_id ? `<span class="mono">${esc(row.user.chat_id)}</span>` : `<span class="mono">${esc(row.runId || "unknown")}</span>`);
+    const reason = row.canResend
+      ? ""
+      : (row.user ? `Cannot resend while user is ${row.user.status || "inactive"}.` : "Cannot resend: user no longer exists in roster.");
+    return `
+      <div class="failed-delivery-row">
+        <div class="failed-delivery-main">
+          <div class="failed-delivery-name">${userLink}</div>
+          <div class="failed-delivery-meta">${deliveryTarget} · failed ${esc(row.runAtLabel || "today")}</div>
+          <div class="failed-delivery-error">${esc(row.error || "Delivery failed")}</div>
+          ${reason ? `<div class="failed-delivery-meta">${esc(reason)}</div>` : ""}
+        </div>
+        <div class="failed-delivery-actions">
+          <button
+            class="schedule-set-btn"
+            onclick='resendFailedDelivery(${JSON.stringify(row.resendChatId || "")}, ${JSON.stringify(row.emailKey || "")}, this)'
+            ${row.canResend && !resendAllInFlight ? "" : "disabled"}
+          >
+            resend
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function resendFailedDelivery(chatId, emailKey, triggerBtn) {
+  if (resendAllInFlight) return;
+  const targetChatId = String(chatId || "").trim();
+  const normalizedEmail = normalizeEmailKey(emailKey || "");
+  if (!targetChatId) {
+    showToast("err", "No resend target found for this row.");
+    return;
+  }
+  const user = findRosterUser(normalizedEmail, targetChatId);
+  const label = user ? (user.name || user.email || user.chat_id) : targetChatId;
+  const accepted = await openConfirmModal(
+    "Resend failed delivery",
+    `Resend today's digest to ${label}?`,
+    "Resend"
+  );
+  if (!accepted) return;
+
+  const btn = triggerBtn && triggerBtn.tagName ? triggerBtn : null;
+  const prevText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "sending...";
+  }
+
+  try {
+    const { ok, data, status } = await runDigestForChat(targetChatId);
+    if (!ok || !data.success) {
+      const errMsg = data.error || `Resend failed (HTTP ${status})`;
+      showToast("err", errMsg);
+      if (normalizedEmail) setRowActionStatus(normalizedEmail, "err", `Resend failed: ${errMsg}`);
+      return;
+    }
+    showToast("ok", data.message || `Digest resent to ${label}`);
+    if (normalizedEmail) setRowActionStatus(normalizedEmail, "ok", "Digest resent");
+    await load(true);
+  } catch (e) {
+    const errMsg = e.message || "Network error during resend";
+    showToast("err", errMsg);
+    if (normalizedEmail) setRowActionStatus(normalizedEmail, "err", errMsg);
+  } finally {
+    if (btn && document.body.contains(btn)) {
+      btn.disabled = false;
+      btn.textContent = prevText || "resend";
+    }
+  }
+}
+
+async function resendFailedDeliveries() {
+  if (resendAllInFlight) return;
+  const queue = (latestFailedDeliveries || []).filter((row) => row.canResend && row.resendChatId);
+  if (!queue.length) {
+    showToast("warn", "No failed users are currently eligible for resend.");
+    return;
+  }
+  const accepted = await openConfirmModal(
+    "Resend failed users",
+    `Resend today's digest to ${queue.length} failed user${queue.length === 1 ? "" : "s"} now?`,
+    "Resend all"
+  );
+  if (!accepted) return;
+
+  resendAllInFlight = true;
+  renderFailedDeliveries(latestRoster || [], latestRuns || []);
+  let sent = 0;
+  let failed = 0;
+  try {
+    for (const row of queue) {
+      const result = await runDigestForChat(row.resendChatId);
+      if (result.ok && result.data && result.data.success) {
+        sent += 1;
+        if (row.emailKey) setRowActionStatus(row.emailKey, "ok", "Digest resent");
+      } else {
+        failed += 1;
+        const errMsg = (result.data && result.data.error) ? result.data.error : `HTTP ${result.status}`;
+        if (row.emailKey) setRowActionStatus(row.emailKey, "err", `Resend failed: ${errMsg}`);
+      }
+      await sleep(140);
+    }
+  } finally {
+    resendAllInFlight = false;
+    renderFailedDeliveries(latestRoster || [], latestRuns || []);
+  }
+
+  if (sent > 0) showToast("ok", `Resent ${sent} user${sent === 1 ? "" : "s"}.`);
+  if (failed > 0) showToast("err", `${failed} resend${failed === 1 ? "" : "s"} failed.`);
+  await load(true);
 }
 
 function toggleScheduleDay(dateKey) {
@@ -2654,6 +2943,7 @@ async function load(silent = false) {
     }
 
     const { summary, health, runs, per_user, roster, admin_messages } = data;
+    latestRuns = Array.isArray(runs) ? runs.slice() : [];
     const qualitySummary = summary && summary.quality ? summary.quality : null;
     const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
     latestHealth = health || null;
@@ -2668,6 +2958,7 @@ async function load(silent = false) {
     }
 
     renderSchedule(roster || []);
+    renderFailedDeliveries(roster || [], latestRuns);
     renderSubscriberTable(roster || []);
     renderTestTargets(roster || []);
     renderTestDigestStatus({ state: "idle" });

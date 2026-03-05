@@ -475,6 +475,7 @@ TASK: For each news item below, return five fields:
 1. "wim_brief" — one sentence, max 18 words.
    RULES:
    - Capture only the core strategic punchline for a busy executive.
+   - Keep this descriptive only (what changed + why now); do not include role-specific actions or "Watch:" language.
    - No filler, no hedging, no repetition of the headline.
    - Do not use HTML tags in this field.
 
@@ -482,7 +483,7 @@ TASK: For each news item below, return five fields:
    RULES:
    - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
    - First sentence: sharp, specific strategic implication. Wrap in <strong> tags. Make the reader think "I need to bring this up in my client meeting."
-   - Second sentence: start with "For <role>," and state a concrete action for that role. Name at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Second sentence: start with "For <role>," and state a concrete action for that role. Include a causal link ("because", "as", or "which means") plus at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
    - Include at least one concrete proper noun in sentence 1 or 2 (company, regulator, buyer segment, or fund type).
    - Include one concrete quantitative anchor when available from the source context (deal value, percentage, timeline, or count). If not available, use a bounded near-term qualifier (for example "next 2 quarters").
    - Third sentence (optional): must start with "Watch:" and name a specific catalyst in the next 2-4 weeks (filing, ruling, earnings call, close date, or vote). Skip only if no concrete catalyst exists.

@@ -243,74 +243,118 @@ async function httpsPostWithRetry(hostname, path_, headers, body, opts = {}) {
 
 async function fetchTopicNews(topic) {
   log(`Fetching: ${topic.tag}`);
-  const query = topic.queries[0];
+  const queries = Array.isArray(topic?.queries) && topic.queries.length
+    ? topic.queries.map((q) => String(q || "").trim()).filter(Boolean)
+    : [];
+  if (!queries.length) {
+    const empty = [];
+    empty.__apiCalls = 0;
+    return empty;
+  }
 
-  const res = await httpsPostWithRetry(
-    "api.perplexity.ai", "/chat/completions",
-    { "Content-Type": "application/json", "Authorization": `Bearer ${CONFIG.keys.perplexity}` },
-    {
-      model: "sonar",
-      messages: [
+  const maxAttempts = topic?.isCustom ? Math.min(2, queries.length) : 1;
+  const collected = [];
+  const seenUrl = new Set();
+  const seenHeadline = new Set();
+  let apiCalls = 0;
+
+  for (let idx = 0; idx < maxAttempts; idx++) {
+    const query = queries[idx];
+    if (idx > 0) log(`↳ ${topic.tag} fallback query ${idx + 1}/${maxAttempts}`);
+
+    let res;
+    try {
+      res = await httpsPostWithRetry(
+        "api.perplexity.ai", "/chat/completions",
+        { "Content-Type": "application/json", "Authorization": `Bearer ${CONFIG.keys.perplexity}` },
         {
-          role: "system",
-          content: `You are a business and strategy news researcher covering AI, technology, healthcare, financial services, private equity, M&A, energy, consumer, policy, and consulting.
+          model: "sonar",
+          messages: [
+            {
+              role: "system",
+              content: `You are a business and strategy news researcher covering AI, technology, healthcare, financial services, private equity, M&A, energy, consumer, policy, and consulting.
 Return ONLY a JSON array of up to 3 distinct news items from the last 48 hours.
 Each item MUST include the direct article URL from your citations — not the homepage.
 Format: [{"headline": string, "summary": string (1 sentence, max 20 words, factual lede only — no analysis), "source": string (domain, e.g. wsj.com), "url": string (full direct article URL from your citations), "tag": "${topic.tag}"}]
 No markdown. No explanation. JSON array only.`,
-        },
-        {
-          role: "user",
-          content: `Find the 3 most important news items from the last 48 hours about: ${query}
+            },
+            {
+              role: "user",
+              content: `Find the 3 most important news items from the last 48 hours about: ${query}
 IMPORTANT: Use the direct article URLs from your search citations. Do not use homepage URLs.`,
-        },
-      ],
-      max_tokens: 1000,
-    }
-  );
-  if (res.status >= 400) {
-    const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || `status ${res.status}`;
-    log(`⚠️ Perplexity ${topic.tag} request returned ${res.status}: ${String(errDetail).slice(0, 180)}`);
-  }
-
-  // Extract article URLs from Perplexity citations if available
-  const citations = res.body?.citations || [];
-
-  try {
-    let content = res.body?.choices?.[0]?.message?.content || "[]";
-    if (!res.body?.choices?.[0]?.message?.content) {
-      const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || "no choices content";
-      log(`⚠️ Perplexity returned empty payload for ${topic.tag}: ${String(errDetail).slice(0, 180)}`);
-    }
-    content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    let items = JSON.parse(content);
-    if (!Array.isArray(items)) {
-      log(`⚠️ Perplexity payload for ${topic.tag} was not an array`);
-      return [];
-    }
-
-    // Patch URLs: if item URL looks like a homepage (no path), try to match from citations
-    items = items.map((item) => {
-      if (!item.url || item.url === "#") return { ...item, tag: topic.tag };
-      try {
-        const u = new URL(item.url);
-        // Homepage if path is "/" or empty
-        if (u.pathname === "/" || u.pathname === "") {
-          // Find citation from same domain
-          const match = citations.find((c) => {
-            try { return new URL(c).hostname === u.hostname; } catch { return false; }
-          });
-          if (match) return { ...item, url: match, tag: topic.tag };
+            },
+          ],
+          max_tokens: 1000,
         }
-      } catch {}
-      return { ...item, tag: topic.tag };
-    });
+      );
+      apiCalls += 1;
+    } catch (e) {
+      log(`⚠️ Perplexity ${topic.tag} query failed (${idx + 1}/${maxAttempts}): ${String(e?.message || e).slice(0, 180)}`);
+      continue;
+    }
 
-    return items;
-  } catch (e) {
-    log(`Parse error for ${topic.tag}: ${e.message}`);
-    return [];
+    if (res.status >= 400) {
+      const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || `status ${res.status}`;
+      log(`⚠️ Perplexity ${topic.tag} request returned ${res.status}: ${String(errDetail).slice(0, 180)}`);
+      continue;
+    }
+
+    // Extract article URLs from Perplexity citations if available
+    const citations = res.body?.citations || [];
+
+    try {
+      let content = res.body?.choices?.[0]?.message?.content || "[]";
+      if (!res.body?.choices?.[0]?.message?.content) {
+        const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || "no choices content";
+        log(`⚠️ Perplexity returned empty payload for ${topic.tag}: ${String(errDetail).slice(0, 180)}`);
+      }
+      content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      let items = JSON.parse(content);
+      if (!Array.isArray(items)) {
+        log(`⚠️ Perplexity payload for ${topic.tag} was not an array`);
+        continue;
+      }
+
+      // Patch URLs: if item URL looks like a homepage (no path), try to match from citations
+      items = items.map((item) => {
+        if (!item.url || item.url === "#") return { ...item, tag: topic.tag };
+        try {
+          const u = new URL(item.url);
+          // Homepage if path is "/" or empty
+          if (u.pathname === "/" || u.pathname === "") {
+            // Find citation from same domain
+            const match = citations.find((c) => {
+              try { return new URL(c).hostname === u.hostname; } catch { return false; }
+            });
+            if (match) return { ...item, url: match, tag: topic.tag };
+          }
+        } catch {}
+        return { ...item, tag: topic.tag };
+      });
+
+      for (const item of items) {
+        if (!item || !item.headline) continue;
+        const headKey = String(item.headline || "").toLowerCase().trim().slice(0, 80);
+        const urlKey = normalizeUrlForDedup(item.url || "");
+        if (headKey && seenHeadline.has(headKey)) continue;
+        if (urlKey && seenUrl.has(urlKey)) continue;
+        if (headKey) seenHeadline.add(headKey);
+        if (urlKey) seenUrl.add(urlKey);
+        collected.push(item);
+        if (collected.length >= 3) break;
+      }
+    } catch (e) {
+      log(`Parse error for ${topic.tag}: ${e.message}`);
+    }
+
+    if (collected.length >= 3) break;
+    if (!topic?.isCustom && collected.length >= 1) break;
+    if (topic?.isCustom && collected.length >= 2) break;
   }
+
+  const out = collected.slice(0, 3);
+  out.__apiCalls = apiCalls;
+  return out;
 }
 
 // ── 2. Select best N (interleaved, max per tag/source, capped custom share) ──
@@ -514,6 +558,7 @@ TASK: For each news item below, return five fields:
 1. "wim_brief" — one sentence, max 18 words.
    RULES:
    - Capture only the core strategic punchline for a busy executive.
+   - Keep this descriptive only (what changed + why now); do not include role-specific actions or "Watch:" language.
    - No filler, no hedging, no repetition of the headline.
    - Do not use HTML tags in this field.
 
@@ -521,7 +566,7 @@ TASK: For each news item below, return five fields:
    RULES:
    - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
    - First sentence: sharp strategic implication with one named entity and one explicit business impact (pricing, margin, demand, cost, capex, valuation, or market share). Wrap in <strong> tags.
-   - Second sentence: start with "For <role>," and state a concrete action for the next 1-2 quarters. Name at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Second sentence: start with "For <role>," and state a concrete action for the next 1-2 quarters. Include a causal link ("because", "as", or "which means") plus at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
    - Avoid hedging and filler: do NOT use "could", "may", "might", "potentially", "likely", "industry broadly", "stakeholders", or "monitor developments".
    - Include at least one concrete proper noun in sentence 1 or 2 (company, regulator, buyer segment, or fund type).
    - Include one concrete quantitative anchor when available from the source context (deal value, percentage, timeline, or count). If not available, use a bounded near-term qualifier (for example "next 2 quarters").
@@ -657,6 +702,92 @@ function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
 }
 
+const CUSTOM_KEYWORD_ALIASES = {
+  "rate cuts": ["federal reserve rate cut", "interest rate cuts", "fed rate decision"],
+  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules", "sec disclosure rule"],
+  "semicap": ["semiconductor equipment", "chip equipment", "wafer fab equipment"],
+  "agentic ai": ["ai agents", "enterprise ai agents", "autonomous ai agent"],
+  "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
+  "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
+  "doge": ["dogecoin", "crypto regulation", "crypto market"],
+};
+
+const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWordBoundary(text, token) {
+  const t = String(text || "");
+  const w = String(token || "");
+  if (!t || !w) return false;
+  const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(w)}(?:\\s|$)`, "i");
+  return pattern.test(t);
+}
+
+function tokenizeCustomTopic(topicNormalized) {
+  return normalizeTopicToken(topicNormalized)
+    .split(" ")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !CUSTOM_TOPIC_STOPWORDS.has(t))
+    .filter((t) => t.length > 2 || ["ai", "pe", "sec", "fed"].includes(t));
+}
+
+function customKeywordMatches(topicNormalized, bodyText, tagNormalized = "") {
+  const topic = normalizeTopicToken(topicNormalized);
+  if (!topic) return false;
+
+  const haystack = normalizeMatchText(`${bodyText || ""} ${tagNormalized || ""}`);
+  if (!haystack) return false;
+
+  if (haystack.includes(topic)) return true;
+
+  const aliases = CUSTOM_KEYWORD_ALIASES[topic] || [];
+  for (const alias of aliases) {
+    const aliasToken = normalizeTopicToken(alias);
+    if (aliasToken && haystack.includes(aliasToken)) return true;
+  }
+
+  const tokens = tokenizeCustomTopic(topic);
+  if (!tokens.length) return false;
+
+  const hitCount = tokens.reduce((sum, token) => (
+    sum + (hasWordBoundary(haystack, token) ? 1 : 0)
+  ), 0);
+  const requiredHits = tokens.length >= 3 ? 2 : tokens.length;
+  return hitCount >= Math.max(1, requiredHits);
+}
+
+function buildCustomTopicQueries(keywordRaw) {
+  const keyword = String(keywordRaw || "").trim().replace(/\s+/g, " ");
+  if (!keyword) return [];
+  const normalized = normalizeTopicToken(keyword);
+  const aliases = CUSTOM_KEYWORD_ALIASES[normalized] || [];
+  const base = [
+    `${keyword} business strategy developments last 48 hours`,
+    `${keyword} market impact regulation deals earnings last 72 hours`,
+    `${keyword} strategy and investment implications last 72 hours`,
+  ];
+  if (keyword.split(" ").length <= 2) {
+    base.unshift(`${keyword} company and sector news last 48 hours`);
+  }
+  const merged = [...base, ...aliases.map((a) => `${a} business and market developments last 72 hours`)];
+  const seen = new Set();
+  const queries = [];
+  for (const q of merged) {
+    const clean = String(q || "").trim();
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    queries.push(clean);
+    if (queries.length >= 4) break;
+  }
+  return queries;
+}
+
 const RELATED_TOPIC_GROUPS = [
   ["healthcare", "life sciences"],
   ["ai tech", "technology", "digital"],
@@ -699,7 +830,7 @@ function computeTopicSignals(item, userTopics) {
       best = Math.max(best, 7);
     }
 
-    if (rawTopic.toLowerCase().startsWith("custom_") && (bodyText.includes(topicNormalized) || tagNormalized.includes(topicNormalized))) {
+    if (rawTopic.toLowerCase().startsWith("custom_") && customKeywordMatches(topicNormalized, bodyText, tagNormalized)) {
       customKeywordMatch = true;
       best = Math.max(best, 10);
     }
@@ -1258,23 +1389,25 @@ async function main() {
       log(`On-demand: fetching ${topicsToFetch.length}/${CONFIG.topics.length} topic(s) for user`);
     }
   }
-  const standardFetchCalls = topicsToFetch.length;
+  const standardFetchCallsPlanned = topicsToFetch.length;
+  let standardFetchCalls = 0;
   let customFetchCalls = 0;
 
   // Fetch standard topics in parallel
   const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
+  standardFetchCalls = allResults.reduce((sum, rows) => sum + Number(rows?.__apiCalls || 0), 0);
   let allItems = allResults.flat();
   log(`Fetched ${allItems.length} raw items`);
-  const allStandardEmpty = standardFetchCalls > 0
+  const allStandardEmpty = standardFetchCallsPlanned > 0
     && allResults.every((rows) => Array.isArray(rows) && rows.length === 0);
   if (allStandardEmpty) {
     await emitDigestIncident(
       "zero-standard-results",
-      `All ${standardFetchCalls} standard topic fetches returned zero items`,
+      `All ${standardFetchCallsPlanned} standard topic fetches returned zero items`,
       {
         mode: runMode,
         due_users: dueUsers.length,
-        standard_topics: standardFetchCalls,
+        standard_topics: standardFetchCallsPlanned,
         selected_items: 0,
       }
     );
@@ -1310,15 +1443,18 @@ async function main() {
   if (customTopicSlugs.length > 0) {
     const customFetchTargets = customTopicSlugs.map(slug => {
       const keyword = slug.replace(/^custom_/, "").replace(/_/g, " ").trim();
+      const queries = buildCustomTopicQueries(keyword);
       return {
         tag: keyword.toUpperCase(),   // e.g. "PFIZER", "GLP-1"
-        queries: [`${keyword} company news business strategy developments last 48 hours`],
+        queries: queries.length ? queries : [`${keyword} business strategy developments last 48 hours`],
+        isCustom: true,
       };
     });
     customTags = customFetchTargets.map((t) => t.tag);
-    customFetchCalls = customFetchTargets.length;
+    customFetchCalls = 0;
     log(`Fetching ${customFetchTargets.length} custom topic(s): ${customFetchTargets.map(t => t.tag).join(", ")}`);
     const customResults = await Promise.all(customFetchTargets.map(fetchTopicNews));
+    customFetchCalls = customResults.reduce((sum, rows) => sum + Number(rows?.__apiCalls || 0), 0);
     const customItems = customResults.flat();
     log(`Fetched ${customItems.length} custom topic item(s)`);
     // Prepend so selectItems() sees custom items first — they have unique tags so they
@@ -1332,7 +1468,7 @@ async function main() {
       {
         mode: runMode,
         due_users: dueUsers.length,
-        standard_topics: standardFetchCalls,
+        standard_topics: standardFetchCallsPlanned,
         selected_items: 0,
       }
     );
@@ -1381,7 +1517,7 @@ async function main() {
         {
           mode: runMode,
           due_users: dueUsers.length,
-          standard_topics: standardFetchCalls,
+          standard_topics: standardFetchCallsPlanned,
           selected_items: selected.length,
         }
       );
@@ -1394,7 +1530,7 @@ async function main() {
       {
         mode: runMode,
         due_users: dueUsers.length,
-        standard_topics: standardFetchCalls,
+        standard_topics: standardFetchCallsPlanned,
         selected_items: 0,
       }
     );
@@ -1468,7 +1604,7 @@ async function main() {
           const tag = normalizeTopicToken(item.tag || "");
           const text = normalizeMatchText(`${item.headline || ""} ${item.summary || ""}`);
           const tagMatch = standardTopicsLower.some(t => topicsRelated(tag, t));
-          const customMatch = customKeywords.some(kw => text.includes(kw) || tag.includes(kw) || kw.includes(tag));
+          const customMatch = customKeywords.some((kw) => customKeywordMatches(kw, text, tag));
           return tagMatch || customMatch;
         });
         const MIN_ITEMS = 3;

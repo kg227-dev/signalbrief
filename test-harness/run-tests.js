@@ -67,6 +67,24 @@ function normalizeTopicToken(value) {
     .trim();
 }
 
+const CUSTOM_QUERY_ALIASES = {
+  "rate cuts": ["federal reserve rate cut", "interest rate cuts"],
+  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules"],
+  "semicap": ["semiconductor equipment", "chip equipment"],
+  "agentic ai": ["ai agents", "enterprise ai agents"],
+  "quantum computing": ["quantum hardware", "quantum platform"],
+  "glp 1": ["obesity drugs", "weight loss drug"],
+  "doge": ["dogecoin", "crypto regulation"],
+};
+
+function buildPrimaryCustomQuery(keywordRaw) {
+  const keyword = String(keywordRaw || "").trim();
+  const normalized = normalizeTopicToken(keyword);
+  const alias = (CUSTOM_QUERY_ALIASES[normalized] || [])[0];
+  if (!alias) return `${keyword} business strategy market policy developments last 72 hours`;
+  return `${keyword} ${alias} business strategy market policy developments last 72 hours`;
+}
+
 function standardTopicUniverse(appConfig) {
   return (appConfig.topics || []).map((t) => t.tag).filter(Boolean);
 }
@@ -167,7 +185,7 @@ async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
   const customItemsByTopic = [];
   for (const keyword of customKeywords) {
     const topicTag = keyword.toUpperCase();
-    const query = `${keyword} company news business strategy developments last 48 hours`;
+    const query = buildPrimaryCustomQuery(keyword);
     try {
       const fetchResult = await fetchTopicNewsCached({
         topicTag,

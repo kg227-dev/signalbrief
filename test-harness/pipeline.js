@@ -10,6 +10,62 @@ function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
 }
 
+const CUSTOM_KEYWORD_ALIASES = {
+  "rate cuts": ["federal reserve rate cut", "interest rate cuts", "fed rate decision"],
+  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules", "sec disclosure rule"],
+  "semicap": ["semiconductor equipment", "chip equipment", "wafer fab equipment"],
+  "agentic ai": ["ai agents", "enterprise ai agents", "autonomous ai agent"],
+  "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
+  "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
+  "doge": ["dogecoin", "crypto regulation", "crypto market"],
+};
+
+const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWordBoundary(text, token) {
+  const t = String(text || "");
+  const w = String(token || "");
+  if (!t || !w) return false;
+  const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(w)}(?:\\s|$)`, "i");
+  return pattern.test(t);
+}
+
+function tokenizeCustomTopic(topicNormalized) {
+  return normalizeTopicToken(topicNormalized)
+    .split(" ")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !CUSTOM_TOPIC_STOPWORDS.has(t))
+    .filter((t) => t.length > 2 || ["ai", "pe", "sec", "fed"].includes(t));
+}
+
+function customKeywordMatches(topicNormalized, bodyText, tagNormalized = "") {
+  const topic = normalizeTopicToken(topicNormalized);
+  if (!topic) return false;
+
+  const haystack = normalizeMatchText(`${bodyText || ""} ${tagNormalized || ""}`);
+  if (!haystack) return false;
+  if (haystack.includes(topic)) return true;
+
+  const aliases = CUSTOM_KEYWORD_ALIASES[topic] || [];
+  for (const alias of aliases) {
+    const aliasToken = normalizeTopicToken(alias);
+    if (aliasToken && haystack.includes(aliasToken)) return true;
+  }
+
+  const tokens = tokenizeCustomTopic(topic);
+  if (!tokens.length) return false;
+  const hitCount = tokens.reduce((sum, token) => (
+    sum + (hasWordBoundary(haystack, token) ? 1 : 0)
+  ), 0);
+  const requiredHits = tokens.length >= 3 ? 2 : tokens.length;
+  return hitCount >= Math.max(1, requiredHits);
+}
+
 const RELATED_TOPIC_GROUPS = [
   ["healthcare", "life sciences"],
   ["ai tech", "technology", "digital"],
@@ -191,7 +247,7 @@ function computeTopicSignals(item, userTopics) {
       best = Math.max(best, 7);
     }
 
-    if (rawTopic.toLowerCase().startsWith("custom_") && (bodyText.includes(topicToken) || tagToken.includes(topicToken))) {
+    if (rawTopic.toLowerCase().startsWith("custom_") && customKeywordMatches(topicToken, bodyText, tagToken)) {
       customKeywordMatch = true;
       best = Math.max(best, 10);
     }
@@ -291,7 +347,7 @@ function itemMatchesPersonaTopic(item, standardTopicsLower, customKeywords) {
   const tag = normalizeTopicToken(item?.tag || "");
   const text = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
   const tagMatch = (standardTopicsLower || []).some((t) => topicsRelated(tag, t));
-  const customMatch = (customKeywords || []).some((kw) => text.includes(kw) || tag.includes(kw) || kw.includes(tag));
+  const customMatch = (customKeywords || []).some((kw) => customKeywordMatches(kw, text, tag));
   return { tagMatch, customMatch, matched: tagMatch || customMatch };
 }
 

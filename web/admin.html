@@ -525,6 +525,11 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   background:#EFF6FF;
   border:1px solid #BFDBFE;
 }
+.schedule-status-missed {
+  color:#B45309;
+  background:#FFFBEB;
+  border:1px solid #FCD34D;
+}
 .schedule-name { font-weight:600; line-height:1.3; }
 .schedule-meta { color:var(--text-secondary); font-size:11px; margin-top:2px; line-height:1.35; }
 .schedule-actions { margin-top:6px; display:flex; justify-content:flex-end; }
@@ -2205,7 +2210,7 @@ function renderSchedule(roster) {
       const [dh, dm] = (u.delivery_time_raw || "07:00").split(":").map(Number);
       const deliveryMinutes = dh * 60 + dm;
       const deliveredToday = isToday && String(u.last_digest || "") === dateKey;
-      if (isToday && deliveryMinutes <= nowMinutes && !deliveredToday) continue;
+      const missedToday = isToday && !deliveredToday && deliveryMinutes <= nowMinutes;
       eventsByDate[dateKey].push({
         dateKey,
         dateLabel,
@@ -2215,7 +2220,7 @@ function renderSchedule(roster) {
         name: u.name || u.email,
         topics: u.topics,
         depth: u.depth,
-        status: deliveredToday ? "sent" : "scheduled",
+        status: deliveredToday ? "sent" : (missedToday ? "missed" : "scheduled"),
         delivered_count: Number(u.last_digest_item_count || 0),
         email: u.email,
         delivery_time_raw: u.delivery_time_raw || "07:00",
@@ -2231,10 +2236,10 @@ function renderSchedule(roster) {
 
   for (const dateKey of Object.keys(eventsByDate)) {
     eventsByDate[dateKey].sort((a, b) => {
-      if (a.status !== b.status) {
-        if (a.status === "sent") return -1;
-        if (b.status === "sent") return 1;
-      }
+      const statusOrder = { sent: 0, missed: 1, scheduled: 2 };
+      const orderA = statusOrder[a.status] != null ? statusOrder[a.status] : 9;
+      const orderB = statusOrder[b.status] != null ? statusOrder[b.status] : 9;
+      if (orderA !== orderB) return orderA - orderB;
       return a.timeSortKey - b.timeSortKey;
     });
   }
@@ -2258,6 +2263,8 @@ function renderSchedule(roster) {
             <div class="schedule-time">${esc(ev.time)}</div>
             ${ev.status === "sent"
               ? `<span class="schedule-status schedule-status-sent">sent${ev.delivered_count > 0 ? ` · ${ev.delivered_count} signal${ev.delivered_count === 1 ? "" : "s"}` : ""}</span>`
+              : ev.status === "missed"
+                ? `<span class="schedule-status schedule-status-missed">missed</span>`
               : (day.isToday
                 ? `<span class="schedule-status schedule-status-upcoming">scheduled</span>`
                 : "")}

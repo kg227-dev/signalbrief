@@ -211,7 +211,7 @@ function feedbackTimestampMs(entry) {
   if (direct != null) return direct;
   const dateEt = String(entry?.date_et || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateEt)) return null;
-  const guess = Date.parse(`${dateEt}T12:00:00-05:00`);
+  const guess = Date.parse(`${dateEt}T00:00:00-05:00`);
   return Number.isFinite(guess) ? guess : null;
 }
 

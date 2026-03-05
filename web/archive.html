@@ -141,10 +141,16 @@ body {
   align-items: center;
   gap: 8px;
 }
+.sort-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .sort-label {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 600;
+  white-space: nowrap;
 }
 .sort-select {
   border: 1px solid var(--border);
@@ -459,7 +465,15 @@ mark {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
-  .sort-wrap { justify-content: space-between; }
+  .sort-wrap {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .sort-field {
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
   .filter-row {
     flex-direction: column;
     gap: 6px;
@@ -518,11 +532,21 @@ mark {
           <button id="searchClear" class="search-clear" type="button" aria-label="Clear search">×</button>
         </div>
         <div class="sort-wrap">
-          <span class="sort-label">Sort</span>
-          <select id="sortSelect" class="sort-select">
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
+          <label class="sort-field" for="sortSelect">
+            <span class="sort-label">Sort</span>
+            <select id="sortSelect" class="sort-select">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+          <label class="sort-field" for="pageSizeSelect">
+            <span class="sort-label">Show</span>
+            <select id="pageSizeSelect" class="sort-select">
+              <option value="10">10 entries</option>
+              <option value="25" selected>25 entries</option>
+              <option value="all">All entries</option>
+            </select>
+          </label>
         </div>
       </div>
 
@@ -566,6 +590,7 @@ const state = {
   expanded: new Set(),
   searchText: "",
   sort: "newest",
+  pageSize: "25",
   mode: "all",
   dateRange: "all",
   selectedTags: new Set(),
@@ -573,6 +598,7 @@ const state = {
   tagCounts: new Map(),
   sourceCounts: new Map(),
   visibleItems: [],
+  filteredCount: 0,
   keyToItem: new Map(),
 };
 
@@ -826,14 +852,27 @@ function applyFilters() {
     return rankA - rankB;
   });
 
-  state.visibleItems = filtered;
+  state.filteredCount = filtered.length;
+  if (state.pageSize === "all") {
+    state.visibleItems = filtered;
+    return;
+  }
+  const limit = parseInt(state.pageSize, 10);
+  if (!Number.isFinite(limit) || limit <= 0) {
+    state.visibleItems = filtered;
+    return;
+  }
+  state.visibleItems = filtered.slice(0, limit);
 }
 
 function renderMeta() {
-  const count = state.visibleItems.length;
+  const total = Number(state.filteredCount || 0);
+  const shown = state.visibleItems.length;
   const q = state.searchText.trim();
-  const noun = count === 1 ? "signal" : "signals";
-  const base = `${count} ${noun}`;
+  const noun = total === 1 ? "signal" : "signals";
+  const base = shown < total
+    ? `Showing ${shown} of ${total} ${noun}`
+    : `${total} ${noun}`;
   const text = q ? `${base} matching '${q}'` : base;
   document.getElementById("resultMeta").textContent = text;
 }
@@ -1020,6 +1059,12 @@ function bindEvents() {
 
   document.getElementById("sortSelect").addEventListener("change", (event) => {
     state.sort = event.target.value || "newest";
+    renderAll();
+  });
+
+  document.getElementById("pageSizeSelect").addEventListener("change", (event) => {
+    const value = String(event.target.value || "25");
+    state.pageSize = (value === "10" || value === "25" || value === "all") ? value : "25";
     renderAll();
   });
 

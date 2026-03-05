@@ -1,0 +1,16 @@
+.git
+.gitignore
+.claude
+.interface-design
+node_modules
+tmp
+*.log
+
+# Runtime/private local state
+data
+archive
+config.json
+features.md
+planning
+test-results
+

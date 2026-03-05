@@ -9,6 +9,7 @@
     "itemCount": 7,
     "maxItemsPerTag": 2,
     "maxItemsPerSourceDomain": 2,
+    "catchupWindowMinutes": 720,
     "crossDayDedupDays": 3,
     "maxCustomItemsPerRun": 3,
     "minBaseScoreForFinal": 6.5,

@@ -5,6 +5,9 @@
   "main": "digest.js",
   "scripts": {
     "start": "node digest.js",
+    "web": "node web/server.js",
+    "bot": "node bot-server.js",
+    "worker": "node scheduler-worker.js",
     "test": "node digest.js --dry-run",
     "qa:harness": "node test-harness/run-tests.js",
     "qa:matrix": "node test-harness/run-matrix.js"

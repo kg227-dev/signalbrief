@@ -1162,6 +1162,10 @@ async function main() {
     dueUsers = allActive.filter(u => u.chatId === targetChatId);
   } else {
     const todayDOW = etNow.getDay(); // 0=Sun … 6=Sat
+    const catchupWindowMinutes = Math.max(
+      30,
+      Number(CONFIG?.digest?.catchupWindowMinutes || (12 * 60))
+    );
     dueUsers = allActive.filter(u => {
       const prefs = u.preferences || {};
       // Check day of week
@@ -1169,7 +1173,7 @@ async function main() {
       if (!allowedDays.includes(todayDOW)) return false;
       // Skip if already delivered today (prevents double-delivery from 30-min cron)
       if (toETDateStr(u.last_digest_at) === todayET) return false;
-      // Catch-up window: up to 4 hours after target handles Mac sleep/missed windows.
+      // Catch-up window: up to catchupWindowMinutes after target handles missed windows.
       // 30-min look-ahead handles cron jitter so we don't need perfect clock alignment.
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       const userMinutes = dh * 60 + dm;
@@ -1177,7 +1181,7 @@ async function main() {
       // Midnight wraparound: e.g. target 23:45, now 00:05 → diff should be +20 not -1420
       if (diff < -(12 * 60)) diff += 24 * 60;
       if (diff > (12 * 60)) diff -= 24 * 60;
-      return diff >= -30 && diff <= 4 * 60;
+      return diff >= -30 && diff <= catchupWindowMinutes;
     });
   }
 

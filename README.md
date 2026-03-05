@@ -39,6 +39,10 @@ Roadmap details: [`features.md`](./features.md)
 ## Architecture
 
 ```
+Scheduler worker (5-min loop on always-on host)
+        ↓
+   digest.js (due-user check + lock + catch-up window)
+        ↓
 Perplexity Sonar (17 topics in parallel)
         ↓
    selectItems() — dedup + interleave + tag cap
@@ -71,6 +75,7 @@ Perplexity Sonar (17 topics in parallel)
 | File | Purpose |
 |------|---------|
 | `digest.js` | Main pipeline — fetch, score, select, enrich, deliver, archive, log costs |
+| `scheduler-worker.js` | Always-on scheduler loop that executes `digest.js` every 5 minutes for due-user delivery |
 | `engagement-events.js` | Engagement event logger + loader (`data/engagement-events.jsonl`) |
 | `personalization.js` | Automatic topic-weight learning from save/click/ignored signals |
 | `quality-score.js` | Digest Quality Score (DQS) computation + trend helpers |
@@ -88,6 +93,8 @@ Perplexity Sonar (17 topics in parallel)
 | `web/archive.html` | Digest archive — list + detail reader (token-gated) |
 | `web/admin.html` | Admin dashboard — cost tracking, upcoming schedule, user roster |
 | `web/admin-user.html` | Admin per-user editor — edit settings, pause/resume/unsub on behalf of user |
+| `docker-compose.yml` | Production process topology (`web` + `bot` + `worker`) with persistent volumes |
+| `Dockerfile` | Container image for running any SignalBrief process |
 | `CLAUDE.md` | Codebase context for Claude Code |
 | `FORMAT-RULES.md` | Editorial format rules (locked) |
 | `SPEC.md` | Full product specification + principles |
@@ -105,17 +112,40 @@ cd signalbrief
 cp config.example.json config.json
 nano config.json
 
-# 3. Start all services (bot + web)
+# 3. Start local services
 ./start.sh
 
 # Or run individually:
 node bot-server.js          # Telegram reply handler (long-poll)
 node web/server.js          # Onboarding + settings + archive UI (port 3003)
+node scheduler-worker.js    # Always-on scheduler loop (runs digest checks every 5 min)
 node digest.js              # Manual digest run (all active users)
 node digest.js --chatId 123 # On-demand digest for one user
 ```
 
-### macOS LaunchAgents (auto-start on boot)
+### Production deployment (recommended — no laptop dependency)
+
+Run SignalBrief on an always-on Linux VM/container host. This removes dependency on a Mac being awake.
+
+1. Provision a small always-on host (2 vCPU / 2 GB RAM is enough for current scale).
+2. Copy repo + `config.json` to that host.
+3. Create `.env`:
+```bash
+cp .env.example .env
+```
+4. Start all services:
+```bash
+docker compose up -d --build
+```
+
+Services in `docker-compose.yml`:
+- `web` — onboarding/settings/archive/admin HTTP layer
+- `bot` — Telegram command + callback handler
+- `worker` — 24/7 scheduler loop that runs `digest.js` every 5 minutes
+
+Persistent state is mounted on disk (`./data`, `./archive`), so user state and digests survive restarts.
+
+### macOS LaunchAgents (local fallback only)
 
 Four plist files are installed at `~/Library/LaunchAgents/`:
 
@@ -123,7 +153,7 @@ Four plist files are installed at `~/Library/LaunchAgents/`:
 |---------|------------------|
 | Web server (port 3003) | `com.jarvis.signalbrief-web` |
 | Telegram bot | `com.jarvis.signalbrief-bot` |
-| Daily digest (6:45 AM ET, Mon–Sat) | `com.jarvis.signalbrief-digest` |
+| Daily digest via LaunchAgent interval (legacy) | `com.jarvis.signalbrief-digest` |
 | Cloudflare Tunnel (public HTTPS) | `com.jarvis.signalbrief-tunnel` |
 
 Load them after filling in `config.json`:

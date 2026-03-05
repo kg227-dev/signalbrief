@@ -1,11 +1,11 @@
 #!/bin/bash
 # SignalBrief — start.sh
-# Starts the Telegram bot reply handler and web onboarding server in parallel.
-# digest.js runs on schedule via OpenClaw cron (signalbrief-daily, 7 AM ET Mon-Sat).
-# To run a manual digest: node digest.js
+# Starts web, bot, and (optionally) the always-on scheduler worker.
+# To disable worker for local one-off sessions: START_WORKER=0 ./start.sh
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
+START_WORKER="${START_WORKER:-1}"
 
 echo "☀️  Starting SignalBrief services..."
 echo ""
@@ -13,6 +13,7 @@ echo ""
 # Kill any existing instances
 pkill -f "signalbrief/bot-server.js" 2>/dev/null && echo "  Stopped existing bot server" || true
 pkill -f "signalbrief/web/server.js" 2>/dev/null && echo "  Stopped existing web server" || true
+pkill -f "signalbrief/scheduler-worker.js" 2>/dev/null && echo "  Stopped existing scheduler worker" || true
 sleep 1
 
 # Start bot server (Telegram reply handler)
@@ -27,17 +28,33 @@ node "$DIR/web/server.js" >> /tmp/signalbrief-web.log 2>&1 &
 WEB_PID=$!
 echo "     PID: $WEB_PID → log: /tmp/signalbrief-web.log"
 
+WORKER_PID=""
+if [ "$START_WORKER" = "1" ]; then
+  echo "  ⏱️  Starting scheduler worker (24/7 due-check loop)..."
+  node "$DIR/scheduler-worker.js" >> /tmp/signalbrief-worker.log 2>&1 &
+  WORKER_PID=$!
+  echo "     PID: $WORKER_PID → log: /tmp/signalbrief-worker.log"
+fi
+
 echo ""
 echo "✅ SignalBrief running:"
 echo "   Onboarding: http://localhost:3003"
 echo "   Settings:   http://localhost:3003/settings?email=you@example.com"
 echo "   Bot:        @signalbrief29bot"
 echo ""
-echo "📅 Digest cron: 6:45 AM ET Mon–Sat (OpenClaw cron: signalbrief-daily)"
-echo "   Run now:    node $DIR/digest.js"
+if [ "$START_WORKER" = "1" ]; then
+  echo "📅 Scheduler:  worker loop every 5m (catches due users automatically)"
+else
+  echo "📅 Scheduler worker disabled (START_WORKER=0)"
+fi
+echo "   Run now:    node $DIR/digest.js (manual catch-up run)"
 echo ""
-echo "Press Ctrl+C to stop both services."
+echo "Press Ctrl+C to stop services."
 
-# Wait for both, kill both on exit
-trap "kill $BOT_PID $WEB_PID 2>/dev/null; echo 'Stopped.'" EXIT
-wait $BOT_PID $WEB_PID
+# Wait for all started services, kill on exit
+trap "kill $BOT_PID $WEB_PID ${WORKER_PID:-} 2>/dev/null; echo 'Stopped.'" EXIT
+if [ -n "$WORKER_PID" ]; then
+  wait $BOT_PID $WEB_PID $WORKER_PID
+else
+  wait $BOT_PID $WEB_PID
+fi

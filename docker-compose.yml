@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    command: ["node", "web/server.js"]
+    env_file:
+      - .env
+    environment:
+      - PORT=3003
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+      - ./archive:/app/archive
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3003/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  bot:
+    build: .
+    command: ["node", "bot-server.js"]
+    env_file:
+      - .env
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+      - ./archive:/app/archive
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["node", "scheduler-worker.js"]
+    env_file:
+      - .env
+    environment:
+      - DIGEST_POLL_MS=300000
+      - DIGEST_STARTUP_DELAY_MS=5000
+      - DIGEST_RUN_TIMEOUT_MS=1500000
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+      - ./archive:/app/archive
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+

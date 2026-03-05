@@ -22,7 +22,7 @@ function stableHash(payload) {
   return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 16);
 }
 
-function httpsPost(hostname, pathName, headers, body, isForm = false) {
+function httpsPost(hostname, pathName, headers, body, isForm = false, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
     const data = isForm ? body : JSON.stringify(body);
     const req = https.request(
@@ -49,20 +49,21 @@ function httpsPost(hostname, pathName, headers, body, isForm = false) {
     );
 
     req.on("error", reject);
-    req.setTimeout(60000, () => req.destroy(new Error("HTTP timeout after 60s")));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`HTTP timeout after ${timeoutMs}ms`)));
     req.write(data);
     req.end();
   });
 }
 
 async function httpsPostWithRetry(hostname, pathName, headers, body, opts = {}) {
-  const retries = Math.max(0, Number(opts.retries ?? 2));
+  const retries = Math.max(0, Number(opts.retries ?? 1));
   const retryDelayMs = Math.max(100, Number(opts.retryDelayMs ?? 1200));
+  const timeoutMs = Math.max(3000, Number(opts.timeoutMs ?? 30000));
 
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await httpsPost(hostname, pathName, headers, body, opts.isForm === true);
+      return await httpsPost(hostname, pathName, headers, body, opts.isForm === true, timeoutMs);
     } catch (err) {
       lastErr = err;
       const msg = String(err?.message || "");
@@ -398,7 +399,12 @@ async function fetchTopicNewsCached({
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      payload
+      payload,
+      {
+        retries: 1,
+        retryDelayMs: 900,
+        timeoutMs: 20000,
+      }
     );
   } catch (err) {
     if (fs.existsSync(file)) {
@@ -562,6 +568,11 @@ async function enrichItemsCached({
       model: enrichModel,
       max_tokens: 4500,
       messages: [{ role: "user", content: prompt }],
+    },
+    {
+      retries: 1,
+      retryDelayMs: 1200,
+      timeoutMs: 45000,
     }
   );
 
@@ -699,6 +710,11 @@ async function judgeWithClaudeCached({
       model: judgeModel,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
+    },
+    {
+      retries: 1,
+      retryDelayMs: 1000,
+      timeoutMs: 35000,
     }
   );
 

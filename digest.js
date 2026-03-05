@@ -25,6 +25,7 @@ const { applyAutoTopicLearning } = require("./personalization");
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
 const DIGEST_RUN_LOCK = path.join(__dirname, "data", "digest-run.lock");
+const DIGEST_INCIDENT_LOG = path.join(__dirname, "data", "digest-incident-log.jsonl");
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
 
@@ -58,6 +59,74 @@ function appendCostLog(entry) {
   } catch (e) {
     log(`⚠️  Cost log write failed: ${e.message}`);
   }
+}
+
+function appendIncidentLog(entry) {
+  try {
+    const dir = path.dirname(DIGEST_INCIDENT_LOG);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(DIGEST_INCIDENT_LOG, JSON.stringify(entry) + "\n");
+  } catch (e) {
+    log(`⚠️ Incident log write failed: ${e.message}`);
+  }
+}
+
+function incidentKeySeenRecently(eventKey, maxAgeHours = 24) {
+  try {
+    if (!eventKey || !fs.existsSync(DIGEST_INCIDENT_LOG)) return false;
+    const cutoff = Date.now() - Math.max(1, Number(maxAgeHours || 24)) * 60 * 60 * 1000;
+    const lines = fs.readFileSync(DIGEST_INCIDENT_LOG, "utf8").split("\n").filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const row = JSON.parse(lines[i]);
+        const ts = Date.parse(row?.ts_utc || "");
+        if (Number.isFinite(ts) && ts < cutoff) break;
+        if (String(row?.event_key || "") === String(eventKey)) return true;
+      } catch {
+        // skip malformed rows
+      }
+    }
+  } catch {
+    // ignore read errors
+  }
+  return false;
+}
+
+async function emitDigestIncident(type, summary, metadata = {}) {
+  const now = new Date();
+  const hourBucket = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+  const eventKey = `digest-incident:${String(type || "unknown")}:${hourBucket}`;
+  if (incidentKeySeenRecently(eventKey, 48)) return false;
+
+  const entry = {
+    ts_utc: now.toISOString(),
+    date_et: etDateKey(now),
+    event_key: eventKey,
+    type: String(type || "unknown"),
+    summary: String(summary || "").trim(),
+    metadata: metadata && typeof metadata === "object" ? metadata : {},
+  };
+  appendIncidentLog(entry);
+
+  const opsChatId = process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null;
+  if (opsChatId) {
+    const lines = [
+      "ALERT SignalBrief incident",
+      `Type: ${entry.type}`,
+      `Summary: ${entry.summary}`,
+      `ET date: ${entry.date_et}`,
+      `Mode: ${entry.metadata.mode || "scheduled"}`,
+      `Due users: ${entry.metadata.due_users != null ? entry.metadata.due_users : "-"}`,
+      `Standard topics: ${entry.metadata.standard_topics != null ? entry.metadata.standard_topics : "-"}`,
+      `Selected items: ${entry.metadata.selected_items != null ? entry.metadata.selected_items : "-"}`,
+    ];
+    try {
+      await sendTelegram(lines.join("\n"), opsChatId);
+    } catch (e) {
+      log(`⚠️ Incident alert send failed: ${e.message}`);
+    }
+  }
+  return true;
 }
 
 function log(msg) {
@@ -1185,6 +1254,20 @@ async function main() {
   const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
   let allItems = allResults.flat();
   log(`Fetched ${allItems.length} raw items`);
+  const allStandardEmpty = standardFetchCalls > 0
+    && allResults.every((rows) => Array.isArray(rows) && rows.length === 0);
+  if (allStandardEmpty) {
+    await emitDigestIncident(
+      "zero-standard-results",
+      `All ${standardFetchCalls} standard topic fetches returned zero items`,
+      {
+        mode: runMode,
+        due_users: dueUsers.length,
+        standard_topics: standardFetchCalls,
+        selected_items: 0,
+      }
+    );
+  }
 
   // Fetch custom topics for due users.
   // Scale cap with user count so custom coverage doesn't collapse as users grow.
@@ -1231,6 +1314,18 @@ async function main() {
     // won't crowd out standard items; prepending ensures they're selected
     allItems.unshift(...customItems);
   }
+  if (allItems.length === 0) {
+    await emitDigestIncident(
+      "zero-raw-items",
+      "No raw items available after standard and custom fetches",
+      {
+        mode: runMode,
+        due_users: dueUsers.length,
+        standard_topics: standardFetchCalls,
+        selected_items: 0,
+      }
+    );
+  }
 
   const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
   const dedupRes = dedupAgainstRecentArchives(allItems, {
@@ -1269,9 +1364,29 @@ async function main() {
         maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
       });
       log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
+      await emitDigestIncident(
+        "archive-fallback-engaged",
+        `Live fetch produced zero selectable items; archive fallback selected ${selected.length}`,
+        {
+          mode: runMode,
+          due_users: dueUsers.length,
+          standard_topics: standardFetchCalls,
+          selected_items: selected.length,
+        }
+      );
     }
   }
   if (selected.length === 0) {
+    await emitDigestIncident(
+      "no-selectable-items",
+      "No selectable items after archive fallback; digest run aborted",
+      {
+        mode: runMode,
+        due_users: dueUsers.length,
+        standard_topics: standardFetchCalls,
+        selected_items: 0,
+      }
+    );
     throw new Error("No items available from live fetch or archive fallback; digest aborted");
   }
   log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);

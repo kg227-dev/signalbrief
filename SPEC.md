@@ -1,272 +1,323 @@
 # SignalBrief — Product Specification
 
-*Last updated: March 2026 — reflects current live codebase*
+*Last updated: March 5, 2026 (reflects current code in this branch)*
 
 ---
 
-## What It Is
+## Product Definition
 
-SignalBrief is a daily AI-curated news digest for strategy consultants and business professionals. It surfaces the signals that matter across 17 topics — delivered at your chosen time, before the first client meeting.
-
-**Not a news aggregator.** Every item has a "why it matters" layer written at the level of a senior strategy consultant: what moves, who feels it, what to watch next.
+SignalBrief is a daily AI-curated strategy-news digest delivered through Telegram and email. It is optimized for consultants/operators who need fast cross-vertical situational awareness with explicit business implications.
 
 ---
 
-## Core Thesis
+## Built Scope (Current)
 
-Strategy consultants work across industries. On Monday you're in healthcare, Wednesday you're in financial services, Friday you're in a private equity portfolio review. You need enough context across verticals to sound informed — not a PhD-level deep dive, but a credible 30-second take.
-
-SignalBrief provides that cross-vertical situational awareness in under 5 minutes per morning.
-
----
-
-## Target User
-
-- Strategy consultants at MBB, Big 4, boutiques
-- Corporate strategy / BD roles at large enterprises
-- Investors (PE, growth, VC) who need sector breadth
-- Senior operators who need to track adjacent markets
+- 17 standard topics (10 industries + 7 capabilities)
+- Custom topics (`custom_<slug>`) supported end-to-end: storage, matching, and dedicated fetches during runs
+- Scheduled digest delivery via always-on worker (`scheduler-worker.js`) plus on-demand (`/digest`, admin trigger)
+- Per-user relevance scoring and depth transformation
+- Engagement telemetry and automatic topic-weight learning
+- User-scoped archive browsing + public share page
+- Admin control plane (stats, audits, run controls, bulk operations, direct user messaging)
 
 ---
 
-## Topics (17 total)
+## System Architecture
 
-Users pick 2+ topics on signup. Custom topics supported (e.g. "GLP-1", "DOGE", "data centers") — stored and keyword-matched, dedicated fetch not yet wired.
+```text
+scheduler-worker.js
+  - startup run + interval loop (default 5m)
+  - heartbeat file: data/scheduler-heartbeat.json
+        |
+        v
+digest.js
+  - acquires data/digest-run.lock
+  - computes due users (ET day/time + catch-up window)
+  - fetches standard + custom topics
+  - dedupes against recent archive window
+  - selects diverse pool
+  - enriches items via Claude
+  - per-user filter/score/trim/depth transform
+  - delivers (Telegram + email)
+  - writes archive + cost log + user state + engagement events
 
-### Industries (10)
-| Tag | What We Track |
-|-----|---------------|
-| `HEALTHCARE` | Payers, providers, pharma, FDA, clinical AI |
-| `FINANCIAL SERVICES` | Banking, fintech, insurance, capital markets |
-| `PE×M&A` | Deal flow, multiples, sector activity, sponsor moves |
-| `ENERGY` | Transition, utilities, grid, industrials |
-| `CONSUMER` | Brand moves, DTC, retail media, supply chain |
-| `LIFE SCIENCES` | Biotech, medical devices, genomics, drug pipelines |
-| `TECHNOLOGY` | Enterprise tech, SaaS, cloud infrastructure |
-| `INDUSTRIALS` | Manufacturing, logistics, automation, supply chain |
-| `REAL ESTATE` | CRE, construction tech, proptech, data centers |
-| `PUBLIC SECTOR` | Government, defense, federal procurement |
+web/server.js
+  - onboarding/settings/archive/public digest/admin APIs
+  - token-based user access + cookie admin sessions
 
-### Capabilities (7)
-| Tag | What We Track |
-|-----|---------------|
-| `AI×TECH` | Enterprise AI deployment, foundation models, infrastructure |
-| `STRATEGY` | Firm moves, methodology shifts, transformation trends |
-| `POLICY×REGULATORY` | Regulation, antitrust, trade, DOGE, federal budget |
-| `SUSTAINABILITY` | ESG, net zero, carbon, climate policy, reporting |
-| `DIGITAL` | Digital transformation, platforms, product strategy |
-| `M&A ADVISORY` | Deal advisory, integration, synergy capture, valuation |
-| `TALENT` | Workforce trends, hiring, org restructuring |
-
----
-
-## Format
-
-### Telegram
-- 5 items default (configurable 5/10 per user)
-- Numbered with keycap emoji (1⃣)
-- `*[VERTICAL×SUBTAG]*` bold cross-category labels
-- Headline + italic "why it matters" first sentence (250-char cap, HTML stripped)
-- `→ direct article link`
-- Command footer (full first 5 digests, compressed after)
-
-### Email
-- Quick-scan summary bar at top (numbered headlines with tags)
-- ★ LEAD item with left blue border accent
-- Bold first clause on every "Why it matters"
-- Relevance score badge (color-coded: green >8.5, yellow >5.0, orange >3.5, red <3.5)
-- `Read more →` with direct article link
-- "Forward to a colleague" button in footer
-- `Update preferences` link → `/settings?token=...`
-
-See `FORMAT-RULES.md` for locked editorial rules.
-
----
-
-## Architecture
-
-```
-Perplexity Sonar (17 topics in parallel)
-        ↓
-   selectItems() — dedup + interleave + tag cap (max 2 per tag)
-        ↓
-   Claude Haiku — "why it matters" enrichment + baseScore (0–10)
-        ↓
-  ┌──────────────────────────────────────────┐
-  │  Per-user delivery fan-out               │
-  │  - relevance sort (baseScore 60% + topicMatch 40%) │
-  │  - topic filter                          │
-  │  - items_per_digest (5 or 10)            │
-  │  - depth preference                      │
-  │  → Telegram bot (@signalbrief29bot)      │
-  │  → Resend API → HTML email               │
-  │     (Gmail OAuth fallback)               │
-  └──────────────────────────────────────────┘
-        ↓
-   saveToArchive() — archive/YYYY-MM-DD.json
-   logCosts() — data/cost-log.json
+store.js
+  - one JSON file per user (`data/user-<chatId>.json`)
+  - token index in process memory
 ```
 
 ---
 
-## Personalization
+## Digest Pipeline Behavior
 
-| Setting | Options | Default |
-|---------|---------|---------|
-| **Topics** | Any of 17 standard + custom freeform | First 5 standard |
-| **Depth** | Scan / Brief / Deep (see below) | Deep |
-| **Delivery time** | Any 30-min slot, 5 AM – 9:30 PM ET | 7:00 AM ET |
-| **Days of week** | Any combination | Weekdays (M–F) |
-| **Items per digest** | 5 or 10 | 5 |
+## 1) Due-user scheduling
 
-### Depth modes
-| Label | Value | Delivery |
-|-------|-------|----------|
-| **Scan** | `headline_only` | Headline + source link only |
-| **Brief** | `headline_plus_oneliner` | Headline + one-line strategic takeaway |
-| **Deep** | `headline_plus_why` | Headline + full "why it matters" paragraph |
+- Run modes:
+1. `scheduled` (worker/admin full run)
+2. `targeted` (`--chatId` or admin targeted)
 
-**Relevance scoring:** items sorted by `baseScore` (0–10, from Claude enrichment) × 60% + `topicMatch` (0–1, fraction of user's topics present in item tags) × 40%.
+- Scheduled eligibility checks:
+1. `status === active`
+2. Today ET day is in `preferences.days_of_week`
+3. Not already delivered today (`last_digest_at` ET date check)
+4. Time delta within `[-30, catchupWindowMinutes]`
 
-**Bookmarks:** `save 3` → persisted to user profile with headline + URL. Viewable via `/bookmarks` in Telegram.
+- Digest lock:
+1. File lock at `data/digest-run.lock` (`wx` create)
+2. Stale lock detection via `DIGEST_LOCK_STALE_MS` (default 2h, min 5m)
+3. Exit code `4` when lock is active
 
-**Topic weights:** `more AI` / `less pharma` adjusts per-user multiplier on tag-matched items. `add DOGE` stores a custom topic (keyword-matched against all fetched items; dedicated Perplexity fetch for custom topics not yet built — see features.md P2-1).
+## 2) Fetch strategy
 
----
+- Standard topics:
+1. Scheduled run: all configured standard topics
+2. Targeted run: only the user’s selected standard topics when available
 
-## Interaction (Telegram)
+- Custom topics:
+1. Derived from due users’ `topics` entries with `custom_` prefix
+2. Ranked by follower count among due users
+3. Run cap: `digest.maxCustomFetchPerRun` or dynamic fallback `min(18, max(6, ceil(dueUsers/4)))`
+4. Query generation via `buildCustomTopicQueries()` with alias expansion
 
-All replies parsed by Claude for fuzzy intent:
+- Incidents logged to `data/digest-incident-log.jsonl` and optionally pushed to `OPS_ALERT_CHAT_ID`.
 
-| Input | Action |
-|-------|--------|
-| `save 3` / `save 1,4,6` | Bookmark item(s) |
-| `more AI` / `less pharma` | Adjust topic weight |
-| `add DOGE` | Store custom topic |
-| `/start email@example.com` | Link Telegram to existing web signup |
-| `/digest` | Pull a fresh digest immediately (15-min cooldown) |
-| `/settings` | Show preferences summary + link |
-| `/bookmarks` | List saved items |
-| `/help` | Command guide |
-| Any question | Answered by Claude in strategy/consulting context |
+## 3) Selection + dedup
 
-### Telegram-first Onboarding
-1. `/start` (unknown user) → bot asks for email
-2. Email provided → account created with default topics, or linked to existing web signup
-3. Settings link and welcome email sent
-4. `/start email@example.com` → skips the prompt, links directly
+- `dedupAgainstRecentArchives()` removes URL/headline duplicates against recent `archive/*.json` files (`crossDayDedupDays`, default 3)
+- `selectItems()` enforces:
+1. `maxItemsPerTag`
+2. `maxItemsPerSourceDomain`
+3. custom item cap (`maxCustomItemsPerRun` or dynamic 40% default)
+4. interleaving (avoid adjacent same-tag items when possible)
+5. tag priority bias from due-user topic demand
 
----
+- If no selectable live items:
+1. fallback to recent archive pool
+2. if still empty, run aborts with incident
 
-## Web Layer
+## 4) Enrichment
 
-### User pages
-| URL | Purpose |
-|-----|---------|
-| `/` | 4-step onboarding: name/email, topics, depth, schedule |
-| `/settings?token=...` | Self-serve preferences editor |
-| `/archive` | Browse and read past digests (prompts for magic link if no token) |
+- Claude call returns (per item):
+1. `wim_brief`
+2. `wim`
+3. `baseScore` (`0.0–10.0`)
+4. `implications`
+5. `watch_next`
 
-### Admin pages (localhost only)
-| URL | Purpose |
-|-----|---------|
-| `/admin` | Cost dashboard, upcoming delivery schedule, run log, per-user costs, user roster |
-| `/admin/user?email=...` | Per-user admin editor — edit all fields, pause/resume/unsubscribe |
+- Parse failure fallback: item delivery continues with null analysis fields.
 
----
+## 5) Per-user personalization and ranking
 
-## Data Model (per user)
+### Topic signal
 
-```json
-{
-  "chatId": "6297966907",
-  "name": "Alex Chen",
-  "email": "alex@firm.com",
-  "token": "64-char hex — used for settings/archive/unsubscribe links",
-  "status": "active",
-  "joined_at": "2026-03-01T00:00:00.000Z",
-  "last_digest_at": "2026-03-01T11:45:00.000Z",
-  "digests_received": 12,
-  "preferences": {
-    "depth": "headline_plus_why",
-    "delivery_time": "07:00",
-    "frequency": "daily_weekday",
-    "days_of_week": [1, 2, 3, 4, 5],
-    "items_per_digest": 5,
-    "email_enabled": true,
-    "telegram_enabled": true
-  },
-  "topics": ["AI×TECH", "PE×M&A", "STRATEGY"],
-  "topic_weights": { "AI×TECH": 1.3, "ENERGY": 0.7 },
-  "bookmarks": [
-    { "headline": "...", "url": "...", "saved_at": "..." }
-  ]
-}
-```
+`computeTopicSignals()` yields:
+- `topicMatch = 10` exact tag/custom keyword hit
+- `topicMatch = 7` related-topic match
+- `topicMatch = 3` default baseline
 
-File stored at `data/user-{chatId}.json`. Defaults merged at read time via `store.js`.
+### Weight adjustment
 
----
+- Manual and automatic topic weights are stored in `user.topic_weights`
+- `weightBonus = matchedWeight * 0.6`
+- Weight keys are fuzzy-matched via normalized related-topic logic
 
-## Infrastructure
+### Specialist mode
 
-| Component | Detail |
-|-----------|--------|
-| **Runtime** | Node.js — stdlib only, zero npm dependencies |
-| **News source** | Perplexity Sonar (not Sonar Pro) — 17 parallel queries per run |
-| **AI** | Claude Haiku (`claude-haiku-4-5`) — enrichment + intent parsing |
-| **Email** | Resend API (branded `digest@getsignalbrief.com`), Gmail OAuth fallback |
-| **Bot** | Telegram long-polling (port 3002) — not webhooks |
-| **Web** | Raw `http.createServer`, port 3003, no framework |
-| **Auth** | 64-char hex token per user (`crypto.randomBytes(32)`) |
-| **Storage** | Per-user JSON files in `data/` — SQLite upgrade path at ~20 users |
-| **Rate limiting** | In-memory: 5 signups/IP/15 min, 10-min email cooldown, 15-min `/digest` cooldown |
-| **Public HTTPS** | Cloudflare Tunnel (`signalbrief`, ID `308a0e0b`) → `getsignalbrief.com` |
-| **Cron** | LaunchAgent `com.jarvis.signalbrief-digest` — 6:45 AM ET, Mon–Sat |
-| **Cost tracking** | `data/cost-log.json` (JSONL) — per-run Perplexity + Claude token spend |
+For users with 1–2 standard topics:
+- `+1.1` exact match
+- `+0.45` related match
+- `-0.6` weak/no match
 
----
+### Final relevance score
 
-## Product Principles
+`relevanceScore = clamp(0,10, round1(baseScore*0.6 + topicMatch*0.4 + weightBonus + specialistBonus))`
 
-### Content must be
-- **Recency-aware** — last 24–72 hours only
-- **Source-quality weighted** — business press + trade press, not blogs
-- **Cluster-balanced** — no over-indexing on one topic or source domain
-- **Action-oriented** — at least one item per digest that affects decisions
+Items are sorted descending by `relevanceScore` and trimmed to `items_per_digest`.
 
-### Digest must be
-- **Short enough to read in 2–4 min** in Telegram
-- **Deep enough to be useful** in email
-- **Non-annoying** — one push per day, no breaking news spam (see features.md P1-7 for planned alerts)
+### Strong-item filter
 
-### Personalization must be
-- **Preference-based** — topics, depth, schedule
-- **Behavior-based** — what you save, what you request more/less of
-- **Never creepy** — no tracking beyond explicit saves and explicit tuning commands
+If enough high-quality items exist (`baseScore >= minBaseScoreForFinal`, default `6.5`, or custom-keyword matched), weaker items are removed before final trim.
 
-### Two value streams
-| Stream | Cadence | Examples |
-|--------|---------|---------|
-| **Run Stream** (daily utility) | Every day | Digest delivery, Telegram replies |
-| **Build Stream** (compounding asset) | Deliberate | New features, infrastructure, growth |
+### Emergency fallback
 
-Rule: Build Stream never cannibalizes Run Stream. Ship only when it doesn't degrade the daily experience.
+If user list is empty after filtering/ranking, top 1–3 items from global enriched set are used to avoid blank delivery.
+
+## 6) Depth transformation
+
+- `headline_only` / `scan`: remove `wim`
+- `headline_plus_oneliner`: prefer `wim_brief`, fallback to first sentence from `wim`
+- `headline_plus_why` (or equivalent deep): keep full `wim`
+
+## 7) Delivery + persistence
+
+- Telegram delivery includes inline item action buttons and digest feedback buttons
+- Email includes tracked click links (`/api/click`)
+- Post-delivery state updates:
+1. `digests_received`
+2. `last_digest_at`
+3. `last_digest_items`
+4. `digest_dates`
+5. `quality_history` + `last_quality_score`
+
+- Run-level persistence:
+1. `archive/YYYY-MM-DD.json`
+2. `data/cost-log.json` (JSONL)
 
 ---
 
-## Build History
+## Cost Model
 
-| Batch | What shipped |
-|-------|-------------|
-| **0** ✅ | Scope locked, target user defined |
-| **1** ✅ | Format locked — 5 manual prototype runs |
-| **2** ✅ | `digest.js` pipeline, LaunchAgents, 6:45 AM cron |
-| **3** ✅ | `reply-handler.js` — `save`, `more/less`, Claude intent parsing, per-user JSON store |
-| **4** ✅ | Multi-user — web onboarding (`index.html`), settings page, welcome email |
-| **5** ✅ | Custom domain — `mailer.js`, Resend primary + Gmail fallback |
-| **6** ✅ | Digest archive — `archive.html`, `/api/archive`, `saveToArchive()` |
-| **7** ✅ | Beta hardening — relevance scoring, admin dashboard, rate limiting, RFC 8058 unsubscribe, Cloudflare Tunnel, Telegram-first onboarding |
-| **Post-7** ✅ | Bug pass — 6 P0 fixes, 12 P1 features, 15 P2 fixes, `admin-user.html`, schedule view |
+Per run estimates in `digest.js`:
 
-For the forward-looking roadmap (known bugs + P1–P4 features), see `features.md`.
+- `PERPLEXITY_COST_PER_CALL = $0.005`
+- `CLAUDE_HAIKU_IN_PER_MTOK = $0.80`
+- `CLAUDE_HAIKU_OUT_PER_MTOK = $4.00`
+
+Total run cost:
+
+`total = (perplexity_calls * 0.005) + (in_tokens/1e6*0.80) + (out_tokens/1e6*4.00)`
+
+Logged fields include per-user served/failed breakdown and standard vs custom Perplexity call counts.
+
+---
+
+## Error Handling and Degradation
+
+- Perplexity fetch failures: retried for retryable network errors; item collection continues best-effort
+- Claude enrichment parse failures: digest still sends with null analysis fields
+- No selectable items: archive fallback attempt; otherwise run abort with incident
+- Channel delivery failures: channel-specific errors logged; user marked failed only if all channels fail
+- Admin triggered targeted run returns explicit lock/user-state/channel errors
+
+---
+
+## Rate Limits and Constraints
+
+- Signup API rate limit: 5 requests/IP/15 minutes + 10 minute per-email cooldown
+- `/digest` Telegram command cooldown: 15 minutes per chat
+- Resend pacing in digest loop: 600ms per email send
+- Admin login rate limit: 5 attempts/IP/15 minutes
+- Bulk admin action cap: 200 emails/request
+
+---
+
+## Security Model
+
+## User access
+
+- User-scoped endpoints use 64-char token (`crypto.randomBytes(32)` from `store.js`)
+- Archive and settings APIs require valid token
+- Email-based unsubscribe requires HMAC signature (`signUnsubEmail`) for POST email-path flow
+
+## Admin access
+
+- Session cookie `sb_admin` (`HttpOnly`, `SameSite=Strict`, optional `Secure`)
+- Password verified using scrypt hash (`CONFIG.admin.salt` + `passwordHash`)
+- Optional local bypass exists (`ADMIN_LOCAL_BYPASS=1`) for localhost requests
+
+## Data protection and integrity
+
+- User writes are atomic (`.tmp` + rename)
+- Engagement/admin logs are append-only JSONL style
+- Input validation exists for core auth fields, but some preference fields are currently permissive (see `features.md`)
+
+---
+
+## Data Model
+
+## User record (`data/user-<chatId>.json`)
+
+| Field | Type | Default | Notes |
+|------|------|---------|-------|
+| `chatId` | string | required | User key; email-only users use `email-<timestamp>` |
+| `name` | string | optional | Present for onboarded users |
+| `email` | string\|null | `null` | Lowercased in APIs |
+| `telegram` | string\|null | optional | Username (without `@`) |
+| `status` | enum | `active` | `active` \| `paused` \| `unsubscribed` |
+| `token` | string\|null | auto-generated | 64-char hex |
+| `joined_at` | ISO string | now | |
+| `last_updated` | ISO string | optional | |
+| `last_digest_at` | ISO string\|null | `null` | |
+| `digests_received` | number | `0` | |
+| `topics` | string[] | app-set | Standard tags and `custom_` tags |
+| `custom_topics` | string[] | `[]` | Convenience list |
+| `topic_weights` | object | `{}` | Numeric per-topic adjustments |
+| `digest_dates` | string[] | `[]` | ET dates user received |
+| `bookmarks` | array | `[]` | Saved digest items |
+| `last_digest_items` | array | `[]` | Most recent delivery snapshot |
+| `digest_feedback` | array | `[]` | Per-digest feedback rows |
+| `quality_history` | array | `[]` | DQS history |
+| `last_quality_score` | object\|null | `null` | Last DQS entry |
+| `auto_learning` | object | enabled defaults | Auto-adjust state counters/timestamps |
+| `preferences.delivery_time` | `HH:MM` | `07:00` | ET schedule target |
+| `preferences.timezone` | string | `America/New_York` | |
+| `preferences.depth` | string | onboarding default | `headline_only` / `headline_plus_oneliner` / `headline_plus_why` |
+| `preferences.frequency` | string | onboarding default | schedule label |
+| `preferences.days_of_week` | number[] | `[1,2,3,4,5]` | 0=Sun…6=Sat |
+| `preferences.items_per_digest` | number | `5` | UI uses 5/10 |
+| `preferences.email_enabled` | boolean | `true` | |
+| `preferences.telegram_enabled` | boolean | `true` | |
+
+## Other persisted files
+
+| Path | Format | Purpose |
+|------|--------|---------|
+| `archive/YYYY-MM-DD.json` | JSON | Daily enriched digest payload |
+| `data/cost-log.json` | JSONL | Run-level cost/accounting |
+| `data/engagement-events.jsonl` | JSONL | User engagement telemetry |
+| `data/admin-action-log.json` | JSONL | Admin action trail |
+| `data/admin-message-log.json` | JSONL | Admin outbound message trail |
+| `data/admin-service-log.json` | JSONL | LaunchAgent service actions |
+| `data/digest-incident-log.jsonl` | JSONL | Incident stream |
+| `data/scheduler-heartbeat.json` | JSON | Worker heartbeat |
+| `data/digest-run.lock` | JSON | Active run lock payload |
+
+---
+
+## API Contracts
+
+## Public APIs
+
+| Method | Endpoint | Request | Response |
+|--------|----------|---------|----------|
+| `GET` | `/api/topics` | none | `{ topics, industries, capabilities }` |
+| `GET` | `/api/user` | `token` query | Full user JSON or 4xx |
+| `POST` | `/api/signup` | `{ name, email, telegram?, topics[], depth?, delivery_time?, frequency?, days_of_week?, items_per_digest? }` | `{ success, chatId, token, archiveUrl }` |
+| `POST` | `/api/settings` | `{ token, ...fields }` | `{ success: true }` or error |
+| `GET` | `/api/archive` | `token` query | `{ digests[] }` |
+| `GET` | `/api/archive/all` | `token` query | `{ items[], digestCount }` |
+| `GET` | `/api/archive/:date` | `token` query | Archive payload with user-relative `relevanceScore` |
+| `GET` | `/api/click` | `url` + optional `token/did/item` query | 302 redirect |
+| `POST` | `/api/bookmarks` | `{ token, action: add|remove, item: { url, ... } }` | bookmark state/count |
+| `POST` | `/api/request-link` | `{ email }` | `{ success: true }` (non-enumerating) |
+| `GET` | `/api/unsubscribe` | `token` query | 302 to settings confirmation |
+| `POST` | `/api/unsubscribe` | `token` query OR `email+sig` query | `{ success: true }` |
+
+## Admin APIs
+
+| Method | Endpoint | Request | Response |
+|--------|----------|---------|----------|
+| `POST` | `/api/admin/login` | `{ email, password }` | `{ success: true }` + cookie |
+| `POST` | `/api/admin/logout` | session cookie | `{ success: true }` |
+| `GET` | `/api/admin/check` | session cookie | `{ authenticated }` |
+| `GET` | `/api/admin/stats` | session cookie | `{ summary, health, runs, per_user, roster, admin_messages }` |
+| `GET` | `/api/admin/user-by-email` | `email` query | Full user + `auto_adjustments_recent` |
+| `GET` | `/api/admin/audit` | `email` query | `{ entries[] }` action/message timeline |
+| `POST` | `/api/admin/bulk-action` | `{ action, emails[], dry_run?, delivery_time? }` | planned/applied/skipped summary |
+| `POST` | `/api/admin/launch-agent-action` | `{ key, action:"restart" }` | service restart result + health |
+| `POST` | `/api/admin/update-delivery-time` | `{ email, delivery_time }` | normalized time payload |
+| `POST` | `/api/admin/run-digest` | optional `{ chatId }` | targeted/full trigger result |
+| `POST` | `/api/admin/message-user` | `{ email, subject?, message, channels[] }` | send result + warnings |
+
+---
+
+## Product Constraints
+
+- Storage is file-based (no transactional DB)
+- Admin sessions are in-memory (server restart clears sessions)
+- Multi-process deployments require shared filesystem for consistent state
+- Archive visibility is scoped to `digest_dates` plus one current-date grace path

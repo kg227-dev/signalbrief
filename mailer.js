@@ -37,7 +37,29 @@ function signUnsubEmail(email) {
     .slice(0, 16);
 }
 
-module.exports.signUnsubEmail = signUnsubEmail;
+function normalizeBaseUrl(rawBaseUrl) {
+  const fallback = String(BASE_URL || "").trim() || "https://getsignalbrief.com";
+  const raw = String(rawBaseUrl || fallback).trim() || fallback;
+  return raw.replace(/\/+$/, "");
+}
+
+// digestId path encoding scheme for /t/:digestId/:token/o.gif:
+// base64url(utf8("YYYY-MM-DD:chatId")) as a single path segment.
+function encodeDigestIdParam(digestId) {
+  return Buffer.from(String(digestId || "").trim(), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function buildOpenTrackingPixel(digestId, token, baseUrl = BASE_URL) {
+  const digestParam = encodeDigestIdParam(digestId);
+  const tokenParam = encodeURIComponent(String(token || "").trim());
+  const root = normalizeBaseUrl(baseUrl);
+  const src = `${root}/t/${digestParam}/${tokenParam}/o.gif`;
+  return `<img src="${src}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" />`;
+}
 
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
@@ -175,19 +197,123 @@ async function sendEmail(to, subject, html, token = null) {
   return { ok: result.ok, via: "gmail" };
 }
 
-function buildOpenTrackingPixel(digestId, token, baseUrl = BASE_URL) {
-  const did = String(digestId || "").trim();
-  const userToken = String(token || "").trim().toLowerCase();
-  if (!did || !/^[a-f0-9]{64}$/.test(userToken)) return "";
+function firstName(value, fallback = "there") {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  return raw.split(/\s+/)[0] || fallback;
+}
 
-  const encodedDigestId = Buffer.from(did, "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-  const safeBase = String(baseUrl || BASE_URL).replace(/\/+$/, "");
-  const src = `${safeBase}/t/${encodedDigestId}/${userToken}/o.gif`;
-  return `<img src="${src}" alt="" width="1" height="1" style="display:none;" />`;
+function topicLabel(topic) {
+  const raw = String(topic || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("custom_")) {
+    return raw.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return raw;
+}
+
+function topicListForUser(user) {
+  const topics = Array.isArray(user?.topics) ? user.topics : [];
+  const labels = topics.map(topicLabel).filter(Boolean);
+  if (!labels.length) return "your selected topics";
+  return labels.join(", ");
+}
+
+function deliveryTimeLabelEt(user) {
+  const prefs = user?.preferences || {};
+  const [hRaw, mRaw] = String(prefs.delivery_time || "07:00").split(":").map(Number);
+  const h = Number.isFinite(hRaw) ? hRaw : 7;
+  const m = Number.isFinite(mRaw) ? mRaw : 0;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${ampm} ET`;
+}
+
+function profileLinks(user) {
+  const token = encodeURIComponent(String(user?.token || "").trim());
+  const root = normalizeBaseUrl(BASE_URL);
+  return {
+    settings: `${root}/settings?token=${token}`,
+    pause: `${root}/api/pause?token=${token}`,
+    reactivate: `${root}/api/reactivate?token=${token}`,
+  };
+}
+
+function lifecycleEmailShell(innerHtml) {
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:620px;margin:0 auto;padding:28px 22px;color:#111827;background:#F9FAFB;">
+      <div style="background:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;padding:24px 22px;">
+        <div style="font-size:21px;font-weight:700;margin-bottom:14px;">☀️ SignalBrief</div>
+        <div style="font-size:15px;line-height:1.65;color:#1F2937;">${innerHtml}</div>
+      </div>
+    </div>`;
+}
+
+async function sendReferralThankYou(referrerUser, newUser) {
+  if (!referrerUser?.email) return { ok: false, skipped: true };
+  const referrerFirst = firstName(referrerUser.name, referrerUser.email.split("@")[0]);
+  const newUserFirst = firstName(newUser?.name, "someone");
+  const subject = "Your recommendation just brought someone in";
+  const html = lifecycleEmailShell(`
+    <p style="margin:0 0 14px;">Hey ${referrerFirst},</p>
+    <p style="margin:0 0 14px;">Just wanted to let you know — ${newUserFirst} just signed up for SignalBrief using your referral link. They'll get their first digest this morning.</p>
+    <p style="margin:0 0 14px;">Thanks for sharing it. The only way this grows is word of mouth from people like you.</p>
+    <p style="margin:0;">— Kush</p>
+  `);
+  const result = await sendEmail(referrerUser.email, subject, html, referrerUser.token || null);
+  console.log(`[referral thank-you] ${referrerUser.email} → ${result.ok ? "✅ sent via " + result.via : "❌ failed"}`);
+  return result;
+}
+
+async function sendReengagementDay4Email(user) {
+  if (!user?.email) return { ok: false, skipped: true };
+  const name = firstName(user.name, user.email.split("@")[0]);
+  const links = profileLinks(user);
+  const topics = topicListForUser(user);
+  const deliveryTime = deliveryTimeLabelEt(user);
+  const subject = "Your SignalBrief is still running — want to adjust anything?";
+  const html = lifecycleEmailShell(`
+    <p style="margin:0 0 14px;">Hi ${name},</p>
+    <p style="margin:0 0 14px;">I noticed you haven't opened SignalBrief in a few days. No judgment — inboxes are brutal.</p>
+    <p style="margin:0 0 10px;">A few things that might help:</p>
+    <p style="margin:0 0 10px;">Wrong topics? You're currently getting ${topics}. Update them in 30 seconds: <a href="${links.settings}" style="color:#2563EB;text-decoration:none;">settings</a></p>
+    <p style="margin:0 0 10px;">Wrong time? Your digest arrives at ${deliveryTime}. Too early, too late? Change it: <a href="${links.settings}" style="color:#2563EB;text-decoration:none;">settings</a></p>
+    <p style="margin:0 0 14px;">Too much text? Switch to headline-only depth for a faster scan: <a href="${links.settings}" style="color:#2563EB;text-decoration:none;">settings</a></p>
+    <p style="margin:0 0 14px;">Or just reply here and tell me what's not working. I read every reply.</p>
+    <p style="margin:0;">— Kush</p>
+  `);
+  return sendEmail(user.email, subject, html, user.token || null);
+}
+
+async function sendReengagementDay8Email(user) {
+  if (!user?.email) return { ok: false, skipped: true };
+  const name = firstName(user.name, user.email.split("@")[0]);
+  const links = profileLinks(user);
+  const subject = "Should I pause your SignalBrief?";
+  const html = lifecycleEmailShell(`
+    <p style="margin:0 0 14px;">Hi ${name},</p>
+    <p style="margin:0 0 14px;">You haven't opened SignalBrief in about a week. I don't want to fill your inbox if it's not useful.</p>
+    <p style="margin:0 0 10px;">Keep it going: <a href="${links.reactivate}" style="color:#2563EB;text-decoration:none;">I'll keep sending as normal</a>.</p>
+    <p style="margin:0 0 14px;">Pause it: <a href="${links.pause}" style="color:#2563EB;text-decoration:none;">I'll stop for now</a>. You can restart anytime from your settings.</p>
+    <p style="margin:0 0 14px;">No wrong answer. If the timing or topics aren't right, I'd rather pause than become noise.</p>
+    <p style="margin:0;">— Kush</p>
+  `);
+  return sendEmail(user.email, subject, html, user.token || null);
+}
+
+async function sendAutoPauseConfirmationEmail(user) {
+  if (!user?.email) return { ok: false, skipped: true };
+  const name = firstName(user.name, user.email.split("@")[0]);
+  const links = profileLinks(user);
+  const subject = "Your SignalBrief is paused for now";
+  const html = lifecycleEmailShell(`
+    <p style="margin:0 0 14px;">Hi ${name},</p>
+    <p style="margin:0 0 14px;">We've paused your SignalBrief digest to keep your inbox clean — you hadn't opened it in a while and I didn't want to keep sending.</p>
+    <p style="margin:0 0 14px;">To restart, it takes one click: <a href="${links.reactivate}" style="color:#2563EB;text-decoration:none;">reactivate SignalBrief</a></p>
+    <p style="margin:0 0 14px;">Your topics and settings are all saved — you'll pick up right where you left off.</p>
+    <p style="margin:0;">— Kush</p>
+  `);
+  return sendEmail(user.email, subject, html, user.token || null);
 }
 
 // ── Welcome email ─────────────────────────────────────────────────────────────
@@ -248,4 +374,13 @@ async function sendWelcomeEmail(user) {
   console.log(`[welcome email] ${email} → ${result.ok ? "✅ sent via " + result.via : "❌ failed"}`);
 }
 
-module.exports = { sendEmail, sendWelcomeEmail, buildOpenTrackingPixel, signUnsubEmail };
+module.exports = {
+  sendEmail,
+  sendWelcomeEmail,
+  sendReferralThankYou,
+  sendReengagementDay4Email,
+  sendReengagementDay8Email,
+  sendAutoPauseConfirmationEmail,
+  buildOpenTrackingPixel,
+  signUnsubEmail,
+};

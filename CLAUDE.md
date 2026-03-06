@@ -22,16 +22,17 @@ SignalBrief is an AI-curated daily news digest for strategy consultants. It fetc
 
 ## Key files
 - `digest.js` — Main pipeline: fetch news → select 7 items → enrich with Claude Haiku (adds baseScore 0-10) → per-user relevance sort (baseScore 60% + topicMatch 40%) → deliver (Telegram + email) → archive → log costs. BASE_URL const for email links.
-- `mailer.js` — Resend API (branded domain) with Gmail OAuth fallback. `List-Unsubscribe` + `List-Unsubscribe-Post` headers on all mail (RFC 8058). BASE_URL for unsubscribe links.
+- `mailer.js` — Resend API (branded domain) with Gmail OAuth fallback. `List-Unsubscribe` + `List-Unsubscribe-Post` headers on all mail (RFC 8058). Also owns referral thank-you + re-engagement lifecycle emails and the open-tracking pixel URL builder.
+- `reengagement.js` — Daily lifecycle automation: day-4 nudge, day-8 pause warning, day-11 auto-pause (idempotent via `user.reengagement_state`). Logs to `/tmp/signalbrief-reengagement.log`.
 - `reply-handler.js` — Telegram reply handler. Claude-powered fuzzy intent parsing (save, more/less, add topic, /digest on-demand, questions). Telegram-first onboarding: `AWAITING_EMAIL` Map tracks chatIds mid-flow; `/start email@example.com` links existing web signups; unknown users prompted for email → account created via `handleEmailCapture()`.
 - `bot-server.js` — Telegram long-polling server (port 3002)
-- `store.js` — JSON file-based per-user data store (data/user-{chatId}.json)
-- `web/server.js` — HTTP server (port 3003): onboarding/settings/archive/admin pages + API endpoints. In-memory rate limiting (5 signups/IP/15min + per-email cooldown). `GET|POST /api/unsubscribe`. `GET /api/admin/stats` returns summary, runs log, per-user costs, user roster. BASE_URL from env (set to https://getsignalbrief.com in LaunchAgent).
+- `store.js` — JSON file-based per-user data store (data/user-{chatId}.json). Includes engagement + reengagement fields (`last_email_open_at`, `email_opens_total`, `reengagement_state`, `signup_referral_source`).
+- `web/server.js` — HTTP server (port 3003): onboarding/settings/archive/admin pages + API endpoints. In-memory rate limiting (5 signups/IP/15min + per-email cooldown). Includes open pixel endpoint `GET /t/:digestId/:token/o.gif`, pause/reactivate endpoints, referral attribution on signup, and `GET /api/admin/stats` with engagement + referral metrics.
 - `web/index.html` — Onboarding form (4-step: details, topics, depth, schedule)
-- `web/settings.html` + `web/settings.js` — Self-serve preferences editor. Auto-scrolls to #unsub anchor. Shows confirmation screen on `?unsubscribed=1`.
+- `web/settings.html` + `web/settings.js` — Self-serve preferences editor. Auto-scrolls to #unsub anchor. Shows confirmation screens/banners on `?unsubscribed=1`, `?paused=1`, and `?reactivated=1`.
 - `web/archive.html` — Past digest browser
-- `web/admin.html` — Admin dashboard: 4 summary cards (month cost, all-time, users served, active subscribers), recent runs table, per-user cost table, user roster table
-- `templates/email.html` — HTML email template (600px responsive, blue accent #2563EB). Placeholders: `{{DATE}}`, `{{QUICK_SCAN}}`, `{{BASE_URL}}`, `{{USER_EMAIL}}`.
+- `web/admin.html` — Admin dashboard: summary cards + engagement card row (open rate, subscriber mix, re-engagement pipeline, referral signups), recent runs table, per-user cost table, user roster table.
+- `templates/email.html` — HTML email template (600px responsive, blue accent #2563EB). Includes `{{EDITORIAL_NOTE}}` placeholder and referral-aware share links.
 - `templates/welcome.html` — Welcome email with setup summary, Telegram tip (pre-filled `/start {{USER_EMAIL}}` command), archive link.
 - `config.json` — API keys + topics + user config (gitignored, copy from config.example.json)
 - `start.sh` — Starts bot-server + web-server in parallel
@@ -52,11 +53,18 @@ Topics appear as grouped chips in onboarding (index.html) and settings (settings
 - Web server on port 3003, no framework — raw http.createServer
 - Telegram via long-polling (not webhooks) — runs on local Mac
 - Cloudflare Tunnel (named tunnel `signalbrief`, ID `308a0e0b-b520-4ae0-92d3-ca92bf3084f9`) serves web layer publicly at getsignalbrief.com
-- LaunchAgent labels: `com.jarvis.signalbrief-bot`, `com.jarvis.signalbrief-web`, `com.jarvis.signalbrief-digest`, `com.jarvis.signalbrief-tunnel`
+- LaunchAgent labels: `com.jarvis.signalbrief-bot`, `com.jarvis.signalbrief-web`, `com.jarvis.signalbrief-digest`, `com.jarvis.signalbrief-reengagement`, `com.jarvis.signalbrief-tunnel`
 - Digest cron: 6:45 AM ET Mon–Sat via LaunchAgent (com.jarvis.signalbrief-digest.plist). No external cron dependency.
+- Re-engagement cron: 8:00 AM ET daily via LaunchAgent (com.jarvis.signalbrief-reengagement.plist), after digest delivery window.
 - Rate limiting: in-memory Maps `RATE_IP` (5 req/15min) + `RATE_EMAIL` (10min cooldown) in web/server.js. `getClientIp()` respects `cf-connecting-ip` Cloudflare header.
 - httpsPost in digest.js and reply-handler.js both resolve `{ status, body }` — always access `.body` for response data
 - BASE_URL: `process.env.BASE_URL || "http://localhost:3003"` in server.js; set to `https://getsignalbrief.com` in com.jarvis.signalbrief-web.plist EnvironmentVariables
+
+## User store fields
+- `last_email_open_at`: ISO timestamp of the most recent tracking-pixel open (or `null`).
+- `email_opens_total`: cumulative open count (integer).
+- `reengagement_state`: `{ day4_sent_at, day8_sent_at, auto_paused_at, reactivated_at }` ISO-or-null fields for idempotent lifecycle sends.
+- `signup_referral_source`: `{ chatId, email, ts }` of referring user when signup is attributed, else `null`.
 
 ## Telegram-first onboarding flow
 1. User sends `/start` (no email) to bot → `AWAITING_EMAIL.set(chatId, true)`, bot asks for email

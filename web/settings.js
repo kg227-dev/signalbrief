@@ -197,6 +197,9 @@ function getSettingsFrequency() {
 async function init() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token');
+  const statusBanner = params.get('paused') === '1'
+    ? '⏸️ Digest paused. We will stop sending until you reactivate.'
+    : (params.get('reactivated') === '1' ? '✅ SignalBrief reactivated. Your digest will resume.' : '');
   const archiveNavLink = document.getElementById('archiveNavLink');
   if (archiveNavLink) {
     archiveNavLink.href = token
@@ -234,6 +237,7 @@ async function init() {
 
     loadingEl.style.display = 'none';
     formEl.style.display = 'block';
+    if (statusBanner) showBanner(statusBanner, 5000);
 
     // Fill details
     document.getElementById('name').value = user.name || '';
@@ -375,12 +379,13 @@ function showError(msg) {
   el.style.display = msg ? 'block' : 'none';
 }
 
-function showBanner(msg) {
+function showBanner(msg, timeoutMs) {
   const el = document.getElementById('savedBanner');
   if (!el) return;
   el.textContent = msg;
   el.classList.add('visible');
-  setTimeout(function() { el.classList.remove('visible'); }, 3000);
+  const delay = Number.isFinite(Number(timeoutMs)) ? Number(timeoutMs) : 3000;
+  setTimeout(function() { el.classList.remove('visible'); }, delay);
 }
 
 init();

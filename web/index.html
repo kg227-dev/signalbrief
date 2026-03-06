@@ -749,6 +749,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
     btn.textContent = 'Subscribing…';
 
     const depthEl = document.querySelector('.depth-option.selected');
+    const referralToken = (new URLSearchParams(window.location.search).get('ref') || '').trim();
 
     try {
       const res = await fetch('/api/signup', {
@@ -763,7 +764,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
           delivery_time: document.getElementById('deliveryTime').value,
           frequency: getDaysFrequency(),
           days_of_week: days,
-          items_per_digest: getSize()
+          items_per_digest: getSize(),
+          referral_token: referralToken || null
         })
       });
       const result = await res.json();

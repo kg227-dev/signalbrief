@@ -833,6 +833,31 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
         </div>
       </div>
     </div>
+    <div>
+      <div class="kpi-row-title">Engagement</div>
+      <div class="cards cards-kpi">
+        <div class="card">
+          <div class="card-label">7-day open rate</div>
+          <div class="card-value" id="engagementOpenRate">—</div>
+          <div class="card-sub" id="engagementOpenRateSub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Subscribers</div>
+          <div class="card-value" id="engagementSubscribers">—</div>
+          <div class="card-sub" id="engagementSubscribersSub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Re-engagement pipeline</div>
+          <div class="card-value" id="engagementPipeline">—</div>
+          <div class="card-sub" id="engagementPipelineSub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Referral signups</div>
+          <div class="card-value" id="engagementReferrals">—</div>
+          <div class="card-sub" id="engagementReferralsSub">—</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Upcoming deliveries -->
@@ -2954,7 +2979,7 @@ async function load(silent = false) {
       return;
     }
 
-    const { summary, health, runs, per_user, roster, admin_messages } = data;
+    const { summary, health, runs, per_user, roster, admin_messages, engagement } = data;
     latestRuns = Array.isArray(runs) ? runs.slice() : [];
     const qualitySummary = summary && summary.quality ? summary.quality : null;
     const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
@@ -3148,6 +3173,32 @@ async function load(silent = false) {
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${activeUsers}</a>`;
     document.getElementById("telegramUsers").innerHTML =
       `<strong>${activeTelegramUsers}</strong> active on Telegram · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
+
+    const openRate7d = Number(engagement && engagement.open_rate_7d || 0);
+    const openRate30d = Number(engagement && engagement.open_rate_30d || 0);
+    const openRate7dPct = Number.isFinite(openRate7d) ? (openRate7d * 100) : 0;
+    const openRate30dPct = Number.isFinite(openRate30d) ? (openRate30d * 100) : 0;
+    const openTone = openRate7dPct >= 45 ? "var(--accent)" : (openRate7dPct >= 30 ? "var(--yellow)" : "var(--red)");
+    document.getElementById("engagementOpenRate").innerHTML =
+      `<span style="color:${openTone};">${openRate7dPct.toFixed(1)}%</span>`;
+    document.getElementById("engagementOpenRateSub").textContent =
+      `30-day: ${openRate30dPct.toFixed(1)}%`;
+
+    const activeCount = Number(engagement && engagement.total_active || 0);
+    const pausedCount = Number(engagement && engagement.total_paused || 0);
+    const unsubCount = Number(engagement && engagement.total_unsubscribed || 0);
+    document.getElementById("engagementSubscribers").textContent = `${activeCount} / ${pausedCount} / ${unsubCount}`;
+    document.getElementById("engagementSubscribersSub").textContent = "active / paused / unsubscribed";
+
+    const day4 = Number(engagement && engagement.in_reengagement_day4 || 0);
+    const day8 = Number(engagement && engagement.in_reengagement_day8 || 0);
+    const pipelineTotal = day4 + day8;
+    document.getElementById("engagementPipeline").textContent = String(pipelineTotal);
+    document.getElementById("engagementPipelineSub").textContent = `day4: ${day4} · day8: ${day8}`;
+
+    const referralSignups = Number(engagement && engagement.referral_signups_total || 0);
+    document.getElementById("engagementReferrals").textContent = String(referralSignups);
+    document.getElementById("engagementReferralsSub").textContent = "all-time attributed signups";
 
     // ── Run log (condensed to 6 columns) ────────────────────────────────────────
     const runsBody = document.getElementById("runsBody");

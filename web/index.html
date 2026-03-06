@@ -46,19 +46,19 @@
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
-.container { max-width:640px; margin:0 auto; padding:40px 24px 80px; }
+.container { max-width:1080px; margin:0 auto; padding:40px 32px 88px; }
 
 /* Hero */
-.hero { text-align:center; padding:60px 0 0; margin-bottom:48px; animation:fadeUp 0.6s ease both; }
+.hero { text-align:center; padding:60px 0 0; margin:0 auto 56px; max-width:900px; animation:fadeUp 0.6s ease both; }
 .hero h1 { font-family:'Instrument Serif',Georgia,serif; font-size:52px; font-weight:400; letter-spacing:-0.5px; margin-bottom:10px; }
 .hero .tagline { font-family:'Instrument Serif',Georgia,serif; font-style:italic; color:var(--text-secondary); font-size:20px; margin-bottom:20px; }
-.hero .description { color:var(--text-secondary); font-size:16px; line-height:1.6; max-width:460px; margin:0 auto 32px; }
+.hero .description { color:var(--text-secondary); font-size:17px; line-height:1.6; max-width:620px; margin:0 auto 36px; }
 .hero-cta { display:inline-block; background:var(--accent); color:#fff; font-family:inherit; font-size:16px; font-weight:600; padding:16px 40px; border-radius:100px; border:none; cursor:pointer; transition:all 0.2s ease; box-shadow:0 4px 20px rgba(37,99,235,0.25); letter-spacing:-0.2px; text-decoration:none; }
 .hero-cta:hover { background:var(--accent-hover); transform:translateY(-2px); box-shadow:0 8px 28px rgba(37,99,235,0.3); }
 .hero-cta:active { transform:translateY(0); }
 
 /* Digest preview mockup */
-.digest-preview { margin:36px auto 32px; max-width:560px; background:#fff; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.08); text-align:left; animation:fadeUp 0.6s ease 0.15s both; }
+.digest-preview { margin:42px auto 34px; max-width:720px; background:#fff; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.08); text-align:left; animation:fadeUp 0.6s ease 0.15s both; }
 .dp-header { padding:16px 20px 14px; border-bottom:1px solid var(--border); }
 .dp-brand { font-family:'Instrument Serif',Georgia,serif; font-size:16px; font-weight:400; color:var(--text); }
 .dp-meta { font-size:11px; color:#9CA3AF; margin-top:2px; }
@@ -94,6 +94,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .progress-step.filled .step-circle { border-color:var(--accent); background:var(--accent); color:#fff; }
 .step-label { font-size:11px; font-weight:500; color:#9CA3AF; margin-top:6px; white-space:nowrap; transition:color 0.3s ease; }
 .progress-step.filled .step-label { color:var(--accent); font-weight:600; }
+#onboard-form { max-width:760px; margin:0 auto; }
 
 /* Dark mode */
 body.dark { --bg:#0F172A; --card:#1E293B; --text:#F1F5F9; --text-secondary:#94A3B8; --text-2:#CBD5E1; --border:rgba(255,255,255,0.08); --border-subtle:rgba(255,255,255,0.05); --accent:#3B82F6; --accent-light:#1e3a5f; --accent-hover:#2563EB; --shadow-sm:0 1px 2px rgba(0,0,0,0.2); --shadow-md:0 4px 12px rgba(0,0,0,0.25); }
@@ -204,7 +205,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
 /* SEO content */
 .seo-content {
-  margin-top: 28px;
+  max-width: 760px;
+  margin: 28px auto 0;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -228,7 +230,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 .seo-content p:last-child { margin-bottom: 0; }
 
 /* Footer */
-.footer { text-align:center; margin-top:48px; padding-top:24px; border-top:1px solid var(--border); color:var(--text-secondary); font-size:13px; animation:fadeUp 0.5s ease 0.5s both; }
+.footer { max-width:760px; text-align:center; margin:48px auto 0; padding-top:24px; border-top:1px solid var(--border); color:var(--text-secondary); font-size:13px; animation:fadeUp 0.5s ease 0.5s both; }
 .footer a { color:var(--accent); text-decoration:none; }
 
 /* Animation */

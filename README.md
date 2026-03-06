@@ -1,130 +1,167 @@
 # SignalBrief
 
-> AI-curated daily news digest for strategy professionals — across AI, healthcare, finance, PE, policy, and more.
+> AI-curated daily news digest for strategy professionals across AI, healthcare, finance, PE, policy, and more.
 
-Each user gets a personalized briefing: choose your topics, delivery time, analysis depth, and item count. Sharp consultant-grade "why it matters" on every story. Built to be forwarded.
+Each user gets a personalized briefing: selected topics, delivery schedule, analysis depth, and item count. SignalBrief delivers to Telegram and email, tracks engagement, and continuously tunes relevance.
 
 ---
 
 ## Current Focus (March 2026)
 
-- Tier 1 quality foundation: measurable relevance, stronger analysis specificity, cross-day freshness, and custom-topic reliability
-- Tier 2A personalization loop: use save/click/reply signals to improve per-user relevance over time
-- Tier 3A distribution: shareable digest pages to unlock organic growth
+- Tier 1 quality: measurable relevance, cross-day freshness, stronger analyst-grade output quality
+- Tier 2 personalization: save/click/feedback loops with automatic topic-weight adjustment
+- Tier 3 distribution: public digest pages, admin reliability controls, and cloud-first scheduling
 
-Roadmap details: [`features.md`](./features.md)
+Roadmap + audit backlog: [`features.md`](./features.md)
+
+---
+
+## Recent Changes (Last 24 Hours)
+
+- `3b44d02` Improved custom-topic recall and depth prompt rigor
+- `33b328f` Added cloud cutover runbook and scheduler health checks
+- `8d3ceb1` Added always-on scheduler worker and cloud deploy stack
+- `1d2f7bd` Admin now surfaces overdue deliveries in today schedule
+- `8f7f2eb` Added failed-delivery resend panel in admin
 
 ---
 
 ## What It Does
 
-- Pulls top news across 17 standard topics (10 industries + 7 capabilities) from the last 48 hours via Perplexity Sonar
-- Pulls additional dedicated fetches for active user custom topics in the same run (e.g., `custom_glp_1`)
-- Scores and ranks items per user with a relevance algorithm (Claude base score + per-user topic match)
-- Selects 5 or 10 items with interleaved sector coverage — no two adjacent items from the same tag
-- Enriches each item with a "why it matters" analysis at senior consultant level (Claude Haiku)
-- Delivers a tight Telegram message and a full HTML email simultaneously
-- Tracks bookmarks and topic preferences per user
-- Supports inline Telegram actions per item (`Save`, `More`, `Less`) plus one-tap digest feedback
-- Logs engagement events (sent/saved/clicked/ignored/weight-adjusted) for personalization analytics
-- Computes per-digest Digest Quality Score (DQS), shows digest match in delivery, and stores user-level quality history
-- Applies automatic topic-weight learning from engagement signals (with guardrails)
-- On-demand digest via `/digest` Telegram command
-- Telegram-first onboarding — sign up directly in the bot with `/start your@email.com`
-- Past digests browsable at `/archive` (token-gated)
-- Admin dashboard at `/admin` — cost tracking, upcoming schedule, user roster
+- Fetches business/strategy news via Perplexity Sonar across 17 standard topics
+- Fetches additional dedicated custom-topic pulls for active due users in the same run
+- Deduplicates against recent archives and enforces source/tag diversity caps
+- Enriches selected items with Claude Haiku (`wim_brief`, `wim`, `baseScore`, `implications`, `watch_next`)
+- Scores per-user relevance with topic match + topic weights + specialist-mode adjustment
+- Delivers scheduled and on-demand digests through Telegram and HTML email
+- Tracks engagement events (`sent`, `clicked`, `saved`, `ignored`, `feedback`, `topic_weight_adjusted`)
+- Computes and stores Digest Quality Score (DQS) history per user
+- Archives full run output by ET date and exposes user-scoped archive APIs
+- Provides admin operations for diagnostics, bulk actions, messaging, and run control
 
 ---
 
 ## Architecture
 
-```
-Scheduler worker (5-min loop on always-on host)
-        ↓
-   digest.js (due-user check + lock + catch-up window)
-        ↓
-Perplexity Sonar (17 topics in parallel)
-        ↓
-   selectItems() — dedup + interleave + tag cap
-        ↓
-   Claude Haiku — "why it matters" enrichment + base relevance score (0–10)
-        ↓
-  ┌──────────────────────────────────────────┐
-  │  Per-user delivery fan-out               │
-  │  - relevance sort (baseScore 60% + topicMatch 40%) │
-  │  - topic filter                          │
-  │  - items_per_digest (5 or 10)            │
-  │  - depth preference                      │
-  │  - auto topic learning (save/click/ignore) │
-  │  → Telegram bot (@signalbrief29bot)      │
-  │  → Resend API → HTML email               │
-  │     (Gmail OAuth fallback)               │
-  └──────────────────────────────────────────┘
-        ↓
-   quality-score.js — per-user DQS + trend history
-   engagement-events.js — append-only engagement telemetry
-        ↓
-   saveToArchive() — archive/YYYY-MM-DD.json
-   logCosts() — data/cost-log.json
+```text
+scheduler-worker.js (startup + 5-min interval loop)
+        |
+        v
+digest.js (run lock + due-user scheduling + catch-up window)
+        |
+        +--> Perplexity Sonar (standard topics)
+        +--> Perplexity Sonar (ranked custom topics, capped per run)
+        |
+        v
+cross-day dedup (archive-aware) + selectItems() caps
+        |
+        v
+Claude Haiku enrichment (wim + baseScore + implications + watch_next)
+        |
+        v
+Per-user fan-out:
+  - topic filter (standard + custom keyword matching)
+  - relevanceScore = base*0.6 + topicMatch*0.4 + weightBonus + specialistBonus
+  - depth transform (scan/brief/deep)
+  - DQS compute + engagement logging
+  - Telegram + email delivery
+        |
+        v
+archive/YYYY-MM-DD.json + data/cost-log.json + user JSON state updates
 ```
 
 ---
 
-## Files
+## Repository File Map
 
 | File | Purpose |
 |------|---------|
-| `digest.js` | Main pipeline — fetch, score, select, enrich, deliver, archive, log costs |
-| `scheduler-worker.js` | Always-on scheduler loop that executes `digest.js` every 5 minutes for due-user delivery |
-| `engagement-events.js` | Engagement event logger + loader (`data/engagement-events.jsonl`) |
-| `personalization.js` | Automatic topic-weight learning from save/click/ignored signals |
-| `quality-score.js` | Digest Quality Score (DQS) computation + trend helpers |
-| `mailer.js` | Email delivery — Resend (branded domain) with Gmail OAuth fallback + RFC 8058 unsubscribe headers |
-| `reply-handler.js` | Fuzzy intent parser for Telegram replies, `/digest` on-demand, Telegram-first onboarding |
-| `bot-server.js` | Long-poll Telegram bot server |
-| `store.js` | Per-user JSON store (`data/user-{chatId}.json`) |
-| `templates/email.html` | HTML digest email template (responsive, 600px) |
-| `templates/welcome.html` | Welcome email sent on signup (email + Telegram-first flows) |
-| `config.json` | API keys + config (gitignored — copy from config.example.json) |
-| `config.example.json` | Template — copy to config.json and fill in keys |
-| `web/server.js` | Onboarding + settings + archive + admin API server (port 3003) |
-| `web/index.html` | New user onboarding (4-step form) |
-| `web/settings.html` | Self-serve preferences page (token-gated) |
-| `web/archive.html` | Digest archive — list + detail reader (token-gated) |
-| `web/admin.html` | Admin dashboard — cost tracking, upcoming schedule, user roster |
-| `web/admin-user.html` | Admin per-user editor — edit settings, pause/resume/unsub on behalf of user |
-| `docker-compose.yml` | Production process topology (`web` + `bot` + `worker`) with persistent volumes |
-| `Dockerfile` | Container image for running any SignalBrief process |
-| `CLAUDE.md` | Codebase context for Claude Code |
-| `FORMAT-RULES.md` | Editorial format rules (locked) |
-| `SPEC.md` | Full product specification + principles |
-| `features.md` | Strategic roadmap + execution phases (tiered plan mapped to P1–P4 backlog) |
+| `AGENTS.md` | Agent workflow and automation instructions |
+| `CLAUDE.md` | Codebase context and operating guidance |
+| `FORMAT-RULES.md` | Locked editorial formatting rules |
+| `README.md` | Public project documentation |
+| `SPEC.md` | Built-state product specification |
+| `features.md` | Backlog, bugs, audit findings, technical debt |
+| `Dockerfile` | Container image definition |
+| `docker-compose.yml` | Multi-service runtime topology (`web`, `bot`, `worker`) |
+| `package.json` | Node metadata and scripts |
+| `config.example.json` | Configuration template (copy to `config.json`) |
+| `start.sh` | Local process launcher for web/bot/worker |
+| `digest.js` | Core digest pipeline |
+| `store.js` | JSON user store + token index |
+| `reply-handler.js` | Telegram intent parsing and command handlers |
+| `bot-server.js` | Telegram long-poll worker |
+| `mailer.js` | Resend primary + Gmail fallback mail delivery |
+| `scheduler-worker.js` | Always-on scheduler loop and heartbeat writer |
+| `engagement-events.js` | Engagement event append/load + ignored-event backfill |
+| `quality-score.js` | Digest quality scoring/trend helpers |
+| `personalization.js` | Auto topic-weight learning engine |
+| `templates/email.html` | Digest email template |
+| `templates/welcome.html` | Welcome email template |
+| `web/server.js` | HTTP layer: public + admin APIs and static routing |
+| `web/index.html` | Onboarding UI |
+| `web/settings.html` | User settings UI |
+| `web/archive.html` | User archive/search UI |
+| `web/admin-login.html` | Admin login page |
+| `web/admin.html` | Admin dashboard |
+| `web/admin-user.html` | Admin per-user editor |
+| `web/app.js` | Public onboarding client script |
+| `web/settings.js` | Settings client script |
+| `web/style.css` | Shared stylesheet |
+| `web/robots.txt` | Robots directives |
+| `web/sitemap.xml` | Sitemap for crawlability |
+| `planning/engagement-event-schema.v1.json` | Engagement event schema reference |
+| `planning/phase-0-planning-pack.md` | Early planning pack |
+| `planning/production-cutover-ubuntu.md` | Cloud cutover runbook |
+| `scripts/smoke-worker.js` | Scheduler smoke test |
+| `scripts/smoke-admin-scheduler.js` | Admin scheduler smoke test |
+| `test-harness/config.js` | Harness config |
+| `test-harness/cache.js` | Harness cache helpers |
+| `test-harness/evaluator.js` | Harness evaluation logic |
+| `test-harness/personas.js` | Persona definitions |
+| `test-harness/pipeline.js` | Harness execution pipeline |
+| `test-harness/run-tests.js` | Main QA harness runner |
+| `test-harness/run-matrix.js` | Matrix runner |
+| `test-harness/reporters/console.js` | Console reporter |
+| `test-harness/reporters/json.js` | JSON reporter |
+| `test-harness/suites/01-topic-matching.js` | Topic matching suite |
+| `test-harness/suites/02-relevance-scoring.js` | Relevance scoring suite |
+| `test-harness/suites/03-analysis-quality.js` | Analysis quality suite |
+| `test-harness/suites/04-diversity.js` | Diversity suite |
+| `test-harness/suites/05-custom-topics.js` | Custom topic suite |
+| `test-harness/suites/06-depth-control.js` | Depth-control suite |
+| `test-harness/suites/07-item-count.js` | Item-count suite |
+| `test-harness/suites/08-cross-day-freshness.js` | Cross-day freshness suite |
+| `test-harness/suites/09-end-to-end.js` | End-to-end suite |
 
 ---
 
 ## Setup
 
 ```bash
-# 1. Clone and enter the directory
-cd signalbrief
-
-# 2. Copy config template and fill in your keys
+# 1. Configure
 cp config.example.json config.json
-nano config.json
 
-# 3. Start local services
+# 2. Start all local services
 ./start.sh
 
-# Or run individually:
-node bot-server.js          # Telegram reply handler (long-poll)
-node web/server.js          # Onboarding + settings + archive UI (port 3003)
-node scheduler-worker.js    # Always-on scheduler loop (runs digest checks every 5 min)
-node digest.js              # Manual digest run (all active users)
-node digest.js --chatId 123 # On-demand digest for one user
+# Optional individual processes
+node web/server.js
+node bot-server.js
+node scheduler-worker.js
 
-# Smoke checks (no live delivery sends)
+# Manual digest runs
+node digest.js
+node digest.js --chatId 123456789
+```
+
+### Useful scripts
+
+```bash
 npm run smoke:worker
 npm run smoke:admin-scheduler
+npm run qa:harness
+npm run qa:matrix
 ```
 
 ### Production deployment (recommended — no laptop dependency)
@@ -175,180 +212,188 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 `BASE_URL=https://getsignalbrief.com` is set in the web LaunchAgent — no extra config needed for production URLs.
 
 Note: these LaunchAgents are now fallback/rollback only and are intentionally unloaded in normal production operation.
+---
+
+## Configuration Keys (`config.json`)
+
+### `keys`
+
+| Key | Required | Notes |
+|-----|----------|-------|
+| `perplexity` | Yes | Perplexity Sonar API key |
+| `anthropic` | Yes | Claude API key |
+| `signalBriefBotToken` | Yes | Primary Telegram bot token |
+| `telegramBotToken` | Optional | Legacy fallback bot token |
+| `resendApiKey` | Optional | If missing, mail falls back to Gmail OAuth |
+| `fromEmail` | Recommended | Sender email when using Resend |
+| `fromName` | Recommended | Sender display name |
+| `googleClientId` | Required for Gmail fallback | OAuth client ID |
+| `googleClientSecret` | Required for Gmail fallback | OAuth client secret |
+| `googleRefreshToken` | Required for Gmail fallback | OAuth refresh token |
+
+### `digest`
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `itemCount` | `7` | Base global selection target |
+| `maxItemsPerTag` | `2` | Diversity cap per tag |
+| `maxItemsPerSourceDomain` | `2` | Diversity cap per source domain |
+| `catchupWindowMinutes` | `720` | Scheduled catch-up window |
+| `crossDayDedupDays` | `3` | Archive lookback for duplicate suppression |
+| `maxCustomItemsPerRun` | `3` | Cap custom-topic items in selected pool |
+| `minBaseScoreForFinal` | `6.5` | Strong-item filtering threshold |
+| `lookbackHours` | `48` | News freshness target |
 
 ---
 
-## Web Layer
+## Telegram Commands
 
-### User-facing pages
+| Command | Behavior |
+|---------|----------|
+| `/start` | Welcome + onboarding/link flow |
+| `/start your@email.com` | Link Telegram chat to existing account |
+| `/verify 123456` | Complete email verification for account linking |
+| `/digest` | Trigger on-demand digest (15-minute cooldown) |
+| `/settings` | Show preferences summary |
+| `/bookmarks` | Show saved items |
+| `/topics` | Show tracked topics and adjustments |
+| `/help` | Show command help |
+
+### Natural-language intents (Claude parsed)
+
+| Input Pattern | Parsed Action |
+|---------------|---------------|
+| `save 3`, `save 1,4,6` | Save digest items |
+| `more AI` | Increase topic weight |
+| `less pharma` | Decrease topic weight |
+| `add GLP-1` | Add custom topic |
+| `bookmarks` / `saved items` | Show bookmarks |
+| `settings` / `preferences` | Show settings summary |
+| `topics` | Show topics list |
+| Other question | Claude short-form answer |
+
+Inline callback buttons per digest item: `Save`, `More like this`, `Less like this`, plus digest-level feedback (`Great`, `Fine`, `Meh`).
+
+---
+
+## Web Routes
+
+### User pages
 
 | URL | Purpose |
 |-----|---------|
-| `/` | New user onboarding (4-step: details, topics, depth, schedule) |
-| `/settings?token=...` | Self-serve preferences editor |
-| `/archive` | Browse and read past digests (prompts for magic link if no token) |
+| `/` | Onboarding |
+| `/settings?token=...` | Settings editor |
+| `/archive` | Archive browser/search |
+| `/digest` or `/digest/YYYY-MM-DD` | Public share page |
 
-### API — public
+### Public APIs
 
-| Endpoint | Purpose |
-|----------|---------|
-| `POST /api/signup` | Create user from onboarding form, returns token |
-| `GET /api/user?token=...` | Load user profile by token |
-| `POST /api/settings` | Update preferences (requires token) |
-| `GET /api/topics` | All 17 topics — flat list + grouped by industry/capability |
-| `GET /api/archive` | List all archived digest dates |
-| `GET /api/archive/:date` | Full digest for a specific date (YYYY-MM-DD) |
-| `GET /api/click?token=...&did=...&item=...&url=...` | Tracked redirect for email click instrumentation |
-| `GET /api/unsubscribe?token=...` | One-click unsubscribe via email link |
-| `POST /api/unsubscribe` | Machine-initiated unsubscribe (RFC 8058 compliant, email param) |
-| `POST /api/request-link` | Send a magic settings link to an email address |
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/topics` | Return standard topic lists |
+| `GET` | `/api/user?token=...` | Return user profile by token |
+| `POST` | `/api/signup` | Create user + trigger welcome digest |
+| `POST` | `/api/settings` | Update token-authenticated user settings |
+| `GET` | `/api/archive?token=...` | User-scoped archive list |
+| `GET` | `/api/archive/all?token=...` | User-scoped flattened archive feed |
+| `GET` | `/api/archive/:date?token=...` | User-scoped full digest for date |
+| `GET` | `/api/click?token=...&did=...&item=...&url=...` | Tracked outbound redirect |
+| `POST` | `/api/bookmarks` | Add/remove bookmark by URL |
+| `POST` | `/api/request-link` | Send magic link email |
+| `GET` | `/api/unsubscribe?token=...` | Human one-click unsubscribe + redirect |
+| `POST` | `/api/unsubscribe?token=...` | Machine one-click unsubscribe |
+| `POST` | `/api/unsubscribe?email=...&sig=...` | Signed RFC8058 email unsubscribe |
 
-### API — admin (authenticated session)
+### Admin pages + APIs (session-authenticated)
 
-| Endpoint | Purpose |
-|----------|---------|
-| `/admin/login` | Admin login page (email + password) |
-| `/admin` | Cost dashboard, upcoming schedule, run log, user roster (requires session) |
-| `/admin/user?email=...` | Per-user admin editor |
-| `POST /api/admin/login` | Create admin session cookie |
-| `POST /api/admin/logout` | Clear admin session |
-| `GET /api/admin/check` | Auth check for current admin session |
-| `GET /api/admin/stats` | Full stats payload: summary, health, runs, per-user costs, roster |
-| `GET /api/admin/user-by-email?email=...` | Load user data by email (includes auto-learning state and recent auto adjustments) |
-| `GET /api/admin/audit?email=...` | Unified user-level admin timeline |
-| `POST /api/admin/message-user` | Send admin outbound message via email/Telegram |
-| `POST /api/admin/update-delivery-time` | Inline admin schedule update for a user |
-| `POST /api/admin/bulk-action` | Safe dry-run/apply bulk admin actions |
-| `POST /api/admin/run-digest` | Trigger a digest run immediately |
-
-`/api/admin/stats` health now includes:
-- `digest_runner` (in-flight lock state)
-- `scheduler_worker` (heartbeat freshness from `data/scheduler-heartbeat.json`)
-
----
-
-## Email — Resend + Custom Domain
-
-SignalBrief sends from **`digest@getsignalbrief.com`** via [Resend](https://resend.com).
-
-`mailer.js` handles delivery:
-- **Primary:** Resend API (when `resendApiKey` is set in config.json)
-- **Fallback:** Gmail OAuth
-- **Headers:** `List-Unsubscribe` + `List-Unsubscribe-Post` on all outbound mail (Gmail/Yahoo bulk sender compliance)
-
-### Resend Setup
-
-1. Create account at [resend.com](https://resend.com) (free: 3,000 emails/month)
-2. Add your domain → get DNS records → add to registrar
-3. Get API key from resend.com/api-keys
-4. Add to `config.json`:
-
-```json
-{
-  "keys": {
-    "resendApiKey": "re_...",
-    "fromEmail": "digest@yourdomain.com",
-    "fromName": "SignalBrief"
-  }
-}
-```
-
-If `resendApiKey` is absent or blank, falls back to Gmail automatically.
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/admin/login` | Admin login page |
+| `GET` | `/admin` | Admin dashboard |
+| `GET` | `/admin/user?email=...` | Per-user editor |
+| `POST` | `/api/admin/login` | Admin login, set cookie |
+| `POST` | `/api/admin/logout` | Clear admin cookie |
+| `GET` | `/api/admin/check` | Session health check |
+| `GET` | `/api/admin/stats` | Summary/health/runs/roster payload |
+| `GET` | `/api/admin/user-by-email?email=...` | User details + auto-adjustment history |
+| `GET` | `/api/admin/audit?email=...` | User action/message audit timeline |
+| `POST` | `/api/admin/bulk-action` | Dry-run or apply bulk user operations |
+| `POST` | `/api/admin/launch-agent-action` | Restart LaunchAgent service |
+| `POST` | `/api/admin/update-delivery-time` | Set one user’s delivery time |
+| `POST` | `/api/admin/run-digest` | Trigger targeted or full digest run |
+| `POST` | `/api/admin/message-user` | Send operator message via email/Telegram |
 
 ---
 
-## Keys Required
+## Topics (17)
 
-| Key | Where to Get |
-|-----|-------------|
-| `perplexity` | [perplexity.ai/settings/api](https://perplexity.ai/settings/api) |
-| `anthropic` | [console.anthropic.com](https://console.anthropic.com) |
-| `signalBriefBotToken` | [@BotFather](https://t.me/BotFather) on Telegram |
-| `resendApiKey` *(optional)* | [resend.com/api-keys](https://resend.com/api-keys) — enables branded email |
-| `googleClientId` / `googleClientSecret` / `googleRefreshToken` | Gmail OAuth2 — only needed if not using Resend |
+| Group | Tag |
+|-------|-----|
+| Industry | `HEALTHCARE` |
+| Industry | `FINANCIAL SERVICES` |
+| Industry | `PE×M&A` |
+| Industry | `ENERGY` |
+| Industry | `CONSUMER` |
+| Industry | `LIFE SCIENCES` |
+| Industry | `TECHNOLOGY` |
+| Industry | `INDUSTRIALS` |
+| Industry | `REAL ESTATE` |
+| Industry | `PUBLIC SECTOR` |
+| Capability | `AI×TECH` |
+| Capability | `STRATEGY` |
+| Capability | `POLICY×REGULATORY` |
+| Capability | `SUSTAINABILITY` |
+| Capability | `DIGITAL` |
+| Capability | `M&A ADVISORY` |
+| Capability | `TALENT` |
 
----
-
-## Telegram Bot Commands
-
-| Command | What it does |
-|---------|-------------|
-| `/start` | Welcome message + link to onboarding |
-| `/start your@email.com` | Link Telegram account to an existing email signup |
-| `/digest` | Pull a fresh digest on demand right now |
-| `/settings` | View your current preferences |
-| `/bookmarks` | See your saved items |
-| `/topics` | View your tracked topic weights |
-| `/help` | Command reference |
-
-Users can also reply in natural language — intent is parsed by Claude:
-
-| What you type | What happens |
-|--------------|-------------|
-| `save 3` | Bookmarks item 3 |
-| `save 1, 4, 6` | Bookmarks multiple items |
-| `more AI` | Increases AI story weight |
-| `less pharma` | Decreases pharma story weight |
-| `add DOGE` | Adds DOGE as a custom topic |
-| Any question | Answered by Claude in a strategy/consulting context |
-
-Each digest message also includes inline buttons for:
-- Per-item actions: `💾 Save`, `➕ More like this`, `➖ Less like this`
-- Daily reaction: `🔥 Great`, `👍 Fine`, `👎 Meh`
-
-### Telegram-first Onboarding
-
-New users can sign up without the web form:
-1. Send `/start` to [@signalbrief29bot](https://t.me/signalbrief29bot)
-2. Bot asks for your email
-3. Account created with default topics — preferences editable at `getsignalbrief.com/settings`
-4. Welcome email sent with setup summary
-
-Existing web signups link their Telegram account by sending `/start their@email.com`.
-
----
-
-## Topics Covered (17)
-
-### Industries (10)
-| Tag | Coverage |
-|-----|----------|
-| `HEALTHCARE` | Payers, providers, clinical AI, pharma, FDA |
-| `FINANCIAL SERVICES` | Banking, fintech, insurance, capital markets |
-| `PE×M&A` | Private equity, deal flow, buyouts, sponsor activity |
-| `ENERGY` | Transition, grid, commodities, clean energy policy |
-| `CONSUMER` | Retail, CPG, brand strategy, spending trends |
-| `LIFE SCIENCES` | Biotech, medical devices, genomics, drug pipelines |
-| `TECHNOLOGY` | Enterprise tech, SaaS, infrastructure, cloud |
-| `INDUSTRIALS` | Manufacturing, logistics, supply chain, automation |
-| `REAL ESTATE` | CRE, housing, REITs, data centers |
-| `PUBLIC SECTOR` | Government, defense, federal procurement |
-
-### Capabilities (7)
-| Tag | Coverage |
-|-----|----------|
-| `AI×TECH` | Foundation models, enterprise AI, LLM deployments |
-| `STRATEGY` | Corporate strategy, operating models, org design |
-| `POLICY×REGULATORY` | Federal/state policy, antitrust, trade, DOGE |
-| `SUSTAINABILITY` | ESG, climate risk, supply chain, carbon markets |
-| `DIGITAL` | Digital transformation, platforms, product strategy |
-| `M&A ADVISORY` | Deal advisory, integration, valuation trends |
-| `TALENT` | Workforce, hiring, org restructuring, compensation |
-
-Custom topics also supported (e.g. "GLP-1", "quantum computing", "DOGE"). Stored with `custom_` prefix and fetched as dedicated Perplexity queries during digest runs.
+Custom topics are stored as `custom_<slug>` and fetched as dedicated Perplexity queries for due users.
 
 ---
 
 ## Stack
 
-- **Node.js** — stdlib only, zero npm dependencies, no build step
-- **Perplexity Sonar** — real-time news with citations
-- **Claude Haiku** (`claude-haiku-4-5`) — editorial enrichment, relevance scoring + intent parsing
-- **Resend** — branded transactional email
-- **Gmail OAuth** — email fallback
-- **Telegram Bot API** — daily digest + reply handling
-- **Cloudflare Tunnel** — public HTTPS with custom domain, no port forwarding
+- Node.js 22+ (stdlib-only)
+- Perplexity Sonar
+- Anthropic Claude Haiku (`claude-haiku-4-5`)
+- Telegram Bot API (long polling)
+- Resend (primary email)
+- Gmail OAuth2 (fallback email)
+- Cloudflare Tunnel + custom domain
+- JSON file storage (`data/`, `archive/`)
 
 ---
 
-*SignalBrief — Daily intelligence for strategy professionals.*
+## LaunchAgents (Legacy Mac Ops)
+
+| Service | LaunchAgent Label | Current Role |
+|---------|-------------------|--------------|
+| Web | `com.jarvis.signalbrief-web` | Active for local Mac runtime |
+| Bot | `com.jarvis.signalbrief-bot` | Active for local Mac runtime |
+| Digest Cron | `com.jarvis.signalbrief-digest` | Legacy/optional; expected stopped in cloud-first mode |
+| Tunnel | `com.jarvis.signalbrief-tunnel` | Active when exposing local runtime |
+
+---
+
+## Known Limitations
+
+- User and admin session state is in-process memory/JSON files (no shared DB/session store).
+- Admin APIs are not localhost-only by default; protection is session auth, with optional local bypass flag.
+- If a user JSON file is corrupt, `readUser()` falls back to defaults for that chatId.
+- `/api/settings` currently accepts unconstrained `topics` and `items_per_digest`; UI constrains values but API does not.
+
+---
+
+## Contributing
+
+1. Create a branch for focused changes.
+2. Run relevant smoke checks (`npm run smoke:worker`, `npm run smoke:admin-scheduler`).
+3. For ranking/quality changes, run harness suites (`npm run qa:harness`).
+4. Keep docs (`README.md`, `SPEC.md`, `features.md`) in sync with behavior changes.
+
+---
+
+## License
+
+No license file is currently present in this repository. Add a `LICENSE` file before open-source redistribution.

@@ -719,11 +719,16 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
 // are preserved at the top of the ranking before broad balancing.
 
 function scoreColor(score) {
-  if (score >= 8.5) return { bg: "#16A34A", text: "#fff" };    // strong green
-  if (score >= 7.0) return { bg: "#22C55E", text: "#fff" };    // green
-  if (score >= 5.0) return { bg: "#EAB308", text: "#111827" }; // yellow
-  if (score >= 3.5) return { bg: "#F97316", text: "#fff" };    // orange
-  return { bg: "#EF4444", text: "#fff" };                       // red
+  if (score >= 9.0) {
+    return { dot: "#10B981", text: "#065F46", bg: "#ECFDF5", glow: "0 0 6px rgba(16,185,129,0.35)" };
+  }
+  if (score >= 7.0) {
+    return { dot: "#34D399", text: "#065F46", bg: "#ECFDF5", glow: "0 0 6px rgba(52,211,153,0.3)" };
+  }
+  if (score >= 5.0) {
+    return { dot: "#F59E0B", text: "#92400E", bg: "#FFFBEB", glow: "0 0 5px rgba(245,158,11,0.24)" };
+  }
+  return { dot: "#9CA3AF", text: "#4B5563", bg: "#F3F4F6", glow: "none" };
 }
 
 function stripInlineHtml(raw) {
@@ -829,6 +834,87 @@ function normalizeMatchText(value) {
 
 function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
+}
+
+const STANDARD_TOPIC_TOKENS = new Set([
+  "healthcare",
+  "financial services",
+  "pe m a",
+  "energy",
+  "consumer",
+  "life sciences",
+  "technology",
+  "industrials",
+  "real estate",
+  "public sector",
+  "ai tech",
+  "strategy",
+  "policy regulatory",
+  "sustainability",
+  "digital",
+  "m a advisory",
+  "talent",
+]);
+
+const TOPIC_ICON_MAP = {
+  ai: "🤖",
+  "ai tech": "🤖",
+  technology: "⚙️",
+  digital: "⚙️",
+  healthcare: "🏥",
+  "life sciences": "🧬",
+  strategy: "🧭",
+  finance: "📊",
+  "financial services": "📊",
+  markets: "📈",
+  sustainability: "🌍",
+  climate: "🌍",
+  energy: "⚡",
+  startups: "🚀",
+  policy: "🏛",
+  "policy regulatory": "🏛",
+  pharma: "💊",
+  cybersecurity: "🔐",
+  "supply chain": "🚚",
+  industrials: "🏭",
+  manufacturing: "🏭",
+  consumer: "🛍",
+  economics: "📉",
+  "public sector": "🏛",
+  "real estate": "🏢",
+  "pe m a": "🤝",
+  "m a advisory": "🤝",
+  talent: "👥",
+};
+
+function topicVisual(tagValue) {
+  const raw = String(tagValue || "").trim();
+  const token = normalizeTopicToken(raw);
+  const isCustom = !!token && !STANDARD_TOPIC_TOKENS.has(token);
+  let icon = TOPIC_ICON_MAP[token] || "";
+  if (!icon && token.includes("health")) icon = "🏥";
+  if (!icon && token.includes("policy")) icon = "🏛";
+  if (!icon && token.includes("energy")) icon = "⚡";
+  if (!icon && token.includes("climate")) icon = "🌍";
+  if (!icon && token.includes("tech")) icon = "⚙️";
+  if (!icon && token.includes("finance")) icon = "📊";
+  if (!icon && token.includes("market")) icon = "📈";
+  if (!icon && token.includes("pharma")) icon = "💊";
+  if (!icon && token.includes("bio")) icon = "🧬";
+  if (!icon && token.includes("supply")) icon = "🚚";
+  if (!icon && token.includes("industrial")) icon = "🏭";
+  if (!icon && token.includes("consumer")) icon = "🛍";
+  if (!icon && token.includes("start")) icon = "🚀";
+  if (!icon && token.includes("cyber")) icon = "🔐";
+  if (!icon && token.includes("econ")) icon = "📉";
+  if (!icon) icon = isCustom ? "✨" : "📰";
+
+  return {
+    icon,
+    isCustom,
+    chipBg: isCustom ? "rgba(139,92,246,0.14)" : "rgba(59,130,246,0.12)",
+    chipText: isCustom ? "#7C3AED" : "#2563EB",
+  };
 }
 
 const CUSTOM_KEYWORD_ALIASES = {
@@ -1257,7 +1343,7 @@ function buildEmail(
 
   // ── Welcome banner (first digest only — placed BEFORE Quick Scan via template placeholder) ──
   const welcomeBanner = isFirstDigest ? `
-  <div style="padding:28px 40px 24px;background:#F0FDF4;border-bottom:2px solid #BBF7D0;">
+  <div style="padding:24px 28px 22px;background:#F0FDF4;border-bottom:1px solid #BBF7D0;">
     <div style="font-size:21px;font-weight:700;color:#15803D;margin-bottom:8px;">👋 Welcome to SignalBrief</div>
     <div style="font-size:14px;color:#166534;line-height:1.6;margin-bottom:20px;">Your first briefing is below — ${filterNote}. Here's what you're looking at:</div>
     <div style="font-size:13px;color:#374151;margin-bottom:20px;">
@@ -1266,25 +1352,25 @@ function buildEmail(
         <span style="color:#6B7280;">Each signal includes a strategic analysis written for how consultants think about implications — not just what happened, but who feels it and what moves next.</span>
       </div>
       <div style="margin-bottom:12px;">
-        <strong>🎯 Relevance scores</strong> — the colored badges like <span style="background:#DCFCE7;color:#15803D;padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700;">8.5</span><br>
-        <span style="color:#6B7280;">Ranked 0–10 per story: 40% topic match · 35% market significance · 25% strategic utility. Green = high signal, yellow = moderate, red = low.</span>
+        <strong>🎯 Relevance scores</strong> — shown as signal pills like <span style="display:inline-block;background:#ECFDF5;color:#065F46;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 5px rgba(16,185,129,0.35);vertical-align:middle;margin-right:5px;"></span>8.5</span><br>
+        <span style="color:#6B7280;">Ranked 0–10 per story: 40% topic match · 35% market significance · 25% strategic utility.</span>
       </div>
       <div>
         <strong>⚙️ Personalized to your topics</strong><br>
         <span style="color:#6B7280;">This digest is ${filterNote}. Tune anytime — email "more [topic]" or "less [topic]" to adjust what you see, or update your full preferences below.</span>
       </div>
     </div>
-    <a href="${BASE_URL}/settings?token=${userToken}" style="display:inline-block;background:#15803D;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 28px;border-radius:100px;">Update preferences →</a>
+    <a href="${BASE_URL}/settings?token=${userToken}" style="display:inline-block;background:#15803D;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:999px;">Update preferences →</a>
   </div>` : "";
   const personalizationNote = learningSummary ? `
-  <div style="padding:12px 40px;background:#F8FAFC;border-bottom:1px solid #E5E7EB;">
+  <div style="padding:12px 28px;background:#F8FAFC;border-bottom:1px solid #EAECEF;">
     <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748B;margin-bottom:4px;">Personalization update</div>
     <div style="font-size:13px;line-height:1.5;color:#334155;">🧠 ${escapeHtml(learningSummary)}</div>
   </div>` : "";
   const editorialNoteText = String(opts.editorialNote || "").trim();
   const editorialNote = editorialNoteText
     ? `
-  <div style="padding:10px 40px;background:#F0F4FF;border-bottom:1px solid #E5E7EB;">
+  <div style="padding:10px 28px;background:#F0F4FF;border-bottom:1px solid #EAECEF;">
     <p style="margin:0;font-size:13px;color:#4B5563;font-style:italic;">${escapeHtml(editorialNoteText)}</p>
   </div>`
     : "";
@@ -1293,11 +1379,17 @@ function buildEmail(
     const trackedLinkUrl = userToken && digestId
       ? `${BASE_URL}/api/click?token=${encodeURIComponent(userToken)}&did=${encodeURIComponent(digestId)}&item=${i + 1}&url=${encodeURIComponent(linkUrl)}`
       : linkUrl;
-    // Relevance score badge (color-coded, embedded in enrichment — no extra API cost)
-    const score = item.relevanceScore;
-    const scoreHtml = score !== undefined ? (() => {
+    const topic = topicVisual(item.tag);
+    const tagText = escapeHtml(String(item.tag || "NEWS"));
+
+    // Signal-strength pill: color + subtle glow based on score band.
+    const score = Number(item.relevanceScore);
+    const scoreHtml = Number.isFinite(score) ? (() => {
       const c = scoreColor(score);
-      return `<span style="display:inline-block;font-size:10px;font-weight:700;color:${c.text};background:${c.bg};padding:2px 8px;border-radius:4px;letter-spacing:0.01em;">${score.toFixed(1)}</span>`;
+      return `<span style="display:inline-block;font-size:12px;font-weight:700;color:${c.text};background:${c.bg};padding:4px 10px;border-radius:999px;letter-spacing:0.01em;line-height:1;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.dot};box-shadow:${c.glow};vertical-align:middle;margin-right:6px;"></span>
+        <span style="vertical-align:middle;">${score.toFixed(1)}</span>
+      </span>`;
     })() : "";
 
     // Conditionally render WIM block — inline styles for Gmail (strips <style> blocks)
@@ -1317,27 +1409,31 @@ function buildEmail(
       ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why shown: ${item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ")}</div>`
       : "";
 
-    const itemStyle = "padding:32px 0;border-bottom:1px solid #E5E7EB;";
+    const itemStyle = "background:#FFFFFF;border-radius:14px;border:1px solid #ECEFF3;box-shadow:0 2px 6px rgba(0,0,0,0.04);padding:20px;margin:0 0 18px;";
 
     return `
       <div class="item" style="${itemStyle}">
-        <div style="margin-bottom:8px;">
-          <span style="font-size:13px;color:#9CA3AF;font-weight:600;margin-right:6px;">${i + 1}</span>
-          <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#2563EB;background:#EFF6FF;padding:2px 8px;border-radius:4px;margin-right:6px;">${item.tag}</span>
-          ${scoreHtml}
-        </div>
-        <div style="font-size:16px;font-weight:700;color:#1A1A1A;line-height:1.4;margin-bottom:8px;">${item.headline}</div>
-        <div style="font-size:15px;color:#374151;line-height:1.6;margin-bottom:12px;">${item.summary}</div>
+        <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin-bottom:10px;">
+          <tr>
+            <td style="vertical-align:middle;padding:0 8px 0 0;">
+              <span style="font-size:15px;color:#6B7280;font-weight:700;margin-right:8px;">${i + 1}</span>
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${topic.chipText};background:${topic.chipBg};padding:4px 9px;border-radius:7px;">${topic.icon} ${tagText}</span>
+            </td>
+            <td style="text-align:right;vertical-align:middle;padding:0;white-space:nowrap;">${scoreHtml}</td>
+          </tr>
+        </table>
+        <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:10px;">${item.headline}</div>
+        <div style="font-size:15px;color:#374151;line-height:1.6;margin-bottom:14px;">${item.summary}</div>
         ${wimHtml}
         ${implHtml}
         ${watchHtml}
         ${whyShownHtml}
-        <div style="font-size:13px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:500;">Read more → ${item.source}</a></div>
+        <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}</span></div>
       </div>`;
   }).join("\n");
 
   const readMins = Math.max(2, Math.ceil(items.length * 0.6));
-  const headerMeta = `${items.length} signals · ${readMins} min read${quality ? ` · Match ${quality.score}%` : ""}`;
+  const headerMeta = `${items.length} signals • ${readMins} min read${quality ? ` • Match ${quality.score}%` : ""}`;
 
   // ── Per-user settings footer (shown in every digest) ──
   let settingsFooter = "";
@@ -1356,25 +1452,21 @@ function buildEmail(
     const SDEPTH = { headline_only: "Scan", scan: "Scan", headline_plus_oneliner: "Brief", headline_plus_why: "Deep", full: "Deep", deep: "Deep" };
     const sDepth = SDEPTH[prefs.depth] || "Deep";
     const sTopics = (user.topics || [])
-      .map(t => t.replace(/^custom_/, "").replace(/_/g, " "))
+      .map((t) => formatTopicDisplay(t))
       .join(" · ") || "—";
     const sSettingsUrl = `${BASE_URL}/settings?token=${userToken}`;
     settingsFooter = `
-    <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:16px;background:#F3F4F6;border-radius:8px;padding:14px 16px;">
-      <tr valign="middle">
-        <td>
-          <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px;">Your digest settings</div>
-          <div style="font-size:12px;color:#6B7280;line-height:1.9;">
-            <span style="color:#374151;font-weight:600;">Topics</span>&nbsp;&nbsp;${sTopics}<br>
-            <span style="color:#374151;font-weight:600;">Delivery</span>&nbsp;&nbsp;${sTimeStr} · ${sDaysStr}<br>
-            <span style="color:#374151;font-weight:600;">Depth</span>&nbsp;&nbsp;${sDepth}
-          </div>
-        </td>
-        <td style="text-align:right;vertical-align:middle;padding-left:12px;white-space:nowrap;">
-          <a href="${sSettingsUrl}" style="display:inline-block;font-size:12px;font-weight:600;color:#2563EB;text-decoration:none;border:1.5px solid #BFDBFE;background:#EFF6FF;padding:7px 16px;border-radius:100px;">Edit settings →</a>
-        </td>
-      </tr>
-    </table>`;
+    <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #EAECEF;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:8px;">Your digest settings</div>
+      <div style="font-size:13px;color:#6B7280;line-height:1.75;">
+        <div><span style="color:#4B5563;font-weight:600;">Topics:</span> ${escapeHtml(sTopics)}</div>
+        <div><span style="color:#4B5563;font-weight:600;">Delivery:</span> ${escapeHtml(`${sTimeStr} • ${sDaysStr}`)}</div>
+        <div><span style="color:#4B5563;font-weight:600;">Depth:</span> ${escapeHtml(sDepth)}</div>
+      </div>
+      <div style="margin-top:6px;">
+        <a href="${sSettingsUrl}" style="font-size:13px;font-weight:600;color:#2563EB;text-decoration:none;">Edit settings →</a>
+      </div>
+    </div>`;
   }
 
   return EMAIL_TEMPLATE
@@ -1392,7 +1484,7 @@ function buildEmail(
     .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, digestDateKey || "")
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
-      `<!-- Items -->\n    <div class="items">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
+      `<!-- Items -->\n    <div class="items" style="padding:18px 18px 10px;background:#FFFFFF;">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
     );
 }
 
@@ -1510,14 +1602,14 @@ async function main() {
       // Skip if already delivered today (prevents double-delivery from 30-min cron)
       if (toETDateStr(u.last_digest_at) === todayET) return false;
       // Catch-up window: up to catchupWindowMinutes after target handles missed windows.
-      // 30-min look-ahead handles cron jitter so we don't need perfect clock alignment.
+      // Strict mode: never send before the configured target time.
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       const userMinutes = dh * 60 + dm;
       let diff = nowMinutes - userMinutes; // positive = we're past target time
       // Midnight wraparound: e.g. target 23:45, now 00:05 → diff should be +20 not -1420
       if (diff < -(12 * 60)) diff += 24 * 60;
       if (diff > (12 * 60)) diff -= 24 * 60;
-      return diff >= -30 && diff <= catchupWindowMinutes;
+      return diff >= 0 && diff <= catchupWindowMinutes;
     });
   }
 
@@ -1928,8 +2020,17 @@ async function main() {
 
       // 5. Build per-user quick scan + subject
       const userQuickScan = userItems.map((i, idx) => {
-        const short = i.headline.split(":")[0].split("—")[0].trim();
-        return `<tr><td style="font-size:11px;color:#9CA3AF;font-weight:600;padding:4px 10px 4px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td><td style="font-size:10px;font-weight:700;letter-spacing:0.05em;color:#2563EB;text-transform:uppercase;white-space:nowrap;padding:4px 14px 4px 0;vertical-align:top;line-height:1.5;">${i.tag}</td><td style="font-size:13px;color:#374151;padding:4px 0;vertical-align:top;line-height:1.5;">${short}</td></tr>`;
+        const short = stripInlineHtml(i.headline).split(":")[0].split("—")[0].trim();
+        const topic = topicVisual(i.tag);
+        const safeTag = escapeHtml(String(i.tag || "News"));
+        const safeShort = escapeHtml(short);
+        return `<tr>
+          <td style="font-size:14px;color:#111827;font-weight:700;padding:6px 10px 6px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td>
+          <td style="padding:6px 0;vertical-align:top;line-height:1.5;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${topic.chipText};margin-bottom:2px;">${topic.icon} ${safeTag}</div>
+            <div style="font-size:14px;color:#374151;line-height:1.5;">${safeShort}</div>
+          </td>
+        </tr>`;
       }).join("\n");
       // Admin-triggered sends can force regular framing (no first-briefing subject/banner).
       const isFirstDigest = !u.welcome_email_sent && !suppressWelcome;

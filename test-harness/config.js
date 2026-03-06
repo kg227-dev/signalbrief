@@ -77,6 +77,7 @@ const SUITE_IDS = [
   "07-item-count",
   "08-cross-day-freshness",
   "09-end-to-end",
+  "10-module-coverage",
 ];
 
 const COMPOSITE_WEIGHTS = {

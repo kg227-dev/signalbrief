@@ -45,6 +45,7 @@ const suiteModules = [
   require("./suites/07-item-count"),
   require("./suites/08-cross-day-freshness"),
   require("./suites/09-end-to-end"),
+  require("./suites/10-module-coverage"),
 ];
 
 function syncBudget(target, next) {

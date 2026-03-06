@@ -147,7 +147,21 @@ async function main() {
   log(`run complete (${processed} action${processed === 1 ? "" : "s"})`);
 }
 
-main().catch((err) => {
-  log(`fatal: ${err.message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((err) => {
+    log(`fatal: ${err.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  log,
+  blankReengagementState,
+  normalizeReengagementState,
+  daysSince,
+  userFirstName,
+  handleDay4,
+  handleDay8,
+  handleAutoPause,
+  main,
+};

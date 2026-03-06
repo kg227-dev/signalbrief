@@ -293,4 +293,22 @@ function main() {
   process.stdout.write(toMarkdown(report));
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  readUsers,
+  readEvents,
+  parseDate,
+  startOfWeekMonday,
+  endOfDay,
+  pct,
+  fmtPct,
+  dateOnly,
+  parseArgs,
+  computeDigest2OpenRate,
+  computeReport,
+  toMarkdown,
+  main,
+};

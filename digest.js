@@ -453,6 +453,32 @@ function dedupAgainstRecentArchives(items, opts = {}) {
   };
 }
 
+function buildRecentRepeatIndex(days = 3) {
+  const lookbackDays = Math.max(1, Number(days || 3));
+  const recentItems = loadRecentArchiveItems(lookbackDays);
+  const urlKeys = new Set(
+    recentItems.map((i) => normalizeUrlForDedup(i?.url)).filter(Boolean)
+  );
+  const headlineKeys = new Set(
+    recentItems.map((i) => headlineFingerprint(i?.headline)).filter(Boolean)
+  );
+  return {
+    days: lookbackDays,
+    urlKeys,
+    headlineKeys,
+  };
+}
+
+function isRecentRepeatItem(item, repeatIndex) {
+  if (!repeatIndex || typeof repeatIndex !== "object") return false;
+  const urlKey = normalizeUrlForDedup(item?.url);
+  const headKey = headlineFingerprint(item?.headline);
+  return (
+    (urlKey && repeatIndex.urlKeys instanceof Set && repeatIndex.urlKeys.has(urlKey))
+    || (headKey && repeatIndex.headlineKeys instanceof Set && repeatIndex.headlineKeys.has(headKey))
+  );
+}
+
 function selectItems(allItems, opts = {}) {
   const maxItems = Math.max(1, Number(opts.maxItems || CONFIG.digest.itemCount || 7));
   const maxItemsPerTag = Math.max(1, Number(opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2));
@@ -980,6 +1006,37 @@ function computeTopicMatch(item, userTopics) {
   return computeTopicSignals(item, userTopics).topicMatch;
 }
 
+function itemMatchesAnyCustomKeyword(item, customKeywords = []) {
+  if (!Array.isArray(customKeywords) || customKeywords.length === 0) return false;
+  const tagNormalized = normalizeTopicToken(item?.tag || "");
+  const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
+  return customKeywords.some((kw) => customKeywordMatches(kw, bodyText, tagNormalized));
+}
+
+function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
+  const scored = Array.isArray(items) ? items : [];
+  const count = Math.max(1, Number(requestedCount || 5));
+  const base = scored.slice(0, count);
+  if (!base.length) return base;
+  if (!Array.isArray(customKeywords) || customKeywords.length === 0) return base;
+
+  const alreadyCovered = base.some((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
+  if (alreadyCovered) return base;
+
+  const fallbackCandidate = scored.find((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
+  if (!fallbackCandidate) return base;
+
+  const replaced = base.slice(0, Math.max(0, count - 1));
+  const exists = replaced.some((item) =>
+    String(item?.headline || "") === String(fallbackCandidate?.headline || "")
+    && String(item?.url || "") === String(fallbackCandidate?.url || "")
+  );
+  if (!exists) replaced.push(fallbackCandidate);
+  return replaced
+    .sort((a, b) => Number(b?.relevanceScore || 0) - Number(a?.relevanceScore || 0))
+    .slice(0, count);
+}
+
 // Find the total weight adjustment for a given item tag from the user's topic_weights map.
 // Weight keys may be partial/informal ("AI" → "AI×TECH"), so we fuzzy-match.
 function matchWeightToTag(tag, topicWeights) {
@@ -999,6 +1056,8 @@ function matchWeightToTag(tag, topicWeights) {
 
 function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
   const specialistMode = !!opts.specialistMode;
+  const repeatIndex = opts.repeatIndex && typeof opts.repeatIndex === "object" ? opts.repeatIndex : null;
+  const repeatPenalty = Math.max(0, Number(opts.repeatPenalty || 0));
   return items.map(item => {
     const signals     = computeTopicSignals(item, userTopics);
     const topicMatch  = signals.topicMatch;
@@ -1011,7 +1070,8 @@ function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
       else if (topicMatch >= 7) specialistBonus = 0.45;
       else specialistBonus = -0.6;
     }
-    const raw         = base * 0.6 + topicMatch * 0.4 + weightBonus + specialistBonus;
+    const freshnessPenalty = isRecentRepeatItem(item, repeatIndex) ? -repeatPenalty : 0;
+    const raw         = base * 0.6 + topicMatch * 0.4 + weightBonus + specialistBonus + freshnessPenalty;
 
     const whyShown = [];
     if (topicMatch >= 7) whyShown.push("topic_match");
@@ -1025,6 +1085,7 @@ function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
       topicMatch,
       weightBonus,
       specialistBonus,
+      freshnessPenalty,
       why_shown: whyShown,
       relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)),
     };
@@ -1623,8 +1684,13 @@ async function main() {
     targetCount: selectionTarget,
   });
   allItems = dedupRes.items;
+  const repeatIndex = buildRecentRepeatIndex(crossDayDedupDays);
+  const repeatPenalty = Math.max(0, Number(CONFIG.digest.crossDayRepeatPenalty || 0.8));
   if (dedupRes.removed > 0) {
     log(`Cross-day dedup removed ${dedupRes.removed} repeat item(s) using last ${dedupRes.archive_days_used} day(s) of archive history`);
+  }
+  if ((repeatIndex.urlKeys.size > 0 || repeatIndex.headlineKeys.size > 0) && repeatPenalty > 0) {
+    log(`Freshness penalty active (days=${repeatIndex.days}, penalty=${repeatPenalty.toFixed(2)})`);
   }
 
   const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
@@ -1727,6 +1793,7 @@ async function main() {
       let wasFiltered = false;
       let userItems = enriched;
       let standardTopicsLower = [];
+      let customKeywords = [];
       let specialistMode = false;
       if (u.topics && u.topics.length >= 1) {
         // Standard topics: match against article tag
@@ -1737,7 +1804,7 @@ async function main() {
         specialistMode = standardTopicsLower.length > 0 && standardTopicsLower.length <= 2;
         const standardTopicSet = new Set(standardTopicsLower);
         // Custom topics: match keyword against headline + summary text
-        const customKeywords = u.topics
+        customKeywords = u.topics
           .filter((t) => {
             const raw = String(t || "");
             const normalized = normalizeTopicToken(raw);
@@ -1784,6 +1851,8 @@ async function main() {
 
       userItems = applyRelevanceScores(userItems, u.topics || [], weights, {
         specialistMode,
+        repeatIndex,
+        repeatPenalty,
       });
       userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
@@ -1804,13 +1873,15 @@ async function main() {
 
       // 3. Trim to user's items_per_digest (top-N by relevance)
       const count = requestedCount;
-      userItems = userItems.slice(0, count);
+      userItems = reserveCustomKeywordSlot(userItems, count, customKeywords);
 
       // Hard guardrail: never send an empty digest.
       if (userItems.length === 0) {
         const emergencyCount = Math.max(1, Math.min(3, count));
         const emergency = applyRelevanceScores(enriched, u.topics || [], weights, {
           specialistMode: false,
+          repeatIndex,
+          repeatPenalty,
         })
           .sort((a, b) => b.relevanceScore - a.relevanceScore)
           .slice(0, emergencyCount);

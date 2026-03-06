@@ -85,6 +85,37 @@ function maxRequestedItems(personas, fallback = 7) {
   return Math.max(Number(fallback || 7), requested.length ? Math.max(...requested) : 0);
 }
 
+function normalizeUrlForDedup(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) parsed.pathname = parsed.pathname.slice(0, -1);
+    return parsed.toString().toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
+function headlineFingerprint(text, width = 60) {
+  return normalizeTopicToken(text).slice(0, width);
+}
+
+function buildRecentRepeatIndexFromArchives(archives, days = 3) {
+  const lookbackDays = Math.max(1, Number(days || 3));
+  const sorted = (Array.isArray(archives) ? archives.slice() : [])
+    .sort((a, b) => String(a?.date || "").localeCompare(String(b?.date || "")));
+  const recent = sorted.slice(-lookbackDays);
+  const recentItems = recent.flatMap((row) => (Array.isArray(row?.items) ? row.items : []));
+
+  return {
+    days: lookbackDays,
+    urlKeys: [...new Set(recentItems.map((i) => normalizeUrlForDedup(i?.url)).filter(Boolean))],
+    headlineKeys: [...new Set(recentItems.map((i) => headlineFingerprint(i?.headline)).filter(Boolean))],
+  };
+}
+
 function loadOfflineDataset(appConfig) {
   const archiveDir = path.join(ROOT_DIR, "archive");
   const archives = loadArchiveDigests(archiveDir);
@@ -559,6 +590,8 @@ async function runHarness(argv = process.argv.slice(2)) {
 
   const archiveDir = path.join(ROOT_DIR, "archive");
   const archives = loadArchiveDigests(archiveDir);
+  const dedupDays = Math.max(1, Number(appConfig?.digest?.crossDayDedupDays || 3));
+  const recentRepeatIndex = buildRecentRepeatIndexFromArchives(archives, dedupDays);
 
   const runtime = {
     defaultItemCount: Number(dataset?.metadata?.selection_target || appConfig?.digest?.itemCount || 7),
@@ -566,6 +599,8 @@ async function runHarness(argv = process.argv.slice(2)) {
     maxItemsPerSourceDomain: Number(appConfig?.digest?.maxItemsPerSourceDomain || 2),
     minBaseScoreForFinal: Number(appConfig?.digest?.minBaseScoreForFinal || 6.5),
     minFilteredItems: 3,
+    recent_repeat_index: recentRepeatIndex,
+    repeat_penalty: Math.max(0, Number(appConfig?.digest?.crossDayRepeatPenalty || 0.8)),
     max_analysis_samples: args.max_analysis_samples,
     max_depth_pairs: args.max_depth_pairs,
     allow_live_api: args.allow_live_api,

@@ -217,6 +217,15 @@ function selectItems(allItems, itemCount, maxItemsPerTag, opts = {}) {
   return selected;
 }
 
+function isRecentRepeatItem(item, repeatIndex) {
+  if (!repeatIndex || typeof repeatIndex !== "object") return false;
+  const urlKeys = repeatIndex.urlKeys instanceof Set ? repeatIndex.urlKeys : new Set(repeatIndex.urlKeys || []);
+  const headlineKeys = repeatIndex.headlineKeys instanceof Set ? repeatIndex.headlineKeys : new Set(repeatIndex.headlineKeys || []);
+  const urlKey = normalizeUrl(item?.url || "");
+  const headKey = normalizeMatchText(item?.headline || "").slice(0, 60);
+  return (urlKey && urlKeys.has(urlKey)) || (headKey && headlineKeys.has(headKey));
+}
+
 function computeTopicSignals(item, userTopics) {
   const tagToken = normalizeTopicToken(item?.tag || "");
   const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
@@ -280,6 +289,8 @@ function matchWeightToTag(tag, topicWeights) {
 
 function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
   const specialistMode = !!opts.specialist_mode;
+  const repeatIndex = opts.repeat_index || null;
+  const repeatPenalty = Math.max(0, Number(opts.repeat_penalty || 0));
 
   return (items || []).map((item) => {
     const signals = computeTopicSignals(item, userTopics);
@@ -294,7 +305,8 @@ function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
       else specialistBonus = -0.6;
     }
 
-    const raw = base * 0.6 + signals.topicMatch * 0.4 + weightBonus + specialistBonus;
+    const freshnessPenalty = isRecentRepeatItem(item, repeatIndex) ? -repeatPenalty : 0;
+    const raw = base * 0.6 + signals.topicMatch * 0.4 + weightBonus + specialistBonus + freshnessPenalty;
 
     const whyShown = [];
     if (signals.topicMatch >= 7) whyShown.push("topic_match");
@@ -308,6 +320,7 @@ function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
       topicMatch: signals.topicMatch,
       weightBonus,
       specialistBonus,
+      freshnessPenalty,
       relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)),
       why_shown: whyShown,
     };
@@ -407,9 +420,38 @@ function applyDepth(items, depth) {
   return (items || []).map((i) => ({ ...i }));
 }
 
+function itemMatchesAnyCustomKeyword(item, customKeywords = []) {
+  if (!Array.isArray(customKeywords) || customKeywords.length === 0) return false;
+  const tag = normalizeTopicToken(item?.tag || "");
+  const text = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
+  return customKeywords.some((kw) => customKeywordMatches(kw, text, tag));
+}
+
+function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
+  const scored = Array.isArray(items) ? items : [];
+  const count = Math.max(1, Number(requestedCount || 5));
+  const base = scored.slice(0, count);
+  if (!base.length) return base;
+  if (!Array.isArray(customKeywords) || customKeywords.length === 0) return base;
+  if (base.some((item) => itemMatchesAnyCustomKeyword(item, customKeywords))) return base;
+
+  const fallback = scored.find((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
+  if (!fallback) return base;
+
+  const replaced = base.slice(0, Math.max(0, count - 1));
+  const exists = replaced.some((item) =>
+    String(item?.headline || "") === String(fallback?.headline || "")
+    && String(item?.url || "") === String(fallback?.url || "")
+  );
+  if (!exists) replaced.push(fallback);
+  return replaced
+    .sort((a, b) => Number(b?.relevanceScore || 0) - Number(a?.relevanceScore || 0))
+    .slice(0, count);
+}
+
 function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   const prefs = persona?.preferences || {};
-  const { standardTopicsLower } = splitUserTopics(persona?.topics || []);
+  const { standardTopicsLower, customKeywords } = splitUserTopics(persona?.topics || []);
   const specialistMode = standardTopicsLower.length > 0 && standardTopicsLower.length <= 2;
   const filterRes = filterItemsForPersona(
     enrichedItems,
@@ -421,6 +463,8 @@ function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   let scored = applyRelevanceScores(filterRes.items, persona?.topics || [], persona?.topic_weights || {}, {
     specialist_mode: specialistMode,
     standard_topic_count: standardTopicsLower.length,
+    repeat_index: runtime.recent_repeat_index || null,
+    repeat_penalty: runtime.repeat_penalty || 0,
   });
   scored = scored.sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0));
 
@@ -434,7 +478,7 @@ function buildDigestForPersona(enrichedItems, persona, runtime = {}) {
   if (stronger.length >= minStrongItems) scored = stronger;
 
   const preTrimCount = scored.length;
-  const trimmed = scored.slice(0, requested);
+  const trimmed = reserveCustomKeywordSlot(scored, requested, customKeywords);
   const preDepthItems = trimmed.map((i) => ({ ...i }));
   const depth = prefs.depth || "headline_plus_why";
   const finalItems = applyDepth(trimmed, depth);

@@ -17,7 +17,7 @@ const EMAIL_TEMPLATE = fs.readFileSync(
   "utf8"
 );
 const { readUser, writeUser, allUsers } = require("./store");
-const { sendEmail: sendEmailViaMailer } = require("./mailer");
+const { sendEmail: sendEmailViaMailer, buildOpenTrackingPixel } = require("./mailer");
 const { appendEngagementEvent, buildDigestId, loadEngagementEvents } = require("./engagement-events");
 const { computeDigestQualityScore } = require("./quality-score");
 const { applyAutoTopicLearning } = require("./personalization");
@@ -82,12 +82,12 @@ function incidentKeySeenRecently(eventKey, maxAgeHours = 24) {
         const ts = Date.parse(row?.ts_utc || "");
         if (Number.isFinite(ts) && ts < cutoff) break;
         if (String(row?.event_key || "") === String(eventKey)) return true;
-      } catch {
-        // skip malformed rows
+      } catch (err) {
+        log(`⚠️ Incident log row parse failed: ${err.message}`);
       }
     }
-  } catch {
-    // ignore read errors
+  } catch (err) {
+    log(`⚠️ Incident log read failed: ${err.message}`);
   }
   return false;
 }
@@ -144,7 +144,8 @@ function readDigestLock() {
     if (!Number.isFinite(ts)) return { stale: true, raw: lock };
     const ageMs = Date.now() - ts;
     return { ...lock, ageMs, stale: ageMs > DIGEST_LOCK_STALE_MS };
-  } catch {
+  } catch (err) {
+    log(`⚠️ Invalid digest lock state; treating as stale: ${err.message}`);
     return { stale: true };
   }
 }
@@ -152,8 +153,8 @@ function readDigestLock() {
 function clearDigestLock() {
   try {
     if (fs.existsSync(DIGEST_RUN_LOCK)) fs.unlinkSync(DIGEST_RUN_LOCK);
-  } catch {
-    // ignore cleanup errors
+  } catch (err) {
+    log(`⚠️ Failed to clear digest lock: ${err.message}`);
   }
 }
 
@@ -179,7 +180,10 @@ function acquireDigestLock(mode) {
     }
     digestLockOwned = true;
     return { ok: true, lock: payload };
-  } catch {
+  } catch (err) {
+    if (err?.code !== "EEXIST") {
+      log(`⚠️ Failed to acquire digest lock: ${err.message}`);
+    }
     const lock = readDigestLock();
     return { ok: false, lock };
   }
@@ -328,7 +332,9 @@ IMPORTANT: Use the direct article URLs from your search citations. Do not use ho
             });
             if (match) return { ...item, url: match, tag: topic.tag };
           }
-        } catch {}
+        } catch (err) {
+          log(`⚠️ Invalid item URL for ${topic.tag}: ${err.message}`);
+        }
         return { ...item, tag: topic.tag };
       });
 
@@ -364,7 +370,9 @@ function parseSourceDomain(item) {
   if (rawUrl) {
     try {
       return new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
-    } catch {}
+    } catch (err) {
+      log(`⚠️ Unable to parse source domain from URL: ${err.message}`);
+    }
   }
 
   const rawSource = String(item?.source || "").trim().toLowerCase();
@@ -401,7 +409,9 @@ function loadRecentArchiveItems(days = 3) {
     try {
       const parsed = JSON.parse(fs.readFileSync(path.join(archiveDir, file), "utf8"));
       items.push(...(parsed?.items || []));
-    } catch {}
+    } catch (err) {
+      log(`⚠️ Failed to parse archive file ${file}: ${err.message}`);
+    }
   }
   return items;
 }
@@ -688,6 +698,99 @@ function scoreColor(score) {
   if (score >= 5.0) return { bg: "#EAB308", text: "#111827" }; // yellow
   if (score >= 3.5) return { bg: "#F97316", text: "#fff" };    // orange
   return { bg: "#EF4444", text: "#fff" };                       // red
+}
+
+function stripInlineHtml(raw) {
+  return String(raw || "")
+    .replace(/<\/?[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sanitizeSingleLineModelOutput(raw) {
+  return String(raw || "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function callHaikuOneLine(prompt, maxTokens) {
+  const res = await httpsPostWithRetry(
+    "api.anthropic.com",
+    "/v1/messages",
+    { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
+    {
+      model: "claude-haiku-4-5",
+      max_tokens: Math.max(8, Number(maxTokens || 40)),
+      messages: [{ role: "user", content: String(prompt || "").trim() }],
+    }
+  );
+  const usage = {
+    input_tokens: Number(res.body?.usage?.input_tokens || 0),
+    output_tokens: Number(res.body?.usage?.output_tokens || 0),
+  };
+  if (res.status >= 400) throw new Error(`haiku status ${res.status}`);
+  const text = sanitizeSingleLineModelOutput(res.body?.content?.[0]?.text || "");
+  return { text, usage };
+}
+
+function fallbackSubjectLine(now) {
+  const label = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+  return `Your signals for ${label}`;
+}
+
+async function generateLeadSubjectLine(leadItem, now) {
+  const fallback = fallbackSubjectLine(now);
+  if (!leadItem || !leadItem.headline) {
+    return { subject: fallback, usage: { input_tokens: 0, output_tokens: 0 } };
+  }
+
+  const prompt = `Given this news headline and "why it matters" analysis, write a single email subject line (max 65 characters) for a daily briefing aimed at strategy consultants. The subject should hint at the strategic implication without being clickbait. No emoji. No "SignalBrief" in the subject.
+
+Headline: ${stripInlineHtml(leadItem.headline)}
+Why it matters: ${stripInlineHtml(leadItem.wim || leadItem.wim_brief || leadItem.summary || "")}
+
+Reply with ONLY the subject line, no quotes, no explanation.`;
+
+  try {
+    const { text, usage } = await callHaikuOneLine(prompt, 60);
+    if (!text || text.length > 100 || /[\r\n]/.test(text) || /signalbrief/i.test(text)) {
+      return { subject: fallback, usage };
+    }
+    return { subject: text, usage };
+  } catch {
+    return { subject: fallback, usage: { input_tokens: 0, output_tokens: 0 } };
+  }
+}
+
+async function generateEditorialNote(items) {
+  const safeItems = Array.isArray(items) ? items.filter((item) => item && item.headline) : [];
+  if (!safeItems.length) return { note: "", usage: { input_tokens: 0, output_tokens: 0 } };
+
+  const stories = safeItems
+    .map((item) => `[${String(item.tag || "news").trim()}] ${stripInlineHtml(item.headline)}`)
+    .join(", ");
+  const prompt = `Write a single editorial sentence (max 120 characters) for a strategy professional's morning briefing. It should flag the most important cross-sector or non-obvious pattern across today's ${safeItems.length} stories. Be specific. Name a sector or player. No hedging. No "today's digest" language.
+
+Stories: ${stories}
+
+Reply with ONLY the sentence, no quotes.`;
+
+  try {
+    const { text, usage } = await callHaikuOneLine(prompt, 40);
+    if (!text || text.length > 120 || /[\r\n]/.test(text)) {
+      return { note: "", usage };
+    }
+    return { note: text, usage };
+  } catch {
+    return { note: "", usage: { input_tokens: 0, output_tokens: 0 } };
+  }
 }
 
 function normalizeMatchText(value) {
@@ -1083,9 +1186,12 @@ function buildEmail(
     : "today's top signals across all areas";
   const quality = digestQualityLabel(opts.digestQuality);
   const learningSummary = String(opts.learningSummary || "").trim();
-  const publicDigestUrl = String(opts.publicDigestUrl || "").trim()
+  const publicDigestUrlBase = String(opts.publicDigestUrl || "").trim()
     || buildPublicDigestUrl(digestDateKey)
     || BASE_URL;
+  const publicDigestUrl = userToken
+    ? `${publicDigestUrlBase}${publicDigestUrlBase.includes("?") ? "&" : "?"}ref=${encodeURIComponent(userToken)}`
+    : publicDigestUrlBase;
   const publicDigestUrlEncoded = encodeURIComponent(publicDigestUrl);
 
   // ── Welcome banner (first digest only — placed BEFORE Quick Scan via template placeholder) ──
@@ -1114,6 +1220,13 @@ function buildEmail(
     <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748B;margin-bottom:4px;">Personalization update</div>
     <div style="font-size:13px;line-height:1.5;color:#334155;">🧠 ${escapeHtml(learningSummary)}</div>
   </div>` : "";
+  const editorialNoteText = String(opts.editorialNote || "").trim();
+  const editorialNote = editorialNoteText
+    ? `
+  <div style="padding:10px 40px;background:#F0F4FF;border-bottom:1px solid #E5E7EB;">
+    <p style="margin:0;font-size:13px;color:#4B5563;font-style:italic;">${escapeHtml(editorialNoteText)}</p>
+  </div>`
+    : "";
   const itemsHtml = items.map((item, i) => {
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
     const trackedLinkUrl = userToken && digestId
@@ -1209,6 +1322,7 @@ function buildEmail(
     .replace("{{QUICK_SCAN}}", quickScan)
     .replace("{{WELCOME_BANNER}}", welcomeBanner)
     .replace("{{PERSONALIZATION_NOTE}}", personalizationNote)
+    .replace("{{EDITORIAL_NOTE}}", editorialNote)
     .replace("{{SETTINGS_FOOTER}}", settingsFooter)
     .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
     .replace(/\{\{PUBLIC_DIGEST_URL\}\}/g, publicDigestUrl)
@@ -1242,7 +1356,7 @@ async function sendTelegram(text, chatId, extra = {}) {
 
 // ── 7. Send Email (via mailer.js — Resend if configured, Gmail fallback) ──────
 
-async function sendEmail(subject, html, toEmail, token = null) {
+async function sendEmail(toEmail, subject, html, token = null) {
   const target = toEmail || CONFIG.user.email;
   log(`Sending email to ${target}...`);
   const result = await sendEmailViaMailer(target, subject, html, token);
@@ -1567,15 +1681,17 @@ async function main() {
   }
   log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
 
-  const { items: enriched, usage: claudeUsage } = await enrichItems(selected);
+  const enrichment = await enrichItems(selected);
+  const enriched = enrichment.items;
+  const claudeUsage = {
+    input_tokens: Number(enrichment?.usage?.input_tokens || 0),
+    output_tokens: Number(enrichment?.usage?.output_tokens || 0),
+  };
 
-  // Quick scan & subject
+  // Quick scan (shared archive/public page)
   const quickScan = enriched
     .map((i) => i.headline.split(":")[0].split("—")[0].trim())
     .join(" &nbsp;·&nbsp; ");
-  const topThree = enriched.slice(0, 3)
-    .map((i) => i.headline.split(":")[0].split("—")[0].trim().slice(0, 28));
-  const subject = `SignalBrief — ${shortDate} | ${topThree.join(", ")}`;
 
   // Archive once per run (shared, date-keyed) — uses full enriched set before user filtering
   // Must happen before per-user loop so the archive reflects all fetched items, not one user's filtered view
@@ -1744,13 +1860,8 @@ async function main() {
         const short = i.headline.split(":")[0].split("—")[0].trim();
         return `<tr><td style="font-size:11px;color:#9CA3AF;font-weight:600;padding:4px 10px 4px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td><td style="font-size:10px;font-weight:700;letter-spacing:0.05em;color:#2563EB;text-transform:uppercase;white-space:nowrap;padding:4px 14px 4px 0;vertical-align:top;line-height:1.5;">${i.tag}</td><td style="font-size:13px;color:#374151;padding:4px 0;vertical-align:top;line-height:1.5;">${short}</td></tr>`;
       }).join("\n");
-      // Clean subject: first name + tagline (headlines get cut off and look ugly)
-      const uFirstName = ((u.name || "").split(" ")[0]) || u.email.split("@")[0];
       // Admin-triggered sends can force regular framing (no first-briefing subject/banner).
       const isFirstDigest = !u.welcome_email_sent && !suppressWelcome;
-      const userSubject = isFirstDigest
-        ? `Welcome to SignalBrief, ${uFirstName} 👋 — your first briefing is ready`
-        : `SignalBrief — ${shortDate} | ${uFirstName}'s daily signal across AI, strategy, and business`;
 
       // 5. Deliver
       let delivered = false;
@@ -1788,7 +1899,15 @@ async function main() {
         }
       }
       if (u.email && prefs.email_enabled !== false) {
-        const userEmailHtml = buildEmail(
+        const subjectResult = await generateLeadSubjectLine(userItems[0] || null, now);
+        claudeUsage.input_tokens += Number(subjectResult?.usage?.input_tokens || 0);
+        claudeUsage.output_tokens += Number(subjectResult?.usage?.output_tokens || 0);
+
+        const noteResult = await generateEditorialNote(userItems);
+        claudeUsage.input_tokens += Number(noteResult?.usage?.input_tokens || 0);
+        claudeUsage.output_tokens += Number(noteResult?.usage?.output_tokens || 0);
+
+        let userEmailHtml = buildEmail(
           userItems,
           dateStr,
           userQuickScan,
@@ -1803,10 +1922,17 @@ async function main() {
             digestQuality,
             learningSummary,
             publicDigestUrl,
+            editorialNote: noteResult.note || "",
           }
         );
+        if (u.token) {
+          const trackingPixel = buildOpenTrackingPixel(userDigestId, u.token, BASE_URL);
+          userEmailHtml = /<\/body>/i.test(userEmailHtml)
+            ? userEmailHtml.replace(/<\/body>/i, `${trackingPixel}\n</body>`)
+            : `${userEmailHtml}\n${trackingPixel}`;
+        }
         try {
-          await sendEmail(userSubject, userEmailHtml, u.email, u.token || null);
+          await sendEmail(u.email, subjectResult.subject, userEmailHtml, u.token || null);
           appendEngagementEvent({
             event_type: "digest_sent",
             event_key: `digest_sent:${userDigestId}:email`,

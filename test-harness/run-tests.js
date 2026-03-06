@@ -29,6 +29,11 @@ const { selectItems } = require("./pipeline");
 const { buildEvaluator } = require("./evaluator");
 const { printConsoleReport } = require("./reporters/console");
 const { writeRunReport, writeRollingSummary } = require("./reporters/json");
+const {
+  normalizeTopicToken,
+  normalizeCustomKeyword,
+  CUSTOM_TOPIC_ALIASES,
+} = require("./topic-utils");
 
 const suiteModules = [
   require("./suites/01-topic-matching"),
@@ -50,37 +55,10 @@ function syncBudget(target, next) {
   target.calls = next.calls;
 }
 
-function normalizeCustomKeyword(topic) {
-  return String(topic || "")
-    .replace(/^custom_/, "")
-    .replace(/_/g, " ")
-    .trim();
-}
-
-function normalizeTopicToken(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/^custom_/i, "")
-    .replace(/×/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const CUSTOM_QUERY_ALIASES = {
-  "rate cuts": ["federal reserve rate cut", "interest rate cuts", "fomc rate decision"],
-  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules", "sec rule proposal"],
-  "semicap": ["semiconductor equipment", "chip equipment", "asml applied materials lam research"],
-  "agentic ai": ["ai agents", "enterprise ai agents", "openai anthropic microsoft agent"],
-  "quantum computing": ["quantum hardware", "quantum platform"],
-  "glp 1": ["obesity drugs", "weight loss drug"],
-  "doge": ["dogecoin", "crypto regulation"],
-};
-
 function buildPrimaryCustomQuery(keywordRaw) {
   const keyword = String(keywordRaw || "").trim();
   const normalized = normalizeTopicToken(keyword);
-  const alias = (CUSTOM_QUERY_ALIASES[normalized] || [])[0];
+  const alias = (CUSTOM_TOPIC_ALIASES[normalized] || [])[0];
   if (!alias) return `${keyword} business strategy market policy developments last 72 hours`;
   return `${keyword} ${alias} business strategy market policy developments last 72 hours`;
 }

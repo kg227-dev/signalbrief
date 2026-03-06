@@ -31,35 +31,51 @@ function normalizeUrl(rawUrl) {
   }
 }
 
+function appendResult(ok, event = null, code = "ok", detail = null) {
+  return {
+    ok: !!ok,
+    code,
+    detail,
+    event,
+  };
+}
+
 function appendEngagementEvent(input) {
+  if (!input || typeof input !== "object") {
+    return appendResult(false, null, "invalid_input", "input must be an object");
+  }
+
+  const now = new Date();
+  const payload = {
+    event_version: "v1",
+    event_id: input.event_id || crypto.randomUUID(),
+    event_type: String(input.event_type || "").trim(),
+    event_key: String(input.event_key || "").trim(),
+    ts_utc: input.ts_utc || now.toISOString(),
+    date_et: input.date_et || etDateKey(now),
+    user_chat_id: String(input.user_chat_id || "").trim(),
+    user_email: input.user_email || null,
+    digest_id: String(input.digest_id || "").trim(),
+    run_id: input.run_id || null,
+    channel: input.channel || "system",
+    source: input.source || "scheduled-job",
+    item: input.item || null,
+    topic: input.topic || null,
+    feedback: input.feedback || null,
+    window_hours: Number.isFinite(Number(input.window_hours)) ? Number(input.window_hours) : null,
+    metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
+  };
+
+  if (!payload.event_type || !payload.event_key || !payload.user_chat_id || !payload.digest_id) {
+    return appendResult(false, null, "missing_required_fields", "event_type, event_key, user_chat_id, and digest_id are required");
+  }
+
   try {
-    if (!input || typeof input !== "object") return null;
     ensureEventsFile();
-    const now = new Date();
-    const payload = {
-      event_version: "v1",
-      event_id: input.event_id || crypto.randomUUID(),
-      event_type: String(input.event_type || "").trim(),
-      event_key: String(input.event_key || "").trim(),
-      ts_utc: input.ts_utc || now.toISOString(),
-      date_et: input.date_et || etDateKey(now),
-      user_chat_id: String(input.user_chat_id || "").trim(),
-      user_email: input.user_email || null,
-      digest_id: String(input.digest_id || "").trim(),
-      run_id: input.run_id || null,
-      channel: input.channel || "system",
-      source: input.source || "scheduled-job",
-      item: input.item || null,
-      topic: input.topic || null,
-      feedback: input.feedback || null,
-      window_hours: Number.isFinite(Number(input.window_hours)) ? Number(input.window_hours) : null,
-      metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
-    };
-    if (!payload.event_type || !payload.event_key || !payload.user_chat_id || !payload.digest_id) return null;
     fs.appendFileSync(EVENTS_FILE, `${JSON.stringify(payload)}\n`);
-    return payload;
-  } catch {
-    return null;
+    return appendResult(true, payload);
+  } catch (err) {
+    return appendResult(false, null, "write_failed", err?.message || "unknown write error");
   }
 }
 
@@ -122,6 +138,7 @@ function emitIgnoredEventsIfDue(opts = {}) {
 
   let considered = 0;
   let emitted = 0;
+  let appendFailures = 0;
   for (const [digestId, sent] of digestsById.entries()) {
     const sentMs = Date.parse(sent.ts_utc || "");
     if (!Number.isFinite(sentMs) || sentMs > cutoffMs) continue;
@@ -135,7 +152,7 @@ function emitIgnoredEventsIfDue(opts = {}) {
       if (engagedItems.has(actionKey) || ignoredKeys.has(ignoreKey)) continue;
 
       const digestDate = String(digestId.split(":")[0] || sent.date_et || etDateKey()).trim();
-      appendEngagementEvent({
+      const appendOutcome = appendEngagementEvent({
         event_type: "item_ignored_computed",
         event_key: ignoreKey,
         date_et: digestDate,
@@ -157,12 +174,16 @@ function emitIgnoredEventsIfDue(opts = {}) {
         window_hours: windowHours,
         metadata: { derived_from: "digest_sent", algorithm: "no-save-no-click-within-window" },
       });
+      if (!appendOutcome.ok) {
+        appendFailures++;
+        continue;
+      }
       ignoredKeys.add(ignoreKey);
       emitted++;
     }
   }
 
-  return { emitted, considered };
+  return { emitted, considered, append_failures: appendFailures };
 }
 
 module.exports = {

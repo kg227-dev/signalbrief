@@ -12,7 +12,10 @@ function normalizeUrl(item) {
       parsed.pathname = parsed.pathname.slice(0, -1);
     }
     return parsed.toString().toLowerCase();
-  } catch {
+  } catch (err) {
+    if (process.env.QA_DEBUG === "1") {
+      console.warn(`[qa-cross-day-freshness] URL parse fallback: ${err.message}`);
+    }
     return raw.toLowerCase();
   }
 }

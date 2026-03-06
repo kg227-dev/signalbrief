@@ -10,9 +10,9 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn, execFileSync } = require("child_process");
+const { spawn } = require("child_process");
 const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
-const { sendEmail, sendWelcomeEmail, signUnsubEmail } = require("../mailer");
+const { sendEmail, sendWelcomeEmail, sendReferralThankYou, signUnsubEmail } = require("../mailer");
 const {
   appendEngagementEvent,
   buildDigestId,
@@ -27,6 +27,10 @@ const WEB_DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "../config.json"), "utf8"));
 const CANONICAL_HOST = "getsignalbrief.com";
 const PUBLIC_HOSTS = new Set([CANONICAL_HOST, `www.${CANONICAL_HOST}`]);
+const TRANSPARENT_GIF = Buffer.from(
+  "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  "base64"
+);
 
 // ── Rate limiting (in-memory, per-IP + per-email) ─────────────────────────────
 const RATE_IP    = new Map(); // ip  → { count, resetAt }
@@ -51,8 +55,10 @@ function getRequestScheme(req) {
       const parsed = JSON.parse(cfVisitor);
       const scheme = String(parsed?.scheme || "").toLowerCase();
       if (scheme === "http" || scheme === "https") return scheme;
-    } catch {
-      // Ignore malformed cf-visitor headers.
+    } catch (err) {
+      if (process.env.DEBUG_WEB_SERVER === "1") {
+        console.warn(`[web] malformed cf-visitor header ignored: ${err.message}`);
+      }
     }
   }
 
@@ -91,9 +97,12 @@ const LOGIN_RATE = new Map(); // ip → { count, resetAt }
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
+const ADMIN_LOCAL_BYPASS_ALLOWLIST = new Set([
+  "GET /api/admin/check",
+  "GET /api/admin/stats",
+]);
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
-const ADMIN_SERVICE_LOG = path.join(__dirname, "../data/admin-service-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
 const DIGEST_RUN_LOCK_FILE = path.join(__dirname, "../data/digest-run.lock");
 const SCHEDULER_HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
@@ -108,7 +117,16 @@ function verifyAdminPassword(password) {
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(passwordHash, "hex"));
 }
 
+function pruneAdminSessions(now = Date.now()) {
+  for (const [token, session] of ADMIN_SESSIONS.entries()) {
+    if (!session || (now - Number(session.createdAt || 0)) > ADMIN_SESSION_TTL) {
+      ADMIN_SESSIONS.delete(token);
+    }
+  }
+}
+
 function createAdminSession(email) {
+  pruneAdminSessions();
   const token = crypto.randomBytes(32).toString("hex");
   ADMIN_SESSIONS.set(token, { email, createdAt: Date.now() });
   return token;
@@ -120,14 +138,12 @@ function getAdminSession(req) {
   if (!match) return null;
   const session = ADMIN_SESSIONS.get(match[1]);
   if (!session) return null;
-  if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) {
-    ADMIN_SESSIONS.delete(match[1]);
-    return null;
-  }
+  if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) return null;
   return session;
 }
 
 function validateAdminSession(req) {
+  pruneAdminSessions();
   return !!getAdminSession(req);
 }
 
@@ -185,8 +201,10 @@ function readJsonLineTail(filePath, limit = 30, maxBytes = 512 * 1024) {
       try {
         const parsed = JSON.parse(lines[i]);
         if (parsed) out.push(parsed);
-      } catch {
-        // skip bad line
+      } catch (err) {
+        if (process.env.DEBUG_WEB_SERVER === "1") {
+          console.warn(`[web] skipping malformed JSONL line in ${filePath}: ${err.message}`);
+        }
       }
     }
     if (out.length >= requested || start === 0) return out;
@@ -387,8 +405,10 @@ function readDigestRunLock() {
 function clearDigestRunLock() {
   try {
     if (fs.existsSync(DIGEST_RUN_LOCK_FILE)) fs.unlinkSync(DIGEST_RUN_LOCK_FILE);
-  } catch {
-    // ignore lock cleanup failures
+  } catch (err) {
+    if (process.env.DEBUG_WEB_SERVER === "1") {
+      console.warn(`[web] failed to clear digest run lock: ${err.message}`);
+    }
   }
 }
 
@@ -447,30 +467,6 @@ function readSchedulerHeartbeat() {
   }
 }
 
-function appendAdminMessageLog(entry) {
-  appendJsonLineLog(ADMIN_MESSAGE_LOG, entry, "admin-message-log");
-}
-
-function readAdminMessageLog(limit = 30) {
-  return readJsonLineLog(ADMIN_MESSAGE_LOG, limit);
-}
-
-function appendAdminActionLog(entry) {
-  appendJsonLineLog(ADMIN_ACTION_LOG, entry, "admin-action-log");
-}
-
-function readAdminActionLog(limit = 60) {
-  return readJsonLineLog(ADMIN_ACTION_LOG, limit);
-}
-
-function appendAdminServiceLog(entry) {
-  appendJsonLineLog(ADMIN_SERVICE_LOG, entry, "admin-service-log");
-}
-
-function readAdminServiceLog(limit = 20) {
-  return readJsonLineLog(ADMIN_SERVICE_LOG, limit);
-}
-
 function maskEmail(email) {
   const value = String(email || "").trim();
   const at = value.indexOf("@");
@@ -489,25 +485,28 @@ function hashText(text) {
 }
 
 function logAdminMessageEvent(req, payload) {
-  appendAdminMessageLog({
+  appendJsonLineLog(ADMIN_MESSAGE_LOG, {
     at: new Date().toISOString(),
     actor: getAdminActor(req),
     ...payload,
-  });
+  }, "admin-message-log");
 }
 
 function logAdminActionEvent(req, payload) {
-  appendAdminActionLog({
+  appendJsonLineLog(ADMIN_ACTION_LOG, {
     at: new Date().toISOString(),
     actor: getAdminActor(req),
     ...payload,
-  });
+  }, "admin-action-log");
 }
 
 function isAdminAuthed(req) {
   if (validateAdminSession(req)) return true;
   if (!ADMIN_LOCAL_BYPASS) return false;
-  return isLocalRequest(req);
+  if (!isLocalRequest(req)) return false;
+  const method = String(req?.method || "GET").toUpperCase();
+  const pathname = String(req?.url || "/").split("?")[0];
+  return ADMIN_LOCAL_BYPASS_ALLOWLIST.has(`${method} ${pathname}`);
 }
 
 function checkLoginRate(ip) {
@@ -543,168 +542,59 @@ function serveFile(res, filePath) {
 }
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:3003";
-const LAUNCH_AGENT_SERVICES = [
-  { key: "web", label: "com.jarvis.signalbrief-web", expected_running: true },
-  { key: "bot", label: "com.jarvis.signalbrief-bot", expected_running: true },
-  { key: "digest", label: "com.jarvis.signalbrief-digest", expected_running: false },
-  { key: "tunnel", label: "com.jarvis.signalbrief-tunnel", expected_running: true },
-];
-const LAUNCH_AGENT_CACHE_MS = 15000;
-let launchAgentCache = { at: 0, data: null };
-
-function getLaunchAgentServiceByKey(key) {
-  const normalized = String(key || "").trim().toLowerCase();
-  return LAUNCH_AGENT_SERVICES.find(s => s.key === normalized) || null;
-}
-
-function parseLaunchctlList(raw) {
-  const rows = new Map();
-  for (const line of String(raw || "").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || /^PID\s+Status\s+Label$/i.test(trimmed)) continue;
-    const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\S+)$/);
-    if (!match) continue;
-    const pidRaw = match[1];
-    const statusRaw = match[2];
-    const label = match[3];
-    const pid = pidRaw === "-" ? null : parseInt(pidRaw, 10);
-    const lastExit = statusRaw === "-" ? null : parseInt(statusRaw, 10);
-    rows.set(label, {
-      pid: Number.isFinite(pid) ? pid : null,
-      last_exit: Number.isFinite(lastExit) ? lastExit : null,
-    });
-  }
-  return rows;
-}
-
-function getLaunchAgentHealth(forceRefresh = false) {
-  const now = Date.now();
-  if (!forceRefresh && launchAgentCache.data && (now - launchAgentCache.at) < LAUNCH_AGENT_CACHE_MS) {
-    return launchAgentCache.data;
-  }
-
-  try {
-    const output = execFileSync("launchctl", ["list"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 1800,
-    });
-    const launchctlRows = parseLaunchctlList(output);
-
-    const services = LAUNCH_AGENT_SERVICES.map(service => {
-      const row = launchctlRows.get(service.label);
-      if (!row) {
-        return {
-          key: service.key,
-          label: service.label,
-          expected_running: service.expected_running,
-          loaded: false,
-          running: false,
-          ok: false,
-          state: "missing",
-          pid: null,
-          last_exit: null,
-        };
-      }
-
-      const running = Number.isInteger(row.pid) && row.pid > 0;
-      const loaded = true;
-      const hasErrorExit = row.last_exit != null && row.last_exit !== 0;
-      let state = "loaded";
-      let ok = true;
-
-      if (service.expected_running) {
-        if (running) {
-          state = "running";
-          ok = true;
-        } else if (hasErrorExit) {
-          state = "error";
-          ok = false;
-        } else {
-          state = "stopped";
-          ok = false;
-        }
-      } else if (running) {
-        state = "running";
-      } else if (hasErrorExit) {
-        state = "error";
-        ok = false;
-      }
-
-      return {
-        key: service.key,
-        label: service.label,
-        expected_running: service.expected_running,
-        loaded,
-        running,
-        ok,
-        state,
-        pid: row.pid,
-        last_exit: row.last_exit,
-      };
-    });
-
-    const total = services.length;
-    const loadedCount = services.filter(s => s.loaded).length;
-    const runningCount = services.filter(s => s.running).length;
-    const okCount = services.filter(s => s.ok).length;
-    const overall = okCount === total ? "healthy" : "degraded";
-    const summary = `${runningCount}/${total} running · ${loadedCount}/${total} loaded`;
-
-    const data = {
-      available: true,
-      overall,
-      summary,
-      checked_at: new Date().toISOString(),
-      services,
-    };
-    launchAgentCache = { at: now, data };
-    return data;
-  } catch (e) {
-    const err = String((e && (e.stderr || e.message)) || e || "").trim();
-    const data = {
-      available: false,
-      overall: "unknown",
-      summary: "LaunchAgent status unavailable",
-      checked_at: new Date().toISOString(),
-      error: err.slice(0, 180),
-      services: [],
-    };
-    launchAgentCache = { at: now, data };
-    return data;
-  }
-}
-
-function restartLaunchAgent(label) {
-  const attempts = [];
-  const uid = (typeof process.getuid === "function" && Number.isInteger(process.getuid()))
-    ? String(process.getuid())
-    : "";
-  const targets = uid
-    ? [`gui/${uid}/${label}`, label]
-    : [label];
-
-  for (const target of targets) {
-    try {
-      execFileSync("launchctl", ["kickstart", "-k", target], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 3500,
-      });
-      return { ok: true, target, attempts };
-    } catch (e) {
-      const stderr = String((e && (e.stderr || e.message)) || e || "").trim();
-      attempts.push({ target, error: stderr.slice(0, 220) });
-    }
-  }
-  return { ok: false, target: null, attempts };
-}
 
 function toEtDateKey(iso) {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function normalizeReferralToken(raw) {
+  const token = String(raw || "").trim().toLowerCase();
+  return /^[a-f0-9]{64}$/.test(token) ? token : "";
+}
+
+// digestId is base64url-encoded in tracking pixel URLs to preserve the
+// native digest id shape ("YYYY-MM-DD:chatId") as a single path segment.
+function decodeDigestIdParam(encoded) {
+  const raw = String(encoded || "").trim();
+  if (!raw) return "";
+  try {
+    const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return Buffer.from(padded, "base64").toString("utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function blankReengagementState() {
+  return {
+    day4_sent_at: null,
+    day8_sent_at: null,
+    auto_paused_at: null,
+    reactivated_at: null,
+  };
+}
+
+function resetReengagementState(user, opts = {}) {
+  const preserveAutoPaused = !!opts.preserveAutoPaused;
+  const prev = user && typeof user.reengagement_state === "object" ? user.reengagement_state : {};
+  const next = blankReengagementState();
+  if (preserveAutoPaused && prev.auto_paused_at) next.auto_paused_at = prev.auto_paused_at;
+  return next;
+}
+
+function sendTransparentGif(res) {
+  res.writeHead(200, {
+    "Content-Type": "image/gif",
+    "Content-Length": TRANSPARENT_GIF.length,
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+  });
+  res.end(TRANSPARENT_GIF);
 }
 
 async function sendMagicLinkEmail(user) {
@@ -817,8 +707,14 @@ function formatPublicDigestDateLabel(dateKey) {
   });
 }
 
-function renderPublicDigestPage({ dateKey, dateLabel, quickScan, items }) {
-  const shareUrl = `${BASE_URL}/digest/${dateKey}`;
+function renderPublicDigestPage({ dateKey, dateLabel, quickScan, items, refToken = "" }) {
+  const referralToken = normalizeReferralToken(refToken);
+  const shareUrl = referralToken
+    ? `${BASE_URL}/digest/${dateKey}?ref=${encodeURIComponent(referralToken)}`
+    : `${BASE_URL}/digest/${dateKey}`;
+  const signupUrl = referralToken
+    ? `${BASE_URL}/?ref=${encodeURIComponent(referralToken)}`
+    : `${BASE_URL}/`;
   const safeDateLabel = escapeHtml(dateLabel || formatPublicDigestDateLabel(dateKey));
   const safeQuickScan = escapeHtml(String(quickScan || ""));
   const safeItems = Array.isArray(items) ? items : [];
@@ -903,7 +799,7 @@ function renderPublicDigestPage({ dateKey, dateLabel, quickScan, items }) {
       <h1>${safeDateLabel}</h1>
       <p class="hero-sub">A shareable briefing from SignalBrief: daily intelligence across AI, strategy, and business.</p>
       <div class="hero-actions">
-        <a class="btn btn-primary" href="https://getsignalbrief.com" target="_blank" rel="noopener">Get your own personalized brief</a>
+        <a class="btn btn-primary" href="${escapeHtml(signupUrl)}" target="_blank" rel="noopener">Get your own personalized brief</a>
         <a class="btn btn-secondary" href="mailto:?subject=SignalBrief%20Digest&body=${encodeURIComponent(shareUrl)}">Forward this brief</a>
       </div>
       ${safeQuickScan ? `<div class="scan"><strong>Quick scan:</strong> ${safeQuickScan}</div>` : ""}
@@ -1074,7 +970,20 @@ const CAPABILITY_TOPICS = [
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
 // Fields that must never be overwritten via /api/settings
-const PROTECTED_FIELDS = ["chatId", "token", "joined_at", "digests_received", "bookmarks", "last_digest_items", "last_digest_at", "digest_dates"];
+const PROTECTED_FIELDS = [
+  "chatId",
+  "token",
+  "joined_at",
+  "digests_received",
+  "bookmarks",
+  "last_digest_items",
+  "last_digest_at",
+  "digest_dates",
+  "last_email_open_at",
+  "email_opens_total",
+  "reengagement_state",
+  "signup_referral_source",
+];
 const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function parseEtNowParts() {
@@ -1178,8 +1087,22 @@ function runDigestChild(digestPath, args = [], opts = {}) {
     });
     let stderr = "";
     const timer = setTimeout(() => {
-      try { child.kill("SIGTERM"); } catch {}
-      setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, 1500);
+      try {
+        child.kill("SIGTERM");
+      } catch (err) {
+        if (process.env.DEBUG_WEB_SERVER === "1") {
+          console.warn(`[web] SIGTERM kill failed for digest child: ${err.message}`);
+        }
+      }
+      setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch (err) {
+          if (process.env.DEBUG_WEB_SERVER === "1") {
+            console.warn(`[web] SIGKILL kill failed for digest child: ${err.message}`);
+          }
+        }
+      }, 1500);
     }, timeoutMs);
     child.stderr.on("data", c => {
       stderr += c.toString();
@@ -1240,6 +1163,7 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const { name, email, telegram, topics, depth, delivery_time, frequency, days_of_week, items_per_digest } = body;
     const emailNorm = String(email || "").toLowerCase().trim();
+    const referralToken = normalizeReferralToken(body.referral_token);
 
     if (!emailNorm || !name) return json(res, { error: "name and email required" }, 400);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) return json(res, { error: "invalid email address" }, 400);
@@ -1271,6 +1195,20 @@ const server = http.createServer(async (req, res) => {
 
     const chatId = `email-${Date.now()}`;
 
+    let signupReferralSource = null;
+    let referrerUser = null;
+    if (referralToken) {
+      const referrer = findUserByToken(referralToken);
+      if (referrer) {
+        referrerUser = referrer;
+        signupReferralSource = {
+          chatId: referrer.chatId,
+          email: referrer.email || null,
+          ts: new Date().toISOString(),
+        };
+      }
+    }
+
     const user = {
       chatId,
       name,
@@ -1285,6 +1223,7 @@ const server = http.createServer(async (req, res) => {
       bookmarks: [],
       topic_weights: {},
       custom_topics: topics.filter(t => !DEFAULT_TOPICS.includes(t)),
+      signup_referral_source: signupReferralSource,
       digest_dates: [],
       last_digest_items: [],
       preferences: {
@@ -1301,6 +1240,10 @@ const server = http.createServer(async (req, res) => {
 
     writeUser(chatId, user);
     console.log(`[signup] ${name} <${email}>`);
+    if (referrerUser) {
+      console.log(`[signup] referred by ${referrerUser.email || referrerUser.chatId}`);
+      sendReferralThankYou(referrerUser, user).catch(e => console.error("[referral thank-you]", e));
+    }
 
     // Send welcome email (non-blocking)
     sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
@@ -1424,6 +1367,49 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
+  // GET /api/pause?token=... — one-click pause from lifecycle emails
+  if (pathname === "/api/pause" && req.method === "GET") {
+    const token = String(url.searchParams.get("token") || "").trim();
+    const user = token ? findUserByToken(token) : null;
+    if (user) {
+      const updated = {
+        ...user,
+        status: "paused",
+        preferences: { ...(user.preferences || {}), email_enabled: false },
+        last_updated: new Date().toISOString(),
+      };
+      writeUser(user.chatId, updated);
+      console.log(`[pause] ${user.email || user.chatId}`);
+    }
+    const location = token
+      ? `/settings?token=${encodeURIComponent(token)}&paused=1`
+      : "/settings?paused=1";
+    res.writeHead(302, { Location: location, "Cache-Control": "no-store" });
+    return res.end();
+  }
+
+  // GET /api/reactivate?token=... — one-click resume from lifecycle emails
+  if (pathname === "/api/reactivate" && req.method === "GET") {
+    const token = String(url.searchParams.get("token") || "").trim();
+    const user = token ? findUserByToken(token) : null;
+    if (user) {
+      const updated = {
+        ...user,
+        status: "active",
+        preferences: { ...(user.preferences || {}), email_enabled: true },
+        reengagement_state: blankReengagementState(),
+        last_updated: new Date().toISOString(),
+      };
+      writeUser(user.chatId, updated);
+      console.log(`[reactivate] ${user.email || user.chatId}`);
+    }
+    const location = token
+      ? `/settings?token=${encodeURIComponent(token)}&reactivated=1`
+      : "/settings?reactivated=1";
+    res.writeHead(302, { Location: location, "Cache-Control": "no-store" });
+    return res.end();
+  }
+
   // GET /api/archive?token=... — user-specific archive (filtered to dates they received)
   // Without token: returns empty (archive requires auth)
   if (pathname === "/api/archive" && req.method === "GET") {
@@ -1494,8 +1480,10 @@ const server = http.createServer(async (req, res) => {
             relevanceScore: archiveRelevanceScore(item, userTopics, topicWeights),
           });
         });
-      } catch {
-        // Skip malformed files so one bad archive does not break discovery feed.
+      } catch (err) {
+        if (process.env.DEBUG_WEB_SERVER === "1") {
+          console.warn(`[web] skipping malformed archive file ${f}: ${err.message}`);
+        }
       }
     }
 
@@ -1548,6 +1536,50 @@ const server = http.createServer(async (req, res) => {
     } catch {
       return json(res, { error: "malformed archive file" }, 500);
     }
+  }
+
+  // GET /t/:digestId/:token/o.gif — email open tracking pixel
+  const openPixelMatch = pathname.match(/^\/t\/([^/]+)\/([a-f0-9]{64})\/o\.gif$/i);
+  if (openPixelMatch && req.method === "GET") {
+    const encodedDigestId = String(openPixelMatch[1] || "");
+    const token = String(openPixelMatch[2] || "").toLowerCase();
+    const decodedDigestId = decodeDigestIdParam(encodedDigestId);
+    const nowIso = new Date().toISOString();
+
+    try {
+      const user = findUserByToken(token);
+      if (user) {
+        const digestId = decodedDigestId || buildDigestId(toEtDateKey(nowIso) || nowIso.slice(0, 10), user.chatId);
+        const digestDate = String(digestId.split(":")[0] || "").trim();
+        appendEngagementEvent({
+          event_type: "email_open",
+          event_key: `open:${digestId}`,
+          user_chat_id: String(user.chatId),
+          user_email: user.email || null,
+          digest_id: digestId,
+          date_et: /^\d{4}-\d{2}-\d{2}$/.test(digestDate) ? digestDate : (toEtDateKey(nowIso) || nowIso.slice(0, 10)),
+          channel: "email",
+          source: "tracking-pixel",
+        });
+
+        const updated = {
+          ...user,
+          last_email_open_at: nowIso,
+          email_opens_total: Math.max(0, Number(user.email_opens_total || 0)) + 1,
+          reengagement_state: resetReengagementState(user, {
+            preserveAutoPaused: String(user.status || "").toLowerCase() === "paused",
+          }),
+          last_updated: nowIso,
+        };
+        writeUser(user.chatId, updated);
+      }
+    } catch (err) {
+      if (process.env.DEBUG_WEB_SERVER === "1") {
+        console.warn(`[web] tracking pixel processing failed: ${err.message}`);
+      }
+    }
+
+    return sendTransparentGif(res);
   }
 
   // GET /api/click?token=...&did=...&item=...&url=... — tracked outbound link redirect
@@ -1764,8 +1796,10 @@ const server = http.createServer(async (req, res) => {
         window_hours: Number(CONFIG?.digest?.ignoredWindowHours || 24),
         max_age_days: 45,
       }) || ignoredBackfill;
-    } catch {
-      // Keep stats endpoint resilient if engagement backfill fails.
+    } catch (err) {
+      if (process.env.DEBUG_WEB_SERVER === "1") {
+        console.warn(`[web] ignored-events backfill failed: ${err.message}`);
+      }
     }
     const runs = loadCostRunsNewest();
 
@@ -1783,6 +1817,74 @@ const server = http.createServer(async (req, res) => {
       }
     }
     const usersAll = allUsers();
+    const referrals = usersAll
+      .map((u) => {
+        const source = u && typeof u.signup_referral_source === "object" ? u.signup_referral_source : null;
+        if (!source) return null;
+        return {
+          referrerEmail: source.email || null,
+          newUserEmail: u.email || null,
+          ts: source.ts || null,
+        };
+      })
+      .filter((row) => row && row.referrerEmail && row.newUserEmail && row.ts)
+      .sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
+
+    const nowMs = Date.now();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const engagementEvents = loadEngagementEvents({ max_age_days: 120, dedupe: true });
+    const inWindow = (ev, days) => {
+      const ts = parseIsoTs(ev?.ts_utc);
+      return ts != null && ts >= (nowMs - (Math.max(1, Number(days || 1)) * DAY_MS));
+    };
+    // Open-rate method: unique email_open events divided by unique digest_sent(email) events.
+    const openEvents7d = engagementEvents.filter((ev) =>
+      String(ev?.event_type || "") === "email_open" && inWindow(ev, 7)
+    ).length;
+    const openEvents30d = engagementEvents.filter((ev) =>
+      String(ev?.event_type || "") === "email_open" && inWindow(ev, 30)
+    ).length;
+    const digestEmailSent7d = engagementEvents.filter((ev) =>
+      String(ev?.event_type || "") === "digest_sent"
+      && String(ev?.channel || "") === "email"
+      && inWindow(ev, 7)
+    ).length;
+    const digestEmailSent30d = engagementEvents.filter((ev) =>
+      String(ev?.event_type || "") === "digest_sent"
+      && String(ev?.channel || "") === "email"
+      && inWindow(ev, 30)
+    ).length;
+    const openRate7d = digestEmailSent7d > 0 ? Number((openEvents7d / digestEmailSent7d).toFixed(4)) : 0;
+    const openRate30d = digestEmailSent30d > 0 ? Number((openEvents30d / digestEmailSent30d).toFixed(4)) : 0;
+    const totalActive = usersAll.filter((u) => String(u?.status || "active") === "active").length;
+    const totalPaused = usersAll.filter((u) => String(u?.status || "") === "paused").length;
+    const totalUnsubscribed = usersAll.filter((u) => String(u?.status || "") === "unsubscribed").length;
+    const inReengagementDay4 = usersAll.filter((u) => {
+      if (String(u?.status || "active") !== "active") return false;
+      const rs = u && typeof u.reengagement_state === "object" ? u.reengagement_state : {};
+      return !!rs.day4_sent_at && !rs.day8_sent_at && !rs.auto_paused_at;
+    }).length;
+    const inReengagementDay8 = usersAll.filter((u) => {
+      if (String(u?.status || "active") !== "active") return false;
+      const rs = u && typeof u.reengagement_state === "object" ? u.reengagement_state : {};
+      return !!rs.day8_sent_at && !rs.auto_paused_at;
+    }).length;
+    const autoPausedLast30d = usersAll.filter((u) => {
+      const rs = u && typeof u.reengagement_state === "object" ? u.reengagement_state : {};
+      const ts = parseIsoTs(rs.auto_paused_at);
+      return ts != null && ts >= (nowMs - (30 * DAY_MS));
+    }).length;
+    const engagement = {
+      total_active: totalActive,
+      total_paused: totalPaused,
+      total_unsubscribed: totalUnsubscribed,
+      open_rate_7d: openRate7d,
+      open_rate_30d: openRate30d,
+      in_reengagement_day4: inReengagementDay4,
+      in_reengagement_day8: inReengagementDay8,
+      auto_paused_last_30d: autoPausedLast30d,
+      referral_signups_total: referrals.length,
+    };
 
     // Per-user rollup across all runs — divide run cost by number of users served
     const userMap = {};
@@ -1985,7 +2087,6 @@ const server = http.createServer(async (req, res) => {
     const nextExpectedCountdownMinutes = nextExpectedActiveDelivery
       ? minutesUntilEtKey(nextExpectedActiveDelivery.next_delivery_key)
       : null;
-    const serviceActionLog = readAdminServiceLog(12);
     const digestRun = digestRunStatus();
     const schedulerWorker = readSchedulerHeartbeat();
 
@@ -1995,8 +2096,7 @@ const server = http.createServer(async (req, res) => {
     const uptimeHours = Math.floor(serverUptimeSecs / 3600);
     const uptimeMins  = Math.floor((serverUptimeSecs % 3600) / 60);
     const uptimeStr   = uptimeHours > 0 ? `${uptimeHours}h ${uptimeMins}m` : `${uptimeMins}m`;
-    const launchAgents = getLaunchAgentHealth();
-    const adminMessages = readAdminMessageLog(30).map(m => ({
+    const adminMessages = readJsonLineLog(ADMIN_MESSAGE_LOG, 30).map(m => ({
       at: m.at || null,
       actor: m.actor || "unknown",
       action: m.action || "message_user",
@@ -2052,7 +2152,7 @@ const server = http.createServer(async (req, res) => {
         last_run_at:              lastRun ? lastRun.run_at_et || lastRun.run_at : null,
         last_run_users:           lastRun ? lastRun.users_served : null,
         last_run_cost:            lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
-        cron_schedule:            "6:45 AM ET · Mon–Sat (LaunchAgent)",
+        cron_schedule:            "5-minute worker loop (always-on VM)",
         users_delivery_warning:   deliveryWarnings,
         delivery_reliability: {
           success_rate_7d: successRate7d,
@@ -2069,8 +2169,6 @@ const server = http.createServer(async (req, res) => {
           next_expected_countdown: formatCountdown(nextExpectedCountdownMinutes),
           next_expected_countdown_minutes: nextExpectedCountdownMinutes,
         },
-        launch_agents:            launchAgents,
-        launch_agent_actions:     serviceActionLog,
         scheduler_worker:         schedulerWorker,
         digest_runner: digestRun.running
           ? {
@@ -2089,6 +2187,8 @@ const server = http.createServer(async (req, res) => {
       runs: runs.slice(0, 30),
       per_user: perUser,
       roster,
+      engagement,
+      referrals,
       admin_messages: adminMessages,
     });
   }
@@ -2119,7 +2219,7 @@ const server = http.createServer(async (req, res) => {
     const requestedLimit = parseInt(url.searchParams.get("limit"), 10);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 120) : 30;
 
-    const actionRows = readAdminActionLog(limit * 6)
+    const actionRows = readJsonLineLog(ADMIN_ACTION_LOG, limit * 6)
       .filter(row => String(row.target_email || "").toLowerCase().trim() === email)
       .map(row => {
         const action = String(row.action || "action");
@@ -2149,7 +2249,7 @@ const server = http.createServer(async (req, res) => {
         };
       });
 
-    const messageRows = readAdminMessageLog(limit * 6)
+    const messageRows = readJsonLineLog(ADMIN_MESSAGE_LOG, limit * 6)
       .filter(row => String(row.target_email || "").toLowerCase().trim() === email)
       .map(row => ({
         at: row.at || null,
@@ -2327,55 +2427,6 @@ const server = http.createServer(async (req, res) => {
         status: "applied",
       })),
     });
-  }
-
-  // POST /api/admin/launch-agent-action — safe service controls (restart only)
-  if (pathname === "/api/admin/launch-agent-action" && req.method === "POST") {
-    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    const body = await readBody(req);
-    const key = String(body.key || "").toLowerCase().trim();
-    const action = String(body.action || "restart").toLowerCase().trim();
-    if (action !== "restart") return json(res, { error: "unsupported service action" }, 400);
-    const service = getLaunchAgentServiceByKey(key);
-    if (!service) return json(res, { error: "unknown service key" }, 400);
-
-    const restart = restartLaunchAgent(service.label);
-    const latestHealth = getLaunchAgentHealth(true);
-    const latestService = (latestHealth.services || []).find(s => s.key === service.key) || null;
-    const serviceLogEntry = {
-      at: new Date().toISOString(),
-      actor: getAdminActor(req),
-      action: "restart",
-      service_key: service.key,
-      label: service.label,
-      success: !!restart.ok,
-      attempts: restart.attempts || [],
-      state_after: latestService?.state || null,
-    };
-    appendAdminServiceLog(serviceLogEntry);
-    logAdminActionEvent(req, {
-      action: "launch_agent_restart",
-      target_service: service.key,
-      success: !!restart.ok,
-      details: {
-        attempts: restart.attempts || [],
-        state_after: latestService?.state || null,
-      },
-    });
-
-    return json(res, {
-      success: !!restart.ok,
-      service: latestService || {
-        key: service.key,
-        label: service.label,
-        state: "unknown",
-      },
-      launch_agents: latestHealth,
-      launch_agent_actions: readAdminServiceLog(12),
-      error: restart.ok
-        ? null
-        : ((restart.attempts && restart.attempts[restart.attempts.length - 1] && restart.attempts[restart.attempts.length - 1].error) || "restart failed"),
-    }, restart.ok ? 200 : 500);
   }
 
   // POST /api/admin/update-delivery-time — admin inline schedule editor
@@ -2693,6 +2744,7 @@ const server = http.createServer(async (req, res) => {
         dateLabel,
         quickScan: parsed?.quickScan || "",
         items: Array.isArray(parsed?.items) ? parsed.items : [],
+        refToken: url.searchParams.get("ref") || "",
       });
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",

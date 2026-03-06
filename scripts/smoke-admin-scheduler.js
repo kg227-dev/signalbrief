@@ -76,7 +76,13 @@ async function main() {
   } finally {
     child.kill("SIGTERM");
     await sleep(250);
-    try { fs.unlinkSync(HEARTBEAT); } catch {}
+    try {
+      fs.unlinkSync(HEARTBEAT);
+    } catch (err) {
+      if (process.env.SB_SMOKE_DEBUG === "1") {
+        process.stderr.write(`[smoke-admin-scheduler] heartbeat cleanup failed: ${err.message}\n`);
+      }
+    }
   }
 
   if (err.trim()) process.stdout.write(`[smoke-admin-scheduler] stderr:\n${err}\n`);
@@ -86,4 +92,3 @@ main().catch((e) => {
   process.stderr.write(`[smoke-admin-scheduler] fail: ${e.message}\n`);
   process.exit(1);
 });
-

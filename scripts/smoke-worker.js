@@ -21,7 +21,11 @@ function readHeartbeat() {
 async function main() {
   try {
     if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
-  } catch {}
+  } catch (err) {
+    if (process.env.SB_SMOKE_DEBUG === "1") {
+      process.stderr.write(`[smoke-worker] pre-run heartbeat cleanup failed: ${err.message}\n`);
+    }
+  }
 
   const child = spawn(process.execPath, [WORKER], {
     cwd: ROOT,
@@ -63,7 +67,13 @@ async function main() {
   } finally {
     child.kill("SIGTERM");
     await sleep(300);
-    try { if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT); } catch {}
+    try {
+      if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
+    } catch (err) {
+      if (process.env.SB_SMOKE_DEBUG === "1") {
+        process.stderr.write(`[smoke-worker] post-run heartbeat cleanup failed: ${err.message}\n`);
+      }
+    }
   }
 
   if (err.trim()) process.stdout.write(`[smoke-worker] stderr:\n${err}\n`);
@@ -74,4 +84,3 @@ main().catch((e) => {
   process.stderr.write(`[smoke-worker] fail: ${e.message}\n`);
   process.exit(1);
 });
-

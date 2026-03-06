@@ -58,6 +58,7 @@ const CAPABILITY_TOPICS = [
 ];
 const STANDARD_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 const LINK_VERIFY_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const REPLY_HANDLER_DEBUG = process.env.REPLY_HANDLER_DEBUG === "1";
 // chatId -> { email, code, expiresAt }
 const PENDING_LINK_VERIFICATIONS = new Map();
 
@@ -906,7 +907,12 @@ async function handle(message, chatId) {
   }
 
   const intent = await parseIntent(message);
-  console.log(`[${chatId}] "${message}" → ${JSON.stringify(intent)}`);
+  const action = String(intent?.action || "unknown");
+  const messageLen = String(message || "").length;
+  console.log(`[reply-handler] action=${action} message_len=${messageLen}`);
+  if (REPLY_HANDLER_DEBUG) {
+    console.log(`[reply-handler] debug intent=${JSON.stringify(intent)}`);
+  }
 
   switch (intent.action) {
     case "start":     return handleStart(chatId, intent.email);

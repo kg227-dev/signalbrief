@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const INDUSTRY_TOPICS = [
   "HEALTHCARE",
   "FINANCIAL SERVICES",
@@ -23,6 +25,10 @@ const CAPABILITY_TOPICS = [
 
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 
+function buildQaToken(id) {
+  return crypto.createHash("sha256").update(`qa-persona:${id}`).digest("hex");
+}
+
 function basePersona(id, name, purpose, overrides = {}) {
   const persona = {
     id,
@@ -32,7 +38,7 @@ function basePersona(id, name, purpose, overrides = {}) {
     chatId: `qa-${id}`,
     email: `${id}@qa.signalbrief.local`,
     status: "active",
-    token: `qa-token-${id}`,
+    token: buildQaToken(id),
     digests_received: 0,
     joined_at: "2026-03-01T00:00:00.000Z",
     last_digest_at: null,

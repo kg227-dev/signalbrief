@@ -302,8 +302,10 @@ function parsePerplexityItems(responseBody, topicTag) {
             });
             if (hit) base.url = hit;
           }
-        } catch {
-          // Keep original URL.
+        } catch (err) {
+          if (process.env.QA_DEBUG === "1") {
+            console.warn(`[qa-cache] keeping original URL for ${topicTag}: ${err.message}`);
+          }
         }
 
         return base;

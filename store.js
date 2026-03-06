@@ -28,6 +28,8 @@ function defaultUser(chatId) {
     digests_received: 0,
     joined_at: new Date().toISOString(),
     last_digest_at: null,
+    last_email_open_at: null,
+    email_opens_total: 0,
     topic_weights: {},          // { "AI": 1, "PHARMA": -1 }
     custom_topics: [],          // ["GLP-1", "biosimilars"]
     digest_dates: [],           // ["2026-03-01", ...] — dates user received a digest (for archive scoping)
@@ -43,6 +45,13 @@ function defaultUser(chatId) {
       last_applied_at: null,
       total_auto_adjustments: 0,
     },
+    reengagement_state: {
+      day4_sent_at: null,
+      day8_sent_at: null,
+      auto_paused_at: null,
+      reactivated_at: null,
+    },
+    signup_referral_source: null,
     preferences: {
       delivery_time: "07:00",
       timezone: "America/New_York",
@@ -67,7 +76,11 @@ function rebuildTokenIndex() {
       try {
         const raw = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
         if (raw.token) tokenIndex.set(raw.token, raw.chatId || f.replace("user-", "").replace(".json", ""));
-      } catch { /* skip corrupt files */ }
+      } catch (err) {
+        if (process.env.STORE_DEBUG === "1") {
+          console.warn(`[store] skipping unreadable user file ${f}: ${err.message}`);
+        }
+      }
     });
 }
 
@@ -82,13 +95,18 @@ function readUser(chatId) {
   try { raw = JSON.parse(fs.readFileSync(f, "utf8")); }
   catch { return defaultUser(chatId); }
   const defaults = defaultUser(chatId);
-  const user = { ...defaults, ...raw, preferences: { ...defaults.preferences, ...(raw.preferences || {}) } };
+  const user = {
+    ...defaults,
+    ...raw,
+    preferences: { ...defaults.preferences, ...(raw.preferences || {}) },
+    auto_learning: { ...defaults.auto_learning, ...(raw.auto_learning || {}) },
+    reengagement_state: { ...defaults.reengagement_state, ...(raw.reengagement_state || {}) },
+  };
   // Auto-generate and persist token for existing users who don't have one
   if (!raw.token) {
     user.token = generateToken();
     _writeUserFile(f, user);
     tokenIndex.set(user.token, String(chatId));
-    console.log(`[store] Auto-generated token for ${chatId}`);
   } else {
     // Keep index hydrated even when records are loaded ad-hoc from disk.
     tokenIndex.set(raw.token, String(chatId));

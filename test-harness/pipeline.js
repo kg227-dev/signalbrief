@@ -1,44 +1,8 @@
-function normalizeMatchText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeTopicToken(value) {
-  return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
-}
-
-const CUSTOM_KEYWORD_ALIASES = {
-  "rate cuts": [
-    "federal reserve rate cut",
-    "interest rate cuts",
-    "fed rate decision",
-    "fomc rate decision",
-  ],
-  "sec rulemaking": [
-    "sec proposed rules",
-    "securities and exchange commission rules",
-    "sec disclosure rule",
-    "sec rule proposal",
-  ],
-  "semicap": [
-    "semiconductor equipment",
-    "chip equipment",
-    "wafer fab equipment",
-    "asml applied materials lam research",
-  ],
-  "agentic ai": [
-    "ai agents",
-    "enterprise ai agents",
-    "autonomous ai agent",
-    "openai anthropic microsoft agent",
-  ],
-  "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
-  "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
-  "doge": ["dogecoin", "crypto regulation", "crypto market"],
-};
+const {
+  normalizeMatchText,
+  normalizeTopicToken,
+  CUSTOM_TOPIC_ALIASES,
+} = require("./topic-utils");
 
 const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
 const CUSTOM_TOKEN_ALIASES = {
@@ -77,7 +41,7 @@ function customKeywordMatches(topicNormalized, bodyText, tagNormalized = "") {
   if (!haystack) return false;
   if (haystack.includes(topic)) return true;
 
-  const aliases = CUSTOM_KEYWORD_ALIASES[topic] || [];
+  const aliases = CUSTOM_TOPIC_ALIASES[topic] || [];
   for (const alias of aliases) {
     const aliasToken = normalizeTopicToken(alias);
     if (aliasToken && haystack.includes(aliasToken)) return true;
@@ -118,8 +82,10 @@ function parseItemDomain(item) {
     try {
       const parsed = new URL(urlRaw);
       return parsed.hostname.replace(/^www\./i, "").toLowerCase();
-    } catch {
-      // fall back to source
+    } catch (err) {
+      if (process.env.QA_DEBUG === "1") {
+        console.warn(`[qa-pipeline] falling back to source domain: ${err.message}`);
+      }
     }
   }
 

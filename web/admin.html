@@ -126,21 +126,15 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   color:var(--text-secondary);
 }
 .table-wrap-subscribers table { table-layout:fixed; }
-.table-wrap-subscribers th:nth-child(1) { width:36px; }
-.table-wrap-subscribers th:nth-child(2) { width:26%; }
-.table-wrap-subscribers th:nth-child(3) { width:11%; }
-.table-wrap-subscribers th:nth-child(4) { width:17%; }
+.table-wrap-subscribers th:nth-child(1) { width:26%; }
+.table-wrap-subscribers th:nth-child(2) { width:11%; }
+.table-wrap-subscribers th:nth-child(3) { width:17%; }
+.table-wrap-subscribers th:nth-child(4) { width:19%; }
 .table-wrap-subscribers th:nth-child(5) { width:19%; }
-.table-wrap-subscribers th:nth-child(6) { width:19%; }
-.table-wrap-subscribers th:nth-child(7) { width:8%; }
+.table-wrap-subscribers th:nth-child(6) { width:8%; }
 .table-wrap-subscribers td {
   vertical-align:top;
   padding:10px 12px;
-}
-.table-checkbox {
-  width:15px;
-  height:15px;
-  accent-color: var(--accent);
 }
 .subscriber-main { font-size:15px; font-weight:600; line-height:1.25; }
 .subscriber-sub {
@@ -304,54 +298,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   font-size:12px;
   color:var(--text-2);
 }
-.bulk-bar {
-  display:none;
-  align-items:center;
-  gap:8px;
-  flex-wrap:wrap;
-  margin:8px 0 10px;
-  padding:10px;
-  border:1px solid var(--border);
-  border-radius:10px;
-  background:#fff;
-}
-.bulk-pill {
-  font-size:11px;
-  font-weight:700;
-  color:var(--accent);
-  background:var(--accent-light);
-  border:1px solid #BFDBFE;
-  border-radius:999px;
-  padding:3px 10px;
-}
-.bulk-select, .bulk-input {
-  border:1.5px solid var(--border);
-  border-radius:8px;
-  background:#fff;
-  color:var(--text-2);
-  font-size:12px;
-  font-family:inherit;
-  padding:7px 10px;
-}
-.bulk-input { width:120px; }
-.bulk-select:focus, .bulk-input:focus {
-  outline:none;
-  border-color:var(--accent);
-}
-.bulk-preview-list {
-  border:1px solid var(--border);
-  border-radius:8px;
-  background:#fff;
-  max-height:220px;
-  overflow:auto;
-  padding:8px;
-}
-.bulk-preview-row {
-  font-size:12px;
-  padding:6px 4px;
-  border-bottom:1px solid var(--border-subtle);
-}
-.bulk-preview-row:last-child { border-bottom:none; }
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
 .topics-cell { white-space:normal; line-height:1.45; min-width:280px; max-width:460px; }
 .topics-cell-tight { white-space:normal; line-height:1.45; max-width:320px; }
@@ -681,8 +627,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   .schedule-calendar { grid-template-columns:1fr; }
   .table-toolbar-controls { width:100%; margin-left:0; }
   .table-search { width:100%; }
-  .bulk-bar { align-items:stretch; }
-  .bulk-select, .bulk-input { width:100%; }
   .drawer-grid { grid-template-columns:1fr; }
   .table-wrap-subscribers table { table-layout:auto; }
   table { font-size:12px; }
@@ -872,24 +816,10 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     </div>
   </div>
   <div id="subscriberTableMeta" class="table-meta" style="margin-bottom:10px;">Loading…</div>
-  <div id="bulkActionBar" class="bulk-bar">
-    <span class="bulk-pill" id="bulkCountPill">0 selected</span>
-    <select id="bulkActionSelect" class="bulk-select" onchange="onBulkActionChange(this.value)">
-      <option value="set_time">Set delivery time</option>
-      <option value="pause">Pause deliveries</option>
-      <option value="resume">Resume deliveries</option>
-      <option value="resend_link">Resend settings link</option>
-    </select>
-    <input id="bulkTimeInput" class="bulk-input" type="text" placeholder="07:00 ET" value="07:00">
-    <button class="btn-secondary" onclick="previewBulkAction()">Preview</button>
-    <button class="btn-secondary" onclick="clearBulkSelection()">Clear</button>
-    <div id="bulkActionHint" class="table-meta" style="margin-left:auto;">Choose users to enable bulk actions.</div>
-  </div>
   <div class="table-wrap table-wrap-subscribers">
     <table>
       <thead>
         <tr>
-          <th><input id="selectAllSubscribers" class="table-checkbox" type="checkbox" onclick="toggleSelectAllVisible(this.checked)" aria-label="Select all visible subscribers"></th>
           <th>
             <button class="th-sort" type="button" onclick="onSubscriberSort('subscriber')">
               Subscriber <span id="sortInd-subscriber" class="th-sort-ind">↕</span>
@@ -923,7 +853,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
         </tr>
       </thead>
       <tbody id="subscriberBody">
-        <tr><td colspan="7" class="empty">Loading…</td></tr>
+        <tr><td colspan="6" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -1062,27 +992,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     <div class="modal-actions">
       <button class="modal-btn" onclick="closeDeliveryTimeModal()">Cancel</button>
       <button id="deliveryTimeModalSubmit" class="modal-btn primary" onclick="submitDeliveryTimeModal()">Save time</button>
-    </div>
-  </div>
-</div>
-
-<div id="bulkPreviewModal" class="modal-backdrop" onclick="if (event.target === this) closeBulkPreviewModal();">
-  <div class="modal-card">
-    <div class="modal-head">
-      <div>
-        <div class="modal-kicker">Bulk actions</div>
-        <div class="modal-title" id="bulkPreviewTitle">Preview bulk action</div>
-      </div>
-      <button class="modal-close" onclick="closeBulkPreviewModal()" aria-label="Close">×</button>
-    </div>
-    <div class="modal-panel">
-      <div id="bulkPreviewSummary" class="modal-help" style="margin-bottom:10px;">Loading preview…</div>
-      <div id="bulkPreviewAffected" class="bulk-preview-list"></div>
-    </div>
-    <div id="bulkPreviewFeedback" class="modal-feedback"></div>
-    <div class="modal-actions">
-      <button class="modal-btn" onclick="closeBulkPreviewModal()">Cancel</button>
-      <button id="bulkPreviewApplyBtn" class="modal-btn primary" onclick="applyBulkAction()">Apply</button>
     </div>
   </div>
 </div>
@@ -1291,11 +1200,9 @@ let subscriberSortKey = "next_delivery";
 let subscriberSortDir = "asc";
 let expandedSubscriberEmail = "";
 const expandedScheduleDays = new Set();
-const selectedSubscriberEmails = new Set();
 const rowActionStatusByEmail = new Map();
 const auditTimelineByEmail = new Map();
 const loadingAuditEmails = new Set();
-let pendingBulkPreview = null;
 let confirmResolve = null;
 let retryToastAt = 0;
 
@@ -2214,212 +2121,6 @@ function onSubscriberStatusFilter(value) {
   renderSubscriberTable();
 }
 
-function toggleSubscriberSelection(email, checked) {
-  const emailKey = String(email || "").toLowerCase().trim();
-  if (!emailKey) return;
-  if (checked) selectedSubscriberEmails.add(emailKey);
-  else selectedSubscriberEmails.delete(emailKey);
-  updateBulkBar();
-  renderSubscriberTable();
-}
-
-function toggleSelectAllVisible(checked) {
-  const visible = getFilteredSubscribers();
-  if (checked) {
-    visible.forEach(u => {
-      const key = String(u.email || "").toLowerCase().trim();
-      if (key) selectedSubscriberEmails.add(key);
-    });
-  } else {
-    visible.forEach(u => {
-      const key = String(u.email || "").toLowerCase().trim();
-      if (key) selectedSubscriberEmails.delete(key);
-    });
-  }
-  updateBulkBar();
-  renderSubscriberTable();
-}
-
-function clearBulkSelection() {
-  selectedSubscriberEmails.clear();
-  pendingBulkPreview = null;
-  updateBulkBar();
-  renderSubscriberTable();
-}
-
-function onBulkActionChange(value) {
-  const action = String(value || "set_time");
-  const timeInput = document.getElementById("bulkTimeInput");
-  if (timeInput) {
-    timeInput.style.display = action === "set_time" ? "" : "none";
-  }
-}
-
-function updateBulkBar() {
-  const bar = document.getElementById("bulkActionBar");
-  const countPill = document.getElementById("bulkCountPill");
-  const hint = document.getElementById("bulkActionHint");
-  if (!bar || !countPill || !hint) return;
-  const count = selectedSubscriberEmails.size;
-  bar.style.display = count ? "flex" : "none";
-  countPill.textContent = `${count} selected`;
-  hint.textContent = count
-    ? "Run preview before applying."
-    : "Choose users to enable bulk actions.";
-}
-
-function closeBulkPreviewModal() {
-  document.getElementById("bulkPreviewModal").style.display = "none";
-  document.getElementById("bulkPreviewFeedback").className = "modal-feedback";
-  document.getElementById("bulkPreviewFeedback").textContent = "";
-}
-
-function renderBulkPreview(data, actionLabel) {
-  const summaryEl = document.getElementById("bulkPreviewSummary");
-  const affectedEl = document.getElementById("bulkPreviewAffected");
-  const applyBtn = document.getElementById("bulkPreviewApplyBtn");
-  const applicable = Number(data.applicable || 0);
-  const requested = Number(data.requested || 0);
-  const skipped = Array.isArray(data.skipped) ? data.skipped : [];
-  const affected = Array.isArray(data.affected) ? data.affected : [];
-  summaryEl.innerHTML = `<strong>${applicable}</strong> of <strong>${requested}</strong> users can be updated with <strong>${esc(actionLabel)}</strong>. ${skipped.length ? `${skipped.length} will be skipped.` : "No skips."}`;
-  applyBtn.disabled = applicable === 0;
-  applyBtn.textContent = applicable ? `Apply to ${applicable} user${applicable === 1 ? "" : "s"}` : "Nothing to apply";
-
-  const rows = [];
-  affected.slice(0, 80).forEach(item => {
-    const label = `${item.email || "unknown"}${item.from ? ` · ${item.from}` : ""}${item.to ? ` → ${item.to}` : ""}`;
-    rows.push(`<div class="bulk-preview-row">${esc(label)}</div>`);
-  });
-  skipped.slice(0, 40).forEach(item => {
-    rows.push(`<div class="bulk-preview-row" style="color:var(--text-secondary);">${esc(item.email || "unknown")} · skipped (${esc(item.reason || "n/a")})</div>`);
-  });
-  affectedEl.innerHTML = rows.length ? rows.join("") : `<div class="bulk-preview-row">No applicable users.</div>`;
-}
-
-async function previewBulkAction() {
-  const emails = Array.from(selectedSubscriberEmails);
-  if (!emails.length) {
-    showToast("warn", "Select at least one user first.");
-    return;
-  }
-  const action = document.getElementById("bulkActionSelect").value;
-  const actionLabelMap = {
-    set_time: "set delivery time",
-    pause: "pause deliveries",
-    resume: "resume deliveries",
-    resend_link: "resend settings link",
-  };
-  const payload = {
-    action,
-    emails,
-    dry_run: true,
-  };
-  if (action === "set_time") {
-    const normalized = normalizeAdminTimeInput(document.getElementById("bulkTimeInput").value);
-    if (!normalized) {
-      showToast("err", "Invalid bulk time. Use HH:MM or H:MM AM/PM.");
-      return;
-    }
-    payload.delivery_time = normalized;
-  }
-
-  document.getElementById("bulkPreviewTitle").textContent = "Preview bulk action";
-  document.getElementById("bulkPreviewSummary").textContent = "Running dry-run preview…";
-  document.getElementById("bulkPreviewAffected").innerHTML = "";
-  document.getElementById("bulkPreviewFeedback").className = "modal-feedback";
-  document.getElementById("bulkPreviewFeedback").textContent = "";
-  document.getElementById("bulkPreviewModal").style.display = "flex";
-
-  const resp = await apiFetchJson("/api/admin/bulk-action", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }, 1);
-  const data = resp.data || {};
-  if (!resp.ok || !data.success) {
-    const box = document.getElementById("bulkPreviewFeedback");
-    box.className = "modal-feedback err";
-    box.textContent = data.error || `Preview failed (HTTP ${resp.status})`;
-    pendingBulkPreview = null;
-    return;
-  }
-  pendingBulkPreview = {
-    action,
-    emails,
-    delivery_time: payload.delivery_time || null,
-    preview: data,
-  };
-  renderBulkPreview(data, actionLabelMap[action] || action);
-}
-
-async function applyBulkAction() {
-  if (!pendingBulkPreview) {
-    await previewBulkAction();
-    if (!pendingBulkPreview) return;
-  }
-
-  const action = pendingBulkPreview.action;
-  const applicable = Number((pendingBulkPreview.preview && pendingBulkPreview.preview.applicable) || 0);
-  if (!applicable) {
-    showToast("warn", "No applicable users in this bulk action.");
-    return;
-  }
-
-  const actionLabelMap = {
-    set_time: "set delivery time",
-    pause: "pause deliveries",
-    resume: "resume deliveries",
-    resend_link: "resend settings link",
-  };
-  const accepted = await openConfirmModal(
-    "Apply bulk action",
-    `Apply "${actionLabelMap[action] || action}" to ${applicable} user${applicable === 1 ? "" : "s"}?`,
-    "Apply"
-  );
-  if (!accepted) return;
-
-  const box = document.getElementById("bulkPreviewFeedback");
-  box.className = "modal-feedback";
-  box.textContent = "";
-  const applyBtn = document.getElementById("bulkPreviewApplyBtn");
-  applyBtn.disabled = true;
-  applyBtn.textContent = "Applying…";
-
-  const payload = {
-    action,
-    emails: pendingBulkPreview.emails,
-    dry_run: false,
-  };
-  if (pendingBulkPreview.delivery_time) payload.delivery_time = pendingBulkPreview.delivery_time;
-
-  const resp = await apiFetchJson("/api/admin/bulk-action", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }, 1);
-  const data = resp.data || {};
-  if (!resp.ok || !data.success) {
-    box.className = "modal-feedback err";
-    box.textContent = data.error || `Apply failed (HTTP ${resp.status})`;
-    applyBtn.disabled = false;
-    applyBtn.textContent = "Apply";
-    return;
-  }
-
-  const affected = Array.isArray(data.affected) ? data.affected : [];
-  const skipped = Array.isArray(data.skipped) ? data.skipped : [];
-  affected.forEach(item => setRowActionStatus(item.email, "ok", `${actionLabelMap[action] || action} applied`));
-  skipped.forEach(item => setRowActionStatus(item.email, "err", item.reason || "Skipped"));
-  box.className = "modal-feedback ok";
-  box.textContent = `Applied to ${data.applied || affected.length} user${(data.applied || affected.length) === 1 ? "" : "s"}.`;
-  showToast("ok", `Bulk action applied to ${data.applied || affected.length} user${(data.applied || affected.length) === 1 ? "" : "s"}.`);
-  pendingBulkPreview = null;
-  selectedSubscriberEmails.clear();
-  await load(true);
-  closeBulkPreviewModal();
-}
-
 function renderAuditTimeline(email) {
   const key = String(email || "").toLowerCase().trim();
   if (!key) return `<div class="subscriber-sub">No audit data.</div>`;
@@ -2552,7 +2253,6 @@ function renderSubscriberTable(roster) {
   if (Array.isArray(roster)) latestRoster = roster.slice();
   const body = document.getElementById("subscriberBody");
   const meta = document.getElementById("subscriberTableMeta");
-  const selectAllBox = document.getElementById("selectAllSubscribers");
   if (!body || !meta) return;
 
   const filtered = getFilteredSubscribers();
@@ -2561,15 +2261,13 @@ function renderSubscriberTable(roster) {
   meta.textContent = `${filtered.length} of ${total} subscriber${total === 1 ? "" : "s"}`;
 
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="7" class="empty">${hasFilters ? "No subscribers match your filters." : "No users yet."}</td></tr>`;
-    updateBulkBar();
+    body.innerHTML = `<tr><td colspan="6" class="empty">${hasFilters ? "No subscribers match your filters." : "No users yet."}</td></tr>`;
     return;
   }
 
   const rows = [];
   filtered.forEach(u => {
     const emailKey = String(u.email || "").toLowerCase().trim();
-    const isSelected = emailKey && selectedSubscriberEmails.has(emailKey);
     const isExpanded = emailKey && expandedSubscriberEmail === emailKey;
     const topicsCell = renderTopicChips(u.topics_raw || [], 4);
     const wSummary = weightsSummary(u.topic_weights || {});
@@ -2582,16 +2280,6 @@ function renderSubscriberTable(roster) {
       : "";
     rows.push(`
       <tr class="subscriber-row-main ${isExpanded ? "expanded" : ""}">
-        <td>
-          <input
-            class="table-checkbox"
-            type="checkbox"
-            ${isSelected ? "checked" : ""}
-            ${emailKey ? "" : "disabled"}
-            onclick='event.stopPropagation();toggleSubscriberSelection(${JSON.stringify(emailKey)}, this.checked)'
-            aria-label="Select subscriber"
-          >
-        </td>
         <td>
           <div class="subscriber-name-row">
             ${emailKey ? `<button class="expand-btn" onclick='toggleSubscriberDrawer(${JSON.stringify(emailKey)})' aria-label="${isExpanded ? "Collapse" : "Expand"}">${isExpanded ? "−" : "+"}</button>` : ""}
@@ -2616,18 +2304,10 @@ function renderSubscriberTable(roster) {
       </tr>
     `);
     if (isExpanded) {
-      rows.push(`<tr class="drawer-row"><td colspan="7">${renderSubscriberDrawer(u)}</td></tr>`);
+      rows.push(`<tr class="drawer-row"><td colspan="6">${renderSubscriberDrawer(u)}</td></tr>`);
     }
   });
   body.innerHTML = rows.join("");
-
-  if (selectAllBox) {
-    const visibleEmails = filtered.map(u => String(u.email || "").toLowerCase().trim()).filter(Boolean);
-    const selectedVisible = visibleEmails.filter(email => selectedSubscriberEmails.has(email)).length;
-    selectAllBox.checked = visibleEmails.length > 0 && selectedVisible === visibleEmails.length;
-    selectAllBox.indeterminate = selectedVisible > 0 && selectedVisible < visibleEmails.length;
-  }
-  updateBulkBar();
   updateSortIndicators();
 }
 function downloadScheduleCsv() {
@@ -2789,9 +2469,6 @@ async function load(silent = false) {
     latestHealth = health || null;
 
     const rosterEmailSet = new Set((roster || []).map(u => String(u.email || "").toLowerCase().trim()).filter(Boolean));
-    for (const key of Array.from(selectedSubscriberEmails)) {
-      if (!rosterEmailSet.has(key)) selectedSubscriberEmails.delete(key);
-    }
     if (expandedSubscriberEmail && !rosterEmailSet.has(expandedSubscriberEmail)) {
       expandedSubscriberEmail = "";
     }
@@ -3058,7 +2735,6 @@ async function load(silent = false) {
 
 readSubscriberStateFromUrl();
 applySubscriberInputsFromState();
-onBulkActionChange(document.getElementById("bulkActionSelect") ? document.getElementById("bulkActionSelect").value : "set_time");
 updateSortIndicators();
 load();
 if (!autoRefreshTimer) {

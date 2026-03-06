@@ -131,6 +131,8 @@ npm run smoke:admin-scheduler
 
 Run SignalBrief on an always-on Linux VM/container host. This removes dependency on a Mac being awake.
 
+Current production status (2026-03-06): live on always-on Ubuntu VM (`web` + `bot` + `worker`) with Cloudflare tunnel connector running on VM.
+
 1. Provision a small always-on host (2 vCPU / 2 GB RAM is enough for current scale).
 2. Copy repo + `config.json` to that host.
 3. Create `.env`:
@@ -171,6 +173,8 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 ```
 
 `BASE_URL=https://getsignalbrief.com` is set in the web LaunchAgent — no extra config needed for production URLs.
+
+Note: these LaunchAgents are now fallback/rollback only and are intentionally unloaded in normal production operation.
 
 ---
 

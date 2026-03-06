@@ -1,10 +1,12 @@
 # SignalBrief Production Cutover Runbook (Ubuntu VM + Docker Compose)
 
-Updated: 2026-03-05 (America/New_York)
+Updated: 2026-03-06 (America/New_York)
 
 ## Goal
 
 Move runtime off the local Mac so digest delivery does not depend on laptop sleep/wake state.
+
+Execution note (2026-03-06): completed in production with VM-hosted `web`/`bot`/`worker` and VM-hosted Cloudflare tunnel connector; local Mac runtime services are now rollback-only.
 
 Target topology:
 - `web` container (`web/server.js`)
@@ -22,27 +24,27 @@ Use any always-on Ubuntu 24.04 VM (2 vCPU / 2 GB RAM minimum).
 ```bash
 # on your local machine
 export SB_HOST=<vm-ip-or-dns>
-ssh root@$SB_HOST
+ssh ubuntu@$SB_HOST
 ```
 
 ## 2) Base OS + Docker
 
 ```bash
-apt-get update
-apt-get install -y ca-certificates curl git ufw
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl git ufw
 
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-chmod a+r /etc/apt/keyrings/docker.asc
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
   $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | \
-  tee /etc/apt/sources.list.d/docker.list > /dev/null
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-systemctl enable docker
-systemctl start docker
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable docker
+sudo systemctl start docker
 docker --version
 docker compose version
 ```
@@ -50,7 +52,8 @@ docker compose version
 ## 3) App Checkout + Directories
 
 ```bash
-mkdir -p /opt/signalbrief
+sudo mkdir -p /opt/signalbrief
+sudo chown -R $USER:$USER /opt/signalbrief
 cd /opt/signalbrief
 git clone https://github.com/kg227-dev/signalbrief.git app
 cd app
@@ -65,10 +68,11 @@ Copy your existing `config.json` from current production machine.
 
 ```bash
 # from local machine
-scp /Users/kushgulati/Desktop/signalbrief/config.json root@$SB_HOST:/opt/signalbrief/app/config.json
+scp /Users/kushgulati/Desktop/signalbrief/config.json ubuntu@$SB_HOST:/tmp/config.json
 
 # on VM
 cd /opt/signalbrief/app
+mv /tmp/config.json ./config.json
 cp .env.example .env
 ```
 
@@ -139,13 +143,14 @@ Expect `HTTP/2 200`.
 
 ### 6.4 Scheduled delivery proof
 
-Within one polling cycle (5 minutes), verify a scheduler run wrote to `data/cost-log.json`:
+Within one polling cycle (5 minutes), verify scheduler heartbeat + logs advance:
 
 ```bash
-tail -n 3 /opt/signalbrief/app/data/cost-log.json
+cat /opt/signalbrief/app/data/scheduler-heartbeat.json
+docker compose logs --no-color --tail=80 worker
 ```
 
-You should see a fresh `run_at` timestamp and `on_demand:false` entries when users are due.
+You should see fresh `updated_at` and interval runs with exit code `0`.
 
 ## 7) Cut DNS / Tunnel to VM
 
@@ -157,6 +162,56 @@ Two options:
 
 If using Cloudflare Tunnel on VM, ensure `getsignalbrief.com` routes to `http://127.0.0.1:3003`.
 
+Cloudflared VM setup (recommended):
+
+```bash
+# install cloudflared on VM
+cd /tmp
+curl -L --fail --silent --show-error \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
+  -o cloudflared.deb
+sudo dpkg -i cloudflared.deb
+
+# copy existing tunnel credentials from Mac
+scp ~/.cloudflared/<tunnel-id>.json ubuntu@$SB_HOST:/home/ubuntu/
+
+# on VM
+mkdir -p ~/.cloudflared
+mv ~/<tunnel-id>.json ~/.cloudflared/<tunnel-id>.json
+chmod 600 ~/.cloudflared/<tunnel-id>.json
+
+cat > ~/.cloudflared/config.yml <<'YAML'
+tunnel: <tunnel-id>
+credentials-file: /home/ubuntu/.cloudflared/<tunnel-id>.json
+ingress:
+  - hostname: getsignalbrief.com
+    service: http://127.0.0.1:3003
+  - hostname: www.getsignalbrief.com
+    service: http://127.0.0.1:3003
+  - service: http_status:404
+YAML
+
+sudo tee /etc/systemd/system/signalbrief-tunnel.service >/dev/null <<'UNIT'
+[Unit]
+Description=SignalBrief Cloudflare Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/local/bin/cloudflared --config /home/ubuntu/.cloudflared/config.yml tunnel run signalbrief
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now signalbrief-tunnel.service
+```
+
 ## 8) Decommission Mac Scheduler (after 24h clean run)
 
 On Mac:
@@ -165,6 +220,7 @@ On Mac:
 launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-digest.plist || true
 launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-web.plist || true
 launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-bot.plist || true
+launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist || true
 ```
 
 Keep a one-day rollback window before deleting local files.
@@ -198,4 +254,3 @@ cd /opt/signalbrief/app
 git pull --rebase origin main
 docker compose up -d --build
 ```
-

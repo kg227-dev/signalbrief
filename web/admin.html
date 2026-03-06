@@ -619,89 +619,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   color:var(--text-secondary);
   line-height:1.4;
 }
-.health-launch-stack {
-  display:flex;
-  flex-direction:column;
-  gap:7px;
-}
-.health-launch-summary {
-  font-size:14px;
-  font-weight:700;
-  line-height:1.25;
-}
-.health-launch-summary.healthy { color:var(--green); }
-.health-launch-summary.degraded { color:var(--yellow); }
-.health-launch-summary.unknown { color:var(--text-secondary); }
-.health-launch-chips {
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-}
-.health-launch-chip {
-  display:inline-flex;
-  align-items:center;
-  border-radius:999px;
-  padding:2px 8px;
-  font-size:10px;
-  font-weight:700;
-  letter-spacing:0.04em;
-  text-transform:uppercase;
-  border:1px solid transparent;
-  white-space:nowrap;
-}
-.health-launch-chip.ok {
-  color:#047857;
-  border-color:#A7F3D0;
-  background:#ECFDF5;
-}
-.health-launch-chip.info {
-  color:#1D4ED8;
-  border-color:#BFDBFE;
-  background:#EFF6FF;
-}
-.health-launch-chip.warn {
-  color:#B45309;
-  border-color:#FDE68A;
-  background:#FFFBEB;
-}
-.health-launch-chip.err {
-  color:#B91C1C;
-  border-color:#FECACA;
-  background:#FEF2F2;
-}
-.health-launch-chip.neutral {
-  color:#4B5563;
-  border-color:#E5E7EB;
-  background:#F3F4F6;
-}
-.health-launch-controls {
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-}
-.health-launch-ctrl-btn {
-  border:1.5px solid var(--border);
-  border-radius:7px;
-  padding:4px 9px;
-  background:#fff;
-  color:var(--text-2);
-  font-size:11px;
-  font-weight:700;
-  cursor:pointer;
-  font-family:inherit;
-  letter-spacing:0.02em;
-}
-.health-launch-ctrl-btn:hover { border-color:var(--accent); color:var(--accent); }
-.health-launch-log {
-  display:flex;
-  flex-direction:column;
-  gap:4px;
-}
-.health-launch-log-row {
-  font-size:11px;
-  color:var(--text-secondary);
-}
-.health-launch-log-row strong { color:var(--text-2); }
 
 .toast-wrap {
   position:fixed;
@@ -921,10 +838,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div class="health-metric-label">Scheduler worker</div>
       <div class="health-metric-value" id="healthSchedulerVal">—</div>
       <div class="health-metric-sub" id="healthSchedulerSub">—</div>
-    </div>
-    <div class="health-metric" id="healthLaunchAgents" style="display:none;min-width:280px;">
-      <div class="health-metric-label">LaunchAgents</div>
-      <div class="health-metric-value" id="healthLaunchAgentsVal">—</div>
     </div>
     <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:260px;">
       <div class="test-target-wrap">
@@ -1294,115 +1207,6 @@ function formatEtDateTime(iso) {
   }
 }
 
-function renderLaunchAgentActionLog(entries) {
-  if (!Array.isArray(entries) || !entries.length) return "";
-  const rows = entries.slice(0, 4).map(entry => {
-    const at = formatEtDateTime(entry.at);
-    const svc = String(entry.service_key || "service");
-    const result = entry.success ? "ok" : "failed";
-    return `<div class="health-launch-log-row"><strong>${esc(svc)}</strong> restart ${result} · ${esc(at)}</div>`;
-  }).join("");
-  return `<div class="health-launch-log">${rows}</div>`;
-}
-
-function renderLaunchAgentDetail(launch) {
-  const overall = String(launch?.overall || "").toLowerCase();
-  const overallIcon = overall === "healthy" ? "✅" : overall === "degraded" ? "⚠️" : "ℹ️";
-  const overallClass = overall === "healthy" ? "healthy" : overall === "degraded" ? "degraded" : "unknown";
-  const summary = esc(launch?.summary || "Status unavailable");
-  const services = Array.isArray(launch?.services) ? launch.services : [];
-
-  if (!services.length) {
-    const detail = launch?.error
-      ? `<div class="health-launch-chips"><span class="health-launch-chip neutral">${esc(String(launch.error).slice(0, 120))}</span></div>`
-      : "";
-    const log = renderLaunchAgentActionLog(launchAgentActionLog);
-    return `<div class="health-launch-stack"><div class="health-launch-summary ${overallClass}">${overallIcon} ${summary}</div>${detail}${log}</div>`;
-  }
-
-  const nameMap = { web: "Web", bot: "Bot", digest: "Digest", tunnel: "Tunnel" };
-  const chips = services.map(svc => {
-    const key = String(svc?.key || "service").toLowerCase();
-    const displayName = nameMap[key] || key.replace(/[_-]/g, " ");
-    const state = String(svc?.state || "unknown").toLowerCase();
-    let tone = "neutral";
-    let stateLabel = state;
-
-    if (state === "running" && svc?.expected_running) {
-      tone = "ok";
-      stateLabel = "running";
-    } else if (state === "running") {
-      tone = "info";
-      stateLabel = "running";
-    } else if (state === "loaded") {
-      tone = "info";
-      stateLabel = "loaded";
-    } else if (state === "stopped") {
-      tone = "warn";
-      stateLabel = "stopped";
-    } else if (state === "error") {
-      tone = "err";
-      stateLabel = svc?.last_exit != null ? `exit ${svc.last_exit}` : "error";
-    } else if (state === "missing") {
-      tone = "err";
-      stateLabel = "missing";
-    }
-
-    const details = [`${displayName} (${svc?.label || "service"})`, `state ${state}`];
-    if (svc?.pid) details.push(`pid ${svc.pid}`);
-    if (svc?.last_exit != null) details.push(`exit ${svc.last_exit}`);
-    return `<span class="health-launch-chip ${tone}" title="${esc(details.join(" · "))}">${esc(displayName)} · ${esc(stateLabel)}</span>`;
-  }).join("");
-  const controls = services.map(svc => {
-    const key = String(svc?.key || "").toLowerCase();
-    const label = nameMap[key] || key || "Service";
-    return `<button class="health-launch-ctrl-btn" onclick='restartLaunchAgentService(${JSON.stringify(key)})'>restart ${esc(label)}</button>`;
-  }).join("");
-  const log = renderLaunchAgentActionLog(launchAgentActionLog);
-
-  return `
-    <div class="health-launch-stack">
-      <div class="health-launch-summary ${overallClass}">${overallIcon} ${summary}</div>
-      <div class="health-launch-chips">${chips}</div>
-      <div class="health-launch-controls">${controls}</div>
-      ${log}
-    </div>
-  `;
-}
-
-async function restartLaunchAgentService(key) {
-  const normalized = String(key || "").toLowerCase().trim();
-  if (!normalized) return;
-  const accepted = await openConfirmModal(
-    "Restart LaunchAgent",
-    `Restart ${normalized} service now? This may interrupt in-flight jobs for a few seconds.`,
-    "Restart"
-  );
-  if (!accepted) return;
-  showToast("warn", `Restarting ${normalized}…`, 1800);
-  const response = await apiFetchJson("/api/admin/launch-agent-action", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: normalized, action: "restart" }),
-  }, 1);
-  const data = response.data || {};
-  if (!response.ok || data.success === false) {
-    showToast("err", data.error || `Failed to restart ${normalized}`);
-    return;
-  }
-  if (data.launch_agents) {
-    if (!latestHealth) latestHealth = {};
-    latestHealth.launch_agents = data.launch_agents;
-  }
-  launchAgentActionLog = Array.isArray(data.launch_agent_actions) ? data.launch_agent_actions : launchAgentActionLog;
-  const launchDiv = document.getElementById("healthLaunchAgents");
-  const launchVal = document.getElementById("healthLaunchAgentsVal");
-  if (launchDiv && launchVal) {
-    launchDiv.style.display = "";
-    launchVal.innerHTML = renderLaunchAgentDetail((latestHealth && latestHealth.launch_agents) || data.launch_agents || {});
-  }
-  showToast("ok", `${normalized} restarted`);
-}
 function renderAdminMessages(entries) {
   const body = document.getElementById("adminMsgBody");
   if (!body) return;
@@ -1491,7 +1295,6 @@ const selectedSubscriberEmails = new Set();
 const rowActionStatusByEmail = new Map();
 const auditTimelineByEmail = new Map();
 const loadingAuditEmails = new Set();
-let launchAgentActionLog = [];
 let pendingBulkPreview = null;
 let confirmResolve = null;
 let retryToastAt = 0;
@@ -2984,7 +2787,6 @@ async function load(silent = false) {
     const qualitySummary = summary && summary.quality ? summary.quality : null;
     const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
     latestHealth = health || null;
-    launchAgentActionLog = Array.isArray(health?.launch_agent_actions) ? health.launch_agent_actions : [];
 
     const rosterEmailSet = new Set((roster || []).map(u => String(u.email || "").toLowerCase().trim()).filter(Boolean));
     for (const key of Array.from(selectedSubscriberEmails)) {
@@ -3127,17 +2929,6 @@ async function load(silent = false) {
         }
       }
 
-      const launchDiv = document.getElementById("healthLaunchAgents");
-      const launchVal = document.getElementById("healthLaunchAgentsVal");
-      const launch = health.launch_agents || null;
-      if (launchDiv && launchVal) {
-        if (!launch) {
-          launchDiv.style.display = "none";
-        } else {
-          launchDiv.style.display = "";
-          launchVal.innerHTML = renderLaunchAgentDetail(launch);
-        }
-      }
     }
 
     // Summary cards

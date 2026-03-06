@@ -252,7 +252,7 @@ async function fetchTopicNews(topic) {
     return empty;
   }
 
-  const maxAttempts = topic?.isCustom ? Math.min(2, queries.length) : 1;
+  const maxAttempts = topic?.isCustom ? Math.min(3, queries.length) : 1;
   const collected = [];
   const seenUrl = new Set();
   const seenHeadline = new Set();
@@ -703,16 +703,42 @@ function normalizeTopicToken(value) {
 }
 
 const CUSTOM_KEYWORD_ALIASES = {
-  "rate cuts": ["federal reserve rate cut", "interest rate cuts", "fed rate decision"],
-  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules", "sec disclosure rule"],
-  "semicap": ["semiconductor equipment", "chip equipment", "wafer fab equipment"],
-  "agentic ai": ["ai agents", "enterprise ai agents", "autonomous ai agent"],
+  "rate cuts": [
+    "federal reserve rate cut",
+    "interest rate cuts",
+    "fed rate decision",
+    "fomc rate decision",
+  ],
+  "sec rulemaking": [
+    "sec proposed rules",
+    "securities and exchange commission rules",
+    "sec disclosure rule",
+    "sec rule proposal",
+  ],
+  "semicap": [
+    "semiconductor equipment",
+    "chip equipment",
+    "wafer fab equipment",
+    "asml applied materials lam research",
+  ],
+  "agentic ai": [
+    "ai agents",
+    "enterprise ai agents",
+    "autonomous ai agent",
+    "openai anthropic microsoft agent",
+  ],
   "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
   "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
   "doge": ["dogecoin", "crypto regulation", "crypto market"],
 };
 
 const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
+const CUSTOM_TOKEN_ALIASES = {
+  rulemaking: ["rule", "rules", "proposed"],
+  semicap: ["semiconductor", "chip"],
+  agentic: ["agent", "agents"],
+  cuts: ["cut", "reduce", "easing"],
+};
 
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -753,9 +779,12 @@ function customKeywordMatches(topicNormalized, bodyText, tagNormalized = "") {
   const tokens = tokenizeCustomTopic(topic);
   if (!tokens.length) return false;
 
-  const hitCount = tokens.reduce((sum, token) => (
-    sum + (hasWordBoundary(haystack, token) ? 1 : 0)
-  ), 0);
+  const hitCount = tokens.reduce((sum, token) => {
+    if (hasWordBoundary(haystack, token)) return sum + 1;
+    const aliases = CUSTOM_TOKEN_ALIASES[token] || [];
+    if (aliases.some((alias) => hasWordBoundary(haystack, alias))) return sum + 1;
+    return sum;
+  }, 0);
   const requiredHits = tokens.length >= 3 ? 2 : tokens.length;
   return hitCount >= Math.max(1, requiredHits);
 }

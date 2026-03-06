@@ -68,10 +68,10 @@ function normalizeTopicToken(value) {
 }
 
 const CUSTOM_QUERY_ALIASES = {
-  "rate cuts": ["federal reserve rate cut", "interest rate cuts"],
-  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules"],
-  "semicap": ["semiconductor equipment", "chip equipment"],
-  "agentic ai": ["ai agents", "enterprise ai agents"],
+  "rate cuts": ["federal reserve rate cut", "interest rate cuts", "fomc rate decision"],
+  "sec rulemaking": ["sec proposed rules", "securities and exchange commission rules", "sec rule proposal"],
+  "semicap": ["semiconductor equipment", "chip equipment", "asml applied materials lam research"],
+  "agentic ai": ["ai agents", "enterprise ai agents", "openai anthropic microsoft agent"],
   "quantum computing": ["quantum hardware", "quantum platform"],
   "glp 1": ["obesity drugs", "weight loss drug"],
   "doge": ["dogecoin", "crypto regulation"],

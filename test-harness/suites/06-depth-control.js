@@ -1,4 +1,4 @@
-const { buildDigestForPersona } = require("../pipeline");
+const { buildDigestForPersona, computeTopicMatch } = require("../pipeline");
 const { mean } = require("../evaluator");
 
 function safeLength(text) {
@@ -91,8 +91,13 @@ module.exports = {
           : deepDigest.items);
       const fallbackUniverse = Array.isArray(dataset?.enriched_items) ? dataset.enriched_items : [];
       const candidates = [...deepSource, ...fallbackUniverse];
+      const depthTopics = Array.isArray(a.topics) && a.topics.length
+        ? a.topics
+        : (Array.isArray(b.topics) ? b.topics : []);
       for (const deep of candidates) {
         if (!deep?.headline || seen.has(deep.headline)) continue;
+        if (Number(deep?.baseScore || 0) < 6) continue;
+        if (depthTopics.length > 0 && computeTopicMatch(deep, depthTopics) < 7) continue;
         const briefText = toBriefText(deep);
         const deepText = [
           String(deep?.wim || ""),

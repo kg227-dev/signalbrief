@@ -175,6 +175,21 @@ async function sendEmail(to, subject, html, token = null) {
   return { ok: result.ok, via: "gmail" };
 }
 
+function buildOpenTrackingPixel(digestId, token, baseUrl = BASE_URL) {
+  const did = String(digestId || "").trim();
+  const userToken = String(token || "").trim().toLowerCase();
+  if (!did || !/^[a-f0-9]{64}$/.test(userToken)) return "";
+
+  const encodedDigestId = Buffer.from(did, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  const safeBase = String(baseUrl || BASE_URL).replace(/\/+$/, "");
+  const src = `${safeBase}/t/${encodedDigestId}/${userToken}/o.gif`;
+  return `<img src="${src}" alt="" width="1" height="1" style="display:none;" />`;
+}
+
 // ── Welcome email ─────────────────────────────────────────────────────────────
 // Shared by server.js (web signup) and reply-handler.js (Telegram signup)
 
@@ -233,4 +248,4 @@ async function sendWelcomeEmail(user) {
   console.log(`[welcome email] ${email} → ${result.ok ? "✅ sent via " + result.via : "❌ failed"}`);
 }
 
-module.exports = { sendEmail, sendWelcomeEmail };
+module.exports = { sendEmail, sendWelcomeEmail, buildOpenTrackingPixel, signUnsubEmail };

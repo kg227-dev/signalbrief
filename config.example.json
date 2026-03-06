@@ -11,6 +11,10 @@
     "maxItemsPerSourceDomain": 2,
     "catchupWindowMinutes": 720,
     "crossDayDedupDays": 3,
+    "crossDayRepeatPenalty": 0.8,
+    "minBackfillItemsAfterDedup": 3,
+    "perUserFreshnessDigests": 3,
+    "perUserFreshnessMinItems": 3,
     "maxCustomItemsPerRun": 3,
     "minBaseScoreForFinal": 6.5,
     "lookbackHours": 48

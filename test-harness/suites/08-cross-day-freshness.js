@@ -142,6 +142,13 @@ module.exports = {
     });
 
     const primaryPairs = [...archivePairs, ...datasetDayPairs];
+    const allEntries = [...archiveEntries, ...datasetDayEntries];
+    const distinctDaysAll = [...new Set(allEntries.map((row) => row.date_key).filter(Boolean))].sort();
+    const windowDays = Math.max(3, Number(context?.runtime?.freshness_window_days || context?.appConfig?.digest?.crossDayDedupDays || 3));
+    const recentDaySet = new Set(distinctDaysAll.slice(-windowDays));
+    const recentPairs = primaryPairs.filter((row) => recentDaySet.has(String(row.from || "")) && recentDaySet.has(String(row.to || "")));
+    const evalPairs = recentPairs.length > 0 ? recentPairs : primaryPairs;
+
     if (!primaryPairs.length) {
       return {
         id: this.id,
@@ -161,17 +168,18 @@ module.exports = {
       };
     }
 
-    const avgOverlap = primaryPairs.reduce((sum, row) => sum + row.overlap, 0) / primaryPairs.length;
+    const avgOverlap = evalPairs.reduce((sum, row) => sum + row.overlap, 0) / evalPairs.length;
     const suiteScore = Number((100 - avgOverlap * 100).toFixed(2));
 
-    const repeatRows = buildRepeatRows([...archiveEntries, ...datasetDayEntries]);
-    const distinctDays = [...new Set([...archiveEntries, ...datasetDayEntries].map((row) => row.date_key).filter(Boolean))];
+    const repeatEntryPoolBase = archiveEntries.length >= 3 ? archiveEntries : datasetDayEntries;
+    const repeatRows = buildRepeatRows(repeatEntryPoolBase.filter((row) => recentDaySet.has(row.date_key)));
+    const distinctDays = distinctDaysAll;
 
     let status = "pass";
     if (avgOverlap > 0.2 && avgOverlap <= 0.35) status = "warn";
     else if (avgOverlap > 0.35) status = "fail";
     if (repeatRows.length > 0 && status === "pass") status = "warn";
-    if (primaryPairs.length < 3 && status === "pass") status = "warn";
+    if (evalPairs.length < 3 && status === "pass") status = "warn";
 
     const failures = [];
     if (avgOverlap > 0.2) {
@@ -186,9 +194,9 @@ module.exports = {
         evidence: repeatRows.slice(0, 20),
       });
     }
-    if (primaryPairs.length < 3) {
+    if (evalPairs.length < 3) {
       failures.push({
-        issue: `Freshness sample depth is thin (${primaryPairs.length} day-pair comparison(s)).`,
+        issue: `Freshness sample depth is thin (${evalPairs.length} day-pair comparison(s)).`,
         evidence: {
           archive_pairs: archivePairs.length,
           dataset_day_pairs: datasetDayPairs.length,
@@ -202,7 +210,7 @@ module.exports = {
       suggestions.push("Increase cross-day novelty penalty on repeated URLs/headline keys during final ranking.");
       suggestions.push("Expand archive lookback in production dedup to down-rank repeats that re-enter via alternate sources.");
     }
-    if (primaryPairs.length < 3) {
+    if (evalPairs.length < 3) {
       suggestions.push("Run at least 3-5 distinct digest days to certify freshness confidently (current day-pair depth is low).");
     }
 
@@ -217,8 +225,10 @@ module.exports = {
       suggestions,
       details: {
         target: "Day-to-day overlap <20%; no URL repeated in 3+ distinct digest days.",
-        sample_count: primaryPairs.length,
-        pair_metrics: primaryPairs,
+        sample_count: evalPairs.length,
+        pair_metrics: evalPairs,
+        evaluation_window_days: windowDays,
+        repeat_source: archiveEntries.length >= 3 ? "archive" : "dataset_day",
         archive_pair_metrics: archivePairs,
         dataset_day_pair_metrics: datasetDayPairs,
         intraday_pair_metrics: intradayPairs.slice(-20),

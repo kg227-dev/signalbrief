@@ -419,9 +419,10 @@ function loadRecentArchiveItems(days = 3) {
 function dedupAgainstRecentArchives(items, opts = {}) {
   const dedupDays = Math.max(1, Number(opts.days || 3));
   const target = Math.max(1, Number(opts.targetCount || 7));
+  const minBackfillItems = Math.max(1, Number(opts.minBackfillItems || 3));
   const recentItems = loadRecentArchiveItems(dedupDays);
   if (!recentItems.length) {
-    return { items: items || [], removed: 0, archive_days_used: 0 };
+    return { items: items || [], removed: 0, archive_days_used: 0, backfilled: 0 };
   }
 
   const seenUrls = new Set(
@@ -441,15 +442,19 @@ function dedupAgainstRecentArchives(items, opts = {}) {
     else kept.push(item);
   }
 
-  if (kept.length < target && removed.length > 0) {
-    const backfill = removed.slice(0, target - kept.length);
+  let backfilled = 0;
+  if (kept.length < minBackfillItems && removed.length > 0) {
+    const backfillTarget = Math.min(target, minBackfillItems);
+    const backfill = removed.slice(0, backfillTarget - kept.length);
     kept.push(...backfill);
+    backfilled = backfill.length;
   }
 
   return {
     items: kept,
     removed: removed.length,
     archive_days_used: dedupDays,
+    backfilled,
   };
 }
 
@@ -477,6 +482,61 @@ function isRecentRepeatItem(item, repeatIndex) {
     (urlKey && repeatIndex.urlKeys instanceof Set && repeatIndex.urlKeys.has(urlKey))
     || (headKey && repeatIndex.headlineKeys instanceof Set && repeatIndex.headlineKeys.has(headKey))
   );
+}
+
+function getUserRecentDigestUrlKeys(user, opts = {}) {
+  const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+  const keys = new Set();
+  const history = Array.isArray(user?.recent_digest_url_history)
+    ? user.recent_digest_url_history.slice(-maxDigests)
+    : [];
+
+  if (history.length > 0) {
+    for (const row of history) {
+      const urls = Array.isArray(row?.urls) ? row.urls : [];
+      for (const url of urls) {
+        const key = normalizeUrlForDedup(url);
+        if (key) keys.add(key);
+      }
+    }
+  } else if (Array.isArray(user?.last_digest_items)) {
+    for (const item of user.last_digest_items) {
+      const key = normalizeUrlForDedup(item?.url);
+      if (key) keys.add(key);
+    }
+  }
+  return keys;
+}
+
+function suppressRecentlySentForUser(items, user, opts = {}) {
+  const arr = Array.isArray(items) ? items : [];
+  const minItems = Math.max(1, Number(opts.minItems || 3));
+  const recentKeys = getUserRecentDigestUrlKeys(user, opts);
+  if (!recentKeys.size) {
+    return { items: arr, removed: 0, recent_keys: 0, backfilled: 0 };
+  }
+
+  const kept = [];
+  const removed = [];
+  for (const item of arr) {
+    const key = normalizeUrlForDedup(item?.url);
+    if (key && recentKeys.has(key)) removed.push(item);
+    else kept.push(item);
+  }
+
+  let backfilled = 0;
+  if (kept.length < minItems && removed.length > 0) {
+    const add = removed.slice(0, minItems - kept.length);
+    kept.push(...add);
+    backfilled = add.length;
+  }
+
+  return {
+    items: kept,
+    removed: removed.length,
+    recent_keys: recentKeys.size,
+    backfilled,
+  };
 }
 
 function selectItems(allItems, opts = {}) {
@@ -603,6 +663,7 @@ TASK: For each news item below, return five fields:
    - Use 2 sentences by default; use 3 only when there is a concrete near-term catalyst.
    - First sentence: sharp strategic implication with one named entity and one explicit business impact (pricing, margin, demand, cost, capex, valuation, or market share). Wrap in <strong> tags.
    - Second sentence: start with "For <role>," and state a concrete action for the next 1-2 quarters. Include a causal link ("because", "as", or "which means") plus at least one specific company, regulator, or investor type AND one business lever (pricing, margin, demand, cost, capex, valuation, or market share).
+   - Second sentence must introduce at least one NEW fact not in sentence one (new actor, metric, catalyst, or timeline). Do not paraphrase sentence one.
    - Avoid hedging and filler: do NOT use "could", "may", "might", "potentially", "likely", "industry broadly", "stakeholders", or "monitor developments".
    - Include at least one concrete proper noun in sentence 1 or 2 (company, regulator, buyer segment, or fund type).
    - Include one concrete quantitative anchor when available from the source context (deal value, percentage, timeline, or count). If not available, use a bounded near-term qualifier (for example "next 2 quarters").
@@ -945,6 +1006,7 @@ const CUSTOM_KEYWORD_ALIASES = {
   "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
   "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
   "doge": ["dogecoin", "crypto regulation", "crypto market"],
+  "medtech": ["medical device", "diagnostics", "surgical systems", "hospital technology"],
 };
 
 const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
@@ -953,6 +1015,9 @@ const CUSTOM_TOKEN_ALIASES = {
   semicap: ["semiconductor", "chip"],
   agentic: ["agent", "agents"],
   cuts: ["cut", "reduce", "easing"],
+  medtech: ["medical", "device", "diagnostic", "surgical"],
+  sec: ["securities", "exchange", "commission"],
+  rate: ["interest", "federal", "reserve", "fomc"],
 };
 
 function escapeRegExp(value) {
@@ -1121,6 +1186,52 @@ function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
   return replaced
     .sort((a, b) => Number(b?.relevanceScore || 0) - Number(a?.relevanceScore || 0))
     .slice(0, count);
+}
+
+function buildCustomRescueItemsFromStandard(standardItems, customKeywords = [], existingItems = [], maxPerKeyword = 1) {
+  const standard = Array.isArray(standardItems) ? standardItems : [];
+  const existing = Array.isArray(existingItems) ? existingItems : [];
+  const out = [];
+  const seenHeadlines = new Set(existing.map((i) => headlineFingerprint(i?.headline)).filter(Boolean));
+  const seenUrls = new Set(existing.map((i) => normalizeUrlForDedup(i?.url)).filter(Boolean));
+  const cap = Math.max(1, Number(maxPerKeyword || 1));
+
+  for (const rawKeyword of customKeywords) {
+    const keyword = normalizeTopicToken(rawKeyword);
+    if (!keyword) continue;
+
+    const alreadyCovered = existing.some((item) => {
+      const text = normalizeMatchText(`${item?.headline || ""} ${item?.summary || ""}`);
+      const tag = normalizeTopicToken(item?.tag || "");
+      return customKeywordMatches(keyword, text, tag);
+    });
+    if (alreadyCovered) continue;
+
+    const matches = standard.filter((item) => {
+      const text = normalizeMatchText(`${item?.headline || ""} ${item?.summary || ""}`);
+      const tag = normalizeTopicToken(item?.tag || "");
+      return customKeywordMatches(keyword, text, tag);
+    });
+    if (!matches.length) continue;
+
+    let used = 0;
+    for (const item of matches) {
+      if (used >= cap) break;
+      const headKey = headlineFingerprint(item?.headline);
+      const urlKey = normalizeUrlForDedup(item?.url);
+      if ((headKey && seenHeadlines.has(headKey)) || (urlKey && seenUrls.has(urlKey))) continue;
+      if (headKey) seenHeadlines.add(headKey);
+      if (urlKey) seenUrls.add(urlKey);
+      out.push({
+        ...item,
+        tag: String(rawKeyword || "").toUpperCase(),
+        custom_rescue: true,
+      });
+      used += 1;
+    }
+  }
+
+  return out;
 }
 
 // Find the total weight adjustment for a given item tag from the user's topic_weights map.
@@ -1692,7 +1803,8 @@ async function main() {
   // Fetch standard topics in parallel
   const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
   standardFetchCalls = allResults.reduce((sum, rows) => sum + Number(rows?.__apiCalls || 0), 0);
-  let allItems = allResults.flat();
+  const standardItems = allResults.flat();
+  let allItems = standardItems.slice();
   log(`Fetched ${allItems.length} raw items`);
   const allStandardEmpty = standardFetchCallsPlanned > 0
     && allResults.every((rows) => Array.isArray(rows) && rows.length === 0);
@@ -1756,6 +1868,15 @@ async function main() {
     // Prepend so selectItems() sees custom items first — they have unique tags so they
     // won't crowd out standard items; prepending ensures they're selected
     allItems.unshift(...customItems);
+
+    const customKeywords = customTopicSlugs.map((slug) =>
+      normalizeTopicToken(String(slug || "").replace(/^custom_/, "").replace(/_/g, " "))
+    ).filter(Boolean);
+    const rescueItems = buildCustomRescueItemsFromStandard(standardItems, customKeywords, allItems, 1);
+    if (rescueItems.length > 0) {
+      allItems.unshift(...rescueItems);
+      log(`Custom keyword rescue added ${rescueItems.length} item(s) from standard pool`);
+    }
   }
   if (allItems.length === 0) {
     await emitDigestIncident(
@@ -1774,12 +1895,13 @@ async function main() {
   const dedupRes = dedupAgainstRecentArchives(allItems, {
     days: crossDayDedupDays,
     targetCount: selectionTarget,
+    minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || 3)),
   });
   allItems = dedupRes.items;
   const repeatIndex = buildRecentRepeatIndex(crossDayDedupDays);
   const repeatPenalty = Math.max(0, Number(CONFIG.digest.crossDayRepeatPenalty || 0.8));
   if (dedupRes.removed > 0) {
-    log(`Cross-day dedup removed ${dedupRes.removed} repeat item(s) using last ${dedupRes.archive_days_used} day(s) of archive history`);
+    log(`Cross-day dedup removed ${dedupRes.removed} repeat item(s) using last ${dedupRes.archive_days_used} day(s) of archive history${dedupRes.backfilled > 0 ? ` (backfilled ${dedupRes.backfilled} to minimum)` : ""}`);
   }
   if ((repeatIndex.urlKeys.size > 0 || repeatIndex.headlineKeys.size > 0) && repeatPenalty > 0) {
     log(`Freshness penalty active (days=${repeatIndex.days}, penalty=${repeatPenalty.toFixed(2)})`);
@@ -1950,6 +2072,16 @@ async function main() {
 
       const minBaseScoreForFinal = Number(CONFIG.digest.minBaseScoreForFinal || 6.5);
       const requestedCount = Number(prefs.items_per_digest || CONFIG.digest.itemCount || 5);
+      const perUserFreshnessMin = Math.max(1, Math.min(requestedCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
+      const suppression = suppressRecentlySentForUser(userItems, u, {
+        maxDigests: Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)),
+        minItems: perUserFreshnessMin,
+      });
+      if (suppression.removed > 0) {
+        userItems = suppression.items;
+        log(`  [freshness-user] ${u.email || u.chatId}: removed ${suppression.removed} recent URL repeat(s)${suppression.backfilled > 0 ? `, backfilled ${suppression.backfilled}` : ""}`);
+      }
+
       const minStrongItems = Math.max(2, Math.min(requestedCount, 4));
       const stronger = userItems.filter((i) =>
         Number(i?.baseScore || 0) >= minBaseScoreForFinal
@@ -2134,6 +2266,20 @@ async function main() {
       if (!delivered) throw new Error("no channels succeeded");
 
       // 6. Persist state
+      const currentUrlKeys = [...new Set(
+        userItems
+          .map((item) => normalizeUrlForDedup(item?.url))
+          .filter(Boolean)
+      )];
+      const priorUrlHistory = Array.isArray(u.recent_digest_url_history)
+        ? u.recent_digest_url_history.slice()
+        : [];
+      priorUrlHistory.push({
+        date_et: digestDateKey,
+        digest_id: userDigestId,
+        urls: currentUrlKeys,
+      });
+      u.recent_digest_url_history = priorUrlHistory.slice(-Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)));
       u.digests_received = (u.digests_received || 0) + 1;
       u.last_digest_at = now.toISOString();
       u.last_digest_items = userItems.map(i => ({

@@ -67,7 +67,7 @@ function standardTopicUniverse(appConfig) {
   return (appConfig.topics || []).map((t) => t.tag).filter(Boolean);
 }
 
-function collectCustomTopics(personas, limit = 5) {
+function collectCustomTopics(personas, limit = 12) {
   const values = [];
   for (const p of personas) {
     for (const t of p.topics || []) {
@@ -113,6 +113,57 @@ function buildRecentRepeatIndexFromArchives(archives, days = 3) {
     days: lookbackDays,
     urlKeys: [...new Set(recentItems.map((i) => normalizeUrlForDedup(i?.url)).filter(Boolean))],
     headlineKeys: [...new Set(recentItems.map((i) => headlineFingerprint(i?.headline)).filter(Boolean))],
+  };
+}
+
+function dedupAgainstRecentArchivesForDataset(items, archives, opts = {}) {
+  const arr = Array.isArray(items) ? items : [];
+  const allArchives = Array.isArray(archives) ? archives : [];
+  const dedupDays = Math.max(1, Number(opts.days || 3));
+  const minBackfillItems = Math.max(1, Number(opts.minBackfillItems || 3));
+  const targetCount = Math.max(1, Number(opts.targetCount || 7));
+  const dateKey = String(opts.dateKey || "");
+
+  const archiveRows = allArchives
+    .filter((row) => {
+      const day = String(row?.date || "").trim();
+      if (!day) return false;
+      if (!dateKey) return true;
+      return day < dateKey;
+    })
+    .sort((a, b) => String(a?.date || "").localeCompare(String(b?.date || "")));
+
+  const recentItems = archiveRows
+    .slice(-dedupDays)
+    .flatMap((row) => (Array.isArray(row?.items) ? row.items : []));
+
+  if (!recentItems.length) return { items: arr, removed: 0, backfilled: 0 };
+
+  const seenUrls = new Set(recentItems.map((i) => normalizeUrlForDedup(i?.url)).filter(Boolean));
+  const seenHeadlines = new Set(recentItems.map((i) => headlineFingerprint(i?.headline)).filter(Boolean));
+  const kept = [];
+  const removed = [];
+
+  for (const item of arr) {
+    const urlKey = normalizeUrlForDedup(item?.url);
+    const headKey = headlineFingerprint(item?.headline);
+    const duplicate = (urlKey && seenUrls.has(urlKey)) || (headKey && seenHeadlines.has(headKey));
+    if (duplicate) removed.push(item);
+    else kept.push(item);
+  }
+
+  let backfilled = 0;
+  if (kept.length < minBackfillItems && removed.length > 0) {
+    const addTarget = Math.min(targetCount, minBackfillItems);
+    const add = removed.slice(0, addTarget - kept.length);
+    kept.push(...add);
+    backfilled = add.length;
+  }
+
+  return {
+    items: kept,
+    removed: removed.length,
+    backfilled,
   };
 }
 
@@ -164,6 +215,8 @@ function loadOfflineDataset(appConfig) {
 async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
   const digestConfig = appConfig.digest || {};
   const topics = appConfig.topics || [];
+  const archiveDir = path.join(ROOT_DIR, "archive");
+  const archives = loadArchiveDigests(archiveDir);
   const dateKey = String(args?.date_key || etDateKey());
   const selectionTarget = maxRequestedItems(personas, Number(digestConfig.itemCount || 7));
 
@@ -190,7 +243,8 @@ async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
     });
   }
 
-  const customKeywords = collectCustomTopics(personas, 5);
+  const customFetchCap = Number(digestConfig.maxCustomFetchPerRun || 12);
+  const customKeywords = collectCustomTopics(personas, customFetchCap);
   const customItemsByTopic = [];
   for (const keyword of customKeywords) {
     const topicTag = keyword.toUpperCase();
@@ -237,6 +291,13 @@ async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
   const standardRawItems = standardItemsByTopic.flatMap((x) => x.items || []);
   const customRawItems = customItemsByTopic.flatMap((x) => x.items || []);
   const allRawItems = [...customRawItems, ...standardRawItems];
+  const dedupRes = dedupAgainstRecentArchivesForDataset(allRawItems, archives, {
+    days: Math.max(1, Number(digestConfig.crossDayDedupDays || 3)),
+    minBackfillItems: Math.max(1, Number(digestConfig.minBackfillItemsAfterDedup || 3)),
+    targetCount: selectionTarget,
+    dateKey,
+  });
+  const dedupedRawItems = dedupRes.items;
   const customTags = customItemsByTopic.map((x) => x.tag);
   const tagPriority = {};
   for (const persona of personas || []) {
@@ -253,7 +314,7 @@ async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
     : defaultMaxCustom;
 
   const selectedItems = selectItems(
-    allRawItems,
+    dedupedRawItems,
     selectionTarget,
     Number(digestConfig.maxItemsPerTag || 2),
     {
@@ -315,11 +376,14 @@ async function buildLiveOrCachedDataset({ appConfig, personas, args, budget }) {
       skipped_cache_miss: !!x.skipped_cache_miss,
     })),
     raw_items: allRawItems,
+    raw_items_deduped: dedupedRawItems,
     selected_items: selectedItems,
     enriched_items: enrichResult.items || [],
     metadata: {
       standard_raw_item_count: standardRawItems.length,
       custom_raw_item_count: customRawItems.length,
+      cross_day_dedup_removed: Number(dedupRes.removed || 0),
+      cross_day_dedup_backfilled: Number(dedupRes.backfilled || 0),
       selected_item_count: selectedItems.length,
       selection_target: selectionTarget,
       max_custom_items: maxCustomItems,
@@ -609,6 +673,7 @@ async function runHarness(argv = process.argv.slice(2)) {
     judge_model: args.judge_model,
     analysis_calibration_samples: Number(args.analysis_calibration_samples || 0),
     freshness_max_snapshots: Number(args.freshness_max_snapshots || 120),
+    freshness_window_days: Math.max(3, Number(appConfig?.digest?.crossDayDedupDays || 3)),
     custom_persona_limit: Number(args.custom_persona_limit || 0),
     confidence_bootstrap: args.confidence_bootstrap,
     run_label: args.run_label,

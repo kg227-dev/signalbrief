@@ -10,6 +10,9 @@ const CUSTOM_TOKEN_ALIASES = {
   semicap: ["semiconductor", "chip"],
   agentic: ["agent", "agents"],
   cuts: ["cut", "reduce", "easing"],
+  medtech: ["medical", "device", "diagnostic", "surgical"],
+  sec: ["securities", "exchange", "commission"],
+  rate: ["interest", "federal", "reserve", "fomc"],
 };
 
 function escapeRegExp(value) {

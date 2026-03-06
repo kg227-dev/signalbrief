@@ -45,6 +45,7 @@ const CUSTOM_TOPIC_ALIASES = {
   "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
   "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
   "doge": ["dogecoin", "crypto regulation", "crypto market"],
+  "medtech": ["medical device", "diagnostics", "surgical systems", "hospital technology"],
 };
 
 module.exports = {

@@ -21,6 +21,14 @@ const {
   loadEngagementEvents,
 } = require("../engagement-events");
 const { computeQualityTrend } = require("../quality-score");
+const {
+  verifyAdminPassword,
+  createAdminSession,
+  clearAdminSessionByRequest,
+  getAdminActor,
+  isAdminAuthed,
+  checkLoginRate,
+} = require("./admin-auth");
 
 const PORT = parseInt(process.env.PORT, 10) || 3003;
 const WEB_DIR = __dirname;
@@ -90,17 +98,6 @@ function checkRateLimit(ip, email) {
   return { limited: false };
 }
 
-// ── Admin auth (session-based, in-memory) ────────────────────────────────────
-const ADMIN_SESSIONS = new Map(); // token → { email, createdAt }
-const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-const LOGIN_RATE = new Map(); // ip → { count, resetAt }
-const LOGIN_LIMIT = 5;
-const LOGIN_WINDOW = 15 * 60 * 1000;
-const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
-const ADMIN_LOCAL_BYPASS_ALLOWLIST = new Set([
-  "GET /api/admin/check",
-  "GET /api/admin/stats",
-]);
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
@@ -109,55 +106,6 @@ const SCHEDULER_HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
   ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
   : path.join(__dirname, "../data/scheduler-heartbeat.json");
 const DIGEST_RUN_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
-
-function verifyAdminPassword(password) {
-  const { salt, passwordHash } = CONFIG.admin || {};
-  if (!salt || !passwordHash) return false;
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(passwordHash, "hex"));
-}
-
-function pruneAdminSessions(now = Date.now()) {
-  for (const [token, session] of ADMIN_SESSIONS.entries()) {
-    if (!session || (now - Number(session.createdAt || 0)) > ADMIN_SESSION_TTL) {
-      ADMIN_SESSIONS.delete(token);
-    }
-  }
-}
-
-function createAdminSession(email) {
-  pruneAdminSessions();
-  const token = crypto.randomBytes(32).toString("hex");
-  ADMIN_SESSIONS.set(token, { email, createdAt: Date.now() });
-  return token;
-}
-
-function getAdminSession(req) {
-  const cookieHeader = req.headers.cookie || "";
-  const match = cookieHeader.match(/(?:^|;\s*)sb_admin=([a-f0-9]{64})/);
-  if (!match) return null;
-  const session = ADMIN_SESSIONS.get(match[1]);
-  if (!session) return null;
-  if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) return null;
-  return session;
-}
-
-function validateAdminSession(req) {
-  pruneAdminSessions();
-  return !!getAdminSession(req);
-}
-
-function isLocalRequest(req) {
-  const ip = req.socket.remoteAddress || "";
-  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-}
-
-function getAdminActor(req) {
-  const session = getAdminSession(req);
-  if (session?.email) return session.email;
-  if (ADMIN_LOCAL_BYPASS && isLocalRequest(req)) return "local-bypass";
-  return "unknown";
-}
 
 function appendJsonLineLog(filePath, entry, label) {
   try {
@@ -498,26 +446,6 @@ function logAdminActionEvent(req, payload) {
     actor: getAdminActor(req),
     ...payload,
   }, "admin-action-log");
-}
-
-function isAdminAuthed(req) {
-  if (validateAdminSession(req)) return true;
-  if (!ADMIN_LOCAL_BYPASS) return false;
-  if (!isLocalRequest(req)) return false;
-  const method = String(req?.method || "GET").toUpperCase();
-  const pathname = String(req?.url || "/").split("?")[0];
-  return ADMIN_LOCAL_BYPASS_ALLOWLIST.has(`${method} ${pathname}`);
-}
-
-function checkLoginRate(ip) {
-  const now = Date.now();
-  for (const [k, v] of LOGIN_RATE) if (v.resetAt < now) LOGIN_RATE.delete(k);
-  const entry = LOGIN_RATE.get(ip) || { count: 0, resetAt: now + LOGIN_WINDOW };
-  if (entry.resetAt < now) { entry.count = 0; entry.resetAt = now + LOGIN_WINDOW; }
-  if (entry.count >= LOGIN_LIMIT) return true;
-  entry.count++;
-  LOGIN_RATE.set(ip, entry);
-  return false;
 }
 
 const MIME = {
@@ -1738,7 +1666,7 @@ const server = http.createServer(async (req, res) => {
     if (!email || !password) return json(res, { error: "Email and password required" }, 400);
 
     const adminEmail = (CONFIG.admin && CONFIG.admin.email) || "";
-    if (email.toLowerCase().trim() !== adminEmail.toLowerCase() || !verifyAdminPassword(password)) {
+    if (email.toLowerCase().trim() !== adminEmail.toLowerCase() || !verifyAdminPassword(password, CONFIG.admin || {})) {
       return json(res, { error: "Invalid credentials" }, 401);
     }
 
@@ -1763,9 +1691,7 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/admin/logout — clear admin session
   if (pathname === "/api/admin/logout" && req.method === "POST") {
-    const cookieHeader = req.headers.cookie || "";
-    const match = cookieHeader.match(/(?:^|;\s*)sb_admin=([a-f0-9]{64})/);
-    if (match) ADMIN_SESSIONS.delete(match[1]);
+    clearAdminSessionByRequest(req);
 
     const isSecure = BASE_URL.startsWith("https");
     res.writeHead(200, {

@@ -4,13 +4,19 @@ const path = require("path");
 const {
   RESULTS_DIR,
   MATRIX_DEFAULTS,
+  IMPROVEMENT_LOG_FILE,
   writeJson,
   readJson,
 } = require("./config");
 const { runHarness } = require("./run-tests");
+const STALLED_SIGNATURE_THRESHOLD = 3;
 
 function parseCli(argv) {
   let matrixPath = null;
+  let allowStalledRerun = false;
+  let stalledThreshold = STALLED_SIGNATURE_THRESHOLD;
+  let ackSignature = null;
+  let ackNote = "";
   const passthrough = [];
 
   for (const token of argv) {
@@ -18,10 +24,34 @@ function parseCli(argv) {
       matrixPath = token.replace("--matrix=", "").trim() || null;
       continue;
     }
+    if (token === "--allow-stalled-rerun") {
+      allowStalledRerun = true;
+      continue;
+    }
+    if (token.startsWith("--stalled-threshold=")) {
+      const raw = Number(token.replace("--stalled-threshold=", "").trim());
+      if (Number.isFinite(raw) && raw >= 1) stalledThreshold = Math.max(1, Math.floor(raw));
+      continue;
+    }
+    if (token.startsWith("--ack-signature=")) {
+      ackSignature = token.replace("--ack-signature=", "").trim() || null;
+      continue;
+    }
+    if (token.startsWith("--ack-note=")) {
+      ackNote = token.replace("--ack-note=", "").trim();
+      continue;
+    }
     passthrough.push(token);
   }
 
-  return { matrixPath, passthrough };
+  return {
+    matrixPath,
+    allowStalledRerun,
+    stalledThreshold,
+    ackSignature,
+    ackNote,
+    passthrough,
+  };
 }
 
 function loadMatrixConfig(matrixPath) {
@@ -119,12 +149,74 @@ function compositeAvg(payload) {
   );
 }
 
+function buildOpenSignature(payload) {
+  const suites = payload?.suites && typeof payload.suites === "object" ? payload.suites : {};
+  const parts = Object.entries(suites)
+    .map(([suiteId, suite]) => ({
+      suiteId,
+      status: String(suite?.status || "").toLowerCase(),
+    }))
+    .filter((row) => row.status === "fail" || row.status === "warn")
+    .sort((a, b) => a.suiteId.localeCompare(b.suiteId))
+    .map((row) => `${row.suiteId}:${row.status}`);
+  return parts.length ? parts.join("|") : "all_pass";
+}
+
+function readImprovementLogEntries() {
+  const raw = readJson(IMPROVEMENT_LOG_FILE, []);
+  return Array.isArray(raw) ? raw : [];
+}
+
+function writeImprovementLogEntries(entries) {
+  writeJson(IMPROVEMENT_LOG_FILE, Array.isArray(entries) ? entries : []);
+}
+
+function hasAcknowledgedSignature(entries, signature) {
+  const target = String(signature || "").trim();
+  if (!target || target === "all_pass") return true;
+  return entries.some((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    if (String(entry.type || "") !== "matrix_signature_ack") return false;
+    if (String(entry.signature || "") !== target) return false;
+    const state = String(entry.state || "active").toLowerCase();
+    return state !== "revoked";
+  });
+}
+
+function appendSignatureAck(entries, signature, note = "") {
+  const existing = Array.isArray(entries) ? entries.slice() : [];
+  existing.push({
+    type: "matrix_signature_ack",
+    signature: String(signature || "").trim(),
+    note: String(note || "").trim() || "acknowledged by operator",
+    acknowledged_at: new Date().toISOString(),
+    state: "active",
+  });
+  return existing;
+}
+
 async function main() {
-  const { matrixPath, passthrough } = parseCli(process.argv.slice(2));
+  const {
+    matrixPath,
+    passthrough,
+    allowStalledRerun,
+    stalledThreshold,
+    ackSignature,
+    ackNote,
+  } = parseCli(process.argv.slice(2));
   const matrixConfig = loadMatrixConfig(matrixPath);
   const plan = buildWindowPlan(matrixConfig);
+  let improvementLog = readImprovementLogEntries();
+
+  if (ackSignature) {
+    improvementLog = appendSignatureAck(improvementLog, ackSignature, ackNote);
+    writeImprovementLogEntries(improvementLog);
+    console.log(`[run-matrix] acknowledged signature: ${ackSignature}`);
+  }
 
   const runRows = [];
+  let priorSignature = null;
+  let stalledCount = 0;
   for (let i = 0; i < plan.length; i++) {
     const window = plan[i];
     const refreshNow = matrixConfig.refresh_every > 0 && i > 0 && i % matrixConfig.refresh_every === 0;
@@ -144,6 +236,16 @@ async function main() {
 
     const result = await runHarness(runArgs);
     const payload = result?.report?.payload || null;
+    const openSignature = buildOpenSignature(payload);
+    if (openSignature === "all_pass") {
+      priorSignature = null;
+      stalledCount = 0;
+    } else if (openSignature === priorSignature) {
+      stalledCount += 1;
+    } else {
+      priorSignature = openSignature;
+      stalledCount = 1;
+    }
 
     runRows.push({
       label: window.label,
@@ -153,7 +255,23 @@ async function main() {
       composite_avg: Number(compositeAvg(payload).toFixed(2)),
       budget_spent: Number(payload?.budget?.spent || 0),
       sample_sizes: payload?.sample_sizes || {},
+      open_signature: openSignature,
+      stalled_signature_windows: openSignature === "all_pass" ? 0 : stalledCount,
     });
+
+    if (
+      openSignature !== "all_pass"
+      && stalledCount >= Math.max(1, Number(stalledThreshold || STALLED_SIGNATURE_THRESHOLD))
+      && !allowStalledRerun
+      && !hasAcknowledgedSignature(improvementLog, openSignature)
+    ) {
+      throw new Error(
+        `Matrix guardrail: fail/warn signature persisted for ${stalledCount} windows (${openSignature}). `
+        + `Acknowledge an improvement plan before rerunning: `
+        + `node test-harness/run-matrix.js --ack-signature="${openSignature}" --ack-note="<what changed>" `
+        + `or override once with --allow-stalled-rerun`
+      );
+    }
   }
 
   let certificationStreak = 0;

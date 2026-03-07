@@ -9,8 +9,12 @@ const LOGIN_WINDOW = 15 * 60 * 1000;
 
 const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
 const ADMIN_LOCAL_BYPASS_ALLOWLIST = new Set([
+  "GET /admin",
+  "GET /admin/sandbox",
   "GET /api/admin/check",
   "GET /api/admin/stats",
+  "POST /api/admin/sandbox/estimate",
+  "POST /api/admin/sandbox/run",
 ]);
 
 function pruneAdminSessions(now = Date.now()) {

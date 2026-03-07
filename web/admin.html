@@ -647,6 +647,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   <div class="header">
     <div class="header-top">
       <h1>⚙️ SignalBrief Admin</h1>
+      <a href="/admin/sandbox" class="badge" style="text-decoration:none;cursor:pointer;">Sandbox</a>
       <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
@@ -2012,7 +2013,7 @@ function renderSchedule(roster) {
           <div class="schedule-name">${esc(ev.name)}</div>
           <div class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</div>
           <div class="schedule-actions">
-            ${ev.email
+            ${ev.email && ev.status !== "sent"
               ? `<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(ev.email || "")}, ${JSON.stringify(ev.delivery_time_raw || "07:00")}, this)'>set time</button>`
               : `<span style="color:var(--text-secondary);font-size:11px;">—</span>`}
           </div>

@@ -19,8 +19,9 @@ function log(message) {
   console.log(line);
   try {
     fs.appendFileSync(LOG_FILE, `${line}\n`);
-  } catch {
-    // Keep the job running even if logfile writes fail.
+  } catch (err) {
+    const reason = err && err.message ? err.message : String(err || "unknown error");
+    process.stderr.write(`[reengagement] log write failed: ${reason}\n`);
   }
 }
 

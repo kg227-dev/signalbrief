@@ -22,6 +22,7 @@ services:
       start_period: 15s
 
   bot:
+    profiles: ["background-jobs"]
     build: .
     command: ["node", "bot-server.js"]
     env_file:
@@ -36,6 +37,7 @@ services:
     restart: unless-stopped
 
   worker:
+    profiles: ["background-jobs"]
     build: .
     command: ["node", "scheduler-worker.js"]
     env_file:

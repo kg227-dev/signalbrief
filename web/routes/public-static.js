@@ -1,6 +1,7 @@
 function handlePublicStaticRoutes(ctx, deps) {
   const { req, res, url, pathname } = ctx;
   const {
+    isAdminAuthed,
     path, fs, APP_ROOT, readArchiveFiles, renderPublicDigestMissingPage,
     formatPublicDigestDateLabel, renderPublicDigestPage, serveFile, WEB_DIR,
   } = deps;
@@ -59,15 +60,25 @@ function handlePublicStaticRoutes(ctx, deps) {
   if (pathname === "/admin/login") {
     return serveFile(res, path.join(WEB_DIR, "admin-login.html"));
   }
+  const adminHtmlRoute = pathname === "/admin" || pathname === "/admin.html" || pathname === "/admin/user" || pathname === "/admin/sandbox";
+  if (adminHtmlRoute && !isAdminAuthed(req)) {
+    const next = encodeURIComponent(pathname + (url.search || ""));
+    res.writeHead(302, { Location: `/admin/login?next=${next}`, "Cache-Control": "no-store" });
+    return res.end();
+  }
   if (pathname === "/admin" || pathname === "/admin.html") {
     return serveFile(res, path.join(WEB_DIR, "admin.html"));
   }
   if (pathname === "/admin/user") {
     return serveFile(res, path.join(WEB_DIR, "admin-user.html"));
   }
+  if (pathname === "/admin/sandbox") {
+    return serveFile(res, path.join(WEB_DIR, "sandbox.html"));
+  }
   if (pathname === "/robots.txt") return serveFile(res, path.join(WEB_DIR, "robots.txt"));
   if (pathname === "/sitemap.xml") return serveFile(res, path.join(WEB_DIR, "sitemap.xml"));
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
+  if (pathname === "/preferences-shared.js") return serveFile(res, path.join(WEB_DIR, "preferences-shared.js"));
   if (pathname === "/index.js") return serveFile(res, path.join(WEB_DIR, "index.js"));
   if (pathname === "/settings.js") return serveFile(res, path.join(WEB_DIR, "settings.js"));
 

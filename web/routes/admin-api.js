@@ -4,7 +4,7 @@ async function handleAdminApiRoutes(ctx, deps) {
     json, isAdminAuthed, getClientIp, checkLoginRate, requireJsonBody, CONFIG,
     verifyAdminPassword, createAdminSession, clearAdminSessionByRequest, BASE_URL,
     emitIgnoredEventsIfDue, loadCostRunsNewest, allUsers, loadEngagementEvents, parseIsoTs,
-    computeFeedbackTrend, digestRunStatus, readSchedulerHeartbeat, readJsonLineLog,
+    computeFeedbackTrend, digestRunStatus, getCachedOrRefreshSchedulerHeartbeat, readJsonLineLog,
     ADMIN_MESSAGE_LOG, ADMIN_ACTION_LOG, maskEmail, getRecentAutoAdjustmentsForUser,
     logAdminActionEvent, normalizeDeliveryTimeInput, writeUser, sendMagicLinkEmail,
     handleAdminRunDigest, logAdminMessageEvent, summarizeMessage, hashText, escapeHtml,
@@ -369,7 +369,7 @@ async function handleAdminApiRoutes(ctx, deps) {
       ? minutesUntilEtKey(nextExpectedActiveDelivery.next_delivery_key)
       : null;
     const digestRun = digestRunStatus();
-    const schedulerWorker = readSchedulerHeartbeat();
+    const schedulerWorker = getCachedOrRefreshSchedulerHeartbeat();
 
     // Health / system status
     const lastRun = runs[0] || null; // runs is newest-first
@@ -888,6 +888,36 @@ async function handleAdminApiRoutes(ctx, deps) {
         sent.telegram ? "telegram" : null,
       ].filter(Boolean).join(" + ")}`,
     });
+  }
+
+  // ── Sandbox API ──────────────────────────────────────────────────────────────
+
+  // POST /api/admin/sandbox/estimate — cost estimate without API calls
+  if (pathname === "/api/admin/sandbox/estimate" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
+    try {
+      const { estimateCost } = require("../../src/sandbox-pipeline");
+      const estimate = estimateCost(body);
+      return json(res, estimate);
+    } catch (err) {
+      return json(res, { error: err.message }, 500);
+    }
+  }
+
+  // POST /api/admin/sandbox/run — run pipeline, return results (no delivery)
+  if (pathname === "/api/admin/sandbox/run" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
+    try {
+      const { runPipeline } = require("../../src/sandbox-pipeline");
+      const result = await runPipeline(body);
+      return json(res, result);
+    } catch (err) {
+      return json(res, { error: err.message }, 500);
+    }
   }
 
   return false;

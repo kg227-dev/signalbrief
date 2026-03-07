@@ -29,6 +29,7 @@ const {
   reserveCustomKeywordSlot,
 } = require("../../digest-pipeline-seam");
 const { selectItemsByPolicy } = require("../../selection-domain");
+const { createSelectionPolicy, createDigestPolicies } = require("../../digest-policy-domain");
 const {
   buildCustomTopicQueries,
   customKeywordMatches,
@@ -67,6 +68,18 @@ function toEtDateKey(date) {
 const PERPLEXITY_COST_PER_CALL  = 0.005;   // Sonar model per call
 const CLAUDE_HAIKU_IN_PER_MTOK  = 0.80;    // $/million input tokens
 const CLAUDE_HAIKU_OUT_PER_MTOK = 4.00;    // $/million output tokens
+
+// Model cost lookup maps (used by sandbox for dynamic model selection)
+const MODEL_COSTS = {
+  "claude-haiku-4-5":  { input: 0.80,  output: 4.00  },
+  "claude-sonnet-4-6": { input: 3.00,  output: 15.00 },
+  "claude-opus-4-6":   { input: 15.00, output: 75.00 },
+};
+const SEARCH_COSTS = {
+  "sonar": 0.005,
+  "sonar-pro": 0.01,
+  "sonar-reasoning": 0.01,
+};
 
 function appendCostLog(entry) {
   try {
@@ -313,7 +326,8 @@ async function httpsPostWithRetry(hostname, path_, headers, body, opts = {}) {
 
 // ── 1. Fetch news via Perplexity Sonar (with real URLs from citations) ───────
 
-async function fetchTopicNews(topic) {
+async function fetchTopicNews(topic, opts = {}) {
+  const searchModel = opts.searchModel || "sonar";
   log(`Fetching: ${topic.tag}`);
   const queries = Array.isArray(topic?.queries) && topic.queries.length
     ? topic.queries.map((q) => String(q || "").trim()).filter(Boolean)
@@ -340,7 +354,7 @@ async function fetchTopicNews(topic) {
         "api.perplexity.ai", "/chat/completions",
         { "Content-Type": "application/json", "Authorization": `Bearer ${CONFIG.keys.perplexity}` },
         {
-          model: "sonar",
+          model: searchModel,
           messages: [
             {
               role: "system",
@@ -608,25 +622,15 @@ function suppressRecentlySentForUser(items, user, opts = {}) {
 }
 
 function selectItems(allItems, opts = {}) {
-  const maxItems = Math.max(1, Number(opts.maxItems || CONFIG.digest.itemCount || 7));
-  const maxItemsPerTag = Math.max(1, Number(opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2));
-  const maxItemsPerSourceDomain = Math.max(1, Number(opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2));
-  const customTagOrder = [...new Set((opts.customTags || []).map((t) => String(t || "").toLowerCase()).filter(Boolean))];
-  const customTags = new Set(customTagOrder);
-  const tagPriority = opts.tagPriority && typeof opts.tagPriority === "object" ? opts.tagPriority : {};
-  const explicitCustomCap = Number(opts.maxCustomItems);
-  const maxCustomItems = Number.isFinite(explicitCustomCap)
-    ? Math.max(0, explicitCustomCap)
-    : (customTags.size > 0 ? Math.max(1, Math.floor(maxItems * 0.4)) : Infinity);
-  return selectItemsByPolicy(allItems, {
-    maxItems,
-    perTagCap: maxItemsPerTag,
-    perSourceCap: maxItemsPerSourceDomain,
-    customTagOrder,
-    customTags,
-    tagPriority,
-    maxCustomItems,
-  }, {
+  const policy = createSelectionPolicy({
+    maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
+    perTagCap: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
+    perSourceCap: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
+    customTagOrder: opts.customTags || [],
+    tagPriority: opts.tagPriority,
+    maxCustomItems: opts.maxCustomItems,
+  });
+  return selectItemsByPolicy(allItems, policy, {
     normalizeUrl: normalizeUrlForDedup,
     parseDomain: parseSourceDomain,
     normalizeTopicToken,
@@ -636,8 +640,9 @@ function selectItems(allItems, opts = {}) {
 
 // ── 3. Enrich with Claude (sharp consultant lens) ────────────────────────────
 
-async function enrichItems(items) {
-  log("Enriching with Claude...");
+async function enrichItems(items, enrichOpts = {}) {
+  const enrichModel = enrichOpts.model || "claude-haiku-4-5";
+  log(`Enriching with ${enrichModel}...`);
 
   const prompt = `You are the editorial voice of SignalBrief — a daily news digest for senior strategy consultants and business professionals. Your readers work at MBB, Big 4, boutique strategy firms, corporate strategy functions, and PE/investment shops. They work across multiple industries and need to sound informed in client meetings across healthcare, tech, financial services, PE, energy, consumer, and policy. They are time-pressed, sophisticated, and allergic to generic analysis.
 
@@ -688,7 +693,7 @@ ${JSON.stringify(items.map(i => ({ headline: i.headline, summary: i.summary, tag
   const res = await httpsPostWithRetry(
     "api.anthropic.com", "/v1/messages",
     { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
-    { model: "claude-haiku-4-5", max_tokens: 4500, messages: [{ role: "user", content: prompt }] }
+    { model: enrichModel, max_tokens: 4500, messages: [{ role: "user", content: prompt }] }
   );
 
   const usage = {
@@ -1640,6 +1645,9 @@ async function main() {
   }
 
   const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
+  const digestPolicies = createDigestPolicies(CONFIG.digest || {});
+  const rankingPolicy = digestPolicies.rankingPolicy;
+  const depthPolicy = digestPolicies.depthPolicy;
   const dedupRes = dedupAgainstRecentArchives(allItems, {
     days: crossDayDedupDays,
     targetCount: selectionTarget,
@@ -1647,7 +1655,7 @@ async function main() {
   });
   allItems = dedupRes.items;
   const repeatIndex = buildRecentRepeatIndex(crossDayDedupDays);
-  const repeatPenalty = Math.max(0, Number(CONFIG.digest.crossDayRepeatPenalty || 0.8));
+  const repeatPenalty = Number(rankingPolicy.repeatPenalty || 0);
   if (dedupRes.removed > 0) {
     log(`Cross-day dedup removed ${dedupRes.removed} repeat item(s) using last ${dedupRes.archive_days_used} day(s) of archive history${dedupRes.backfilled > 0 ? ` (backfilled ${dedupRes.backfilled} to minimum)` : ""}`);
   }
@@ -1762,7 +1770,7 @@ async function main() {
       let customKeywords = [];
       let specialistMode = false;
       const filteredResult = filterDigestItemsByTopics(enriched, u.topics || [], {
-        minItems: 3,
+        minItems: depthPolicy.minFilteredItems,
         strictZeroFallback: "specialist",
       });
       standardTopicsLower = filteredResult.standardTopicsLower || [];
@@ -1789,8 +1797,8 @@ async function main() {
       });
       userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-      const minBaseScoreForFinal = Number(CONFIG.digest.minBaseScoreForFinal || 6.5);
-      const requestedCount = Number(prefs.items_per_digest || CONFIG.digest.itemCount || 5);
+      const minBaseScoreForFinal = Number(rankingPolicy.minBaseScoreForFinal || 6.5);
+      const requestedCount = Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5);
       const perUserFreshnessMin = Math.max(1, Math.min(requestedCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
       const suppression = suppressRecentlySentForUser(userItems, u, {
         maxDigests: Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)),
@@ -2077,7 +2085,51 @@ process.on("exit", () => {
   });
 });
 
-main().catch((e) => {
-  log(`FATAL: ${e.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    log(`FATAL: ${e.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  // Pipeline stages
+  fetchTopicNews,
+  enrichItems,
+  selectItems,
+  dedupAgainstRecentArchives,
+  buildRecentRepeatIndex,
+
+  // Formatting
+  formatTelegram,
+  buildEmail,
+  buildEmailHeaderMeta,
+  renderDigestItemHtml,
+  applyTemplateSlots,
+  escapeHtml,
+  topicVisual,
+  scoreColor,
+  stripInlineHtml,
+  buildDigestInlineKeyboard,
+  generateLeadSubjectLine,
+  generateEditorialNote,
+
+  // Helpers
+  httpsPost,
+  httpsPostWithRetry,
+  parseSourceDomain,
+  normalizeUrlForDedup,
+  headlineFingerprint,
+
+  // Cost constants
+  PERPLEXITY_COST_PER_CALL,
+  CLAUDE_HAIKU_IN_PER_MTOK,
+  CLAUDE_HAIKU_OUT_PER_MTOK,
+  MODEL_COSTS,
+  SEARCH_COSTS,
+
+  // Config + template (read-only references)
+  CONFIG,
+  EMAIL_TEMPLATE,
+  BASE_URL,
+};

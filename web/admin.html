@@ -1699,8 +1699,8 @@ function buildFailedDeliveryRows(roster, runs) {
   }
 
   const todayEt = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-  const todayScheduledRuns = runRows
-    .filter((run) => !run.on_demand && String(run.date || "") === todayEt)
+  const todayRuns = runRows
+    .filter((run) => String(run.date || "") === todayEt)
     .slice()
     .sort((a, b) => {
       const aTs = Date.parse(a.run_at || "");
@@ -1710,10 +1710,10 @@ function buildFailedDeliveryRows(roster, runs) {
       if (Number.isFinite(aTs)) return -1;
       return 0;
     });
-
   const latestOutcomeByUser = new Map();
-  for (const run of todayScheduledRuns) {
+  for (const run of todayRuns) {
     const runAtLabel = run.run_at_et || formatEtDateTime(run.run_at);
+    const fromScheduled = !run.on_demand;
     (Array.isArray(run.per_user) ? run.per_user : []).forEach((entry) => {
       const resolved = resolveRecipient(entry && entry.id);
       if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
@@ -1732,6 +1732,7 @@ function buildFailedDeliveryRows(roster, runs) {
       if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
       latestOutcomeByUser.set(resolved.key, {
         status: "failed",
+        fromScheduled,
         key: resolved.key,
         runId: resolved.rawId,
         user: resolved.user,
@@ -1744,7 +1745,7 @@ function buildFailedDeliveryRows(roster, runs) {
   }
 
   return Array.from(latestOutcomeByUser.values())
-    .filter((row) => row.status === "failed")
+    .filter((row) => row.status === "failed" && row.fromScheduled)
     .map((row) => {
       const resendChatId = row.user ? String(row.user.chat_id || "").trim() : "";
       const canResend = !!(resendChatId && row.user && row.user.status === "active");

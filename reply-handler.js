@@ -7,7 +7,7 @@
  * - Natural language: "save 3", "more AI", "less pharma", "add GLP-1"
  * 
  * Usage: node reply-handler.js "<message>" "<chat_id>"
- * Or: called from bot-server.js webhook
+ * Or: called from bot-server.js polling dispatcher (default runtime)
  */
 
 const fs = require("fs");
@@ -16,7 +16,7 @@ const https = require("https");
 const { readUser, writeUser, allUsers, generateToken } = require("./store");
 const { sendEmail: sendEmailViaMailer, sendWelcomeEmail } = require("./mailer");
 const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
-const { spawn } = require("child_process");
+const { triggerDigest } = require("./digest-runner");
 
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
 const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
@@ -41,11 +41,23 @@ function etDateKeyFromIso(iso) {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
+function appendEngagementEventChecked(payload, context) {
+  const outcome = appendEngagementEvent(payload);
+  if (!outcome.ok) {
+    const code = String(outcome.error_code || outcome.code || "unknown");
+    const detail = outcome.detail ? ` (${outcome.detail})` : "";
+    console.warn(`[reply-handler] engagement event write failed [${context}] code=${code}${detail}`);
+  }
+  return outcome;
+}
+
 // ── Telegram-first onboarding state ──────────────────────────────────────────
 // Maps chatId → true when we're waiting for the user to reply with their email
 const AWAITING_EMAIL = new Map();
 // Maps chatId → cooldown expiry timestamp for on-demand /digest rate limiting (15 min)
 const DIGEST_COOLDOWN = new Map();
+// Tracks on-demand digest requests currently in admission/launch for each chat.
+const DIGEST_INFLIGHT = new Set();
 const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
 
 const INDUSTRY_TOPICS = [
@@ -252,6 +264,7 @@ function commandMenu(user) {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 async function handleDigest(chatId) {
+  const chatKey = String(chatId);
   const linkedUser = allUsers().find(u => String(u.chatId) === String(chatId));
   if (!linkedUser) {
     await send(chatId, `I couldn't find an account linked to this chat yet. Send /start and share your email to link your account.`);
@@ -264,34 +277,42 @@ async function handleDigest(chatId) {
 
   // Rate limit: 15-min cooldown between on-demand digest requests
   const now = Date.now();
-  const cooldownEnd = DIGEST_COOLDOWN.get(chatId);
+  if (DIGEST_INFLIGHT.has(chatKey)) {
+    await send(chatId, `⏳ Your digest request is already in progress. I will send it as soon as it is ready.`);
+    return;
+  }
+  const cooldownEnd = DIGEST_COOLDOWN.get(chatKey);
   if (cooldownEnd && cooldownEnd > now) {
     const minsLeft = Math.ceil((cooldownEnd - now) / 60000);
     await send(chatId, `⏱ Your last on-demand digest was recent. Try again in ${minsLeft} min${minsLeft !== 1 ? "s" : ""}.`);
     return;
   }
-  DIGEST_COOLDOWN.set(chatId, now + 15 * 60 * 1000);
 
-  await send(chatId, `⏳ Pulling your digest now — takes about 45 seconds...`);
+  DIGEST_INFLIGHT.add(chatKey);
   try {
-    // Spawn digest.js as a child process, scoped to this user
-    const { spawn } = require("child_process");
-    const proc = spawn("node", [
-      require("path").join(__dirname, "digest.js"),
-      "--chatId", chatId
-    ], { cwd: __dirname });
-
-    let stderr = "";
-    proc.stderr.on("data", d => { stderr += d.toString(); });
-    proc.on("close", async (code) => {
-      if (code !== 0) {
-        console.error("digest error:", stderr);
-        await send(chatId, `❌ Something went wrong pulling the digest. Check /tmp/signalbrief.log.`);
-      }
-      // Success message already delivered by digest.js via Telegram
+    await send(chatId, `⏳ Pulling your digest now — takes about 45 seconds...`);
+    const run = await triggerDigest({
+      source: "telegram:on_demand",
+      trigger: "telegram_command_digest",
+      chatId,
+      queue: true,
+      maxAdmissionWaitMs: 90 * 1000,
+      serializeAdmission: false,
     });
+    if (!run.ok) {
+      if (run.code === "busy") {
+        await send(chatId, `⏱ Another digest run is in progress right now. Try again in a minute.`);
+        return;
+      }
+      await send(chatId, `❌ Failed to trigger digest. Please try /digest again in a moment.`);
+      return;
+    }
+    DIGEST_COOLDOWN.set(chatKey, Date.now() + 15 * 60 * 1000);
+    // Success confirmation is delivered by digest.js via Telegram.
   } catch (e) {
     await send(chatId, `❌ Failed to trigger digest: ${e.message}`);
+  } finally {
+    DIGEST_INFLIGHT.delete(chatKey);
   }
 }
 
@@ -485,15 +506,21 @@ async function handleEmailCapture(chatId, text) {
   // Send full welcome email (same template as web signups)
   sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
 
-  // Spawn an immediate welcome digest so the user sees content right away
-  // (mirrors the web signup flow in server.js)
-  const digestPath = path.join(__dirname, "digest.js");
-  const child = spawn(process.execPath, [digestPath, "--chatId", chatId], {
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env, BASE_URL },
+  // Queue an immediate welcome digest so the user sees content right away.
+  triggerDigest({
+    source: "telegram:signup_welcome",
+    trigger: "telegram_signup_welcome",
+    chatId,
+    queue: true,
+    maxAdmissionWaitMs: 10 * 60 * 1000,
+    env: { BASE_URL },
+  }).then((run) => {
+    if (!run.ok && REPLY_HANDLER_DEBUG) {
+      console.warn(`[reply-handler] welcome digest skipped for ${chatId}: ${run.code || "unknown"}`);
+    }
+  }).catch((err) => {
+    console.error(`[reply-handler] welcome digest failed for ${chatId}: ${err.message}`);
   });
-  child.unref();
 
   const settingsUrl = `${BASE_URL}/settings?token=${userToken}`;
   await send(chatId,
@@ -544,7 +571,7 @@ async function handleSave(chatId, items) {
       url: digestItem?.url || null,
       tag: digestItem?.tag || null,
     });
-    appendEngagementEvent({
+    appendEngagementEventChecked({
       event_type: "item_saved",
       event_key: `item_saved:${digestId}:${n}`,
       date_et: digestDateKey,
@@ -562,7 +589,7 @@ async function handleSave(chatId, items) {
       metadata: {
         command: "save",
       },
-    });
+    }, `item_saved:${digestId}:${n}`);
     saved.push(n);
   });
 
@@ -596,7 +623,7 @@ async function handleTopicMore(chatId, topic) {
   user.topic_weights[topic] = Math.min(5, (user.topic_weights[topic] || 0) + 1);
   writeUser(chatId, user);
   const next = Number(user.topic_weights[topic] || 0);
-  appendEngagementEvent({
+  appendEngagementEventChecked({
     event_type: "topic_weight_adjusted",
     event_key: `weight:${dateKey}:${chatId}:${topic}:manual:${next}:${Date.now()}`,
     date_et: dateKey,
@@ -611,7 +638,7 @@ async function handleTopicMore(chatId, topic) {
       mode: "manual",
       reason: "more command",
     },
-  });
+  }, `topic_weight_adjusted:more:${chatId}:${topic}`);
   await send(chatId, `📊 Got it — more *${topic}* stories starting tomorrow.`);
 }
 
@@ -623,7 +650,7 @@ async function handleTopicLess(chatId, topic) {
   user.topic_weights[topic] = Math.max(-5, (user.topic_weights[topic] || 0) - 1);
   writeUser(chatId, user);
   const next = Number(user.topic_weights[topic] || 0);
-  appendEngagementEvent({
+  appendEngagementEventChecked({
     event_type: "topic_weight_adjusted",
     event_key: `weight:${dateKey}:${chatId}:${topic}:manual:${next}:${Date.now()}`,
     date_et: dateKey,
@@ -638,7 +665,7 @@ async function handleTopicLess(chatId, topic) {
       mode: "manual",
       reason: "less command",
     },
-  });
+  }, `topic_weight_adjusted:less:${chatId}:${topic}`);
   await send(chatId, `📉 Got it — fewer *${topic}* stories starting tomorrow.`);
 }
 
@@ -695,7 +722,7 @@ async function handleDigestFeedback(chatId, reactionKey) {
   }
   writeUser(chatId, user);
 
-  appendEngagementEvent({
+  appendEngagementEventChecked({
     event_type: "digest_feedback_submitted",
     event_key: `feedback:${digestId}`,
     date_et: dateKey,
@@ -709,7 +736,7 @@ async function handleDigestFeedback(chatId, reactionKey) {
       score: chosen.score,
       emoji: chosen.emoji,
     },
-  });
+  }, `digest_feedback_submitted:${digestId}`);
 
   await send(chatId, `${chosen.emoji} Feedback saved. ${chosen.ack}`);
   return { ok: true, notice: "Feedback saved" };

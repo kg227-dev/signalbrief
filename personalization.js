@@ -59,6 +59,16 @@ function parseTs(value) {
   return Number.isFinite(ts) ? ts : null;
 }
 
+function appendEngagementEventChecked(payload, context) {
+  const outcome = appendEngagementEvent(payload);
+  if (!outcome.ok) {
+    const code = String(outcome.error_code || outcome.code || "unknown");
+    const detail = outcome.detail ? ` (${outcome.detail})` : "";
+    console.warn(`[personalization] engagement event write failed [${context}] code=${code}${detail}`);
+  }
+  return outcome;
+}
+
 function getEventTag(ev, digestIndexById) {
   const direct = String(ev?.item?.tag || "").trim();
   if (direct) return direct;
@@ -78,10 +88,10 @@ function applyAutoTopicLearning(user, opts = {}) {
   const runId = String(opts.run_id || "").trim() || null;
   const allEvents = Array.isArray(opts.events) ? opts.events : [];
   const userChatId = String(user?.chatId || "").trim();
-  if (!userChatId) return { changed: false, adjustments: [], processed_events: 0 };
+  if (!userChatId) return { changed: false, adjustments: [], processed_events: 0, event_write_failures: 0 };
 
   const userTopics = Array.isArray(user?.topics) ? user.topics : [];
-  if (!userTopics.length) return { changed: false, adjustments: [], processed_events: 0 };
+  if (!userTopics.length) return { changed: false, adjustments: [], processed_events: 0, event_write_failures: 0 };
 
   const maxTopicsPerRun = Math.max(1, Number(opts.max_topics_per_run || 5));
   const minSignalsPerTopic = Math.max(2, Number(opts.min_signals_per_topic || 4));
@@ -125,7 +135,7 @@ function applyAutoTopicLearning(user, opts = {}) {
       ...state,
       last_checked_at: now.toISOString(),
     };
-    return { changed: false, adjustments: [], processed_events: 0 };
+    return { changed: false, adjustments: [], processed_events: 0, event_write_failures: 0 };
   }
 
   const statsByTopic = new Map();
@@ -179,6 +189,7 @@ function applyAutoTopicLearning(user, opts = {}) {
 
   if (!user.topic_weights || typeof user.topic_weights !== "object") user.topic_weights = {};
   const adjustments = [];
+  let eventWriteFailures = 0;
   for (const row of selected) {
     const prev = Number(user.topic_weights[row.topic] || 0);
     const next = clampWeight(prev + row.delta);
@@ -186,7 +197,7 @@ function applyAutoTopicLearning(user, opts = {}) {
     user.topic_weights[row.topic] = next;
     const digestId = buildDigestId(dateKey, userChatId);
     const eventKey = `weight:${dateKey}:${userChatId}:${row.topic}:auto:${next}:${runId || "na"}`;
-    appendEngagementEvent({
+    const eventOutcome = appendEngagementEventChecked({
       event_type: "topic_weight_adjusted",
       event_key: eventKey,
       date_et: dateKey,
@@ -209,7 +220,8 @@ function applyAutoTopicLearning(user, opts = {}) {
         saved: row.saved,
         ignored: row.ignored,
       },
-    });
+    }, `topic_weight_adjusted:auto:${userChatId}:${row.topic}`);
+    if (!eventOutcome.ok) eventWriteFailures += 1;
     adjustments.push({
       topic: row.topic,
       prev,
@@ -243,6 +255,7 @@ function applyAutoTopicLearning(user, opts = {}) {
     adjustments,
     processed_events: candidateEvents.length,
     cursor_ts: new Date(maxProcessedTs).toISOString(),
+    event_write_failures: eventWriteFailures,
   };
 }
 

@@ -35,7 +35,9 @@ function appendResult(ok, event = null, code = "ok", detail = null) {
   return {
     ok: !!ok,
     code,
+    error_code: code,
     detail,
+    error_detail: detail,
     event,
   };
 }

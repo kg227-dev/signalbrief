@@ -10,7 +10,6 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
 const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
 const { sendEmail, sendWelcomeEmail, sendReferralThankYou, signUnsubEmail } = require("../mailer");
 const {
@@ -21,6 +20,7 @@ const {
   loadEngagementEvents,
 } = require("../engagement-events");
 const { computeQualityTrend } = require("../quality-score");
+const { triggerDigest, digestRunStatus } = require("../digest-runner");
 const {
   verifyAdminPassword,
   createAdminSession,
@@ -101,11 +101,9 @@ function checkRateLimit(ip, email) {
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
-const DIGEST_RUN_LOCK_FILE = path.join(__dirname, "../data/digest-run.lock");
 const SCHEDULER_HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
   ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
   : path.join(__dirname, "../data/scheduler-heartbeat.json");
-const DIGEST_RUN_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 
 function appendJsonLineLog(filePath, entry, label) {
   try {
@@ -115,6 +113,16 @@ function appendJsonLineLog(filePath, entry, label) {
   } catch (e) {
     console.error(`[${label}]`, e.message);
   }
+}
+
+function appendEngagementEventChecked(payload, context) {
+  const outcome = appendEngagementEvent(payload);
+  if (!outcome.ok) {
+    const code = String(outcome.error_code || outcome.code || "unknown");
+    const detail = outcome.detail ? ` (${outcome.detail})` : "";
+    console.warn(`[web] engagement event write failed [${context}] code=${code}${detail}`);
+  }
+  return outcome;
 }
 
 function readJsonLineTail(filePath, limit = 30, maxBytes = 512 * 1024) {
@@ -334,40 +342,6 @@ function loadCostRunsNewest() {
   COST_LOG_CACHE.size = stat.size;
   COST_LOG_CACHE.runsNewest = runs;
   return runs;
-}
-
-function readDigestRunLock() {
-  if (!fs.existsSync(DIGEST_RUN_LOCK_FILE)) return null;
-  try {
-    const raw = JSON.parse(fs.readFileSync(DIGEST_RUN_LOCK_FILE, "utf8"));
-    const startedAtIso = raw?.startedAt || null;
-    const startedAtTs = Date.parse(startedAtIso || "");
-    if (!Number.isFinite(startedAtTs)) return { stale: true, raw };
-    const ageMs = Date.now() - startedAtTs;
-    return { ...raw, startedAtIso, startedAtTs, ageMs, stale: ageMs > DIGEST_RUN_LOCK_STALE_MS };
-  } catch {
-    return { stale: true };
-  }
-}
-
-function clearDigestRunLock() {
-  try {
-    if (fs.existsSync(DIGEST_RUN_LOCK_FILE)) fs.unlinkSync(DIGEST_RUN_LOCK_FILE);
-  } catch (err) {
-    if (process.env.DEBUG_WEB_SERVER === "1") {
-      console.warn(`[web] failed to clear digest run lock: ${err.message}`);
-    }
-  }
-}
-
-function digestRunStatus() {
-  const lock = readDigestRunLock();
-  if (!lock) return { running: false, lock: null };
-  if (lock.stale) {
-    clearDigestRunLock();
-    return { running: false, lock: null };
-  }
-  return { running: true, lock };
 }
 
 function readSchedulerHeartbeat() {
@@ -873,18 +847,72 @@ function json(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
+const REQUEST_BODY_MAX_BYTES = 1 * 1024 * 1024; // 1 MB
+
 function readBody(req) {
   return new Promise((resolve) => {
     let body = "";
     let size = 0;
-    const MAX = 1 * 1024 * 1024; // 1 MB guard against oversized payloads
-    req.on("data", c => {
+    let tooLarge = false;
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    req.on("data", (c) => {
       size += c.length;
-      if (size > MAX) { req.destroy(); resolve({}); return; }
+      if (size > REQUEST_BODY_MAX_BYTES) {
+        tooLarge = true;
+        return;
+      }
+      if (tooLarge) return;
       body += c;
     });
-    req.on("end", () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
+    req.on("end", () => {
+      if (tooLarge) {
+        return settle({
+          ok: false,
+          code: "payload_too_large",
+          max_bytes: REQUEST_BODY_MAX_BYTES,
+        });
+      }
+      if (!body.trim()) return settle({ ok: true, body: {} });
+      try {
+        return settle({ ok: true, body: JSON.parse(body) });
+      } catch {
+        return settle({ ok: false, code: "invalid_json" });
+      }
+    });
+    req.on("error", (err) => {
+      if (process.env.DEBUG_WEB_SERVER === "1") {
+        console.warn(`[web] request body read error: ${err.message}`);
+      }
+      settle({ ok: false, code: "body_read_error" });
+    });
   });
+}
+
+function writeBodyParseError(res, parseResult) {
+  if (parseResult.code === "payload_too_large") {
+    return json(res, {
+      error: "request payload too large",
+      code: "payload_too_large",
+      max_bytes: REQUEST_BODY_MAX_BYTES,
+    }, 413);
+  }
+  return json(res, {
+    error: "invalid JSON payload",
+    code: parseResult.code || "invalid_json",
+  }, 400);
+}
+
+async function requireJsonBody(req, res) {
+  const parseResult = await readBody(req);
+  if (parseResult.ok) return parseResult.body;
+  writeBodyParseError(res, parseResult);
+  return null;
 }
 
 const INDUSTRY_TOPICS = [
@@ -1006,45 +1034,366 @@ function computeNextDeliveryEt(preferences) {
   return null;
 }
 
-function runDigestChild(digestPath, args = [], opts = {}) {
-  const timeoutMs = Math.max(15_000, Number(opts.timeoutMs || (12 * 60 * 1000)));
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [digestPath, ...args], {
-      env: { ...process.env },
-      stdio: ["ignore", "ignore", "pipe"],
-    });
-    let stderr = "";
-    const timer = setTimeout(() => {
-      try {
-        child.kill("SIGTERM");
-      } catch (err) {
-        if (process.env.DEBUG_WEB_SERVER === "1") {
-          console.warn(`[web] SIGTERM kill failed for digest child: ${err.message}`);
-        }
-      }
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch (err) {
-          if (process.env.DEBUG_WEB_SERVER === "1") {
-            console.warn(`[web] SIGKILL kill failed for digest child: ${err.message}`);
-          }
-        }
-      }, 1500);
-    }, timeoutMs);
-    child.stderr.on("data", c => {
-      stderr += c.toString();
-      if (stderr.length > 6000) stderr = stderr.slice(-6000);
-    });
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on("close", (code, signal) => {
-      clearTimeout(timer);
-      resolve({ code, signal, stderr });
-    });
+async function handleSignup(req, res) {
+  const body = await requireJsonBody(req, res);
+  if (body == null) return;
+  const { name, email, telegram, topics, depth, delivery_time, frequency, days_of_week, items_per_digest } = body;
+  const emailNorm = String(email || "").toLowerCase().trim();
+  const referralToken = normalizeReferralToken(body.referral_token);
+
+  if (!emailNorm || !name) return json(res, { error: "name and email required" }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) return json(res, { error: "invalid email address" }, 400);
+  if (!topics || topics.length < 2) return json(res, { error: "select at least 2 topics" }, 400);
+
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(ip, emailNorm);
+  if (rl.limited) return json(res, { error: rl.reason }, 429);
+
+  const telegramClean = telegram ? String(telegram).replace(/^@+/, "").trim() : null;
+  const users = allUsers();
+  const existingEmail = users.find(u => (u.email || "").toLowerCase().trim() === emailNorm);
+  if (existingEmail) {
+    return json(res, {
+      error: "An account with this email already exists. Use your existing settings link to access it.",
+    }, 409);
+  }
+
+  if (telegramClean) {
+    const telegramKey = telegramClean.toLowerCase();
+    const existingTelegram = users.find(u => String(u.telegram || "").toLowerCase() === telegramKey);
+    if (existingTelegram) {
+      return json(res, { error: "That Telegram username is already linked to another account." }, 409);
+    }
+  }
+
+  const chatId = `email-${Date.now()}`;
+  let signupReferralSource = null;
+  let referrerUser = null;
+  if (referralToken) {
+    const referrer = findUserByToken(referralToken);
+    if (referrer) {
+      referrerUser = referrer;
+      signupReferralSource = {
+        chatId: referrer.chatId,
+        email: referrer.email || null,
+        ts: new Date().toISOString(),
+      };
+    }
+  }
+
+  const user = {
+    chatId,
+    name,
+    email: emailNorm,
+    telegram: telegramClean || null,
+    topics,
+    status: "active",
+    token: generateToken(),
+    joined_at: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    digests_received: 0,
+    bookmarks: [],
+    topic_weights: {},
+    custom_topics: topics.filter(t => !DEFAULT_TOPICS.includes(t)),
+    signup_referral_source: signupReferralSource,
+    digest_dates: [],
+    last_digest_items: [],
+    preferences: {
+      depth: depth || "headline_plus_why",
+      delivery_time: delivery_time || "07:00",
+      frequency: frequency || "daily_weekday",
+      days_of_week: Array.isArray(days_of_week) ? days_of_week : [1, 2, 3, 4, 5],
+      items_per_digest: parseInt(items_per_digest) || 5,
+      timezone: "America/New_York",
+      email_enabled: true,
+      telegram_enabled: !!telegramClean,
+    },
+  };
+
+  writeUser(chatId, user);
+  console.log(`[signup] ${name} <${email}>`);
+  if (referrerUser) {
+    console.log(`[signup] referred by ${referrerUser.email || referrerUser.chatId}`);
+    sendReferralThankYou(referrerUser, user).catch(e => console.error("[referral thank-you]", e));
+  }
+
+  sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
+
+  triggerDigest({
+    source: "web:signup_welcome",
+    trigger: "signup_welcome",
+    chatId,
+    queue: true,
+    maxAdmissionWaitMs: 10 * 60 * 1000,
+    env: { BASE_URL },
+  }).then((run) => {
+    if (!run.ok && process.env.DEBUG_WEB_SERVER === "1") {
+      console.warn(`[welcome digest] skipped for ${chatId}: ${run.code || "unknown"}`);
+    }
+  }).catch((err) => {
+    console.error(`[welcome digest] failed for ${chatId}: ${err.message}`);
   });
+  console.log(`[welcome digest] queued for ${chatId}`);
+
+  return json(res, { success: true, chatId, token: user.token, archiveUrl: `${BASE_URL}/archive?token=${user.token}` });
+}
+
+async function handleSettings(req, res) {
+  const body = await requireJsonBody(req, res);
+  if (body == null) return;
+  const { token } = body;
+  if (!token) return json(res, { error: "token required" }, 400);
+
+  const existing = findUserByToken(token);
+  if (!existing) return json(res, { error: "invalid token" }, 401);
+
+  const safeBody = Object.fromEntries(
+    Object.entries(body).filter(([k]) => !PROTECTED_FIELDS.includes(k))
+  );
+
+  if (safeBody.telegram != null) {
+    safeBody.telegram = String(safeBody.telegram).replace(/^@+/, "").trim() || null;
+    if (safeBody.telegram) {
+      const telegramKey = safeBody.telegram.toLowerCase();
+      const telegramConflict = allUsers().find(u =>
+        String(u.telegram || "").toLowerCase() === telegramKey &&
+        String(u.chatId || "") !== String(existing.chatId || "")
+      );
+      if (telegramConflict) {
+        return json(res, { error: "That Telegram username is already linked to another account." }, 409);
+      }
+    }
+  }
+
+  if (safeBody.email != null) {
+    const nextEmail = String(safeBody.email).toLowerCase().trim();
+    if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      return json(res, { error: "invalid email address" }, 400);
+    }
+    const emailConflict = allUsers().find(u =>
+      String(u.email || "").toLowerCase().trim() === nextEmail &&
+      String(u.chatId || "") !== String(existing.chatId || "")
+    );
+    if (emailConflict) {
+      return json(res, { error: "That email is already linked to another account." }, 409);
+    }
+    safeBody.email = nextEmail;
+  }
+
+  const updated = {
+    ...existing,
+    ...safeBody,
+    last_updated: new Date().toISOString(),
+    preferences: { ...existing.preferences, ...safeBody.preferences },
+    ...Object.fromEntries(PROTECTED_FIELDS.map(k => [k, existing[k]])),
+  };
+
+  if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
+    updated.email_unsubscribed_at = new Date().toISOString();
+  }
+
+  writeUser(existing.chatId, updated);
+  return json(res, { success: true });
+}
+
+async function handleAdminRunDigest(req, res) {
+  if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+  const body = await requireJsonBody(req, res);
+  if (body == null) return;
+  const targetChatId = body.chatId ? String(body.chatId).trim() : "";
+  const digestLock = digestRunStatus();
+  const lockState = String(digestLock.state || "");
+  const lockUnhealthy = lockState === "corrupt" || lockState === "io_error" || lockState === "stale_uncleared";
+  const lockStatus = lockUnhealthy ? 503 : 409;
+  const lockMsg = digestLock.running
+    ? (lockUnhealthy
+      ? `Digest lock is unhealthy (${lockState}); manual intervention required before triggering runs.`
+      : `Digest run already in progress (${digestLock.lock.mode || "scheduled"}, started ${digestLock.lock.startedAtIso || digestLock.lock.startedAt || "recently"}).`)
+    : "";
+
+  if (targetChatId) {
+    if (digestLock.running) {
+      logAdminActionEvent(req, {
+        action: "run_digest_targeted",
+        target_chat_id: targetChatId,
+        success: false,
+        details: {
+          reason: lockUnhealthy ? "digest lock unhealthy" : "digest lock active",
+          state: lockState || "unknown",
+          mode: digestLock.lock.mode || "scheduled",
+          error: digestLock.lock.error || null,
+        },
+      });
+      return json(res, { error: lockMsg, code: lockState || "busy" }, lockStatus);
+    }
+    const targetUser = allUsers().find(u => String(u.chatId || "").trim() === targetChatId);
+    if (!targetUser) return json(res, { error: `No user found for chatId ${targetChatId}` }, 404);
+    if ((targetUser.status || "active") !== "active") {
+      logAdminActionEvent(req, {
+        action: "run_digest_targeted",
+        target_email: targetUser.email || null,
+        target_chat_id: targetChatId,
+        success: false,
+        details: { reason: `user status ${targetUser.status}` },
+      });
+      return json(res, { error: `User is ${targetUser.status}; re-activate before sending.` }, 400);
+    }
+    const prefs = targetUser.preferences || {};
+    const emailReady = !!targetUser.email && prefs.email_enabled !== false;
+    const tgReady = !!(targetUser.chatId && !String(targetUser.chatId).startsWith("email-") && prefs.telegram_enabled !== false);
+    if (!emailReady && !tgReady) {
+      logAdminActionEvent(req, {
+        action: "run_digest_targeted",
+        target_email: targetUser.email || null,
+        target_chat_id: targetChatId,
+        success: false,
+        details: { reason: "no enabled delivery channels" },
+      });
+      return json(res, { error: "No enabled delivery channels for this user." }, 400);
+    }
+
+    try {
+      const run = await triggerDigest({
+        source: "web:admin_targeted",
+        trigger: "admin_targeted",
+        chatId: targetChatId,
+        suppressWelcome: true,
+        waitForExit: true,
+        timeoutMs: 12 * 60 * 1000,
+        queue: false,
+        maxAdmissionWaitMs: 0,
+        serializeAdmission: false,
+      });
+      if (!run.ok && run.code === "busy") {
+        const detail = run.run?.stderr
+          ? run.run.stderr.slice(-260)
+          : "digest run lock active";
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { detail, reason: "digest lock active" },
+        });
+        return json(res, { error: "Digest run already in progress. Try again shortly.", detail }, 409);
+      }
+      if (!run.ok && (run.code === "corrupt" || run.code === "io_error" || run.code === "stale_uncleared")) {
+        const detail = run.admission?.lock?.error || "digest lock requires manual intervention";
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { detail, reason: "digest lock unhealthy", state: run.code },
+        });
+        return json(res, {
+          error: `Digest lock unhealthy (${run.code}). Clear or repair lock before retrying.`,
+          detail,
+          code: run.code,
+        }, 503);
+      }
+      if (!run.ok || !run.run || run.run.code == null) {
+        const detail = run.run?.stderr
+          ? run.run.stderr.slice(-240)
+          : (run.code || "unknown failure");
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { detail },
+        });
+        return json(res, { error: `Digest failed for ${targetChatId}`, detail }, 500);
+      }
+      if (run.run.code !== 0) {
+        const detail = run.run.stderr ? run.run.stderr.slice(-240) : `exit ${run.run.code}`;
+        logAdminActionEvent(req, {
+          action: "run_digest_targeted",
+          target_email: targetUser.email || null,
+          target_chat_id: targetChatId,
+          success: false,
+          details: { detail },
+        });
+        return json(res, { error: `Digest failed for ${targetChatId}`, detail }, 500);
+      }
+      logAdminActionEvent(req, {
+        action: "run_digest_targeted",
+        target_email: targetUser.email || null,
+        target_chat_id: targetChatId,
+        success: true,
+      });
+      return json(res, {
+        success: true,
+        message: `Digest sent to ${targetUser.email || targetChatId}`,
+      });
+    } catch (e) {
+      logAdminActionEvent(req, {
+        action: "run_digest_targeted",
+        target_email: targetUser.email || null,
+        target_chat_id: targetChatId,
+        success: false,
+        details: { detail: e.message },
+      });
+      return json(res, { error: `Failed to run digest: ${e.message}` }, 500);
+    }
+  }
+
+  if (digestLock.running) {
+    logAdminActionEvent(req, {
+      action: "run_digest_full",
+      success: false,
+      details: {
+        reason: lockUnhealthy ? "digest lock unhealthy" : "digest lock active",
+        state: lockState || "unknown",
+        mode: digestLock.lock.mode || "scheduled",
+        error: digestLock.lock.error || null,
+      },
+    });
+    return json(res, { error: lockMsg, code: lockState || "busy" }, lockStatus);
+  }
+
+  const run = await triggerDigest({
+    source: "web:admin_full",
+    trigger: "admin_full",
+    suppressWelcome: true,
+    queue: false,
+    maxAdmissionWaitMs: 0,
+    serializeAdmission: false,
+  });
+  if (!run.ok && run.code === "busy") {
+    logAdminActionEvent(req, {
+      action: "run_digest_full",
+      success: false,
+      details: { reason: "digest lock active", state: run.admission?.lockState || "valid", mode: digestLock.lock?.mode || "scheduled" },
+    });
+    return json(res, { error: "Digest run already in progress. Try again shortly." }, 409);
+  }
+  if (!run.ok && (run.code === "corrupt" || run.code === "io_error" || run.code === "stale_uncleared")) {
+    const detail = run.admission?.lock?.error || "digest lock requires manual intervention";
+    logAdminActionEvent(req, {
+      action: "run_digest_full",
+      success: false,
+      details: { reason: "digest lock unhealthy", state: run.code, error: detail },
+    });
+    return json(res, {
+      error: `Digest lock unhealthy (${run.code}). Clear or repair lock before retrying.`,
+      detail,
+      code: run.code,
+    }, 503);
+  }
+  if (!run.ok) {
+    logAdminActionEvent(req, {
+      action: "run_digest_full",
+      success: false,
+      details: { reason: run.code || "spawn_failed", error: run.error || null },
+    });
+    return json(res, { error: "Failed to trigger full digest run." }, 500);
+  }
+  logAdminActionEvent(req, {
+    action: "run_digest_full",
+    success: true,
+  });
+  return json(res, { success: true, message: "Full scheduled digest run triggered" });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1088,210 +1437,50 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/signup — new user onboarding
   if (pathname === "/api/signup" && req.method === "POST") {
-    const body = await readBody(req);
-    const { name, email, telegram, topics, depth, delivery_time, frequency, days_of_week, items_per_digest } = body;
-    const emailNorm = String(email || "").toLowerCase().trim();
-    const referralToken = normalizeReferralToken(body.referral_token);
-
-    if (!emailNorm || !name) return json(res, { error: "name and email required" }, 400);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) return json(res, { error: "invalid email address" }, 400);
-    if (!topics || topics.length < 2) return json(res, { error: "select at least 2 topics" }, 400);
-
-    // Rate limiting
-    const ip = getClientIp(req);
-    const rl = checkRateLimit(ip, emailNorm);
-    if (rl.limited) return json(res, { error: rl.reason }, 429);
-
-    // Sanitize telegram: strip leading @ characters
-    const telegramClean = telegram ? String(telegram).replace(/^@+/, "").trim() : null;
-
-    const users = allUsers();
-    const existingEmail = users.find(u => (u.email || "").toLowerCase().trim() === emailNorm);
-    if (existingEmail) {
-      return json(res, {
-        error: "An account with this email already exists. Use your existing settings link to access it.",
-      }, 409);
-    }
-
-    if (telegramClean) {
-      const telegramKey = telegramClean.toLowerCase();
-      const existingTelegram = users.find(u => String(u.telegram || "").toLowerCase() === telegramKey);
-      if (existingTelegram) {
-        return json(res, { error: "That Telegram username is already linked to another account." }, 409);
-      }
-    }
-
-    const chatId = `email-${Date.now()}`;
-
-    let signupReferralSource = null;
-    let referrerUser = null;
-    if (referralToken) {
-      const referrer = findUserByToken(referralToken);
-      if (referrer) {
-        referrerUser = referrer;
-        signupReferralSource = {
-          chatId: referrer.chatId,
-          email: referrer.email || null,
-          ts: new Date().toISOString(),
-        };
-      }
-    }
-
-    const user = {
-      chatId,
-      name,
-      email: emailNorm,
-      telegram: telegramClean || null,
-      topics,
-      status: "active",
-      token: generateToken(),
-      joined_at: new Date().toISOString(),
-      last_updated: new Date().toISOString(),
-      digests_received: 0,
-      bookmarks: [],
-      topic_weights: {},
-      custom_topics: topics.filter(t => !DEFAULT_TOPICS.includes(t)),
-      signup_referral_source: signupReferralSource,
-      digest_dates: [],
-      last_digest_items: [],
-      preferences: {
-        depth: depth || "headline_plus_why",
-        delivery_time: delivery_time || "07:00",
-        frequency: frequency || "daily_weekday",
-        days_of_week: Array.isArray(days_of_week) ? days_of_week : [1, 2, 3, 4, 5],
-        items_per_digest: parseInt(items_per_digest) || 5,
-        timezone: "America/New_York",
-        email_enabled: true,
-        telegram_enabled: !!telegramClean,
-      },
-    };
-
-    writeUser(chatId, user);
-    console.log(`[signup] ${name} <${email}>`);
-    if (referrerUser) {
-      console.log(`[signup] referred by ${referrerUser.email || referrerUser.chatId}`);
-      sendReferralThankYou(referrerUser, user).catch(e => console.error("[referral thank-you]", e));
-    }
-
-    // Send welcome email (non-blocking)
-    sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
-
-    // Spawn welcome digest in background — user gets their first briefing immediately
-    const digestPath = path.join(__dirname, "../digest.js");
-    const child = spawn(process.execPath, [digestPath, "--chatId", chatId], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env, BASE_URL },
-    });
-    child.unref();
-    console.log(`[welcome digest] spawned for ${chatId}`);
-
-    return json(res, { success: true, chatId, token: user.token, archiveUrl: `${BASE_URL}/archive?token=${user.token}` });
+    return handleSignup(req, res);
   }
 
   // POST /api/settings — update existing user (token-authenticated)
   if (pathname === "/api/settings" && req.method === "POST") {
-    const body = await readBody(req);
-    const { token } = body;
-    if (!token) return json(res, { error: "token required" }, 400);
-
-    const existing = findUserByToken(token);
-    if (!existing) return json(res, { error: "invalid token" }, 401);
-
-    // Strip protected fields from body so they can never be overwritten
-    const safeBody = Object.fromEntries(
-      Object.entries(body).filter(([k]) => !PROTECTED_FIELDS.includes(k))
-    );
-
-    // Sanitize telegram if present
-    if (safeBody.telegram != null) {
-      safeBody.telegram = String(safeBody.telegram).replace(/^@+/, "").trim() || null;
-      if (safeBody.telegram) {
-        const telegramKey = safeBody.telegram.toLowerCase();
-        const telegramConflict = allUsers().find(u =>
-          String(u.telegram || "").toLowerCase() === telegramKey &&
-          String(u.chatId || "") !== String(existing.chatId || "")
-        );
-        if (telegramConflict) {
-          return json(res, { error: "That Telegram username is already linked to another account." }, 409);
-        }
-      }
-    }
-
-    // Sanitize + protect email uniqueness if present
-    if (safeBody.email != null) {
-      const nextEmail = String(safeBody.email).toLowerCase().trim();
-      if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
-        return json(res, { error: "invalid email address" }, 400);
-      }
-      const emailConflict = allUsers().find(u =>
-        String(u.email || "").toLowerCase().trim() === nextEmail &&
-        String(u.chatId || "") !== String(existing.chatId || "")
-      );
-      if (emailConflict) {
-        return json(res, { error: "That email is already linked to another account." }, 409);
-      }
-      safeBody.email = nextEmail;
-    }
-
-    const updated = {
-      ...existing,
-      ...safeBody,
-      last_updated: new Date().toISOString(),
-      preferences: { ...existing.preferences, ...safeBody.preferences },
-      // Always restore protected fields from existing record
-      ...Object.fromEntries(PROTECTED_FIELDS.map(k => [k, existing[k]])),
-    };
-
-    // Track unsubscription timestamp when status changes to unsubscribed
-    if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
-      updated.email_unsubscribed_at = new Date().toISOString();
-    }
-
-    writeUser(existing.chatId, updated);
-    return json(res, { success: true });
+    return handleSettings(req, res);
   }
 
-  // GET|POST /api/unsubscribe — one-click unsubscribe (RFC 8058)
-  // GET:  requires ?token=TOKEN (human-readable redirect to settings)
-  // POST: accepts ?token=TOKEN or ?email=... (email client one-click per RFC 8058)
+  // GET|POST /api/unsubscribe — token-based one-click unsubscribe.
+  // Legacy signed email links are bridged to token identity for backward compatibility.
   if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
-    const tokenParam = url.searchParams.get("token") || "";
-    const emailParam = url.searchParams.get("email") || "";
-    let existing = null;
+    const tokenParam = String(url.searchParams.get("token") || "").trim();
+    const emailParam = String(url.searchParams.get("email") || "").trim();
+    const sigParam = String(url.searchParams.get("sig") || "").trim();
+    let tokenLookup = tokenParam ? decodeURIComponent(tokenParam) : "";
 
-    // GET requires token (no unauthenticated email-based unsubscribe)
-    if (req.method === "GET" && !tokenParam) {
-      return json(res, { error: "token required" }, 400);
-    }
-
-    if (tokenParam) {
-      existing = findUserByToken(decodeURIComponent(tokenParam));
-    } else if (emailParam && req.method === "POST") {
-      // POST-only: email-based lookup for RFC 8058 one-click from email clients.
-      // Requires HMAC signature (?sig=...) to prevent unauthenticated unsubscribes (B-3).
-      const sigParam = url.searchParams.get("sig") || "";
+    if (!tokenLookup && emailParam) {
       const targetEmail = decodeURIComponent(emailParam).toLowerCase().trim();
       if (!sigParam || sigParam !== signUnsubEmail(targetEmail)) {
         return json(res, { error: "invalid signature" }, 403);
       }
-      existing = allUsers().find(u => u.email && u.email.toLowerCase() === targetEmail);
+      const legacyUser = allUsers().find(u => String(u.email || "").toLowerCase().trim() === targetEmail);
+      tokenLookup = legacyUser?.token ? String(legacyUser.token) : "";
     }
 
-    if (!tokenParam && !emailParam) return json(res, { error: "token or email required" }, 400);
+    if (!tokenLookup) {
+      if (req.method === "POST") return json(res, { success: true });
+      res.writeHead(302, { Location: "/settings?unsubscribed=1", "Cache-Control": "no-store" });
+      return res.end();
+    }
 
+    const existing = findUserByToken(tokenLookup);
     if (existing) {
       writeUser(existing.chatId, { ...existing, status: "unsubscribed", email_unsubscribed_at: new Date().toISOString() });
       console.log(`[unsubscribe] ${existing.email}`);
     }
-    // Always succeed (idempotent — if user not found, silently ok)
+
+    // Always succeed (idempotent — if user not found, silently ok).
     if (req.method === "POST") return json(res, { success: true });
-    // GET: redirect to settings confirmation page on the same host that handled unsubscribe.
-    // Using a relative path avoids localhost/public host bounce loops.
+
     const confirmUrl = existing?.token
-      ? `/settings?token=${existing.token}&unsubscribed=1`
+      ? `/settings?token=${encodeURIComponent(existing.token)}&unsubscribed=1`
       : `/settings?unsubscribed=1`;
-    res.writeHead(302, { Location: confirmUrl });
+    res.writeHead(302, { Location: confirmUrl, "Cache-Control": "no-store" });
     return res.end();
   }
 
@@ -1479,7 +1668,7 @@ const server = http.createServer(async (req, res) => {
       if (user) {
         const digestId = decodedDigestId || buildDigestId(toEtDateKey(nowIso) || nowIso.slice(0, 10), user.chatId);
         const digestDate = String(digestId.split(":")[0] || "").trim();
-        appendEngagementEvent({
+        appendEngagementEventChecked({
           event_type: "email_open",
           event_key: `open:${digestId}`,
           user_chat_id: String(user.chatId),
@@ -1488,7 +1677,7 @@ const server = http.createServer(async (req, res) => {
           date_et: /^\d{4}-\d{2}-\d{2}$/.test(digestDate) ? digestDate : (toEtDateKey(nowIso) || nowIso.slice(0, 10)),
           channel: "email",
           source: "tracking-pixel",
-        });
+        }, `email_open:${digestId}`);
 
         const updated = {
           ...user,
@@ -1534,7 +1723,7 @@ const server = http.createServer(async (req, res) => {
       const digestId = did || buildDigestId(dateKey, user.chatId);
       const normalizedUrl = normalizeEngagementUrl(target.toString());
       const indexToken = Number.isFinite(itemIndex) && itemIndex > 0 ? itemIndex : "unknown";
-      appendEngagementEvent({
+      appendEngagementEventChecked({
         event_type: "item_clicked",
         event_key: `item_clicked:${digestId}:${indexToken}:${normalizedUrl}`,
         date_et: dateKey,
@@ -1547,7 +1736,7 @@ const server = http.createServer(async (req, res) => {
           index: Number.isFinite(itemIndex) && itemIndex > 0 ? itemIndex : null,
           url: target.toString(),
         },
-      });
+      }, `item_clicked:${digestId}`);
     }
 
     res.writeHead(302, {
@@ -1559,7 +1748,8 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/bookmarks — add/remove bookmark by URL
   if ((pathname === "/api/bookmarks" || pathname === "/api/bookmarks/") && req.method === "POST") {
-    const body = await readBody(req);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
     const token = String(body.token || "").trim();
     const action = String(body.action || "").toLowerCase().trim();
     const item = body.item || {};
@@ -1592,7 +1782,7 @@ const server = http.createServer(async (req, res) => {
           saved_at: new Date().toISOString(),
         });
         const itemIndex = Number(item.item_num || item.index || 0);
-        appendEngagementEvent({
+        appendEngagementEventChecked({
           event_type: "item_saved",
           event_key: `item_saved:${digestId}:${itemIndex > 0 ? itemIndex : normalizeBookmarkUrl(itemUrl)}`,
           date_et: digestDateKey,
@@ -1611,7 +1801,7 @@ const server = http.createServer(async (req, res) => {
             action: "bookmark_add",
             from: "archive",
           },
-        });
+        }, `item_saved:${digestId}`);
       }
       writeUser(user.chatId, {
         ...user,
@@ -1643,7 +1833,8 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/request-link — send magic access link to user's email
   if (pathname === "/api/request-link" && req.method === "POST") {
-    const body = await readBody(req);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
     const email = String(body.email || "").toLowerCase().trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return json(res, { error: "valid email required" }, 400);
@@ -1661,7 +1852,8 @@ const server = http.createServer(async (req, res) => {
     const ip = getClientIp(req);
     if (checkLoginRate(ip)) return json(res, { error: "Too many attempts. Try again in 15 minutes." }, 429);
 
-    const body = await readBody(req);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
     const { email, password } = body;
     if (!email || !password) return json(res, { error: "Email and password required" }, 400);
 
@@ -2099,12 +2291,15 @@ const server = http.createServer(async (req, res) => {
         digest_runner: digestRun.running
           ? {
             running: true,
+            state: digestRun.state || "valid",
+            unhealthy: digestRun.state === "corrupt" || digestRun.state === "io_error" || digestRun.state === "stale_uncleared",
             mode: digestRun.lock.mode || "scheduled",
-            started_at: digestRun.lock.startedAtIso || null,
+            started_at: digestRun.lock.startedAtIso || digestRun.lock.startedAt || null,
             age_seconds: Math.max(0, Math.round((digestRun.lock.ageMs || 0) / 1000)),
             pid: digestRun.lock.pid || null,
+            error: digestRun.lock.error || null,
           }
-          : { running: false },
+          : { running: false, state: digestRun.state || "absent", unhealthy: false },
         engagement_events: {
           ignored_backfill_emitted: ignoredBackfill.emitted || 0,
           ignored_backfill_considered: ignoredBackfill.considered || 0,
@@ -2203,7 +2398,8 @@ const server = http.createServer(async (req, res) => {
   // POST /api/admin/bulk-action — dry-run + apply safe admin bulk ops
   if (pathname === "/api/admin/bulk-action" && req.method === "POST") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    const body = await readBody(req);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
     const action = String(body.action || "").toLowerCase().trim();
     const dryRun = body.dry_run !== false;
     const emailsRaw = Array.isArray(body.emails) ? body.emails : [];
@@ -2359,7 +2555,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/admin/update-delivery-time" && req.method === "POST") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
 
-    const body = await readBody(req);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
     const email = String(body.email || "").toLowerCase().trim();
     const deliveryTime = normalizeDeliveryTimeInput(body.delivery_time);
 
@@ -2402,127 +2599,15 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/admin/run-digest — trigger a digest run
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
-    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    const body = await readBody(req);
-    const digestPath = path.join(__dirname, "../digest.js");
-    const targetChatId = body.chatId ? String(body.chatId).trim() : "";
-    const digestLock = digestRunStatus();
-    const lockMsg = digestLock.running
-      ? `Digest run already in progress (${digestLock.lock.mode || "scheduled"}, started ${digestLock.lock.startedAtIso || "recently"}).`
-      : "";
-
-    // Targeted admin sends are awaited so UI only reports success on real delivery.
-    if (targetChatId) {
-      if (digestLock.running) {
-        logAdminActionEvent(req, {
-          action: "run_digest_targeted",
-          target_chat_id: targetChatId,
-          success: false,
-          details: { reason: "digest lock active", mode: digestLock.lock.mode || "scheduled" },
-        });
-        return json(res, { error: lockMsg }, 409);
-      }
-      const targetUser = allUsers().find(u => String(u.chatId || "").trim() === targetChatId);
-      if (!targetUser) return json(res, { error: `No user found for chatId ${targetChatId}` }, 404);
-      if ((targetUser.status || "active") !== "active") {
-        logAdminActionEvent(req, {
-          action: "run_digest_targeted",
-          target_email: targetUser.email || null,
-          target_chat_id: targetChatId,
-          success: false,
-          details: { reason: `user status ${targetUser.status}` },
-        });
-        return json(res, { error: `User is ${targetUser.status}; re-activate before sending.` }, 400);
-      }
-      const prefs = targetUser.preferences || {};
-      const emailReady = !!targetUser.email && prefs.email_enabled !== false;
-      const tgReady = !!(targetUser.chatId && !String(targetUser.chatId).startsWith("email-") && prefs.telegram_enabled !== false);
-      if (!emailReady && !tgReady) {
-        logAdminActionEvent(req, {
-          action: "run_digest_targeted",
-          target_email: targetUser.email || null,
-          target_chat_id: targetChatId,
-          success: false,
-          details: { reason: "no enabled delivery channels" },
-        });
-        return json(res, { error: "No enabled delivery channels for this user." }, 400);
-      }
-
-      try {
-        const run = await runDigestChild(digestPath, ["--chatId", targetChatId, "--suppressWelcome"], {
-          timeoutMs: 12 * 60 * 1000,
-        });
-        if (run.code === 4) {
-          const detail = run.stderr ? run.stderr.slice(-260) : "digest run lock active";
-          logAdminActionEvent(req, {
-            action: "run_digest_targeted",
-            target_email: targetUser.email || null,
-            target_chat_id: targetChatId,
-            success: false,
-            details: { detail, reason: "digest lock active" },
-          });
-          return json(res, { error: "Digest run already in progress. Try again shortly.", detail }, 409);
-        }
-        if (run.code !== 0) {
-          const detail = run.stderr ? run.stderr.slice(-240) : `exit ${run.code}`;
-          logAdminActionEvent(req, {
-            action: "run_digest_targeted",
-            target_email: targetUser.email || null,
-            target_chat_id: targetChatId,
-            success: false,
-            details: { detail },
-          });
-          return json(res, { error: `Digest failed for ${targetChatId}`, detail }, 500);
-        }
-        logAdminActionEvent(req, {
-          action: "run_digest_targeted",
-          target_email: targetUser.email || null,
-          target_chat_id: targetChatId,
-          success: true,
-        });
-        return json(res, {
-          success: true,
-          message: `Digest sent to ${targetUser.email || targetChatId}`,
-        });
-      } catch (e) {
-        logAdminActionEvent(req, {
-          action: "run_digest_targeted",
-          target_email: targetUser.email || null,
-          target_chat_id: targetChatId,
-          success: false,
-          details: { detail: e.message },
-        });
-        return json(res, { error: `Failed to run digest: ${e.message}` }, 500);
-      }
-    }
-
-    if (digestLock.running) {
-      logAdminActionEvent(req, {
-        action: "run_digest_full",
-        success: false,
-        details: { reason: "digest lock active", mode: digestLock.lock.mode || "scheduled" },
-      });
-      return json(res, { error: lockMsg }, 409);
-    }
-
-    const child = spawn(process.execPath, [digestPath, "--suppressWelcome"], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env },
-    });
-    child.unref();
-    logAdminActionEvent(req, {
-      action: "run_digest_full",
-      success: true,
-    });
-    return json(res, { success: true, message: "Full scheduled digest run triggered" });
+    return handleAdminRunDigest(req, res);
   }
 
   // POST /api/admin/message-user — send custom admin message via configured channels
   // Accept trailing slash variant for proxy/canonicalization compatibility.
   if ((pathname === "/api/admin/message-user" || pathname === "/api/admin/message-user/") && req.method === "POST") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    const body = await readBody(req);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return;
     const email = String(body.email || "").toLowerCase().trim();
     const message = String(body.message || "").trim();
     const subject = String(body.subject || "Message from SignalBrief").trim().slice(0, 140) || "Message from SignalBrief";
@@ -2706,7 +2791,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/robots.txt") return serveFile(res, path.join(WEB_DIR, "robots.txt"));
   if (pathname === "/sitemap.xml") return serveFile(res, path.join(WEB_DIR, "sitemap.xml"));
   if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
-  if (pathname === "/app.js") return serveFile(res, path.join(WEB_DIR, "app.js"));
+  if (pathname === "/index.js") return serveFile(res, path.join(WEB_DIR, "index.js"));
   if (pathname === "/settings.js") return serveFile(res, path.join(WEB_DIR, "settings.js"));
 
   res.writeHead(404); res.end("Not found");

@@ -21,6 +21,20 @@ const { sendEmail: sendEmailViaMailer, buildOpenTrackingPixel } = require("./mai
 const { appendEngagementEvent, buildDigestId, loadEngagementEvents } = require("./engagement-events");
 const { computeDigestQualityScore } = require("./quality-score");
 const { applyAutoTopicLearning } = require("./personalization");
+const {
+  filterDigestItemsByTopics,
+  scoreDigestItemsForUser,
+  applyDigestDepth,
+  reserveCustomKeywordSlot,
+} = require("./digest-pipeline-seam");
+const { selectItemsByPolicy } = require("./selection-domain");
+const {
+  buildCustomTopicQueries,
+  customKeywordMatches,
+  normalizeMatchText,
+  normalizeTopicToken,
+  topicsRelated,
+} = require("./topic-domain");
 
 const LOG_FILE = "/tmp/signalbrief.log";
 const COST_LOG = path.join(__dirname, "data", "cost-log.json");
@@ -36,13 +50,13 @@ function buildPublicDigestUrl(dateKey) {
 }
 
 // ET time helpers
-function getETNow() {
+function getEtNow() {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
 }
-function toETDateStr(iso) {
+function toEtDateString(iso) {
   return iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
 }
-function etDateKey(date) {
+function toEtDateKey(date) {
   return date.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
@@ -100,7 +114,7 @@ async function emitDigestIncident(type, summary, metadata = {}) {
 
   const entry = {
     ts_utc: now.toISOString(),
-    date_et: etDateKey(now),
+    date_et: toEtDateKey(now),
     event_key: eventKey,
     type: String(type || "unknown"),
     summary: String(summary || "").trim(),
@@ -135,35 +149,86 @@ function log(msg) {
   fs.appendFileSync(LOG_FILE, line + "\n");
 }
 
+function appendEngagementEventChecked(payload, context) {
+  const outcome = appendEngagementEvent(payload);
+  if (!outcome.ok) {
+    const code = String(outcome.error_code || outcome.code || "unknown");
+    const detail = outcome.detail ? ` (${outcome.detail})` : "";
+    log(`⚠️ Engagement event write failed (${context}) code=${code}${detail}`);
+  }
+  return outcome;
+}
+
 let digestLockOwned = false;
 function readDigestLock() {
   if (!fs.existsSync(DIGEST_RUN_LOCK)) return null;
+
+  let rawText = "";
   try {
-    const lock = JSON.parse(fs.readFileSync(DIGEST_RUN_LOCK, "utf8"));
-    const ts = Date.parse(lock?.startedAt || "");
-    if (!Number.isFinite(ts)) return { stale: true, raw: lock };
-    const ageMs = Date.now() - ts;
-    return { ...lock, ageMs, stale: ageMs > DIGEST_LOCK_STALE_MS };
+    rawText = fs.readFileSync(DIGEST_RUN_LOCK, "utf8");
   } catch (err) {
-    log(`⚠️ Invalid digest lock state; treating as stale: ${err.message}`);
-    return { stale: true };
+    return {
+      state: "io_error",
+      error: err.message,
+      error_code: err?.code || null,
+    };
   }
+
+  let lock;
+  try {
+    lock = JSON.parse(rawText);
+  } catch (err) {
+    return {
+      state: "corrupt",
+      error: `invalid_json:${err.message}`,
+    };
+  }
+
+  const ts = Date.parse(lock?.startedAt || "");
+  if (!Number.isFinite(ts)) {
+    return {
+      state: "corrupt",
+      error: "missing_or_invalid_startedAt",
+      raw: lock,
+    };
+  }
+  const ageMs = Math.max(0, Date.now() - ts);
+  const state = ageMs > DIGEST_LOCK_STALE_MS ? "stale" : "valid";
+  return { ...lock, state, ageMs, stale: state === "stale" };
 }
 
 function clearDigestLock() {
   try {
     if (fs.existsSync(DIGEST_RUN_LOCK)) fs.unlinkSync(DIGEST_RUN_LOCK);
+    return true;
   } catch (err) {
     log(`⚠️ Failed to clear digest lock: ${err.message}`);
+    return false;
   }
 }
 
 function acquireDigestLock(mode) {
   const existing = readDigestLock();
-  if (existing && !existing.stale) {
-    return { ok: false, lock: existing };
+  if (existing) {
+    if (existing.state === "stale") {
+      if (!clearDigestLock()) {
+        return {
+          ok: false,
+          reason: "stale_uncleared",
+          lock: {
+            ...existing,
+            state: "stale_uncleared",
+            error: "stale_lock_clear_failed",
+          },
+        };
+      }
+    } else if (existing.state === "valid") {
+      return { ok: false, reason: "locked", lock: existing };
+    } else {
+      log(`⚠️ Digest lock requires manual intervention (state=${existing.state}, detail=${existing.error || "unknown"})`);
+      return { ok: false, reason: existing.state, lock: existing };
+    }
   }
-  if (existing && existing.stale) clearDigestLock();
   const dir = path.dirname(DIGEST_RUN_LOCK);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const payload = {
@@ -185,7 +250,7 @@ function acquireDigestLock(mode) {
       log(`⚠️ Failed to acquire digest lock: ${err.message}`);
     }
     const lock = readDigestLock();
-    return { ok: false, lock };
+    return { ok: false, reason: "race_or_locked", lock };
   }
 }
 
@@ -550,96 +615,20 @@ function selectItems(allItems, opts = {}) {
   const maxCustomItems = Number.isFinite(explicitCustomCap)
     ? Math.max(0, explicitCustomCap)
     : (customTags.size > 0 ? Math.max(1, Math.floor(maxItems * 0.4)) : Infinity);
-
-  const seen = new Set();
-  const seenUrls = new Set();
-  const deduped = (allItems || []).filter((item) => {
-    const headline = String(item?.headline || "").toLowerCase().trim();
-    if (!headline) return false;
-    const key = headline.slice(0, 40);
-    if (seen.has(key)) return false;
-    const urlKey = normalizeUrlForDedup(item?.url);
-    if (urlKey && seenUrls.has(urlKey)) return false;
-    seen.add(key);
-    if (urlKey) seenUrls.add(urlKey);
-    return true;
+  return selectItemsByPolicy(allItems, {
+    maxItems,
+    perTagCap: maxItemsPerTag,
+    perSourceCap: maxItemsPerSourceDomain,
+    customTagOrder,
+    customTags,
+    tagPriority,
+    maxCustomItems,
+  }, {
+    normalizeUrl: normalizeUrlForDedup,
+    parseDomain: parseSourceDomain,
+    normalizeTopicToken,
+    isCandidate: (_item, ctx) => Boolean(ctx.headlineKey),
   });
-
-  const tagCounts = {};
-  const domainCounts = {};
-  let customCount = 0;
-  const selected = [];
-  const pool = [...deduped];
-
-  const underCaps = (item) => {
-    const tag = String(item?.tag || "");
-    if (!tag) return false;
-    if ((tagCounts[tag] || 0) >= maxItemsPerTag) return false;
-    if (customTags.size > 0 && customTags.has(tag.toLowerCase()) && customCount >= maxCustomItems) return false;
-    const domain = parseSourceDomain(item);
-    if ((domainCounts[domain] || 0) >= maxItemsPerSourceDomain) return false;
-    return true;
-  };
-
-  const pickIndex = (lastTag, allowAdjacentTag = false) => {
-    let bestIdx = -1;
-    let bestCount = Infinity;
-    let bestDomainCount = Infinity;
-    let bestPriority = -Infinity;
-    for (let i = 0; i < pool.length; i++) {
-      const item = pool[i];
-      if (!underCaps(item)) continue;
-      const tag = String(item?.tag || "");
-      if (!allowAdjacentTag && lastTag && tag === lastTag) continue;
-      const count = tagCounts[tag] || 0;
-      const domainCount = domainCounts[parseSourceDomain(item)] || 0;
-      const priority = Number(tagPriority[normalizeTopicToken(tag)] || 0);
-      if (
-        count < bestCount
-        || (count === bestCount && domainCount < bestDomainCount)
-        || (count === bestCount && domainCount === bestDomainCount && priority > bestPriority)
-      ) {
-        bestCount = count;
-        bestDomainCount = domainCount;
-        bestPriority = priority;
-        bestIdx = i;
-      }
-    }
-    return bestIdx;
-  };
-
-  // Guarantee baseline custom-topic coverage without letting custom tags dominate.
-  if (customTagOrder.length > 0 && maxCustomItems > 0) {
-    for (const customTag of customTagOrder) {
-      if (selected.length >= maxItems || customCount >= maxCustomItems) break;
-      const idx = pool.findIndex((item) => {
-        const tag = String(item?.tag || "").toLowerCase();
-        return tag === customTag && underCaps(item);
-      });
-      if (idx === -1) continue;
-      const item = pool.splice(idx, 1)[0];
-      const domain = parseSourceDomain(item);
-      tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
-      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
-      customCount += 1;
-      selected.push({ ...item, source_domain: item.source_domain || domain });
-    }
-  }
-
-  while (selected.length < maxItems && pool.length > 0) {
-    const lastTag = selected.length > 0 ? selected[selected.length - 1].tag : null;
-    const idx = pickIndex(lastTag, false);
-    const fallback = idx === -1 ? pickIndex(lastTag, true) : idx;
-    if (fallback === -1) break;
-    const item = pool.splice(fallback, 1)[0];
-    const domain = parseSourceDomain(item);
-    tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
-    domainCounts[domain] = (domainCounts[domain] || 0) + 1;
-    if (customTags.has(String(item.tag || "").toLowerCase())) customCount += 1;
-    selected.push({ ...item, source_domain: item.source_domain || domain });
-  }
-
-  return selected;
 }
 
 // ── 3. Enrich with Claude (sharp consultant lens) ────────────────────────────
@@ -885,18 +874,6 @@ Reply with ONLY the sentence, no quotes.`;
   }
 }
 
-function normalizeMatchText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeTopicToken(value) {
-  return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
-}
-
 const STANDARD_TOPIC_TOKENS = new Set([
   "healthcare",
   "financial services",
@@ -978,216 +955,6 @@ function topicVisual(tagValue) {
   };
 }
 
-const CUSTOM_KEYWORD_ALIASES = {
-  "rate cuts": [
-    "federal reserve rate cut",
-    "interest rate cuts",
-    "fed rate decision",
-    "fomc rate decision",
-  ],
-  "sec rulemaking": [
-    "sec proposed rules",
-    "securities and exchange commission rules",
-    "sec disclosure rule",
-    "sec rule proposal",
-  ],
-  "semicap": [
-    "semiconductor equipment",
-    "chip equipment",
-    "wafer fab equipment",
-    "asml applied materials lam research",
-  ],
-  "agentic ai": [
-    "ai agents",
-    "enterprise ai agents",
-    "autonomous ai agent",
-    "openai anthropic microsoft agent",
-  ],
-  "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
-  "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
-  "doge": ["dogecoin", "crypto regulation", "crypto market"],
-  "medtech": ["medical device", "diagnostics", "surgical systems", "hospital technology"],
-};
-
-const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
-const CUSTOM_TOKEN_ALIASES = {
-  rulemaking: ["rule", "rules", "proposed"],
-  semicap: ["semiconductor", "chip"],
-  agentic: ["agent", "agents"],
-  cuts: ["cut", "reduce", "easing"],
-  medtech: ["medical", "device", "diagnostic", "surgical"],
-  sec: ["securities", "exchange", "commission"],
-  rate: ["interest", "federal", "reserve", "fomc"],
-};
-
-function escapeRegExp(value) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function hasWordBoundary(text, token) {
-  const t = String(text || "");
-  const w = String(token || "");
-  if (!t || !w) return false;
-  const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(w)}(?:\\s|$)`, "i");
-  return pattern.test(t);
-}
-
-function tokenizeCustomTopic(topicNormalized) {
-  return normalizeTopicToken(topicNormalized)
-    .split(" ")
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .filter((t) => !CUSTOM_TOPIC_STOPWORDS.has(t))
-    .filter((t) => t.length > 2 || ["ai", "pe", "sec", "fed"].includes(t));
-}
-
-function customKeywordMatches(topicNormalized, bodyText, tagNormalized = "") {
-  const topic = normalizeTopicToken(topicNormalized);
-  if (!topic) return false;
-
-  const haystack = normalizeMatchText(`${bodyText || ""} ${tagNormalized || ""}`);
-  if (!haystack) return false;
-
-  if (haystack.includes(topic)) return true;
-
-  const aliases = CUSTOM_KEYWORD_ALIASES[topic] || [];
-  for (const alias of aliases) {
-    const aliasToken = normalizeTopicToken(alias);
-    if (aliasToken && haystack.includes(aliasToken)) return true;
-  }
-
-  const tokens = tokenizeCustomTopic(topic);
-  if (!tokens.length) return false;
-
-  const hitCount = tokens.reduce((sum, token) => {
-    if (hasWordBoundary(haystack, token)) return sum + 1;
-    const aliases = CUSTOM_TOKEN_ALIASES[token] || [];
-    if (aliases.some((alias) => hasWordBoundary(haystack, alias))) return sum + 1;
-    return sum;
-  }, 0);
-  const requiredHits = tokens.length >= 3 ? 2 : tokens.length;
-  return hitCount >= Math.max(1, requiredHits);
-}
-
-function buildCustomTopicQueries(keywordRaw) {
-  const keyword = String(keywordRaw || "").trim().replace(/\s+/g, " ");
-  if (!keyword) return [];
-  const normalized = normalizeTopicToken(keyword);
-  const aliases = CUSTOM_KEYWORD_ALIASES[normalized] || [];
-  const base = [
-    `${keyword} business strategy developments last 48 hours`,
-    `${keyword} market impact regulation deals earnings last 72 hours`,
-    `${keyword} strategy and investment implications last 72 hours`,
-  ];
-  if (keyword.split(" ").length <= 2) {
-    base.unshift(`${keyword} company and sector news last 48 hours`);
-  }
-  const merged = [...base, ...aliases.map((a) => `${a} business and market developments last 72 hours`)];
-  const seen = new Set();
-  const queries = [];
-  for (const q of merged) {
-    const clean = String(q || "").trim();
-    if (!clean) continue;
-    const key = clean.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    queries.push(clean);
-    if (queries.length >= 4) break;
-  }
-  return queries;
-}
-
-const RELATED_TOPIC_GROUPS = [
-  ["healthcare", "life sciences"],
-  ["ai tech", "technology", "digital"],
-  ["pe m a", "m a advisory", "financial services"],
-  ["public sector", "policy regulatory"],
-  ["energy", "sustainability"],
-];
-
-function topicsRelated(a, b) {
-  const left = normalizeTopicToken(a);
-  const right = normalizeTopicToken(b);
-  if (!left || !right) return false;
-  if (left === right) return true;
-  if (left.includes(right) || right.includes(left)) return true;
-  return RELATED_TOPIC_GROUPS.some((group) => group.includes(left) && group.includes(right));
-}
-
-function computeTopicSignals(item, userTopics) {
-  const tagNormalized = normalizeTopicToken(item?.tag || "");
-  const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
-  let best = 3;
-  let customKeywordMatch = false;
-  let exactMatch = false;
-  let partialMatch = false;
-
-  for (const topic of (userTopics || [])) {
-    const rawTopic = String(topic || "");
-    const topicNormalized = normalizeTopicToken(rawTopic);
-    if (!topicNormalized) continue;
-
-    const exact = tagNormalized && topicNormalized === tagNormalized;
-    const partial = tagNormalized && !exact
-      && topicsRelated(tagNormalized, topicNormalized);
-
-    if (exact) {
-      exactMatch = true;
-      best = Math.max(best, 10);
-    } else if (partial) {
-      partialMatch = true;
-      best = Math.max(best, 7);
-    }
-
-    if (rawTopic.toLowerCase().startsWith("custom_") && customKeywordMatches(topicNormalized, bodyText, tagNormalized)) {
-      customKeywordMatch = true;
-      best = Math.max(best, 10);
-    }
-  }
-
-  return {
-    topicMatch: best,
-    customKeywordMatch,
-    exactMatch,
-    partialMatch,
-  };
-}
-
-function computeTopicMatch(item, userTopics) {
-  return computeTopicSignals(item, userTopics).topicMatch;
-}
-
-function itemMatchesAnyCustomKeyword(item, customKeywords = []) {
-  if (!Array.isArray(customKeywords) || customKeywords.length === 0) return false;
-  const tagNormalized = normalizeTopicToken(item?.tag || "");
-  const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
-  return customKeywords.some((kw) => customKeywordMatches(kw, bodyText, tagNormalized));
-}
-
-function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
-  const scored = Array.isArray(items) ? items : [];
-  const count = Math.max(1, Number(requestedCount || 5));
-  const base = scored.slice(0, count);
-  if (!base.length) return base;
-  if (!Array.isArray(customKeywords) || customKeywords.length === 0) return base;
-
-  const alreadyCovered = base.some((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
-  if (alreadyCovered) return base;
-
-  const fallbackCandidate = scored.find((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
-  if (!fallbackCandidate) return base;
-
-  const replaced = base.slice(0, Math.max(0, count - 1));
-  const exists = replaced.some((item) =>
-    String(item?.headline || "") === String(fallbackCandidate?.headline || "")
-    && String(item?.url || "") === String(fallbackCandidate?.url || "")
-  );
-  if (!exists) replaced.push(fallbackCandidate);
-  return replaced
-    .sort((a, b) => Number(b?.relevanceScore || 0) - Number(a?.relevanceScore || 0))
-    .slice(0, count);
-}
-
 function buildCustomRescueItemsFromStandard(standardItems, customKeywords = [], existingItems = [], maxPerKeyword = 1) {
   const standard = Array.isArray(standardItems) ? standardItems : [];
   const existing = Array.isArray(existingItems) ? existingItems : [];
@@ -1232,61 +999,6 @@ function buildCustomRescueItemsFromStandard(standardItems, customKeywords = [], 
   }
 
   return out;
-}
-
-// Find the total weight adjustment for a given item tag from the user's topic_weights map.
-// Weight keys may be partial/informal ("AI" → "AI×TECH"), so we fuzzy-match.
-function matchWeightToTag(tag, topicWeights) {
-  if (!topicWeights || typeof topicWeights !== "object") return 0;
-  const tagToken = normalizeTopicToken(tag);
-  let total = 0;
-  for (const [key, w] of Object.entries(topicWeights)) {
-    if (!w) continue;
-    const keyToken = normalizeTopicToken(key);
-    if (!keyToken) continue;
-    if (topicsRelated(tagToken, keyToken)) {
-      total += w;
-    }
-  }
-  return total;
-}
-
-function applyRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
-  const specialistMode = !!opts.specialistMode;
-  const repeatIndex = opts.repeatIndex && typeof opts.repeatIndex === "object" ? opts.repeatIndex : null;
-  const repeatPenalty = Math.max(0, Number(opts.repeatPenalty || 0));
-  return items.map(item => {
-    const signals     = computeTopicSignals(item, userTopics);
-    const topicMatch  = signals.topicMatch;
-    const base        = typeof item.baseScore === "number" ? item.baseScore : 5.0;
-    const weight      = matchWeightToTag(item.tag, topicWeights);
-    const weightBonus = weight * 0.6; // ±0.6 pts per "more"/"less" step
-    let specialistBonus = 0;
-    if (specialistMode) {
-      if (topicMatch >= 10) specialistBonus = 1.1;
-      else if (topicMatch >= 7) specialistBonus = 0.45;
-      else specialistBonus = -0.6;
-    }
-    const freshnessPenalty = isRecentRepeatItem(item, repeatIndex) ? -repeatPenalty : 0;
-    const raw         = base * 0.6 + topicMatch * 0.4 + weightBonus + specialistBonus + freshnessPenalty;
-
-    const whyShown = [];
-    if (topicMatch >= 7) whyShown.push("topic_match");
-    if (signals.customKeywordMatch) whyShown.push("custom_keyword");
-    if (weightBonus > 0.25) whyShown.push("weight_boost");
-    if (base >= 8.0) whyShown.push("high_base_score");
-
-    return {
-      ...item,
-      source_domain: item.source_domain || parseSourceDomain(item),
-      topicMatch,
-      weightBonus,
-      specialistBonus,
-      freshnessPenalty,
-      why_shown: whyShown,
-      relevanceScore: Math.min(10, Math.max(0, Math.round(raw * 10) / 10)),
-    };
-  });
 }
 
 // ── 4. Format Telegram message ───────────────────────────────────────────────
@@ -1426,34 +1138,15 @@ function buildDigestInlineKeyboard(items) {
 
 // ── 5. Build HTML email ──────────────────────────────────────────────────────
 
-function buildEmail(
-  items,
-  dateStr,
-  quickScan,
-  userToken = "",
-  isFirstDigest = false,
-  wasFiltered = true,
-  depth = "headline_plus_why",
-  user = null,
-  digestDateKey = "",
-  digestId = "",
-  opts = {}
-) {
-  const filterNote = wasFiltered
-    ? "filtered to your selected topics"
-    : "today's top signals across all areas";
-  const quality = digestQualityLabel(opts.digestQuality);
-  const learningSummary = String(opts.learningSummary || "").trim();
-  const publicDigestUrlBase = String(opts.publicDigestUrl || "").trim()
-    || buildPublicDigestUrl(digestDateKey)
-    || BASE_URL;
-  const publicDigestUrl = userToken
-    ? `${publicDigestUrlBase}${publicDigestUrlBase.includes("?") ? "&" : "?"}ref=${encodeURIComponent(userToken)}`
-    : publicDigestUrlBase;
-  const publicDigestUrlEncoded = encodeURIComponent(publicDigestUrl);
+function buildEmailHeaderMeta(itemsCount, digestQuality) {
+  const quality = digestQualityLabel(digestQuality);
+  const readMins = Math.max(2, Math.ceil(Number(itemsCount || 0) * 0.6));
+  return `${itemsCount} signals • ${readMins} min read${quality ? ` • Match ${quality.score}%` : ""}`;
+}
 
-  // ── Welcome banner (first digest only — placed BEFORE Quick Scan via template placeholder) ──
-  const welcomeBanner = isFirstDigest ? `
+function buildWelcomeBanner(isFirstDigest, filterNote, userToken) {
+  if (!isFirstDigest) return "";
+  return `
   <div style="padding:24px 28px 22px;background:#F0FDF4;border-bottom:1px solid #BBF7D0;">
     <div style="font-size:21px;font-weight:700;color:#15803D;margin-bottom:8px;">👋 Welcome to SignalBrief</div>
     <div style="font-size:14px;color:#166534;line-height:1.6;margin-bottom:20px;">Your first briefing is below — ${filterNote}. Here's what you're looking at:</div>
@@ -1472,62 +1165,70 @@ function buildEmail(
       </div>
     </div>
     <a href="${BASE_URL}/settings?token=${userToken}" style="display:inline-block;background:#15803D;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:999px;">Update preferences →</a>
-  </div>` : "";
-  const personalizationNote = learningSummary ? `
+  </div>`;
+}
+
+function buildPersonalizationNote(learningSummary) {
+  const summary = String(learningSummary || "").trim();
+  if (!summary) return "";
+  return `
   <div style="padding:12px 28px;background:#F8FAFC;border-bottom:1px solid #EAECEF;">
     <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748B;margin-bottom:4px;">Personalization update</div>
-    <div style="font-size:13px;line-height:1.5;color:#334155;">🧠 ${escapeHtml(learningSummary)}</div>
-  </div>` : "";
-  const editorialNoteText = String(opts.editorialNote || "").trim();
-  const editorialNote = editorialNoteText
-    ? `
+    <div style="font-size:13px;line-height:1.5;color:#334155;">🧠 ${escapeHtml(summary)}</div>
+  </div>`;
+}
+
+function buildEditorialNote(editorialNoteText) {
+  const text = String(editorialNoteText || "").trim();
+  if (!text) return "";
+  return `
   <div style="padding:10px 28px;background:#F0F4FF;border-bottom:1px solid #EAECEF;">
-    <p style="margin:0;font-size:13px;color:#4B5563;font-style:italic;">${escapeHtml(editorialNoteText)}</p>
-  </div>`
+    <p style="margin:0;font-size:13px;color:#4B5563;font-style:italic;">${escapeHtml(text)}</p>
+  </div>`;
+}
+
+function renderDigestItemHtml(item, index, opts = {}) {
+  const userToken = String(opts.userToken || "");
+  const digestId = String(opts.digestId || "");
+  const depth = String(opts.depth || "headline_plus_why");
+  const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
+  const trackedLinkUrl = userToken && digestId
+    ? `${BASE_URL}/api/click?token=${encodeURIComponent(userToken)}&did=${encodeURIComponent(digestId)}&item=${index + 1}&url=${encodeURIComponent(linkUrl)}`
+    : linkUrl;
+  const topic = topicVisual(item.tag);
+  const tagText = escapeHtml(String(item.tag || "NEWS"));
+
+  const score = Number(item.relevanceScore);
+  const scoreHtml = Number.isFinite(score) ? (() => {
+    const c = scoreColor(score);
+    return `<span style="display:inline-block;font-size:12px;font-weight:700;color:${c.text};background:${c.bg};padding:4px 10px;border-radius:999px;letter-spacing:0.01em;line-height:1;">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.dot};box-shadow:${c.glow};vertical-align:middle;margin-right:6px;"></span>
+      <span style="vertical-align:middle;">${score.toFixed(1)}</span>
+    </span>`;
+  })() : "";
+
+  const wimHtml = item.wim
+    ? `<div style="font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#2563EB;margin-bottom:5px;">Why it matters</div>\n        <div style="font-size:14px;color:#374151;line-height:1.65;margin-bottom:10px;">${item.wim}</div>`
     : "";
-  const itemsHtml = items.map((item, i) => {
-    const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
-    const trackedLinkUrl = userToken && digestId
-      ? `${BASE_URL}/api/click?token=${encodeURIComponent(userToken)}&did=${encodeURIComponent(digestId)}&item=${i + 1}&url=${encodeURIComponent(linkUrl)}`
-      : linkUrl;
-    const topic = topicVisual(item.tag);
-    const tagText = escapeHtml(String(item.tag || "NEWS"));
 
-    // Signal-strength pill: color + subtle glow based on score band.
-    const score = Number(item.relevanceScore);
-    const scoreHtml = Number.isFinite(score) ? (() => {
-      const c = scoreColor(score);
-      return `<span style="display:inline-block;font-size:12px;font-weight:700;color:${c.text};background:${c.bg};padding:4px 10px;border-radius:999px;letter-spacing:0.01em;line-height:1;">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.dot};box-shadow:${c.glow};vertical-align:middle;margin-right:6px;"></span>
-        <span style="vertical-align:middle;">${score.toFixed(1)}</span>
-      </span>`;
-    })() : "";
+  const isDeep = depth === "headline_plus_why" || depth === "full" || depth === "deep";
+  const implHtml = (isDeep && item.implications)
+    ? `<div style="font-size:13px;color:#1D4ED8;line-height:1.6;margin-bottom:6px;font-weight:500;">→ ${item.implications}</div>`
+    : "";
+  const watchHtml = (isDeep && item.watch_next)
+    ? `<div style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;font-style:italic;">👀 ${item.watch_next}</div>`
+    : "";
+  const whyShownHtml = Array.isArray(item.why_shown) && item.why_shown.length
+    ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why shown: ${item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ")}</div>`
+    : "";
 
-    // Conditionally render WIM block — inline styles for Gmail (strips <style> blocks)
-    const wimHtml = item.wim
-      ? `<div style="font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#2563EB;margin-bottom:5px;">Why it matters</div>\n        <div style="font-size:14px;color:#374151;line-height:1.65;margin-bottom:10px;">${item.wim}</div>`
-      : "";
-
-    // Deep mode extras: implications + watch_next (only for headline_plus_why / full depth)
-    const isDeep = depth === "headline_plus_why" || depth === "full" || depth === "deep";
-    const implHtml = (isDeep && item.implications)
-      ? `<div style="font-size:13px;color:#1D4ED8;line-height:1.6;margin-bottom:6px;font-weight:500;">→ ${item.implications}</div>`
-      : "";
-    const watchHtml = (isDeep && item.watch_next)
-      ? `<div style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;font-style:italic;">👀 ${item.watch_next}</div>`
-      : "";
-    const whyShownHtml = Array.isArray(item.why_shown) && item.why_shown.length
-      ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why shown: ${item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ")}</div>`
-      : "";
-
-    const itemStyle = "background:#FFFFFF;border-radius:14px;border:1px solid #ECEFF3;box-shadow:0 2px 6px rgba(0,0,0,0.04);padding:20px;margin:0 0 18px;";
-
-    return `
+  const itemStyle = "background:#FFFFFF;border-radius:14px;border:1px solid #ECEFF3;box-shadow:0 2px 6px rgba(0,0,0,0.04);padding:20px;margin:0 0 18px;";
+  return `
       <div class="item" style="${itemStyle}">
         <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin-bottom:10px;">
           <tr>
             <td style="vertical-align:middle;padding:0 8px 0 0;">
-              <span style="font-size:15px;color:#6B7280;font-weight:700;margin-right:8px;">${i + 1}</span>
+              <span style="font-size:15px;color:#6B7280;font-weight:700;margin-right:8px;">${index + 1}</span>
               <span style="font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${topic.chipText};background:${topic.chipBg};padding:4px 9px;border-radius:7px;">${topic.icon} ${tagText}</span>
             </td>
             <td style="text-align:right;vertical-align:middle;padding:0;white-space:nowrap;">${scoreHtml}</td>
@@ -1541,32 +1242,26 @@ function buildEmail(
         ${whyShownHtml}
         <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}</span></div>
       </div>`;
-  }).join("\n");
+}
 
-  const readMins = Math.max(2, Math.ceil(items.length * 0.6));
-  const headerMeta = `${items.length} signals • ${readMins} min read${quality ? ` • Match ${quality.score}%` : ""}`;
-
-  // ── Per-user settings footer (shown in every digest) ──
-  let settingsFooter = "";
-  if (user) {
-    const prefs = user.preferences || {};
-    const [sh, sm] = (prefs.delivery_time || "07:00").split(":").map(Number);
-    const sampm = sh >= 12 ? "PM" : "AM";
-    const shour = sh % 12 || 12;
-    const sTimeStr = `${shour}${sm === 0 ? "" : ":" + String(sm).padStart(2, "0")} ${sampm} ET`;
-    const sDays = prefs.days_of_week || [1, 2, 3, 4, 5];
-    const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    let sDaysStr;
-    if (sDays.length === 7) sDaysStr = "Every day";
-    else if (sDays.length === 5 && !sDays.includes(0) && !sDays.includes(6)) sDaysStr = "Mon–Fri";
-    else sDaysStr = sDays.map(d => DAY_NAMES[d]).join(", ");
-    const SDEPTH = { headline_only: "Scan", scan: "Scan", headline_plus_oneliner: "Brief", headline_plus_why: "Deep", full: "Deep", deep: "Deep" };
-    const sDepth = SDEPTH[prefs.depth] || "Deep";
-    const sTopics = (user.topics || [])
-      .map((t) => formatTopicDisplay(t))
-      .join(" · ") || "—";
-    const sSettingsUrl = `${BASE_URL}/settings?token=${userToken}`;
-    settingsFooter = `
+function renderSettingsFooter(user, userToken) {
+  if (!user) return "";
+  const prefs = user.preferences || {};
+  const [sh, sm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+  const sampm = sh >= 12 ? "PM" : "AM";
+  const shour = sh % 12 || 12;
+  const sTimeStr = `${shour}${sm === 0 ? "" : ":" + String(sm).padStart(2, "0")} ${sampm} ET`;
+  const sDays = prefs.days_of_week || [1, 2, 3, 4, 5];
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let sDaysStr;
+  if (sDays.length === 7) sDaysStr = "Every day";
+  else if (sDays.length === 5 && !sDays.includes(0) && !sDays.includes(6)) sDaysStr = "Mon–Fri";
+  else sDaysStr = sDays.map(d => DAY_NAMES[d]).join(", ");
+  const SDEPTH = { headline_only: "Scan", scan: "Scan", headline_plus_oneliner: "Brief", headline_plus_why: "Deep", full: "Deep", deep: "Deep" };
+  const sDepth = SDEPTH[prefs.depth] || "Deep";
+  const sTopics = (user.topics || []).map((t) => formatTopicDisplay(t)).join(" · ") || "—";
+  const sSettingsUrl = `${BASE_URL}/settings?token=${userToken}`;
+  return `
     <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #EAECEF;">
       <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:8px;">Your digest settings</div>
       <div style="font-size:13px;color:#6B7280;line-height:1.75;">
@@ -1578,25 +1273,73 @@ function buildEmail(
         <a href="${sSettingsUrl}" style="font-size:13px;font-weight:600;color:#2563EB;text-decoration:none;">Edit settings →</a>
       </div>
     </div>`;
-  }
+}
 
-  return EMAIL_TEMPLATE
-    .replace(/\{\{DATE\}\}/g, dateStr)
-    .replace("{{ITEM_COUNT}}", headerMeta)
-    .replace("{{QUICK_SCAN}}", quickScan)
-    .replace("{{WELCOME_BANNER}}", welcomeBanner)
-    .replace("{{PERSONALIZATION_NOTE}}", personalizationNote)
-    .replace("{{EDITORIAL_NOTE}}", editorialNote)
-    .replace("{{SETTINGS_FOOTER}}", settingsFooter)
-    .replace(/\{\{BASE_URL\}\}/g, BASE_URL)
-    .replace(/\{\{PUBLIC_DIGEST_URL\}\}/g, publicDigestUrl)
-    .replace(/\{\{PUBLIC_DIGEST_URL_ENCODED\}\}/g, publicDigestUrlEncoded)
-    .replace(/\{\{SETTINGS_TOKEN\}\}/g, userToken)
-    .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, digestDateKey || "")
+function applyTemplateSlots(template, slots = {}) {
+  return template
+    .replace(/\{\{DATE\}\}/g, slots.dateStr || "")
+    .replace("{{ITEM_COUNT}}", slots.headerMeta || "")
+    .replace("{{QUICK_SCAN}}", slots.quickScan || "")
+    .replace("{{WELCOME_BANNER}}", slots.welcomeBanner || "")
+    .replace("{{PERSONALIZATION_NOTE}}", slots.personalizationNote || "")
+    .replace("{{EDITORIAL_NOTE}}", slots.editorialNote || "")
+    .replace("{{SETTINGS_FOOTER}}", slots.settingsFooter || "")
+    .replace(/\{\{BASE_URL\}\}/g, slots.baseUrl || "")
+    .replace(/\{\{PUBLIC_DIGEST_URL\}\}/g, slots.publicDigestUrl || "")
+    .replace(/\{\{PUBLIC_DIGEST_URL_ENCODED\}\}/g, slots.publicDigestUrlEncoded || "")
+    .replace(/\{\{SETTINGS_TOKEN\}\}/g, slots.userToken || "")
+    .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, slots.digestDateKey || "")
     .replace(
       /<!-- Items -->[\s\S]*<!-- Footer -->/,
-      `<!-- Items -->\n    <div class="items" style="padding:18px 18px 10px;background:#FFFFFF;">\n${itemsHtml}\n    </div>\n\n    <!-- Footer -->`
+      `<!-- Items -->\n    <div class="items" style="padding:18px 18px 10px;background:#FFFFFF;">\n${slots.itemsHtml || ""}\n    </div>\n\n    <!-- Footer -->`
     );
+}
+
+function buildEmail(
+  items,
+  dateStr,
+  quickScan,
+  userToken = "",
+  isFirstDigest = false,
+  wasFiltered = true,
+  depth = "headline_plus_why",
+  user = null,
+  digestDateKey = "",
+  digestId = "",
+  opts = {}
+) {
+  const filterNote = wasFiltered
+    ? "filtered to your selected topics"
+    : "today's top signals across all areas";
+  const learningSummary = String(opts.learningSummary || "").trim();
+  const editorialNoteText = String(opts.editorialNote || "").trim();
+  const publicDigestUrlBase = String(opts.publicDigestUrl || "").trim()
+    || buildPublicDigestUrl(digestDateKey)
+    || BASE_URL;
+  const publicDigestUrl = userToken
+    ? `${publicDigestUrlBase}${publicDigestUrlBase.includes("?") ? "&" : "?"}ref=${encodeURIComponent(userToken)}`
+    : publicDigestUrlBase;
+  const publicDigestUrlEncoded = encodeURIComponent(publicDigestUrl);
+  const headerMeta = buildEmailHeaderMeta(items.length, opts.digestQuality);
+  const itemsHtml = items
+    .map((item, index) => renderDigestItemHtml(item, index, { userToken, digestId, depth }))
+    .join("\n");
+
+  return applyTemplateSlots(EMAIL_TEMPLATE, {
+    dateStr,
+    headerMeta,
+    quickScan,
+    welcomeBanner: buildWelcomeBanner(isFirstDigest, filterNote, userToken),
+    personalizationNote: buildPersonalizationNote(learningSummary),
+    editorialNote: buildEditorialNote(editorialNoteText),
+    settingsFooter: renderSettingsFooter(user, userToken),
+    baseUrl: BASE_URL,
+    publicDigestUrl,
+    publicDigestUrlEncoded,
+    userToken,
+    digestDateKey: digestDateKey || "",
+    itemsHtml,
+  });
 }
 
 // ── 6. Send via SignalBrief bot ───────────────────────────────────────────────
@@ -1642,7 +1385,7 @@ function saveToArchive(date, items, dateStr, quickScan, opts = {}) {
   }
   const archiveDir = path.join(__dirname, "archive");
   if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir);
-  const key = etDateKey(date);
+  const key = toEtDateKey(date);
   const file = path.join(archiveDir, `${key}.json`);
   if (fs.existsSync(file) && !overwrite) return;
   const entry = {
@@ -1685,12 +1428,14 @@ async function main() {
   if (!lock.ok) {
     const started = lock.lock?.startedAt || "unknown";
     const mode = lock.lock?.mode || "unknown";
-    log(`⏭️ Digest skipped: another run is active (mode=${mode}, started=${started})`);
+    const state = lock.lock?.state || lock.reason || "unknown";
+    const detail = lock.lock?.error ? ` detail=${lock.lock.error}` : "";
+    log(`⏭️ Digest skipped: lock unavailable (state=${state}, mode=${mode}, started=${started})${detail}`);
     process.exit(4);
   }
 
   // ── Check who's due BEFORE any API calls ──────────────────────────────────
-  const etNow = getETNow();
+  const etNow = getEtNow();
   const todayET = etNow.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const nowMinutes = etNow.getHours() * 60 + etNow.getMinutes();
   const allActive = allUsers().filter(u => u.status === "active");
@@ -1711,7 +1456,7 @@ async function main() {
       const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
       if (!allowedDays.includes(todayDOW)) return false;
       // Skip if already delivered today (prevents double-delivery from 30-min cron)
-      if (toETDateStr(u.last_digest_at) === todayET) return false;
+      if (toEtDateString(u.last_digest_at) === todayET) return false;
       // Catch-up window: up to catchupWindowMinutes after target handles missed windows.
       // Strict mode: never send before the configured target time.
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
@@ -1729,7 +1474,7 @@ async function main() {
   if (!targetChatId && allActive.length > 0) {
     const parts = allActive.map(u => {
       const prefs = u.preferences || {};
-      const alreadyToday = toETDateStr(u.last_digest_at) === todayET;
+      const alreadyToday = toEtDateString(u.last_digest_at) === todayET;
       if (alreadyToday) return `${u.email || u.chatId}: alreadyToday`;
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       let diff = nowMinutes - (dh * 60 + dm);
@@ -1766,7 +1511,7 @@ async function main() {
   const shortDate = now.toLocaleDateString("en-US", {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
-  const digestDateKey = etDateKey(now);
+  const digestDateKey = toEtDateKey(now);
   const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
   const requestedCounts = dueUsers
     .map((u) => Number(u?.preferences?.items_per_digest))
@@ -1990,6 +1735,10 @@ async function main() {
         date_key: digestDateKey,
         run_id: runId,
       });
+      const autoLearningEventFailures = Math.max(0, Number(autoLearning.event_write_failures || 0));
+      if (autoLearningEventFailures > 0) {
+        log(`⚠️ [auto-learning] ${u.email || u.chatId}: engagement event write failures=${autoLearningEventFailures}`);
+      }
       if (autoLearning.changed) {
         writeUser(u.chatId, u);
         const changes = autoLearning.adjustments
@@ -2009,49 +1758,15 @@ async function main() {
       let standardTopicsLower = [];
       let customKeywords = [];
       let specialistMode = false;
-      if (u.topics && u.topics.length >= 1) {
-        // Standard topics: match against article tag
-        standardTopicsLower = u.topics
-          .filter(t => !String(t).toLowerCase().startsWith("custom_"))
-          .map(t => normalizeTopicToken(t))
-          .filter(Boolean);
-        specialistMode = standardTopicsLower.length > 0 && standardTopicsLower.length <= 2;
-        const standardTopicSet = new Set(standardTopicsLower);
-        // Custom topics: match keyword against headline + summary text
-        customKeywords = u.topics
-          .filter((t) => {
-            const raw = String(t || "");
-            const normalized = normalizeTopicToken(raw);
-            return raw.toLowerCase().startsWith("custom_") || !standardTopicSet.has(normalized);
-          })
-          .map(t => normalizeTopicToken(t))
-          .filter(Boolean);
-        const filtered = enriched.filter(item => {
-          const tag = normalizeTopicToken(item.tag || "");
-          const text = normalizeMatchText(`${item.headline || ""} ${item.summary || ""}`);
-          const tagMatch = standardTopicsLower.some(t => topicsRelated(tag, t));
-          const customMatch = customKeywords.some((kw) => customKeywordMatches(kw, text, tag));
-          return tagMatch || customMatch;
-        });
-        const MIN_ITEMS = 3;
-        if (filtered.length >= MIN_ITEMS) {
-          // Enough topic matches — use them directly
-          userItems = filtered;
-          wasFiltered = true;
-        } else if (filtered.length >= 1) {
-          // Keep strict preference fidelity: avoid padding with unrelated items.
-          userItems = filtered;
-          wasFiltered = true;
-        } else if (specialistMode) {
-          // Sparse-topic users should not receive unrelated filler when no direct matches exist.
-          userItems = [];
-          wasFiltered = true;
-        } else {
-          // Zero topic matches — full fallback (banner reflects this)
-          userItems = enriched;
-          wasFiltered = false;
-        }
-      }
+      const filteredResult = filterDigestItemsByTopics(enriched, u.topics || [], {
+        minItems: 3,
+        strictZeroFallback: "specialist",
+      });
+      standardTopicsLower = filteredResult.standardTopicsLower || [];
+      customKeywords = filteredResult.customKeywords || [];
+      specialistMode = !!filteredResult.specialistMode;
+      userItems = filteredResult.items;
+      wasFiltered = filteredResult.wasFiltered;
 
       // 2. Score by relevance (free — uses baseScore + local topic match + user weight adjustments)
       const weights = u.topic_weights || {};
@@ -2063,10 +1778,11 @@ async function main() {
         log(`  [pre-sort] ${userItems.map(i => `${i.tag}(${i.baseScore})`).join(", ")}`);
       }
 
-      userItems = applyRelevanceScores(userItems, u.topics || [], weights, {
+      userItems = scoreDigestItemsForUser(userItems, u.topics || [], weights, {
         specialistMode,
-        repeatIndex,
         repeatPenalty,
+        isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
+        sourceDomainForItem: parseSourceDomain,
       });
       userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
@@ -2102,10 +1818,11 @@ async function main() {
       // Hard guardrail: never send an empty digest.
       if (userItems.length === 0) {
         const emergencyCount = Math.max(1, Math.min(3, count));
-        const emergency = applyRelevanceScores(enriched, u.topics || [], weights, {
+        const emergency = scoreDigestItemsForUser(enriched, u.topics || [], weights, {
           specialistMode: false,
-          repeatIndex,
           repeatPenalty,
+          isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
+          sourceDomainForItem: parseSourceDomain,
         })
           .sort((a, b) => b.relevanceScore - a.relevanceScore)
           .slice(0, emergencyCount);
@@ -2121,17 +1838,7 @@ async function main() {
 
       // 4. Apply depth — strip wim if user wants headlines only or one-liner
       const depth = prefs.depth || "full";
-      if (depth === "headline_only" || depth === "headlines" || depth === "scan") {
-        userItems = userItems.map(i => ({ ...i, wim: null }));
-      } else if (depth === "oneliner" || depth === "headline_plus_oneliner") {
-        // Prefer model-authored brief sentence; fallback to first sentence of wim.
-        userItems = userItems.map(i => ({
-          ...i,
-          wim: i.wim_brief
-            ? i.wim_brief
-            : (i.wim ? i.wim.replace(/<strong>(.*?)<\/strong>/s, "$1").split(".")[0] + "." : null)
-        }));
-      }
+      userItems = applyDigestDepth(userItems, depth);
 
       const previousDigestItems = Array.isArray(u.last_digest_items) ? u.last_digest_items : [];
       const digestQuality = computeDigestQualityScore({
@@ -2169,6 +1876,7 @@ async function main() {
 
       // 5. Deliver
       let delivered = false;
+      let engagementWriteFailures = 0;
       if (u.chatId && !u.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
         const userTelegram = formatTelegram(userItems, shortDate, u, {
           digestQuality,
@@ -2178,7 +1886,7 @@ async function main() {
         const userKeyboard = buildDigestInlineKeyboard(userItems);
         try {
           await sendTelegram(userTelegram, u.chatId, { reply_markup: userKeyboard });
-          appendEngagementEvent({
+          const eventOutcome = appendEngagementEventChecked({
             event_type: "digest_sent",
             event_key: `digest_sent:${userDigestId}:telegram`,
             date_et: digestDateKey,
@@ -2196,7 +1904,8 @@ async function main() {
               quality_components: digestQuality.components,
               items: eventItems,
             },
-          });
+          }, `digest_sent:telegram:${u.email || u.chatId}`);
+          if (!eventOutcome.ok) engagementWriteFailures += 1;
           delivered = true;
         } catch (err) {
           log(`⚠️ Telegram delivery failed for ${u.email || u.chatId}: ${err.message}`);
@@ -2237,7 +1946,7 @@ async function main() {
         }
         try {
           await sendEmail(u.email, subjectResult.subject, userEmailHtml, u.token || null);
-          appendEngagementEvent({
+          const eventOutcome = appendEngagementEventChecked({
             event_type: "digest_sent",
             event_key: `digest_sent:${userDigestId}:email`,
             date_et: digestDateKey,
@@ -2255,7 +1964,8 @@ async function main() {
               quality_components: digestQuality.components,
               items: eventItems,
             },
-          });
+          }, `digest_sent:email:${u.email || u.chatId}`);
+          if (!eventOutcome.ok) engagementWriteFailures += 1;
           delivered = true;
           if (isFirstDigest || suppressWelcome) u.welcome_email_sent = true; // avoid future welcome framing after manual/admin send
         } catch (err) {
@@ -2291,7 +2001,7 @@ async function main() {
         why_shown: Array.isArray(i.why_shown) ? i.why_shown : [],
       }));
       // Track which dates this user received a digest (for user-scoped archive)
-      const todayDateKey = etDateKey(now);
+      const todayDateKey = toEtDateKey(now);
       if (!u.digest_dates) u.digest_dates = [];
       if (!u.digest_dates.includes(todayDateKey)) u.digest_dates.push(todayDateKey);
       const history = Array.isArray(u.quality_history) ? u.quality_history.slice() : [];
@@ -2307,9 +2017,16 @@ async function main() {
       u.quality_history = history;
       u.last_quality_score = history[history.length - 1] || null;
       writeUser(u.chatId, u);
-      deliveredUsers.push({ id: u.email || u.chatId, on_demand: !!targetChatId });
+      deliveredUsers.push({
+        id: u.email || u.chatId,
+        on_demand: !!targetChatId,
+        engagement_event_failures: engagementWriteFailures,
+      });
 
-      log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth}, dqs=${digestQuality.score.toFixed(1)})`);
+      const eventWriteSuffix = engagementWriteFailures > 0
+        ? `, event_writes_failed=${engagementWriteFailures}`
+        : "";
+      log(`✅ Delivered to ${u.email || u.chatId} (${userItems.length} items, depth=${depth}, dqs=${digestQuality.score.toFixed(1)}${eventWriteSuffix})`);
     } catch (err) {
       failedUsers.push({ id: u.email || u.chatId, error: err.message, on_demand: !!targetChatId });
       log(`❌ Failed delivery to ${u.email || u.chatId}: ${err.message}`);

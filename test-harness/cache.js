@@ -355,6 +355,16 @@ function readPerplexityCacheFile(file, topicTag, stale = false) {
   };
 }
 
+function tryPerplexityCacheFallback(file, latestFallback, topicTag, stale = true) {
+  if (file && fs.existsSync(file)) {
+    return readPerplexityCacheFile(file, topicTag, stale);
+  }
+  if (latestFallback) {
+    return readPerplexityCacheFile(latestFallback, topicTag, true);
+  }
+  return null;
+}
+
 async function fetchTopicNewsCached({
   topicTag,
   query,
@@ -371,12 +381,9 @@ async function fetchTopicNewsCached({
   );
   const latestFallback = findLatestTopicCacheFile(topicTag);
 
-  if (!refreshCache && fs.existsSync(file)) {
-    return readPerplexityCacheFile(file, topicTag, false);
-  }
-
-  if (!refreshCache && latestFallback) {
-    return readPerplexityCacheFile(latestFallback, topicTag, true);
+  if (!refreshCache) {
+    const cached = tryPerplexityCacheFallback(file, latestFallback, topicTag, false);
+    if (cached) return cached;
   }
 
   if (!allowLiveApi) {
@@ -409,22 +416,14 @@ async function fetchTopicNewsCached({
       }
     );
   } catch (err) {
-    if (fs.existsSync(file)) {
-      return readPerplexityCacheFile(file, topicTag, true);
-    }
-    if (latestFallback) {
-      return readPerplexityCacheFile(latestFallback, topicTag, true);
-    }
+    const fallback = tryPerplexityCacheFallback(file, latestFallback, topicTag, true);
+    if (fallback) return fallback;
     throw err;
   }
 
   if (res.status < 200 || res.status >= 300) {
-    if (fs.existsSync(file)) {
-      return readPerplexityCacheFile(file, topicTag, true);
-    }
-    if (latestFallback) {
-      return readPerplexityCacheFile(latestFallback, topicTag, true);
-    }
+    const fallback = tryPerplexityCacheFallback(file, latestFallback, topicTag, true);
+    if (fallback) return fallback;
     throw new Error(`Perplexity fetch failed for ${topicTag}: status ${res.status}`);
   }
 

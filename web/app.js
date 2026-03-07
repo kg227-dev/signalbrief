@@ -1,319 +1,270 @@
-/* SignalBrief — app.js */
+/* SignalBrief — index.js (onboarding UI runtime) */
 
-const API = '';  // same origin
-
-const DEFAULT_TOPICS = [
-  'AI×Healthcare', 'Pharma M&A', 'Biotech', 'Payers',
-  'Regulatory/FDA', 'Clinical Trials', 'Digital Health',
-  'Consulting Industry', 'Strategy & Business', 'Health Systems'
-];
-
-let selectedTopics = new Set();
-
-// ── Shared: Topic chips ───────────────────────────────────────────────────────
-
-function renderChips(containerEl, noteEl, topics, selected = []) {
-  selected.forEach(t => selectedTopics.add(t));
-  containerEl.innerHTML = '';
-
-  topics.forEach(topic => {
-    const chip = document.createElement('div');
-    chip.className = 'chip' + (selectedTopics.has(topic) ? ' selected' : '');
-    chip.dataset.topic = topic;
-    chip.innerHTML = `<span class="chip-check">✓</span> ${topic}`;
-    chip.addEventListener('click', () => toggleChip(chip, topic, noteEl));
-    containerEl.appendChild(chip);
-  });
-  updateNote(noteEl);
+function showOnboarding() {
+  const hero = document.querySelector('.hero');
+  const onboard = document.getElementById('onboard-form');
+  if (!hero || !onboard) return;
+  hero.style.display = 'none';
+  onboard.style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function toggleChip(chip, topic, noteEl) {
-  if (selectedTopics.has(topic)) {
-    selectedTopics.delete(topic);
-    chip.classList.remove('selected');
-  } else {
-    selectedTopics.add(topic);
-    chip.classList.add('selected');
-  }
-  updateNote(noteEl);
+function showLanding() {
+  const hero = document.querySelector('.hero');
+  const onboard = document.getElementById('onboard-form');
+  if (!hero || !onboard) return;
+  onboard.style.display = 'none';
+  hero.style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function updateNote(noteEl) {
-  if (!noteEl) return;
-  const n = selectedTopics.size;
-  noteEl.textContent = `${n} selected${n < 2 ? ' — pick at least 2' : ''}`;
-  noteEl.classList.toggle('error', n < 2 && n > 0);
-}
-
-function addCustomTopic(inputEl, containerEl, noteEl) {
-  const val = inputEl.value.trim();
-  if (!val) return;
-  if (selectedTopics.has(val)) { inputEl.value = ''; return; }
-
-  // Add chip
-  const chip = document.createElement('div');
-  chip.className = 'chip selected';
-  chip.dataset.topic = val;
-  chip.innerHTML = `<span class="chip-check">✓</span> ${val} <span style="opacity:0.5;margin-left:2px;">×</span>`;
-  chip.addEventListener('click', () => toggleChip(chip, val, noteEl));
-  containerEl.appendChild(chip);
-  selectedTopics.add(val);
-  updateNote(noteEl);
-  inputEl.value = '';
-}
-
-// ── Shared: Depth radio ───────────────────────────────────────────────────────
-
-function initDepthOptions(defaultVal = 'full') {
-  document.querySelectorAll('.depth-option').forEach(opt => {
-    const val = opt.dataset.value;
-    if (val === defaultVal) {
-      opt.classList.add('selected');
-      opt.querySelector('input').checked = true;
-    }
-    opt.addEventListener('click', () => {
-      document.querySelectorAll('.depth-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
-      opt.querySelector('input').checked = true;
-    });
-  });
-}
-
-function getDepthValue() {
-  const checked = document.querySelector('.depth-option.selected');
-  return checked ? checked.dataset.value : 'full';
-}
-
-// ── ONBOARDING PAGE ───────────────────────────────────────────────────────────
-
-function initOnboarding() {
-  const sections = document.querySelectorAll('.section');
-  const dots = document.querySelectorAll('.step-dot');
-  const progressFill = document.getElementById('progressFill');
-
-  // Fade-up sections on load
-  sections.forEach((s, i) => {
-    setTimeout(() => s.classList.add('visible'), 100 + i * 120);
-  });
-
-  // Update progress based on scroll position
-  function updateProgress() {
-    let maxVisible = 0;
-    sections.forEach((s, i) => {
-      const rect = s.getBoundingClientRect();
-      if (rect.top < window.innerHeight * 0.8) maxVisible = i + 1;
-    });
-    const pct = Math.round((maxVisible / sections.length) * 100);
-    progressFill.style.width = pct + '%';
-    dots.forEach((d, i) => {
-      d.classList.toggle('active', i === maxVisible - 1);
-      d.classList.toggle('done', i < maxVisible - 1);
-    });
-  }
-  window.addEventListener('scroll', updateProgress);
+// ── Topic chips ───────────────────────────────────────────────────────────
+function toggleTopic(el) {
+  el.classList.toggle('selected');
   updateProgress();
-
-  // Chips
-  const chipsEl = document.getElementById('topicChips');
-  const noteEl = document.getElementById('topicMinNote');
-  renderChips(chipsEl, noteEl, DEFAULT_TOPICS);
-
-  document.getElementById('addTopicBtn').addEventListener('click', () => {
-    addCustomTopic(document.getElementById('customTopicInput'), chipsEl, noteEl);
-  });
-  document.getElementById('customTopicInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); addCustomTopic(e.target, chipsEl, noteEl); }
-  });
-
-  // Depth
-  initDepthOptions('full');
-
-  // Preview tabs
-  document.querySelectorAll('.preview-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.preview-panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
-    });
-  });
-
-  // Form submit
-  document.getElementById('signupForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const name = document.getElementById('name').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const telegram = document.getElementById('telegram').value.trim();
-    const emailErr = document.getElementById('emailError');
-    const submitErr = document.getElementById('submitError');
-    const btn = document.getElementById('submitBtn');
-
-    // Validate
-    let valid = true;
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailErr.classList.add('visible'); valid = false;
-    } else { emailErr.classList.remove('visible'); }
-
-    if (selectedTopics.size < 2) {
-      noteEl.classList.add('error');
-      noteEl.textContent = `${selectedTopics.size} selected — pick at least 2`;
-      document.getElementById('section1').scrollIntoView({ behavior: 'smooth' });
-      valid = false;
-    }
-    if (!valid) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Subscribing…';
-
-    try {
-      const res = await fetch('/api/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          email,
-          telegram: telegram.replace('@', '') || null,
-          topics: [...selectedTopics],
-          depth: getDepthValue(),
-          delivery_time: document.getElementById('deliveryTime').value,
-          frequency: document.getElementById('frequency').value,
-          items_per_digest: document.getElementById('itemsPerDigest').value,
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        document.getElementById('signupForm').style.display = 'none';
-        const success = document.getElementById('successState');
-        success.classList.add('visible');
-        success.scrollIntoView({ behavior: 'smooth' });
-        progressFill.style.width = '100%';
-      } else {
-        submitErr.textContent = data.error || 'Something went wrong. Try again.';
-        submitErr.classList.add('visible');
-        btn.disabled = false;
-        btn.textContent = 'Subscribe to SignalBrief →';
-      }
-    } catch {
-      submitErr.textContent = 'Network error. Please try again.';
-      submitErr.classList.add('visible');
-      btn.disabled = false;
-      btn.textContent = 'Subscribe to SignalBrief →';
-    }
-  });
 }
 
-// ── SETTINGS PAGE ─────────────────────────────────────────────────────────────
+function addCustomTopic() {
+  const input = document.getElementById('customTopic');
+  const value = input.value.trim();
+  if (!value) return;
+  const slug = 'custom_' + value.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  if (document.querySelector('[data-topic="' + slug + '"]')) { input.value = ''; return; }
+  const chip = document.createElement('div');
+  chip.className = 'topic-chip topic-chip-custom selected';
+  chip.dataset.topic = slug;
+  chip.onclick = function() { toggleTopic(this); };
+  chip.innerHTML = '<span class="check"></span> ' + value;
+  document.getElementById('topicGrid').appendChild(chip);
+  input.value = '';
+  updateProgress();
+}
 
-async function initSettings() {
-  const loadingEl = document.getElementById('loadingState');
-  const formEl = document.getElementById('settingsForm');
-  const notFoundEl = document.getElementById('notFoundState');
+document.getElementById('customTopic').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); addCustomTopic(); }
+});
 
-  const params = new URLSearchParams(window.location.search);
-  const email = params.get('email');
+// ── Depth ─────────────────────────────────────────────────────────────────
+function setSelectedDepth(el) {
+  document.querySelectorAll('.depth-option').forEach(function(o) { o.classList.remove('selected'); });
+  el.classList.add('selected');
+  updateProgress();
+}
 
-  if (!email) { loadingEl.style.display = 'none'; notFoundEl.style.display = 'block'; return; }
+function getSelectedDepth() {
+  var el = document.querySelector('.depth-option.selected');
+  return el ? el.dataset.depth : 'headline_plus_why';
+}
 
-  // Load user
-  const res = await fetch(`/api/user?email=${encodeURIComponent(email)}`);
-  if (!res.ok) { loadingEl.style.display = 'none'; notFoundEl.style.display = 'block'; return; }
-  const user = await res.json();
+function initDepthSelector(initialDepth) {
+  var current = document.querySelector('.depth-option.selected');
+  if (current) return;
+  var depth = initialDepth || 'headline_plus_why';
+  var fallback = document.querySelector('.depth-option[data-depth="' + depth + '"]');
+  if (fallback) fallback.classList.add('selected');
+}
 
-  loadingEl.style.display = 'none';
-  formEl.style.display = 'block';
+// ── Size toggle (2-pill) ──────────────────────────────────────────────────
+function selectSize(el) {
+  document.querySelectorAll('.size-pill').forEach(function(p) { p.classList.remove('selected'); });
+  el.classList.add('selected');
+}
 
-  // Pre-fill details
-  document.getElementById('name').value = user.name || '';
-  document.getElementById('email').value = user.email || '';
-  document.getElementById('telegram').value = user.telegram ? '@' + user.telegram : '';
+function getSize() {
+  const sel = document.querySelector('.size-pill.selected');
+  return sel ? parseInt(sel.dataset.size) : 5;
+}
 
-  // Chips
-  const chipsEl = document.getElementById('topicChips');
-  const noteEl = document.getElementById('topicMinNote');
-  const allTopics = [...new Set([...DEFAULT_TOPICS, ...(user.topics || [])])];
-  renderChips(chipsEl, noteEl, allTopics, user.topics || []);
+// ── Day circles ───────────────────────────────────────────────────────────
+function toggleDay(el) {
+  el.classList.toggle('active');
+  syncDayPresets();
+  updateProgress();
+}
 
-  document.getElementById('addTopicBtn').addEventListener('click', () => {
-    addCustomTopic(document.getElementById('customTopicInput'), chipsEl, noteEl);
-  });
-  document.getElementById('customTopicInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); addCustomTopic(e.target, chipsEl, noteEl); }
-  });
-
-  // Depth
-  const depth = user.preferences?.depth || 'full';
-  initDepthOptions(depth);
-
-  // Schedule
-  const p = user.preferences || {};
-  const setVal = (id, val) => { if (val && document.getElementById(id)) document.getElementById(id).value = val; };
-  setVal('deliveryTime', p.delivery_time);
-  setVal('frequency', p.frequency);
-  setVal('itemsPerDigest', p.items_per_digest?.toString());
-
-  // Save
-  document.getElementById('saveBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('saveBtn');
-    const errEl = document.getElementById('saveError');
-    if (selectedTopics.size < 2) {
-      errEl.textContent = 'Please select at least 2 topics.';
-      errEl.classList.add('visible'); return;
+function setDays(preset) {
+  const circles = document.querySelectorAll('.day-circle');
+  circles.forEach(function(c) {
+    const day = parseInt(c.dataset.day);
+    if (preset === 'weekdays') {
+      c.classList.toggle('active', day >= 1 && day <= 5);
+    } else if (preset === 'everyday') {
+      c.classList.add('active');
     }
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          name: document.getElementById('name').value.trim(),
-          telegram: document.getElementById('telegram').value.replace('@','').trim() || null,
-          topics: [...selectedTopics],
-          preferences: {
-            depth: getDepthValue(),
-            delivery_time: document.getElementById('deliveryTime').value,
-            frequency: document.getElementById('frequency').value,
-            items_per_digest: parseInt(document.getElementById('itemsPerDigest').value),
-          }
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        const banner = document.getElementById('savedBanner');
-        banner.classList.add('visible');
-        setTimeout(() => banner.classList.remove('visible'), 3000);
-      } else {
-        errEl.textContent = data.error || 'Save failed.';
-        errEl.classList.add('visible');
-      }
-    } catch {
-      errEl.textContent = 'Network error.'; errEl.classList.add('visible');
-    }
-    btn.disabled = false; btn.textContent = 'Save preferences';
   });
+  document.getElementById('preset-weekdays').classList.toggle('active', preset === 'weekdays');
+  document.getElementById('preset-everyday').classList.toggle('active', preset === 'everyday');
+  updateProgress();
+}
 
-  // Unsubscribe
-  document.getElementById('unsubBtn').addEventListener('click', async () => {
-    if (!confirm('Unsubscribe from SignalBrief? You can re-subscribe anytime.')) return;
-    await fetch('/api/settings', {
+function syncDayPresets() {
+  const active = Array.from(document.querySelectorAll('.day-circle.active')).map(function(c) { return parseInt(c.dataset.day); });
+  const isWeekdays = active.length === 5 && [1,2,3,4,5].every(function(d) { return active.includes(d); });
+  const isEveryday = active.length === 7;
+  document.getElementById('preset-weekdays').classList.toggle('active', isWeekdays);
+  document.getElementById('preset-everyday').classList.toggle('active', isEveryday);
+}
+
+function getSelectedDays() {
+  return Array.from(document.querySelectorAll('.day-circle.active')).map(function(c) { return parseInt(c.dataset.day); });
+}
+
+function getDaysFrequency() {
+  const days = getSelectedDays();
+  const isWeekdays = days.length === 5 && [1,2,3,4,5].every(function(d) { return days.includes(d); });
+  const isEveryday = days.length === 7;
+  if (isWeekdays) return 'daily_weekday';
+  if (isEveryday) return 'daily_all';
+  return 'custom';
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────
+function updateProgress() {
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const topics = document.querySelectorAll('.topic-chip.selected').length;
+  const depth = getSelectedDepth();
+  const days = document.querySelectorAll('.day-circle.active').length;
+
+  function setStep(id, filled) {
+    document.getElementById(id).className = 'progress-step' + (filled ? ' filled' : '');
+  }
+  setStep('prog-1', name && email);
+  setStep('prog-2', topics >= 2);
+  setStep('prog-3', !!depth);
+  setStep('prog-4', days > 0);
+}
+
+document.getElementById('name').addEventListener('input', updateProgress);
+document.getElementById('email').addEventListener('input', updateProgress);
+
+function showSubmitError(msg) {
+  var el = document.getElementById('submitError');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function clearSubmitError() {
+  var el = document.getElementById('submitError');
+  if (!el) return;
+  el.textContent = '';
+  el.classList.remove('visible');
+}
+
+// ── Form submit ───────────────────────────────────────────────────────────
+document.getElementById('onboardForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  clearSubmitError();
+
+  const selectedTopics = Array.from(document.querySelectorAll('.topic-chip.selected'))
+    .map(function(c) { return c.dataset.topic; });
+
+  if (selectedTopics.length < 2) {
+    showSubmitError('Please select at least 2 topics.');
+    return;
+  }
+
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  if (!name || !email) {
+    showSubmitError('Name and email are required.');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showSubmitError('Please enter a valid email address.');
+    document.getElementById('email').focus();
+    return;
+  }
+
+  const days = getSelectedDays();
+  if (days.length === 0) {
+    showSubmitError('Please select at least one delivery day.');
+    return;
+  }
+
+  const btn = document.querySelector('.submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Subscribing…';
+
+  const selectedDepth = getSelectedDepth();
+  const referralToken = (new URLSearchParams(window.location.search).get('ref') || '').trim();
+
+  try {
+    const res = await fetch('/api/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, status: 'unsubscribed' })
+      body: JSON.stringify({
+        name: name,
+        email: email,
+        telegram: document.getElementById('telegram').value.trim().replace(/^@+/, '') || null,
+        topics: selectedTopics,
+        depth: selectedDepth,
+        delivery_time: document.getElementById('deliveryTime').value,
+        frequency: getDaysFrequency(),
+        days_of_week: days,
+        items_per_digest: getSize(),
+        referral_token: referralToken || null
+      })
     });
-    document.getElementById('settingsForm').innerHTML = `
-      <div class="section visible" style="text-align:center;padding:40px 24px;">
-        <div style="font-size:32px;margin-bottom:12px;">👋</div>
-        <div style="font-family:'Instrument Serif',serif;font-size:22px;margin-bottom:8px;">You're unsubscribed.</div>
-        <div style="color:var(--text-muted);font-size:14px;">No more digests. <a href="/" style="color:var(--blue);">Re-subscribe anytime →</a></div>
-      </div>`;
+    const result = await res.json();
+    if (result.success) {
+      clearSubmitError();
+      document.getElementById('onboardForm').style.display = 'none';
+      document.getElementById('formFooter').style.display = 'none';
+      document.getElementById('successCard').classList.add('visible');
+      document.querySelectorAll('.progress-step').forEach(function(s) { s.className = 'progress-step filled'; });
+      var settingsLink = document.getElementById('settingsLink');
+      if (settingsLink && result.token) settingsLink.href = '/settings?token=' + encodeURIComponent(result.token);
+      var archiveLink = document.getElementById('archiveLink');
+      if (archiveLink && result.archiveUrl) archiveLink.href = result.archiveUrl;
+      // Update delivery time in success message
+      var timeVal = document.getElementById('deliveryTime').value || '07:00';
+      var timeParts = timeVal.split(':').map(Number);
+      var h = timeParts[0], m = timeParts[1];
+      var ampm = h >= 12 ? 'PM' : 'AM';
+      var hour = h % 12 || 12;
+      var timeStr = hour + ':' + String(m).padStart(2, '0') + ' ' + ampm + ' ET';
+      document.getElementById('successDeliveryMsg').innerHTML = 'Your first SignalBrief arrives at <strong>' + timeStr + '</strong>. Here\'s a preview of what to expect:';
+    } else {
+      showSubmitError(result.error || 'Something went wrong. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Start my SignalBrief →';
+    }
+  } catch(err) {
+    showSubmitError('Network error. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Start my SignalBrief →';
+  }
+});
+
+// ── Preview tab switcher ──────────────────────────────────────────────────
+function switchPreview(panel, btn) {
+  document.getElementById('prev-telegram').style.display = panel === 'telegram' ? 'block' : 'none';
+  document.getElementById('prev-email').style.display = panel === 'email' ? 'block' : 'none';
+  document.querySelectorAll('.prev-tab').forEach(function(t) {
+    t.style.borderColor = '#E5E7EB';
+    t.style.background = '#fff';
+    t.style.color = '#6B7280';
+    t.style.fontWeight = '500';
   });
+  btn.style.borderColor = '#2563EB';
+  btn.style.background = '#EFF6FF';
+  btn.style.color = '#2563EB';
+  btn.style.fontWeight = '600';
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-
-if (window.SETTINGS_MODE) {
-  initSettings();
-} else if (document.getElementById('signupForm')) {
-  initOnboarding();
+// ── Dark mode ──────────────────────────────────────────────────────────────
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  var isDark = document.body.classList.contains('dark');
+  document.getElementById('darkToggle').textContent = isDark ? '☀️' : '🌙';
+  try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e){}
 }
+(function initDark() {
+  try { if (localStorage.getItem('sbDark') === '1') { document.body.classList.add('dark'); document.getElementById('darkToggle').textContent = '☀️'; } } catch(e){}
+})();
+
+// Init
+initDepthSelector('headline_plus_why');
+updateProgress();

@@ -4,13 +4,16 @@ async function handleAdminApiRoutes(ctx, deps) {
     json, isAdminAuthed, getClientIp, checkLoginRate, requireJsonBody, CONFIG,
     verifyAdminPassword, createAdminSession, clearAdminSessionByRequest, BASE_URL,
     emitIgnoredEventsIfDue, loadCostRunsNewest, allUsers, loadEngagementEvents, parseIsoTs,
-    computeFeedbackTrend, digestRunStatus, getCachedOrRefreshSchedulerHeartbeat, readJsonLineLog,
+    computeFeedbackTrend, digestRunStatus, getCachedOrRefreshSchedulerHeartbeat, readSchedulerHeartbeat, readJsonLineLog,
     ADMIN_MESSAGE_LOG, ADMIN_ACTION_LOG, maskEmail, getRecentAutoAdjustmentsForUser,
     logAdminActionEvent, normalizeDeliveryTimeInput, writeUser, sendMagicLinkEmail,
     handleAdminRunDigest, logAdminMessageEvent, summarizeMessage, hashText, escapeHtml,
     sendEmail, sendTelegramText, formatTimeEt, parseEtNowParts, computeNextDeliveryEt,
     formatDaysLabel, computeQualityTrend, formatCountdown,
   } = deps;
+  const loadSchedulerHeartbeat = typeof getCachedOrRefreshSchedulerHeartbeat === "function"
+    ? getCachedOrRefreshSchedulerHeartbeat
+    : (typeof readSchedulerHeartbeat === "function" ? readSchedulerHeartbeat : (() => null));
   if (pathname === "/api/admin/login" && req.method === "POST") {
     const ip = getClientIp(req);
     if (checkLoginRate(ip)) return json(res, { error: "Too many attempts. Try again in 15 minutes." }, 429);
@@ -369,7 +372,7 @@ async function handleAdminApiRoutes(ctx, deps) {
       ? minutesUntilEtKey(nextExpectedActiveDelivery.next_delivery_key)
       : null;
     const digestRun = digestRunStatus();
-    const schedulerWorker = getCachedOrRefreshSchedulerHeartbeat();
+    const schedulerWorker = loadSchedulerHeartbeat();
 
     // Health / system status
     const lastRun = runs[0] || null; // runs is newest-first

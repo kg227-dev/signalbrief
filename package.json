@@ -8,11 +8,19 @@
     "web": "node web/server.js",
     "bot": "node src/entrypoints/bot-server.js",
     "worker": "node src/entrypoints/scheduler-worker.js",
+    "check:module-linkage": "node --check scripts/module-linkage.mjs",
     "smoke:worker": "node scripts/smoke-worker.js",
     "smoke:admin-scheduler": "node scripts/smoke-admin-scheduler.js",
-    "test": "node src/entrypoints/digest.js --dry-run",
-    "qa:harness": "node test-harness/run-tests.js",
+    "smoke:digest": "node src/entrypoints/digest.js --dry-run",
+    "test": "node scripts/test-critical-paths.js",
+    "qa:harness": "node test-harness/run-tests.js --deterministic",
+    "qa:benchmark": "node test-harness/run-tests.js",
     "qa:matrix": "node test-harness/run-matrix.js"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "eslint": "^10.0.3"
+  }
 }

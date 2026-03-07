@@ -7,6 +7,11 @@ const ROOT = path.join(__dirname, "..");
 const DATA_DIR = path.join(ROOT, "data");
 const EVENTS_FILE = path.join(DATA_DIR, "engagement-events.jsonl");
 
+function logDataWarning(scope, identifier, err) {
+  const message = err && err.message ? err.message : String(err || "unknown error");
+  process.stderr.write(`[marketing-report] skipped ${scope} (${identifier}): ${message}\n`);
+}
+
 function readUsers() {
   const files = fs
     .readdirSync(DATA_DIR)
@@ -19,6 +24,7 @@ function readUsers() {
       users.push(raw);
     } catch (err) {
       // Skip malformed user files so one bad record does not block reporting.
+      logDataWarning("user file", file, err);
     }
   }
   return users;
@@ -32,11 +38,13 @@ function readEvents() {
     .map((line) => line.trim())
     .filter(Boolean);
   const events = [];
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
     try {
       events.push(JSON.parse(line));
     } catch (err) {
       // Skip malformed lines.
+      logDataWarning("event line", `line ${i + 1}`, err);
     }
   }
   return events;

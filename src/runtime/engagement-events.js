@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const DATA_DIR = path.join(__dirname, "data");
+const APP_ROOT = path.resolve(__dirname, "..", "..");
+const DATA_DIR = path.join(APP_ROOT, "data");
 const EVENTS_FILE = path.join(DATA_DIR, "engagement-events.jsonl");
 
 function etDateKey(date = new Date()) {

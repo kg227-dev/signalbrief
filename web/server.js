@@ -10,16 +10,16 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../store");
-const { sendEmail, sendWelcomeEmail, sendReferralThankYou, signUnsubEmail } = require("../mailer");
+const { initStore, readUser, writeUser, allUsers, generateToken, findUserByToken } = require("../src/runtime/store");
+const { sendEmail, sendWelcomeEmail, sendReferralThankYou, signUnsubEmail } = require("../src/runtime/mailer");
 const {
   appendEngagementEvent,
   buildDigestId,
   normalizeUrl: normalizeEngagementUrl,
   emitIgnoredEventsIfDue,
   loadEngagementEvents,
-} = require("../engagement-events");
-const { computeQualityTrend } = require("../quality-score");
+} = require("../src/runtime/engagement-events");
+const { computeQualityTrend } = require("../src/runtime/quality-score");
 const { triggerDigest, digestRunStatus } = require("../digest-runner");
 const {
   verifyAdminPassword,
@@ -40,9 +40,23 @@ const TRANSPARENT_GIF = Buffer.from(
   "base64"
 );
 
+initStore();
+
 // ── Rate limiting (in-memory, per-IP + per-email) ─────────────────────────────
-const RATE_IP    = new Map(); // ip  → { count, resetAt }
-const RATE_EMAIL = new Map(); // email → resetAt (cooldown)
+function createServerState() {
+  return {
+    rateIp: new Map(),
+    rateEmail: new Map(),
+  };
+}
+
+let SERVER_STATE = createServerState();
+
+function resetServerState() {
+  SERVER_STATE = createServerState();
+  return SERVER_STATE;
+}
+
 const IP_LIMIT   = 5;          // max signups per IP per window
 const IP_WINDOW  = 15 * 60 * 1000; // 15 min
 const EMAIL_COOLDOWN = 10 * 60 * 1000; // 10 min re-submit cooldown
@@ -78,22 +92,24 @@ function getRequestScheme(req) {
 
 function checkRateLimit(ip, email) {
   const now = Date.now();
+  const rateIp = SERVER_STATE.rateIp;
+  const rateEmail = SERVER_STATE.rateEmail;
 
   // Prune expired entries (keep map lean)
-  for (const [k, v] of RATE_IP) if (v.resetAt < now) RATE_IP.delete(k);
-  for (const [k, v] of RATE_EMAIL) if (v < now) RATE_EMAIL.delete(k);
+  for (const [k, v] of rateIp) if (v.resetAt < now) rateIp.delete(k);
+  for (const [k, v] of rateEmail) if (v < now) rateEmail.delete(k);
 
   // Per-IP check
-  const ipEntry = RATE_IP.get(ip) || { count: 0, resetAt: now + IP_WINDOW };
+  const ipEntry = rateIp.get(ip) || { count: 0, resetAt: now + IP_WINDOW };
   if (ipEntry.resetAt < now) { ipEntry.count = 0; ipEntry.resetAt = now + IP_WINDOW; }
   if (ipEntry.count >= IP_LIMIT) return { limited: true, reason: "Too many signups from your network. Try again in 15 minutes." };
   ipEntry.count++;
-  RATE_IP.set(ip, ipEntry);
+  rateIp.set(ip, ipEntry);
 
   // Per-email cooldown
-  const emailReset = RATE_EMAIL.get(email.toLowerCase());
+  const emailReset = rateEmail.get(email.toLowerCase());
   if (emailReset && emailReset > now) return { limited: true, reason: "This email was just submitted. Wait a few minutes before resubmitting." };
-  RATE_EMAIL.set(email.toLowerCase(), now + EMAIL_COOLDOWN);
+  rateEmail.set(email.toLowerCase(), now + EMAIL_COOLDOWN);
 
   return { limited: false };
 }
@@ -101,6 +117,8 @@ function checkRateLimit(ip, email) {
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
+const ARCHIVE_LEGACY_USAGE_LOG = path.join(__dirname, "../data/archive-legacy-usage.jsonl");
+const ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC = process.env.ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC || "2026-06-30T00:00:00Z";
 const SCHEDULER_HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
   ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
   : path.join(__dirname, "../data/scheduler-heartbeat.json");
@@ -123,6 +141,25 @@ function appendEngagementEventChecked(payload, context) {
     console.warn(`[web] engagement event write failed [${context}] code=${code}${detail}`);
   }
   return outcome;
+}
+
+function isLegacyArchiveEndpointEnabled() {
+  if (String(process.env.ARCHIVE_LEGACY_FORCE_ENABLE || "") === "1") return true;
+  const ts = Date.parse(String(ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC || ""));
+  if (!Number.isFinite(ts)) return true;
+  return Date.now() < ts;
+}
+
+function recordLegacyArchiveUsage(req, endpoint, outcome, metadata = {}) {
+  appendJsonLineLog(ARCHIVE_LEGACY_USAGE_LOG, {
+    ts_utc: new Date().toISOString(),
+    endpoint,
+    outcome,
+    method: req.method,
+    host: getRequestHost(req),
+    ip: getClientIp(req),
+    metadata: metadata && typeof metadata === "object" ? metadata : {},
+  }, "archive-legacy-usage");
 }
 
 function readJsonLineTail(filePath, limit = 30, maxBytes = 512 * 1024) {
@@ -1530,15 +1567,33 @@ const server = http.createServer(async (req, res) => {
   // GET /api/archive?token=... — user-specific archive (filtered to dates they received)
   // Without token: returns empty (archive requires auth)
   if (pathname === "/api/archive" && req.method === "GET") {
+    if (!isLegacyArchiveEndpointEnabled()) {
+      recordLegacyArchiveUsage(req, "/api/archive", "blocked_retired");
+      return json(res, {
+        error: "legacy archive endpoint retired",
+        use: "/api/archive/all",
+        retired_after_utc: ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC,
+      }, 410);
+    }
+
     const token = url.searchParams.get("token");
-    if (!token) return json(res, { digests: [], requiresAuth: true });
+    if (!token) {
+      recordLegacyArchiveUsage(req, "/api/archive", "missing_token");
+      return json(res, { digests: [], requiresAuth: true });
+    }
 
     const user = findUserByToken(token);
-    if (!user) return json(res, { error: "invalid token" }, 401);
+    if (!user) {
+      recordLegacyArchiveUsage(req, "/api/archive", "invalid_token");
+      return json(res, { error: "invalid token" }, 401);
+    }
 
     const archiveDir = path.join(__dirname, "../archive");
     const files = readArchiveFiles(archiveDir);
-    if (files.length === 0) return json(res, { digests: [] });
+    if (files.length === 0) {
+      recordLegacyArchiveUsage(req, "/api/archive", "served_empty", { user_chat_id: String(user.chatId || "") });
+      return json(res, { digests: [] });
+    }
 
     const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
     const digests = files.flatMap(f => {
@@ -1550,6 +1605,10 @@ const server = http.createServer(async (req, res) => {
       } catch {
         return [];
       }
+    });
+    recordLegacyArchiveUsage(req, "/api/archive", "served", {
+      user_chat_id: String(user.chatId || ""),
+      digest_count: digests.length,
     });
     return json(res, { digests });
   }
@@ -1614,23 +1673,53 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/archive/:date?token=... — full digest for a specific date
   if (pathname.startsWith("/api/archive/") && req.method === "GET") {
+    if (!isLegacyArchiveEndpointEnabled()) {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "blocked_retired");
+      return json(res, {
+        error: "legacy archive endpoint retired",
+        use: "/api/archive/all",
+        retired_after_utc: ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC,
+      }, 410);
+    }
+
     const rawDate = pathname.replace("/api/archive/", "").replace(/\/+$/, "");
     // Sanitize: only allow YYYY-MM-DD format to prevent path traversal
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return json(res, { error: "invalid date" }, 400);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "invalid_date", { date: rawDate });
+      return json(res, { error: "invalid date" }, 400);
+    }
 
     // Token auth required: verify user received this digest
     const token = url.searchParams.get("token");
-    if (!token) return json(res, { error: "token required" }, 400);
+    if (!token) {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "missing_token", { date: rawDate });
+      return json(res, { error: "token required" }, 400);
+    }
     const user = findUserByToken(token);
-    if (!user) return json(res, { error: "invalid token" }, 401);
+    if (!user) {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "invalid_token", { date: rawDate });
+      return json(res, { error: "invalid token" }, 401);
+    }
 
     const archiveDir = path.join(__dirname, "../archive");
     const files = readArchiveFiles(archiveDir);
     const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
-    if (!allowedDates.has(rawDate)) return json(res, { error: "not found" }, 404);
+    if (!allowedDates.has(rawDate)) {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "not_found", {
+        date: rawDate,
+        user_chat_id: String(user.chatId || ""),
+      });
+      return json(res, { error: "not found" }, 404);
+    }
 
     const file = path.join(archiveDir, `${rawDate}.json`);
-    if (!fs.existsSync(file)) return json(res, { error: "not found" }, 404);
+    if (!fs.existsSync(file)) {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "file_missing", {
+        date: rawDate,
+        user_chat_id: String(user.chatId || ""),
+      });
+      return json(res, { error: "not found" }, 404);
+    }
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8"));
       const userTopics = Array.isArray(user.topics) ? user.topics : [];
@@ -1649,8 +1738,16 @@ const server = http.createServer(async (req, res) => {
           relevanceScore: archiveRelevanceScore(item, userTopics, topicWeights),
         }));
       }
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "served", {
+        date: rawDate,
+        user_chat_id: String(user.chatId || ""),
+      });
       return json(res, raw);
     } catch {
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "malformed_file", {
+        date: rawDate,
+        user_chat_id: String(user.chatId || ""),
+      });
       return json(res, { error: "malformed archive file" }, 500);
     }
   }

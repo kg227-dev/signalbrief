@@ -17,17 +17,43 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { loadConfig } = require("./config-provider");
 
-const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
-const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
-const WELCOME_TEMPLATE = fs.readFileSync(path.join(__dirname, "templates/welcome.html"), "utf8");
+const APP_ROOT = path.resolve(__dirname, "..", "..");
+const WELCOME_TEMPLATE_PATH = path.join(APP_ROOT, "templates", "welcome.html");
+let welcomeTemplateCache = null;
 
-// ── HMAC helpers (B-3) ────────────────────────────────────────────────────────
-// Sign email addresses for the RFC 8058 fallback unsubscribe URL.
-// Uses the last 32 chars of the Anthropic key as a stable HMAC secret.
-// Verified in server.js before allowing email-based unsubscribes.
+function getBaseUrl() {
+  return process.env.BASE_URL || "https://getsignalbrief.com";
+}
+
+function getConfig() {
+  return loadConfig();
+}
+
+function getConfigKeys() {
+  const config = getConfig();
+  return config && typeof config.keys === "object" ? config.keys : {};
+}
+
+function loadWelcomeTemplate() {
+  if (welcomeTemplateCache !== null) return welcomeTemplateCache;
+  try {
+    welcomeTemplateCache = fs.readFileSync(WELCOME_TEMPLATE_PATH, "utf8");
+    return welcomeTemplateCache;
+  } catch (err) {
+    const wrapped = new Error(`[mailer] failed to load welcome template (${WELCOME_TEMPLATE_PATH}): ${err.message}`);
+    wrapped.cause = err;
+    throw wrapped;
+  }
+}
+
+// ── HMAC helpers (legacy unsubscribe bridge) ───────────────────────────────────
+// Keeps backward compatibility for previously issued signed email-based
+// unsubscribe links while runtime converges on token-based unsubscribe URLs.
 function _unsubSecret() {
-  return (CONFIG.keys.anthropic || "").slice(-32) || "signalbrief-unsub-secret";
+  const keys = getConfigKeys();
+  return (keys.anthropic || "").slice(-32) || "signalbrief-unsub-secret";
 }
 
 function signUnsubEmail(email) {
@@ -38,9 +64,16 @@ function signUnsubEmail(email) {
 }
 
 function normalizeBaseUrl(rawBaseUrl) {
-  const fallback = String(BASE_URL || "").trim() || "https://getsignalbrief.com";
+  const fallback = String(getBaseUrl() || "").trim() || "https://getsignalbrief.com";
   const raw = String(rawBaseUrl || fallback).trim() || fallback;
   return raw.replace(/\/+$/, "");
+}
+
+function buildUnsubscribeUrl(to, token = null) {
+  const root = normalizeBaseUrl(getBaseUrl());
+  if (token) return `${root}/api/unsubscribe?token=${encodeURIComponent(token)}`;
+  // Token-less emails are treated as transactional/non-settings entrypoints.
+  return `${root}/settings`;
 }
 
 // digestId path encoding scheme for /t/:digestId/:token/o.gif:
@@ -53,10 +86,10 @@ function encodeDigestIdParam(digestId) {
     .replace(/=+$/g, "");
 }
 
-function buildOpenTrackingPixel(digestId, token, baseUrl = BASE_URL) {
+function buildOpenTrackingPixel(digestId, token, baseUrl = null) {
   const digestParam = encodeDigestIdParam(digestId);
   const tokenParam = encodeURIComponent(String(token || "").trim());
-  const root = normalizeBaseUrl(baseUrl);
+  const root = normalizeBaseUrl(baseUrl || getBaseUrl());
   const src = `${root}/t/${digestParam}/${tokenParam}/o.gif`;
   return `<img src="${src}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" />`;
 }
@@ -64,22 +97,24 @@ function buildOpenTrackingPixel(digestId, token, baseUrl = BASE_URL) {
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
 async function sendViaResend(to, subject, html, token = null) {
-  const apiKey = CONFIG.keys.resendApiKey;
-  const fromEmail = CONFIG.keys.fromEmail || "digest@signalbrief.co";
-  const fromName = CONFIG.keys.fromName || "SignalBrief";
-  const unsubUrl = token
-    ? `${BASE_URL}/api/unsubscribe?token=${encodeURIComponent(token)}`
-    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}&sig=${signUnsubEmail(to)}`;
+  const keys = getConfigKeys();
+  const apiKey = keys.resendApiKey;
+  const fromEmail = keys.fromEmail || "digest@signalbrief.co";
+  const fromName = keys.fromName || "SignalBrief";
+  const unsubUrl = buildUnsubscribeUrl(to, token);
+  const listHeaders = {
+    "List-Unsubscribe": `<${unsubUrl}>`,
+  };
+  if (token) {
+    listHeaders["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
 
   const body = JSON.stringify({
     from: `${fromName} <${fromEmail}>`,
     to: [to],
     subject,
     html,
-    headers: {
-      "List-Unsubscribe": `<${unsubUrl}>`,
-      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-    },
+    headers: listHeaders,
   });
 
   return new Promise((resolve, reject) => {
@@ -113,10 +148,11 @@ async function sendViaResend(to, subject, html, token = null) {
 // ── Gmail OAuth fallback ──────────────────────────────────────────────────────
 
 async function refreshGoogleToken() {
+  const keys = getConfigKeys();
   const formData = new URLSearchParams({
-    client_id: CONFIG.keys.googleClientId,
-    client_secret: CONFIG.keys.googleClientSecret,
-    refresh_token: CONFIG.keys.googleRefreshToken,
+    client_id: keys.googleClientId,
+    client_secret: keys.googleClientSecret,
+    refresh_token: keys.googleRefreshToken,
     grant_type: "refresh_token",
   }).toString();
 
@@ -138,24 +174,26 @@ async function refreshGoogleToken() {
 }
 
 async function sendViaGmail(to, subject, html, token = null) {
+  const keys = getConfigKeys();
   const accessToken = await refreshGoogleToken();
   const fromEmail = "jarvisjones2922@gmail.com";
-  const fromName = CONFIG.keys.fromName || "SignalBrief";
-  const unsubUrl = token
-    ? `${BASE_URL}/api/unsubscribe?token=${encodeURIComponent(token)}`
-    : `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(to)}&sig=${signUnsubEmail(to)}`;
+  const fromName = keys.fromName || "SignalBrief";
+  const unsubUrl = buildUnsubscribeUrl(to, token);
 
-  const mime = [
+  const mimeLines = [
     `To: ${to}`,
     `From: ${fromName} <${fromEmail}>`,
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
     `MIME-Version: 1.0`,
     `Content-Type: text/html; charset=utf-8`,
     `List-Unsubscribe: <${unsubUrl}>`,
-    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
     ``,
     html,
-  ].join("\r\n");
+  ];
+  if (token) {
+    mimeLines.splice(6, 0, `List-Unsubscribe-Post: List-Unsubscribe=One-Click`);
+  }
+  const mime = mimeLines.join("\r\n");
 
   const raw = Buffer.from(mime).toString("base64")
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -186,8 +224,9 @@ async function sendViaGmail(to, subject, html, token = null) {
 // ── Main send function ────────────────────────────────────────────────────────
 
 async function sendEmail(to, subject, html, token = null) {
+  const keys = getConfigKeys();
   // Use Resend if configured, otherwise Gmail
-  if (CONFIG.keys.resendApiKey) {
+  if (keys.resendApiKey) {
     const result = await sendViaResend(to, subject, html, token);
     if (result.ok) return { ok: true, via: "resend" };
     console.error(`Resend failed (${result.error}), falling back to Gmail...`);
@@ -231,7 +270,7 @@ function deliveryTimeLabelEt(user) {
 
 function profileLinks(user) {
   const token = encodeURIComponent(String(user?.token || "").trim());
-  const root = normalizeBaseUrl(BASE_URL);
+  const root = normalizeBaseUrl(getBaseUrl());
   return {
     settings: `${root}/settings?token=${token}`,
     pause: `${root}/api/pause?token=${token}`,
@@ -322,8 +361,9 @@ async function sendAutoPauseConfirmationEmail(user) {
 async function sendWelcomeEmail(user) {
   const { name, email } = user;
   const prefs = user.preferences || {};
-  const settingsUrl = `${BASE_URL}/settings?token=${user.token}`;
-  const archiveUrl  = `${BASE_URL}/archive?token=${user.token}`;
+  const baseUrl = getBaseUrl();
+  const settingsUrl = `${baseUrl}/settings?token=${user.token}`;
+  const archiveUrl  = `${baseUrl}/archive?token=${user.token}`;
   const firstName = (name || "there").split(" ")[0];
 
   const [hRaw, mRaw] = (prefs.delivery_time || "07:00").split(":").map(Number);
@@ -357,7 +397,7 @@ async function sendWelcomeEmail(user) {
     return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${t}</span>`;
   }).join("");
 
-  const html = WELCOME_TEMPLATE
+  const html = loadWelcomeTemplate()
     .replace(/\{\{NAME\}\}/g, firstName)
     .replace(/\{\{TOPICS_HTML\}\}/g, topicsHtml)
     .replace(/\{\{TOPIC_COUNT\}\}/g, String(topics.length))

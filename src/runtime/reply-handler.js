@@ -6,20 +6,45 @@
  * - /settings, /bookmarks, /topics, /help
  * - Natural language: "save 3", "more AI", "less pharma", "add GLP-1"
  * 
- * Usage: node reply-handler.js "<message>" "<chat_id>"
+ * Usage: node src/runtime/reply-handler.js "<message>" "<chat_id>"
  * Or: called from bot-server.js polling dispatcher (default runtime)
  */
 
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const { readUser, writeUser, allUsers, generateToken } = require("./store");
+const { loadConfig } = require("./config-provider");
+const { initStore, readUser, writeUser, allUsers, generateToken } = require("./store");
 const { sendEmail: sendEmailViaMailer, sendWelcomeEmail } = require("./mailer");
 const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
-const { triggerDigest } = require("./digest-runner");
+const { triggerDigest } = require("../../digest-runner");
 
-const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
-const BASE_URL = process.env.BASE_URL || "https://getsignalbrief.com";
+const APP_ROOT = path.resolve(__dirname, "..", "..");
+
+function getBaseUrl() {
+  return process.env.BASE_URL || "https://getsignalbrief.com";
+}
+
+let storeReady = false;
+function ensureStoreReady() {
+  if (storeReady) return;
+  initStore();
+  storeReady = true;
+}
+
+function getConfig() {
+  return loadConfig();
+}
+
+function getConfigKeys() {
+  const config = getConfig();
+  return config && typeof config.keys === "object" ? config.keys : {};
+}
+
+function getBotToken() {
+  const keys = getConfigKeys();
+  return keys.signalBriefBotToken || keys.telegramBotToken || "";
+}
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -52,13 +77,26 @@ function appendEngagementEventChecked(payload, context) {
 }
 
 // ── Telegram-first onboarding state ──────────────────────────────────────────
-// Maps chatId → true when we're waiting for the user to reply with their email
-const AWAITING_EMAIL = new Map();
-// Maps chatId → cooldown expiry timestamp for on-demand /digest rate limiting (15 min)
-const DIGEST_COOLDOWN = new Map();
-// Tracks on-demand digest requests currently in admission/launch for each chat.
-const DIGEST_INFLIGHT = new Set();
-const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
+function createReplyState() {
+  return {
+    awaitingEmail: new Map(),
+    digestCooldown: new Map(),
+    digestInflight: new Set(),
+    pendingLinkVerifications: new Map(),
+  };
+}
+
+let REPLY_STATE = createReplyState();
+
+function resetReplyState() {
+  REPLY_STATE = createReplyState();
+  storeReady = false;
+  return REPLY_STATE;
+}
+
+function isReplyHandlerDebug() {
+  return process.env.REPLY_HANDLER_DEBUG === "1";
+}
 
 const INDUSTRY_TOPICS = [
   "HEALTHCARE", "FINANCIAL SERVICES", "PE×M&A", "ENERGY", "CONSUMER",
@@ -70,9 +108,6 @@ const CAPABILITY_TOPICS = [
 ];
 const STANDARD_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 const LINK_VERIFY_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const REPLY_HANDLER_DEBUG = process.env.REPLY_HANDLER_DEBUG === "1";
-// chatId -> { email, code, expiresAt }
-const PENDING_LINK_VERIFICATIONS = new Map();
 
 function generateVerificationCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -105,7 +140,7 @@ async function startLinkVerification(chatId, user) {
   }
 
   const code = generateVerificationCode();
-  PENDING_LINK_VERIFICATIONS.set(String(chatId), {
+  REPLY_STATE.pendingLinkVerifications.set(String(chatId), {
     email,
     code,
     expiresAt: Date.now() + LINK_VERIFY_TTL_MS,
@@ -114,7 +149,7 @@ async function startLinkVerification(chatId, user) {
   try {
     await sendLinkVerificationEmail(email, code);
   } catch (e) {
-    PENDING_LINK_VERIFICATIONS.delete(String(chatId));
+    REPLY_STATE.pendingLinkVerifications.delete(String(chatId));
     await send(chatId, `I couldn't send the verification code right now (${e.message}). Try again in a minute.`);
     return false;
   }
@@ -139,7 +174,7 @@ function relinkExistingUserToChat(existing, chatId) {
   };
   writeUser(chatId, updated);
   if (oldChatId && String(oldChatId) !== String(chatId)) {
-    const oldFile = path.join(__dirname, "data", `user-${oldChatId}.json`);
+    const oldFile = path.join(APP_ROOT, "data", `user-${oldChatId}.json`);
     if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
   }
   return updated;
@@ -169,8 +204,9 @@ function httpsPost(hostname, path_, headers, body) {
 }
 
 async function send(chatId, text, extra = {}) {
+  const botToken = getBotToken();
   return httpsPost(
-    "api.telegram.org", `/bot${BOT_TOKEN}/sendMessage`,
+    "api.telegram.org", `/bot${botToken}/sendMessage`,
     { "Content-Type": "application/json" },
     { chat_id: chatId, text, parse_mode: "Markdown", disable_web_page_preview: true, ...extra }
   );
@@ -231,7 +267,7 @@ Examples:
 
   const res = await httpsPost(
     "api.anthropic.com", "/v1/messages",
-    { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
+    { "Content-Type": "application/json", "x-api-key": getConfigKeys().anthropic, "anthropic-version": "2023-06-01" },
     { model: "claude-haiku-4-5", max_tokens: 200, messages: [{ role: "user", content: prompt }] }
   );
 
@@ -277,18 +313,18 @@ async function handleDigest(chatId) {
 
   // Rate limit: 15-min cooldown between on-demand digest requests
   const now = Date.now();
-  if (DIGEST_INFLIGHT.has(chatKey)) {
+  if (REPLY_STATE.digestInflight.has(chatKey)) {
     await send(chatId, `⏳ Your digest request is already in progress. I will send it as soon as it is ready.`);
     return;
   }
-  const cooldownEnd = DIGEST_COOLDOWN.get(chatKey);
+  const cooldownEnd = REPLY_STATE.digestCooldown.get(chatKey);
   if (cooldownEnd && cooldownEnd > now) {
     const minsLeft = Math.ceil((cooldownEnd - now) / 60000);
     await send(chatId, `⏱ Your last on-demand digest was recent. Try again in ${minsLeft} min${minsLeft !== 1 ? "s" : ""}.`);
     return;
   }
 
-  DIGEST_INFLIGHT.add(chatKey);
+  REPLY_STATE.digestInflight.add(chatKey);
   try {
     await send(chatId, `⏳ Pulling your digest now — takes about 45 seconds...`);
     const run = await triggerDigest({
@@ -307,25 +343,25 @@ async function handleDigest(chatId) {
       await send(chatId, `❌ Failed to trigger digest. Please try /digest again in a moment.`);
       return;
     }
-    DIGEST_COOLDOWN.set(chatKey, Date.now() + 15 * 60 * 1000);
+    REPLY_STATE.digestCooldown.set(chatKey, Date.now() + 15 * 60 * 1000);
     // Success confirmation is delivered by digest.js via Telegram.
   } catch (e) {
     await send(chatId, `❌ Failed to trigger digest: ${e.message}`);
   } finally {
-    DIGEST_INFLIGHT.delete(chatKey);
+    REPLY_STATE.digestInflight.delete(chatKey);
   }
 }
 
 async function handleVerifyLink(chatId, codeRaw) {
   const key = String(chatId);
-  const pending = PENDING_LINK_VERIFICATIONS.get(key);
+  const pending = REPLY_STATE.pendingLinkVerifications.get(key);
   if (!pending) {
     await send(chatId, "No pending verification request. Start with `/start your@email.com`.");
     return;
   }
 
   if (Date.now() > pending.expiresAt) {
-    PENDING_LINK_VERIFICATIONS.delete(key);
+    REPLY_STATE.pendingLinkVerifications.delete(key);
     await send(chatId, "That verification code expired. Run `/start your@email.com` again to get a new code.");
     return;
   }
@@ -342,14 +378,14 @@ async function handleVerifyLink(chatId, codeRaw) {
 
   const existing = allUsers().find(u => (u.email || "").toLowerCase().trim() === pending.email);
   if (!existing) {
-    PENDING_LINK_VERIFICATIONS.delete(key);
+    REPLY_STATE.pendingLinkVerifications.delete(key);
     await send(chatId, "I couldn't find that account anymore. Try `/start your@email.com`.");
     return;
   }
 
   const updated = relinkExistingUserToChat(existing, chatId);
-  PENDING_LINK_VERIFICATIONS.delete(key);
-  AWAITING_EMAIL.delete(chatId);
+  REPLY_STATE.pendingLinkVerifications.delete(key);
+  REPLY_STATE.awaitingEmail.delete(chatId);
 
   const firstName = (updated.name || "").split(" ")[0] || "there";
   await send(chatId,
@@ -361,8 +397,8 @@ async function handleVerifyLink(chatId, codeRaw) {
 
 async function handleStart(chatId, email) {
   // Always clear pending email capture state — /start resets it regardless
-  AWAITING_EMAIL.delete(chatId);
-  PENDING_LINK_VERIFICATIONS.delete(String(chatId));
+  REPLY_STATE.awaitingEmail.delete(chatId);
+  REPLY_STATE.pendingLinkVerifications.delete(String(chatId));
 
   // ── /start email@example.com — link Telegram to existing web signup ──────────
   if (email) {
@@ -431,7 +467,7 @@ async function handleStart(chatId, email) {
   }
 
   // Unknown Telegram user — prompt for email (Telegram-first onboarding)
-  AWAITING_EMAIL.set(chatId, true);
+  REPLY_STATE.awaitingEmail.set(chatId, true);
   await send(chatId,
     `☀️ *Welcome to SignalBrief*\n\n` +
     `Your daily signal across AI, strategy, and business.\n\n` +
@@ -449,7 +485,7 @@ async function handleEmailCapture(chatId, text) {
     return;
   }
 
-  AWAITING_EMAIL.delete(chatId);
+  REPLY_STATE.awaitingEmail.delete(chatId);
 
   // Check if already signed up via web — link instead of creating duplicate
   const existing = allUsers().find(u => (u.email || "").toLowerCase() === email);
@@ -480,7 +516,7 @@ async function handleEmailCapture(chatId, text) {
     name: email.split("@")[0],
     telegram: null,
     token: userToken,
-    topics: CONFIG.topics.slice(0, 5).map(t => t.tag), // first 5 topics as default
+    topics: (getConfig().topics || []).slice(0, 5).map(t => t.tag), // first 5 topics as default
     status: "active",
     joined_at: new Date().toISOString(),
     last_updated: new Date().toISOString(),
@@ -513,16 +549,16 @@ async function handleEmailCapture(chatId, text) {
     chatId,
     queue: true,
     maxAdmissionWaitMs: 10 * 60 * 1000,
-    env: { BASE_URL },
+    env: { BASE_URL: getBaseUrl() },
   }).then((run) => {
-    if (!run.ok && REPLY_HANDLER_DEBUG) {
+    if (!run.ok && isReplyHandlerDebug()) {
       console.warn(`[reply-handler] welcome digest skipped for ${chatId}: ${run.code || "unknown"}`);
     }
   }).catch((err) => {
     console.error(`[reply-handler] welcome digest failed for ${chatId}: ${err.message}`);
   });
 
-  const settingsUrl = `${BASE_URL}/settings?token=${userToken}`;
+  const settingsUrl = `${getBaseUrl()}/settings?token=${userToken}`;
   await send(chatId,
     `✅ *You're in!*\n\n` +
     `Sending your first digest now — 7 signals across strategy, AI, and business.\n\n` +
@@ -778,7 +814,7 @@ async function handleSettings(chatId) {
 
   // Include tokenized settings link if user has a token
   const settingsLine = user.token
-    ? `\n🔗 [Manage preferences](${BASE_URL}/settings?token=${user.token})`
+    ? `\n🔗 [Manage preferences](${getBaseUrl()}/settings?token=${user.token})`
     : "";
 
   await send(chatId,
@@ -818,7 +854,7 @@ async function handleBookmarks(chatId) {
 
 async function handleTopics(chatId) {
   const user = readUser(chatId);
-  const defaultTopics = CONFIG.topics.map(t => t.tag);
+  const defaultTopics = (getConfig().topics || []).map(t => t.tag);
   const custom = user.custom_topics || [];
   const weights = user.topic_weights || {};
 
@@ -861,7 +897,7 @@ async function handleQuestion(chatId, question) {
   // Lightweight fallback — answer via Claude with healthcare context
   const res = await httpsPost(
     "api.anthropic.com", "/v1/messages",
-    { "Content-Type": "application/json", "x-api-key": CONFIG.keys.anthropic, "anthropic-version": "2023-06-01" },
+    { "Content-Type": "application/json", "x-api-key": getConfigKeys().anthropic, "anthropic-version": "2023-06-01" },
     {
       model: "claude-haiku-4-5",
       max_tokens: 300,
@@ -894,6 +930,7 @@ function parseInlineCallbackData(data) {
 }
 
 async function handleCallback(data, chatId) {
+  ensureStoreReady();
   const parsed = parseInlineCallbackData(data);
   if (!parsed) return { ok: false, notice: "Unsupported action" };
 
@@ -928,8 +965,9 @@ async function handleCallback(data, chatId) {
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
 async function handle(message, chatId) {
+  ensureStoreReady();
   // Telegram-first onboarding: intercept email reply before intent parsing
-  if (AWAITING_EMAIL.has(chatId) && !message.trim().startsWith("/")) {
+  if (REPLY_STATE.awaitingEmail.has(chatId) && !message.trim().startsWith("/")) {
     return handleEmailCapture(chatId, message);
   }
 
@@ -937,7 +975,7 @@ async function handle(message, chatId) {
   const action = String(intent?.action || "unknown");
   const messageLen = String(message || "").length;
   console.log(`[reply-handler] action=${action} message_len=${messageLen}`);
-  if (REPLY_HANDLER_DEBUG) {
+  if (isReplyHandlerDebug()) {
     console.log(`[reply-handler] debug intent=${JSON.stringify(intent)}`);
   }
 
@@ -961,10 +999,16 @@ async function handle(message, chatId) {
 // ── CLI entry ─────────────────────────────────────────────────────────────────
 
 if (require.main === module) {
+  ensureStoreReady();
   const message = process.argv[2];
-  const chatId = process.argv[3] || CONFIG.user.telegramChatId;
-  if (!message) { console.error("Usage: node reply-handler.js '<message>' [chat_id]"); process.exit(1); }
+  const chatId = process.argv[3] || getConfig().user.telegramChatId;
+  if (!message) { console.error("Usage: node src/runtime/reply-handler.js '<message>' [chat_id]"); process.exit(1); }
   handle(message, chatId).catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { handle, handleCallback };
+module.exports = {
+  createReplyState,
+  resetReplyState,
+  handle,
+  handleCallback,
+};

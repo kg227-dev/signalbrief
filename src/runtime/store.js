@@ -8,15 +8,65 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+const APP_ROOT = path.resolve(__dirname, "..", "..");
+
+function defaultDataDir() {
+  return path.resolve(process.env.SIGNALBRIEF_DATA_DIR || path.join(APP_ROOT, "data"));
+}
+
+function createStoreIndex() {
+  return new Map();
+}
+
+function createStoreState(opts = {}) {
+  return {
+    dataDir: opts.dataDir ? path.resolve(String(opts.dataDir)) : defaultDataDir(),
+    initialized: false,
+    tokenIndex: createStoreIndex(),
+  };
+}
+
+let STORE_STATE = createStoreState();
+
 function generateToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+function currentDataDir() {
+  return STORE_STATE.dataDir;
+}
+
+function currentTokenIndex() {
+  return STORE_STATE.tokenIndex;
+}
+
+function initStore(opts = {}) {
+  const requestedDir = opts.dataDir
+    ? path.resolve(String(opts.dataDir))
+    : defaultDataDir();
+  const shouldRebuild =
+    !STORE_STATE.initialized
+    || requestedDir !== STORE_STATE.dataDir
+    || opts.rebuildIndex === true;
+  STORE_STATE.dataDir = requestedDir;
+  if (!fs.existsSync(STORE_STATE.dataDir)) fs.mkdirSync(STORE_STATE.dataDir, { recursive: true });
+  STORE_STATE.initialized = true;
+  if (shouldRebuild) rebuildTokenIndex();
+  return { dataDir: STORE_STATE.dataDir };
+}
+
+function resetStoreState(opts = {}) {
+  STORE_STATE = createStoreState({ dataDir: opts.dataDir });
+  if (opts.initialize) initStore({ dataDir: STORE_STATE.dataDir, rebuildIndex: true });
+  return { dataDir: STORE_STATE.dataDir };
+}
+
+function ensureStoreInitialized() {
+  if (!STORE_STATE.initialized) initStore();
+}
 
 function userFile(chatId) {
-  return path.join(DATA_DIR, `user-${chatId}.json`);
+  return path.join(currentDataDir(), `user-${chatId}.json`);
 }
 
 function defaultUser(chatId) {
@@ -62,19 +112,19 @@ function defaultUser(chatId) {
 }
 
 // ── In-memory token→chatId index (B-2) ───────────────────────────────────────
-// Avoids O(n) disk scan on every authenticated request. Rebuilt at startup,
-// kept current by writeUser(). Each process maintains its own index.
-
-const tokenIndex = new Map(); // token → chatId (string)
+// Avoids O(n) disk scan on every authenticated request. Rebuilt during
+// explicit initStore() and kept current by writeUser().
 
 function rebuildTokenIndex() {
+  const tokenIndex = currentTokenIndex();
   tokenIndex.clear();
-  if (!fs.existsSync(DATA_DIR)) return;
-  fs.readdirSync(DATA_DIR)
+  const dir = currentDataDir();
+  if (!fs.existsSync(dir)) return;
+  fs.readdirSync(dir)
     .filter(f => f.startsWith("user-") && f.endsWith(".json"))
     .forEach(f => {
       try {
-        const raw = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
+        const raw = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
         if (raw.token) tokenIndex.set(raw.token, raw.chatId || f.replace("user-", "").replace(".json", ""));
       } catch (err) {
         if (process.env.STORE_DEBUG === "1") {
@@ -84,11 +134,11 @@ function rebuildTokenIndex() {
     });
 }
 
-rebuildTokenIndex();
-
 // ── Core store functions ──────────────────────────────────────────────────────
 
 function readUser(chatId) {
+  ensureStoreInitialized();
+  const tokenIndex = currentTokenIndex();
   const f = userFile(chatId);
   if (!fs.existsSync(f)) return defaultUser(chatId);
   let raw;
@@ -123,14 +173,18 @@ function _writeUserFile(file, data) {
 }
 
 function writeUser(chatId, data) {
+  ensureStoreInitialized();
+  const tokenIndex = currentTokenIndex();
   _writeUserFile(userFile(chatId), data);
   // Keep token index current
   if (data.token) tokenIndex.set(data.token, String(chatId));
 }
 
 function allUsers() {
-  if (!fs.existsSync(DATA_DIR)) return [];
-  return fs.readdirSync(DATA_DIR)
+  ensureStoreInitialized();
+  const dir = currentDataDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
     .filter(f => f.startsWith("user-") && f.endsWith(".json"))
     .map(f => {
       // Use readUser() so each user gets full default-merging and auto-token generation
@@ -143,6 +197,8 @@ function allUsers() {
 
 // O(1) token lookup via in-memory index (B-2).
 function findUserByToken(token) {
+  ensureStoreInitialized();
+  const tokenIndex = currentTokenIndex();
   if (!token) return null;
   const hit = tokenIndex.get(token);
   if (hit) return readUser(hit);
@@ -154,4 +210,15 @@ function findUserByToken(token) {
   return readUser(refreshed);
 }
 
-module.exports = { readUser, writeUser, allUsers, defaultUser, generateToken, findUserByToken };
+module.exports = {
+  createStoreIndex,
+  createStoreState,
+  initStore,
+  resetStoreState,
+  readUser,
+  writeUser,
+  allUsers,
+  defaultUser,
+  generateToken,
+  findUserByToken,
+};

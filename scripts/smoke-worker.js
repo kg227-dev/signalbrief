@@ -6,7 +6,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
-const WORKER = path.join(ROOT, "scheduler-worker.js");
+const WORKER = path.join(ROOT, "src", "entrypoints", "scheduler-worker.js");
 const HEARTBEAT = path.join("/tmp", `signalbrief-worker-smoke-${process.pid}.json`);
 
 function sleep(ms) {

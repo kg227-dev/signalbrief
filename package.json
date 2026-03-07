@@ -4,13 +4,13 @@
   "description": "AI-curated daily news digest for healthcare strategy professionals",
   "main": "digest.js",
   "scripts": {
-    "start": "node digest.js",
+    "start": "node src/entrypoints/digest.js",
     "web": "node web/server.js",
-    "bot": "node bot-server.js",
-    "worker": "node scheduler-worker.js",
+    "bot": "node src/entrypoints/bot-server.js",
+    "worker": "node src/entrypoints/scheduler-worker.js",
     "smoke:worker": "node scripts/smoke-worker.js",
     "smoke:admin-scheduler": "node scripts/smoke-admin-scheduler.js",
-    "test": "node digest.js --dry-run",
+    "test": "node src/entrypoints/digest.js --dry-run",
     "qa:harness": "node test-harness/run-tests.js",
     "qa:matrix": "node test-harness/run-matrix.js"
   },

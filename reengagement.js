@@ -2,15 +2,17 @@
 "use strict";
 
 const fs = require("fs");
-const { allUsers, writeUser } = require("./store");
+const { initStore, allUsers, writeUser } = require("./src/runtime/store");
 const {
   sendReengagementDay4Email,
   sendReengagementDay8Email,
   sendAutoPauseConfirmationEmail,
-} = require("./mailer");
+} = require("./src/runtime/mailer");
 
 const LOG_FILE = "/tmp/signalbrief-reengagement.log";
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+initStore();
 
 function log(message) {
   const line = `[${new Date().toISOString()}] [reengagement] ${message}`;

@@ -12,8 +12,11 @@
 
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
 const { loadConfig } = require("./config-provider");
+const { createTelegramTransport, createAnthropicTransport } = require("./reply/transport");
+const { createIntentService } = require("./reply/intent-service");
+const { createCommandRouter } = require("./reply/command-router");
+const { createOnboardingService } = require("./reply/onboarding-service");
 const { initStore, readUser, writeUser, allUsers, generateToken } = require("./store");
 const { sendEmail: sendEmailViaMailer, sendWelcomeEmail } = require("./mailer");
 const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
@@ -45,6 +48,10 @@ function getBotToken() {
   const keys = getConfigKeys();
   return keys.signalBriefBotToken || keys.telegramBotToken || "";
 }
+
+const telegramTransport = createTelegramTransport(getBotToken);
+const anthropicTransport = createAnthropicTransport(() => getConfigKeys().anthropic || "");
+const intentService = createIntentService((payload) => anthropicTransport.requestMessage(payload));
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -109,10 +116,6 @@ const CAPABILITY_TOPICS = [
 const STANDARD_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
 const LINK_VERIFY_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-function generateVerificationCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
 async function sendLinkVerificationEmail(email, code) {
   const target = String(email || "").toLowerCase().trim();
   const html = `
@@ -130,36 +133,6 @@ async function sendLinkVerificationEmail(email, code) {
     </div>`;
   const result = await sendEmailViaMailer(target, "Your SignalBrief verification code", html);
   if (!result.ok) throw new Error(`verification email failed via ${result.via || "mailer"}`);
-}
-
-async function startLinkVerification(chatId, user) {
-  const email = String(user?.email || "").toLowerCase().trim();
-  if (!email) {
-    await send(chatId, "I couldn't start verification because this account has no email on file. Contact support.");
-    return false;
-  }
-
-  const code = generateVerificationCode();
-  REPLY_STATE.pendingLinkVerifications.set(String(chatId), {
-    email,
-    code,
-    expiresAt: Date.now() + LINK_VERIFY_TTL_MS,
-  });
-
-  try {
-    await sendLinkVerificationEmail(email, code);
-  } catch (e) {
-    REPLY_STATE.pendingLinkVerifications.delete(String(chatId));
-    await send(chatId, `I couldn't send the verification code right now (${e.message}). Try again in a minute.`);
-    return false;
-  }
-
-  await send(chatId,
-    `🔐 I sent a 6-digit verification code to *${email}*.\n\n` +
-    `Reply here with \`/verify 123456\` to link this Telegram chat to your existing account.\n\n` +
-    `Code expires in 10 minutes.`
-  );
-  return true;
 }
 
 function relinkExistingUserToChat(existing, chatId) {
@@ -180,102 +153,28 @@ function relinkExistingUserToChat(existing, chatId) {
   return updated;
 }
 
-// ── HTTP ─────────────────────────────────────────────────────────────────────
-
-function httpsPost(hostname, path_, headers, body) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const req = https.request(
-      { hostname, path: path_, method: "POST",
-        headers: { ...headers, "Content-Length": Buffer.byteLength(data) } },
-      (res) => {
-        let out = "";
-        res.on("data", c => out += c);
-        res.on("end", () => {
-          try { resolve({ status: res.statusCode, body: JSON.parse(out) }); }
-          catch { resolve({ status: res.statusCode, body: out }); }
-        });
-      }
-    );
-    req.on("error", reject);
-    req.write(data);
-    req.end();
-  });
+function findUserByEmail(email) {
+  const lookup = String(email || "").toLowerCase().trim();
+  if (!lookup) return null;
+  return allUsers().find((u) => String(u.email || "").toLowerCase().trim() === lookup) || null;
 }
 
 async function send(chatId, text, extra = {}) {
-  const botToken = getBotToken();
-  return httpsPost(
-    "api.telegram.org", `/bot${botToken}/sendMessage`,
-    { "Content-Type": "application/json" },
-    { chat_id: chatId, text, parse_mode: "Markdown", disable_web_page_preview: true, ...extra }
-  );
+  return telegramTransport.sendMessage(chatId, text, extra);
 }
 
-// ── Intent parsing via Claude ─────────────────────────────────────────────────
+const onboardingService = createOnboardingService({
+  state: () => REPLY_STATE,
+  linkVerifyTtlMs: LINK_VERIFY_TTL_MS,
+  sendMessage: send,
+  sendVerificationEmail: sendLinkVerificationEmail,
+  findUserByEmail,
+  relinkUserToChat: relinkExistingUserToChat,
+  formatDeliveryTime,
+});
 
 async function parseIntent(message) {
-  // Fast-path for slash commands
-  const m = message.trim().toLowerCase();
-  if (m.startsWith("/start")) {
-    const parts = message.trim().split(/\s+/);
-    return { action: "start", email: parts[1] || null };
-  }
-  if (m === "/digest") return { action: "digest" };
-  if (m === "/settings") return { action: "settings" };
-  if (m === "/bookmarks") return { action: "bookmarks" };
-  if (m === "/topics") return { action: "topics" };
-  if (m === "/help") return { action: "help" };
-  if (m.startsWith("/verify")) {
-    const parts = message.trim().split(/\s+/);
-    return { action: "verify_link", code: parts[1] || null };
-  }
-
-  const prompt = `The user replied to their SignalBrief news digest with: "${message}"
-
-Parse intent. Return ONLY valid JSON:
-{
-  "action": "save" | "topic_more" | "topic_less" | "topic_add" | "settings" | "bookmarks" | "topics" | "help" | "question" | "unknown",
-  "items": [],
-  "topic": null,
-  "question": null
-}
-
-Rules:
-- save / bookmark / keep + numbers → action=save, items=[nums]
-- more [topic] / I want more [topic] / more [topic] stories → action=topic_more, topic=normalized tag
-- less/fewer [topic] → action=topic_less, topic=normalized tag
-- add/track [keyword] → action=topic_add, topic=keyword
-- settings/preferences/config → action=settings
-- bookmarks/saved/my saves → action=bookmarks
-- topics/what do you cover → action=topics
-- help/commands/how do I → action=help
-- otherwise → action=question or unknown
-
-Normalize topics: "ai" → "AI", "pharma" → "PHARMA", "M&A" → "M&A", "digital health" → "DIGITAL HEALTH", etc.
-Item numbers: parse "1,4,6" or "1 4 6" or "#3" or "item 3" or "number 3" — all as arrays of integers.
-
-Examples:
-"save 3" → {"action":"save","items":[3],"topic":null,"question":null}
-"Save #3" → {"action":"save","items":[3],"topic":null,"question":null}
-"bookmark 1, 4, 6" → {"action":"save","items":[1,4,6],"topic":null,"question":null}
-"save 1 4 6" → {"action":"save","items":[1,4,6],"topic":null,"question":null}
-"more AI" → {"action":"topic_more","items":[],"topic":"AI","question":null}
-"less pharma m&a" → {"action":"topic_less","items":[],"topic":"PHARMA×M&A","question":null}
-"add GLP-1" → {"action":"topic_add","items":[],"topic":"GLP-1","question":null}
-"what does 340B mean?" → {"action":"question","items":[],"topic":null,"question":"what does 340B mean?"}`;
-
-  const res = await httpsPost(
-    "api.anthropic.com", "/v1/messages",
-    { "Content-Type": "application/json", "x-api-key": getConfigKeys().anthropic, "anthropic-version": "2023-06-01" },
-    { model: "claude-haiku-4-5", max_tokens: 200, messages: [{ role: "user", content: prompt }] }
-  );
-
-  try {
-    let text = res.body?.content?.[0]?.text || "{}";
-    text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    return JSON.parse(text);
-  } catch { return { action: "unknown" }; }
+  return intentService.parseIntent(message);
 }
 
 // ── Command menu ──────────────────────────────────────────────────────────────
@@ -353,52 +252,12 @@ async function handleDigest(chatId) {
 }
 
 async function handleVerifyLink(chatId, codeRaw) {
-  const key = String(chatId);
-  const pending = REPLY_STATE.pendingLinkVerifications.get(key);
-  if (!pending) {
-    await send(chatId, "No pending verification request. Start with `/start your@email.com`.");
-    return;
-  }
-
-  if (Date.now() > pending.expiresAt) {
-    REPLY_STATE.pendingLinkVerifications.delete(key);
-    await send(chatId, "That verification code expired. Run `/start your@email.com` again to get a new code.");
-    return;
-  }
-
-  const code = String(codeRaw || "").trim();
-  if (!/^\d{6}$/.test(code)) {
-    await send(chatId, "Please provide a 6-digit code, e.g. `/verify 123456`.");
-    return;
-  }
-  if (code !== pending.code) {
-    await send(chatId, "That code doesn't match. Check your email and try again.");
-    return;
-  }
-
-  const existing = allUsers().find(u => (u.email || "").toLowerCase().trim() === pending.email);
-  if (!existing) {
-    REPLY_STATE.pendingLinkVerifications.delete(key);
-    await send(chatId, "I couldn't find that account anymore. Try `/start your@email.com`.");
-    return;
-  }
-
-  const updated = relinkExistingUserToChat(existing, chatId);
-  REPLY_STATE.pendingLinkVerifications.delete(key);
-  REPLY_STATE.awaitingEmail.delete(chatId);
-
-  const firstName = (updated.name || "").split(" ")[0] || "there";
-  await send(chatId,
-    `✅ *Verified, ${firstName}!* Telegram is now linked to your SignalBrief account.\n\n` +
-    `Digest arrives at *${formatDeliveryTime(updated.preferences)}*. Or get one now:\n\n` +
-    `⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
-  );
+  return onboardingService.handleVerifyLink(chatId, codeRaw);
 }
 
 async function handleStart(chatId, email) {
   // Always clear pending email capture state — /start resets it regardless
-  REPLY_STATE.awaitingEmail.delete(chatId);
-  REPLY_STATE.pendingLinkVerifications.delete(String(chatId));
+  onboardingService.clearAllPending(chatId);
 
   // ── /start email@example.com — link Telegram to existing web signup ──────────
   if (email) {
@@ -431,7 +290,7 @@ async function handleStart(chatId, email) {
     }
 
     // Existing account is linked to a different chat — require email verification
-    await startLinkVerification(chatId, match);
+    await onboardingService.startLinkVerification(chatId, match);
     return;
   }
 
@@ -467,7 +326,7 @@ async function handleStart(chatId, email) {
   }
 
   // Unknown Telegram user — prompt for email (Telegram-first onboarding)
-  REPLY_STATE.awaitingEmail.set(chatId, true);
+  onboardingService.setAwaitingEmail(chatId, true);
   await send(chatId,
     `☀️ *Welcome to SignalBrief*\n\n` +
     `Your daily signal across AI, strategy, and business.\n\n` +
@@ -485,14 +344,14 @@ async function handleEmailCapture(chatId, text) {
     return;
   }
 
-  REPLY_STATE.awaitingEmail.delete(chatId);
+  onboardingService.setAwaitingEmail(chatId, false);
 
   // Check if already signed up via web — link instead of creating duplicate
   const existing = allUsers().find(u => (u.email || "").toLowerCase() === email);
   if (existing) {
     const oldChatId = existing.chatId;
     if (oldChatId !== chatId) {
-      await startLinkVerification(chatId, existing);
+      await onboardingService.startLinkVerification(chatId, existing);
       return;
     } else {
       existing.status = "active";
@@ -895,18 +754,14 @@ async function handleHelp(chatId) {
 
 async function handleQuestion(chatId, question) {
   // Lightweight fallback — answer via Claude with healthcare context
-  const res = await httpsPost(
-    "api.anthropic.com", "/v1/messages",
-    { "Content-Type": "application/json", "x-api-key": getConfigKeys().anthropic, "anthropic-version": "2023-06-01" },
-    {
-      model: "claude-haiku-4-5",
-      max_tokens: 300,
-      messages: [{
-        role: "user",
-        content: `You are SignalBrief, a business and strategy news assistant covering AI, healthcare, financial services, PE/M&A, energy, consumer, policy, and consulting. Answer this question concisely (2-3 sentences max, plain text, no markdown headers): ${question}`
-      }]
-    }
-  );
+  const res = await anthropicTransport.requestMessage({
+    model: "claude-haiku-4-5",
+    max_tokens: 300,
+    messages: [{
+      role: "user",
+      content: `You are SignalBrief, a business and strategy news assistant covering AI, healthcare, financial services, PE/M&A, energy, consumer, policy, and consulting. Answer this question concisely (2-3 sentences max, plain text, no markdown headers): ${question}`
+    }],
+  });
   const answer = res.body?.content?.[0]?.text || "I'm not sure — try asking again.";
   await send(chatId, answer);
 }
@@ -964,10 +819,26 @@ async function handleCallback(data, chatId) {
 
 // ── Main dispatch ─────────────────────────────────────────────────────────────
 
+const routeCommand = createCommandRouter({
+  start: (intent, chatId) => handleStart(chatId, intent.email),
+  verify_link: (intent, chatId) => handleVerifyLink(chatId, intent.code),
+  digest: (_intent, chatId) => handleDigest(chatId),
+  save: (intent, chatId) => handleSave(chatId, intent.items),
+  topic_more: (intent, chatId) => handleTopicMore(chatId, intent.topic),
+  topic_less: (intent, chatId) => handleTopicLess(chatId, intent.topic),
+  topic_add: (intent, chatId) => handleTopicAdd(chatId, intent.topic),
+  settings: (_intent, chatId) => handleSettings(chatId),
+  bookmarks: (_intent, chatId) => handleBookmarks(chatId),
+  topics: (_intent, chatId) => handleTopics(chatId),
+  help: (_intent, chatId) => handleHelp(chatId),
+  question: (intent, chatId) => handleQuestion(chatId, intent.question),
+  default: (_intent, chatId) => handleHelp(chatId),
+});
+
 async function handle(message, chatId) {
   ensureStoreReady();
   // Telegram-first onboarding: intercept email reply before intent parsing
-  if (REPLY_STATE.awaitingEmail.has(chatId) && !message.trim().startsWith("/")) {
+  if (onboardingService.isAwaitingEmail(chatId) && !message.trim().startsWith("/")) {
     return handleEmailCapture(chatId, message);
   }
 
@@ -978,22 +849,7 @@ async function handle(message, chatId) {
   if (isReplyHandlerDebug()) {
     console.log(`[reply-handler] debug intent=${JSON.stringify(intent)}`);
   }
-
-  switch (intent.action) {
-    case "start":     return handleStart(chatId, intent.email);
-    case "verify_link": return handleVerifyLink(chatId, intent.code);
-    case "digest":    return handleDigest(chatId);
-    case "save":      return handleSave(chatId, intent.items);
-    case "topic_more": return handleTopicMore(chatId, intent.topic);
-    case "topic_less": return handleTopicLess(chatId, intent.topic);
-    case "topic_add": return handleTopicAdd(chatId, intent.topic);
-    case "settings":  return handleSettings(chatId);
-    case "bookmarks": return handleBookmarks(chatId);
-    case "topics":    return handleTopics(chatId);
-    case "help":      return handleHelp(chatId);
-    case "question":  return handleQuestion(chatId, intent.question);
-    default:          return handleHelp(chatId);
-  }
+  return routeCommand(intent, chatId);
 }
 
 // ── CLI entry ─────────────────────────────────────────────────────────────────

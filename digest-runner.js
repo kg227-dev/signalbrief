@@ -27,6 +27,15 @@ const LOCK_UNHEALTHY_STATES = new Set([
   LOCK_STATE_IO_ERROR,
   LOCK_STATE_STALE_UNCLEARED,
 ]);
+const DIGEST_TRIGGER_STATUS = Object.freeze({
+  OK: "ok",
+  QUEUED: "queued",
+  BUSY: "busy",
+  LOCK_UNHEALTHY: "lock_unhealthy",
+  FAILED: "failed",
+  SPAWN_FAILED: "spawn_failed",
+  UNKNOWN: "unknown",
+});
 const LOCK_WARNING_THROTTLE_MS = 60 * 1000;
 
 let admissionQueue = Promise.resolve();
@@ -364,11 +373,40 @@ async function triggerDigest(opts = {}) {
   }
 }
 
+function normalizeDigestTriggerResult(run) {
+  if (!run || typeof run !== "object") {
+    return { ok: false, status: DIGEST_TRIGGER_STATUS.UNKNOWN, code: null };
+  }
+
+  const code = run.code == null ? null : String(run.code);
+  if (run.ok) {
+    if (code === "queued") return { ok: true, status: DIGEST_TRIGGER_STATUS.QUEUED, code };
+    if (code === "ok") return { ok: true, status: DIGEST_TRIGGER_STATUS.OK, code };
+    return { ok: true, status: code || DIGEST_TRIGGER_STATUS.OK, code };
+  }
+
+  if (code === "busy") {
+    return { ok: false, status: DIGEST_TRIGGER_STATUS.BUSY, code };
+  }
+
+  if (LOCK_UNHEALTHY_STATES.has(code) || run?.admission?.reason === "lock_unhealthy") {
+    return { ok: false, status: DIGEST_TRIGGER_STATUS.LOCK_UNHEALTHY, code };
+  }
+
+  if (code === "spawn_failed") {
+    return { ok: false, status: DIGEST_TRIGGER_STATUS.SPAWN_FAILED, code };
+  }
+
+  return { ok: false, status: DIGEST_TRIGGER_STATUS.FAILED, code };
+}
+
 module.exports = {
+  DIGEST_TRIGGER_STATUS,
   DIGEST_LOCK_EXIT_CODE,
   DIGEST_RUN_LOCK_FILE,
   clearDigestRunLock,
   digestRunStatus,
+  normalizeDigestTriggerResult,
   readDigestRunLock,
   triggerDigest,
 };

@@ -34,7 +34,7 @@ async function handleCoreApiRoutes(ctx, deps) {
 
   // GET|POST /api/unsubscribe — token-based one-click unsubscribe.
   // Legacy signed email links are bridged to token identity for backward compatibility.
-  if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
+  if ((pathname === "/api/unsubscribe" || pathname === "/api/unsubscribe/legacy") && (req.method === "GET" || req.method === "POST")) {
     const tokenParam = String(url.searchParams.get("token") || "").trim();
     const emailParam = String(url.searchParams.get("email") || "").trim();
     const sigParam = String(url.searchParams.get("sig") || "").trim();

@@ -3,7 +3,10 @@
 
 const fs = require("fs");
 const path = require("path");
-const { triggerDigest, DIGEST_LOCK_EXIT_CODE } = require("../../digest-runner");
+const {
+  DIGEST_LOCK_EXIT_CODE,
+  runDigestTrigger,
+} = require("../../digest-runner");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const HEARTBEAT_FILE = process.env.SCHEDULER_HEARTBEAT_FILE
@@ -72,26 +75,22 @@ function runDigest(trigger) {
   });
 
   log(`starting digest (${trigger})`);
-  triggerDigest({
+  runDigestTrigger({
     source: "scheduler-worker",
     trigger,
-    waitForExit: true,
     timeoutMs: RUN_TIMEOUT_MS,
-    queue: false,
-    maxAdmissionWaitMs: 0,
-    serializeAdmission: false,
     extraArgs: WORKER_ARGS,
     onStdout: (buf) => process.stdout.write(String(buf)),
     onStderr: (buf) => process.stderr.write(String(buf)),
-  }).then((run) => {
+  }).then((outcome) => {
     runInFlight = false;
-    const lockUnhealthy = run.code === "corrupt" || run.code === "io_error" || run.code === "stale_uncleared";
-    const code = run.run?.code != null
-      ? run.run.code
-      : (run.code === "busy" ? DIGEST_LOCK_EXIT_CODE : null);
-    const signal = run.run?.signal || null;
-    const success = !!run.ok;
-    const skipped = run.code === "busy";
+    const lockUnhealthy = outcome.lockUnhealthy;
+    const skipped = outcome.busy;
+    const code = outcome.exitCode != null
+      ? outcome.exitCode
+      : (skipped ? DIGEST_LOCK_EXIT_CODE : null);
+    const signal = outcome.signal;
+    const success = outcome.ok;
     lastRun = {
       trigger,
       started_at: startedIso,
@@ -108,18 +107,18 @@ function runDigest(trigger) {
       last_error: success ? null : (skipped
         ? "digest lock active"
         : (lockUnhealthy
-          ? `digest lock unhealthy (${run.code}): ${run.admission?.lock?.error || "manual intervention required"}`
+          ? `digest lock unhealthy (${outcome.code}): ${outcome.lockError || "manual intervention required"}`
           : `digest exit code ${code}${signal ? ` (signal ${signal})` : ""}`)
       ),
-      lock_state: run.admission?.lockState || null,
-      lock_error: run.admission?.lock?.error || null,
+      lock_state: outcome.lockState,
+      lock_error: outcome.lockError,
     });
     if (skipped) {
       log(`digest skipped (${trigger}) — lock active`);
       return;
     }
     if (lockUnhealthy) {
-      log(`digest blocked (${trigger}) — unhealthy lock state ${run.code}: ${run.admission?.lock?.error || "manual intervention required"}`);
+      log(`digest blocked (${trigger}) — unhealthy lock state ${outcome.code}: ${outcome.lockError || "manual intervention required"}`);
       return;
     }
     log(`digest finished (${trigger}) exit=${code}${signal ? ` signal=${signal}` : ""}`);

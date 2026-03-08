@@ -1,3 +1,12 @@
+const { chatKey, validateCodeInput } = require("./onboarding/keys");
+const {
+  beginLinkVerificationFlow,
+  completeLinkVerificationFlow,
+} = require("./onboarding/link-verification-flow");
+
+const RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_VERIFY_ATTEMPTS = 5;
+
 function createOnboardingService(deps) {
   const {
     state,
@@ -13,103 +22,93 @@ function createOnboardingService(deps) {
     return typeof state === "function" ? state() : state;
   }
 
-  function pendingMap() {
+  function pendingByChatId() {
     return currentState().pendingLinkVerifications;
   }
 
-  function awaitingMap() {
+  function awaitingByChatId() {
     return currentState().awaitingEmail;
   }
 
   function setAwaitingEmail(chatId, enabled) {
-    if (enabled) awaitingMap().set(chatId, true);
-    else awaitingMap().delete(chatId);
+    const pending = awaitingByChatId();
+    if (enabled) pending.set(chatId, true);
+    else pending.delete(chatId);
   }
 
   function isAwaitingEmail(chatId) {
-    return awaitingMap().has(chatId);
+    return awaitingByChatId().has(chatId);
   }
 
   function clearAllPending(chatId) {
-    awaitingMap().delete(chatId);
-    pendingMap().delete(String(chatId));
-  }
-
-  function generateVerificationCode() {
-    return String(Math.floor(100000 + Math.random() * 900000));
+    awaitingByChatId().delete(chatId);
+    pendingByChatId().delete(chatKey(chatId));
   }
 
   async function startLinkVerification(chatId, user) {
+    const key = chatKey(chatId);
+    const pending = pendingByChatId().get(key) || null;
+    const now = Date.now();
     const email = String(user?.email || "").toLowerCase().trim();
-    if (!email) {
-      await sendMessage(chatId, "I couldn't start verification because this account has no email on file. Contact support.");
-      return false;
+    const sameEmailPending = pending
+      && String(pending.email || "").toLowerCase().trim() === email
+      && Number(pending.expiresAt || 0) > now;
+    const inCooldown = sameEmailPending && Number(pending.resend_after_ts || 0) > now;
+    if (inCooldown) {
+      await sendMessage(chatId, "A verification code was just sent. Check your email and try `/verify 123456`.");
+      return true;
     }
 
-    const code = generateVerificationCode();
-    pendingMap().set(String(chatId), {
-      email,
-      code,
-      expiresAt: Date.now() + linkVerifyTtlMs,
+    const started = await beginLinkVerificationFlow({
+      chatId,
+      user,
+      linkVerifyTtlMs,
+      pendingByChatId: pendingByChatId(),
+      sendMessage,
+      sendVerificationEmail,
     });
+    if (!started) return false;
 
-    try {
-      await sendVerificationEmail(email, code);
-    } catch (e) {
-      pendingMap().delete(String(chatId));
-      await sendMessage(chatId, `I couldn't send the verification code right now (${e.message}). Try again in a minute.`);
-      return false;
+    const next = pendingByChatId().get(key);
+    if (next && typeof next === "object") {
+      pendingByChatId().set(key, {
+        ...next,
+        attempts: 0,
+        resend_after_ts: now + RESEND_COOLDOWN_MS,
+      });
     }
-
-    await sendMessage(chatId,
-      `🔐 I sent a 6-digit verification code to *${email}*.\n\n` +
-      `Reply here with \`/verify 123456\` to link this Telegram chat to your existing account.\n\n` +
-      `Code expires in 10 minutes.`
-    );
     return true;
   }
 
   async function handleVerifyLink(chatId, codeRaw) {
-    const key = String(chatId);
-    const pending = pendingMap().get(key);
-    if (!pending) {
-      await sendMessage(chatId, "No pending verification request. Start with `/start your@email.com`.");
-      return;
+    const key = chatKey(chatId);
+    const pending = pendingByChatId().get(key) || null;
+    if (pending && typeof pending === "object" && Number(pending.expiresAt || 0) > Date.now()) {
+      const codeInput = validateCodeInput(codeRaw);
+      if (codeInput.ok && codeInput.code !== pending.code) {
+        const attempts = Math.max(0, Number(pending.attempts || 0)) + 1;
+        if (attempts >= MAX_VERIFY_ATTEMPTS) {
+          pendingByChatId().delete(key);
+          await sendMessage(chatId, "Too many incorrect attempts. Start again with `/start your@email.com`.");
+          return;
+        }
+        pendingByChatId().set(key, {
+          ...pending,
+          attempts,
+        });
+      }
     }
 
-    if (Date.now() > pending.expiresAt) {
-      pendingMap().delete(key);
-      await sendMessage(chatId, "That verification code expired. Run `/start your@email.com` again to get a new code.");
-      return;
-    }
-
-    const code = String(codeRaw || "").trim();
-    if (!/^\d{6}$/.test(code)) {
-      await sendMessage(chatId, "Please provide a 6-digit code, e.g. `/verify 123456`.");
-      return;
-    }
-    if (code !== pending.code) {
-      await sendMessage(chatId, "That code doesn't match. Check your email and try again.");
-      return;
-    }
-
-    const existing = findUserByEmail(pending.email);
-    if (!existing) {
-      pendingMap().delete(key);
-      await sendMessage(chatId, "I couldn't find that account anymore. Try `/start your@email.com`.");
-      return;
-    }
-
-    const updated = relinkUserToChat(existing, chatId);
-    pendingMap().delete(key);
-    awaitingMap().delete(chatId);
-
-    const firstName = (updated.name || "").split(" ")[0] || "there";
-    await sendMessage(chatId,
-      `✅ *Verified, ${firstName}!* Telegram is now linked to your SignalBrief account.\n\n` +
-      `Digest arrives at *${formatDeliveryTime(updated.preferences)}*. Or get one now:\n\n` +
-      `⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`
-    );
+    return completeLinkVerificationFlow({
+      chatId,
+      codeRaw,
+      pendingByChatId: pendingByChatId(),
+      awaitingByChatId: awaitingByChatId(),
+      sendMessage,
+      findUserByEmail,
+      relinkUserToChat,
+      formatDeliveryTime,
+    });
   }
 
   return {

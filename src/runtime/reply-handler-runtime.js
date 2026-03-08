@@ -17,12 +17,12 @@ const { createTelegramTransport, createAnthropicTransport } = require("./reply/t
 const { createIntentService } = require("./reply/intent-service");
 const { createCommandRouter } = require("./reply/command-router");
 const { createOnboardingService } = require("./reply/onboarding-service");
+const { createInfoHandlers } = require("./reply/info-handlers-runtime");
 const { initStore, readUser, writeUser, allUsers, generateToken } = require("./store");
 const { sendEmail: sendEmailViaMailer, sendWelcomeEmail } = require("./mailer");
 const { appendEngagementEvent, buildDigestId } = require("./engagement-events");
 const {
-  triggerDigest,
-  normalizeDigestTriggerResult,
+  queueDigestTrigger,
 } = require("../../digest-runner");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
@@ -180,24 +180,22 @@ function parseIntent(message) {
   return intentService.parseIntent(message);
 }
 
-// ── Command menu ──────────────────────────────────────────────────────────────
-
-function commandMenu(user) {
-  if (user.digests_received < 5) {
-    return [
-      "───",
-      "📧 Deeper takes in your email",
-      "",
-      "💾 save 3 → bookmarks item 3",
-      "💾 save 1,4,6 → bookmarks multiple",
-      "📊 more AI → see more AI stories",
-      "📉 less M&A → see fewer M&A stories",
-      "➕ add GLP-1 → track a new topic",
-      "⚙️ settings → view/change all preferences",
-    ].join("\n");
-  }
-  return "───\n📧 Deeper takes in your email\n💾 save [#] · 📊 more/less [topic] · ⚙️ settings";
-}
+const {
+  handleSettings,
+  handleBookmarks,
+  handleTopics,
+  handleHelp,
+  handleQuestion,
+} = createInfoHandlers({
+  readUser,
+  getConfig,
+  getBaseUrl,
+  formatDeliveryTime,
+  send,
+  anthropicTransport,
+  INDUSTRY_TOPICS,
+  CAPABILITY_TOPICS,
+});
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -229,21 +227,18 @@ async function handleDigest(chatId) {
   REPLY_STATE.digestInflight.add(chatKey);
   try {
     await send(chatId, `⏳ Pulling your digest now — takes about 45 seconds...`);
-    const run = await triggerDigest({
+    const outcome = await queueDigestTrigger({
       source: "telegram:on_demand",
       trigger: "telegram_command_digest",
       chatId,
-      queue: true,
       maxAdmissionWaitMs: 90 * 1000,
-      serializeAdmission: false,
     });
-    const normalized = normalizeDigestTriggerResult(run);
-    if (!run.ok) {
-      if (normalized.status === "busy") {
+    if (!outcome.ok) {
+      if (outcome.busy) {
         await send(chatId, `⏱ Another digest run is in progress right now. Try again in a minute.`);
         return;
       }
-      if (normalized.status === "lock_unhealthy") {
+      if (outcome.lockUnhealthy) {
         await send(chatId, `⚠️ Digest delivery is temporarily paused due to a runner lock issue. Please try again shortly.`);
         return;
       }
@@ -362,10 +357,13 @@ async function handleEmailCapture(chatId, text) {
       await onboardingService.startLinkVerification(chatId, existing);
       return;
     } else {
-      existing.status = "active";
-      existing.preferences = { ...(existing.preferences || {}), telegram_enabled: true };
-      existing.last_updated = new Date().toISOString();
-      writeUser(chatId, existing);
+      const refreshed = {
+        ...existing,
+        status: "active",
+        preferences: { ...(existing.preferences || {}), telegram_enabled: true },
+        last_updated: new Date().toISOString(),
+      };
+      writeUser(chatId, refreshed);
     }
     const firstName = (existing.name || "").split(" ")[0] || "there";
     await send(chatId,
@@ -410,17 +408,15 @@ async function handleEmailCapture(chatId, text) {
   sendWelcomeEmail(user).catch(e => console.error("[welcome email]", e));
 
   // Queue an immediate welcome digest so the user sees content right away.
-  triggerDigest({
+  queueDigestTrigger({
     source: "telegram:signup_welcome",
     trigger: "telegram_signup_welcome",
     chatId,
-    queue: true,
     maxAdmissionWaitMs: 10 * 60 * 1000,
     env: { BASE_URL: getBaseUrl() },
-  }).then((run) => {
-    const normalized = normalizeDigestTriggerResult(run);
-    if (!run.ok && isReplyHandlerDebug()) {
-      console.warn(`[reply-handler] welcome digest skipped for ${chatId}: ${normalized.code || "unknown"}`);
+  }).then((outcome) => {
+    if (!outcome.ok && isReplyHandlerDebug()) {
+      console.warn(`[reply-handler] welcome digest skipped for ${chatId}: ${outcome.code || "unknown"}`);
     }
   }).catch((err) => {
     console.error(`[reply-handler] welcome digest failed for ${chatId}: ${err.message}`);
@@ -665,114 +661,6 @@ async function handleTopicAdd(chatId, topic) {
   if (!user.topics.includes(topicKey)) user.topics.push(topicKey);
   writeUser(chatId, user);
   await send(chatId, `➕ Added *${displayLabel}* to your topics. You'll see it in tomorrow's digest.`);
-}
-
-async function handleSettings(chatId) {
-  const user = readUser(chatId);
-  const topics = Array.isArray(user.topics) ? user.topics : [];
-  const industries = topics.filter(t => INDUSTRY_TOPICS.includes(t));
-  const capabilities = topics.filter(t => CAPABILITY_TOPICS.includes(t));
-  const weights = Object.entries(user.topic_weights || {});
-  const adjustments = weights.length
-    ? weights.map(([k, v]) => `${v > 0 ? "↑".repeat(Math.min(v,3)) : "↓".repeat(Math.min(-v,3))} ${k}`).join(" · ")
-    : "none";
-  const customTopics = user.custom_topics?.length
-    ? user.custom_topics.map(t => t.replace(/^custom_/, "").replace(/_/g, " ")).join(", ")
-    : "none";
-
-  // Include tokenized settings link if user has a token
-  const settingsLine = user.token
-    ? `\n🔗 [Manage preferences](${getBaseUrl()}/settings?token=${user.token})`
-    : "";
-
-  await send(chatId,
-    `⚙️ *Your SignalBrief Settings*\n\n` +
-    `📬 Digests received: *${user.digests_received}*\n` +
-    `📅 Delivery: *${formatDeliveryTime(user.preferences)}*\n` +
-    `💾 Bookmarks saved: *${user.bookmarks?.length || 0}*\n\n` +
-    `🏭 Industries: ${industries.length ? industries.join(", ") : "none"}\n` +
-    `🧰 Capabilities: ${capabilities.length ? capabilities.join(", ") : "none"}\n` +
-    `📊 Topic adjustments: ${adjustments}\n` +
-    `➕ Custom topics: ${customTopics}` +
-    settingsLine + `\n\n` +
-    `_To tune:_ more/less [topic] · add [topic] · /bookmarks`
-  );
-}
-
-async function handleBookmarks(chatId) {
-  const user = readUser(chatId);
-  const bm = user.bookmarks || [];
-  if (bm.length === 0) {
-    await send(chatId, `💾 No bookmarks yet.\n\nAfter your next digest, reply *save 3* to bookmark item 3.`);
-    return;
-  }
-
-  // Group by date, show last 10
-  const recent = bm.slice(-10).reverse();
-  const lines = [`💾 *Your Bookmarks* (last ${recent.length})`, ""];
-  recent.forEach(b => {
-    const tag = b.tag ? `[${b.tag}] ` : "";
-    const link = b.url ? `\n→ ${b.url}` : "";
-    lines.push(`*${b.date} · #${b.item_num}*\n${tag}${b.headline}${link}`);
-    lines.push("");
-  });
-
-  await send(chatId, lines.join("\n"));
-}
-
-async function handleTopics(chatId) {
-  const user = readUser(chatId);
-  const defaultTopics = (getConfig().topics || []).map(t => t.tag);
-  const custom = user.custom_topics || [];
-  const weights = user.topic_weights || {};
-
-  const topicLines = defaultTopics.map(t => {
-    const w = weights[t] || 0;
-    const adj = w > 0 ? ` ↑` : w < 0 ? ` ↓` : "";
-    return `• ${t}${adj}`;
-  });
-  if (custom.length) custom.forEach(t => topicLines.push(`• ${t} _(custom)_`));
-
-  await send(chatId,
-    `📋 *Your Tracked Topics*\n\n` +
-    topicLines.join("\n") + "\n\n" +
-    `_To tune:_ more [topic] · less [topic] · add [keyword]`
-  );
-}
-
-async function handleHelp(chatId) {
-  const user = readUser(chatId);
-  await send(chatId,
-    `☀️ *SignalBrief Help*\n\n` +
-    `*Saving items:*\n` +
-    `• \`save 3\` — bookmark item 3\n` +
-    `• \`save 1, 4, 6\` — bookmark multiple\n\n` +
-    `*Tuning topics:*\n` +
-    `• \`more AI\` — see more AI stories\n` +
-    `• \`less pharma\` — fewer pharma stories\n` +
-    `• \`add GLP-1\` — track a new topic\n\n` +
-    `*Other commands:*\n` +
-    `• /verify 123456 — confirm Telegram account linking\n` +
-    `• /bookmarks — view saved items\n` +
-    `• /topics — view tracked topics\n` +
-    `• /settings — view all preferences\n\n` +
-    `Digest arrives at *${formatDeliveryTime(user.preferences)}* on your scheduled days.\n` +
-    `Questions? Just ask.`
-  );
-}
-
-async function handleQuestion(chatId, question) {
-  // Lightweight fallback — answer via Claude with healthcare context
-  const res = await anthropicTransport.requestMessage({
-    model: "claude-haiku-4-5",
-    max_tokens: 300,
-    messages: [{
-      role: "user",
-      content: `You are SignalBrief, a business and strategy news assistant covering AI, healthcare, financial services, PE/M&A, energy, consumer, policy, and consulting. Answer this question concisely (2-3 sentences max, plain text, no markdown headers): ${question}`
-    }],
-  });
-  const answer = res.body?.content?.[0]?.text || "I'm not sure — try asking again.";
-  await send(chatId, answer);
 }
 
 function parseInlineCallbackData(data) {

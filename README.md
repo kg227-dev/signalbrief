@@ -87,15 +87,17 @@ archive/YYYY-MM-DD.json + data/cost-log.json + user JSON state updates
 | `package.json` | Node metadata and scripts |
 | `config.example.json` | Configuration template (copy to `config.json`) |
 | `start.sh` | Local process launcher for web/bot/worker |
-| `digest.js` | Core digest pipeline |
-| `store.js` | JSON user store + token index |
-| `reply-handler.js` | Telegram intent parsing and command handlers |
-| `bot-server.js` | Telegram long-poll worker |
-| `mailer.js` | Resend primary + Gmail fallback mail delivery |
-| `scheduler-worker.js` | Always-on scheduler loop and heartbeat writer |
-| `engagement-events.js` | Engagement event append/load + ignored-event backfill |
-| `quality-score.js` | Digest quality scoring/trend helpers |
-| `personalization.js` | Auto topic-weight learning engine |
+| `digest.js` | Compatibility entrypoint for manual digest runs |
+| `digest-runner.js` | Digest trigger orchestration, admission, and lock handling |
+| `src/entrypoints/digest-runtime.js` | Core digest pipeline orchestration |
+| `src/runtime/store.js` | JSON user store + token index |
+| `src/runtime/reply-handler-runtime.js` | Telegram intent parsing and command handlers |
+| `src/entrypoints/bot-server.js` | Telegram long-poll worker |
+| `src/runtime/mailer-runtime.js` | Resend primary + Gmail fallback mail delivery |
+| `src/entrypoints/scheduler-worker.js` | Always-on scheduler loop and heartbeat writer |
+| `src/runtime/engagement-events-runtime.js` | Engagement event append/load + ignored-event backfill |
+| `src/runtime/quality-score.js` | Digest quality scoring/trend helpers |
+| `src/runtime/personalization-runtime.js` | Auto topic-weight learning engine |
 | `templates/email.html` | Digest email template |
 | `templates/welcome.html` | Welcome email template |
 | `web/server.js` | HTTP layer: public + admin APIs and static routing |
@@ -105,7 +107,7 @@ archive/YYYY-MM-DD.json + data/cost-log.json + user JSON state updates
 | `web/admin-login.html` | Admin login page |
 | `web/admin.html` | Admin dashboard |
 | `web/admin-user.html` | Admin per-user editor |
-| `web/app.js` | Public onboarding client script |
+| `web/index.js` | Public onboarding client script |
 | `web/settings.js` | Settings client script |
 | `web/style.css` | Shared stylesheet |
 | `web/robots.txt` | Robots directives |
@@ -147,12 +149,12 @@ cp config.example.json config.json
 
 # Optional individual processes
 node web/server.js
-node bot-server.js
-node scheduler-worker.js
+node src/entrypoints/bot-server.js
+node src/entrypoints/scheduler-worker.js
 
 # Manual digest runs
-node digest.js
-node digest.js --chatId 123456789
+node src/entrypoints/digest.js
+node src/entrypoints/digest.js --chatId 123456789
 ```
 
 ### Useful scripts
@@ -183,8 +185,10 @@ docker compose up -d --build
 
 Services in `docker-compose.yml`:
 - `web` — onboarding/settings/archive/admin HTTP layer
-- `bot` — Telegram command + callback handler
+- `bot` — Telegram command + callback handler via long polling (`getUpdates`)
 - `worker` — 24/7 scheduler loop that runs `digest.js` every 5 minutes
+
+Telegram ingress defaults to polling-first runtime mode. Webhook mode is legacy/optional and not active in normal production operation.
 
 Persistent state is mounted on disk (`./data`, `./archive`), so user state and digests survive restarts.
 
@@ -301,9 +305,10 @@ Inline callback buttons per digest item: `Save`, `More like this`, `Less like th
 | `GET` | `/api/click?token=...&did=...&item=...&url=...` | Tracked outbound redirect |
 | `POST` | `/api/bookmarks` | Add/remove bookmark by URL |
 | `POST` | `/api/request-link` | Send magic link email |
-| `GET` | `/api/unsubscribe?token=...` | Human one-click unsubscribe + redirect |
-| `POST` | `/api/unsubscribe?token=...` | Machine one-click unsubscribe |
-| `POST` | `/api/unsubscribe?email=...&sig=...` | Signed RFC8058 email unsubscribe |
+| `GET` | `/api/unsubscribe/confirm?token=...` | Browser unsubscribe confirmation redirect |
+| `POST` | `/api/unsubscribe/one-click?token=...` | RFC8058 one-click unsubscribe |
+| `GET`/`POST` | `/api/unsubscribe/legacy?email=...&sig=...` | Legacy signed-email bridge |
+| `GET`/`POST` | `/api/unsubscribe` | Deprecated compatibility shim to new unsubscribe endpoints |
 
 ### Admin pages + APIs (session-authenticated)
 

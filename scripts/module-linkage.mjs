@@ -1,4 +1,4 @@
-// Static linkage map for analysis tools.
+// Static dependency-links map for analysis tools.
 // This file is not executed in production; it enumerates module relationships explicitly.
 
 import "../digest-pipeline-seam.js";
@@ -20,6 +20,11 @@ import "../src/runtime/config-provider.js";
 import "../src/runtime/engagement-events.js";
 import "../src/runtime/engagement-events-runtime.js";
 import "../src/runtime/mailer.js";
+import "../src/runtime/mailer-lifecycle-runtime.js";
+import "../src/runtime/mailer/lifecycle/common.js";
+import "../src/runtime/mailer/lifecycle/lifecycle-senders.js";
+import "../src/runtime/mailer/lifecycle/welcome-content.js";
+import "../src/runtime/mailer/lifecycle/welcome-sender.js";
 import "../src/runtime/mailer-runtime.js";
 import "../src/runtime/personalization.js";
 import "../src/runtime/personalization-runtime.js";
@@ -28,6 +33,9 @@ import "../src/runtime/reply-handler.js";
 import "../src/runtime/reply-handler-runtime.js";
 import "../src/runtime/reply/command-router.js";
 import "../src/runtime/reply/intent-service.js";
+import "../src/runtime/reply/onboarding/keys.js";
+import "../src/runtime/reply/onboarding/link-verification-flow.js";
+import "../src/runtime/reply/onboarding/messages.js";
 import "../src/runtime/reply/onboarding-service.js";
 import "../src/runtime/reply/onboarding-service-runtime.js";
 import "../src/runtime/reply/transport.js";
@@ -37,20 +45,27 @@ import "../src/sandbox-pipeline-runtime.js";
 import "../test-harness/cache.js";
 import "../test-harness/cache/cache-archive.js";
 import "../test-harness/cache/cache-budget.js";
+import "../test-harness/cache/cache-claude-enrichment.js";
 import "../test-harness/cache/cache-claude.js";
 import "../test-harness/cache/cache-common.js";
 import "../test-harness/cache/cache-perplexity.js";
+import "../test-harness/cache/cache-perplexity-parser.js";
 import "../test-harness/config.js";
 import "../test-harness/config/config-args.js";
 import "../test-harness/config/config-constants.js";
 import "../test-harness/config/config-io.js";
 import "../test-harness/evaluator.js";
 import "../test-harness/harness-runtime.js";
+import "../test-harness/matrix-runtime.js";
+import "../test-harness/matrix/config.js";
+import "../test-harness/matrix/guardrails.js";
 import "../test-harness/personas.js";
 import "../test-harness/personas/persona-factory.js";
 import "../test-harness/personas/persona-topics.js";
 import "../test-harness/personas/personas-canonical.js";
+import "../test-harness/personas/personas-canonical-defs.js";
 import "../test-harness/personas/personas-stress.js";
+import "../test-harness/personas/personas-stress-defs.js";
 import "../test-harness/pipeline.js";
 import "../test-harness/reporters/console.js";
 import "../test-harness/reporters/json.js";
@@ -58,6 +73,9 @@ import "../test-harness/run-matrix.js";
 import "../test-harness/run-tests.js";
 import "../test-harness/stages/analytics.js";
 import "../test-harness/stages/dataset.js";
+import "../test-harness/stages/dataset/live.js";
+import "../test-harness/stages/dataset/offline.js";
+import "../test-harness/stages/dataset/shared.js";
 import "../test-harness/stages/reporting.js";
 import "../test-harness/stages/suite-runner.js";
 import "../test-harness/suites/01-topic-matching.js";
@@ -70,6 +88,10 @@ import "../test-harness/suites/07-item-count.js";
 import "../test-harness/suites/08-cross-day-freshness.js";
 import "../test-harness/suites/09-end-to-end.js";
 import "../test-harness/suites/10-module-coverage.js";
+import "../test-harness/suites/module-coverage/checks-runtime.js";
+import "../test-harness/suites/module-coverage/checks-topic.js";
+import "../test-harness/suites/module-coverage/common.js";
+import "../test-harness/suites/module-coverage/suite.js";
 import "../test-harness/suites/analysis-quality-runtime.js";
 import "../test-harness/suites/cross-day-freshness-runtime.js";
 import "../test-harness/suites/custom-topics-runtime.js";
@@ -80,17 +102,27 @@ import "../test-harness/topic-utils.js";
 import "../topic-domain.js";
 import "../web/admin-auth.js";
 import "../web/index.js";
+import "../web/preferences-runtime.js";
+import "../web/preferences-state-runtime.js";
 import "../web/preferences-shared.js";
 import "../web/routes/admin-api.js";
 import "../web/routes/core-api.js";
 import "../web/routes/public-static.js";
 import "../web/server.js";
 import "../web/services/admin-ops.js";
+import "../web/services/admin-ops-analytics.js";
+import "../web/services/admin-ops-scheduler.js";
+import "../web/services/admin-ops-utils.js";
+import "../web/services/archive-scoring.js";
 import "../web/services/delivery-schedule.js";
+import "../web/services/reengagement-state.js";
+import "../web/services/request-metadata.js";
+import "../web/services/web-rate-limit.js";
 import "../web/settings-runtime.js";
+import "../web/settings-ui-runtime.js";
 import "../web/settings.js";
 
-export const linkedModules = [
+export const dependencyLinks = [
   "digest-pipeline-seam.js",
   "digest-policy-domain.js",
   "digest-runner.js",
@@ -110,6 +142,11 @@ export const linkedModules = [
   "src/runtime/engagement-events.js",
   "src/runtime/engagement-events-runtime.js",
   "src/runtime/mailer.js",
+  "src/runtime/mailer-lifecycle-runtime.js",
+  "src/runtime/mailer/lifecycle/common.js",
+  "src/runtime/mailer/lifecycle/lifecycle-senders.js",
+  "src/runtime/mailer/lifecycle/welcome-content.js",
+  "src/runtime/mailer/lifecycle/welcome-sender.js",
   "src/runtime/mailer-runtime.js",
   "src/runtime/personalization.js",
   "src/runtime/personalization-runtime.js",
@@ -118,6 +155,9 @@ export const linkedModules = [
   "src/runtime/reply-handler-runtime.js",
   "src/runtime/reply/command-router.js",
   "src/runtime/reply/intent-service.js",
+  "src/runtime/reply/onboarding/keys.js",
+  "src/runtime/reply/onboarding/link-verification-flow.js",
+  "src/runtime/reply/onboarding/messages.js",
   "src/runtime/reply/onboarding-service.js",
   "src/runtime/reply/onboarding-service-runtime.js",
   "src/runtime/reply/transport.js",
@@ -127,20 +167,27 @@ export const linkedModules = [
   "test-harness/cache.js",
   "test-harness/cache/cache-archive.js",
   "test-harness/cache/cache-budget.js",
+  "test-harness/cache/cache-claude-enrichment.js",
   "test-harness/cache/cache-claude.js",
   "test-harness/cache/cache-common.js",
   "test-harness/cache/cache-perplexity.js",
+  "test-harness/cache/cache-perplexity-parser.js",
   "test-harness/config.js",
   "test-harness/config/config-args.js",
   "test-harness/config/config-constants.js",
   "test-harness/config/config-io.js",
   "test-harness/evaluator.js",
   "test-harness/harness-runtime.js",
+  "test-harness/matrix-runtime.js",
+  "test-harness/matrix/config.js",
+  "test-harness/matrix/guardrails.js",
   "test-harness/personas.js",
   "test-harness/personas/persona-factory.js",
   "test-harness/personas/persona-topics.js",
   "test-harness/personas/personas-canonical.js",
+  "test-harness/personas/personas-canonical-defs.js",
   "test-harness/personas/personas-stress.js",
+  "test-harness/personas/personas-stress-defs.js",
   "test-harness/pipeline.js",
   "test-harness/reporters/console.js",
   "test-harness/reporters/json.js",
@@ -148,6 +195,9 @@ export const linkedModules = [
   "test-harness/run-tests.js",
   "test-harness/stages/analytics.js",
   "test-harness/stages/dataset.js",
+  "test-harness/stages/dataset/live.js",
+  "test-harness/stages/dataset/offline.js",
+  "test-harness/stages/dataset/shared.js",
   "test-harness/stages/reporting.js",
   "test-harness/stages/suite-runner.js",
   "test-harness/suites/01-topic-matching.js",
@@ -160,6 +210,10 @@ export const linkedModules = [
   "test-harness/suites/08-cross-day-freshness.js",
   "test-harness/suites/09-end-to-end.js",
   "test-harness/suites/10-module-coverage.js",
+  "test-harness/suites/module-coverage/checks-runtime.js",
+  "test-harness/suites/module-coverage/checks-topic.js",
+  "test-harness/suites/module-coverage/common.js",
+  "test-harness/suites/module-coverage/suite.js",
   "test-harness/suites/analysis-quality-runtime.js",
   "test-harness/suites/cross-day-freshness-runtime.js",
   "test-harness/suites/custom-topics-runtime.js",
@@ -170,13 +224,26 @@ export const linkedModules = [
   "topic-domain.js",
   "web/admin-auth.js",
   "web/index.js",
+  "web/preferences-runtime.js",
+  "web/preferences-state-runtime.js",
   "web/preferences-shared.js",
   "web/routes/admin-api.js",
   "web/routes/core-api.js",
   "web/routes/public-static.js",
   "web/server.js",
   "web/services/admin-ops.js",
+  "web/services/admin-ops-analytics.js",
+  "web/services/admin-ops-scheduler.js",
+  "web/services/admin-ops-utils.js",
+  "web/services/archive-scoring.js",
   "web/services/delivery-schedule.js",
+  "web/services/reengagement-state.js",
+  "web/services/request-metadata.js",
+  "web/services/web-rate-limit.js",
   "web/settings-runtime.js",
+  "web/settings-ui-runtime.js",
   "web/settings.js"
 ];
+
+// Backward-compatible alias for older tooling imports.
+export const linkedModules = dependencyLinks;

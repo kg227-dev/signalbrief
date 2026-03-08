@@ -2,7 +2,7 @@
   "name": "signalbrief",
   "version": "1.0.0",
   "description": "AI-curated daily news digest for healthcare strategy professionals",
-  "main": "digest.js",
+  "main": "src/entrypoints/digest.js",
   "scripts": {
     "start": "node src/entrypoints/digest.js",
     "web": "node web/server.js",

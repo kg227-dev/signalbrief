@@ -1,90 +1,119 @@
-function handlePublicStaticRoutes(ctx, deps) {
+const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
+const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
+
+const STATIC_ROUTE_FILES = new Map([
+  ["/", "index.html"],
+  ["/index.html", "index.html"],
+  ["/settings", "settings.html"],
+  ["/settings.html", "settings.html"],
+  ["/archive", "archive.html"],
+  ["/archive.html", "archive.html"],
+  ["/admin/login", "admin-login.html"],
+  ["/admin", "admin.html"],
+  ["/admin.html", "admin.html"],
+  ["/admin/user", "admin-user.html"],
+  ["/admin/sandbox", "sandbox.html"],
+  ["/robots.txt", "robots.txt"],
+  ["/sitemap.xml", "sitemap.xml"],
+  ["/style.css", "style.css"],
+  ["/preferences-shared.js", "preferences-shared.js"],
+  ["/index.js", "index.js"],
+  ["/settings.js", "settings.js"],
+]);
+
+function writeMissingDigest(res, dateKey, renderPublicDigestMissingPage) {
+  res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+  return res.end(renderPublicDigestMissingPage(dateKey));
+}
+
+function resolveDigestDateKey(pathname, archiveFiles) {
+  const match = pathname.match(DIGEST_ROUTE_RE);
+  if (!match) return null;
+  const explicit = match[1];
+  if (explicit) return explicit;
+  if (archiveFiles.length > 0) return String(archiveFiles[0] || "").replace(".json", "");
+  return null;
+}
+
+function serveDigestPage(ctx, deps) {
   const { req, res, url, pathname } = ctx;
   const {
-    isAdminAuthed,
     path, fs, APP_ROOT, readArchiveFiles, renderPublicDigestMissingPage,
-    formatPublicDigestDateLabel, renderPublicDigestPage, serveFile, WEB_DIR,
+    formatPublicDigestDateLabel, renderPublicDigestPage,
   } = deps;
-  // GET /digest(/:date) — public shareable digest page
-  if (req.method === "GET" && (pathname === "/digest" || /^\/digest\/\d{4}-\d{2}-\d{2}\/?$/.test(pathname))) {
-    const archiveDir = path.join(APP_ROOT, "archive");
-    const files = readArchiveFiles(archiveDir);
-    let dateKey = null;
-    const datedMatch = pathname.match(/^\/digest\/(\d{4}-\d{2}-\d{2})\/?$/);
-    if (datedMatch) dateKey = datedMatch[1];
-    else if (files.length > 0) dateKey = String(files[0] || "").replace(".json", "");
 
-    if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(renderPublicDigestMissingPage(dateKey));
-    }
+  if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
 
-    const archivePath = path.join(archiveDir, `${dateKey}.json`);
-    if (!fs.existsSync(archivePath)) {
-      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(renderPublicDigestMissingPage(dateKey));
-    }
-
-    try {
-      const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
-      const dateLabel = String(parsed?.dateStr || "").trim() || formatPublicDigestDateLabel(dateKey);
-      const html = renderPublicDigestPage({
-        dateKey,
-        dateLabel,
-        quickScan: parsed?.quickScan || "",
-        items: Array.isArray(parsed?.items) ? parsed.items : [],
-        refToken: url.searchParams.get("ref") || "",
-      });
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "public, max-age=300",
-      });
-      return res.end(html);
-    } catch {
-      res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(renderPublicDigestMissingPage(dateKey));
-    }
+  const archiveDir = path.join(APP_ROOT, "archive");
+  const files = readArchiveFiles(archiveDir);
+  const dateKey = resolveDigestDateKey(pathname, files);
+  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
 
-  // ── Static files ────────────────────────────────────────────────────────────
+  const archivePath = path.join(archiveDir, `${dateKey}.json`);
+  if (!fs.existsSync(archivePath)) {
+    return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
+  }
 
-  if (pathname === "/" || pathname === "/index.html") {
-    return serveFile(res, path.join(WEB_DIR, "index.html"));
+  try {
+    const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
+    const dateLabel = String(parsed?.dateStr || "").trim() || formatPublicDigestDateLabel(dateKey);
+    const html = renderPublicDigestPage({
+      dateKey,
+      dateLabel,
+      quickScan: parsed?.quickScan || "",
+      items: Array.isArray(parsed?.items) ? parsed.items : [],
+      refToken: url.searchParams.get("ref") || "",
+    });
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=300",
+    });
+    return res.end(html);
+  } catch {
+    res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end(renderPublicDigestMissingPage(dateKey));
   }
-  if (pathname === "/settings" || pathname === "/settings.html") {
-    return serveFile(res, path.join(WEB_DIR, "settings.html"));
-  }
-  if (pathname === "/archive" || pathname === "/archive.html") {
-    return serveFile(res, path.join(WEB_DIR, "archive.html"));
-  }
-  if (pathname === "/admin/login") {
-    return serveFile(res, path.join(WEB_DIR, "admin-login.html"));
-  }
-  const adminHtmlRoute = pathname === "/admin" || pathname === "/admin.html" || pathname === "/admin/user" || pathname === "/admin/sandbox";
-  if (adminHtmlRoute && !isAdminAuthed(req)) {
-    const next = encodeURIComponent(pathname + (url.search || ""));
-    res.writeHead(302, { Location: `/admin/login?next=${next}`, "Cache-Control": "no-store" });
-    return res.end();
-  }
-  if (pathname === "/admin" || pathname === "/admin.html") {
-    return serveFile(res, path.join(WEB_DIR, "admin.html"));
-  }
-  if (pathname === "/admin/user") {
-    return serveFile(res, path.join(WEB_DIR, "admin-user.html"));
-  }
-  if (pathname === "/admin/sandbox") {
-    return serveFile(res, path.join(WEB_DIR, "sandbox.html"));
-  }
-  if (pathname === "/robots.txt") return serveFile(res, path.join(WEB_DIR, "robots.txt"));
-  if (pathname === "/sitemap.xml") return serveFile(res, path.join(WEB_DIR, "sitemap.xml"));
-  if (pathname === "/style.css") return serveFile(res, path.join(WEB_DIR, "style.css"));
-  if (pathname === "/preferences-shared.js") return serveFile(res, path.join(WEB_DIR, "preferences-shared.js"));
-  if (pathname === "/index.js") return serveFile(res, path.join(WEB_DIR, "index.js"));
-  if (pathname === "/settings.js") return serveFile(res, path.join(WEB_DIR, "settings.js"));
+}
 
-  return false;
+function enforceAdminHtmlAuth(ctx, deps) {
+  const { req, res, url, pathname } = ctx;
+  const { isAdminAuthed } = deps;
+  if (!ADMIN_HTML_ROUTES.has(pathname) || isAdminAuthed(req)) return false;
+  const next = encodeURIComponent(pathname + (url.search || ""));
+  res.writeHead(302, { Location: `/admin/login?next=${next}`, "Cache-Control": "no-store" });
+  return res.end();
+}
+
+function serveStaticFile(res, pathname, deps) {
+  const { path, serveFile, WEB_DIR } = deps;
+  const fileName = STATIC_ROUTE_FILES.get(pathname);
+  if (!fileName) return false;
+  return serveFile(res, path.join(WEB_DIR, fileName));
+}
+
+function createPublicStaticRouteHandler(deps) {
+  const localDeps = { ...deps };
+  return function handlePublicStaticRoutes(ctx) {
+    const { pathname, res } = ctx;
+
+    const digestHandled = serveDigestPage(ctx, localDeps);
+    if (digestHandled !== false) return digestHandled;
+
+    const adminRedirected = enforceAdminHtmlAuth(ctx, localDeps);
+    if (adminRedirected !== false) return adminRedirected;
+
+    return serveStaticFile(res, pathname, localDeps);
+  };
+}
+
+function handlePublicStaticRoutes(ctx, deps) {
+  const routeHandler = createPublicStaticRouteHandler(deps);
+  return routeHandler(ctx);
 }
 
 module.exports = {
+  createPublicStaticRouteHandler,
   handlePublicStaticRoutes,
 };

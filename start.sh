@@ -11,14 +11,14 @@ echo "☀️  Starting SignalBrief services..."
 echo ""
 
 # Kill any existing instances
-pkill -f "signalbrief/bot-server.js" 2>/dev/null && echo "  Stopped existing bot server" || true
+pkill -f "signalbrief/src/entrypoints/bot-server.js" 2>/dev/null && echo "  Stopped existing bot server" || true
 pkill -f "signalbrief/web/server.js" 2>/dev/null && echo "  Stopped existing web server" || true
-pkill -f "signalbrief/scheduler-worker.js" 2>/dev/null && echo "  Stopped existing scheduler worker" || true
+pkill -f "signalbrief/src/entrypoints/scheduler-worker.js" 2>/dev/null && echo "  Stopped existing scheduler worker" || true
 sleep 1
 
 # Start bot server (Telegram reply handler)
 echo "  📱 Starting Telegram bot server (replies/commands)..."
-node "$DIR/bot-server.js" >> /tmp/signalbrief-bot.log 2>&1 &
+node "$DIR/src/entrypoints/bot-server.js" >> /tmp/signalbrief-bot.log 2>&1 &
 BOT_PID=$!
 echo "     PID: $BOT_PID → log: /tmp/signalbrief-bot.log"
 
@@ -31,7 +31,7 @@ echo "     PID: $WEB_PID → log: /tmp/signalbrief-web.log"
 WORKER_PID=""
 if [ "$START_WORKER" = "1" ]; then
   echo "  ⏱️  Starting scheduler worker (24/7 due-check loop)..."
-  node "$DIR/scheduler-worker.js" >> /tmp/signalbrief-worker.log 2>&1 &
+  node "$DIR/src/entrypoints/scheduler-worker.js" >> /tmp/signalbrief-worker.log 2>&1 &
   WORKER_PID=$!
   echo "     PID: $WORKER_PID → log: /tmp/signalbrief-worker.log"
 fi
@@ -47,7 +47,7 @@ if [ "$START_WORKER" = "1" ]; then
 else
   echo "📅 Scheduler worker disabled (START_WORKER=0)"
 fi
-echo "   Run now:    node $DIR/digest.js (manual catch-up run)"
+echo "   Run now:    node $DIR/src/entrypoints/digest.js (manual catch-up run)"
 echo ""
 echo "Press Ctrl+C to stop services."
 

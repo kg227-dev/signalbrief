@@ -161,37 +161,33 @@ function computeRelevanceFit(items, userTopics, topicWeights) {
   }));
   if (!rows.length) return 0;
 
-  const weightValues = rows.map((r) => r.weight);
-  const scoreValues = rows.map((r) => r.relevance);
-  const hasWeightSignal = weightValues.some((v) => Math.abs(v) > 0.01)
-    && new Set(weightValues.map((v) => v.toFixed(3))).size > 1;
-
-  let corr = 0;
-  let spread = stddev(scoreValues);
-  let anomalies = [];
-  let anomalyRate = 0;
-  let score = 0;
+  const weightValues = rows.map((row) => row.weight);
+  const scoreValues = rows.map((row) => row.relevance);
+  const spreadScore = clamp((stddev(scoreValues) / 2.0) * 100, 0, 100);
+  const hasWeightSignal = weightValues.some((value) => Math.abs(value) > 0.01)
+    && new Set(weightValues.map((value) => value.toFixed(3))).size > 1;
 
   if (hasWeightSignal) {
-    corr = spearmanCorrelation(weightValues, scoreValues);
-    anomalies = rows.filter((r) => (r.weight <= -2 && r.relevance > 8) || (r.weight >= 4 && r.relevance < 5));
-    anomalyRate = rows.length ? anomalies.length / rows.length : 0;
+    const corr = spearmanCorrelation(weightValues, scoreValues);
+    const anomalies = rows.filter((row) => (row.weight <= -2 && row.relevance > 8) || (row.weight >= 4 && row.relevance < 5));
+    const anomalyRate = rows.length ? anomalies.length / rows.length : 0;
     const corrNorm = ((corr + 1) / 2) * 100;
-    const spreadScore = clamp((spread / 2.0) * 100, 0, 100);
     const anomalyPenalty = Math.min(50, anomalyRate * 100);
-    score = clamp(0.7 * corrNorm + 0.3 * spreadScore - anomalyPenalty, 0, 100);
-  } else if (rows.length < 3) {
-    score = rows.length ? 75 : 0;
-  } else {
-    const expected = rows.map((r) => Number((r.base_score * 0.6 + r.topic_match * 0.4).toFixed(3)));
-    corr = spearmanCorrelation(expected, scoreValues);
-    anomalies = rows.filter((r) => (r.topic_match >= 7 && r.relevance < 6) || (r.topic_match <= 3 && r.relevance > 8.8));
-    anomalyRate = rows.length ? anomalies.length / rows.length : 0;
-    const corrNorm = ((corr + 1) / 2) * 100;
-    const spreadScore = clamp((spread / 2.0) * 100, 0, 100);
-    const anomalyPenalty = Math.min(40, anomalyRate * 100);
-    score = clamp(0.75 * corrNorm + 0.25 * spreadScore - anomalyPenalty, 0, 100);
+    const score = clamp(0.7 * corrNorm + 0.3 * spreadScore - anomalyPenalty, 0, 100);
+    return Number(score.toFixed(2));
   }
+
+  if (rows.length < 3) {
+    return rows.length ? 75 : 0;
+  }
+
+  const expected = rows.map((row) => Number((row.base_score * 0.6 + row.topic_match * 0.4).toFixed(3)));
+  const corr = spearmanCorrelation(expected, scoreValues);
+  const anomalies = rows.filter((row) => (row.topic_match >= 7 && row.relevance < 6) || (row.topic_match <= 3 && row.relevance > 8.8));
+  const anomalyRate = rows.length ? anomalies.length / rows.length : 0;
+  const corrNorm = ((corr + 1) / 2) * 100;
+  const anomalyPenalty = Math.min(40, anomalyRate * 100);
+  const score = clamp(0.75 * corrNorm + 0.25 * spreadScore - anomalyPenalty, 0, 100);
   return Number(score.toFixed(2));
 }
 

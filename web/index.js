@@ -83,16 +83,74 @@ async function ensureTopicCatalogLoaded() {
   }
 }
 
+function buildRequestError(message, extra = {}) {
+  const err = new Error(message);
+  Object.assign(err, extra);
+  return err;
+}
+
+async function fetchJsonStrict(url, options = {}) {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (err) {
+    throw buildRequestError("network_error", { kind: "network", cause: err });
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (err) {
+    if (window.location.search.includes("debug_ui=1")) {
+      console.warn("[index] non-JSON response:", err.message);
+    }
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const apiMessage = payload && typeof payload.error === "string" ? payload.error.trim() : "";
+    throw buildRequestError(apiMessage || `request_failed_${response.status}`, {
+      kind: "http",
+      status: response.status,
+      payload,
+    });
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw buildRequestError("invalid_json_response", { kind: "decode", status: response.status });
+  }
+
+  return payload;
+}
+
+function mapRequestError(err, fallbackMessage) {
+  if (err && err.kind === "network") return "Network error. Please try again.";
+  const apiMessage = err && err.payload && typeof err.payload.error === "string"
+    ? err.payload.error.trim()
+    : "";
+  if (apiMessage) return apiMessage;
+  if (
+    err
+    && typeof err.message === "string"
+    && err.message
+    && !err.message.startsWith("request_failed_")
+    && err.message !== "invalid_json_response"
+  ) {
+    return err.message;
+  }
+  return fallbackMessage || "Something went wrong. Please try again.";
+}
+
 // -- Topic chips --------------------------------------------------------------
-function toggleTopic(el) {
-  const topic = String(el?.dataset?.topic || "").trim();
+function toggleTopic(topicChip) {
+  const topic = String(topicChip?.dataset?.topic || "").trim();
   if (!topic) return;
 
   const isSelected = prefState
     ? prefState.toggleTopic(topic)
-    : !el.classList.contains("selected");
+    : !topicChip.classList.contains("selected");
 
-  el.classList.toggle("selected", isSelected);
+  topicChip.classList.toggle("selected", isSelected);
   updateProgress();
 }
 
@@ -144,8 +202,8 @@ document.getElementById("customTopic").addEventListener("keypress", (event) => {
 });
 
 // -- Depth -------------------------------------------------------------------
-function setSelectedDepth(el) {
-  const depth = String(el?.dataset?.depth || "").trim() || "headline_plus_why";
+function setSelectedDepth(depthOption) {
+  const depth = String(depthOption?.dataset?.depth || "").trim() || "headline_plus_why";
   if (prefState) prefState.setDepth(depth);
 
   document.querySelectorAll(".depth-option").forEach((option) => {
@@ -170,18 +228,27 @@ function initDepthSelector(initialDepth) {
 }
 
 // -- Size toggle (2-pill) ----------------------------------------------------
-function selectSize(el) {
-  const size = Number(el?.dataset?.size || 5);
+function selectItemsPerDigest(sizePill) {
+  const itemsPerDigest = Number(sizePill?.dataset?.size || 5);
   document.querySelectorAll(".size-pill").forEach((pill) => {
-    pill.classList.toggle("selected", pill === el);
+    pill.classList.toggle("selected", pill === sizePill);
   });
-  if (prefState) prefState.setItemsPerDigest(size);
+  if (prefState) prefState.setItemsPerDigest(itemsPerDigest);
 }
 
-function getSize() {
+function getItemsPerDigest() {
   if (prefState) return prefState.getItemsPerDigest();
   const selected = document.querySelector(".size-pill.selected");
   return selected ? parseInt(selected.dataset.size, 10) : 5;
+}
+
+// Backward-compatible aliases for any stale inline handlers.
+function selectSize(sizePill) {
+  selectItemsPerDigest(sizePill);
+}
+
+function getSize() {
+  return getItemsPerDigest();
 }
 
 // -- Day circles --------------------------------------------------------------
@@ -215,10 +282,13 @@ function renderDays() {
   syncDayPresets();
 }
 
-function toggleDay(el) {
-  const day = parseInt(el?.dataset?.day, 10);
+function toggleDay(dayCircle) {
+  const day = parseInt(dayCircle?.dataset?.day, 10);
   if (prefState) prefState.toggleDay(day);
-  el.classList.toggle("active", prefState ? prefState.getDays().includes(day) : !el.classList.contains("active"));
+  dayCircle.classList.toggle(
+    "active",
+    prefState ? prefState.getDays().includes(day) : !dayCircle.classList.contains("active")
+  );
   syncDayPresets();
   updateProgress();
 }
@@ -321,7 +391,7 @@ document.getElementById("onboardForm").addEventListener("submit", async (event) 
     prefState.setDepth(getSelectedDepth());
     prefState.setDeliveryTime(deliveryTime);
     prefState.setDays(days);
-    prefState.setItemsPerDigest(getSize());
+    prefState.setItemsPerDigest(getItemsPerDigest());
   }
 
   const payload = (prefState && typeof Prefs.buildSignupPayload === "function")
@@ -341,19 +411,17 @@ document.getElementById("onboardForm").addEventListener("submit", async (event) 
         delivery_time: deliveryTime,
         frequency: getDaysFrequency(),
         days_of_week: days,
-        items_per_digest: getSize(),
+        items_per_digest: getItemsPerDigest(),
         referral_token: referralToken || null,
       };
 
   try {
-    const res = await fetch("/api/signup", {
+    const result = await fetchJsonStrict("/api/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-
-    const result = await res.json();
-    if (result.success) {
+    if (result.success || result.account_created === true) {
       clearSubmitError();
       document.getElementById("onboardForm").style.display = "none";
       document.getElementById("formFooter").style.display = "none";
@@ -379,13 +447,14 @@ document.getElementById("onboardForm").addEventListener("submit", async (event) 
       const hour12 = hour24 % 12 || 12;
       const prettyTime = `${hour12}:${String(minutes).padStart(2, "0")} ${ampm} ET`;
       document.getElementById("successDeliveryMsg").innerHTML = `Your first SignalBrief arrives at <strong>${prettyTime}</strong>. Here's a preview of what to expect:`;
-    } else {
-      showSubmitError(result.error || "Something went wrong. Please try again.");
-      btn.disabled = false;
-      btn.textContent = "Start my SignalBrief →";
+      if (Array.isArray(result.warnings) && result.warnings.length) {
+        console.warn("[signup] completed with side-effect warnings:", result.warnings);
+      }
+      return;
     }
-  } catch {
-    showSubmitError("Network error. Please try again.");
+    throw buildRequestError(result.error || "Could not complete signup.");
+  } catch (err) {
+    showSubmitError(mapRequestError(err, "Something went wrong. Please try again."));
     btn.disabled = false;
     btn.textContent = "Start my SignalBrief →";
   }

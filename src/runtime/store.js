@@ -74,7 +74,7 @@ function defaultUser(chatId) {
     chatId: String(chatId),
     email: null,
     status: "active",          // active | paused | unsubscribed
-    token: null,               // 64-char hex; generated on signup or auto-generated on first readUser
+    token: null,               // 64-char hex; generated on signup or backfilled during index rebuild
     digests_received: 0,
     joined_at: new Date().toISOString(),
     last_digest_at: null,
@@ -123,9 +123,23 @@ function rebuildTokenIndex() {
   fs.readdirSync(dir)
     .filter(f => f.startsWith("user-") && f.endsWith(".json"))
     .forEach(f => {
+      const filePath = path.join(dir, f);
+      const fallbackChatId = f.replace("user-", "").replace(".json", "");
       try {
-        const raw = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-        if (raw.token) tokenIndex.set(raw.token, raw.chatId || f.replace("user-", "").replace(".json", ""));
+        const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        const chatId = String(raw.chatId || fallbackChatId);
+        if (raw.token) {
+          tokenIndex.set(raw.token, chatId);
+          return;
+        }
+        const backfilled = {
+          ...raw,
+          chatId,
+          token: generateToken(),
+          last_updated: raw.last_updated || new Date().toISOString(),
+        };
+        _writeUserFile(filePath, backfilled);
+        tokenIndex.set(backfilled.token, chatId);
       } catch (err) {
         if (process.env.STORE_DEBUG === "1") {
           console.warn(`[store] skipping unreadable user file ${f}: ${err.message}`);
@@ -138,7 +152,6 @@ function rebuildTokenIndex() {
 
 function readUser(chatId) {
   ensureStoreInitialized();
-  const tokenIndex = currentTokenIndex();
   const f = userFile(chatId);
   if (!fs.existsSync(f)) return defaultUser(chatId);
   let raw;
@@ -152,15 +165,6 @@ function readUser(chatId) {
     auto_learning: { ...defaults.auto_learning, ...(raw.auto_learning || {}) },
     reengagement_state: { ...defaults.reengagement_state, ...(raw.reengagement_state || {}) },
   };
-  // Auto-generate and persist token for existing users who don't have one
-  if (!raw.token) {
-    user.token = generateToken();
-    _writeUserFile(f, user);
-    tokenIndex.set(user.token, String(chatId));
-  } else {
-    // Keep index hydrated even when records are loaded ad-hoc from disk.
-    tokenIndex.set(raw.token, String(chatId));
-  }
   return user;
 }
 

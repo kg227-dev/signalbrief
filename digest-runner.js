@@ -27,6 +27,14 @@ const LOCK_UNHEALTHY_STATES = new Set([
   LOCK_STATE_IO_ERROR,
   LOCK_STATE_STALE_UNCLEARED,
 ]);
+const DIGEST_TRIGGER_STATUS = Object.freeze({
+  QUEUED: "queued",
+  OK: "ok",
+  BUSY: "busy",
+  LOCK_UNHEALTHY: "lock_unhealthy",
+  FAILED: "failed",
+  SPAWN_FAILED: "spawn_failed",
+});
 const LOCK_WARNING_THROTTLE_MS = 60 * 1000;
 
 let admissionQueue = Promise.resolve();
@@ -161,6 +169,90 @@ function enqueueAdmission(task) {
   const run = admissionQueue.then(task, task);
   admissionQueue = run.catch(() => null);
   return run;
+}
+
+function isDigestLockUnhealthyCode(code) {
+  return LOCK_UNHEALTHY_STATES.has(String(code || ""));
+}
+
+function normalizeDigestTriggerResult(result) {
+  const code = String(result?.code || "");
+  if (result?.ok && code === "queued") {
+    return {
+      status: DIGEST_TRIGGER_STATUS.QUEUED,
+      code,
+      lock_state: null,
+      lock_error: null,
+      exit_code: null,
+      signal: null,
+    };
+  }
+  if (result?.ok) {
+    return {
+      status: DIGEST_TRIGGER_STATUS.OK,
+      code: code || "ok",
+      lock_state: null,
+      lock_error: null,
+      exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
+      signal: result?.run?.signal || null,
+    };
+  }
+  if (code === "busy") {
+    return {
+      status: DIGEST_TRIGGER_STATUS.BUSY,
+      code,
+      lock_state: result?.admission?.lockState || null,
+      lock_error: result?.admission?.lock?.error || null,
+      exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
+      signal: result?.run?.signal || null,
+    };
+  }
+  if (isDigestLockUnhealthyCode(code)) {
+    return {
+      status: DIGEST_TRIGGER_STATUS.LOCK_UNHEALTHY,
+      code,
+      lock_state: code,
+      lock_error: result?.admission?.lock?.error || result?.admission?.lock?.error_code || null,
+      exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
+      signal: result?.run?.signal || null,
+    };
+  }
+  if (code === "spawn_failed") {
+    return {
+      status: DIGEST_TRIGGER_STATUS.SPAWN_FAILED,
+      code,
+      lock_state: null,
+      lock_error: null,
+      exit_code: null,
+      signal: null,
+    };
+  }
+  return {
+    status: DIGEST_TRIGGER_STATUS.FAILED,
+    code: code || "failed",
+    lock_state: result?.admission?.lockState || null,
+    lock_error: result?.admission?.lock?.error || null,
+    exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
+    signal: result?.run?.signal || null,
+  };
+}
+
+function toDigestTriggerOutcome(result) {
+  const normalized = normalizeDigestTriggerResult(result);
+  const status = normalized.status;
+  return {
+    ok: !!result?.ok,
+    status,
+    code: normalized.code,
+    busy: status === DIGEST_TRIGGER_STATUS.BUSY,
+    lockUnhealthy: status === DIGEST_TRIGGER_STATUS.LOCK_UNHEALTHY,
+    lockState: normalized.lock_state,
+    lockError: normalized.lock_error,
+    exitCode: normalized.exit_code,
+    signal: normalized.signal,
+    normalized,
+    raw: result,
+  };
 }
 
 async function waitForAdmission(opts = {}) {
@@ -364,11 +456,66 @@ async function triggerDigest(opts = {}) {
   }
 }
 
+async function queueDigestTrigger(opts = {}) {
+  const result = await triggerDigest({
+    source: opts.source,
+    trigger: opts.trigger,
+    chatId: opts.chatId,
+    queue: true,
+    maxAdmissionWaitMs: toPositiveIntOrDefault(opts.maxAdmissionWaitMs, 60_000),
+    serializeAdmission: true,
+    env: opts.env,
+    extraArgs: opts.extraArgs,
+  });
+  return toDigestTriggerOutcome(result);
+}
+
+async function startDigestTrigger(opts = {}) {
+  const result = await triggerDigest({
+    source: opts.source,
+    trigger: opts.trigger,
+    chatId: opts.chatId,
+    suppressWelcome: !!opts.suppressWelcome,
+    queue: false,
+    maxAdmissionWaitMs: 0,
+    serializeAdmission: true,
+    env: opts.env,
+    extraArgs: opts.extraArgs,
+  });
+  return toDigestTriggerOutcome(result);
+}
+
+async function runDigestTrigger(opts = {}) {
+  const result = await triggerDigest({
+    source: opts.source,
+    trigger: opts.trigger,
+    chatId: opts.chatId,
+    suppressWelcome: !!opts.suppressWelcome,
+    waitForExit: true,
+    timeoutMs: opts.timeoutMs,
+    queue: false,
+    maxAdmissionWaitMs: 0,
+    serializeAdmission: true,
+    env: opts.env,
+    extraArgs: opts.extraArgs,
+    onStdout: opts.onStdout,
+    onStderr: opts.onStderr,
+  });
+  return toDigestTriggerOutcome(result);
+}
+
 module.exports = {
+  DIGEST_TRIGGER_STATUS,
   DIGEST_LOCK_EXIT_CODE,
   DIGEST_RUN_LOCK_FILE,
   clearDigestRunLock,
   digestRunStatus,
+  isDigestLockUnhealthyCode,
+  normalizeDigestTriggerResult,
+  queueDigestTrigger,
   readDigestRunLock,
+  runDigestTrigger,
+  startDigestTrigger,
+  toDigestTriggerOutcome,
   triggerDigest,
 };

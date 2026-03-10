@@ -1,3 +1,10 @@
 #!/usr/bin/env node
-// Root launch shim retained for CLI compatibility.
-require("./src/entrypoints/scheduler-worker");
+"use strict";
+
+const runtime = require("./src/entrypoints/scheduler-worker");
+
+if (require.main === module && typeof runtime.startSchedulerWorker === "function") {
+  runtime.startSchedulerWorker();
+}
+
+module.exports = runtime;

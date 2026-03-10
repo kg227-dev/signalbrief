@@ -1,3 +1,3 @@
-const runtime = require("./engagement-events-runtime");
+"use strict";
 
-module.exports = runtime;
+module.exports = require("./engagement/engagement-events-runtime");

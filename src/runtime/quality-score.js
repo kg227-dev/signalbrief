@@ -1,3 +1,9 @@
+const {
+  normalizeMatchText,
+  normalizeTopicToken,
+  topicsRelated,
+} = require("../digest/domain/topic-domain-runtime");
+
 function mean(values) {
   const nums = (values || []).map(Number).filter(Number.isFinite);
   if (!nums.length) return 0;
@@ -16,17 +22,10 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, Number(n) || 0));
 }
 
-function normalizeToken(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/×/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+const normalizeToken = normalizeMatchText;
 
 function normalizeCustomKeyword(topic) {
-  return normalizeToken(String(topic || "").replace(/^custom_/, "").replace(/_/g, " "));
+  return normalizeTopicToken(topic);
 }
 
 function rank(values) {
@@ -82,7 +81,7 @@ function jaccardSimilarity(aValues, bValues) {
 function tagDistribution(items) {
   const out = {};
   for (const item of (items || [])) {
-    const key = normalizeToken(item?.tag || "");
+    const key = normalizeTopicToken(item?.tag || "");
     if (!key) continue;
     out[key] = (out[key] || 0) + 1;
   }
@@ -92,7 +91,7 @@ function tagDistribution(items) {
 function countAdjacencyViolations(items) {
   let n = 0;
   for (let i = 1; i < (items || []).length; i++) {
-    if (normalizeToken(items[i - 1]?.tag) && normalizeToken(items[i - 1]?.tag) === normalizeToken(items[i]?.tag)) n += 1;
+    if (normalizeTopicToken(items[i - 1]?.tag) && normalizeTopicToken(items[i - 1]?.tag) === normalizeTopicToken(items[i]?.tag)) n += 1;
   }
   return n;
 }
@@ -105,14 +104,14 @@ function qualityBand(score) {
 }
 
 function getItemWeight(tag, weights) {
-  const tagNorm = normalizeToken(tag);
+  const tagNorm = normalizeTopicToken(tag);
   const entries = Object.entries(weights || {});
   let best = 0;
   let bestLen = 0;
   for (const [k, raw] of entries) {
-    const key = normalizeToken(k);
+    const key = normalizeTopicToken(k);
     if (!key || !tagNorm) continue;
-    const matches = tagNorm.includes(key) || key.includes(tagNorm);
+    const matches = topicsRelated(tagNorm, key);
     if (!matches) continue;
     if (key.length > bestLen) {
       bestLen = key.length;
@@ -127,15 +126,15 @@ function topicMatchScore(item, userTopics) {
   if (!topics.length) return 7;
   const standard = topics
     .filter((t) => !String(t).startsWith("custom_"))
-    .map(normalizeToken)
+    .map(normalizeTopicToken)
     .filter(Boolean);
   const custom = topics
     .filter((t) => String(t).startsWith("custom_"))
     .map(normalizeCustomKeyword)
     .filter(Boolean);
-  const tag = normalizeToken(item?.tag || "");
-  const text = normalizeToken(`${item?.headline || ""} ${item?.summary || ""} ${item?.wim || ""}`);
-  const standardHit = standard.some((t) => tag.includes(t) || t.includes(tag));
+  const tag = normalizeTopicToken(item?.tag || "");
+  const text = normalizeMatchText(`${item?.headline || ""} ${item?.summary || ""} ${item?.wim || ""}`);
+  const standardHit = standard.some((t) => topicsRelated(tag, t));
   const customHit = custom.some((kw) => text.includes(kw) || tag.includes(kw));
   if (standardHit || customHit) return 9;
   return 3;

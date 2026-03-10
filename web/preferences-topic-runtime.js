@@ -1,0 +1,95 @@
+/* SignalBrief — preference topic helper runtime */
+(function bootstrapPreferencesTopicRuntime(globalScope) {
+  function replaceArray(target, nextValues) {
+    target.splice(0, target.length, ...nextValues);
+  }
+
+  function sanitizeTopicList(values) {
+    if (!Array.isArray(values)) return [];
+    const out = [];
+    for (const value of values) {
+      const topic = String(value || "").trim();
+      if (!topic || out.includes(topic)) continue;
+      out.push(topic);
+    }
+    return out;
+  }
+
+  function buildTopicCatalogSnapshot({ industryTopics, capabilityTopics, defaultTopics }) {
+    return {
+      industries: industryTopics.slice(),
+      capabilities: capabilityTopics.slice(),
+      topics: defaultTopics.slice(),
+    };
+  }
+
+  function deriveTopicCatalog(payload, { fallbackIndustries, fallbackCapabilities }) {
+    const industries = sanitizeTopicList(payload && payload.industries);
+    const capabilities = sanitizeTopicList(payload && payload.capabilities);
+    const defaults = sanitizeTopicList(payload && payload.topics);
+
+    const nextIndustries = industries.length ? industries : fallbackIndustries;
+    const nextCapabilities = capabilities.length ? capabilities : fallbackCapabilities;
+    const nextDefaults = defaults.length ? defaults : [...nextIndustries, ...nextCapabilities];
+
+    return {
+      industries: nextIndustries,
+      capabilities: nextCapabilities,
+      topics: nextDefaults,
+    };
+  }
+
+  function normalizeCustomTopicInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    return slug ? `custom_${slug}` : "";
+  }
+
+  function topicKeyFromInput(value, opts = {}) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
+    if (opts.matchDefault) {
+      const defaultMatch = defaults.find((topic) => topic.toLowerCase() === raw.toLowerCase());
+      if (defaultMatch) return defaultMatch;
+    }
+
+    return normalizeCustomTopicInput(raw);
+  }
+
+  function isCustomTopic(topic, opts = {}) {
+    const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
+    return !defaults.includes(String(topic || ""));
+  }
+
+  function formatCustomLabel(topic) {
+    return String(topic || "")
+      .replace(/^custom_/, "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function topicDisplayLabel(topic, opts = {}) {
+    const key = String(topic || "");
+    if (!key) return "";
+
+    const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
+    const labels = opts.topicLabels && typeof opts.topicLabels === "object" ? opts.topicLabels : {};
+    if (defaults.includes(key)) return labels[key] || key;
+    return formatCustomLabel(key);
+  }
+
+  globalScope.SignalBriefPrefsTopicRuntime = {
+    replaceArray,
+    sanitizeTopicList,
+    buildTopicCatalogSnapshot,
+    deriveTopicCatalog,
+    normalizeCustomTopicInput,
+    topicKeyFromInput,
+    isCustomTopic,
+    formatCustomLabel,
+    topicDisplayLabel,
+  };
+})(window);

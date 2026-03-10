@@ -1,5 +1,3 @@
-const { selectItemsByPolicy } = require("./selection-domain-runtime");
+"use strict";
 
-module.exports = {
-  selectItemsByPolicy,
-};
+module.exports = require("./src/digest/domain/selection-domain-runtime");

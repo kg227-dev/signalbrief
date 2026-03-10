@@ -16,7 +16,13 @@ const STATIC_ROUTE_FILES = new Map([
   ["/robots.txt", "robots.txt"],
   ["/sitemap.xml", "sitemap.xml"],
   ["/style.css", "style.css"],
+  ["/preferences-topic-runtime.js", "preferences-topic-runtime.js"],
+  ["/preferences-schedule-runtime.js", "preferences-schedule-runtime.js"],
   ["/preferences-shared.js", "preferences-shared.js"],
+  ["/settings-ui-topic-runtime.js", "settings-ui-topic-runtime.js"],
+  ["/settings-ui-preferences-runtime.js", "settings-ui-preferences-runtime.js"],
+  ["/index-helpers-runtime.js", "index-helpers-runtime.js"],
+  ["/index-form-runtime.js", "index-form-runtime.js"],
   ["/index.js", "index.js"],
   ["/settings.js", "settings.js"],
 ]);

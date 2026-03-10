@@ -1,3 +1,10 @@
 #!/usr/bin/env node
-// Root launch shim retained for CLI compatibility.
-require("./src/entrypoints/bot-server");
+"use strict";
+
+const runtime = require("./src/entrypoints/bot-server");
+
+if (require.main === module && typeof runtime.startBotServer === "function") {
+  runtime.startBotServer();
+}
+
+module.exports = runtime;

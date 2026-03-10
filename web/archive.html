@@ -601,6 +601,11 @@ const state = {
   filteredCount: 0,
   keyToItem: new Map(),
 };
+const LEGACY_ARCHIVE_FALLBACK_DEADLINE_UTC = "2026-06-30T00:00:00Z";
+const LEGACY_ARCHIVE_FALLBACK_ENABLED = (() => {
+  const ts = Date.parse(LEGACY_ARCHIVE_FALLBACK_DEADLINE_UTC);
+  return Number.isFinite(ts) ? Date.now() < ts : true;
+})();
 
 let searchDebounce = null;
 
@@ -1213,6 +1218,10 @@ async function loadArchiveFlatWithFallback(token) {
     // Continue to legacy fallback.
   }
 
+  if (!LEGACY_ARCHIVE_FALLBACK_ENABLED) {
+    return { loadError: true, legacyRetired: true };
+  }
+
   // Compatibility fallback for older servers that only expose /api/archive + /api/archive/:date.
   try {
     const listRes = await fetch("/api/archive?token=" + tokenParam);
@@ -1326,6 +1335,10 @@ async function init() {
     return;
   }
   if (!archiveData || archiveData.loadError) {
+    if (archiveData && archiveData.legacyRetired) {
+      showGate("Archive API migration window has closed. Please refresh and use the latest SignalBrief link.");
+      return;
+    }
     showGate("Could not load archive right now. Please try again.");
     return;
   }

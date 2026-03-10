@@ -1,6 +1,15 @@
 /* SignalBrief — index.js (onboarding UI runtime) */
 
 const Prefs = window.SignalBriefPrefs || {};
+const IndexHelpersRuntime = window.SignalBriefIndexHelpersRuntime || {};
+const IndexFormRuntime = window.SignalBriefIndexFormRuntime || {};
+const DEBUG_UI = window.location.search.includes("debug_ui=1");
+const requestHelpers = typeof IndexHelpersRuntime.createRequestHelpers === "function"
+  ? IndexHelpersRuntime.createRequestHelpers({ debugEnabled: DEBUG_UI })
+  : null;
+const darkModeHelpers = typeof IndexHelpersRuntime.createDarkModeHelpers === "function"
+  ? IndexHelpersRuntime.createDarkModeHelpers({ debugEnabled: DEBUG_UI })
+  : null;
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
 const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
 const prefState = typeof Prefs.createPreferenceState === "function"
@@ -11,24 +20,6 @@ const prefState = typeof Prefs.createPreferenceState === "function"
       deliveryTime: "07:00",
     })
   : null;
-
-function showOnboarding() {
-  const hero = document.querySelector(".hero");
-  const onboard = document.getElementById("onboard-form");
-  if (!hero || !onboard) return;
-  hero.style.display = "none";
-  onboard.style.display = "block";
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function showLanding() {
-  const hero = document.querySelector(".hero");
-  const onboard = document.getElementById("onboard-form");
-  if (!hero || !onboard) return;
-  onboard.style.display = "none";
-  hero.style.display = "block";
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
 
 function selectedTopicKeys() {
   if (prefState) return prefState.getTopics();
@@ -51,24 +42,10 @@ function renderTopicCatalog() {
   if (!topicGrid) return;
   topicGrid.innerHTML = "";
 
-  const appendGroup = (label, topics) => {
-    if (!Array.isArray(topics) || !topics.length) return;
-    const heading = document.createElement("div");
-    heading.className = "topic-group-label";
-    heading.textContent = label;
-    topicGrid.appendChild(heading);
-    topics.forEach((topic) => {
-      const chip = document.createElement("div");
-      chip.className = "topic-chip";
-      chip.dataset.topic = topic;
-      chip.innerHTML = `<span class="check"></span> ${topicDisplayLabel(topic)}`;
-      chip.addEventListener("click", () => toggleTopic(chip));
-      topicGrid.appendChild(chip);
-    });
-  };
-
-  appendGroup("Industries", INDUSTRY_TOPICS);
-  appendGroup("Capabilities", CAPABILITY_TOPICS);
+  if (typeof IndexHelpersRuntime.appendTopicGroup === "function") {
+    IndexHelpersRuntime.appendTopicGroup(topicGrid, "Industries", INDUSTRY_TOPICS, topicDisplayLabel, toggleTopic);
+    IndexHelpersRuntime.appendTopicGroup(topicGrid, "Capabilities", CAPABILITY_TOPICS, topicDisplayLabel, toggleTopic);
+  }
 }
 
 async function ensureTopicCatalogLoaded() {
@@ -76,69 +53,11 @@ async function ensureTopicCatalogLoaded() {
   try {
     await Prefs.loadTopicCatalog();
   } catch (err) {
-    if (window.location.search.includes("debug_ui=1")) {
+    if (DEBUG_UI) {
       const message = err && err.message ? err.message : String(err || "unknown error");
       console.warn(`[index] topic catalog fallback: ${message}`);
     }
   }
-}
-
-function buildRequestError(message, extra = {}) {
-  const err = new Error(message);
-  Object.assign(err, extra);
-  return err;
-}
-
-async function fetchJsonStrict(url, options = {}) {
-  let response;
-  try {
-    response = await fetch(url, options);
-  } catch (err) {
-    throw buildRequestError("network_error", { kind: "network", cause: err });
-  }
-
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch (err) {
-    if (window.location.search.includes("debug_ui=1")) {
-      console.warn("[index] non-JSON response:", err.message);
-    }
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const apiMessage = payload && typeof payload.error === "string" ? payload.error.trim() : "";
-    throw buildRequestError(apiMessage || `request_failed_${response.status}`, {
-      kind: "http",
-      status: response.status,
-      payload,
-    });
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw buildRequestError("invalid_json_response", { kind: "decode", status: response.status });
-  }
-
-  return payload;
-}
-
-function mapRequestError(err, fallbackMessage) {
-  if (err && err.kind === "network") return "Network error. Please try again.";
-  const apiMessage = err && err.payload && typeof err.payload.error === "string"
-    ? err.payload.error.trim()
-    : "";
-  if (apiMessage) return apiMessage;
-  if (
-    err
-    && typeof err.message === "string"
-    && err.message
-    && !err.message.startsWith("request_failed_")
-    && err.message !== "invalid_json_response"
-  ) {
-    return err.message;
-  }
-  return fallbackMessage || "Something went wrong. Please try again.";
 }
 
 // -- Topic chips --------------------------------------------------------------
@@ -242,15 +161,6 @@ function getItemsPerDigest() {
   return selected ? parseInt(selected.dataset.size, 10) : 5;
 }
 
-// Backward-compatible aliases for any stale inline handlers.
-function selectSize(sizePill) {
-  selectItemsPerDigest(sizePill);
-}
-
-function getSize() {
-  return getItemsPerDigest();
-}
-
 // -- Day circles --------------------------------------------------------------
 function syncDayPresets() {
   const days = prefState
@@ -312,200 +222,90 @@ function getDaysFrequency() {
   return "custom";
 }
 
-// -- Progress ----------------------------------------------------------------
+const indexForm = typeof IndexFormRuntime.createIndexFormContext === "function"
+  ? IndexFormRuntime.createIndexFormContext({
+      Prefs,
+      prefState,
+      requestHelpers,
+      selectedTopicKeys,
+      getSelectedDepth,
+      getSelectedDays,
+      getDaysFrequency,
+      getItemsPerDigest,
+      debugEnabled: DEBUG_UI,
+    })
+  : null;
+
+function showOnboarding() {
+  if (indexForm && typeof indexForm.showOnboarding === "function") {
+    indexForm.showOnboarding();
+    return;
+  }
+  const hero = document.querySelector(".hero");
+  const onboard = document.getElementById("onboard-form");
+  if (!hero || !onboard) return;
+  hero.style.display = "none";
+  onboard.style.display = "block";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function showLanding() {
+  if (indexForm && typeof indexForm.showLanding === "function") {
+    indexForm.showLanding();
+    return;
+  }
+  const hero = document.querySelector(".hero");
+  const onboard = document.getElementById("onboard-form");
+  if (!hero || !onboard) return;
+  onboard.style.display = "none";
+  hero.style.display = "block";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function updateProgress() {
-  const name = document.getElementById("name").value.trim();
-  const email = document.getElementById("email").value.trim();
+  if (indexForm && typeof indexForm.updateProgress === "function") {
+    indexForm.updateProgress();
+    return;
+  }
+  const name = String(document.getElementById("name")?.value || "").trim();
+  const email = String(document.getElementById("email")?.value || "").trim();
   const topicCount = selectedTopicKeys().length;
   const depth = getSelectedDepth();
   const dayCount = getSelectedDays().length;
-
-  function setStep(id, filled) {
+  [
+    ["prog-1", !!(name && email)],
+    ["prog-2", topicCount >= 2],
+    ["prog-3", !!depth],
+    ["prog-4", dayCount > 0],
+  ].forEach(([id, filled]) => {
     const step = document.getElementById(id);
-    if (!step) return;
-    step.className = `progress-step${filled ? " filled" : ""}`;
-  }
-
-  setStep("prog-1", !!(name && email));
-  setStep("prog-2", topicCount >= 2);
-  setStep("prog-3", !!depth);
-  setStep("prog-4", dayCount > 0);
+    if (step) step.className = `progress-step${filled ? " filled" : ""}`;
+  });
 }
 
-document.getElementById("name").addEventListener("input", updateProgress);
-document.getElementById("email").addEventListener("input", updateProgress);
-
-function showSubmitError(msg) {
-  const el = document.getElementById("submitError");
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.add("visible");
-}
-
-function clearSubmitError() {
-  const el = document.getElementById("submitError");
-  if (!el) return;
-  el.textContent = "";
-  el.classList.remove("visible");
-}
-
-// -- Form submit --------------------------------------------------------------
-document.getElementById("onboardForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  clearSubmitError();
-
-  const topics = selectedTopicKeys();
-  if (topics.length < 2) {
-    showSubmitError("Please select at least 2 topics.");
-    return;
-  }
-
-  const name = document.getElementById("name").value.trim();
-  const email = document.getElementById("email").value.trim();
-  if (!name || !email) {
-    showSubmitError("Name and email are required.");
-    return;
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    showSubmitError("Please enter a valid email address.");
-    document.getElementById("email").focus();
-    return;
-  }
-
-  const days = getSelectedDays();
-  if (!days.length) {
-    showSubmitError("Please select at least one delivery day.");
-    return;
-  }
-
-  const btn = document.querySelector(".submit-btn");
-  btn.disabled = true;
-  btn.textContent = "Subscribing…";
-
-  const deliveryTime = document.getElementById("deliveryTime").value || "07:00";
-  const referralToken = (new URLSearchParams(window.location.search).get("ref") || "").trim();
-
-  if (prefState) {
-    prefState.setTopics(topics);
-    prefState.setDepth(getSelectedDepth());
-    prefState.setDeliveryTime(deliveryTime);
-    prefState.setDays(days);
-    prefState.setItemsPerDigest(getItemsPerDigest());
-  }
-
-  const payload = (prefState && typeof Prefs.buildSignupPayload === "function")
-    ? Prefs.buildSignupPayload({
-        state: prefState,
-        name,
-        email,
-        telegram: document.getElementById("telegram").value,
-        referralToken,
-      })
-    : {
-        name,
-        email,
-        telegram: document.getElementById("telegram").value.trim().replace(/^@+/, "") || null,
-        topics,
-        depth: getSelectedDepth(),
-        delivery_time: deliveryTime,
-        frequency: getDaysFrequency(),
-        days_of_week: days,
-        items_per_digest: getItemsPerDigest(),
-        referral_token: referralToken || null,
-      };
-
-  try {
-    const result = await fetchJsonStrict("/api/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (result.success || result.account_created === true) {
-      clearSubmitError();
-      document.getElementById("onboardForm").style.display = "none";
-      document.getElementById("formFooter").style.display = "none";
-      document.getElementById("successCard").classList.add("visible");
-      document.querySelectorAll(".progress-step").forEach((step) => {
-        step.className = "progress-step filled";
-      });
-
-      const settingsLink = document.getElementById("settingsLink");
-      if (settingsLink && result.token) {
-        settingsLink.href = `/settings?token=${encodeURIComponent(result.token)}`;
-      }
-
-      const archiveLink = document.getElementById("archiveLink");
-      if (archiveLink && result.archiveUrl) {
-        archiveLink.href = result.archiveUrl;
-      }
-
-      const timeParts = deliveryTime.split(":").map(Number);
-      const hour24 = timeParts[0];
-      const minutes = timeParts[1];
-      const ampm = hour24 >= 12 ? "PM" : "AM";
-      const hour12 = hour24 % 12 || 12;
-      const prettyTime = `${hour12}:${String(minutes).padStart(2, "0")} ${ampm} ET`;
-      document.getElementById("successDeliveryMsg").innerHTML = `Your first SignalBrief arrives at <strong>${prettyTime}</strong>. Here's a preview of what to expect:`;
-      if (Array.isArray(result.warnings) && result.warnings.length) {
-        console.warn("[signup] completed with side-effect warnings:", result.warnings);
-      }
-      return;
-    }
-    throw buildRequestError(result.error || "Could not complete signup.");
-  } catch (err) {
-    showSubmitError(mapRequestError(err, "Something went wrong. Please try again."));
-    btn.disabled = false;
-    btn.textContent = "Start my SignalBrief →";
-  }
-});
-
-// -- Preview tab switcher -----------------------------------------------------
 function switchPreview(panel, btn) {
+  if (indexForm && typeof indexForm.switchPreview === "function") {
+    indexForm.switchPreview(panel, btn);
+    return;
+  }
   document.getElementById("prev-telegram").style.display = panel === "telegram" ? "block" : "none";
   document.getElementById("prev-email").style.display = panel === "email" ? "block" : "none";
-  document.querySelectorAll(".prev-tab").forEach((tab) => {
-    tab.style.borderColor = "#E5E7EB";
-    tab.style.background = "#fff";
-    tab.style.color = "#6B7280";
-    tab.style.fontWeight = "500";
-  });
-  btn.style.borderColor = "#2563EB";
-  btn.style.background = "#EFF6FF";
-  btn.style.color = "#2563EB";
-  btn.style.fontWeight = "600";
 }
 
 // -- Dark mode ----------------------------------------------------------------
-function reportStorageError(context, err) {
-  if (!window.location.search.includes("debug_ui=1")) return;
-  const message = err && err.message ? err.message : String(err || "unknown error");
-  console.warn(`[index] localStorage ${context} failed: ${message}`);
-}
-
 function toggleDark() {
-  document.body.classList.toggle("dark");
-  const isDark = document.body.classList.contains("dark");
-  document.getElementById("darkToggle").textContent = isDark ? "☀️" : "🌙";
-  try {
-    localStorage.setItem("sbDark", isDark ? "1" : "0");
-  } catch (err) {
-    reportStorageError("write", err);
-  }
+  if (!darkModeHelpers) return;
+  darkModeHelpers.toggleDarkMode();
 }
 
-(function initDark() {
-  try {
-    if (localStorage.getItem("sbDark") === "1") {
-      document.body.classList.add("dark");
-      document.getElementById("darkToggle").textContent = "☀️";
-    }
-  } catch (err) {
-    reportStorageError("read", err);
-  }
-})();
+if (darkModeHelpers) darkModeHelpers.initDarkMode();
 
 (async function initFormState() {
+  if (indexForm) {
+    indexForm.bindProgressInputs();
+    indexForm.bindSignupForm();
+  }
+
   await ensureTopicCatalogLoaded();
   renderTopicCatalog();
 

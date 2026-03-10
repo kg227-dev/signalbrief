@@ -18,6 +18,32 @@ function readHeartbeat() {
   return JSON.parse(raw);
 }
 
+async function waitFor(predicate, opts = {}) {
+  const timeoutMs = Math.max(1000, Number(opts.timeoutMs || 20000));
+  const pollMs = Math.max(50, Number(opts.pollMs || 200));
+  const start = Date.now();
+  let lastErr = null;
+  while ((Date.now() - start) < timeoutMs) {
+    try {
+      const value = await predicate();
+      if (value) return value;
+    } catch (err) {
+      lastErr = err;
+    }
+    await sleep(pollMs);
+  }
+  if (lastErr) throw lastErr;
+  throw new Error(`timed out after ${timeoutMs}ms`);
+}
+
+async function waitForChildExit(child, timeoutMs = 1500) {
+  if (!child || child.killed) return;
+  await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    sleep(timeoutMs),
+  ]);
+}
+
 async function main() {
   try {
     if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
@@ -46,11 +72,15 @@ async function main() {
   child.stderr.on("data", (buf) => { err += String(buf); });
 
   try {
-    await sleep(4200);
-    if (!fs.existsSync(HEARTBEAT)) {
-      throw new Error("heartbeat file was not created");
-    }
-    const hb = readHeartbeat();
+    const hb = await waitFor(() => {
+      if (!fs.existsSync(HEARTBEAT)) return null;
+      const next = readHeartbeat();
+      if (!next || !next.last_run) return null;
+      return next;
+    }, {
+      timeoutMs: 25000,
+      pollMs: 250,
+    });
     if (!hb || hb.worker !== "scheduler-worker") {
       throw new Error("heartbeat payload missing worker identity");
     }
@@ -66,7 +96,7 @@ async function main() {
     process.stdout.write("[smoke-worker] ok\n");
   } finally {
     child.kill("SIGTERM");
-    await sleep(300);
+    await waitForChildExit(child, 2000);
     try {
       if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
     } catch (err) {

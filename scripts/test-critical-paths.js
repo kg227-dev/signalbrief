@@ -2,6 +2,7 @@
 "use strict";
 
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -12,11 +13,11 @@ const {
   normalizeDigestTriggerResult,
   triggerDigest,
 } = require("../digest-runner");
-const { handleCoreApiRoutes } = require("../web/routes/core-api");
-const { handlePublicStaticRoutes } = require("../web/routes/public-static");
-const { parseSourceDomain } = require("../source-domain");
-const mailer = require("../src/runtime/mailer");
-const store = require("../src/runtime/store");
+const { handleCoreApiRoutes } = require("../web/api/core");
+const { handlePublicStaticRoutes } = require("../web/api/public");
+const { parseSourceDomain } = require("../src/domains/digest");
+const mailer = require("../src/platform/mailer");
+const store = require("../src/platform/store");
 
 const TEST_FILE_SUFFIX = ".test.js";
 const TEST_DIR_EXCLUDES = new Set([
@@ -177,95 +178,62 @@ async function testDigestRunnerLockContract() {
   }
 }
 
-async function testCoreApiRoutesContract() {
-  const topicsReq = { method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } };
-  const topicsRes = buildMockRes();
-  const topicsCtx = {
-    req: topicsReq,
-    res: topicsRes,
-    url: new URL("http://localhost/api/topics"),
-    pathname: "/api/topics",
+async function invokeCoreRoute(method, rawUrl, pathname, depsOverrides = {}) {
+  const res = buildMockRes();
+  const ctx = {
+    req: { method, headers: {}, socket: { remoteAddress: "127.0.0.1" } },
+    res,
+    url: new URL(`http://localhost${rawUrl}`),
+    pathname,
   };
-  await handleCoreApiRoutes(topicsCtx, buildCoreDeps());
+  await handleCoreApiRoutes(ctx, buildCoreDeps(depsOverrides));
+  return res;
+}
+
+async function testCoreApiRoutesContract() {
+  const topicsRes = await invokeCoreRoute("GET", "/api/topics", "/api/topics");
   assert.strictEqual(topicsRes.statusCode, 200, "/api/topics should return 200");
   const topicsBody = JSON.parse(topicsRes.body || "{}");
   assert.deepStrictEqual(topicsBody.industries, ["HEALTHCARE"], "/api/topics should return configured industry list");
 
   let signupCalled = false;
-  const signupRes = buildMockRes();
-  const signupCtx = {
-    req: { method: "POST", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
-    res: signupRes,
-    url: new URL("http://localhost/api/signup"),
-    pathname: "/api/signup",
-  };
-  await handleCoreApiRoutes(signupCtx, buildCoreDeps({
+  await invokeCoreRoute("POST", "/api/signup", "/api/signup", {
     handleSignup: async () => {
       signupCalled = true;
       return "signup-called";
     },
-  }));
+  });
   assert.strictEqual(signupCalled, true, "/api/signup should delegate to handleSignup");
 
-  const unsubRes = buildMockRes();
-  const unsubCtx = {
-    req: { method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
-    res: unsubRes,
-    url: new URL("http://localhost/api/unsubscribe/legacy?email=test%40example.com&sig=wrong"),
-    pathname: "/api/unsubscribe/legacy",
-  };
-  await handleCoreApiRoutes(unsubCtx, buildCoreDeps({
+  const unsubRes = await invokeCoreRoute(
+    "GET",
+    "/api/unsubscribe/legacy?email=test%40example.com&sig=wrong",
+    "/api/unsubscribe/legacy",
+    {
     signUnsubEmail: () => "expected",
-  }));
+    }
+  );
   assert.strictEqual(unsubRes.statusCode, 403, "/api/unsubscribe/legacy should reject bad signatures");
 
-  const bookmarkMissingTokenRes = buildMockRes();
-  const bookmarkMissingTokenCtx = {
-    req: { method: "POST", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
-    res: bookmarkMissingTokenRes,
-    url: new URL("http://localhost/api/bookmarks"),
-    pathname: "/api/bookmarks",
-  };
-  await handleCoreApiRoutes(bookmarkMissingTokenCtx, buildCoreDeps({
+  const bookmarkMissingTokenRes = await invokeCoreRoute("POST", "/api/bookmarks", "/api/bookmarks", {
     requireJsonBody: async () => ({ action: "add", item: { url: "https://example.com/a" } }),
-  }));
+  });
   assert.strictEqual(bookmarkMissingTokenRes.statusCode, 400, "/api/bookmarks should require token");
 
-  const bookmarkInvalidTokenRes = buildMockRes();
-  const bookmarkInvalidTokenCtx = {
-    req: { method: "POST", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
-    res: bookmarkInvalidTokenRes,
-    url: new URL("http://localhost/api/bookmarks"),
-    pathname: "/api/bookmarks",
-  };
-  await handleCoreApiRoutes(bookmarkInvalidTokenCtx, buildCoreDeps({
+  const bookmarkInvalidTokenRes = await invokeCoreRoute("POST", "/api/bookmarks", "/api/bookmarks", {
     requireJsonBody: async () => ({ token: "bad", action: "add", item: { url: "https://example.com/a" } }),
     findUserByToken: () => null,
-  }));
+  });
   assert.strictEqual(bookmarkInvalidTokenRes.statusCode, 401, "/api/bookmarks should reject invalid token");
 
-  const pauseMissingTokenRes = buildMockRes();
-  const pauseMissingTokenCtx = {
-    req: { method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
-    res: pauseMissingTokenRes,
-    url: new URL("http://localhost/api/pause"),
-    pathname: "/api/pause",
-  };
-  await handleCoreApiRoutes(pauseMissingTokenCtx, buildCoreDeps());
+  const pauseMissingTokenRes = await invokeCoreRoute("GET", "/api/pause", "/api/pause");
   assert.strictEqual(pauseMissingTokenRes.statusCode, 302, "/api/pause should redirect on missing token");
   assert.ok(
     String(pauseMissingTokenRes.headers.Location || "").includes("invalid_token=1"),
     "/api/pause missing token should redirect to explicit invalid token state"
   );
 
-  const reactivateMissingTokenRes = buildMockRes();
-  const reactivateMissingTokenCtx = {
-    req: { method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } },
-    res: reactivateMissingTokenRes,
-    url: new URL("http://localhost/api/reactivate"),
-    pathname: "/api/reactivate",
-  };
-  await handleCoreApiRoutes(reactivateMissingTokenCtx, buildCoreDeps());
+  const reactivateMissingTokenRes = await invokeCoreRoute("GET", "/api/reactivate", "/api/reactivate");
   assert.strictEqual(reactivateMissingTokenRes.statusCode, 302, "/api/reactivate should redirect on missing token");
   assert.ok(
     String(reactivateMissingTokenRes.headers.Location || "").includes("invalid_token=1"),
@@ -337,7 +305,7 @@ async function testReplyHandlerCommandFlow() {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sb-critical-"));
   const dataDir = path.join(tmpRoot, "data");
   const transportLog = path.join(tmpRoot, "transport.log");
-  const testSettingsToken = `critical-${Date.now()}-${Math.round(Math.random() * 1000)}`;
+  const settingsLinkValue = `critical-${crypto.randomUUID()}`;
   const prevDataDir = process.env.SIGNALBRIEF_DATA_DIR;
   const prevDryRun = process.env.SIGNALBRIEF_TRANSPORT_DRY_RUN;
   const prevLogFile = process.env.SIGNALBRIEF_TRANSPORT_LOG_FILE;
@@ -354,7 +322,7 @@ async function testReplyHandlerCommandFlow() {
     store.resetStoreState({ dataDir, initialize: true });
     store.writeUser("chat-critical", {
       chatId: "chat-critical",
-      token: testSettingsToken,
+      token: settingsLinkValue,
       name: "Critical Tester",
       email: "critical@example.com",
       status: "active",
@@ -375,9 +343,12 @@ async function testReplyHandlerCommandFlow() {
       },
     });
 
-    const { handle, resetReplyState } = require("../src/runtime/reply-handler");
-    resetReplyState();
-    await handle("/settings", "chat-critical");
+    const {
+      handleIncomingMessage,
+      resetReplyRuntimeState,
+    } = require("../src/runtime/reply/reply-handler-runtime");
+    resetReplyRuntimeState();
+    await handleIncomingMessage("/settings", "chat-critical");
 
     const lines = fs.existsSync(transportLog)
       ? fs.readFileSync(transportLog, "utf8").trim().split("\n").filter(Boolean)
@@ -392,7 +363,7 @@ async function testReplyHandlerCommandFlow() {
     assert.ok(sent, "reply-handler should call Telegram sendMessage");
     assert.strictEqual(String(sent.payload.chat_id), "chat-critical", "reply-handler should target the requested chat");
     assert.ok(
-      String(sent.payload.text || "").includes(`/settings?token=${testSettingsToken}`),
+      String(sent.payload.text || "").includes(`/settings?token=${settingsLinkValue}`),
       "reply-handler /settings should include personalized settings link"
     );
   } finally {

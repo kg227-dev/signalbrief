@@ -1,26 +1,33 @@
 const crypto = require("crypto");
 
-const ADMIN_SESSIONS = new Map(); // token -> { email, createdAt }
 const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-const LOGIN_RATE = new Map(); // ip -> { count, resetAt }
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
 
-const ADMIN_LOCAL_BYPASS = process.env.ADMIN_LOCAL_BYPASS === "1";
-const ADMIN_LOCAL_BYPASS_ALLOWLIST = new Set([
-  "GET /admin",
-  "GET /admin/sandbox",
-  "GET /api/admin/check",
-  "GET /api/admin/stats",
-  "POST /api/admin/sandbox/estimate",
-  "POST /api/admin/sandbox/run",
-]);
+function createAdminAuthState() {
+  return {
+    sessions: new Map(), // token -> { email, createdAt }
+    loginRate: new Map(), // ip -> { count, resetAt }
+  };
+}
+
+let ADMIN_AUTH_STATE = createAdminAuthState();
+
+function resetAdminAuthState() {
+  ADMIN_AUTH_STATE = createAdminAuthState();
+  return ADMIN_AUTH_STATE;
+}
+
+function isAdminLocalBypassEnabled() {
+  return process.env.ADMIN_LOCAL_BYPASS === "1"
+    && String(process.env.NODE_ENV || "").toLowerCase() !== "production";
+}
 
 function pruneAdminSessions(now = Date.now()) {
-  for (const [token, session] of ADMIN_SESSIONS.entries()) {
+  for (const [token, session] of ADMIN_AUTH_STATE.sessions.entries()) {
     if (!session || (now - Number(session.createdAt || 0)) > ADMIN_SESSION_TTL) {
-      ADMIN_SESSIONS.delete(token);
+      ADMIN_AUTH_STATE.sessions.delete(token);
     }
   }
 }
@@ -41,12 +48,12 @@ function verifyAdminPassword(password, adminConfig = {}) {
 function createAdminSession(email) {
   pruneAdminSessions();
   const token = crypto.randomBytes(32).toString("hex");
-  ADMIN_SESSIONS.set(token, { email, createdAt: Date.now() });
+  ADMIN_AUTH_STATE.sessions.set(token, { email, createdAt: Date.now() });
   return token;
 }
 
 function revokeAdminSession(token) {
-  return ADMIN_SESSIONS.delete(String(token || ""));
+  return ADMIN_AUTH_STATE.sessions.delete(String(token || ""));
 }
 
 function clearAdminSessionByRequest(req) {
@@ -58,7 +65,7 @@ function clearAdminSessionByRequest(req) {
 function getAdminSession(req) {
   const token = extractAdminSessionToken(req);
   if (!token) return null;
-  const session = ADMIN_SESSIONS.get(token);
+  const session = ADMIN_AUTH_STATE.sessions.get(token);
   if (!session) return null;
   if (Date.now() - session.createdAt > ADMIN_SESSION_TTL) return null;
   return session;
@@ -74,40 +81,47 @@ function isLocalRequest(req) {
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
 
+function isAdminBypassRoute(req) {
+  const pathname = String((req && req.url) || "/").split("?")[0];
+  return pathname === "/admin"
+    || pathname.startsWith("/admin/")
+    || pathname.startsWith("/api/admin");
+}
+
 function getAdminActor(req) {
   const session = getAdminSession(req);
   if (session && session.email) return session.email;
-  if (ADMIN_LOCAL_BYPASS && isLocalRequest(req)) return "local-bypass";
+  if (isAdminLocalBypassEnabled() && isLocalRequest(req)) return "local-bypass";
   return "unknown";
 }
 
 function isAdminAuthed(req) {
   if (validateAdminSession(req)) return true;
-  if (!ADMIN_LOCAL_BYPASS) return false;
+  if (!isAdminLocalBypassEnabled()) return false;
   if (!isLocalRequest(req)) return false;
-  const method = String((req && req.method) || "GET").toUpperCase();
-  const pathname = String((req && req.url) || "/").split("?")[0];
-  return ADMIN_LOCAL_BYPASS_ALLOWLIST.has(`${method} ${pathname}`);
+  return isAdminBypassRoute(req);
 }
 
 function checkLoginRate(ip) {
   const now = Date.now();
-  for (const [k, v] of LOGIN_RATE.entries()) {
-    if (v.resetAt < now) LOGIN_RATE.delete(k);
+  for (const [k, v] of ADMIN_AUTH_STATE.loginRate.entries()) {
+    if (v.resetAt < now) ADMIN_AUTH_STATE.loginRate.delete(k);
   }
   const key = String(ip || "");
-  const entry = LOGIN_RATE.get(key) || { count: 0, resetAt: now + LOGIN_WINDOW };
+  const entry = ADMIN_AUTH_STATE.loginRate.get(key) || { count: 0, resetAt: now + LOGIN_WINDOW };
   if (entry.resetAt < now) {
     entry.count = 0;
     entry.resetAt = now + LOGIN_WINDOW;
   }
   if (entry.count >= LOGIN_LIMIT) return true;
   entry.count += 1;
-  LOGIN_RATE.set(key, entry);
+  ADMIN_AUTH_STATE.loginRate.set(key, entry);
   return false;
 }
 
 module.exports = {
+  createAdminAuthState,
+  resetAdminAuthState,
   verifyAdminPassword,
   createAdminSession,
   clearAdminSessionByRequest,

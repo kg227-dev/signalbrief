@@ -150,6 +150,66 @@ function computeDigest2OpenRate(users, events, weekStart, asOfEnd) {
   return { eligible, opened, rate: pct(opened, eligible) };
 }
 
+function isEventWithinRange(tsValue, rangeStart, rangeEnd) {
+  const ts = parseDate(tsValue);
+  return !!ts && ts >= rangeStart && ts <= rangeEnd;
+}
+
+function isEmailDigestEvent(event) {
+  return String(event.event_type) === "digest_sent" && String(event.channel) === "email";
+}
+
+function isEmailOpenEvent(event) {
+  return String(event.event_type) === "email_open";
+}
+
+function countNewSignups(users, weekStart, asOfEnd) {
+  return users.filter((user) => {
+    const joined = parseDate(user.joined_at);
+    return joined && joined >= weekStart && joined <= asOfEnd;
+  }).length;
+}
+
+function countWeeklyChurn(users, statuses, weekStart, asOfEnd) {
+  return users.filter((user) => {
+    if (!statuses.has(String(user.status))) return false;
+    const lastDigest = parseDate(user.last_digest_at);
+    return !!lastDigest && lastDigest >= weekStart && lastDigest <= asOfEnd;
+  }).length;
+}
+
+function computeSevenDayEmailMetrics(users, events, sevenDayStart, asOfEnd) {
+  const sent7d = events.filter((event) => isEventWithinRange(event.ts_utc, sevenDayStart, asOfEnd) && isEmailDigestEvent(event));
+  const opens7d = events.filter((event) => isEventWithinRange(event.ts_utc, sevenDayStart, asOfEnd) && isEmailOpenEvent(event));
+  const sentDigestIds = new Set(sent7d.map((event) => String(event.digest_id || ""))).size;
+  const openDigestIds = new Set(opens7d.map((event) => String(event.digest_id || ""))).size;
+  const trackingSeen =
+    opens7d.length > 0 || users.some((user) => user.last_email_open_at || Number(user.email_opens_total || 0) > 0);
+
+  return {
+    trackingSeen,
+    sentDigestIds,
+    openDigestIds,
+    openRate7d: trackingSeen ? pct(openDigestIds, sentDigestIds) : null,
+  };
+}
+
+function selectTopDigestForWeek(events, weekStart, asOfEnd) {
+  const weeklyEmailDigests = events.filter((event) => {
+    return isEventWithinRange(event.ts_utc, weekStart, asOfEnd) && isEmailDigestEvent(event);
+  });
+  weeklyEmailDigests.sort(
+    (a, b) => Number(b?.metadata?.quality_score || 0) - Number(a?.metadata?.quality_score || 0)
+  );
+  if (!weeklyEmailDigests[0]) return null;
+  const top = weeklyEmailDigests[0];
+  return {
+    date: top.date_et,
+    qualityScore: Number(top?.metadata?.quality_score || 0),
+    leadHeadline: top?.metadata?.items?.[0]?.headline || null,
+  };
+}
+
 function computeReport(asOfDate) {
   const users = readUsers();
   const events = readEvents();
@@ -160,69 +220,15 @@ function computeReport(asOfDate) {
   const statuses = new Set(["unsubscribed", "paused", "inactive"]);
 
   const activeSubscribers = users.filter((u) => String(u.status) === "active").length;
-  const newSignupsThisWeek = users.filter((u) => {
-    const joined = parseDate(u.joined_at);
-    return joined && joined >= weekStart && joined <= asOfEnd;
-  }).length;
-
-  const churnThisWeekApprox = users.filter((u) => {
-    if (!statuses.has(String(u.status))) return false;
-    const lastDigest = parseDate(u.last_digest_at);
-    return !!lastDigest && lastDigest >= weekStart && lastDigest <= asOfEnd;
-  }).length;
-
-  const sent7d = events.filter((e) => {
-    const ts = parseDate(e.ts_utc);
-    return (
-      ts &&
-      ts >= sevenDayStart &&
-      ts <= asOfEnd &&
-      String(e.event_type) === "digest_sent" &&
-      String(e.channel) === "email"
-    );
-  });
-  const opens7d = events.filter((e) => {
-    const ts = parseDate(e.ts_utc);
-    return (
-      ts &&
-      ts >= sevenDayStart &&
-      ts <= asOfEnd &&
-      String(e.event_type) === "email_open"
-    );
-  });
-
-  const sentDigestIds = new Set(sent7d.map((e) => String(e.digest_id || ""))).size;
-  const openDigestIds = new Set(opens7d.map((e) => String(e.digest_id || ""))).size;
-
-  const trackingSeen =
-    opens7d.length > 0 || users.some((u) => u.last_email_open_at || Number(u.email_opens_total || 0) > 0);
-  const openRate7d = trackingSeen ? pct(openDigestIds, sentDigestIds) : null;
+  const newSignupsThisWeek = countNewSignups(users, weekStart, asOfEnd);
+  const churnThisWeekApprox = countWeeklyChurn(users, statuses, weekStart, asOfEnd);
+  const sevenDayEmail = computeSevenDayEmailMetrics(users, events, sevenDayStart, asOfEnd);
   const digest2 = computeDigest2OpenRate(users, events, weekStart, asOfEnd);
-  const digest2OpenRate = trackingSeen ? digest2.rate : null;
-
-  const weeklyEmailDigests = events.filter((e) => {
-    const ts = parseDate(e.ts_utc);
-    return (
-      ts &&
-      ts >= weekStart &&
-      ts <= asOfEnd &&
-      String(e.event_type) === "digest_sent" &&
-      String(e.channel) === "email"
-    );
-  });
-  weeklyEmailDigests.sort(
-    (a, b) => Number(b?.metadata?.quality_score || 0) - Number(a?.metadata?.quality_score || 0)
-  );
-  const topDigest = weeklyEmailDigests[0]
-    ? {
-        date: weeklyEmailDigests[0].date_et,
-        qualityScore: Number(weeklyEmailDigests[0]?.metadata?.quality_score || 0),
-        leadHeadline: weeklyEmailDigests[0]?.metadata?.items?.[0]?.headline || null,
-      }
-    : null;
+  const digest2OpenRate = sevenDayEmail.trackingSeen ? digest2.rate : null;
+  const topDigest = selectTopDigestForWeek(events, weekStart, asOfEnd);
 
   const blockers = [];
-  if (!trackingSeen) blockers.push("No email-open tracking data captured yet.");
+  if (!sevenDayEmail.trackingSeen) blockers.push("No email-open tracking data captured yet.");
   if (users.length < 15) blockers.push("Audience is too small for stable week-over-week conversion signals.");
 
   return {
@@ -230,14 +236,14 @@ function computeReport(asOfDate) {
     weekStart: dateOnly(weekStart),
     metrics: {
       active_subscribers: activeSubscribers,
-      open_rate_7d_pct: openRate7d,
+      open_rate_7d_pct: sevenDayEmail.openRate7d,
       new_signups_this_week: newSignupsThisWeek,
       digest2_open_rate_pct: digest2OpenRate,
       unsubscribes_or_pauses_this_week_approx: churnThisWeekApprox,
     },
     supporting: {
-      email_digests_sent_7d: sentDigestIds,
-      email_open_events_7d: openDigestIds,
+      email_digests_sent_7d: sevenDayEmail.sentDigestIds,
+      email_open_events_7d: sevenDayEmail.openDigestIds,
       digest2_open_eligible_users: digest2.eligible,
       digest2_opened_users: digest2.opened,
       top_digest_this_week: topDigest,

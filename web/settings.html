@@ -239,33 +239,19 @@
   Powered by SignalBrief
 </footer>
 
-<script>
-async function requestSettingsLink() {
-  const email = (document.getElementById('linkEmail').value || '').trim().toLowerCase();
-  const errEl = document.getElementById('linkError');
-  const sentEl = document.getElementById('linkSent');
-  errEl.style.display = 'none';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errEl.textContent = 'Please enter a valid email address.';
-    errEl.style.display = 'block';
-    return;
-  }
-  try {
-    const res = await fetch('/api/request-link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
-    // Always show success (don't reveal whether email exists)
-    document.getElementById('linkFormWrap').querySelector('input').disabled = true;
-    document.getElementById('linkFormWrap').querySelector('button').disabled = true;
-    sentEl.style.display = 'block';
-  } catch (e) {
-    errEl.textContent = 'Something went wrong. Please try again.';
-    errEl.style.display = 'block';
-  }
-}
-</script>
+<script src="preferences-topic-runtime.js"></script>
+<script src="preferences-schedule-runtime.js"></script>
+<script src="preferences-runtime.js"></script>
+<script src="preferences-state-core-runtime.js"></script>
+<script src="preferences-state-model-runtime.js"></script>
+<script src="preferences-state-runtime.js"></script>
+<script src="preferences-shared.js"></script>
+<script src="settings-ui-topic-actions-runtime.js"></script>
+<script src="settings-ui-topic-runtime.js"></script>
+<script src="settings-ui-preferences-actions-runtime.js"></script>
+<script src="settings-ui-preferences-runtime.js"></script>
+<script src="settings-ui-runtime.js"></script>
+<script src="settings-runtime.js"></script>
 <script src="settings.js"></script>
 </body>
 </html>

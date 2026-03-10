@@ -1,3 +1,3 @@
-const runtime = require("./personalization-runtime");
+"use strict";
 
-module.exports = runtime;
+module.exports = require("./personalization/personalization-runtime");

@@ -19,19 +19,16 @@ const {
   CONFIG,
   MODEL_COSTS,
   SEARCH_COSTS,
-} = require("./entrypoints/digest");
-
-const {
-  filterDigestItemsByTopics,
-  scoreDigestItemsForUser,
-  applyDigestDepth,
-  reserveCustomKeywordSlot,
-} = require("../digest-pipeline-seam");
+} = require("./digest/application/digest-service-runtime");
 
 const {
   buildCustomTopicQueries,
+  filterItemsByTopics,
+  applyTopicRelevanceScores,
+  applyDigestDepth,
+  reserveCustomKeywordSlot,
   normalizeTopicToken,
-} = require("../topic-domain");
+} = require("./digest/domain/topic-domain-runtime");
 
 // ── In-memory cache for sandbox sessions ─────────────────────────────────────
 const SANDBOX_CACHE = new Map();
@@ -92,6 +89,219 @@ function estimateCost(params) {
   };
 }
 
+function buildFetchTargets(topics, customKeywords) {
+  const fetchTargets = [];
+  for (const topicTag of topics) {
+    const configTopic = CONFIG.topics.find((topic) => topic.tag === topicTag);
+    if (configTopic) fetchTargets.push(configTopic);
+  }
+
+  for (const keyword of customKeywords) {
+    const queries = buildCustomTopicQueries(keyword);
+    fetchTargets.push({
+      tag: keyword.toUpperCase(),
+      queries: queries.length ? queries : [`${keyword} business strategy developments last 48 hours`],
+      isCustom: true,
+    });
+  }
+  return fetchTargets;
+}
+
+async function getRawItemsForSession({ cachedSessionId, topics, customKeywords, searchModel }) {
+  if (cachedSessionId && SANDBOX_CACHE.has(cachedSessionId)) {
+    return {
+      sessionId: cachedSessionId,
+      rawItems: SANDBOX_CACHE.get(cachedSessionId).rawItems,
+      fetchApiCalls: 0,
+      fetchSkipped: true,
+    };
+  }
+
+  pruneCache();
+  const sessionId = crypto.randomBytes(16).toString("hex");
+  const fetchTargets = buildFetchTargets(topics, customKeywords);
+  const results = await Promise.all(fetchTargets.map((target) => fetchTopicNews(target, { searchModel })));
+  const fetchApiCalls = results.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
+  const rawItems = results.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
+  SANDBOX_CACHE.set(sessionId, { rawItems, fetchedAt: Date.now() });
+
+  return {
+    sessionId,
+    rawItems,
+    fetchApiCalls,
+    fetchSkipped: false,
+  };
+}
+
+function buildVirtualUserTopics(topics, customKeywords) {
+  return [
+    ...topics,
+    ...customKeywords.map((keyword) => `custom_${normalizeTopicToken(keyword).replace(/\s+/g, "_")}`),
+  ];
+}
+
+function buildQuickScanRows(items) {
+  return items.map((item, idx) => {
+    const short = stripInlineHtml(item.headline).split(":")[0].split("—")[0].trim();
+    const topic = topicVisual(item.tag);
+    const safeTag = escapeHtml(String(item.tag || "News"));
+    const safeShort = escapeHtml(short);
+    return `<tr>
+      <td style="font-size:14px;color:#111827;font-weight:700;padding:6px 10px 6px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td>
+      <td style="padding:6px 0;vertical-align:top;line-height:1.5;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${topic.chipText};margin-bottom:2px;">${topic.icon} ${safeTag}</div>
+        <div style="font-size:14px;color:#374151;line-height:1.5;">${safeShort}</div>
+      </td>
+    </tr>`;
+  }).join("\n");
+}
+
+function computeRunCostBreakdown({
+  fetchApiCalls,
+  searchModel,
+  enrichmentModel,
+  claudeUsage,
+}) {
+  const searchCostPerCall = SEARCH_COSTS[searchModel] || 0.005;
+  const perplexityCostUsd = fetchApiCalls * searchCostPerCall;
+  const modelCost = MODEL_COSTS[enrichmentModel] || MODEL_COSTS["claude-haiku-4-5"];
+  const claudeCostUsd = (claudeUsage.input_tokens / 1_000_000 * modelCost.input)
+                      + (claudeUsage.output_tokens / 1_000_000 * modelCost.output);
+
+  return {
+    perplexity: {
+      calls: fetchApiCalls,
+      costPerCall: searchCostPerCall,
+      costUsd: parseFloat(perplexityCostUsd.toFixed(5)),
+    },
+    claude: {
+      model: enrichmentModel,
+      inputTokens: claudeUsage.input_tokens,
+      outputTokens: claudeUsage.output_tokens,
+      costUsd: parseFloat(claudeCostUsd.toFixed(5)),
+    },
+    totalUsd: parseFloat((perplexityCostUsd + claudeCostUsd).toFixed(5)),
+  };
+}
+
+function pickSerializableItems(items) {
+  return items.map((item) => ({
+    tag: item.tag,
+    headline: item.headline,
+    summary: item.summary,
+    wim: item.wim,
+    wim_brief: item.wim_brief || null,
+    implications: item.implications || null,
+    watch_next: item.watch_next || null,
+    url: item.url,
+    source: item.source,
+    baseScore: item.baseScore,
+    topicMatch: item.topicMatch,
+    relevanceScore: item.relevanceScore,
+    why_shown: item.why_shown || [],
+  }));
+}
+
+async function runSelectionStage(rawItems, { itemCount, customKeywords, enrichmentModel }) {
+  const stageTiming = {};
+
+  const tDedup0 = Date.now();
+  const dedupRes = dedupAgainstRecentArchives(rawItems, {
+    days: 3,
+    targetCount: itemCount,
+    minBackfillItems: 3,
+  });
+  let items = dedupRes.items;
+  stageTiming.dedupMs = Date.now() - tDedup0;
+
+  const tSelect0 = Date.now();
+  const customTags = customKeywords.map((keyword) => keyword.toUpperCase());
+  items = selectItems(items, {
+    maxItems: itemCount,
+    customTags,
+  });
+  stageTiming.selectMs = Date.now() - tSelect0;
+
+  const tEnrich0 = Date.now();
+  const enrichment = await enrichItems(items, { model: enrichmentModel });
+  items = enrichment.items;
+  const claudeUsage = {
+    input_tokens: Number(enrichment?.usage?.input_tokens || 0),
+    output_tokens: Number(enrichment?.usage?.output_tokens || 0),
+  };
+  stageTiming.enrichMs = Date.now() - tEnrich0;
+
+  return {
+    dedupRes,
+    items,
+    claudeUsage,
+    stageTiming,
+  };
+}
+
+function rankAndTrimItems(items, { topics, customKeywords, topicWeights, itemCount, depth }) {
+  const tScore0 = Date.now();
+  const allUserTopics = buildVirtualUserTopics(topics, customKeywords);
+  const filteredResult = filterItemsByTopics(items, allUserTopics, { minItems: 3 });
+  let userItems = filteredResult.items;
+
+  userItems = applyTopicRelevanceScores(userItems, allUserTopics, topicWeights, {
+    specialistMode: false,
+    repeatPenalty: 0,
+    isRecentRepeat: () => false,
+    sourceDomainForItem: parseSourceDomain,
+  });
+  userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  const normalizedKeywords = customKeywords.map(normalizeTopicToken).filter(Boolean);
+  userItems = reserveCustomKeywordSlot(userItems, itemCount, normalizedKeywords);
+  userItems = applyDigestDepth(userItems, depth);
+
+  return {
+    userItems,
+    scoreMs: Date.now() - tScore0,
+  };
+}
+
+function formatPipelineOutputs(userItems, depth) {
+  const tFormat0 = Date.now();
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+  const shortDate = now.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+
+  const telegramText = formatTelegram(userItems, shortDate, { digests_received: 10 }, {});
+  const quickScan = buildQuickScanRows(userItems);
+  const emailHtml = buildEmail(
+    userItems,
+    dateStr,
+    quickScan,
+    "",
+    false,
+    true,
+    depth,
+    null,
+    "",
+    "",
+    {}
+  );
+
+  return {
+    emailHtml,
+    telegramText,
+    formatMs: Date.now() - tFormat0,
+  };
+}
+
 // ── Sandbox pipeline (full run, no delivery) ─────────────────────────────────
 
 async function runPipeline(params) {
@@ -109,198 +319,62 @@ async function runPipeline(params) {
   const timing = {};
   const t0 = Date.now();
   let sessionId = cachedSessionId;
-  let rawItems;
+  let rawItems = [];
   let fetchApiCalls = 0;
   let fetchSkipped = false;
 
   // ── 1. Fetch (or use cache) ──────────────────────────────────────────────
   const tFetch0 = Date.now();
-
-  if (cachedSessionId && SANDBOX_CACHE.has(cachedSessionId)) {
-    const cached = SANDBOX_CACHE.get(cachedSessionId);
-    rawItems = cached.rawItems;
-    fetchSkipped = true;
-  } else {
-    pruneCache();
-    sessionId = crypto.randomBytes(16).toString("hex");
-
-    // Build fetch targets from selected topics
-    const fetchTargets = [];
-    for (const topicTag of topics) {
-      const configTopic = CONFIG.topics.find((t) => t.tag === topicTag);
-      if (configTopic) {
-        fetchTargets.push(configTopic);
-      }
-    }
-
-    // Add custom keyword targets
-    for (const kw of customKeywords) {
-      const queries = buildCustomTopicQueries(kw);
-      fetchTargets.push({
-        tag: kw.toUpperCase(),
-        queries: queries.length ? queries : [`${kw} business strategy developments last 48 hours`],
-        isCustom: true,
-      });
-    }
-
-    // Fetch all in parallel with model override
-    const results = await Promise.all(
-      fetchTargets.map((t) => fetchTopicNews(t, { searchModel }))
-    );
-    fetchApiCalls = results.reduce((sum, rows) => sum + Number(rows?.__apiCalls || 0), 0);
-    rawItems = results.flat();
-
-    // Cache raw items for re-runs
-    SANDBOX_CACHE.set(sessionId, { rawItems, fetchedAt: Date.now() });
-  }
+  const fetchStage = await getRawItemsForSession({ cachedSessionId, topics, customKeywords, searchModel });
+  sessionId = fetchStage.sessionId;
+  rawItems = fetchStage.rawItems;
+  fetchApiCalls = fetchStage.fetchApiCalls;
+  fetchSkipped = fetchStage.fetchSkipped;
 
   timing.fetchMs = Date.now() - tFetch0;
 
-  // ── 2. Dedup against recent archives ─────────────────────────────────────
-  const tDedup0 = Date.now();
-  const dedupRes = dedupAgainstRecentArchives(rawItems, {
-    days: 3,
-    targetCount: itemCount,
-    minBackfillItems: 3,
+  const selectionStage = await runSelectionStage(rawItems, {
+    itemCount,
+    customKeywords,
+    enrichmentModel,
   });
-  let items = dedupRes.items;
-  timing.dedupMs = Date.now() - tDedup0;
+  timing.dedupMs = selectionStage.stageTiming.dedupMs;
+  timing.selectMs = selectionStage.stageTiming.selectMs;
+  timing.enrichMs = selectionStage.stageTiming.enrichMs;
 
-  // ── 3. Select best N ─────────────────────────────────────────────────────
-  const tSelect0 = Date.now();
-  const customTags = customKeywords.map((kw) => kw.toUpperCase());
-  items = selectItems(items, {
-    maxItems: itemCount,
-    customTags,
-  });
-  timing.selectMs = Date.now() - tSelect0;
-
-  // ── 4. Enrich with Claude ────────────────────────────────────────────────
-  const tEnrich0 = Date.now();
-  const enrichment = await enrichItems(items, { model: enrichmentModel });
-  items = enrichment.items;
-  const claudeUsage = {
-    input_tokens: Number(enrichment?.usage?.input_tokens || 0),
-    output_tokens: Number(enrichment?.usage?.output_tokens || 0),
-  };
-  timing.enrichMs = Date.now() - tEnrich0;
-
-  // ── 5. Score for virtual user ────────────────────────────────────────────
-  const tScore0 = Date.now();
-  const allUserTopics = [
-    ...topics,
-    ...customKeywords.map((kw) => `custom_${normalizeTopicToken(kw).replace(/\s+/g, "_")}`),
-  ];
-  const filteredResult = filterDigestItemsByTopics(items, allUserTopics, { minItems: 3 });
-  let userItems = filteredResult.items;
-
-  userItems = scoreDigestItemsForUser(userItems, allUserTopics, topicWeights, {
-    specialistMode: false,
-    repeatPenalty: 0,
-    isRecentRepeat: () => false,
-    sourceDomainForItem: parseSourceDomain,
-  });
-  userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-  // Trim to requested count
-  const kwNormalized = customKeywords.map(normalizeTopicToken).filter(Boolean);
-  userItems = reserveCustomKeywordSlot(userItems, itemCount, kwNormalized);
-  timing.scoreMs = Date.now() - tScore0;
-
-  // ── 6. Apply depth ──────────────────────────────────────────────────────
-  userItems = applyDigestDepth(userItems, depth);
-
-  // ── 7. Format outputs ───────────────────────────────────────────────────
-  const tFormat0 = Date.now();
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("en-US", {
-    weekday: "long", month: "long", day: "numeric", year: "numeric",
-    timeZone: "America/New_York",
-  });
-  const shortDate = now.toLocaleDateString("en-US", {
-    month: "short", day: "numeric", timeZone: "America/New_York",
-  });
-
-  // Telegram format
-  const telegramText = formatTelegram(userItems, shortDate, { digests_received: 10 }, {});
-
-  // Email format — build quick scan rows
-  const quickScan = userItems.map((i, idx) => {
-    const short = stripInlineHtml(i.headline).split(":")[0].split("—")[0].trim();
-    const topic = topicVisual(i.tag);
-    const safeTag = escapeHtml(String(i.tag || "News"));
-    const safeShort = escapeHtml(short);
-    return `<tr>
-      <td style="font-size:14px;color:#111827;font-weight:700;padding:6px 10px 6px 0;vertical-align:top;line-height:1.5;white-space:nowrap;">${idx + 1}</td>
-      <td style="padding:6px 0;vertical-align:top;line-height:1.5;">
-        <div style="font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${topic.chipText};margin-bottom:2px;">${topic.icon} ${safeTag}</div>
-        <div style="font-size:14px;color:#374151;line-height:1.5;">${safeShort}</div>
-      </td>
-    </tr>`;
-  }).join("\n");
-
-  const emailHtml = buildEmail(
-    userItems,
-    dateStr,
-    quickScan,
-    "",       // userToken
-    false,    // isFirstDigest
-    true,     // wasFiltered
+  const rankingStage = rankAndTrimItems(selectionStage.items, {
+    topics,
+    customKeywords,
+    topicWeights,
+    itemCount,
     depth,
-    null,     // user
-    "",       // digestDateKey
-    "",       // digestId
-    {}
-  );
-  timing.formatMs = Date.now() - tFormat0;
+  });
+  timing.scoreMs = rankingStage.scoreMs;
+
+  const formatStage = formatPipelineOutputs(rankingStage.userItems, depth);
+  timing.formatMs = formatStage.formatMs;
 
   // ── Cost breakdown ──────────────────────────────────────────────────────
-  const searchCostPerCall = SEARCH_COSTS[searchModel] || 0.005;
-  const perplexityCostUsd = fetchApiCalls * searchCostPerCall;
-  const modelCost = MODEL_COSTS[enrichmentModel] || MODEL_COSTS["claude-haiku-4-5"];
-  const claudeCostUsd = (claudeUsage.input_tokens / 1_000_000 * modelCost.input)
-                      + (claudeUsage.output_tokens / 1_000_000 * modelCost.output);
+  const cost = computeRunCostBreakdown({
+    fetchApiCalls,
+    searchModel,
+    enrichmentModel,
+    claudeUsage: selectionStage.claudeUsage,
+  });
 
   timing.totalMs = Date.now() - t0;
 
   return {
     sessionId,
     fetchSkipped,
-    items: userItems.map((item) => ({
-      tag: item.tag,
-      headline: item.headline,
-      summary: item.summary,
-      wim: item.wim,
-      wim_brief: item.wim_brief || null,
-      implications: item.implications || null,
-      watch_next: item.watch_next || null,
-      url: item.url,
-      source: item.source,
-      baseScore: item.baseScore,
-      topicMatch: item.topicMatch,
-      relevanceScore: item.relevanceScore,
-      why_shown: item.why_shown || [],
-    })),
-    emailHtml,
-    telegramText,
-    cost: {
-      perplexity: {
-        calls: fetchApiCalls,
-        costPerCall: searchCostPerCall,
-        costUsd: parseFloat(perplexityCostUsd.toFixed(5)),
-      },
-      claude: {
-        model: enrichmentModel,
-        inputTokens: claudeUsage.input_tokens,
-        outputTokens: claudeUsage.output_tokens,
-        costUsd: parseFloat(claudeCostUsd.toFixed(5)),
-      },
-      totalUsd: parseFloat((perplexityCostUsd + claudeCostUsd).toFixed(5)),
-    },
+    items: pickSerializableItems(rankingStage.userItems),
+    emailHtml: formatStage.emailHtml,
+    telegramText: formatStage.telegramText,
+    cost,
     timing,
     dedup: {
-      removed: dedupRes.removed,
-      backfilled: dedupRes.backfilled,
+      removed: selectionStage.dedupRes.removed,
+      backfilled: selectionStage.dedupRes.backfilled,
     },
   };
 }

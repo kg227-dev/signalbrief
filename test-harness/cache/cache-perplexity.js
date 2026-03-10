@@ -1,108 +1,90 @@
-const fs = require("fs");
 const path = require("path");
 
-const { CACHE_PERPLEXITY_DIR, COSTS, sanitizeCacheKey, writeJson, readJson } = require("../config");
-const { httpsPostWithRetry, qaDebug } = require("./cache-common");
+const { CACHE_PERPLEXITY_DIR, COSTS, sanitizeCacheKey, writeJson } = require("../config");
+const { httpsPostWithRetry } = require("./cache-common");
 const { ensureBudget, recordBudgetCall } = require("./cache-budget");
+const { parsePerplexityItems, buildPerplexityPayload } = require("./cache-perplexity-parser");
+const {
+  findLatestTopicCacheFile,
+  tryPerplexityCacheFallback,
+} = require("./cache-perplexity-io");
 
-function parseUrlOrNull(rawUrl) {
-  try {
-    return new URL(rawUrl);
-  } catch (err) {
-    return null;
+function buildTopicCacheFile(topicTag, dateKey) {
+  return path.join(
+    CACHE_PERPLEXITY_DIR,
+    `${sanitizeCacheKey(topicTag)}_${sanitizeCacheKey(dateKey || "run")}.json`
+  );
+}
+
+function readCachedPerplexity(file, latestFallback, topicTag, refreshCache) {
+  if (refreshCache) return null;
+  return tryPerplexityCacheFallback(file, latestFallback, topicTag, false);
+}
+
+function ensureLiveApiAllowed(allowLiveApi, topicTag) {
+  if (!allowLiveApi) {
+    throw new Error(
+      `Perplexity cache miss for topic "${topicTag}". Rerun with --live to warm cache or use --offline.`
+    );
   }
 }
 
-function selectCitationForHostname(citations, hostname) {
-  for (const citation of citations) {
-    const parsed = parseUrlOrNull(citation);
-    if (parsed && parsed.hostname === hostname) return citation;
-  }
-  return null;
+function getPerplexityApiKey(appConfig) {
+  const apiKey = appConfig?.keys?.perplexity;
+  if (!apiKey) throw new Error("Missing config.keys.perplexity for live Perplexity calls.");
+  return apiKey;
 }
 
-function parsePerplexityItems(responseBody, topicTag) {
-  const citations = Array.isArray(responseBody?.citations) ? responseBody.citations : [];
-  const content = String(responseBody?.choices?.[0]?.message?.content || "[]")
-    .replace(/```json\n?/g, "")
-    .replace(/```\n?/g, "")
-    .trim();
+function estimatePerplexityCallCost(costs = COSTS) {
+  return Number(costs.perplexity_per_call_usd || COSTS.perplexity_per_call_usd);
+}
 
-  let items = [];
-  try {
-    items = JSON.parse(content);
-  } catch (err) {
-    qaDebug(`Perplexity JSON parsing failed for ${topicTag}: ${err.message}`);
-    items = [];
-  }
-
-  if (!Array.isArray(items)) return [];
-
-  return items.map((item) => {
-    const base = {
-      headline: item?.headline || "",
-      summary: item?.summary || "",
-      source: item?.source || "unknown",
-      url: item?.url || "#",
-      tag: topicTag,
-    };
-
-    const parsedUrl = parseUrlOrNull(base.url);
-    if (!parsedUrl) return base;
-
-    if (parsedUrl.pathname === "/" || parsedUrl.pathname === "") {
-      const citationUrl = selectCitationForHostname(citations, parsedUrl.hostname);
-      if (citationUrl) base.url = citationUrl;
+async function fetchPerplexityResponse({ apiKey, payload }) {
+  return httpsPostWithRetry(
+    "api.perplexity.ai",
+    "/chat/completions",
+    {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    payload,
+    {
+      retries: 1,
+      retryDelayMs: 900,
+      timeoutMs: 20000,
     }
-    return base;
-  });
+  );
 }
 
-function buildPerplexityPayload(topicTag, query) {
-  return {
+function getPerplexityFallback(file, latestFallback, topicTag) {
+  return tryPerplexityCacheFallback(file, latestFallback, topicTag, true);
+}
+
+function persistPerplexityCache({
+  file,
+  topicTag,
+  dateKey,
+  query,
+  payload,
+  responseBody,
+  parsedItems,
+  estimated,
+}) {
+  writeJson(file, {
+    timestamp: new Date().toISOString(),
+    api: "perplexity.chat.completions",
+    endpoint: "/chat/completions",
     model: "sonar",
-    messages: [
-      {
-        role: "system",
-        content: `You are a business and strategy news researcher covering AI, technology, healthcare, financial services, private equity, M&A, energy, consumer, policy, and consulting.\nReturn ONLY a JSON array of up to 3 distinct news items from the last 48 hours.\nEach item MUST include the direct article URL from your citations — not the homepage.\nFormat: [{"headline": string, "summary": string (1 sentence, max 20 words, factual lede only — no analysis), "source": string (domain, e.g. wsj.com), "url": string (full direct article URL from your citations), "tag": "${topicTag}"}]\nNo markdown. No explanation. JSON array only.`,
-      },
-      {
-        role: "user",
-        content: `Find the 3 most important news items from the last 48 hours about: ${query}\nIMPORTANT: Use the direct article URLs from your search citations. Do not use homepage URLs.`,
-      },
-    ],
-    max_tokens: 1000,
-  };
-}
-
-function findLatestTopicCacheFile(topicTag) {
-  const prefix = `${sanitizeCacheKey(topicTag)}_`;
-  if (!fs.existsSync(CACHE_PERPLEXITY_DIR)) return null;
-  const candidates = fs
-    .readdirSync(CACHE_PERPLEXITY_DIR)
-    .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
-    .sort();
-  if (!candidates.length) return null;
-  return path.join(CACHE_PERPLEXITY_DIR, candidates[candidates.length - 1]);
-}
-
-function readPerplexityCacheFile(file, topicTag, stale = false) {
-  const cached = readJson(file, {});
-  return {
-    items: Array.isArray(cached.parsed_items) ? cached.parsed_items : [],
-    from_cache: true,
-    cache_file: file,
-    stale_fallback: stale,
-    cost_usd: 0,
-    raw_response: cached.raw_response || null,
     topic_tag: topicTag,
-  };
-}
-
-function tryPerplexityCacheFallback(file, latestFallback, topicTag, stale = true) {
-  if (file && fs.existsSync(file)) return readPerplexityCacheFile(file, topicTag, stale);
-  if (latestFallback) return readPerplexityCacheFile(latestFallback, topicTag, true);
-  return null;
+    input: {
+      date_key: dateKey,
+      query,
+      payload,
+    },
+    raw_response: responseBody,
+    parsed_items: parsedItems,
+    cost_usd: Number(estimated.toFixed(6)),
+  });
 }
 
 async function fetchTopicNewsCached({
@@ -115,72 +97,43 @@ async function fetchTopicNewsCached({
   refreshCache,
   costs = COSTS,
 }) {
-  const file = path.join(
-    CACHE_PERPLEXITY_DIR,
-    `${sanitizeCacheKey(topicTag)}_${sanitizeCacheKey(dateKey || "run")}.json`
-  );
+  const file = buildTopicCacheFile(topicTag, dateKey);
   const latestFallback = findLatestTopicCacheFile(topicTag);
 
-  if (!refreshCache) {
-    const cached = tryPerplexityCacheFallback(file, latestFallback, topicTag, false);
-    if (cached) return cached;
-  }
+  const cached = readCachedPerplexity(file, latestFallback, topicTag, refreshCache);
+  if (cached) return cached;
 
-  if (!allowLiveApi) {
-    throw new Error(
-      `Perplexity cache miss for topic "${topicTag}". Rerun with --live to warm cache or use --offline.`
-    );
-  }
-
-  const apiKey = appConfig?.keys?.perplexity;
-  if (!apiKey) throw new Error("Missing config.keys.perplexity for live Perplexity calls.");
-
-  const estimated = Number(costs.perplexity_per_call_usd || COSTS.perplexity_per_call_usd);
+  ensureLiveApiAllowed(allowLiveApi, topicTag);
+  const apiKey = getPerplexityApiKey(appConfig);
+  const estimated = estimatePerplexityCallCost(costs);
   ensureBudget(budget, estimated, `Perplexity fetch (${topicTag})`);
 
+  const payload = buildPerplexityPayload(topicTag, query);
   let res;
   try {
-    res = await httpsPostWithRetry(
-      "api.perplexity.ai",
-      "/chat/completions",
-      {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      buildPerplexityPayload(topicTag, query),
-      {
-        retries: 1,
-        retryDelayMs: 900,
-        timeoutMs: 20000,
-      }
-    );
+    res = await fetchPerplexityResponse({ apiKey, payload });
   } catch (err) {
-    const fallback = tryPerplexityCacheFallback(file, latestFallback, topicTag, true);
+    const fallback = getPerplexityFallback(file, latestFallback, topicTag);
     if (fallback) return fallback;
     throw err;
   }
 
   if (res.status < 200 || res.status >= 300) {
-    const fallback = tryPerplexityCacheFallback(file, latestFallback, topicTag, true);
+    const fallback = getPerplexityFallback(file, latestFallback, topicTag);
     if (fallback) return fallback;
     throw new Error(`Perplexity fetch failed for ${topicTag}: status ${res.status}`);
   }
 
   const parsedItems = parsePerplexityItems(res.body, topicTag);
-  writeJson(file, {
-    timestamp: new Date().toISOString(),
-    api: "perplexity.chat.completions",
-    endpoint: "/chat/completions",
-    model: "sonar",
-    topic_tag: topicTag,
-    input: {
-      date_key: dateKey,
-      query,
-      payload: buildPerplexityPayload(topicTag, query),
-    },
-    raw_response: res.body,
-    parsed_items: parsedItems,
-    cost_usd: Number(estimated.toFixed(6)),
+  persistPerplexityCache({
+    file,
+    topicTag,
+    dateKey,
+    query,
+    payload,
+    responseBody: res.body,
+    parsedItems,
+    estimated,
   });
 
   const nextBudget = recordBudgetCall(budget, {

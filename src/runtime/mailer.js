@@ -1,3 +1,3 @@
-const runtime = require("./mailer-runtime");
+"use strict";
 
-module.exports = runtime;
+module.exports = require("./mailer/mailer-runtime");

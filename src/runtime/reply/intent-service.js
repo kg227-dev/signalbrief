@@ -181,7 +181,10 @@ async function parseIntentFromModel({ requestAnthropicMessage, message }) {
   });
 
   try {
-    const parsed = parseIntentModelResponse(res.body?.content?.[0]?.text);
+    const responseBody = res && res.kind === "json" && res.body && typeof res.body === "object"
+      ? res.body
+      : null;
+    const parsed = parseIntentModelResponse(responseBody?.content?.[0]?.text);
     return normalizeIntentPayload(parsed, { fallbackQuestion: message });
   } catch {
     return createBaseIntent("unknown");

@@ -9,28 +9,33 @@ const path = require("path");
 const digestRunner = require("../digest-runner");
 const reengagement = require("../reengagement");
 const marketingWeeklyReport = require("../scripts/marketing-weekly-report");
-const selectionDomain = require("../selection-domain");
+const selectionDomain = require("./digest/domain/selection-domain-runtime");
+const botServerEntrypoint = require("../src/entrypoints/bot-server");
+const schedulerWorkerEntrypoint = require("../src/entrypoints/scheduler-worker");
 const digestEntrypoint = require("../src/entrypoints/digest");
 const configProvider = require("../src/runtime/config-provider");
-const engagementEvents = require("../src/runtime/engagement-events");
-const mailer = require("../src/runtime/mailer");
-const personalization = require("../src/runtime/personalization");
+const engagementEvents = require("../src/runtime/engagement/engagement-events-runtime");
+const mailer = require("../src/runtime/mailer/mailer-runtime");
+const personalization = require("../src/runtime/personalization/personalization-runtime");
 const qualityScore = require("../src/runtime/quality-score");
-const replyHandler = require("../src/runtime/reply-handler");
+const replyHandler = require("../src/runtime/reply/reply-handler-runtime");
 const intentService = require("../src/runtime/reply/intent-service");
 const onboardingService = require("../src/runtime/reply/onboarding-service");
+const replyLoggingRuntime = require("./runtime/reply/reply-logging-runtime");
+const replySessionRuntime = require("./runtime/reply/reply-session-runtime");
 const transport = require("../src/runtime/reply/transport");
 const store = require("../src/runtime/store");
-const sandboxPipeline = require("../src/sandbox-pipeline");
+const sandboxPipeline = require("../src/sandbox-pipeline-runtime");
 const cacheBudget = require("../test-harness/cache/cache-budget");
 const cacheClaude = require("../test-harness/cache/cache-claude");
 const cacheCommon = require("../test-harness/cache/cache-common");
 const cachePerplexity = require("../test-harness/cache/cache-perplexity");
 const harnessConfigConstants = require("../test-harness/config/config-constants");
-const harnessEvaluator = require("../test-harness/evaluator");
-const harnessRuntime = require("../test-harness/harness-runtime");
+const harnessEvaluator = require("../test-harness/runtime/evaluator");
+const harnessRuntime = require("../test-harness/runtime/harness-runtime");
+const harnessMatrixRuntime = require("../test-harness/runtime/matrix-runtime");
 const harnessPersonasCanonical = require("../test-harness/personas/personas-canonical");
-const harnessPipeline = require("../test-harness/pipeline");
+const harnessPipeline = require("../test-harness/runtime/pipeline");
 const harnessAnalyticsStage = require("../test-harness/stages/analytics");
 const harnessDatasetStage = require("../test-harness/stages/dataset");
 const harnessSuiteRunnerStage = require("../test-harness/stages/suite-runner");
@@ -41,24 +46,28 @@ const harnessSuiteCustomTopics = require("../test-harness/suites/custom-topics-r
 const harnessSuiteDepthControl = require("../test-harness/suites/depth-control-runtime");
 const harnessSuiteEndToEnd = require("../test-harness/suites/end-to-end-runtime");
 const harnessSuiteRelevanceScoring = require("../test-harness/suites/relevance-scoring-runtime");
-const topicDomain = require("../topic-domain");
+const topicDomain = require("./digest/domain/topic-domain-runtime");
 const adminAuth = require("../web/admin-auth");
 const adminApiRoutes = require("../web/routes/admin-api");
 const coreApiRoutes = require("../web/routes/core-api");
 const adminOpsService = require("../web/services/admin-ops");
+const archiveScoringService = require("../web/services/archive-scoring");
 const deliverySchedule = require("../web/services/delivery-schedule");
+const reengagementStateService = require("../web/services/reengagement-state");
+const requestMetadataService = require("../web/services/request-metadata");
+const webRateLimitService = require("../web/services/web-rate-limit");
 
 // Static resolution for modules with side-effects or browser globals.
 const smokeAdminSchedulerScriptPath = require.resolve("../scripts/smoke-admin-scheduler.js");
 const smokeWorkerScriptPath = require.resolve("../scripts/smoke-worker.js");
 const testCriticalPathsScriptPath = require.resolve("../scripts/test-critical-paths.js");
-const botServerEntrypointPath = require.resolve("../src/entrypoints/bot-server.js");
-const schedulerWorkerEntrypointPath = require.resolve("../src/entrypoints/scheduler-worker.js");
 const harnessRunMatrixScriptPath = require.resolve("../test-harness/run-matrix.js");
+const harnessMatrixRuntimePath = require.resolve("../test-harness/runtime/matrix-runtime.js");
 const webIndexPath = require.resolve("../web/index.js");
 const webPreferencesSharedPath = require.resolve("../web/preferences-shared.js");
 const webServerPath = require.resolve("../web/server.js");
 const webSettingsRuntimePath = require.resolve("../web/settings-runtime.js");
+const webSettingsUiRuntimePath = require.resolve("../web/settings-ui-runtime.js");
 
 function assertNodeSyntaxFile(absPath) {
   execFileSync(process.execPath, ["--check", absPath], { stdio: "pipe" });
@@ -84,118 +93,200 @@ function assertSourceIncludesPath(absPath, snippets) {
   }
 }
 
-function runModuleCoverageTests() {
-  const sourceOnlyTargets = [
-    {
-      file: "scripts/smoke-admin-scheduler.js",
-      absPath: smokeAdminSchedulerScriptPath,
-      snippets: ["spawn(process.execPath", "[smoke-admin-scheduler] ok"],
-    },
-    {
-      file: "scripts/smoke-worker.js",
-      absPath: smokeWorkerScriptPath,
-      snippets: ["spawn(process.execPath", "[smoke-worker] ok"],
-    },
-    {
-      file: "scripts/test-critical-paths.js",
-      absPath: testCriticalPathsScriptPath,
-      snippets: ["testModuleCoverageContracts", "main().catch((err)"],
-    },
-    {
-      file: "src/entrypoints/bot-server.js",
-      absPath: botServerEntrypointPath,
-      snippets: ["async function poll()", "runLoop();"],
-    },
-    {
-      file: "src/entrypoints/scheduler-worker.js",
-      absPath: schedulerWorkerEntrypointPath,
-      snippets: ["function runDigest(trigger)", "setInterval(() => runDigest(\"interval\"), POLL_MS);"],
-    },
-    {
-      file: "test-harness/run-matrix.js",
-      absPath: harnessRunMatrixScriptPath,
-      snippets: ["buildWindowPlan", "Matrix report written:"],
-    },
-    {
-      file: "web/index.js",
-      absPath: webIndexPath,
-      snippets: ["window.SignalBriefPrefs", "document.querySelector"],
-    },
-    {
-      file: "web/preferences-shared.js",
-      absPath: webPreferencesSharedPath,
-      snippets: ["bootstrapPreferences", "SignalBriefPrefs"],
-    },
-    {
-      file: "web/server.js",
-      absPath: webServerPath,
-      snippets: ["http.createServer", "server.listen(PORT"],
-    },
-    {
-      file: "web/settings-runtime.js",
-      absPath: webSettingsRuntimePath,
-      snippets: ["window.SignalBriefPrefs", "document.getElementById"],
-    },
-  ];
+const SOURCE_ONLY_TARGETS = [
+  {
+    file: "scripts/smoke-admin-scheduler.js",
+    absPath: smokeAdminSchedulerScriptPath,
+    snippets: ["spawn(process.execPath", "[smoke-admin-scheduler] ok"],
+  },
+  {
+    file: "scripts/smoke-worker.js",
+    absPath: smokeWorkerScriptPath,
+    snippets: ["spawn(process.execPath", "[smoke-worker] ok"],
+  },
+  {
+    file: "scripts/test-critical-paths.js",
+    absPath: testCriticalPathsScriptPath,
+    snippets: ["testModuleCoverageContracts", "main().catch((err)"],
+  },
+  {
+    file: "test-harness/run-matrix.js",
+    absPath: harnessRunMatrixScriptPath,
+    snippets: ["runMatrix", "main().catch((err)"],
+  },
+  {
+    file: "test-harness/runtime/matrix-runtime.js",
+    absPath: harnessMatrixRuntimePath,
+    snippets: ["buildWindowPlan", "Matrix report written:"],
+  },
+  {
+    file: "web/index.js",
+    absPath: webIndexPath,
+    snippets: ["window.SignalBriefPrefs", "document.querySelector"],
+  },
+  {
+    file: "web/preferences-shared.js",
+    absPath: webPreferencesSharedPath,
+    snippets: ["bootstrapPreferences", "SignalBriefPrefs"],
+  },
+  {
+    file: "web/server.js",
+    absPath: webServerPath,
+    snippets: ["http.createServer", "server.listen(port", "getServerPort()"],
+  },
+  {
+    file: "web/settings-runtime.js",
+    absPath: webSettingsRuntimePath,
+    snippets: ["bootstrapSettingsRuntime", "document.getElementById"],
+  },
+  {
+    file: "web/settings-ui-runtime.js",
+    absPath: webSettingsUiRuntimePath,
+    snippets: ["bootstrapSettingsUiRuntime", "SignalBriefSettingsUiRuntime"],
+  },
+];
 
-  for (const target of sourceOnlyTargets) {
+const EXPORT_SHAPES = [
+  ["src/entrypoints/bot-server.js", botServerEntrypoint, ["poll", "processUpdate", "answerCallbackQuery", "runLoop", "startBotServer"]],
+  ["src/entrypoints/scheduler-worker.js", schedulerWorkerEntrypoint, ["runDigest", "writeHeartbeat", "startSchedulerWorker", "stopSchedulerWorker"]],
+  ["src/entrypoints/digest.js", digestEntrypoint, ["fetchTopicNews", "enrichItems", "buildEmail", "scoreColor"]],
+  ["src/runtime/config-provider.js", configProvider, ["CONFIG_PATH", "loadConfig"]],
+  ["src/runtime/engagement/engagement-events-runtime.js", engagementEvents, ["appendEngagementEvent", "loadEngagementEvents"]],
+  ["src/runtime/mailer/mailer-runtime.js", mailer, ["sendEmail", "sendWelcomeEmail", "sendReengagementDay4Email"]],
+  ["src/runtime/personalization/personalization-runtime.js", personalization, ["applyAutoTopicLearning"]],
+  ["src/runtime/quality-score.js", qualityScore, ["computeDigestQualityScore", "qualityBand"]],
+  [
+    "src/runtime/reply/reply-handler-runtime.js",
+    replyHandler,
+    [
+      "createReplyState",
+      "resetReplyState",
+      "resetReplyRuntimeState",
+      "handleIncomingMessage",
+      "handleCallbackQuery",
+    ],
+  ],
+  ["src/runtime/reply/intent-service.js", intentService, ["createIntentService", "normalizeIntentPayload"]],
+  ["src/runtime/reply/onboarding-service.js", onboardingService, ["createOnboardingService"]],
+  ["src/runtime/reply/reply-logging-runtime.js", replyLoggingRuntime, ["createReplyLogger", "createReplyIntentTracer", "redactIntentForLogs"]],
+  ["src/runtime/reply/reply-session-runtime.js", replySessionRuntime, ["createReplyState", "createReplySessionController"]],
+  ["src/runtime/reply/transport.js", transport, ["httpsPost", "createTelegramTransport", "createAnthropicTransport"]],
+  ["src/runtime/store.js", store, ["createStore", "initStore", "readUser", "writeUser", "findUserByToken"]],
+  ["src/sandbox-pipeline-runtime.js", sandboxPipeline, ["estimateCost", "runPipeline"]],
+];
+
+const LOADED_MODULES = [
+  ["digest-runner.js", digestRunner],
+  ["reengagement.js", reengagement],
+  ["scripts/marketing-weekly-report.js", marketingWeeklyReport],
+  ["src/digest/domain/selection-domain-runtime.js", selectionDomain],
+  ["test-harness/cache/cache-budget.js", cacheBudget],
+  ["test-harness/cache/cache-claude.js", cacheClaude],
+  ["test-harness/cache/cache-common.js", cacheCommon],
+  ["test-harness/cache/cache-perplexity.js", cachePerplexity],
+  ["test-harness/config/config-constants.js", harnessConfigConstants],
+  ["test-harness/runtime/evaluator.js", harnessEvaluator],
+  ["test-harness/runtime/harness-runtime.js", harnessRuntime],
+  ["test-harness/runtime/matrix-runtime.js", harnessMatrixRuntime],
+  ["test-harness/personas/personas-canonical.js", harnessPersonasCanonical],
+  ["test-harness/runtime/pipeline.js", harnessPipeline],
+  ["test-harness/stages/analytics.js", harnessAnalyticsStage],
+  ["test-harness/stages/dataset.js", harnessDatasetStage],
+  ["test-harness/stages/suite-runner.js", harnessSuiteRunnerStage],
+  ["test-harness/suites/10-module-coverage.js", harnessSuiteModuleCoverage],
+  ["test-harness/suites/analysis-quality-runtime.js", harnessSuiteAnalysisQuality],
+  ["test-harness/suites/cross-day-freshness-runtime.js", harnessSuiteCrossDayFreshness],
+  ["test-harness/suites/custom-topics-runtime.js", harnessSuiteCustomTopics],
+  ["test-harness/suites/depth-control-runtime.js", harnessSuiteDepthControl],
+  ["test-harness/suites/end-to-end-runtime.js", harnessSuiteEndToEnd],
+  ["test-harness/suites/relevance-scoring-runtime.js", harnessSuiteRelevanceScoring],
+  ["src/digest/domain/topic-domain-runtime.js", topicDomain],
+  ["src/runtime/reply/reply-logging-runtime.js", replyLoggingRuntime],
+  ["src/runtime/reply/reply-session-runtime.js", replySessionRuntime],
+  ["web/admin-auth.js", adminAuth],
+  ["web/routes/admin-api.js", adminApiRoutes],
+  ["web/routes/core-api.js", coreApiRoutes],
+  ["web/services/admin-ops.js", adminOpsService],
+  ["web/services/archive-scoring.js", archiveScoringService],
+  ["web/services/delivery-schedule.js", deliverySchedule],
+  ["web/services/reengagement-state.js", reengagementStateService],
+  ["web/services/request-metadata.js", requestMetadataService],
+  ["web/services/web-rate-limit.js", webRateLimitService],
+];
+
+function assertSourceOnlyTargets() {
+  for (const target of SOURCE_ONLY_TARGETS) {
     assertNodeSyntaxFile(target.absPath);
     assertSourceIncludesPath(target.absPath, target.snippets);
   }
+}
 
-  assertExportShape("src/entrypoints/digest.js", digestEntrypoint, [
-    "fetchTopicNews",
-    "enrichItems",
-    "buildEmail",
-    "scoreColor",
-  ]);
-  assertExportShape("src/runtime/config-provider.js", configProvider, ["CONFIG_PATH", "loadConfig"]);
-  assertExportShape("src/runtime/engagement-events.js", engagementEvents, ["appendEngagementEvent", "loadEngagementEvents"]);
-  assertExportShape("src/runtime/mailer.js", mailer, ["sendEmail", "sendWelcomeEmail", "sendReengagementDay4Email"]);
-  assertExportShape("src/runtime/personalization.js", personalization, ["applyAutoTopicLearning"]);
-  assertExportShape("src/runtime/quality-score.js", qualityScore, ["computeDigestQualityScore", "qualityBand"]);
-  assertExportShape("src/runtime/reply-handler.js", replyHandler, ["createReplyState", "resetReplyState", "handle", "handleCallback"]);
-  assertExportShape("src/runtime/reply/intent-service.js", intentService, ["createIntentService", "normalizeIntentPayload"]);
-  assertExportShape("src/runtime/reply/onboarding-service.js", onboardingService, ["createOnboardingService"]);
-  assertExportShape("src/runtime/reply/transport.js", transport, ["httpsPost", "createTelegramTransport", "createAnthropicTransport"]);
-  assertExportShape("src/runtime/store.js", store, ["initStore", "readUser", "writeUser", "findUserByToken"]);
-  assertExportShape("src/sandbox-pipeline.js", sandboxPipeline, ["estimateCost", "runPipeline"]);
+function assertExportShapes() {
+  for (const [name, exported, keys] of EXPORT_SHAPES) {
+    assertExportShape(name, exported, keys);
+  }
+}
 
-  const loadedModules = [
-    ["digest-runner.js", digestRunner],
-    ["reengagement.js", reengagement],
-    ["scripts/marketing-weekly-report.js", marketingWeeklyReport],
-    ["selection-domain.js", selectionDomain],
-    ["test-harness/cache/cache-budget.js", cacheBudget],
-    ["test-harness/cache/cache-claude.js", cacheClaude],
-    ["test-harness/cache/cache-common.js", cacheCommon],
-    ["test-harness/cache/cache-perplexity.js", cachePerplexity],
-    ["test-harness/config/config-constants.js", harnessConfigConstants],
-    ["test-harness/evaluator.js", harnessEvaluator],
-    ["test-harness/harness-runtime.js", harnessRuntime],
-    ["test-harness/personas/personas-canonical.js", harnessPersonasCanonical],
-    ["test-harness/pipeline.js", harnessPipeline],
-    ["test-harness/stages/analytics.js", harnessAnalyticsStage],
-    ["test-harness/stages/dataset.js", harnessDatasetStage],
-    ["test-harness/stages/suite-runner.js", harnessSuiteRunnerStage],
-    ["test-harness/suites/10-module-coverage.js", harnessSuiteModuleCoverage],
-    ["test-harness/suites/analysis-quality-runtime.js", harnessSuiteAnalysisQuality],
-    ["test-harness/suites/cross-day-freshness-runtime.js", harnessSuiteCrossDayFreshness],
-    ["test-harness/suites/custom-topics-runtime.js", harnessSuiteCustomTopics],
-    ["test-harness/suites/depth-control-runtime.js", harnessSuiteDepthControl],
-    ["test-harness/suites/end-to-end-runtime.js", harnessSuiteEndToEnd],
-    ["test-harness/suites/relevance-scoring-runtime.js", harnessSuiteRelevanceScoring],
-    ["topic-domain.js", topicDomain],
-    ["web/admin-auth.js", adminAuth],
-    ["web/routes/admin-api.js", adminApiRoutes],
-    ["web/routes/core-api.js", coreApiRoutes],
-    ["web/services/admin-ops.js", adminOpsService],
-    ["web/services/delivery-schedule.js", deliverySchedule],
-  ];
-
-  for (const [name, exported] of loadedModules) {
+function assertLoadedModules() {
+  for (const [name, exported] of LOADED_MODULES) {
     assertModuleLoaded(name, exported);
   }
+}
+
+function assertBehaviorContracts() {
+  const sampleItems = [
+    { tag: "AI×TECH", headline: "AI deal 1", url: "https://a.example/1", source_domain: "a.example" },
+    { tag: "AI×TECH", headline: "AI deal 2", url: "https://b.example/2", source_domain: "b.example" },
+    { tag: "HEALTHCARE", headline: "Health update", url: "https://c.example/3", source_domain: "c.example" },
+  ];
+  const selected = selectionDomain.selectItemsByPolicy(
+    sampleItems,
+    { maxItems: 2, perTagCap: 1, perSourceCap: 1 },
+    {
+      normalizeUrl: (url) => String(url || ""),
+      parseDomain: (item) => String(item?.source_domain || "unknown"),
+      normalizeTopicToken: topicDomain.normalizeTopicToken,
+      headlineFingerprint: (item) => String(item?.headline || ""),
+      isCandidate: () => true,
+    }
+  );
+  assert.strictEqual(selected.length, 2, "selection-domain-runtime should enforce selection policy caps");
+  assert.notStrictEqual(
+    topicDomain.normalizeTopicToken(selected[0].tag),
+    topicDomain.normalizeTopicToken(selected[1].tag),
+    "selection-domain-runtime should respect per-tag cap"
+  );
+
+  const exactTopicScore = topicDomain.computeTopicMatch(
+    { tag: "AI×TECH", headline: "", summary: "" },
+    ["AI×TECH"]
+  );
+  assert.strictEqual(exactTopicScore, 10, "topic-domain-runtime should score exact tag-topic matches as strong");
+  const customTopicScore = topicDomain.computeTopicMatch(
+    { tag: "", headline: "Federal Reserve weighs additional interest rate cuts", summary: "" },
+    ["custom_rate_cuts"]
+  );
+  assert.ok(customTopicScore >= 7, "topic-domain-runtime should recognize custom keyword topic matches");
+
+  const busyOutcome = digestRunner.toDigestTriggerOutcome({
+    ok: false,
+    code: "busy",
+    admission: { lockState: "valid", lock: null },
+  });
+  assert.strictEqual(busyOutcome.busy, true, "digest-runner should normalize busy trigger outcomes");
+  const unhealthyOutcome = digestRunner.toDigestTriggerOutcome({
+    ok: false,
+    code: "corrupt",
+    admission: { lock: { error: "invalid_json" } },
+  });
+  assert.strictEqual(unhealthyOutcome.lockUnhealthy, true, "digest-runner should normalize unhealthy lock outcomes");
+}
+
+function runModuleCoverageTests() {
+  assertSourceOnlyTargets();
+  assertExportShapes();
+  assertLoadedModules();
+  assertBehaviorContracts();
 }
 
 module.exports = {

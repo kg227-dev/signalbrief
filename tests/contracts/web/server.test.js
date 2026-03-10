@@ -6,5 +6,4 @@ const { assertNodeSyntaxFile, assertSourceIncludesFile, assertModuleExports } = 
 const TARGET_REL = "web/server.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
-assertSourceIncludesFile(TARGET_PATH, ["http.createServer","server.listen(PORT"]);
-
+assertSourceIncludesFile(TARGET_PATH, ["http.createServer", "server.listen(port", "getServerPort()"]);

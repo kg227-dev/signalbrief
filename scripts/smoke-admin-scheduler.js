@@ -15,6 +15,32 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitFor(predicate, opts = {}) {
+  const timeoutMs = Math.max(1000, Number(opts.timeoutMs || 15000));
+  const pollMs = Math.max(50, Number(opts.pollMs || 200));
+  const start = Date.now();
+  let lastErr = null;
+  while ((Date.now() - start) < timeoutMs) {
+    try {
+      const value = await predicate();
+      if (value) return value;
+    } catch (err) {
+      lastErr = err;
+    }
+    await sleep(pollMs);
+  }
+  if (lastErr) throw lastErr;
+  throw new Error(`timed out after ${timeoutMs}ms`);
+}
+
+async function waitForChildExit(child, timeoutMs = 1500) {
+  if (!child || child.killed) return;
+  await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    sleep(timeoutMs),
+  ]);
+}
+
 function getJson(url) {
   return new Promise((resolve, reject) => {
     http.get(url, (res) => {
@@ -65,17 +91,26 @@ async function main() {
   child.stdout.on("data", () => {});
 
   try {
-    await sleep(900);
-    const res = await getJson(`http://127.0.0.1:${PORT}/api/admin/stats`);
+    const { res, scheduler } = await waitFor(async () => {
+      const candidate = await getJson(`http://127.0.0.1:${PORT}/api/admin/stats`);
+      if (candidate.status !== 200) return null;
+      const worker = candidate.data && candidate.data.health && candidate.data.health.scheduler_worker;
+      if (!worker) return null;
+      if (!worker.available || !worker.healthy) return null;
+      return { res: candidate, scheduler: worker };
+    }, {
+      timeoutMs: 20000,
+      pollMs: 250,
+    });
+
     if (res.status !== 200) throw new Error(`admin stats returned HTTP ${res.status}`);
-    const scheduler = res.data && res.data.health && res.data.health.scheduler_worker;
     if (!scheduler) throw new Error("scheduler_worker block missing in stats");
     if (!scheduler.available) throw new Error("scheduler worker reported unavailable");
     if (!scheduler.healthy) throw new Error(`scheduler worker reported unhealthy: ${scheduler.summary || "unknown"}`);
     process.stdout.write("[smoke-admin-scheduler] ok\n");
   } finally {
     child.kill("SIGTERM");
-    await sleep(250);
+    await waitForChildExit(child, 2000);
     try {
       fs.unlinkSync(HEARTBEAT);
     } catch (err) {

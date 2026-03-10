@@ -1,5 +1,5 @@
-const { buildDigestForPersona, countAdjacencyViolations, tagDistribution } = require("../pipeline");
-const { mean } = require("../evaluator");
+const { buildDigestForPersona, countAdjacencyViolations, tagDistribution } = require("../runtime/pipeline");
+const { mean } = require("../runtime/evaluator");
 
 module.exports = {
   id: "04-diversity",
@@ -13,7 +13,7 @@ module.exports = {
     const scores = [];
 
     for (const persona of personas) {
-      const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime);
+      const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime.digestPolicies);
       const total = digest.items.length;
       const tagCounts = tagDistribution(digest.items);
       const uniqueTags = Object.keys(tagCounts).length;

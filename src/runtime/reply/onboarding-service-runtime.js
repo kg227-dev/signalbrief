@@ -1,4 +1,11 @@
-const { chatKey, validateCodeInput } = require("./onboarding/keys");
+// @ts-check
+/** @typedef {import("../runtime-types").OnboardingDeps} OnboardingDeps */
+const {
+  withPendingVerificationResendAfter,
+} = require("./onboarding/pending-verification");
+const {
+  createOnboardingVerificationContext,
+} = require("./onboarding/onboarding-context");
 const {
   beginLinkVerificationFlow,
   completeLinkVerificationFlow,
@@ -7,6 +14,9 @@ const {
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 
+/**
+ * @param {OnboardingDeps} deps
+ */
 function createOnboardingService(deps) {
   const {
     state,
@@ -18,36 +28,31 @@ function createOnboardingService(deps) {
     formatDeliveryTime,
   } = deps;
 
-  function currentState() {
-    return typeof state === "function" ? state() : state;
-  }
-
-  function pendingByChatId() {
-    return currentState().pendingLinkVerifications;
-  }
-
-  function awaitingByChatId() {
-    return currentState().awaitingEmail;
-  }
+  const verificationContext = createOnboardingVerificationContext({
+    state,
+    linkVerifyTtlMs,
+    sendMessage,
+    sendVerificationEmail,
+    findUserByEmail,
+    relinkUserToChat,
+    formatDeliveryTime,
+  });
 
   function setAwaitingEmail(chatId, enabled) {
-    const pending = awaitingByChatId();
-    if (enabled) pending.set(chatId, true);
-    else pending.delete(chatId);
+    verificationContext.awaiting.set(chatId, enabled);
   }
 
   function isAwaitingEmail(chatId) {
-    return awaitingByChatId().has(chatId);
+    return verificationContext.awaiting.has(chatId);
   }
 
   function clearAllPending(chatId) {
-    awaitingByChatId().delete(chatId);
-    pendingByChatId().delete(chatKey(chatId));
+    verificationContext.awaiting.delete(chatId);
+    verificationContext.pending.delete(chatId);
   }
 
   async function startLinkVerification(chatId, user) {
-    const key = chatKey(chatId);
-    const pending = pendingByChatId().get(key) || null;
+    const pending = verificationContext.pending.get(chatId);
     const now = Date.now();
     const email = String(user?.email || "").toLowerCase().trim();
     const sameEmailPending = pending
@@ -62,52 +67,26 @@ function createOnboardingService(deps) {
     const started = await beginLinkVerificationFlow({
       chatId,
       user,
-      linkVerifyTtlMs,
-      pendingByChatId: pendingByChatId(),
-      sendMessage,
-      sendVerificationEmail,
+      context: verificationContext,
     });
     if (!started) return false;
 
-    const next = pendingByChatId().get(key);
-    if (next && typeof next === "object") {
-      pendingByChatId().set(key, {
-        ...next,
-        attempts: 0,
-        resend_after_ts: now + RESEND_COOLDOWN_MS,
-      });
+    const nextPending = verificationContext.pending.get(chatId);
+    if (nextPending && typeof nextPending === "object") {
+      verificationContext.pending.set(
+        chatId,
+        withPendingVerificationResendAfter(nextPending, now + RESEND_COOLDOWN_MS)
+      );
     }
     return true;
   }
 
   async function handleVerifyLink(chatId, codeRaw) {
-    const key = chatKey(chatId);
-    const pending = pendingByChatId().get(key) || null;
-    if (pending && typeof pending === "object" && Number(pending.expiresAt || 0) > Date.now()) {
-      const codeInput = validateCodeInput(codeRaw);
-      if (codeInput.ok && codeInput.code !== pending.code) {
-        const attempts = Math.max(0, Number(pending.attempts || 0)) + 1;
-        if (attempts >= MAX_VERIFY_ATTEMPTS) {
-          pendingByChatId().delete(key);
-          await sendMessage(chatId, "Too many incorrect attempts. Start again with `/start your@email.com`.");
-          return;
-        }
-        pendingByChatId().set(key, {
-          ...pending,
-          attempts,
-        });
-      }
-    }
-
     return completeLinkVerificationFlow({
       chatId,
       codeRaw,
-      pendingByChatId: pendingByChatId(),
-      awaitingByChatId: awaitingByChatId(),
-      sendMessage,
-      findUserByEmail,
-      relinkUserToChat,
-      formatDeliveryTime,
+      context: verificationContext,
+      maxAttempts: MAX_VERIFY_ATTEMPTS,
     });
   }
 

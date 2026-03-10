@@ -1,0 +1,132 @@
+const { appendJsonLineLog } = require("./admin-ops-utils");
+
+function createCostRunsReader({ fs, costLogPath }) {
+  const cache = {
+    mtimeMs: 0,
+    size: 0,
+    runsNewest: [],
+  };
+
+  return function loadCostRunsNewest() {
+    if (!fs.existsSync(costLogPath)) {
+      cache.mtimeMs = 0;
+      cache.size = 0;
+      cache.runsNewest = [];
+      return [];
+    }
+
+    let stat;
+    try {
+      stat = fs.statSync(costLogPath);
+    } catch {
+      return [];
+    }
+
+    if (cache.runsNewest.length && cache.mtimeMs === stat.mtimeMs && cache.size === stat.size) {
+      return cache.runsNewest;
+    }
+
+    const runs = fs.readFileSync(costLogPath, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .reverse();
+
+    cache.mtimeMs = stat.mtimeMs;
+    cache.size = stat.size;
+    cache.runsNewest = runs;
+    return runs;
+  };
+}
+
+function createLegacyArchiveUsageRecorder({
+  fs,
+  path,
+  archiveLegacyUsageLog,
+  getRequestHost,
+  getClientIp,
+}) {
+  return function recordLegacyArchiveUsage(req, endpoint, outcome, metadata = {}) {
+    appendJsonLineLog({
+      fs,
+      path,
+      filePath: archiveLegacyUsageLog,
+      entry: {
+        ts_utc: new Date().toISOString(),
+        endpoint,
+        outcome,
+        method: req.method,
+        host: getRequestHost(req),
+        ip: getClientIp(req),
+        metadata: metadata && typeof metadata === "object" ? metadata : {},
+      },
+      label: "archive-legacy-usage",
+    });
+  };
+}
+
+function createAdminAuditLoggers({
+  fs,
+  path,
+  adminMessageLog,
+  adminActionLog,
+  getAdminActor,
+}) {
+  function logAdminMessageEvent(req, payload) {
+    const outcome = appendJsonLineLog({
+      fs,
+      path,
+      filePath: adminMessageLog,
+      entry: {
+        at: new Date().toISOString(),
+        actor: getAdminActor(req),
+        ...payload,
+      },
+      label: "admin-message-log",
+    });
+    if (!outcome.ok) {
+      const err = new Error(`admin message audit log write failed: ${outcome.error || "unknown error"}`);
+      err.code = "admin_message_audit_write_failed";
+      throw err;
+    }
+    return outcome;
+  }
+
+  function logAdminActionEvent(req, payload) {
+    const outcome = appendJsonLineLog({
+      fs,
+      path,
+      filePath: adminActionLog,
+      entry: {
+        at: new Date().toISOString(),
+        actor: getAdminActor(req),
+        ...payload,
+      },
+      label: "admin-action-log",
+    });
+    if (!outcome.ok) {
+      const err = new Error(`admin action audit log write failed: ${outcome.error || "unknown error"}`);
+      err.code = "admin_action_audit_write_failed";
+      throw err;
+    }
+    return outcome;
+  }
+
+  return {
+    logAdminMessageEvent,
+    logAdminActionEvent,
+  };
+}
+
+module.exports = {
+  createCostRunsReader,
+  createLegacyArchiveUsageRecorder,
+  createAdminAuditLoggers,
+};

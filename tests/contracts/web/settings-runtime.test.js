@@ -6,5 +6,4 @@ const { assertNodeSyntaxFile, assertSourceIncludesFile, assertModuleExports } = 
 const TARGET_REL = "web/settings-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
-assertSourceIncludesFile(TARGET_PATH, ["window.SignalBriefPrefs","document.getElementById"]);
-
+assertSourceIncludesFile(TARGET_PATH, ["bootstrapSettingsRuntime", "document.getElementById"]);

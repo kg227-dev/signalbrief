@@ -1,5 +1,5 @@
-const { buildDigestForPersona } = require("../pipeline");
-const { mean } = require("../evaluator");
+const { buildDigestForPersona } = require("../runtime/pipeline");
+const { mean } = require("../runtime/evaluator");
 
 module.exports = {
   id: "07-item-count",
@@ -15,7 +15,7 @@ module.exports = {
     const capNotices = [];
 
     for (const persona of personas) {
-      const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime);
+      const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime.digestPolicies);
       const requested = Number(digest.requested_count || 0);
       const expected = Math.min(requested, Number(digest.pre_trim_count || 0));
       const delivered = Number(digest.delivered_count || 0);

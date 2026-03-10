@@ -2,23 +2,38 @@
 /**
  * SignalBrief — bot-server.js
  * Polling-first Telegram ingress worker.
- * Continuously long-polls Telegram getUpdates and dispatches to src/runtime/reply-handler.js.
+ * Continuously long-polls Telegram getUpdates and dispatches to src/domains/reply.
  * Webhook ingress is legacy/optional and not active in the default runtime.
  * 
  * Usage: node src/entrypoints/bot-server.js
 */
 
 const https = require("https");
-const fs = require("fs");
-const path = require("path");
-const { initStore } = require("../runtime/store");
-const { handle, handleCallback } = require("../runtime/reply-handler");
+const { loadConfig: loadRuntimeConfig } = require("../platform/config");
+const { createStore } = require("../platform/store");
+const {
+  handleIncomingMessage,
+  handleCallbackQuery,
+} = require("../domains/reply");
 
-const APP_ROOT = path.resolve(__dirname, "..", "..");
-const CONFIG = JSON.parse(fs.readFileSync(path.join(APP_ROOT, "config.json"), "utf8"));
-const BOT_TOKEN = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
+const botStore = createStore();
+const { initStore } = botStore;
 
-initStore();
+function loadConfig() {
+  return loadRuntimeConfig();
+}
+
+function getBotToken() {
+  const config = loadConfig();
+  return config?.keys?.signalBriefBotToken || config?.keys?.telegramBotToken || "";
+}
+
+let storeReady = false;
+function ensureStoreReady() {
+  if (storeReady) return;
+  initStore();
+  storeReady = true;
+}
 
 // ── Polling (no public webhook endpoint needed) ────────────────────────────────
 
@@ -26,7 +41,9 @@ let lastUpdateId = 0;
 
 async function poll() {
   return new Promise((resolve) => {
-    const url = `/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
+    const botToken = getBotToken();
+    if (!botToken) return resolve([]);
+    const url = `/bot${botToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
     const req = https.request(
       { hostname: "api.telegram.org", path: url, method: "GET" },
       (res) => {
@@ -59,7 +76,7 @@ async function processUpdate(update) {
     const text = msg.text.trim();
     console.log(`[${new Date().toISOString()}] [${chatId}] ${text}`);
     try {
-      await handle(text, chatId);
+      await handleIncomingMessage(text, chatId);
     } catch (e) {
       console.error(`Error handling message: ${e.message}`);
     }
@@ -76,7 +93,7 @@ async function processUpdate(update) {
     console.log(`[${new Date().toISOString()}] [${chatId}] callback ${data}`);
     let notice = "Saved";
     try {
-      const result = await handleCallback(data, chatId);
+      const result = await handleCallbackQuery(data, chatId);
       if (result && result.notice) notice = String(result.notice);
     } catch (e) {
       notice = "Action failed";
@@ -92,11 +109,13 @@ async function processUpdate(update) {
 
 function telegramPost(pathname, payload) {
   return new Promise((resolve, reject) => {
+    const botToken = getBotToken();
+    if (!botToken) return reject(new Error("missing telegram bot token"));
     const body = JSON.stringify(payload || {});
     const req = https.request(
       {
         hostname: "api.telegram.org",
-        path: `/bot${BOT_TOKEN}/${pathname}`,
+        path: `/bot${botToken}/${pathname}`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -147,4 +166,22 @@ async function runLoop() {
   }
 }
 
-runLoop();
+function startBotServer() {
+  ensureStoreReady();
+  return runLoop();
+}
+
+if (require.main === module) {
+  startBotServer();
+}
+
+module.exports = {
+  loadConfig,
+  getBotToken,
+  poll,
+  processUpdate,
+  telegramPost,
+  answerCallbackQuery,
+  runLoop,
+  startBotServer,
+};

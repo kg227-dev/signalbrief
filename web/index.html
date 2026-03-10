@@ -387,27 +387,7 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       </div>
       <p class="section-subtitle">Select from Industries and Capabilities below. Pick at least 2 total.</p>
 
-      <div class="topic-grid" id="topicGrid">
-        <div class="topic-group-label">Industries</div>
-        <div class="topic-chip" data-topic="HEALTHCARE" onclick="toggleTopic(this)"><span class="check"></span> Healthcare</div>
-        <div class="topic-chip" data-topic="FINANCIAL SERVICES" onclick="toggleTopic(this)"><span class="check"></span> Financial Services</div>
-        <div class="topic-chip" data-topic="PE×M&A" onclick="toggleTopic(this)"><span class="check"></span> Private Equity &amp; M&amp;A</div>
-        <div class="topic-chip" data-topic="ENERGY" onclick="toggleTopic(this)"><span class="check"></span> Energy</div>
-        <div class="topic-chip" data-topic="CONSUMER" onclick="toggleTopic(this)"><span class="check"></span> Consumer &amp; Retail</div>
-        <div class="topic-chip" data-topic="LIFE SCIENCES" onclick="toggleTopic(this)"><span class="check"></span> Life Sciences</div>
-        <div class="topic-chip" data-topic="TECHNOLOGY" onclick="toggleTopic(this)"><span class="check"></span> Technology</div>
-        <div class="topic-chip" data-topic="INDUSTRIALS" onclick="toggleTopic(this)"><span class="check"></span> Industrials</div>
-        <div class="topic-chip" data-topic="REAL ESTATE" onclick="toggleTopic(this)"><span class="check"></span> Real Estate</div>
-        <div class="topic-chip" data-topic="PUBLIC SECTOR" onclick="toggleTopic(this)"><span class="check"></span> Public Sector</div>
-        <div class="topic-group-label">Capabilities</div>
-        <div class="topic-chip" data-topic="AI×TECH" onclick="toggleTopic(this)"><span class="check"></span> AI &amp; Technology</div>
-        <div class="topic-chip" data-topic="STRATEGY" onclick="toggleTopic(this)"><span class="check"></span> Strategy</div>
-        <div class="topic-chip" data-topic="POLICY×REGULATORY" onclick="toggleTopic(this)"><span class="check"></span> Policy &amp; Regulatory</div>
-        <div class="topic-chip" data-topic="SUSTAINABILITY" onclick="toggleTopic(this)"><span class="check"></span> Sustainability &amp; ESG</div>
-        <div class="topic-chip" data-topic="DIGITAL" onclick="toggleTopic(this)"><span class="check"></span> Digital Transformation</div>
-        <div class="topic-chip" data-topic="M&A ADVISORY" onclick="toggleTopic(this)"><span class="check"></span> M&amp;A Advisory</div>
-        <div class="topic-chip" data-topic="TALENT" onclick="toggleTopic(this)"><span class="check"></span> Talent &amp; Workforce</div>
-      </div>
+      <div class="topic-grid" id="topicGrid"></div>
 
       <div class="custom-topic-input">
         <input type="text" class="input-field" placeholder="Custom topic — e.g. GLP-1, DOGE, your client name" id="customTopic">
@@ -526,8 +506,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
       <div class="input-group" style="margin-top:16px;">
         <label class="input-label">Items per digest</label>
         <div class="size-toggle" style="margin-top:6px;" id="sizeToggle">
-          <div class="size-pill selected" data-size="5" onclick="selectSize(this)">5 items — quick scan</div>
-          <div class="size-pill" data-size="10" onclick="selectSize(this)">10 items — full picture</div>
+          <div class="size-pill selected" data-size="5" onclick="selectItemsPerDigest(this)">5 items — quick scan</div>
+          <div class="size-pill" data-size="10" onclick="selectItemsPerDigest(this)">10 items — full picture</div>
         </div>
       </div>
     </div>
@@ -625,7 +605,18 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
 </div>
 
-<script src="app.js"></script>
+<script src="preferences-topic-runtime.js"></script>
+<script src="preferences-schedule-runtime.js"></script>
+<script src="preferences-state-core-runtime.js"></script>
+<script src="preferences-state-model-runtime.js"></script>
+<script src="preferences-runtime.js"></script>
+<script src="preferences-state-runtime.js"></script>
+<script src="preferences-shared.js"></script>
+<script src="index-helpers-runtime.js"></script>
+<script src="index-form-submit-runtime.js"></script>
+<script src="index-form-context-runtime.js"></script>
+<script src="index-form-runtime.js"></script>
+<script src="index.js"></script>
 
 </body>
 </html>

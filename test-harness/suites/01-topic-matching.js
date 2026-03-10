@@ -1,5 +1,5 @@
-const { buildDigestForPersona, splitUserTopics, itemMatchesPersonaTopic } = require("../pipeline");
-const { mean } = require("../evaluator");
+const { buildDigestForPersona, splitUserTopics, itemMatchesPersonaTopic } = require("../runtime/pipeline");
+const { mean } = require("../runtime/evaluator");
 
 module.exports = {
   id: "01-topic-matching",
@@ -15,7 +15,7 @@ module.exports = {
     let totalLeaks = 0;
 
     for (const persona of personas) {
-      const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime);
+      const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime.digestPolicies);
       const { standardTopicsLower, customKeywords } = splitUserTopics(persona.topics || []);
 
       const leakItems = [];

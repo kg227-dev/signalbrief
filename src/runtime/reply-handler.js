@@ -1,3 +1,3 @@
-const runtime = require("./reply-handler-runtime");
+"use strict";
 
-module.exports = runtime;
+module.exports = require("./reply/reply-handler-runtime");

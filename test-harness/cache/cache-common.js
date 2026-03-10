@@ -20,7 +20,7 @@ function tryParseJson(raw, context) {
   }
 }
 
-function httpsPost(hostname, pathName, headers, body, isForm = false, timeoutMs = 60000) {
+function sendHttpPostRequest(hostname, pathName, headers, body, isForm = false, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
     const data = isForm ? body : JSON.stringify(body);
     const req = https.request(
@@ -64,7 +64,7 @@ async function httpsPostWithRetry(hostname, pathName, headers, body, opts = {}) 
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await httpsPost(hostname, pathName, headers, body, opts.isForm === true, timeoutMs);
+      return await sendHttpPostRequest(hostname, pathName, headers, body, opts.isForm === true, timeoutMs);
     } catch (err) {
       lastErr = err;
       const msg = String(err?.message || "");
@@ -143,7 +143,7 @@ function parseJsonObjectLenient(rawText) {
 module.exports = {
   qaDebug,
   stableHash,
-  httpsPost,
+  sendHttpPostRequest,
   httpsPostWithRetry,
   parseJsonArrayLenient,
   parseJsonObjectLenient,

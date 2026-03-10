@@ -1,0 +1,361 @@
+const https = require("https");
+const fs = require("fs");
+const path = require("path");
+const { serveFile, json, requireJsonBody } = require("./server-request-runtime");
+const {
+  normalizeReferralToken,
+  escapeHtml,
+  formatPublicDigestDateLabel,
+  renderPublicDigestPage: renderPublicDigestPageTemplate,
+  renderPublicDigestMissingPage,
+} = require("./server-render-runtime");
+const { createStore } = require("../src/platform/store");
+const { loadConfig } = require("../src/platform/config");
+const { sendEmail, sendWelcomeEmail, sendReferralThankYou, signUnsubEmail } = require("../src/platform/mailer");
+const {
+  appendEngagementEventChecked,
+  buildDigestId,
+  normalizeUrl: normalizeEngagementUrl,
+  emitIgnoredEventsIfDue,
+  loadEngagementEvents,
+} = require("../src/domains/engagement");
+const { computeQualityTrend } = require("../src/domains/digest");
+const {
+  digestRunStatus,
+  queueDigestTrigger,
+  runDigestTrigger,
+  startDigestTrigger,
+} = require("../digest-runner");
+const {
+  estimateCost: estimateSandboxCost,
+  runPipeline: runSandboxPipeline,
+} = require("../src/sandbox-pipeline-runtime");
+const {
+  verifyAdminPassword,
+  createAdminSession,
+  clearAdminSessionByRequest,
+  getAdminActor,
+  isAdminAuthed,
+  checkLoginRate,
+} = require("./admin-auth");
+const { createCoreApiRouteHandler } = require("./api/core");
+const { createAdminApiRouteHandler } = require("./api/admin");
+const { createPublicStaticRouteHandler } = require("./api/public");
+const { createAdminOpsService } = require("./services/admin-ops");
+const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
+const { createSignupRateLimiter } = require("./services/web-rate-limit");
+const { blankReengagementState, resetReengagementState } = require("./services/reengagement-state");
+const { archiveRelevanceScore } = require("./services/archive-scoring");
+const {
+  parseEtNowParts,
+  formatTimeEt,
+  normalizeDeliveryTimeInput,
+  formatDaysLabel,
+  computeNextDeliveryEt,
+} = require("./services/delivery-schedule");
+const { createWebUserHandlers } = require("./services/web-user-handlers");
+const {
+  WEB_DIR,
+  APP_ROOT,
+  CANONICAL_HOST,
+  PUBLIC_HOSTS,
+  getServerPort,
+  getBaseUrl,
+  getArchiveLegacyDeprecationDeadlineUtc,
+  getSchedulerHeartbeatFile,
+} = require("./server-runtime-env-runtime");
+const {
+  INDUSTRY_TOPICS,
+  CAPABILITY_TOPICS,
+  DEFAULT_TOPICS,
+  PROTECTED_FIELDS,
+} = require("./server-runtime-topic-config-runtime");
+const {
+  toEtDateKey,
+  decodeDigestIdParam,
+  sendTransparentGif,
+  readArchiveFiles,
+  getAllowedArchiveDates,
+  normalizeBookmarkUrl,
+  createSendMagicLinkEmail,
+  createSendTelegramText,
+} = require("./server-runtime-utils-runtime");
+
+const webStore = createStore();
+const { initStore, readUser, writeUser, allUsers, generateToken, findUserByToken } = webStore;
+const CONFIG = loadConfig();
+
+let storeInitialized = false;
+function ensureStoreInitialized() {
+  if (storeInitialized) return;
+  initStore();
+  storeInitialized = true;
+}
+
+const { checkRateLimit } = createSignupRateLimiter({
+  ipLimit: 5,
+  ipWindowMs: 15 * 60 * 1000,
+  emailCooldownMs: 10 * 60 * 1000,
+});
+
+const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
+const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
+const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
+const ARCHIVE_LEGACY_USAGE_LOG = path.join(__dirname, "../data/archive-legacy-usage.jsonl");
+
+const appendWebEngagementEvent = (payload, context) => (
+  appendEngagementEventChecked(payload, { scope: "web", context })
+);
+
+const {
+  isLegacyArchiveEndpointEnabled,
+  recordLegacyArchiveUsage,
+  readJsonLineLog,
+  parseIsoTs,
+  computeFeedbackTrend,
+  getRecentAutoAdjustmentsForUser,
+  loadCostRunsNewest,
+  getCachedOrRefreshSchedulerHeartbeat,
+  maskEmail,
+  summarizeMessage,
+  hashText,
+  logAdminMessageEvent,
+  logAdminActionEvent,
+} = createAdminOpsService({
+  runtime: {
+    fs,
+    path,
+  },
+  files: {
+    costLogPath: COST_LOG_PATH,
+    schedulerHeartbeatFile: getSchedulerHeartbeatFile,
+    adminMessageLog: ADMIN_MESSAGE_LOG,
+    adminActionLog: ADMIN_ACTION_LOG,
+    archiveLegacyUsageLog: ARCHIVE_LEGACY_USAGE_LOG,
+  },
+  requestContext: {
+    getRequestHost,
+    getClientIp,
+    getAdminActor,
+  },
+  loaders: {
+    loadEngagementEvents,
+  },
+  flags: {
+    archiveLegacyDeprecationDeadlineUtc: getArchiveLegacyDeprecationDeadlineUtc,
+  },
+});
+const sendMagicLinkEmail = createSendMagicLinkEmail({
+  sendEmail,
+  getBaseUrl,
+});
+
+const sendTelegramText = createSendTelegramText({
+  https,
+  getToken: () => CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken,
+});
+
+const readArchiveFilesForDir = (archiveDir) => readArchiveFiles({
+  fs,
+  archiveDir,
+});
+
+const getAllowedArchiveDatesForUser = (user, archiveDir, files) => getAllowedArchiveDates({
+  user,
+  archiveDir,
+  files,
+  fs,
+  path,
+  writeUser,
+});
+
+// sendWelcomeEmail is defined in mailer.js and imported above
+
+const {
+  handleSignup,
+  handleSettings,
+  handleAdminRunDigest,
+} = createWebUserHandlers({
+  requireJsonBody,
+  json,
+  getClientIp,
+  checkRateLimit,
+  allUsers,
+  findUserByToken,
+  normalizeReferralToken,
+  generateToken,
+  writeUser,
+  sendReferralThankYou,
+  sendWelcomeEmail,
+  queueDigestTrigger,
+  runDigestTrigger,
+  startDigestTrigger,
+  getBaseUrl,
+  DEFAULT_TOPICS,
+  PROTECTED_FIELDS,
+  isAdminAuthed,
+  logAdminActionEvent,
+});
+
+const CORE_ROUTE_DEPS = {
+  json,
+  DEFAULT_TOPICS,
+  INDUSTRY_TOPICS,
+  CAPABILITY_TOPICS,
+  findUserByToken,
+  handleSignup,
+  handleSettings,
+  signUnsubEmail,
+  allUsers,
+  writeUser,
+  blankReengagementState,
+  isLegacyArchiveEndpointEnabled,
+  recordLegacyArchiveUsage,
+  getArchiveLegacyDeprecationDeadlineUtc,
+  readArchiveFiles: readArchiveFilesForDir,
+  getAllowedArchiveDates: getAllowedArchiveDatesForUser,
+  archiveRelevanceScore,
+  path,
+  fs,
+  APP_ROOT,
+  decodeDigestIdParam,
+  buildDigestId,
+  toEtDateKey,
+  appendEngagementEventChecked: appendWebEngagementEvent,
+  resetReengagementState,
+  sendTransparentGif,
+  normalizeEngagementUrl,
+  requireJsonBody,
+  normalizeBookmarkUrl,
+  sendMagicLinkEmail,
+};
+
+const ADMIN_ROUTE_DEPS = {
+  json,
+  isAdminAuthed,
+  getClientIp,
+  checkLoginRate,
+  requireJsonBody,
+  CONFIG,
+  verifyAdminPassword,
+  createAdminSession,
+  clearAdminSessionByRequest,
+  getBaseUrl,
+  emitIgnoredEventsIfDue,
+  loadCostRunsNewest,
+  allUsers,
+  loadEngagementEvents,
+  parseIsoTs,
+  computeFeedbackTrend,
+  digestRunStatus,
+  getCachedOrRefreshSchedulerHeartbeat,
+  readJsonLineLog,
+  ADMIN_MESSAGE_LOG,
+  ADMIN_ACTION_LOG,
+  maskEmail,
+  getRecentAutoAdjustmentsForUser,
+  logAdminActionEvent,
+  normalizeDeliveryTimeInput,
+  writeUser,
+  sendMagicLinkEmail,
+  handleAdminRunDigest,
+  logAdminMessageEvent,
+  summarizeMessage,
+  hashText,
+  escapeHtml,
+  sendEmail,
+  sendTelegramText,
+  formatTimeEt,
+  parseEtNowParts,
+  computeNextDeliveryEt,
+  formatDaysLabel,
+  computeQualityTrend,
+  estimateSandboxCost,
+  runSandboxPipeline,
+};
+
+const PUBLIC_ROUTE_DEPS = {
+  path,
+  fs,
+  APP_ROOT,
+  readArchiveFiles: readArchiveFilesForDir,
+  renderPublicDigestMissingPage,
+  formatPublicDigestDateLabel,
+  renderPublicDigestPage: (payload) => renderPublicDigestPageTemplate({
+    ...payload,
+    baseUrl: getBaseUrl(),
+  }),
+  isAdminAuthed,
+  serveFile,
+  WEB_DIR,
+};
+
+const handleCoreApiRoute = createCoreApiRouteHandler(CORE_ROUTE_DEPS);
+const handleAdminApiRoute = createAdminApiRouteHandler(ADMIN_ROUTE_DEPS);
+const handlePublicStaticRoute = createPublicStaticRouteHandler(PUBLIC_ROUTE_DEPS);
+
+async function handleWebRequest(req, res) {
+  try {
+    ensureStoreInitialized();
+    const port = getServerPort();
+    const url = new URL(req.url, `http://localhost:${port}`);
+    const pathname = url.pathname;
+    const host = getRequestHost(req);
+    const scheme = getRequestScheme(req);
+
+    // Enforce a single canonical public origin for SEO + cache consistency.
+    if (PUBLIC_HOSTS.has(host) && (host !== CANONICAL_HOST || scheme !== "https")) {
+      const location = `https://${CANONICAL_HOST}${pathname}${url.search}`;
+      res.writeHead(301, {
+        Location: location,
+        "Cache-Control": "public, max-age=300",
+      });
+      return res.end();
+    }
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type" });
+      return res.end();
+    }
+
+    const routeCtx = { req, res, url, pathname };
+
+    const coreHandled = await handleCoreApiRoute(routeCtx);
+    if (coreHandled !== false) return;
+
+    const adminHandled = await handleAdminApiRoute(routeCtx);
+    if (adminHandled !== false) return;
+
+    const publicHandled = handlePublicStaticRoute(routeCtx);
+    if (publicHandled !== false) return;
+
+    res.writeHead(404);
+    res.end("Not found");
+  } catch (err) {
+    console.error(`[server error] ${req.method} ${req.url} →`, err.message);
+    if (!res.headersSent) {
+      res.writeHead(500);
+      res.end("Internal server error");
+    }
+  }
+}
+
+let crashProtectionInstalled = false;
+function installCrashProtection() {
+  if (crashProtectionInstalled) return;
+  crashProtectionInstalled = true;
+  process.on("uncaughtException", (err) => {
+    console.error("[uncaughtException]", err.message, err.stack);
+  });
+  process.on("unhandledRejection", (err) => {
+    console.error("[unhandledRejection]", err);
+  });
+}
+
+module.exports = {
+  ensureStoreInitialized,
+  getServerPort,
+  handleWebRequest,
+  installCrashProtection,
+};

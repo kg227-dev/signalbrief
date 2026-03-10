@@ -1,3 +1,3 @@
-const runtime = require("./sandbox-pipeline-runtime");
+"use strict";
 
-module.exports = runtime;
+module.exports = require("./sandbox-pipeline-runtime");

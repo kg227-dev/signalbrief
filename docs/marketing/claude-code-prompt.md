@@ -96,7 +96,7 @@ const TRANSPARENT_GIF = Buffer.from(
 
 **Goal:** Automatically email non-openers before they go fully cold. Pause them cleanly if they stay dark. Protect Resend sender reputation.
 
-**Architecture decision:** Build this as a standalone script `reengagement.js` at the project root, run by a new LaunchAgent plist. It should be safe to run multiple times per day — it must be idempotent (don't send the same email twice). Use a simple `reengagement_state` object on the user record to track what's been sent.
+**Architecture decision:** Build this as a standalone script at `src/jobs/reengagement-runtime.js`, run by a new LaunchAgent plist. It should be safe to run multiple times per day — it must be idempotent (don't send the same email twice). Use a simple `reengagement_state` object on the user record to track what's been sent.
 
 **Schema addition to `store.js` `defaultUser()`:**
 ```js
@@ -108,7 +108,7 @@ reengagement_state: {
 }
 ```
 
-**Logic in `reengagement.js`:**
+**Logic in `src/jobs/reengagement-runtime.js`:**
 
 Read all users where `status === "active"` and `preferences.email_enabled === true`. For each user:
 
@@ -186,7 +186,7 @@ Read all users where `status === "active"` and `preferences.email_enabled === tr
 - `GET /api/pause?token=:token` — Set `user.status = "paused"`, `user.preferences.email_enabled = false`. Redirect to `/settings?token=:token&paused=1`.
 - `GET /api/reactivate?token=:token` — Set `user.status = "active"`, `user.preferences.email_enabled = true`. Reset `reengagement_state` to all-null. Redirect to `/settings?token=:token&reactivated=1`. Show a small confirmation banner on the settings page for these states (check `?paused=1` and `?reactivated=1` params).
 
-**LaunchAgent for `reengagement.js`:** Create `com.jarvis.signalbrief-reengagement.plist` in the same style as the existing plists. Run daily at 8:00 AM ET (after digests have been sent). Document this in CLAUDE.md.
+**LaunchAgent for `src/jobs/reengagement-runtime.js`:** Create `com.jarvis.signalbrief-reengagement.plist` in the same style as the existing plists. Run daily at 8:00 AM ET (after digests have been sent). Document this in CLAUDE.md.
 
 ---
 
@@ -275,11 +275,11 @@ Use the same card/tile styling already established in `admin.html`. No new CSS f
 ## Code Quality Requirements
 
 - **Zero new npm dependencies.** Everything must use Node.js built-ins (`https`, `http`, `fs`, `path`, `crypto`, `child_process`). If you feel you need a library, find a way without it.
-- **Idempotency on all scheduled jobs.** `reengagement.js` must be safe to run multiple times without double-sending emails. Use the state fields on the user record as the source of truth.
+- **Idempotency on all scheduled jobs.** `src/jobs/reengagement-runtime.js` must be safe to run multiple times without double-sending emails. Use the state fields on the user record as the source of truth.
 - **Error handling.** Never let a failed re-engagement email or tracking pixel crash the main server. All lifecycle email sends should be non-blocking `.catch(e => console.error(...))`.
 - **No breaking changes to existing behavior.** The digest pipeline, signup flow, and Telegram handler should continue to work exactly as before.
-- **Log everything.** Use the same `console.log` format as the rest of the codebase: `[module] message`. For `reengagement.js`, write to `/tmp/signalbrief-reengagement.log` using the same `appendFileSync` pattern as `LOG_FILE` in `digest.js`.
-- **Update `CLAUDE.md`** after completing all features: add `reengagement.js` to the Key files section, add the new LaunchAgent label, and document the new user store fields (`last_email_open_at`, `email_opens_total`, `reengagement_state`, `signup_referral_source`).
+- **Log everything.** Use the same `console.log` format as the rest of the codebase: `[module] message`. For `src/jobs/reengagement-runtime.js`, write to `/tmp/signalbrief-reengagement.log` using the same `appendFileSync` pattern as `LOG_FILE` in `digest.js`.
+- **Update `CLAUDE.md`** after completing all features: add `src/jobs/reengagement-runtime.js` to the Key files section, add the new LaunchAgent label, and document the new user store fields (`last_email_open_at`, `email_opens_total`, `reengagement_state`, `signup_referral_source`).
 
 ## Testing Checklist
 
@@ -288,8 +288,8 @@ After building, verify:
 - [ ] A new signup triggers a welcome digest AND a welcome email
 - [ ] Navigating to `/t/[digestId]/[token]/o.gif` returns a 1×1 GIF and updates `last_email_open_at` on the user record
 - [ ] Navigating to `/` with `?ref=[valid_token]` and completing signup sends a thank-you email to the referrer and stores `signup_referral_source` on the new user
-- [ ] Running `node reengagement.js` against a user with `last_email_open_at` 5 days ago sends the day4 email and sets `reengagement_state.day4_sent_at`
-- [ ] Running `node reengagement.js` again immediately does NOT re-send the day4 email (idempotency)
+- [ ] Running `node src/jobs/reengagement-runtime.js` against a user with `last_email_open_at` 5 days ago sends the day4 email and sets `reengagement_state.day4_sent_at`
+- [ ] Running `node src/jobs/reengagement-runtime.js` again immediately does NOT re-send the day4 email (idempotency)
 - [ ] A user with 11 days of no opens gets auto-paused and receives the pause confirmation email
 - [ ] `/api/reactivate?token=:token` sets the user back to active and resets reengagement state
 - [ ] `/api/pause?token=:token` sets the user to paused

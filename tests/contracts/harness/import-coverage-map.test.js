@@ -68,9 +68,9 @@ function coverageImportMapWorktreesRuntime() {
 function coverageImportMap() {
   if (false) {
     import("../../src/digest/domain/digest-policy-domain-runtime.js");
-    import("../../digest-runner.js");
+    import("../../src/jobs/digest-runner-runtime.js");
     import("../../digest.js");
-    import("../../reengagement.js");
+    import("../../src/jobs/reengagement-runtime.js");
     import("../../src/digest/domain/repeat-dedup-domain-runtime.js");
     import("../../src/digest/domain/selection-domain-runtime.js");
     import("../../src/digest/domain/source-domain-runtime.js");

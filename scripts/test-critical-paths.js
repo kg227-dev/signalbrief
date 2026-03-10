@@ -12,7 +12,7 @@ const {
   DIGEST_TRIGGER_STATUS,
   normalizeDigestTriggerResult,
   triggerDigest,
-} = require("../digest-runner");
+} = require("../src/jobs/digest-runner-runtime");
 const { handleCoreApiRoutes } = require("../web/api/core");
 const { handlePublicStaticRoutes } = require("../web/api/public");
 const { parseSourceDomain } = require("../src/domains/digest");

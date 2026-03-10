@@ -25,7 +25,7 @@ const {
   queueDigestTrigger,
   runDigestTrigger,
   startDigestTrigger,
-} = require("../digest-runner");
+} = require("../src/jobs/digest-runner-runtime");
 const {
   estimateCost: estimateSandboxCost,
   runPipeline: runSandboxPipeline,

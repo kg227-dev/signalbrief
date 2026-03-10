@@ -1,6 +1,6 @@
 "use strict";
 
-const { queueDigestTrigger } = require("../../../digest-runner");
+const { queueDigestTrigger } = require("../../jobs/digest-runner-runtime");
 
 function createDigestCommandHandler(deps) {
   const {

@@ -1,6 +1,6 @@
 // Static dependency-links map for tools that only parse ESM import declarations.
 // Runtime code remains CommonJS; this file is for analysis fidelity only.
-import "../digest-runner.js";
+import "../src/jobs/digest-runner-runtime.js";
 import "../src/digest/domain/digest-policy-domain-runtime.js";
 import "../src/digest/domain/repeat-dedup-domain-runtime.js";
 import "../src/digest/domain/selection-domain-runtime.js";

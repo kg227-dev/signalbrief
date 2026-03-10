@@ -1,8 +1,8 @@
 // Static dependency-links map for import-graph tooling in CommonJS-heavy repos.
 import "./dependency-links-entry.mjs";
 import "../digest.js";
-import "../digest-runner.js";
-import "../reengagement.js";
+import "../src/jobs/digest-runner-runtime.js";
+import "../src/jobs/reengagement-runtime.js";
 import "../scripts/dependency-links.mjs";
 import "../scripts/marketing-weekly-report.js";
 import "../scripts/module-linkage.mjs";

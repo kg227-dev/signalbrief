@@ -6,7 +6,7 @@ const path = require("path");
 const {
   DIGEST_LOCK_EXIT_CODE,
   runDigestTrigger,
-} = require("../../digest-runner");
+} = require("../jobs/digest-runner-runtime");
 
 function getWorkerConfig() {
   const appRoot = path.resolve(__dirname, "..", "..");

@@ -6,8 +6,8 @@ const fs = require("fs");
 const path = require("path");
 
 // Static imports for modules that are safe to execute in-process.
-const digestRunner = require("../digest-runner");
-const reengagement = require("../reengagement");
+const digestRunner = require("./jobs/digest-runner-runtime");
+const reengagement = require("./jobs/reengagement-runtime");
 const marketingWeeklyReport = require("../scripts/marketing-weekly-report");
 const selectionDomain = require("./digest/domain/selection-domain-runtime");
 const botServerEntrypoint = require("../src/entrypoints/bot-server");
@@ -176,8 +176,8 @@ const EXPORT_SHAPES = [
 ];
 
 const LOADED_MODULES = [
-  ["digest-runner.js", digestRunner],
-  ["reengagement.js", reengagement],
+  ["src/jobs/digest-runner-runtime.js", digestRunner],
+  ["src/jobs/reengagement-runtime.js", reengagement],
   ["scripts/marketing-weekly-report.js", marketingWeeklyReport],
   ["src/digest/domain/selection-domain-runtime.js", selectionDomain],
   ["test-harness/cache/cache-budget.js", cacheBudget],

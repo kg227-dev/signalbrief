@@ -23,7 +23,7 @@ SignalBrief is an AI-curated daily news digest for strategy consultants. It fetc
 ## Key files
 - `digest.js` — Main pipeline: fetch news → select 7 items → enrich with Claude Haiku (adds baseScore 0-10) → per-user relevance sort (baseScore 60% + topicMatch 40%) → deliver (Telegram + email) → archive → log costs. BASE_URL const for email links.
 - `mailer.js` — Resend API (branded domain) with Gmail OAuth fallback. `List-Unsubscribe` + `List-Unsubscribe-Post` headers on all mail (RFC 8058). Also owns referral thank-you + re-engagement lifecycle emails and the open-tracking pixel URL builder.
-- `reengagement.js` — Daily lifecycle automation: day-4 nudge, day-8 pause warning, day-11 auto-pause (idempotent via `user.reengagement_state`). Logs to `/tmp/signalbrief-reengagement.log`.
+- `src/jobs/reengagement-runtime.js` — Daily lifecycle automation: day-4 nudge, day-8 pause warning, day-11 auto-pause (idempotent via `user.reengagement_state`). Logs to `/tmp/signalbrief-reengagement.log`.
 - `reply-handler.js` — Telegram reply handler. Claude-powered fuzzy intent parsing (save, more/less, add topic, /digest on-demand, questions). Telegram-first onboarding: `AWAITING_EMAIL` Map tracks chatIds mid-flow; `/start email@example.com` links existing web signups; unknown users prompted for email → account created via `handleEmailCapture()`.
 - `bot-server.js` — Telegram long-polling server (port 3002)
 - `store.js` — JSON file-based per-user data store (data/user-{chatId}.json). Includes engagement + reengagement fields (`last_email_open_at`, `email_opens_total`, `reengagement_state`, `signup_referral_source`).

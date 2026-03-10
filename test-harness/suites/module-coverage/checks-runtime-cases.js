@@ -1,7 +1,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const reengagement = require("../../../reengagement");
+const reengagement = require("../../../src/jobs/reengagement-runtime");
 const engagementEvents = require("../../../src/runtime/engagement/engagement-events-runtime");
 const { normalizeIntentPayload } = require("../../../src/runtime/reply/intent-service");
 

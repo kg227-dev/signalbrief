@@ -4,7 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const { assertNodeSyntaxFile, assertSourceIncludesFile, assertModuleExports } = require("../../../test-support/module-contract-helper.js");
 
-const TARGET_REL = "reengagement.js";
+const TARGET_REL = "src/jobs/reengagement-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtimePath = path.join(process.cwd(), "src/jobs/reengagement-runtime.js");

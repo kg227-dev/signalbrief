@@ -28,6 +28,9 @@ function normalizeTopicsForUserInput(rawTopics, opts = {}) {
   const seen = new Set();
   const topics = [];
   for (const rawTopic of rawTopics) {
+    if (typeof rawTopic !== "string" || !rawTopic.trim()) {
+      return { ok: false, error: "topics must contain non-empty strings" };
+    }
     const topic = canonicalizeTopicKey(rawTopic, defaultTopics);
     if (!topic || seen.has(topic)) continue;
     seen.add(topic);

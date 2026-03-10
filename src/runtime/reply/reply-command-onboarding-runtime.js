@@ -18,6 +18,16 @@ function createOnboardingCommandHandlers(deps) {
     USER_STATUS,
   } = deps;
 
+  const allowExampleEmails = (
+    String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
+    || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
+  );
+
+  function isBlockedExampleEmail(email) {
+    if (allowExampleEmails) return false;
+    return /@example\.com$/i.test(String(email || "").trim());
+  }
+
   function buildActiveTelegramUser(user) {
     const nowIso = new Date().toISOString();
     return {
@@ -42,6 +52,10 @@ function createOnboardingCommandHandlers(deps) {
       const normalised = email.toLowerCase().trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalised)) {
         await send(chatId, "❌ That doesn't look like a valid email. Try:\n`/start you@example.com`");
+        return;
+      }
+      if (isBlockedExampleEmail(normalised)) {
+        await send(chatId, "❌ example.com emails are blocked in production. Use your real email address.");
         return;
       }
 
@@ -101,6 +115,10 @@ function createOnboardingCommandHandlers(deps) {
     const email = emailMatch ? emailMatch[0].toLowerCase().replace(/[.,;!?]+$/, "") : "";
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       await send(chatId, "That doesn't look like a valid email. Try again — e.g. *you@gmail.com*");
+      return;
+    }
+    if (isBlockedExampleEmail(email)) {
+      await send(chatId, "❌ example.com emails are blocked in production. Please send your real email.");
       return;
     }
 

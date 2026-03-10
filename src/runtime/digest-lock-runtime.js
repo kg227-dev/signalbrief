@@ -9,6 +9,61 @@ const LOCK_STATES = Object.freeze({
   IO_ERROR: "io_error",
 });
 
+function parseDigestLockPid(lock) {
+  const pid = Number(lock?.pid);
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  return pid;
+}
+
+function isPidAlive(pid, opts = {}) {
+  const target = Number(pid);
+  if (!Number.isInteger(target) || target <= 0) return null;
+  const probe = typeof opts.probe === "function" ? opts.probe : process.kill;
+  try {
+    probe(target, 0);
+    return true;
+  } catch (err) {
+    if (err?.code === "ESRCH") return false;
+    if (err?.code === "EPERM") return true;
+    return null;
+  }
+}
+
+function getDigestLockOwnerStatus(lock, opts = {}) {
+  const pid = parseDigestLockPid(lock);
+  if (!pid) {
+    return {
+      known: false,
+      pid: null,
+      alive: null,
+      reason: "missing_pid",
+    };
+  }
+  const alive = isPidAlive(pid, opts);
+  if (alive === true) {
+    return {
+      known: true,
+      pid,
+      alive: true,
+      reason: "alive",
+    };
+  }
+  if (alive === false) {
+    return {
+      known: true,
+      pid,
+      alive: false,
+      reason: "dead",
+    };
+  }
+  return {
+    known: true,
+    pid,
+    alive: null,
+    reason: "unknown",
+  };
+}
+
 function readDigestLockState(lockFile, staleMs, opts = {}) {
   if (!fs.existsSync(lockFile)) return null;
 
@@ -97,6 +152,9 @@ function clearDigestLockFile(lockFile) {
 
 module.exports = {
   LOCK_STATES,
+  parseDigestLockPid,
+  isPidAlive,
+  getDigestLockOwnerStatus,
   readDigestLockState,
   clearDigestLockFile,
 };

@@ -22,6 +22,7 @@ const {
   LOCK_STATES,
   readDigestLockState,
   clearDigestLockFile,
+  getDigestLockOwnerStatus,
 } = require("../platform/scheduler");
 const { computeDigestQualityScore } = require("../domains/digest");
 const { applyAutoTopicLearning } = require("../domains/personalization");
@@ -268,7 +269,27 @@ function acquireDigestLock(mode) {
         };
       }
     } else if (existing.state === LOCK_STATES.VALID) {
-      return { ok: false, reason: "locked", lock: existing };
+      const owner = getDigestLockOwnerStatus(existing);
+      if (owner.alive === false) {
+        const clearOutcome = clearDigestLock();
+        if (!clearOutcome.ok) {
+          return {
+            ok: false,
+            reason: "pid_dead_uncleared",
+            lock: {
+              ...existing,
+              state: "pid_dead_uncleared",
+              error: `dead_pid_lock_clear_failed:${clearOutcome.code || "unknown"}`,
+              clear_error: clearOutcome.message || null,
+              clear_error_code: clearOutcome.error_code || null,
+              owner_pid: owner.pid,
+              owner_alive: false,
+            },
+          };
+        }
+      } else {
+        return { ok: false, reason: "locked", lock: existing };
+      }
     } else {
       log(`⚠️ Digest lock requires manual intervention (state=${existing.state}, detail=${existing.error || "unknown"})`);
       return { ok: false, reason: existing.state, lock: existing };
@@ -571,6 +592,10 @@ async function main() {
   const suppressWelcome = args.includes("--suppressWelcome");
   const runMode = targetChatId ? "targeted" : "scheduled";
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const allowExampleEmails = (
+    String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
+    || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
+  );
 
   const lock = acquireDigestLock(runMode);
   if (!lock.ok) {
@@ -591,6 +616,7 @@ async function main() {
     toEtDateString,
     CONFIG,
     log,
+    allowExampleEmails,
   });
   const {
     dueUsers,

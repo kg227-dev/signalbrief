@@ -5,6 +5,7 @@ const {
   LOCK_STATES,
   readDigestLockState,
   clearDigestLockFile,
+  getDigestLockOwnerStatus,
 } = require("../runtime/digest-lock-runtime");
 const {
   toPositiveIntOrDefault,
@@ -23,11 +24,13 @@ const LOCK_STATE_STALE = LOCK_STATES.STALE;
 const LOCK_STATE_CORRUPT = LOCK_STATES.CORRUPT;
 const LOCK_STATE_IO_ERROR = LOCK_STATES.IO_ERROR;
 const LOCK_STATE_STALE_UNCLEARED = "stale_uncleared";
+const LOCK_STATE_PID_DEAD_UNCLEARED = "pid_dead_uncleared";
 const LOCK_STATE_ABSENT = "absent";
 const LOCK_UNHEALTHY_STATES = new Set([
   LOCK_STATE_CORRUPT,
   LOCK_STATE_IO_ERROR,
   LOCK_STATE_STALE_UNCLEARED,
+  LOCK_STATE_PID_DEAD_UNCLEARED,
 ]);
 const DIGEST_TRIGGER_STATUS = Object.freeze({
   QUEUED: "queued",
@@ -147,6 +150,33 @@ function digestRunStatus() {
   }
 
   if (lock.state === LOCK_STATE_VALID) {
+    const owner = getDigestLockOwnerStatus(lock);
+    if (owner.alive === false) {
+      const clearOutcome = clearDigestRunLock();
+      if (clearOutcome.ok) {
+        if (isDigestRunnerDebug()) {
+          console.warn(`[digest-runner] cleared lock owned by dead pid=${owner.pid}`);
+        }
+        return { running: false, state: LOCK_STATE_ABSENT, lock: null };
+      }
+      logLockWarning(
+        LOCK_STATE_PID_DEAD_UNCLEARED,
+        `pid=${owner.pid};failed_to_clear_dead_lock:${clearOutcome.code || "unknown"}`
+      );
+      return {
+        running: true,
+        state: LOCK_STATE_PID_DEAD_UNCLEARED,
+        lock: {
+          ...lock,
+          state: LOCK_STATE_PID_DEAD_UNCLEARED,
+          error: `failed_to_clear_dead_lock:${clearOutcome.code || "unknown"}`,
+          clear_error: clearOutcome.message || null,
+          clear_error_code: clearOutcome.error_code || null,
+          owner_pid: owner.pid,
+          owner_alive: false,
+        },
+      };
+    }
     return { running: true, state: LOCK_STATE_VALID, lock };
   }
 

@@ -51,13 +51,14 @@ function readOption(options, ...keys) {
   return "";
 }
 
-function run(command, args, { cwd = ROOT, label = "", capture = false } = {}) {
+function run(command, args, { cwd = ROOT, label = "", capture = false, env = null } = {}) {
   const pretty = [command, ...args].join(" ");
   log(`${label ? `${label}: ` : ""}${pretty}`);
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
     stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    env: env ? { ...process.env, ...env } : process.env,
   });
   if (result.status !== 0) {
     const detail = capture
@@ -233,7 +234,13 @@ async function main() {
     "--exclude=tmp",
     "--exclude=.desloppify",
     ".",
-  ], { label: "pack" });
+  ], {
+    label: "pack",
+    env: {
+      COPYFILE_DISABLE: "1",
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+    },
+  });
 
   run("scp", [
     "-i",

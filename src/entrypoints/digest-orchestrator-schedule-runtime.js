@@ -9,12 +9,20 @@ function resolveDueUsers(deps) {
     toEtDateString,
     CONFIG,
     log,
+    allowExampleEmails = true,
   } = deps;
 
   const etNow = getEtNow();
   const todayET = etNow.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const nowMinutes = etNow.getHours() * 60 + etNow.getMinutes();
-  const allActive = allUsers().filter((user) => user.status === USER_STATUS.ACTIVE);
+  const activeUsers = allUsers().filter((user) => user.status === USER_STATUS.ACTIVE);
+  const allActive = allowExampleEmails
+    ? activeUsers
+    : activeUsers.filter((user) => !/@example\.com$/i.test(String(user?.email || "").trim()));
+  const blockedExampleCount = activeUsers.length - allActive.length;
+  if (blockedExampleCount > 0 && !targetChatId) {
+    log(`[schedule] excluded ${blockedExampleCount} @example.com account(s) from production delivery`);
+  }
 
   let dueUsers;
   if (targetChatId) {

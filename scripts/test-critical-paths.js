@@ -2,6 +2,7 @@
 "use strict";
 
 const assert = require("assert");
+const { spawnSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
@@ -10,6 +11,7 @@ const path = require("path");
 const {
   DIGEST_RUN_LOCK_FILE,
   DIGEST_TRIGGER_STATUS,
+  digestRunStatus,
   normalizeDigestTriggerResult,
   triggerDigest,
 } = require("../src/jobs/digest-runner-runtime");
@@ -165,10 +167,24 @@ async function testDigestRunnerLockContract() {
     const unhealthy = normalizeDigestTriggerResult(unhealthyRun);
     assert.strictEqual(unhealthyRun.ok, false, "corrupt lock should block trigger");
     assert.strictEqual(unhealthy.status, DIGEST_TRIGGER_STATUS.LOCK_UNHEALTHY, "corrupt lock should normalize as LOCK_UNHEALTHY");
+
+    const deadPidProbe = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+      encoding: "utf8",
+    });
+    const deadPid = Number(String(deadPidProbe.stdout || "").trim());
+    assert.ok(Number.isInteger(deadPid) && deadPid > 0, "dead pid probe should return a pid");
+    fs.writeFileSync(DIGEST_RUN_LOCK_FILE, JSON.stringify({
+      startedAt: new Date().toISOString(),
+      mode: "critical-test",
+      pid: deadPid,
+    }));
+    const recovered = digestRunStatus();
+    assert.strictEqual(recovered.running, false, "dead-pid lock should self-heal and not block runs");
+    assert.strictEqual(fs.existsSync(DIGEST_RUN_LOCK_FILE), false, "dead-pid lock should be cleared from disk");
   } finally {
     if (lockBackup == null) {
       try {
-        fs.unlinkSync(DIGEST_RUN_LOCK_FILE);
+        if (fs.existsSync(DIGEST_RUN_LOCK_FILE)) fs.unlinkSync(DIGEST_RUN_LOCK_FILE);
       } catch (err) {
         process.stderr.write(`[critical-tests] lock cleanup failed: ${err.message}\n`);
       }

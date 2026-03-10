@@ -359,6 +359,8 @@ function toggleDark() {
 function initDarkModeToggleBinding() {
   const toggle = document.getElementById("darkToggle");
   if (!toggle) return;
+  // If HTML already binds onclick, avoid double-toggle on a single click.
+  if (typeof toggle.onclick === "function" || toggle.getAttribute("onclick")) return;
   toggle.addEventListener("click", (event) => {
     event.preventDefault();
     toggleDark();

@@ -153,12 +153,21 @@ function addCustomTopic() {
   updateProgress();
 }
 
-document.getElementById("customTopic").addEventListener("keypress", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    addCustomTopic();
-  }
-});
+const customTopicInput = document.getElementById("customTopic");
+if (customTopicInput) {
+  customTopicInput.addEventListener("keypress", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addCustomTopic();
+    }
+  });
+}
+
+function isElementVisible(el) {
+  if (!el) return false;
+  if (el.style && typeof el.style.display === "string" && el.style.display === "none") return false;
+  return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+}
 
 // -- Depth -------------------------------------------------------------------
 function setSelectedDepth(depthOption) {
@@ -277,12 +286,12 @@ const indexForm = typeof IndexFormRuntime.createIndexFormContext === "function"
   : null;
 
 function showOnboarding() {
-  if (indexForm && typeof indexForm.showOnboarding === "function") {
-    indexForm.showOnboarding();
-    return;
-  }
   const hero = document.querySelector(".hero");
   const onboard = document.getElementById("onboard-form");
+  if (indexForm && typeof indexForm.showOnboarding === "function") {
+    indexForm.showOnboarding();
+    if (isElementVisible(onboard) && !isElementVisible(hero)) return;
+  }
   if (!hero || !onboard) return;
   hero.style.display = "none";
   onboard.style.display = "block";
@@ -290,12 +299,12 @@ function showOnboarding() {
 }
 
 function showLanding() {
-  if (indexForm && typeof indexForm.showLanding === "function") {
-    indexForm.showLanding();
-    return;
-  }
   const hero = document.querySelector(".hero");
   const onboard = document.getElementById("onboard-form");
+  if (indexForm && typeof indexForm.showLanding === "function") {
+    indexForm.showLanding();
+    if (isElementVisible(hero) && !isElementVisible(onboard)) return;
+  }
   if (!hero || !onboard) return;
   onboard.style.display = "none";
   hero.style.display = "block";
@@ -372,6 +381,8 @@ function initDarkModeState() {
 
 // Keep compatibility with any cached HTML still using inline onclick.
 window.toggleDark = toggleDark;
+window.showOnboarding = showOnboarding;
+window.showLanding = showLanding;
 
 initDarkModeToggleBinding();
 initDarkModeState();

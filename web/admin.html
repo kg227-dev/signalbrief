@@ -634,13 +634,29 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   flex-wrap:wrap;
   gap:6px;
 }
-.ceo-command-chip {
+.ceo-command-btn {
   border:1px solid var(--border);
   border-radius:999px;
   background:#fff;
-  padding:4px 8px;
+  padding:6px 10px;
   font-size:11px;
+  font-weight:600;
   color:var(--text-2);
+  cursor:pointer;
+  font-family:inherit;
+  transition:all 0.15s ease;
+}
+.ceo-command-btn:hover {
+  border-color:var(--accent);
+  color:var(--accent);
+  background:#EFF6FF;
+}
+.ceo-command-btn:disabled {
+  opacity:0.6;
+  cursor:not-allowed;
+  border-color:var(--border);
+  color:var(--text-secondary);
+  background:#F9FAFB;
 }
 .ops-actions {
   width:100%;
@@ -867,10 +883,10 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div id="ceoActionNow" class="ceo-action-now">No action required yet.</div>
       <div class="health-metric-label" style="margin-top:10px;">CEO command set</div>
       <div id="ceoCommandList" class="ceo-command-list">
-        <span class="ceo-command-chip">Refresh health data</span>
-        <span class="ceo-command-chip">Check scheduler now</span>
-        <span class="ceo-command-chip">Send test digest</span>
-        <span class="ceo-command-chip">Run full digest now</span>
+        <button type="button" class="ceo-command-btn" onclick="runCeoCommand('refresh_health', this)">Refresh health data</button>
+        <button type="button" class="ceo-command-btn" id="checkSchedulerBtn" onclick="runCeoCommand('check_scheduler', this)">Check scheduler now</button>
+        <button type="button" class="ceo-command-btn" id="testDigestBtn" onclick="runCeoCommand('send_test_digest', this)">Send test digest</button>
+        <button type="button" class="ceo-command-btn" id="runFullDigestBtn" onclick="runCeoCommand('run_full_digest', this)">Run full digest now</button>
       </div>
     </div>
     <div class="health-metric">
@@ -921,12 +937,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
         <select id="testDigestTarget" class="test-target-select" aria-label="Test digest target">
           <option value="">Loading targets…</option>
         </select>
-      </div>
-      <div class="ops-actions">
-        <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest</button>
-        <button id="runFullDigestBtn" class="btn-secondary" onclick="triggerFullDigest()">Run full digest now</button>
-        <button id="checkSchedulerBtn" class="btn-secondary" onclick="checkSchedulerNow()">Check scheduler now</button>
-        <button id="restartWorkerBtn" class="btn-secondary" onclick="restartSchedulerWorker()">Restart scheduler worker</button>
       </div>
       <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
       <div id="opsActionMsg" class="ops-action-msg"></div>
@@ -1271,6 +1281,33 @@ function setOpsActionMessage(type, message) {
   el.style.display = "block";
 }
 
+function normalizeCeoCommandId(commandId) {
+  return String(commandId || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+}
+
+function ceoCommandButtonId(commandId) {
+  const id = normalizeCeoCommandId(commandId);
+  if (id === "check_scheduler") return "checkSchedulerBtn";
+  if (id === "send_test_digest") return "testDigestBtn";
+  if (id === "run_full_digest") return "runFullDigestBtn";
+  if (id === "restart_worker") return "restartWorkerBtn";
+  return "";
+}
+
+function renderCeoCommandButtons(commands) {
+  const list = Array.isArray(commands) && commands.length
+    ? commands
+    : [{ id: "refresh_health", label: "Refresh health data", description: "Reload dashboard stats and health signals." }];
+  return list.map((cmd) => {
+    const id = normalizeCeoCommandId(cmd && cmd.id);
+    const label = cmd && cmd.label ? String(cmd.label) : "Command";
+    const detail = cmd && cmd.description ? String(cmd.description) : "";
+    const domId = ceoCommandButtonId(id);
+    const idAttr = domId ? ` id="${domId}"` : "";
+    return `<button type="button" class="ceo-command-btn"${idAttr} onclick="runCeoCommand('${id}', this)" title="${esc(detail)}">${esc(label)}</button>`;
+  }).join("");
+}
+
 function renderExecutiveSummary(health) {
   const summary = health && health.executive_summary ? health.executive_summary : null;
   const pill = document.getElementById("ceoStatusPill");
@@ -1297,7 +1334,7 @@ function renderExecutiveSummary(health) {
     actionNow.style.borderColor = "var(--border-subtle)";
     actionNow.style.background = "#fff";
     actionNow.style.color = "var(--text-2)";
-    commandList.innerHTML = `<span class="ceo-command-chip">Refresh health data</span>`;
+    commandList.innerHTML = renderCeoCommandButtons([]);
     return;
   }
 
@@ -1349,15 +1386,39 @@ function renderExecutiveSummary(health) {
   }
 
   const commands = Array.isArray(summary.commands) ? summary.commands : [];
-  if (!commands.length) {
-    commandList.innerHTML = `<span class="ceo-command-chip">Refresh health data</span>`;
-  } else {
-    commandList.innerHTML = commands.map((cmd) => {
-      const label = cmd && cmd.label ? String(cmd.label) : "Command";
-      const detail = cmd && cmd.description ? String(cmd.description) : "";
-      return `<span class="ceo-command-chip" title="${esc(detail)}">${esc(label)}</span>`;
-    }).join("");
+  commandList.innerHTML = renderCeoCommandButtons(commands);
+}
+
+function runCeoCommand(commandId, triggerEl = null) {
+  const id = normalizeCeoCommandId(commandId);
+  if (id === "refresh_health") {
+    setOpsActionMessage("info", "Refreshing health data…");
+    load(true);
+    return;
   }
+  if (id === "check_scheduler") {
+    checkSchedulerNow(triggerEl);
+    return;
+  }
+  if (id === "send_test_digest") {
+    triggerTestDigest(triggerEl);
+    return;
+  }
+  if (id === "run_full_digest") {
+    triggerFullDigest(triggerEl);
+    return;
+  }
+  if (id === "restart_worker") {
+    restartSchedulerWorker(triggerEl);
+    return;
+  }
+  if (id === "review_missed_users") {
+    const panel = document.getElementById("failedDeliveryPanel");
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    setOpsActionMessage("info", "Reviewing missed deliveries section.");
+    return;
+  }
+  showToast("warn", "Command not wired yet");
 }
 
 function renderAdminMessages(entries) {
@@ -2602,24 +2663,31 @@ function renderTestDigestStatus(status) {
   const btn = document.getElementById("testDigestBtn");
   const msg = document.getElementById("testDigestMsg");
   const targetSel = document.getElementById("testDigestTarget");
+  if (!msg) return;
   const canRun = !!(targetSel && !targetSel.disabled && targetSel.value);
   const baseLabel = "🧪 Send test digest";
   if (!status || !status.state || status.state === "idle") {
-    btn.disabled = !canRun;
-    btn.textContent = baseLabel;
+    if (btn) {
+      btn.disabled = !canRun;
+      btn.textContent = baseLabel;
+    }
     msg.style.display = "none";
     return;
   }
   if (status.state === "running") {
-    btn.disabled = true;
-    btn.textContent = "🧪 Running test digest…";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "🧪 Running test digest…";
+    }
     msg.textContent = `Running for chat ${status.target_chat_id || "—"}...`;
     msg.style.color = "var(--accent)";
     msg.style.display = "block";
     return;
   }
-  btn.disabled = false;
-  btn.textContent = baseLabel;
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = baseLabel;
+  }
   msg.textContent = `${status.state === "success" ? "✅" : "❌"} ${status.message || (status.state === "success" ? "Test digest complete" : "Test digest failed")}`;
   msg.style.color = status.state === "success" ? "var(--green)" : "var(--red)";
   msg.style.display = "block";
@@ -2639,8 +2707,8 @@ async function parseApiJson(res) {
   }
 }
 
-async function checkSchedulerNow() {
-  const btn = document.getElementById("checkSchedulerBtn");
+async function checkSchedulerNow(triggerEl = null) {
+  const btn = triggerEl || document.getElementById("checkSchedulerBtn");
   const prevLabel = btn ? btn.textContent : "Check scheduler now";
   if (btn) {
     btn.disabled = true;
@@ -2678,7 +2746,7 @@ async function checkSchedulerNow() {
   }
 }
 
-async function restartSchedulerWorker() {
+async function restartSchedulerWorker(triggerEl = null) {
   const approved = await openConfirmModal(
     "Restart scheduler worker?",
     "This requests a safe worker restart. Current in-flight digest work is allowed to finish first.",
@@ -2686,7 +2754,7 @@ async function restartSchedulerWorker() {
   );
   if (!approved) return;
 
-  const btn = document.getElementById("restartWorkerBtn");
+  const btn = triggerEl || document.getElementById("restartWorkerBtn");
   const prevLabel = btn ? btn.textContent : "Restart scheduler worker";
   if (btn) {
     btn.disabled = true;
@@ -2724,7 +2792,7 @@ async function restartSchedulerWorker() {
   }
 }
 
-async function triggerFullDigest() {
+async function triggerFullDigest(triggerEl = null) {
   const approved = await openConfirmModal(
     "Run full digest now?",
     "This queues a full digest run for all active users. Use for recovery or verification.",
@@ -2732,7 +2800,7 @@ async function triggerFullDigest() {
   );
   if (!approved) return;
 
-  const btn = document.getElementById("runFullDigestBtn");
+  const btn = triggerEl || document.getElementById("runFullDigestBtn");
   const prevLabel = btn ? btn.textContent : "Run full digest now";
   if (btn) {
     btn.disabled = true;
@@ -2768,8 +2836,8 @@ async function triggerFullDigest() {
   }
 }
 
-async function triggerTestDigest() {
-  const btn = document.getElementById("testDigestBtn");
+async function triggerTestDigest(triggerEl = null) {
+  const btn = triggerEl || document.getElementById("testDigestBtn");
   const msg = document.getElementById("testDigestMsg");
   const targetSel = document.getElementById("testDigestTarget");
   const targetChatId = targetSel ? targetSel.value : "";
@@ -2781,9 +2849,11 @@ async function triggerTestDigest() {
     setOpsActionMessage("err", "Choose a Telegram-linked test target first.");
     return;
   }
-  btn.disabled = true;
-  btn.textContent = "🧪 Sending…";
-  msg.style.display = "none";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "🧪 Sending…";
+  }
+  if (msg) msg.style.display = "none";
   setOpsActionMessage("info", "Sending test digest…");
   try {
     const resp = await apiFetchJson("/api/admin/run-digest", {

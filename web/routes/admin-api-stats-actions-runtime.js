@@ -147,7 +147,7 @@ function buildAdminStatsPayload({
   return {
     summary,
     health,
-    runs: runs.slice(0, 30),
+    runs: runs.slice(0, 10),
     per_user: perUser,
     roster,
     engagement,

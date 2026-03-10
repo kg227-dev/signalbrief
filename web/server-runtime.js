@@ -63,6 +63,7 @@ const {
   getBaseUrl,
   getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
+  getSchedulerControlFile,
 } = require("./server-runtime-env-runtime");
 const {
   INDUSTRY_TOPICS,
@@ -103,6 +104,33 @@ const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json")
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
 const ARCHIVE_LEGACY_USAGE_LOG = path.join(__dirname, "../data/archive-legacy-usage.jsonl");
+const SCHEDULER_CONTROL_FILE = getSchedulerControlFile();
+
+function requestSchedulerWorkerRestart({
+  reason = "manual_admin_request",
+  source = "admin_ui",
+  requestedBy = "admin",
+} = {}) {
+  const requestId = `restart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const requestedAt = new Date().toISOString();
+  const payload = {
+    restart_worker: {
+      request_id: requestId,
+      requested_at: requestedAt,
+      requested_by: String(requestedBy || "admin"),
+      reason: String(reason || "manual_admin_request"),
+      source: String(source || "admin_ui"),
+    },
+  };
+  const dir = path.dirname(SCHEDULER_CONTROL_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(SCHEDULER_CONTROL_FILE, JSON.stringify(payload, null, 2));
+  return {
+    request_id: requestId,
+    requested_at: requestedAt,
+    control_file: SCHEDULER_CONTROL_FILE,
+  };
+}
 
 const appendWebEngagementEvent = (payload, context) => (
   appendEngagementEventChecked(payload, { scope: "web", context })
@@ -276,6 +304,7 @@ const ADMIN_ROUTE_DEPS = {
   computeQualityTrend,
   estimateSandboxCost,
   runSandboxPipeline,
+  requestSchedulerWorkerRestart,
 };
 
 const PUBLIC_ROUTE_DEPS = {

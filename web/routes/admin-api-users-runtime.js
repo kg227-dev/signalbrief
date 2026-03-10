@@ -2,6 +2,7 @@ const {
   handleUserByEmailRoute,
   handleAuditRoute,
   handleUpdateDeliveryTimeRoute,
+  handleRestartSchedulerWorkerRoute,
 } = require("./admin-api-users-actions-runtime");
 
 async function handleAdminUserRoutes(ctx, deps) {
@@ -20,6 +21,7 @@ async function handleAdminUserRoutes(ctx, deps) {
     logAdminActionEvent,
     formatTimeEt,
     handleAdminRunDigest,
+    requestSchedulerWorkerRestart,
   } = deps;
 
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
@@ -64,6 +66,19 @@ async function handleAdminUserRoutes(ctx, deps) {
         writeUser,
         logAdminActionEvent,
         formatTimeEt,
+      },
+    });
+  }
+
+  if (pathname === "/api/admin/restart-scheduler-worker" && req.method === "POST") {
+    return handleRestartSchedulerWorkerRoute({
+      ctx,
+      deps: {
+        json,
+        isAdminAuthed,
+        requireJsonBody,
+        requestSchedulerWorkerRestart,
+        logAdminActionEvent,
       },
     });
   }

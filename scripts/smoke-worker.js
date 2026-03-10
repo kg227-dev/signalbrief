@@ -8,6 +8,7 @@ const { spawn } = require("child_process");
 const ROOT = path.resolve(__dirname, "..");
 const WORKER = path.join(ROOT, "src", "entrypoints", "scheduler-worker.js");
 const HEARTBEAT = path.join("/tmp", `signalbrief-worker-smoke-${process.pid}.json`);
+const CONTROL = path.join("/tmp", `signalbrief-worker-control-smoke-${process.pid}.json`);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,9 +48,10 @@ async function waitForChildExit(child, timeoutMs = 1500) {
 async function main() {
   try {
     if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
+    if (fs.existsSync(CONTROL)) fs.unlinkSync(CONTROL);
   } catch (err) {
     if (process.env.SB_SMOKE_DEBUG === "1") {
-      process.stderr.write(`[smoke-worker] pre-run heartbeat cleanup failed: ${err.message}\n`);
+      process.stderr.write(`[smoke-worker] pre-run temp cleanup failed: ${err.message}\n`);
     }
   }
 
@@ -62,14 +64,19 @@ async function main() {
       DIGEST_POLL_MS: "1500",
       DIGEST_STARTUP_DELAY_MS: "100",
       DIGEST_RUN_TIMEOUT_MS: "60000",
+      SCHEDULER_CONTROL_FILE: CONTROL,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
   let out = "";
   let err = "";
+  let exitState = null;
   child.stdout.on("data", (buf) => { out += String(buf); });
   child.stderr.on("data", (buf) => { err += String(buf); });
+  child.on("exit", (code, signal) => {
+    exitState = { code, signal };
+  });
 
   try {
     const hb = await waitFor(() => {
@@ -93,15 +100,38 @@ async function main() {
     if (!Array.isArray(hb.digest_worker_args) || hb.digest_worker_args.join(" ") !== "--dry-run") {
       throw new Error("worker args were not applied");
     }
+
+    fs.writeFileSync(CONTROL, JSON.stringify({
+      restart_worker: {
+        request_id: `smoke_restart_${process.pid}`,
+        requested_at: new Date().toISOString(),
+        requested_by: "smoke",
+        reason: "smoke_test",
+        source: "smoke_worker",
+      },
+    }, null, 2));
+
+    const restarted = await waitFor(() => exitState, {
+      timeoutMs: 12000,
+      pollMs: 200,
+    });
+    if (!restarted) throw new Error("worker did not exit on restart request");
+    if (restarted.signal) throw new Error(`worker exited by signal ${restarted.signal}`);
+    if (Number(restarted.code) !== 0) throw new Error(`worker restart exit code was ${restarted.code}`);
+    if (fs.existsSync(CONTROL)) throw new Error("worker did not clear scheduler control file after restart request");
+
     process.stdout.write("[smoke-worker] ok\n");
   } finally {
-    child.kill("SIGTERM");
-    await waitForChildExit(child, 2000);
+    if (!exitState) {
+      child.kill("SIGTERM");
+      await waitForChildExit(child, 2000);
+    }
     try {
       if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
+      if (fs.existsSync(CONTROL)) fs.unlinkSync(CONTROL);
     } catch (err) {
       if (process.env.SB_SMOKE_DEBUG === "1") {
-        process.stderr.write(`[smoke-worker] post-run heartbeat cleanup failed: ${err.message}\n`);
+        process.stderr.write(`[smoke-worker] post-run temp cleanup failed: ${err.message}\n`);
       }
     }
   }

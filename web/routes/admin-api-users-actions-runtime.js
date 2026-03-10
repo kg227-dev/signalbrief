@@ -17,6 +17,8 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
         summary = `Set delivery time to ${details.to}`;
       } else if (action === "run_digest_targeted") {
         summary = row.success ? "Triggered digest run" : "Digest run failed";
+      } else if (action === "restart_scheduler_worker") {
+        summary = row.success ? "Requested scheduler worker restart" : "Scheduler worker restart failed";
       }
       return {
         at: row.at || null,
@@ -186,8 +188,73 @@ async function handleUpdateDeliveryTimeRoute({ ctx, deps }) {
   return true;
 }
 
+function normalizeRestartReason(rawReason) {
+  const trimmed = String(rawReason || "").trim();
+  if (!trimmed) return "manual_admin_request";
+  return trimmed.slice(0, 180);
+}
+
+async function handleRestartSchedulerWorkerRoute({ ctx, deps }) {
+  const { req, res } = ctx;
+  const {
+    json,
+    isAdminAuthed,
+    requireJsonBody,
+    requestSchedulerWorkerRestart,
+    logAdminActionEvent,
+  } = deps;
+
+  if (!isAdminAuthed(req)) {
+    json(res, { error: "admin access only" }, 403);
+    return true;
+  }
+
+  const body = await requireJsonBody(req, res);
+  if (body == null) return true;
+  const reason = normalizeRestartReason(body.reason);
+
+  try {
+    const restart = requestSchedulerWorkerRestart({
+      reason,
+      source: "admin_ui",
+    });
+
+    logAdminActionEvent(req, {
+      action: "restart_scheduler_worker",
+      success: true,
+      details: {
+        reason,
+        request_id: restart.request_id,
+        requested_at: restart.requested_at,
+      },
+    });
+
+    json(res, {
+      success: true,
+      message: "Scheduler worker restart requested. It will restart safely after in-flight work finishes.",
+      request_id: restart.request_id,
+      requested_at: restart.requested_at,
+    });
+  } catch (error) {
+    logAdminActionEvent(req, {
+      action: "restart_scheduler_worker",
+      success: false,
+      details: {
+        reason,
+        error: error.message || "restart request failed",
+      },
+    });
+
+    json(res, {
+      error: `Failed to request scheduler restart: ${error.message || "unknown error"}`,
+    }, 500);
+  }
+  return true;
+}
+
 module.exports = {
   handleUserByEmailRoute,
   handleAuditRoute,
   handleUpdateDeliveryTimeRoute,
+  handleRestartSchedulerWorkerRoute,
 };

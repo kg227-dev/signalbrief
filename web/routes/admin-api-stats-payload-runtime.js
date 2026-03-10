@@ -162,6 +162,11 @@ function buildExecutiveHealthSummary({
       label: "Run full digest now",
       description: "Queue a full delivery run for all eligible users.",
     },
+    {
+      id: "restart_worker",
+      label: "Restart scheduler worker",
+      description: "Request a safe worker restart when heartbeat is stale or blocked.",
+    },
   ];
 
   if (usersAtRisk > 0 || missed7d > 0) {

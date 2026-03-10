@@ -23,6 +23,13 @@ function getSchedulerHeartbeatFile() {
   return raw ? path.resolve(raw) : path.join(__dirname, "../data/scheduler-heartbeat.json");
 }
 
+function getSchedulerControlFile() {
+  const raw = String(process.env.SCHEDULER_CONTROL_FILE || "").trim();
+  if (raw) return path.resolve(raw);
+  const heartbeatFile = getSchedulerHeartbeatFile();
+  return path.join(path.dirname(heartbeatFile), "scheduler-control.json");
+}
+
 module.exports = {
   WEB_DIR,
   APP_ROOT,
@@ -32,4 +39,5 @@ module.exports = {
   getBaseUrl,
   getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
+  getSchedulerControlFile,
 };

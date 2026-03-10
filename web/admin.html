@@ -926,6 +926,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
         <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest</button>
         <button id="runFullDigestBtn" class="btn-secondary" onclick="triggerFullDigest()">Run full digest now</button>
         <button id="checkSchedulerBtn" class="btn-secondary" onclick="checkSchedulerNow()">Check scheduler now</button>
+        <button id="restartWorkerBtn" class="btn-secondary" onclick="restartSchedulerWorker()">Restart scheduler worker</button>
       </div>
       <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
       <div id="opsActionMsg" class="ops-action-msg"></div>
@@ -2666,6 +2667,52 @@ async function checkSchedulerNow() {
     }
   } catch (e) {
     const msg = e.message || "Network error checking scheduler";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
+async function restartSchedulerWorker() {
+  const approved = await openConfirmModal(
+    "Restart scheduler worker?",
+    "This requests a safe worker restart. Current in-flight digest work is allowed to finish first.",
+    "Request restart",
+  );
+  if (!approved) return;
+
+  const btn = document.getElementById("restartWorkerBtn");
+  const prevLabel = btn ? btn.textContent : "Restart scheduler worker";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Requesting…";
+  }
+  setOpsActionMessage("info", "Requesting scheduler worker restart…");
+
+  try {
+    const resp = await apiFetchJson("/api/admin/restart-scheduler-worker", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "manual_admin_recovery" }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to request worker restart (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || "Scheduler worker restart requested";
+    const reqId = data.request_id ? ` (${data.request_id})` : "";
+    setOpsActionMessage("ok", `✅ ${msg}${reqId}`);
+    showToast("ok", `${msg}${reqId}`);
+  } catch (e) {
+    const msg = e.message || "Network error requesting worker restart";
     setOpsActionMessage("err", `❌ ${msg}`);
     showToast("err", msg);
   } finally {

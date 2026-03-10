@@ -13,6 +13,9 @@ function getWorkerConfig() {
   const heartbeatFile = process.env.SCHEDULER_HEARTBEAT_FILE
     ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
     : path.join(appRoot, "data", "scheduler-heartbeat.json");
+  const controlFile = process.env.SCHEDULER_CONTROL_FILE
+    ? path.resolve(process.env.SCHEDULER_CONTROL_FILE)
+    : path.join(path.dirname(heartbeatFile), "scheduler-control.json");
   const pollMs = Math.max(60 * 1000, Number(process.env.DIGEST_POLL_MS || (5 * 60 * 1000)));
   const startupDelayMs = Math.max(0, Number(process.env.DIGEST_STARTUP_DELAY_MS || 3000));
   const runTimeoutMs = Math.max(60 * 1000, Number(process.env.DIGEST_RUN_TIMEOUT_MS || (25 * 60 * 1000)));
@@ -22,6 +25,7 @@ function getWorkerConfig() {
     .filter(Boolean);
   return {
     heartbeatFile,
+    controlFile,
     pollMs,
     startupDelayMs,
     runTimeoutMs,
@@ -34,8 +38,11 @@ let lastRun = null;
 let signalHandlersBound = false;
 let startupTimer = null;
 let intervalTimer = null;
+let controlTimer = null;
 let consecutiveLockUnhealthy = 0;
 let schedulerBlockedState = null;
+let pendingRestartRequest = null;
+let lastRestartPendingRequestKey = "";
 
 function getLockUnhealthyBlockThreshold() {
   return Math.max(1, Number(process.env.DIGEST_LOCK_UNHEALTHY_BLOCK_THRESHOLD || 3));
@@ -140,6 +147,92 @@ function log(msg) {
   process.stdout.write(`[worker] ${msg}\n`);
 }
 
+function readSchedulerControl(config) {
+  try {
+    if (!config.controlFile || !fs.existsSync(config.controlFile)) return null;
+    const raw = JSON.parse(fs.readFileSync(config.controlFile, "utf8"));
+    return raw && typeof raw === "object" ? raw : null;
+  } catch (err) {
+    process.stderr.write(`[worker] scheduler control read failed: ${err.message}\n`);
+    return null;
+  }
+}
+
+function clearSchedulerControl(config) {
+  try {
+    if (config.controlFile && fs.existsSync(config.controlFile)) fs.unlinkSync(config.controlFile);
+  } catch (err) {
+    process.stderr.write(`[worker] scheduler control clear failed: ${err.message}\n`);
+  }
+}
+
+function normalizeRestartRequest(control) {
+  if (!control || typeof control !== "object") return null;
+  const restart = control.restart_worker;
+  if (!restart || typeof restart !== "object") return null;
+  const requestedAt = String(restart.requested_at || "").trim();
+  if (!requestedAt) return null;
+  return {
+    requestId: String(restart.request_id || "").trim(),
+    requestedAt,
+    requestedBy: String(restart.requested_by || "admin").trim() || "admin",
+    reason: String(restart.reason || "manual_admin_request").trim() || "manual_admin_request",
+    source: String(restart.source || "admin_ui").trim() || "admin_ui",
+  };
+}
+
+function restartRequestKey(request) {
+  if (!request) return "";
+  return request.requestId || `${request.requestedAt}:${request.requestedBy}:${request.reason}`;
+}
+
+function applyRestartRequest(config, request) {
+  const req = request || pendingRestartRequest;
+  if (!req) return false;
+  pendingRestartRequest = null;
+  lastRestartPendingRequestKey = "";
+  log(
+    `restart requested${req.requestId ? ` id=${req.requestId}` : ""} by ${req.requestedBy} (${req.reason})`
+  );
+  writeHeartbeat({
+    status: "restarting",
+    restart_requested_at: req.requestedAt,
+    restart_requested_by: req.requestedBy,
+    restart_reason: req.reason,
+    restart_request_id: req.requestId || null,
+  }, config);
+  clearSchedulerControl(config);
+  process.exit(0);
+}
+
+function checkForRestartRequest(config = getWorkerConfig()) {
+  const control = readSchedulerControl(config);
+  const request = normalizeRestartRequest(control);
+  if (!request) {
+    pendingRestartRequest = null;
+    lastRestartPendingRequestKey = "";
+    return false;
+  }
+
+  pendingRestartRequest = request;
+  const key = restartRequestKey(request);
+  if (runInFlight) {
+    if (key !== lastRestartPendingRequestKey) {
+      lastRestartPendingRequestKey = key;
+      log(`restart requested but digest is in flight; will restart after current run`);
+      writeHeartbeat({
+        status: "restart_pending",
+        restart_requested_at: request.requestedAt,
+        restart_requested_by: request.requestedBy,
+        restart_reason: request.reason,
+        restart_request_id: request.requestId || null,
+      }, config);
+    }
+    return false;
+  }
+  return applyRestartRequest(config, request);
+}
+
 function setLastRunState({
   trigger,
   startedIso,
@@ -188,6 +281,7 @@ function handleDigestOutcome(outcome, trigger, config, startedAt, startedIso) {
 
   if (lockUnhealthy && consecutiveLockUnhealthy >= getLockUnhealthyBlockThreshold()) {
     blockScheduler(trigger, outcome, config);
+    checkForRestartRequest(config);
     return;
   }
 
@@ -207,13 +301,16 @@ function handleDigestOutcome(outcome, trigger, config, startedAt, startedIso) {
 
   if (skipped) {
     log(`digest skipped (${trigger}) — lock active`);
+    checkForRestartRequest(config);
     return;
   }
   if (lockUnhealthy) {
     log(`digest blocked (${trigger}) — unhealthy lock state ${outcome.code}: ${outcome.lockError || "manual intervention required"}`);
+    checkForRestartRequest(config);
     return;
   }
   log(`digest finished (${trigger}) exit=${code}${signal ? ` signal=${signal}` : ""}`);
+  checkForRestartRequest(config);
 }
 
 function handleDigestError(err, trigger, config, startedAt, startedIso) {
@@ -233,9 +330,12 @@ function handleDigestError(err, trigger, config, startedAt, startedIso) {
     last_error: `digest trigger failed: ${err.message}`,
   }, config);
   log(`digest failed (${trigger}): ${err.message}`);
+  checkForRestartRequest(config);
 }
 
 function runDigest(trigger, config = getWorkerConfig()) {
+  if (checkForRestartRequest(config)) return;
+  if (pendingRestartRequest) return;
   if (schedulerBlockedState) {
     log(`skip run (${trigger}) — scheduler blocked pending manual reset`);
     writeHeartbeat(
@@ -296,14 +396,17 @@ function bindSignalHandlers() {
 
 function startSchedulerWorker() {
   const config = getWorkerConfig();
+  const controlPollMs = Math.max(2000, Math.min(10000, Math.floor(config.pollMs / 20)));
   bindSignalHandlers();
   log(
     `boot (poll=${Math.round(config.pollMs / 1000)}s timeout=${Math.round(config.runTimeoutMs / 1000)}s args=${config.workerArgs.join(" ") || "none"})`
   );
   writeHeartbeat({ status: "booting", booted_at: nowIso() }, config);
+  checkForRestartRequest(config);
   startupTimer = setTimeout(() => runDigest("startup", config), config.startupDelayMs);
   intervalTimer = setInterval(() => runDigest("interval", config), config.pollMs);
-  return { startupTimer, intervalTimer };
+  controlTimer = setInterval(() => checkForRestartRequest(config), controlPollMs);
+  return { startupTimer, intervalTimer, controlTimer };
 }
 
 function stopSchedulerWorker() {
@@ -315,6 +418,10 @@ function stopSchedulerWorker() {
     clearInterval(intervalTimer);
     intervalTimer = null;
   }
+  if (controlTimer) {
+    clearInterval(controlTimer);
+    controlTimer = null;
+  }
 }
 
 function resetSchedulerWorkerState() {
@@ -322,6 +429,8 @@ function resetSchedulerWorkerState() {
   lastRun = null;
   clearLockUnhealthyCounter();
   schedulerBlockedState = null;
+  pendingRestartRequest = null;
+  lastRestartPendingRequestKey = "";
   return getSchedulerWorkerState();
 }
 

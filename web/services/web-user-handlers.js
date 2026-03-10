@@ -21,6 +21,7 @@ function createWebUserHandlers(deps) {
     BASE_URL,
     getBaseUrl,
     DEFAULT_TOPICS,
+    MAX_CUSTOM_KEYWORDS,
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
@@ -53,6 +54,7 @@ function createWebUserHandlers(deps) {
     queueDigestTrigger,
     resolveBaseUrl,
     DEFAULT_TOPICS,
+    MAX_CUSTOM_KEYWORDS,
   });
 
   const handleSettings = createSettingsHandler({
@@ -62,6 +64,8 @@ function createWebUserHandlers(deps) {
     findUserByToken,
     allUsers,
     writeUser,
+    DEFAULT_TOPICS,
+    MAX_CUSTOM_KEYWORDS,
     PROTECTED_FIELDS,
   });
 

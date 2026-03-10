@@ -9,6 +9,7 @@ const CAPABILITY_TOPICS = [
 ];
 
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+const MAX_CUSTOM_KEYWORDS = 3;
 
 // Fields that must never be overwritten via /api/settings
 const PROTECTED_FIELDS = [
@@ -23,6 +24,7 @@ const PROTECTED_FIELDS = [
   "last_email_open_at",
   "email_opens_total",
   "reengagement_state",
+  "custom_topics",
   "signup_referral_source",
 ];
 
@@ -30,5 +32,6 @@ module.exports = {
   INDUSTRY_TOPICS,
   CAPABILITY_TOPICS,
   DEFAULT_TOPICS,
+  MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
 };

@@ -1,6 +1,7 @@
 "use strict";
 
 const { appendEngagementEventChecked, buildDigestId } = require("../engagement/engagement-events-runtime");
+const MAX_CUSTOM_KEYWORDS = 3;
 
 function etDateKeyNow() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -231,16 +232,44 @@ function createEngagementCommandHandlers(deps) {
   }
 
   async function handleTopicAdd(chatId, topic) {
-    if (!topic) return;
+    const rawTopic = String(topic || "").trim();
+    if (!rawTopic) return;
     const user = readUser(chatId);
-    const matchStandard = standardTopics.find((entry) => entry.toLowerCase() === topic.toLowerCase());
-    const topicKey = matchStandard || (`custom_${topic.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`);
-    const displayLabel = matchStandard || topic.replace(/[_]/g, " ");
+    if (!Array.isArray(user.topics)) user.topics = [];
+    if (!Array.isArray(user.custom_topics)) user.custom_topics = [];
 
-    if (!matchStandard && !user.custom_topics.includes(topicKey)) {
-      user.custom_topics.push(topicKey);
+    const matchStandard = standardTopics.find((entry) => entry.toLowerCase() === rawTopic.toLowerCase());
+    let topicKey = matchStandard || "";
+    let displayLabel = matchStandard || rawTopic.replace(/[_]/g, " ");
+
+    if (!matchStandard) {
+      const slug = rawTopic.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      if (!slug) {
+        await send(chatId, "Please add a valid keyword using letters or numbers.");
+        return;
+      }
+
+      topicKey = `custom_${slug}`;
+      displayLabel = rawTopic;
+
+      const existingCustom = new Set(
+        [
+          ...user.custom_topics,
+          ...user.topics.filter((entry) => String(entry || "").startsWith("custom_")),
+        ]
+          .map((entry) => String(entry || "").trim())
+          .filter(Boolean)
+      );
+
+      if (!existingCustom.has(topicKey) && existingCustom.size >= MAX_CUSTOM_KEYWORDS) {
+        await send(chatId, `You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords. Remove one in settings before adding another.`);
+        return;
+      }
+
+      existingCustom.add(topicKey);
+      user.custom_topics = Array.from(existingCustom);
     }
-    if (!user.topics) user.topics = [];
+
     if (!user.topics.includes(topicKey)) {
       user.topics.push(topicKey);
     }

@@ -23,6 +23,7 @@ function createSignupHandler({
   queueDigestTrigger,
   resolveBaseUrl,
   DEFAULT_TOPICS,
+  MAX_CUSTOM_KEYWORDS,
 }) {
   return async function handleSignup(ctxOrReq, maybeRes) {
     const { req, res } = toRouteCtx(ctxOrReq, maybeRes);
@@ -32,6 +33,8 @@ function createSignupHandler({
     const parsedInput = parseSignupInput({
       body,
       normalizeReferralToken,
+      defaultTopics: DEFAULT_TOPICS,
+      maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
     });
     if (!parsedInput.ok) return json(res, { error: parsedInput.error }, parsedInput.status);
     const input = parsedInput.value;

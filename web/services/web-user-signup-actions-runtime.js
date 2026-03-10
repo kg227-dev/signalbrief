@@ -1,6 +1,12 @@
 const { normalizeUserRecord } = require("../../src/platform/store");
+const { normalizeTopicsForUserInput } = require("./topic-normalization-runtime");
 
-function parseSignupInput({ body, normalizeReferralToken }) {
+function parseSignupInput({
+  body,
+  normalizeReferralToken,
+  defaultTopics = [],
+  maxCustomKeywords = 3,
+}) {
   const {
     name,
     email,
@@ -27,15 +33,15 @@ function parseSignupInput({ body, normalizeReferralToken }) {
     return { ok: false, status: 400, error: "topics must be an array" };
   }
 
-  const hasInvalidTopic = topicsList.some((topic) => typeof topic !== "string" || !topic.trim());
-  if (hasInvalidTopic) {
-    return { ok: false, status: 400, error: "topics must contain non-empty strings" };
+  const normalizedTopicsResult = normalizeTopicsForUserInput(topicsList, {
+    defaultTopics,
+    minRequired: 2,
+    maxCustomKeywords,
+  });
+  if (!normalizedTopicsResult.ok) {
+    return { ok: false, status: 400, error: normalizedTopicsResult.error };
   }
-
-  const normalizedTopics = [...new Set(topicsList.map((topic) => topic.trim()))];
-  if (normalizedTopics.length < 2) {
-    return { ok: false, status: 400, error: "select at least 2 topics" };
-  }
+  const normalizedTopics = normalizedTopicsResult.topics;
 
   return {
     ok: true,

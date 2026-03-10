@@ -1,4 +1,5 @@
 const { normalizeUserRecord } = require("../../src/platform/store");
+const { normalizeTopicsForUserInput } = require("./topic-normalization-runtime");
 
 function sanitizePreferencesPatch(rawPreferences) {
   if (
@@ -73,6 +74,8 @@ function createSettingsHandler({
   findUserByToken,
   allUsers,
   writeUser,
+  DEFAULT_TOPICS,
+  MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
 }) {
   return async function handleSettings(ctxOrReq, maybeRes) {
@@ -96,6 +99,18 @@ function createSettingsHandler({
         return json(res, { error: preferencesResult.error }, 400);
       }
       safeBody.preferences = preferencesResult.patch;
+    }
+
+    if (safeBody.topics != null) {
+      const topicsResult = normalizeTopicsForUserInput(safeBody.topics, {
+        defaultTopics: DEFAULT_TOPICS,
+        minRequired: 2,
+        maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
+      });
+      if (!topicsResult.ok) {
+        return json(res, { error: topicsResult.error }, 400);
+      }
+      safeBody.topics = topicsResult.topics;
     }
 
     if (safeBody.telegram != null) {
@@ -134,6 +149,10 @@ function createSettingsHandler({
       preferences: { ...existing.preferences, ...safeBody.preferences },
       ...Object.fromEntries(PROTECTED_FIELDS.map((key) => [key, existing[key]])),
     }, { chatId: existing.chatId });
+
+    if (Array.isArray(updated.topics)) {
+      updated.custom_topics = updated.topics.filter((topic) => !DEFAULT_TOPICS.includes(topic));
+    }
 
     if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
       updated.email_unsubscribed_at = new Date().toISOString();

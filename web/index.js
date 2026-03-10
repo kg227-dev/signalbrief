@@ -12,6 +12,7 @@ const darkModeHelpers = typeof IndexHelpersRuntime.createDarkModeHelpers === "fu
   : null;
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
 const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
+const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
@@ -30,6 +31,29 @@ function selectedTopicKeys() {
 
 function findTopicChip(topic) {
   return Array.from(document.querySelectorAll(".topic-chip")).find((chip) => chip.dataset.topic === topic) || null;
+}
+
+function isCustomTopic(topic) {
+  if (typeof Prefs.isCustomTopic === "function") return Prefs.isCustomTopic(topic);
+  return String(topic || "").startsWith("custom_");
+}
+
+function selectedCustomKeywordCount() {
+  return selectedTopicKeys().filter((topic) => isCustomTopic(topic)).length;
+}
+
+function showInlineSubmitError(message) {
+  const el = document.getElementById("submitError");
+  if (!el) return;
+  el.textContent = String(message || "");
+  el.classList.add("visible");
+}
+
+function clearInlineSubmitError() {
+  const el = document.getElementById("submitError");
+  if (!el) return;
+  el.textContent = "";
+  el.classList.remove("visible");
 }
 
 function topicDisplayLabel(topic) {
@@ -89,12 +113,27 @@ function addCustomTopic() {
 
   const existing = findTopicChip(slug);
   if (existing) {
+    if (
+      isCustomTopic(slug)
+      && prefState
+      && !prefState.hasTopic(slug)
+      && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS
+    ) {
+      showInlineSubmitError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
+      return;
+    }
     if (prefState && !prefState.hasTopic(slug)) {
       prefState.addTopic(slug);
       existing.classList.add("selected");
     }
     input.value = "";
+    clearInlineSubmitError();
     updateProgress();
+    return;
+  }
+
+  if (isCustomTopic(slug) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
+    showInlineSubmitError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
     return;
   }
 
@@ -110,6 +149,7 @@ function addCustomTopic() {
   if (prefState) prefState.addTopic(slug);
 
   input.value = "";
+  clearInlineSubmitError();
   updateProgress();
 }
 

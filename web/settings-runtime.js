@@ -13,6 +13,7 @@ const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS)
 const DEFAULT_TOPICS = Array.isArray(Prefs.DEFAULT_TOPICS)
   ? Prefs.DEFAULT_TOPICS
   : [];
+const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
 
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
@@ -54,6 +55,7 @@ function getSettingsUi() {
     INDUSTRY_TOPICS,
     CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
+    showError,
     showBanner,
   });
   return settingsUi;
@@ -166,6 +168,15 @@ function bindSaveHandler(effectiveToken, user) {
   saveBtn.addEventListener("click", async () => {
     if (prefState.getTopics().length < 2) {
       showError("Please select at least 2 topics.");
+      return;
+    }
+    const customCount = prefState.getTopics().filter((topic) => (
+      typeof Prefs.isCustomTopic === "function"
+        ? Prefs.isCustomTopic(topic)
+        : !DEFAULT_TOPICS.includes(String(topic || ""))
+    )).length;
+    if (customCount > MAX_CUSTOM_KEYWORDS) {
+      showError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
       return;
     }
 

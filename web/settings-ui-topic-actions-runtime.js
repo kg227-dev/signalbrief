@@ -7,7 +7,10 @@
     INDUSTRY_TOPICS,
     CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
+    showError,
   }) {
+    const maxCustomKeywords = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+
     function isCustomTopic(topic) {
       if (typeof Prefs.isCustomTopic === "function") return Prefs.isCustomTopic(topic);
       return !DEFAULT_TOPICS.includes(String(topic || ""));
@@ -21,6 +24,10 @@
 
     function selectedTopicsList() {
       return prefState ? prefState.getTopics() : [];
+    }
+
+    function selectedCustomKeywordCount() {
+      return selectedTopicsList().filter((topic) => isCustomTopic(topic)).length;
     }
 
     function updateSelectedSummary() {
@@ -124,10 +131,28 @@
 
         const existing = findTopicChip(topicKey);
         if (existing) {
+          if (
+            isCustomTopic(topicKey)
+            && !prefState.hasTopic(topicKey)
+            && selectedCustomKeywordCount() >= maxCustomKeywords
+          ) {
+            if (typeof showError === "function") {
+              showError(`You can track up to ${maxCustomKeywords} custom keywords.`);
+            }
+            return;
+          }
           prefState.addTopic(topicKey);
           existing.classList.add("selected");
           updateTopicNote();
           customTopicInput.value = "";
+          if (typeof showError === "function") showError("");
+          return;
+        }
+
+        if (isCustomTopic(topicKey) && selectedCustomKeywordCount() >= maxCustomKeywords) {
+          if (typeof showError === "function") {
+            showError(`You can track up to ${maxCustomKeywords} custom keywords.`);
+          }
           return;
         }
 
@@ -135,6 +160,7 @@
         topicGrid.appendChild(renderChip(topicKey, true));
         updateTopicNote();
         customTopicInput.value = "";
+        if (typeof showError === "function") showError("");
       });
 
       customTopicInput.addEventListener("keydown", (event) => {

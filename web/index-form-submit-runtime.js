@@ -93,6 +93,16 @@
         showSubmitError("Please select at least 2 topics.");
         return;
       }
+      const maxCustomKeywords = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+      const customCount = topics.filter((topic) => (
+        typeof Prefs.isCustomTopic === "function"
+          ? Prefs.isCustomTopic(topic)
+          : String(topic || "").startsWith("custom_")
+      )).length;
+      if (customCount > maxCustomKeywords) {
+        showSubmitError(`You can track up to ${maxCustomKeywords} custom keywords.`);
+        return;
+      }
 
       const name = String(byId("name")?.value || "").trim();
       const email = String(byId("email")?.value || "").trim();

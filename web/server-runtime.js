@@ -68,6 +68,7 @@ const {
   INDUSTRY_TOPICS,
   CAPABILITY_TOPICS,
   DEFAULT_TOPICS,
+  MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
 } = require("./server-runtime-topic-config-runtime");
 const {
@@ -192,6 +193,7 @@ const {
   startDigestTrigger,
   getBaseUrl,
   DEFAULT_TOPICS,
+  MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
   isAdminAuthed,
   logAdminActionEvent,

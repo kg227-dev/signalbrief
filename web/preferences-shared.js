@@ -33,6 +33,7 @@
   const DEFAULT_TOPICS = Array.isArray(runtime.DEFAULT_TOPICS)
     ? runtime.DEFAULT_TOPICS
     : [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+  const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(runtime.MAX_CUSTOM_KEYWORDS || 3));
   const TOPIC_LABELS = runtime.TOPIC_LABELS && typeof runtime.TOPIC_LABELS === "object"
     ? runtime.TOPIC_LABELS
     : {};
@@ -195,6 +196,7 @@
     INDUSTRY_TOPICS,
     CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
+    MAX_CUSTOM_KEYWORDS,
     TOPIC_LABELS,
     DEFAULT_DEPTH,
     getTopicCatalog,

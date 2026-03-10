@@ -10,6 +10,7 @@
     INDUSTRY_TOPICS,
     CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
+    showError,
   }) {
     if (typeof createTopicUiHandlers !== "function") {
       return {
@@ -25,6 +26,7 @@
       INDUSTRY_TOPICS,
       CAPABILITY_TOPICS,
       DEFAULT_TOPICS,
+      showError,
     });
   }
 

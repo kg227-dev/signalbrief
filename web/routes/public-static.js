@@ -1,5 +1,7 @@
 const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
 const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
+const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
+const NO_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/index.js"]);
 
 const STATIC_ROUTE_FILES = new Map([
   ["/", "index.html"],
@@ -96,7 +98,14 @@ function serveStaticFile(res, pathname, deps) {
   const { path, serveFile, WEB_DIR } = deps;
   const fileName = STATIC_ROUTE_FILES.get(pathname);
   if (!fileName) return false;
-  return serveFile(res, path.join(WEB_DIR, fileName));
+  const headers = {};
+  if (NO_STORE_STATIC_ROUTES.has(pathname)) {
+    headers["Cache-Control"] = "no-store";
+  } else if (NO_CACHE_STATIC_ROUTES.has(pathname)) {
+    headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate";
+  }
+  const hasHeaders = Object.keys(headers).length > 0;
+  return serveFile(res, path.join(WEB_DIR, fileName), hasHeaders ? headers : null);
 }
 
 function createPublicStaticRouteHandler(deps) {

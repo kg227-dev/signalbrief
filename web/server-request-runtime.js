@@ -11,11 +11,15 @@ const MIME = {
   ".ico": "image/x-icon",
 };
 
-function serveFile(res, filePath) {
+function serveFile(res, filePath, extraHeaders = null) {
   try {
     const content = fs.readFileSync(filePath);
     const ext = path.extname(filePath);
-    res.writeHead(200, { "Content-Type": MIME[ext] || "text/plain" });
+    const headers = {
+      "Content-Type": MIME[ext] || "text/plain",
+      ...(extraHeaders && typeof extraHeaders === "object" ? extraHeaders : {}),
+    };
+    res.writeHead(200, headers);
     res.end(content);
   } catch {
     res.writeHead(404);

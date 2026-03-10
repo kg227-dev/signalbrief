@@ -175,6 +175,8 @@ This performs:
 5. Run remote runtime checks (`ops:verify-runtime:quick`)
 6. Run public checks (`/`, cache-busted `index.js`, `/api/health/scheduler`)
 
+Deploy packaging intentionally excludes mutable/runtime state: `data/`, `archive/`, `config.json`, and `.env*` are not copied from local machine to production.
+
 Landing-page assets are automatically cache-busted at runtime (`?v=<asset_version>`) using server-side token replacement in `index.html`.
 
 Optional env overrides:

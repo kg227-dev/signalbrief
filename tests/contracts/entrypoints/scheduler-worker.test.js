@@ -2,7 +2,7 @@
 
 const path = require("path");
 const fs = require("fs");
-const { assertNodeSyntaxFile, assertModuleExports, assertSourceIncludesFile } = require("../../../../test-support/module-contract-helper.js");
+const { assertNodeSyntaxFile, assertModuleExports, assertSourceIncludesFile } = require("../../../test-support/module-contract-helper.js");
 
 const TARGET_REL = "src/entrypoints/scheduler-worker.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);

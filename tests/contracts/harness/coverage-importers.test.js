@@ -8,21 +8,21 @@ function assertExported(name, value) {
   assert.ok(kind === "object" || kind === "function", `${name} should export object/function, got ${kind}`);
 }
 
-const digestRoot = require("../../digest.js");
-const mailerLifecycleRuntime = require("../../src/runtime/mailer-lifecycle-runtime.js");
-const mailerLifecycleCommon = require("../../src/runtime/mailer/lifecycle/common.js");
-const mailerLifecycleSenders = require("../../src/runtime/mailer/lifecycle/lifecycle-senders.js");
-const mailerWelcomeContent = require("../../src/runtime/mailer/lifecycle/welcome-content.js");
-const mailerWelcomeSender = require("../../src/runtime/mailer/lifecycle/welcome-sender.js");
-const personalizationRuntime = require("../../src/runtime/personalization/personalization-runtime.js");
-const onboardingServiceRuntime = require("../../src/runtime/reply/onboarding-service-runtime.js");
-const onboardingKeys = require("../../src/runtime/reply/onboarding/keys.js");
-const onboardingLinkFlow = require("../../src/runtime/reply/onboarding/link-verification-flow.js");
-const onboardingMessages = require("../../src/runtime/reply/onboarding/messages.js");
-const sandboxPipelineRuntime = require("../../src/sandbox-pipeline-runtime.js");
-const adminOpsAnalytics = require("../../web/services/admin-ops-analytics.js");
-const adminOpsScheduler = require("../../web/services/admin-ops-scheduler.js");
-const adminOpsUtils = require("../../web/services/admin-ops-utils.js");
+const digestRoot = require("../../../digest.js");
+const mailerLifecycleRuntime = require("../../../src/runtime/mailer-lifecycle-runtime.js");
+const mailerLifecycleCommon = require("../../../src/runtime/mailer/lifecycle/common.js");
+const mailerLifecycleSenders = require("../../../src/runtime/mailer/lifecycle/lifecycle-senders.js");
+const mailerWelcomeContent = require("../../../src/runtime/mailer/lifecycle/welcome-content.js");
+const mailerWelcomeSender = require("../../../src/runtime/mailer/lifecycle/welcome-sender.js");
+const personalizationRuntime = require("../../../src/runtime/personalization/personalization-runtime.js");
+const onboardingServiceRuntime = require("../../../src/runtime/reply/onboarding-service-runtime.js");
+const onboardingKeys = require("../../../src/runtime/reply/onboarding/keys.js");
+const onboardingLinkFlow = require("../../../src/runtime/reply/onboarding/link-verification-flow.js");
+const onboardingMessages = require("../../../src/runtime/reply/onboarding/messages.js");
+const sandboxPipelineRuntime = require("../../../src/sandbox-pipeline-runtime.js");
+const adminOpsAnalytics = require("../../../web/services/admin-ops-analytics.js");
+const adminOpsScheduler = require("../../../web/services/admin-ops-scheduler.js");
+const adminOpsUtils = require("../../../web/services/admin-ops-utils.js");
 
 assertExported("digest.js", digestRoot);
 assertExported("src/runtime/mailer-lifecycle-runtime.js", mailerLifecycleRuntime);

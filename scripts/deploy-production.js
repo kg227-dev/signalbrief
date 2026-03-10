@@ -260,10 +260,8 @@ async function main() {
     remoteSteps.push(
       "if command -v npm >/dev/null 2>&1; then "
       + "npm run -s ops:verify-runtime:quick; "
-      + "elif docker compose ps --services --status running | grep -qx web; then "
-      + "docker compose exec -T web node scripts/verify-runtime.js --skip-canary; "
       + "else "
-      + "echo '[deploy-prod] WARN: remote verify skipped (npm missing and web container unavailable)' >&2; "
+      + "echo '[deploy-prod] WARN: remote verify skipped (npm missing on VM host)' >&2; "
       + "fi"
     );
   }

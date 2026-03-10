@@ -85,7 +85,7 @@ const {
 } = require("./server-runtime-utils-runtime");
 
 const webStore = createStore();
-const { initStore, readUser, writeUser, allUsers, generateToken, findUserByToken } = webStore;
+const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
 const CONFIG = loadConfig();
 
 let storeInitialized = false;
@@ -290,6 +290,7 @@ const ADMIN_ROUTE_DEPS = {
   logAdminActionEvent,
   normalizeDeliveryTimeInput,
   writeUser,
+  deleteUser,
   sendMagicLinkEmail,
   handleAdminRunDigest,
   logAdminMessageEvent,

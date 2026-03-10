@@ -89,6 +89,47 @@ function createStoreRecordRuntime(deps) {
     if (normalized.token) tokenIndex.set(normalized.token, String(chatId));
   }
 
+  function deleteUser(chatId) {
+    ensureStoreInitialized();
+    const id = String(chatId || "").trim();
+    if (!id) {
+      return { ok: false, existed: false, reason: "chatId required" };
+    }
+
+    const filePath = userFile(id);
+    const existed = fs.existsSync(filePath);
+    const tokenIndex = currentTokenIndex();
+    let existingToken = "";
+
+    if (existed) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        existingToken = String(raw?.token || "").trim();
+      } catch {
+        existingToken = "";
+      }
+    }
+
+    try {
+      if (existed) fs.unlinkSync(filePath);
+    } catch (err) {
+      return {
+        ok: false,
+        existed,
+        reason: err && err.message ? err.message : "delete failed",
+      };
+    }
+
+    if (existingToken && tokenIndex.get(existingToken) === id) {
+      tokenIndex.delete(existingToken);
+    }
+    for (const [token, mappedChatId] of tokenIndex.entries()) {
+      if (String(mappedChatId || "").trim() === id) tokenIndex.delete(token);
+    }
+
+    return { ok: true, existed: existed || !!existingToken };
+  }
+
   function allUsers() {
     ensureStoreInitialized();
     const dir = currentDataDir();
@@ -122,6 +163,7 @@ function createStoreRecordRuntime(deps) {
   return {
     readUser,
     writeUser,
+    deleteUser,
     allUsers,
     rebuildTokenIndex,
     findUserByToken,

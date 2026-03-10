@@ -105,6 +105,7 @@ function createStore(options = {}) {
   const {
     readUser,
     writeUser,
+    deleteUser,
     allUsers,
     rebuildTokenIndex,
     findUserByToken,
@@ -125,6 +126,7 @@ function createStore(options = {}) {
     resetStoreState,
     readUser,
     writeUser,
+    deleteUser,
     allUsers,
     defaultUser,
     generateToken,
@@ -162,6 +164,10 @@ function writeUser(chatId, data) {
   return getSingletonStore().writeUser(chatId, data);
 }
 
+function deleteUser(chatId) {
+  return getSingletonStore().deleteUser(chatId);
+}
+
 function allUsers() {
   return getSingletonStore().allUsers();
 }
@@ -179,6 +185,7 @@ module.exports = {
   resetStoreState,
   readUser,
   writeUser,
+  deleteUser,
   allUsers,
   defaultUser,
   generateToken,

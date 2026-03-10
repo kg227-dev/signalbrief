@@ -356,6 +356,21 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 }
 .send-btn:hover { border-color:var(--accent); background:var(--accent-light); }
 .send-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.danger-btn {
+  font-size:11px;
+  font-weight:600;
+  padding:4px 10px;
+  border-radius:6px;
+  border:1.5px solid #FECACA;
+  background:#FEF2F2;
+  color:#B91C1C;
+  cursor:pointer;
+  font-family:inherit;
+  white-space:nowrap;
+  transition:all 0.15s;
+}
+.danger-btn:hover { border-color:#FCA5A5; background:#FEE2E2; }
+.danger-btn:disabled { opacity:0.55; cursor:not-allowed; }
 .modal-backdrop {
   position:fixed; inset:0; background:rgba(17,24,39,0.42); z-index:90;
   display:none; align-items:center; justify-content:center; padding:16px;
@@ -1959,6 +1974,141 @@ function editDeliveryTime(email, currentDeliveryTime, btn) {
   openDeliveryTimeModal(email, currentDeliveryTime, btn);
 }
 
+function statusActionMeta(nextStatus) {
+  const normalized = normalizeUserStatus(nextStatus);
+  if (normalized === "unsubscribed") {
+    return {
+      label: "unsubscribe",
+      title: "Unsubscribe subscriber",
+      description: "This stops all digest delivery channels for this user.",
+      confirmLabel: "Unsubscribe",
+    };
+  }
+  if (normalized === "paused") {
+    return {
+      label: "pause",
+      title: "Pause subscriber",
+      description: "This pauses scheduled digests until re-activated.",
+      confirmLabel: "Pause",
+    };
+  }
+  return {
+    label: "set active",
+    title: "Activate subscriber",
+    description: "This resumes scheduled digests for this user.",
+    confirmLabel: "Set active",
+  };
+}
+
+async function setSubscriberStatus(email, nextStatus, triggerBtn = null) {
+  const emailKey = normalizeEmailKey(email);
+  if (!emailKey) {
+    showToast("err", "Subscriber email missing.");
+    return;
+  }
+  const user = findRosterUser(emailKey, "");
+  const normalizedStatus = normalizeUserStatus(nextStatus);
+  if (!["active", "paused", "unsubscribed"].includes(normalizedStatus)) {
+    showToast("err", "Unsupported status.");
+    return;
+  }
+
+  const meta = statusActionMeta(normalizedStatus);
+  const label = user ? (user.name || user.email || emailKey) : emailKey;
+  const approved = await openConfirmModal(
+    meta.title,
+    `${meta.description}\n\nTarget: ${label}`,
+    meta.confirmLabel
+  );
+  if (!approved) return;
+
+  const btn = triggerBtn && triggerBtn.tagName ? triggerBtn : null;
+  const prevText = btn ? btn.textContent : meta.label;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+  }
+
+  try {
+    const resp = await apiFetchJson("/api/admin/set-user-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailKey, status: normalizedStatus }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const errMsg = data.error || `Failed to update status (HTTP ${resp.status})`;
+      setRowActionStatus(emailKey, "err", errMsg);
+      showToast("err", errMsg);
+      return;
+    }
+    const msg = data.message || `Subscriber set to ${normalizedStatus}`;
+    setRowActionStatus(emailKey, "ok", msg);
+    showToast("ok", msg);
+    await load(true);
+  } catch (error) {
+    const errMsg = error.message || "Network error updating subscriber";
+    setRowActionStatus(emailKey, "err", errMsg);
+    showToast("err", errMsg);
+  } finally {
+    if (btn && document.body.contains(btn)) {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  }
+}
+
+async function deleteSubscriber(email, triggerBtn = null) {
+  const emailKey = normalizeEmailKey(email);
+  if (!emailKey) {
+    showToast("err", "Subscriber email missing.");
+    return;
+  }
+  const user = findRosterUser(emailKey, "");
+  const label = user ? (user.name || user.email || emailKey) : emailKey;
+  const approved = await openConfirmModal(
+    "Delete subscriber",
+    `Delete this subscriber record permanently?\n\nTarget: ${label}\n\nThis cannot be undone.`,
+    "Delete user"
+  );
+  if (!approved) return;
+
+  const btn = triggerBtn && triggerBtn.tagName ? triggerBtn : null;
+  const prevText = btn ? btn.textContent : "delete user";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Deleting...";
+  }
+
+  try {
+    const resp = await apiFetchJson("/api/admin/delete-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailKey, confirm: "DELETE" }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const errMsg = data.error || `Failed to delete subscriber (HTTP ${resp.status})`;
+      setRowActionStatus(emailKey, "err", errMsg);
+      showToast("err", errMsg);
+      return;
+    }
+    rowActionStatusByEmail.delete(emailKey);
+    if (expandedSubscriberEmail === emailKey) expandedSubscriberEmail = "";
+    showToast("ok", data.message || "Subscriber deleted");
+    await load(true);
+  } catch (error) {
+    const errMsg = error.message || "Network error deleting subscriber";
+    setRowActionStatus(emailKey, "err", errMsg);
+    showToast("err", errMsg);
+  } finally {
+    if (btn && document.body.contains(btn)) {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  }
+}
+
 function normalizeEmailKey(value) {
   return String(value || "").toLowerCase().trim();
 }
@@ -2519,6 +2669,16 @@ function renderSubscriberDrawer(u) {
   const caps = getSendCapabilities(u);
   if (caps.canDigest || caps.canAnyMessage) {
     actionParts.push(`<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`);
+  }
+  const userStatus = normalizeUserStatus(u.status);
+  if (u.email) {
+    if (userStatus === "active") {
+      actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "paused", this)'>pause</button>`);
+      actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "unsubscribed", this)'>unsubscribe</button>`);
+    } else if (userStatus === "paused" || userStatus === "unsubscribed") {
+      actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "active", this)'>set active</button>`);
+    }
+    actionParts.push(`<button class="danger-btn" onclick='deleteSubscriber(${JSON.stringify(u.email || "")}, this)'>delete user</button>`);
   }
   const statusMsg = getRowActionStatus(emailKey);
   const statusHtml = statusMsg

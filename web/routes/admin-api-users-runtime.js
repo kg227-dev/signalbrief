@@ -2,6 +2,8 @@ const {
   handleUserByEmailRoute,
   handleAuditRoute,
   handleUpdateDeliveryTimeRoute,
+  handleSetUserStatusRoute,
+  handleDeleteUserRoute,
   handleRestartSchedulerWorkerRoute,
 } = require("./admin-api-users-actions-runtime");
 
@@ -18,6 +20,7 @@ async function handleAdminUserRoutes(ctx, deps) {
     ADMIN_MESSAGE_LOG,
     normalizeDeliveryTimeInput,
     writeUser,
+    deleteUser,
     logAdminActionEvent,
     formatTimeEt,
     handleAdminRunDigest,
@@ -66,6 +69,34 @@ async function handleAdminUserRoutes(ctx, deps) {
         writeUser,
         logAdminActionEvent,
         formatTimeEt,
+      },
+    });
+  }
+
+  if (pathname === "/api/admin/set-user-status" && req.method === "POST") {
+    return handleSetUserStatusRoute({
+      ctx,
+      deps: {
+        json,
+        isAdminAuthed,
+        requireJsonBody,
+        allUsers,
+        writeUser,
+        logAdminActionEvent,
+      },
+    });
+  }
+
+  if (pathname === "/api/admin/delete-user" && req.method === "POST") {
+    return handleDeleteUserRoute({
+      ctx,
+      deps: {
+        json,
+        isAdminAuthed,
+        requireJsonBody,
+        allUsers,
+        deleteUser,
+        logAdminActionEvent,
       },
     });
   }

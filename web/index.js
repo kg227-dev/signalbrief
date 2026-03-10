@@ -334,11 +334,47 @@ function switchPreview(panel, btn) {
 
 // -- Dark mode ----------------------------------------------------------------
 function toggleDark() {
-  if (!darkModeHelpers) return;
-  darkModeHelpers.toggleDarkMode();
+  if (darkModeHelpers && typeof darkModeHelpers.toggleDarkMode === "function") {
+    darkModeHelpers.toggleDarkMode();
+    return;
+  }
+  document.body.classList.toggle("dark");
+  const isDark = document.body.classList.contains("dark");
+  const toggle = document.getElementById("darkToggle");
+  if (toggle) toggle.textContent = isDark ? "☀️" : "🌙";
+  try {
+    localStorage.setItem("sbDark", isDark ? "1" : "0");
+  } catch {}
 }
 
-if (darkModeHelpers) darkModeHelpers.initDarkMode();
+function initDarkModeToggleBinding() {
+  const toggle = document.getElementById("darkToggle");
+  if (!toggle) return;
+  toggle.addEventListener("click", (event) => {
+    event.preventDefault();
+    toggleDark();
+  });
+}
+
+function initDarkModeState() {
+  if (darkModeHelpers && typeof darkModeHelpers.initDarkMode === "function") {
+    darkModeHelpers.initDarkMode();
+    return;
+  }
+  try {
+    if (localStorage.getItem("sbDark") === "1") {
+      document.body.classList.add("dark");
+      const toggle = document.getElementById("darkToggle");
+      if (toggle) toggle.textContent = "☀️";
+    }
+  } catch {}
+}
+
+// Keep compatibility with any cached HTML still using inline onclick.
+window.toggleDark = toggleDark;
+
+initDarkModeToggleBinding();
+initDarkModeState();
 
 (async function initFormState() {
   if (indexForm) {

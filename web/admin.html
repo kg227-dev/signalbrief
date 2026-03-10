@@ -565,6 +565,100 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   color:var(--text-secondary);
   line-height:1.4;
 }
+.ceo-health-panel {
+  flex:1 1 560px;
+  min-width:320px;
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  background:linear-gradient(180deg, #FBFDFF 0%, #FFFFFF 100%);
+  padding:12px 14px;
+}
+.ceo-health-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.ceo-status-pill {
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:2px 9px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  border:1px solid var(--border);
+}
+.ceo-status-pill.green { color:#065F46; background:#ECFDF5; border-color:#A7F3D0; }
+.ceo-status-pill.yellow { color:#92400E; background:#FFFBEB; border-color:#FDE68A; }
+.ceo-status-pill.red { color:#991B1B; background:#FEF2F2; border-color:#FCA5A5; }
+.ceo-status-pill.neutral { color:var(--text-secondary); background:#F9FAFB; border-color:var(--border); }
+.ceo-health-headline {
+  margin-top:7px;
+  font-size:16px;
+  font-weight:700;
+  letter-spacing:-0.2px;
+}
+.ceo-health-reason {
+  margin-top:4px;
+  font-size:12px;
+  color:var(--text-secondary);
+  line-height:1.45;
+}
+.ceo-health-grid {
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px;
+}
+.ceo-health-cell {
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  padding:8px 10px;
+  background:#fff;
+}
+.ceo-action-now {
+  margin-top:10px;
+  border-radius:8px;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  padding:8px 10px;
+  font-size:12px;
+  color:var(--text-2);
+  line-height:1.45;
+}
+.ceo-command-list {
+  margin-top:6px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.ceo-command-chip {
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:#fff;
+  padding:4px 8px;
+  font-size:11px;
+  color:var(--text-2);
+}
+.ops-actions {
+  width:100%;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:6px;
+}
+.ops-actions .btn-secondary {
+  padding:8px 12px;
+}
+.ops-action-msg {
+  width:100%;
+  font-size:12px;
+  color:var(--text-secondary);
+  display:none;
+  text-align:right;
+}
 
 .toast-wrap {
   position:fixed;
@@ -631,6 +725,9 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   .table-wrap-subscribers table { table-layout:auto; }
   table { font-size:12px; }
   thead th, tbody td { padding:10px 12px; }
+  .ceo-health-grid { grid-template-columns:1fr; }
+  .ops-actions { justify-content:flex-start; }
+  .ops-action-msg { text-align:left; }
 }
 @media (min-width:641px) and (max-width:980px) {
   .cards-kpi { grid-template-columns:1fr 1fr; }
@@ -742,6 +839,40 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 
   <!-- System health bar -->
   <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:24px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;">
+    <div id="ceoHealthPanel" class="ceo-health-panel">
+      <div class="ceo-health-head">
+        <div class="health-metric-label" style="margin-bottom:0;">CEO system status</div>
+        <span id="ceoStatusPill" class="ceo-status-pill neutral">Checking…</span>
+      </div>
+      <div id="ceoStatusHeadline" class="ceo-health-headline">Loading runtime health…</div>
+      <div id="ceoStatusReason" class="ceo-health-reason">—</div>
+      <div class="ceo-health-grid">
+        <div class="ceo-health-cell">
+          <div class="health-metric-label">Can deliver next run</div>
+          <div class="health-metric-value" id="ceoCanDeliver">—</div>
+        </div>
+        <div class="ceo-health-cell">
+          <div class="health-metric-label">Users at risk</div>
+          <div class="health-metric-value" id="ceoUsersAtRisk">—</div>
+        </div>
+        <div class="ceo-health-cell">
+          <div class="health-metric-label">Last scheduled success</div>
+          <div class="health-metric-value" id="ceoLastSuccess">—</div>
+        </div>
+        <div class="ceo-health-cell">
+          <div class="health-metric-label">Next scheduled run (ET)</div>
+          <div class="health-metric-value" id="ceoNextExpected">—</div>
+        </div>
+      </div>
+      <div id="ceoActionNow" class="ceo-action-now">No action required yet.</div>
+      <div class="health-metric-label" style="margin-top:10px;">CEO command set</div>
+      <div id="ceoCommandList" class="ceo-command-list">
+        <span class="ceo-command-chip">Refresh health data</span>
+        <span class="ceo-command-chip">Check scheduler now</span>
+        <span class="ceo-command-chip">Send test digest</span>
+        <span class="ceo-command-chip">Run full digest now</span>
+      </div>
+    </div>
     <div class="health-metric">
       <div class="health-metric-label">Server uptime</div>
       <div class="health-metric-value" id="healthUptime">—</div>
@@ -791,8 +922,13 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
           <option value="">Loading targets…</option>
         </select>
       </div>
-      <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest</button>
+      <div class="ops-actions">
+        <button id="testDigestBtn" class="btn-action btn-action-teal" onclick="triggerTestDigest()">🧪 Send test digest</button>
+        <button id="runFullDigestBtn" class="btn-secondary" onclick="triggerFullDigest()">Run full digest now</button>
+        <button id="checkSchedulerBtn" class="btn-secondary" onclick="checkSchedulerNow()">Check scheduler now</button>
+      </div>
       <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
+      <div id="opsActionMsg" class="ops-action-msg"></div>
     </div>
   </div>
 
@@ -1114,6 +1250,112 @@ function formatEtDateTime(iso) {
     });
   } catch {
     return String(iso);
+  }
+}
+
+function setOpsActionMessage(type, message) {
+  const el = document.getElementById("opsActionMsg");
+  if (!el) return;
+  if (!message) {
+    el.style.display = "none";
+    el.textContent = "";
+    return;
+  }
+  const tone = type === "ok" ? "var(--green)"
+    : type === "err" ? "var(--red)"
+      : type === "warn" ? "var(--yellow)"
+        : "var(--text-secondary)";
+  el.style.color = tone;
+  el.textContent = String(message);
+  el.style.display = "block";
+}
+
+function renderExecutiveSummary(health) {
+  const summary = health && health.executive_summary ? health.executive_summary : null;
+  const pill = document.getElementById("ceoStatusPill");
+  const headline = document.getElementById("ceoStatusHeadline");
+  const reason = document.getElementById("ceoStatusReason");
+  const canDeliver = document.getElementById("ceoCanDeliver");
+  const usersAtRisk = document.getElementById("ceoUsersAtRisk");
+  const lastSuccess = document.getElementById("ceoLastSuccess");
+  const nextExpected = document.getElementById("ceoNextExpected");
+  const actionNow = document.getElementById("ceoActionNow");
+  const commandList = document.getElementById("ceoCommandList");
+  if (!pill || !headline || !reason || !canDeliver || !usersAtRisk || !lastSuccess || !nextExpected || !actionNow || !commandList) return;
+
+  if (!summary) {
+    pill.className = "ceo-status-pill neutral";
+    pill.textContent = "Unknown";
+    headline.textContent = "Health summary unavailable";
+    reason.textContent = "No executive summary data returned by server.";
+    canDeliver.textContent = "—";
+    usersAtRisk.textContent = "—";
+    lastSuccess.textContent = "—";
+    nextExpected.textContent = "—";
+    actionNow.textContent = "Action now: refresh dashboard data.";
+    actionNow.style.borderColor = "var(--border-subtle)";
+    actionNow.style.background = "#fff";
+    actionNow.style.color = "var(--text-2)";
+    commandList.innerHTML = `<span class="ceo-command-chip">Refresh health data</span>`;
+    return;
+  }
+
+  const status = String(summary.status || "unknown").toLowerCase();
+  let statusLabel = "Unknown";
+  if (status === "green") statusLabel = "Green";
+  else if (status === "yellow") statusLabel = "Watch";
+  else if (status === "red") statusLabel = "Action";
+  pill.className = `ceo-status-pill ${["green", "yellow", "red"].includes(status) ? status : "neutral"}`;
+  pill.textContent = statusLabel;
+
+  headline.textContent = summary.headline || "System health summary";
+  reason.textContent = summary.reason || "No details provided.";
+
+  if (summary.can_deliver_next_run === true) {
+    canDeliver.innerHTML = `<span style="color:var(--green);">✅ Yes</span>`;
+  } else if (summary.can_deliver_next_run === false) {
+    canDeliver.innerHTML = `<span style="color:var(--red);">❌ No</span>`;
+  } else {
+    canDeliver.textContent = "—";
+  }
+
+  const riskCount = Math.max(0, Number(summary.users_at_risk || 0));
+  usersAtRisk.innerHTML = riskCount > 0
+    ? `<a href="#rosterSection" style="color:var(--yellow);font-weight:700;text-decoration:none;">${riskCount}</a>`
+    : `<span style="color:var(--green);">0</span>`;
+
+  lastSuccess.textContent = summary.last_successful_scheduled_run
+    ? formatEtDateTime(summary.last_successful_scheduled_run)
+    : "No scheduled success yet";
+  nextExpected.textContent = summary.next_expected_delivery_et
+    ? `${summary.next_expected_delivery_et}${summary.next_expected_countdown ? ` (${summary.next_expected_countdown})` : ""}`
+    : "—";
+
+  const nextAction = summary.action_now || "Refresh dashboard health data.";
+  actionNow.textContent = `Action now: ${nextAction}`;
+  if (status === "red") {
+    actionNow.style.borderColor = "#FCA5A5";
+    actionNow.style.background = "#FEF2F2";
+    actionNow.style.color = "#991B1B";
+  } else if (status === "yellow") {
+    actionNow.style.borderColor = "#FDE68A";
+    actionNow.style.background = "#FFFBEB";
+    actionNow.style.color = "#92400E";
+  } else {
+    actionNow.style.borderColor = "#A7F3D0";
+    actionNow.style.background = "#ECFDF5";
+    actionNow.style.color = "#065F46";
+  }
+
+  const commands = Array.isArray(summary.commands) ? summary.commands : [];
+  if (!commands.length) {
+    commandList.innerHTML = `<span class="ceo-command-chip">Refresh health data</span>`;
+  } else {
+    commandList.innerHTML = commands.map((cmd) => {
+      const label = cmd && cmd.label ? String(cmd.label) : "Command";
+      const detail = cmd && cmd.description ? String(cmd.description) : "";
+      return `<span class="ceo-command-chip" title="${esc(detail)}">${esc(label)}</span>`;
+    }).join("");
   }
 }
 
@@ -2396,6 +2638,89 @@ async function parseApiJson(res) {
   }
 }
 
+async function checkSchedulerNow() {
+  const btn = document.getElementById("checkSchedulerBtn");
+  const prevLabel = btn ? btn.textContent : "Check scheduler now";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+  }
+  setOpsActionMessage("info", "Checking scheduler heartbeat…");
+  try {
+    const resp = await apiFetchJson("/api/health/scheduler", {}, 1);
+    const data = resp.data || {};
+    const scheduler = data.scheduler || {};
+    const age = Number.isFinite(Number(scheduler.age_seconds))
+      ? `${Number(scheduler.age_seconds)}s`
+      : "—";
+
+    if (resp.ok && data.ok) {
+      const msg = `Scheduler healthy · heartbeat ${age} ago`;
+      setOpsActionMessage("ok", `✅ ${msg}`);
+      showToast("ok", msg);
+    } else {
+      const detail = scheduler.summary || data.error || `HTTP ${resp.status}`;
+      const msg = `Scheduler unhealthy · ${detail}`;
+      setOpsActionMessage("err", `❌ ${msg}`);
+      showToast("err", msg);
+    }
+  } catch (e) {
+    const msg = e.message || "Network error checking scheduler";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
+async function triggerFullDigest() {
+  const approved = await openConfirmModal(
+    "Run full digest now?",
+    "This queues a full digest run for all active users. Use for recovery or verification.",
+    "Run full digest",
+  );
+  if (!approved) return;
+
+  const btn = document.getElementById("runFullDigestBtn");
+  const prevLabel = btn ? btn.textContent : "Run full digest now";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Queueing…";
+  }
+  setOpsActionMessage("info", "Queueing full digest run…");
+  try {
+    const resp = await apiFetchJson("/api/admin/run-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to queue full digest (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || "Full digest run triggered";
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", msg);
+  } catch (e) {
+    const msg = e.message || "Network error starting full digest";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
 async function triggerTestDigest() {
   const btn = document.getElementById("testDigestBtn");
   const msg = document.getElementById("testDigestMsg");
@@ -2406,11 +2731,13 @@ async function triggerTestDigest() {
     : targetChatId;
   if (!targetChatId) {
     renderTestDigestStatus({ state: "failed", message: "Choose a Telegram-linked test target first." });
+    setOpsActionMessage("err", "Choose a Telegram-linked test target first.");
     return;
   }
   btn.disabled = true;
   btn.textContent = "🧪 Sending…";
   msg.style.display = "none";
+  setOpsActionMessage("info", "Sending test digest…");
   try {
     const resp = await apiFetchJson("/api/admin/run-digest", {
       method: "POST",
@@ -2420,13 +2747,16 @@ async function triggerTestDigest() {
     const data = resp.data;
     if (!resp.ok || !data.success) {
       renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${resp.status})` });
+      setOpsActionMessage("err", data.error || "Test digest failed.");
       showToast("err", data.error || "Test digest failed");
       return;
     }
     renderTestDigestStatus({ state: "success", message: data.message || `Digest sent to ${targetLabel}` });
+    setOpsActionMessage("ok", data.message || `Digest sent to ${targetLabel}`);
     showToast("ok", data.message || `Digest sent to ${targetLabel}`);
   } catch (e) {
     renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
+    setOpsActionMessage("err", e.message || "Network error starting test digest");
     showToast("err", e.message || "Network error starting test digest");
   }
 }
@@ -2481,6 +2811,7 @@ async function load(silent = false) {
     renderTestTargets(roster || []);
     renderTestDigestStatus({ state: "idle" });
     renderAdminMessages(admin_messages || []);
+    renderExecutiveSummary(health || null);
 
     if (summary.month_label) {
       document.getElementById("monthLabel").textContent = summary.month_label;
@@ -2608,6 +2939,8 @@ async function load(silent = false) {
         }
       }
 
+    } else {
+      renderExecutiveSummary(null);
     }
 
     // Summary cards

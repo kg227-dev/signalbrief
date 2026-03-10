@@ -91,13 +91,16 @@ async function main() {
   child.stdout.on("data", () => {});
 
   try {
-    const { res, scheduler } = await waitFor(async () => {
+    const { res, scheduler, executiveSummary } = await waitFor(async () => {
       const candidate = await getJson(`http://127.0.0.1:${PORT}/api/admin/stats`);
       if (candidate.status !== 200) return null;
-      const worker = candidate.data && candidate.data.health && candidate.data.health.scheduler_worker;
+      const health = candidate.data && candidate.data.health;
+      const worker = health && health.scheduler_worker;
+      const summary = health && health.executive_summary;
       if (!worker) return null;
       if (!worker.available || !worker.healthy) return null;
-      return { res: candidate, scheduler: worker };
+      if (!summary) return null;
+      return { res: candidate, scheduler: worker, executiveSummary: summary };
     }, {
       timeoutMs: 20000,
       pollMs: 250,
@@ -107,6 +110,17 @@ async function main() {
     if (!scheduler) throw new Error("scheduler_worker block missing in stats");
     if (!scheduler.available) throw new Error("scheduler worker reported unavailable");
     if (!scheduler.healthy) throw new Error(`scheduler worker reported unhealthy: ${scheduler.summary || "unknown"}`);
+    if (!executiveSummary || typeof executiveSummary !== "object") {
+      throw new Error("executive_summary block missing in health payload");
+    }
+    if (!["green", "yellow", "red"].includes(String(executiveSummary.status || ""))) {
+      throw new Error(`unexpected executive summary status: ${executiveSummary.status}`);
+    }
+    const commands = Array.isArray(executiveSummary.commands) ? executiveSummary.commands : [];
+    const commandIds = new Set(commands.map((entry) => entry && entry.id).filter(Boolean));
+    ["refresh_health", "check_scheduler", "send_test_digest", "run_full_digest"].forEach((id) => {
+      if (!commandIds.has(id)) throw new Error(`executive_summary missing command id: ${id}`);
+    });
     process.stdout.write("[smoke-admin-scheduler] ok\n");
   } finally {
     child.kill("SIGTERM");

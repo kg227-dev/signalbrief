@@ -375,6 +375,7 @@ const CAPABILITY_TOPICS = [
   'DIGITAL','M&A ADVISORY','TALENT',
 ];
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+const MAX_CUSTOM_KEYWORDS = 3;
 const TOPIC_LABELS = {
   'HEALTHCARE':'Healthcare','FINANCIAL SERVICES':'Financial Services','PE×M&A':'Private Equity & M&A',
   'ENERGY':'Energy','CONSUMER':'Consumer & Retail','LIFE SCIENCES':'Life Sciences',
@@ -401,6 +402,14 @@ function topicLabel(t) {
 
 function isCustom(t) { return !DEFAULT_TOPICS.includes(t); }
 
+function selectedCustomTopicCount() {
+  let count = 0;
+  selectedTopics.forEach((topic) => {
+    if (isCustom(topic)) count += 1;
+  });
+  return count;
+}
+
 function formatEtDateTime(iso) {
   if (!iso) return '—';
   const ts = Date.parse(String(iso));
@@ -417,9 +426,11 @@ function formatEtDateTime(iso) {
 
 function updateTopicNote() {
   const n = selectedTopics.size;
+  const custom = selectedCustomTopicCount();
   const el = document.getElementById('topicNote');
   if (!el) return;
-  el.textContent = n + ' selected' + (n < 2 ? ' — minimum 2 required' : '');
+  const customPart = ' · custom ' + custom + '/' + MAX_CUSTOM_KEYWORDS;
+  el.textContent = n + ' selected' + customPart + (n < 2 ? ' — minimum 2 required' : '');
   el.style.color = (n < 2 && n > 0) ? 'var(--red)' : 'var(--text-secondary)';
 }
 
@@ -429,8 +440,18 @@ function renderChip(topic, selected) {
   chip.dataset.topic = topic;
   chip.innerHTML = '<span class="chip-check">✓</span> ' + esc(topicLabel(topic));
   chip.addEventListener('click', function() {
-    if (selectedTopics.has(topic)) { selectedTopics.delete(topic); chip.classList.remove('selected'); }
-    else { selectedTopics.add(topic); chip.classList.add('selected'); }
+    if (selectedTopics.has(topic)) {
+      selectedTopics.delete(topic);
+      chip.classList.remove('selected');
+    } else {
+      if (isCustom(topic) && selectedCustomTopicCount() >= MAX_CUSTOM_KEYWORDS) {
+        showError('You can track up to ' + MAX_CUSTOM_KEYWORDS + ' custom keywords.');
+        return;
+      }
+      selectedTopics.add(topic);
+      chip.classList.add('selected');
+      showError('');
+    }
     updateTopicNote();
   });
   return chip;
@@ -724,10 +745,15 @@ async function init() {
       const input = document.getElementById('customTopicInput');
       const val = input.value.trim();
       if (!val || selectedTopics.has(val)) { input.value = ''; return; }
+      if (selectedCustomTopicCount() >= MAX_CUSTOM_KEYWORDS) {
+        showError('You can track up to ' + MAX_CUSTOM_KEYWORDS + ' custom keywords.');
+        return;
+      }
       const chip = renderChip(val, true);
       selectedTopics.add(val);
       document.getElementById('topicGrid').appendChild(chip);
       updateTopicNote();
+      showError('');
       input.value = '';
     });
     document.getElementById('customTopicInput').addEventListener('keydown', e => {

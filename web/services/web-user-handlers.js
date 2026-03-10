@@ -22,6 +22,7 @@ function createWebUserHandlers(deps) {
     getBaseUrl,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
+    allowExampleEmails,
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
@@ -55,6 +56,7 @@ function createWebUserHandlers(deps) {
     resolveBaseUrl,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
+    allowExampleEmails,
   });
 
   const handleSettings = createSettingsHandler({

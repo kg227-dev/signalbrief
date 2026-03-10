@@ -6,6 +6,7 @@ function parseSignupInput({
   normalizeReferralToken,
   defaultTopics = [],
   maxCustomKeywords = 3,
+  allowExampleEmails = true,
 }) {
   const {
     name,
@@ -28,6 +29,13 @@ function parseSignupInput({
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
     return { ok: false, status: 400, error: "invalid email address" };
+  }
+  if (!allowExampleEmails && /@example\.com$/i.test(emailNorm)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "example.com emails are blocked in production",
+    };
   }
   if (!topicsList) {
     return { ok: false, status: 400, error: "topics must be an array" };

@@ -185,6 +185,11 @@ const sendTelegramText = createSendTelegramText({
   getToken: () => CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken,
 });
 
+const allowExampleSignups = (
+  String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
+  || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
+);
+
 const readArchiveFilesForDir = (archiveDir) => readArchiveFiles({
   fs,
   archiveDir,
@@ -223,6 +228,7 @@ const {
   getBaseUrl,
   DEFAULT_TOPICS,
   MAX_CUSTOM_KEYWORDS,
+  allowExampleEmails: allowExampleSignups,
   PROTECTED_FIELDS,
   isAdminAuthed,
   logAdminActionEvent,

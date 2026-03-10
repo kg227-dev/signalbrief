@@ -24,6 +24,7 @@ function createSignupHandler({
   resolveBaseUrl,
   DEFAULT_TOPICS,
   MAX_CUSTOM_KEYWORDS,
+  allowExampleEmails,
 }) {
   return async function handleSignup(ctxOrReq, maybeRes) {
     const { req, res } = toRouteCtx(ctxOrReq, maybeRes);
@@ -35,6 +36,7 @@ function createSignupHandler({
       normalizeReferralToken,
       defaultTopics: DEFAULT_TOPICS,
       maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
+      allowExampleEmails,
     });
     if (!parsedInput.ok) return json(res, { error: parsedInput.error }, parsedInput.status);
     const input = parsedInput.value;

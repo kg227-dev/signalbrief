@@ -15,7 +15,13 @@ const { createStoreRecordRuntime } = require("./store-record-runtime");
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 
 function defaultDataDir() {
-  return path.resolve(process.env.SIGNALBRIEF_DATA_DIR || path.join(APP_ROOT, "data"));
+  const explicit = String(process.env.SIGNALBRIEF_DATA_DIR || "").trim();
+  if (explicit) return path.resolve(explicit);
+  const nodeEnv = String(process.env.NODE_ENV || "").toLowerCase().trim();
+  if (nodeEnv === "test") {
+    return path.resolve(path.join(APP_ROOT, ".tmp", "test-data"));
+  }
+  return path.resolve(path.join(APP_ROOT, "data"));
 }
 
 function createStoreIndex() {

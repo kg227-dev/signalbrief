@@ -126,6 +126,7 @@ node src/entrypoints/digest.js --chatId 123456789
 npm run smoke:worker
 npm run smoke:admin-scheduler
 npm run ops:deploy:prod
+npm run ops:deploy:web
 npm run ops:verify-runtime:quick
 npm run ops:verify-runtime
 npm run ops:watchdog-scheduler
@@ -161,6 +162,11 @@ From your local repo:
 npm run ops:deploy:prod
 ```
 
+For web-only/admin/UI hotfixes (no bot/worker restart):
+```bash
+npm run ops:deploy:web
+```
+
 This performs:
 1. Package current workspace to `/tmp/signalbrief-deploy-<sha>.tgz`
 2. Upload to VM over SSH
@@ -178,11 +184,14 @@ Optional env overrides:
 - `DEPLOY_REMOTE_DIR` (default `/opt/signalbrief/app`)
 - `DEPLOY_PUBLIC_URL` (default `https://getsignalbrief.com`)
 - `DEPLOY_SERVICES` (default `web bot worker`)
+- `ALLOW_EXAMPLE_SIGNUPS` (`0` by default in `NODE_ENV=production`; set to `1` only for controlled testing)
 
 Optional flags:
 - `--skip-build`
 - `--skip-remote-verify`
 - `--skip-public-verify`
+
+Smoke scripts now force an isolated temp data directory (`SIGNALBRIEF_DATA_DIR=/tmp/...`) to avoid polluting production-like user data during local/runtime checks.
 
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash

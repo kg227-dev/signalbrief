@@ -10,6 +10,7 @@ const ROOT = path.resolve(__dirname, "..");
 const SERVER = path.join(ROOT, "web", "server.js");
 const PORT = 3987;
 const HEARTBEAT = path.join("/tmp", `signalbrief-heartbeat-smoke-${process.pid}.json`);
+const DATA_DIR = path.join("/tmp", `signalbrief-admin-data-smoke-${process.pid}`);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -58,6 +59,7 @@ function getJson(url) {
 }
 
 async function main() {
+  fs.rmSync(DATA_DIR, { recursive: true, force: true });
   const payload = {
     worker: "scheduler-worker",
     updated_at: new Date().toISOString(),
@@ -82,6 +84,7 @@ async function main() {
       PORT: String(PORT),
       ADMIN_LOCAL_BYPASS: "1",
       SCHEDULER_HEARTBEAT_FILE: HEARTBEAT,
+      SIGNALBRIEF_DATA_DIR: DATA_DIR,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -126,10 +129,17 @@ async function main() {
     child.kill("SIGTERM");
     await waitForChildExit(child, 2000);
     try {
-      fs.unlinkSync(HEARTBEAT);
+      if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
     } catch (err) {
       if (process.env.SB_SMOKE_DEBUG === "1") {
         process.stderr.write(`[smoke-admin-scheduler] heartbeat cleanup failed: ${err.message}\n`);
+      }
+    }
+    try {
+      fs.rmSync(DATA_DIR, { recursive: true, force: true });
+    } catch (err) {
+      if (process.env.SB_SMOKE_DEBUG === "1") {
+        process.stderr.write(`[smoke-admin-scheduler] data dir cleanup failed: ${err.message}\n`);
       }
     }
   }

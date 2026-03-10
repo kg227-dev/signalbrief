@@ -5,6 +5,7 @@ services:
     env_file:
       - .env
     environment:
+      - NODE_ENV=production
       - PORT=3003
       - SCHEDULER_HEARTBEAT_FILE=/app/data/scheduler-heartbeat.json
     ports:
@@ -26,6 +27,8 @@ services:
     command: ["node", "bot-server.js"]
     env_file:
       - .env
+    environment:
+      - NODE_ENV=production
     volumes:
       - ./config.json:/app/config.json:ro
       - ./data:/app/data
@@ -41,6 +44,7 @@ services:
     env_file:
       - .env
     environment:
+      - NODE_ENV=production
       - DIGEST_POLL_MS=300000
       - DIGEST_STARTUP_DELAY_MS=5000
       - DIGEST_RUN_ON_STARTUP=0

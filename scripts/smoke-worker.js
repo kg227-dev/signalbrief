@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, "..");
 const WORKER = path.join(ROOT, "src", "entrypoints", "scheduler-worker.js");
 const HEARTBEAT = path.join("/tmp", `signalbrief-worker-smoke-${process.pid}.json`);
 const CONTROL = path.join("/tmp", `signalbrief-worker-control-smoke-${process.pid}.json`);
+const DATA_DIR = path.join("/tmp", `signalbrief-worker-data-smoke-${process.pid}`);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -49,6 +50,7 @@ async function main() {
   try {
     if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
     if (fs.existsSync(CONTROL)) fs.unlinkSync(CONTROL);
+    fs.rmSync(DATA_DIR, { recursive: true, force: true });
   } catch (err) {
     if (process.env.SB_SMOKE_DEBUG === "1") {
       process.stderr.write(`[smoke-worker] pre-run temp cleanup failed: ${err.message}\n`);
@@ -65,6 +67,7 @@ async function main() {
       DIGEST_STARTUP_DELAY_MS: "100",
       DIGEST_RUN_TIMEOUT_MS: "60000",
       SCHEDULER_CONTROL_FILE: CONTROL,
+      SIGNALBRIEF_DATA_DIR: DATA_DIR,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -129,6 +132,7 @@ async function main() {
     try {
       if (fs.existsSync(HEARTBEAT)) fs.unlinkSync(HEARTBEAT);
       if (fs.existsSync(CONTROL)) fs.unlinkSync(CONTROL);
+      fs.rmSync(DATA_DIR, { recursive: true, force: true });
     } catch (err) {
       if (process.env.SB_SMOKE_DEBUG === "1") {
         process.stderr.write(`[smoke-worker] post-run temp cleanup failed: ${err.message}\n`);

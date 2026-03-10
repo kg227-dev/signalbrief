@@ -44,7 +44,7 @@ Roadmap + audit backlog: [`docs/features.md`](./docs/features.md)
 ## Architecture
 
 ```text
-scheduler-worker.js (startup + 5-min interval loop)
+scheduler-worker.js (optional startup run + 5-min interval loop)
         |
         v
 digest.js (run lock + due-user scheduling + catch-up window)

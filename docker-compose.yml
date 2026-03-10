@@ -43,6 +43,7 @@ services:
     environment:
       - DIGEST_POLL_MS=300000
       - DIGEST_STARTUP_DELAY_MS=5000
+      - DIGEST_RUN_ON_STARTUP=0
       - DIGEST_RUN_TIMEOUT_MS=1500000
       - SCHEDULER_HEARTBEAT_FILE=/app/data/scheduler-heartbeat.json
     volumes:

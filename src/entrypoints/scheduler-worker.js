@@ -18,19 +18,50 @@ function getWorkerConfig() {
     : path.join(path.dirname(heartbeatFile), "scheduler-control.json");
   const pollMs = Math.max(60 * 1000, Number(process.env.DIGEST_POLL_MS || (5 * 60 * 1000)));
   const startupDelayMs = Math.max(0, Number(process.env.DIGEST_STARTUP_DELAY_MS || 3000));
+  const runOnStartup = String(process.env.DIGEST_RUN_ON_STARTUP || "1").trim() === "1";
   const runTimeoutMs = Math.max(60 * 1000, Number(process.env.DIGEST_RUN_TIMEOUT_MS || (25 * 60 * 1000)));
-  const workerArgs = String(process.env.DIGEST_WORKER_ARGS || "")
+  const rawWorkerArgs = String(process.env.DIGEST_WORKER_ARGS || "")
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+  const workerArgs = sanitizeSchedulerWorkerArgs(rawWorkerArgs);
   return {
     heartbeatFile,
     controlFile,
     pollMs,
     startupDelayMs,
+    runOnStartup,
     runTimeoutMs,
     workerArgs,
   };
+}
+
+function sanitizeSchedulerWorkerArgs(workerArgs) {
+  const source = Array.isArray(workerArgs) ? workerArgs : [];
+  const safe = [];
+  let removedTargetedArgs = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const token = String(source[index] || "").trim();
+    if (!token) continue;
+    if (token === "--chatId" || token === "--chat-id") {
+      removedTargetedArgs = true;
+      if (index + 1 < source.length && !String(source[index + 1] || "").startsWith("--")) {
+        index += 1;
+      }
+      continue;
+    }
+    if (token.startsWith("--chatId=") || token.startsWith("--chat-id=")) {
+      removedTargetedArgs = true;
+      continue;
+    }
+    safe.push(token);
+  }
+  if (removedTargetedArgs) {
+    process.stderr.write(
+      "[worker] ignored targeted digest args in DIGEST_WORKER_ARGS; scheduler runs always use scheduled audience\n"
+    );
+  }
+  return safe;
 }
 
 let runInFlight = false;
@@ -130,6 +161,7 @@ function writeHeartbeat(extra = {}, config = getWorkerConfig()) {
       updated_at: nowIso(),
       poll_ms: config.pollMs,
       startup_delay_ms: config.startupDelayMs,
+      startup_run_enabled: config.runOnStartup,
       run_timeout_ms: config.runTimeoutMs,
       digest_worker_args: config.workerArgs,
       in_flight: runInFlight,
@@ -399,11 +431,17 @@ function startSchedulerWorker() {
   const controlPollMs = Math.max(2000, Math.min(10000, Math.floor(config.pollMs / 20)));
   bindSignalHandlers();
   log(
-    `boot (poll=${Math.round(config.pollMs / 1000)}s timeout=${Math.round(config.runTimeoutMs / 1000)}s args=${config.workerArgs.join(" ") || "none"})`
+    `boot (poll=${Math.round(config.pollMs / 1000)}s startup=${config.runOnStartup ? "on" : "off"} timeout=${Math.round(config.runTimeoutMs / 1000)}s args=${config.workerArgs.join(" ") || "none"})`
   );
   writeHeartbeat({ status: "booting", booted_at: nowIso() }, config);
   checkForRestartRequest(config);
-  startupTimer = setTimeout(() => runDigest("startup", config), config.startupDelayMs);
+  if (config.runOnStartup) {
+    startupTimer = setTimeout(() => runDigest("startup", config), config.startupDelayMs);
+  } else {
+    startupTimer = null;
+    writeHeartbeat({ status: "ready", startup_skipped: true }, config);
+    log("startup digest disabled (DIGEST_RUN_ON_STARTUP=0)");
+  }
   intervalTimer = setInterval(() => runDigest("interval", config), config.pollMs);
   controlTimer = setInterval(() => checkForRestartRequest(config), controlPollMs);
   return { startupTimer, intervalTimer, controlTimer };

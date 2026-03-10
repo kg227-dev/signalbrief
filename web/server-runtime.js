@@ -204,6 +204,8 @@ const CORE_ROUTE_DEPS = {
   DEFAULT_TOPICS,
   INDUSTRY_TOPICS,
   CAPABILITY_TOPICS,
+  digestRunStatus,
+  getCachedOrRefreshSchedulerHeartbeat,
   findUserByToken,
   handleSignup,
   handleSettings,

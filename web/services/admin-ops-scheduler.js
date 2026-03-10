@@ -47,6 +47,14 @@ function createSchedulerHeartbeatAccessor({ fs, schedulerHeartbeatFile, getSched
             worker: raw?.worker || "scheduler-worker",
             updated_at: raw?.updated_at || null,
             age_seconds: Math.round(ageMs / 1000),
+            status: raw?.status || null,
+            blocked: !!raw?.blocked || String(raw?.status || "").toLowerCase() === "blocked",
+            skip_reason: raw?.skip_reason || null,
+            lock_state: raw?.lock_state || null,
+            lock_error: raw?.lock_error || null,
+            last_error: raw?.last_error || null,
+            consecutive_lock_unhealthy: Number(raw?.consecutive_lock_unhealthy || 0),
+            blocked_state: raw?.blocked_state || null,
             last_run: raw?.last_run || null,
             summary: healthy
               ? `ok · heartbeat ${Math.round(ageMs / 1000)}s ago`

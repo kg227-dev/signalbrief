@@ -125,6 +125,9 @@ node src/entrypoints/digest.js --chatId 123456789
 ```bash
 npm run smoke:worker
 npm run smoke:admin-scheduler
+npm run ops:verify-runtime:quick
+npm run ops:verify-runtime
+npm run ops:watchdog-scheduler
 npm run qa:harness
 npm run qa:matrix
 ```
@@ -144,6 +147,15 @@ cp .env.example .env
 4. Start all services:
 ```bash
 docker compose up -d --build
+```
+5. Verify runtime health before accepting traffic:
+```bash
+npm run ops:verify-runtime
+```
+
+Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
+```bash
+SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler
 ```
 
 Services in `docker-compose.yml`:
@@ -261,6 +273,7 @@ Inline callback buttons per digest item: `Save`, `More like this`, `Less like th
 |--------|----------|---------|
 | `GET` | `/api/topics` | Return standard topic lists |
 | `GET` | `/api/user?token=...` | Return user profile by token |
+| `GET` | `/api/health/scheduler` | Scheduler heartbeat + digest lock health (200 healthy, 503 unhealthy) |
 | `POST` | `/api/signup` | Create user + trigger welcome digest |
 | `POST` | `/api/settings` | Update token-authenticated user settings |
 | `GET` | `/api/archive?token=...` | User-scoped archive list |
@@ -350,7 +363,7 @@ Custom topics are stored as `custom_<slug>` and fetched as dedicated Perplexity 
 - User and admin session state is in-process memory/JSON files (no shared DB/session store).
 - Admin APIs are not localhost-only by default; protection is session auth, with optional local bypass flag.
 - If a user JSON file is corrupt, `readUser()` falls back to defaults for that chatId.
-- `/api/settings` currently accepts unconstrained `topics` and `items_per_digest`; UI constrains values but API does not.
+- Custom keyword tracking is capped at 3 per user (enforced by UI, API, and Telegram command path).
 
 ---
 

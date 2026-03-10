@@ -89,6 +89,7 @@ archive/YYYY-MM-DD.json + data/cost-log.json + user JSON state updates
 | `tests/contracts/` | Contract/integration tests |
 | `test-harness/` | Deterministic QA harness and matrix runner |
 | `scripts/` | Smoke checks and verification scripts |
+| `deploy/launchagents/` | LaunchAgent template files for local Mac fallback ops |
 | `docs/` | Backlog, planning, marketing, onboarding, and contribution docs |
 | `artifacts/` | Ignored generated local outputs |
 
@@ -178,6 +179,7 @@ launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
 `BASE_URL=https://getsignalbrief.com` is set in the web LaunchAgent — no extra config needed for production URLs.
 
 Note: these LaunchAgents are now fallback/rollback only and are intentionally unloaded in normal production operation.
+Template for re-engagement fallback job: `deploy/launchagents/com.jarvis.signalbrief-reengagement.plist`.
 ---
 
 ## Configuration Keys (`config.json`)

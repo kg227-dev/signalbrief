@@ -55,7 +55,7 @@ Topics appear as grouped chips in onboarding (index.html) and settings (settings
 - Cloudflare Tunnel (named tunnel `signalbrief`, ID `308a0e0b-b520-4ae0-92d3-ca92bf3084f9`) serves web layer publicly at getsignalbrief.com
 - LaunchAgent labels: `com.jarvis.signalbrief-bot`, `com.jarvis.signalbrief-web`, `com.jarvis.signalbrief-digest`, `com.jarvis.signalbrief-reengagement`, `com.jarvis.signalbrief-tunnel`
 - Digest cron: 6:45 AM ET Mon–Sat via LaunchAgent (com.jarvis.signalbrief-digest.plist). No external cron dependency.
-- Re-engagement cron: 8:00 AM ET daily via LaunchAgent (com.jarvis.signalbrief-reengagement.plist), after digest delivery window.
+- Re-engagement cron: 8:00 AM ET daily via LaunchAgent (`deploy/launchagents/com.jarvis.signalbrief-reengagement.plist`), after digest delivery window.
 - Rate limiting: in-memory Maps `RATE_IP` (5 req/15min) + `RATE_EMAIL` (10min cooldown) in web/server.js. `getClientIp()` respects `cf-connecting-ip` Cloudflare header.
 - httpsPost in digest.js and reply-handler.js both resolve `{ status, body }` — always access `.body` for response data
 - BASE_URL: `process.env.BASE_URL || "http://localhost:3003"` in server.js; set to `https://getsignalbrief.com` in com.jarvis.signalbrief-web.plist EnvironmentVariables

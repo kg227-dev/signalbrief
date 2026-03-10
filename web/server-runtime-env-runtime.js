@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 
 const WEB_DIR = __dirname;
@@ -30,6 +31,46 @@ function getSchedulerControlFile() {
   return path.join(path.dirname(heartbeatFile), "scheduler-control.json");
 }
 
+function sanitizeAssetVersion(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .slice(0, 64);
+}
+
+function getWebAssetVersion() {
+  const explicit = sanitizeAssetVersion(
+    process.env.WEB_ASSET_VERSION
+    || process.env.RELEASE_VERSION
+    || process.env.SIGNALBRIEF_BUILD_ID
+  );
+  if (explicit) return explicit;
+
+  const candidates = [
+    "index.js",
+    "index-form-runtime.js",
+    "index-helpers-runtime.js",
+    "preferences-runtime.js",
+  ];
+  let newestMtimeMs = 0;
+  for (const fileName of candidates) {
+    try {
+      const fullPath = path.join(WEB_DIR, fileName);
+      const stat = fs.statSync(fullPath);
+      if (Number.isFinite(stat.mtimeMs) && stat.mtimeMs > newestMtimeMs) {
+        newestMtimeMs = stat.mtimeMs;
+      }
+    } catch {
+      // Ignore missing files; fallback handled below.
+    }
+  }
+
+  if (newestMtimeMs > 0) {
+    return `m${Math.floor(newestMtimeMs / 1000).toString(36)}`;
+  }
+  return "dev";
+}
+
 module.exports = {
   WEB_DIR,
   APP_ROOT,
@@ -40,4 +81,5 @@ module.exports = {
   getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
+  getWebAssetVersion,
 };

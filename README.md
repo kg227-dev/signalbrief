@@ -125,6 +125,7 @@ node src/entrypoints/digest.js --chatId 123456789
 ```bash
 npm run smoke:worker
 npm run smoke:admin-scheduler
+npm run ops:deploy:prod
 npm run ops:verify-runtime:quick
 npm run ops:verify-runtime
 npm run ops:watchdog-scheduler
@@ -152,6 +153,36 @@ docker compose up -d --build
 ```bash
 npm run ops:verify-runtime
 ```
+
+### Fast production deploy (one command)
+
+From your local repo:
+```bash
+npm run ops:deploy:prod
+```
+
+This performs:
+1. Package current workspace to `/tmp/signalbrief-deploy-<sha>.tgz`
+2. Upload to VM over SSH
+3. Extract in `/opt/signalbrief/app`
+4. Restart `web bot worker` with `docker compose up -d --build`
+5. Run remote runtime checks (`ops:verify-runtime:quick`)
+6. Run public checks (`/`, cache-busted `index.js`, `/api/health/scheduler`)
+
+Landing-page assets are automatically cache-busted at runtime (`?v=<asset_version>`) using server-side token replacement in `index.html`.
+
+Optional env overrides:
+- `DEPLOY_SSH_HOST` (default `129.213.92.102`)
+- `DEPLOY_SSH_USER` (default `ubuntu`)
+- `DEPLOY_SSH_KEY` (default `~/.ssh/signalbrief_vm`)
+- `DEPLOY_REMOTE_DIR` (default `/opt/signalbrief/app`)
+- `DEPLOY_PUBLIC_URL` (default `https://getsignalbrief.com`)
+- `DEPLOY_SERVICES` (default `web bot worker`)
+
+Optional flags:
+- `--skip-build`
+- `--skip-remote-verify`
+- `--skip-public-verify`
 
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash

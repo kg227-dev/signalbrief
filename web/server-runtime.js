@@ -64,6 +64,7 @@ const {
   getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
+  getWebAssetVersion,
 } = require("./server-runtime-env-runtime");
 const {
   INDUSTRY_TOPICS,
@@ -311,6 +312,7 @@ const PUBLIC_ROUTE_DEPS = {
   path,
   fs,
   APP_ROOT,
+  assetVersion: getWebAssetVersion(),
   readArchiveFiles: readArchiveFilesForDir,
   renderPublicDigestMissingPage,
   formatPublicDigestDateLabel,

@@ -2,6 +2,7 @@ const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
 const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
 const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
 const NO_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/index.js"]);
+const INDEX_ASSET_VERSION_TOKEN = "__ASSET_VERSION__";
 
 const STATIC_ROUTE_FILES = new Map([
   ["/", "index.html"],
@@ -101,7 +102,7 @@ function enforceAdminHtmlAuth(ctx, deps) {
 }
 
 function serveStaticFile(res, pathname, deps) {
-  const { path, serveFile, WEB_DIR } = deps;
+  const { path, fs, serveFile, WEB_DIR, assetVersion } = deps;
   const fileName = STATIC_ROUTE_FILES.get(pathname);
   if (!fileName) return false;
   const headers = {};
@@ -109,6 +110,26 @@ function serveStaticFile(res, pathname, deps) {
     headers["Cache-Control"] = "no-store";
   } else if (NO_CACHE_STATIC_ROUTES.has(pathname)) {
     headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate";
+  }
+  if (fileName === "index.html") {
+    const indexPath = path.join(WEB_DIR, fileName);
+    try {
+      const html = fs.readFileSync(indexPath, "utf8");
+      const version = String(assetVersion || "dev");
+      const rendered = html.includes(INDEX_ASSET_VERSION_TOKEN)
+        ? html.split(INDEX_ASSET_VERSION_TOKEN).join(version)
+        : html;
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        ...headers,
+      });
+      res.end(rendered);
+      return true;
+    } catch {
+      res.writeHead(404);
+      res.end("Not found");
+      return true;
+    }
   }
   const hasHeaders = Object.keys(headers).length > 0;
   return serveFile(res, path.join(WEB_DIR, fileName), hasHeaders ? headers : null);

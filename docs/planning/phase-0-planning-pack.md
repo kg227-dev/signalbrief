@@ -47,7 +47,7 @@ Certification rule: pass all required gates for 3 consecutive runs.
 
 ### 1.2 Composite Weights (Locked)
 
-From `test-harness/config.js`:
+From `test-harness/config/index.js`:
 
 - Topic matching: `0.25`
 - Relevance scoring: `0.20`
@@ -196,4 +196,3 @@ Run a fresh baseline harness snapshot and freeze it as the Phase 1 reference run
 ```bash
 npm run qa:harness -- --run-label=phase1-baseline
 ```
-

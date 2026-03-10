@@ -12,7 +12,7 @@ Each user gets a personalized briefing: selected topics, delivery schedule, anal
 - Tier 2 personalization: save/click/feedback loops with automatic topic-weight adjustment
 - Tier 3 distribution: public digest pages, admin reliability controls, and cloud-first scheduling
 
-Roadmap + audit backlog: [`features.md`](./features.md)
+Roadmap + audit backlog: [`docs/features.md`](./docs/features.md)
 
 ---
 
@@ -72,69 +72,31 @@ archive/YYYY-MM-DD.json + data/cost-log.json + user JSON state updates
 
 ---
 
-## Repository File Map
+## Repository Map
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `AGENTS.md` | Agent workflow and automation instructions |
-| `CLAUDE.md` | Codebase context and operating guidance |
-| `FORMAT-RULES.md` | Locked editorial formatting rules |
-| `README.md` | Public project documentation |
-| `SPEC.md` | Built-state product specification |
-| `features.md` | Backlog, bugs, audit findings, technical debt |
-| `Dockerfile` | Container image definition |
-| `docker-compose.yml` | Multi-service runtime topology (`web`, `bot`, `worker`) |
-| `package.json` | Node metadata and scripts |
-| `config.example.json` | Configuration template (copy to `config.json`) |
-| `start.sh` | Local process launcher for web/bot/worker |
-| `digest.js` | Compatibility entrypoint for manual digest runs |
-| `digest-runner.js` | Digest trigger orchestration, admission, and lock handling |
-| `src/entrypoints/digest-runtime.js` | Core digest pipeline orchestration |
-| `src/runtime/store.js` | JSON user store + token index |
-| `src/runtime/reply-handler-runtime.js` | Telegram intent parsing and command handlers |
-| `src/entrypoints/bot-server.js` | Telegram long-poll worker |
-| `src/runtime/mailer-runtime.js` | Resend primary + Gmail fallback mail delivery |
-| `src/entrypoints/scheduler-worker.js` | Always-on scheduler loop and heartbeat writer |
-| `src/runtime/engagement-events-runtime.js` | Engagement event append/load + ignored-event backfill |
-| `src/runtime/quality-score.js` | Digest quality scoring/trend helpers |
-| `src/runtime/personalization-runtime.js` | Auto topic-weight learning engine |
-| `templates/email.html` | Digest email template |
-| `templates/welcome.html` | Welcome email template |
-| `web/server.js` | HTTP layer: public + admin APIs and static routing |
-| `web/index.html` | Onboarding UI |
-| `web/settings.html` | User settings UI |
-| `web/archive.html` | User archive/search UI |
-| `web/admin-login.html` | Admin login page |
-| `web/admin.html` | Admin dashboard |
-| `web/admin-user.html` | Admin per-user editor |
-| `web/index.js` | Public onboarding client script |
-| `web/settings.js` | Settings client script |
-| `web/style.css` | Shared stylesheet |
-| `web/robots.txt` | Robots directives |
-| `web/sitemap.xml` | Sitemap for crawlability |
-| `planning/engagement-event-schema.v1.json` | Engagement event schema reference |
-| `planning/phase-0-planning-pack.md` | Early planning pack |
-| `planning/production-cutover-ubuntu.md` | Cloud cutover runbook |
-| `scripts/smoke-worker.js` | Scheduler smoke test |
-| `scripts/smoke-admin-scheduler.js` | Admin scheduler smoke test |
-| `test-harness/config.js` | Harness config |
-| `test-harness/cache.js` | Harness cache helpers |
-| `test-harness/evaluator.js` | Harness evaluation logic |
-| `test-harness/personas.js` | Persona definitions |
-| `test-harness/pipeline.js` | Harness execution pipeline |
-| `test-harness/run-tests.js` | Main QA harness runner |
-| `test-harness/run-matrix.js` | Matrix runner |
-| `test-harness/reporters/console.js` | Console reporter |
-| `test-harness/reporters/json.js` | JSON reporter |
-| `test-harness/suites/01-topic-matching.js` | Topic matching suite |
-| `test-harness/suites/02-relevance-scoring.js` | Relevance scoring suite |
-| `test-harness/suites/03-analysis-quality.js` | Analysis quality suite |
-| `test-harness/suites/04-diversity.js` | Diversity suite |
-| `test-harness/suites/05-custom-topics.js` | Custom topic suite |
-| `test-harness/suites/06-depth-control.js` | Depth-control suite |
-| `test-harness/suites/07-item-count.js` | Item-count suite |
-| `test-harness/suites/08-cross-day-freshness.js` | Cross-day freshness suite |
-| `test-harness/suites/09-end-to-end.js` | End-to-end suite |
+| `src/entrypoints/` | Process entrypoints (`digest`, `bot`, `worker`) |
+| `src/domains/` | Canonical domain imports (`digest`, `reply`, `personalization`, `engagement`) |
+| `src/platform/` | Canonical platform imports (`config`, `store`, `mailer`, `scheduler`, `types`) |
+| `src/digest/`, `src/runtime/` | Current implementation modules behind canonical facades |
+| `src/jobs/` | Background jobs (`digest-runner`, reengagement) |
+| `web/server/` | Canonical web server runtime imports |
+| `web/api/` | Canonical API grouping (`admin`, `core`, `public`) |
+| `web/services/` | Service grouping indexes and implementations |
+| `web/client/` | Canonical target for page/state/action client modules |
+| `web/*.html`, `web/*.js`, `web/style.css` | Static assets served in production |
+| `tests/contracts/` | Contract/integration tests |
+| `test-harness/` | Deterministic QA harness and matrix runner |
+| `scripts/` | Smoke checks and verification scripts |
+| `docs/` | Backlog, planning, marketing, onboarding, and contribution docs |
+| `artifacts/` | Ignored generated local outputs |
+
+Quick navigation for new engineers:
+- [Docs Index](./docs/INDEX.md)
+- [First 30 Minutes](./docs/onboarding-first-30-minutes.md)
+- [Change-to-Test Map](./docs/change-to-test-map.md)
+- [Path and Import Rules](./docs/contributing-path-rules.md)
 
 ---
 
@@ -192,7 +154,7 @@ Telegram ingress defaults to polling-first runtime mode. Webhook mode is legacy/
 
 Persistent state is mounted on disk (`./data`, `./archive`), so user state and digests survive restarts.
 
-Full VM cutover commands: [`planning/production-cutover-ubuntu.md`](./planning/production-cutover-ubuntu.md)
+Full VM cutover commands: [`docs/planning/production-cutover-ubuntu.md`](./docs/planning/production-cutover-ubuntu.md)
 
 ### macOS LaunchAgents (local fallback only)
 
@@ -395,7 +357,7 @@ Custom topics are stored as `custom_<slug>` and fetched as dedicated Perplexity 
 1. Create a branch for focused changes.
 2. Run relevant smoke checks (`npm run smoke:worker`, `npm run smoke:admin-scheduler`).
 3. For ranking/quality changes, run harness suites (`npm run qa:harness`).
-4. Keep docs (`README.md`, `SPEC.md`, `features.md`) in sync with behavior changes.
+4. Keep docs (`README.md`, `SPEC.md`, `docs/features.md`) in sync with behavior changes.
 
 ---
 

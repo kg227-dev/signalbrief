@@ -22,6 +22,8 @@
 
 ## REDDIT PLAYBOOK
 
+> **Account note (u/xlone6):** Before starting the seeding plan, check your karma in r/consulting specifically. If you have fewer than 50 karma in r/consulting (or no comment history there), treat yourself as Day 1 and do the full 2-week lurk phase. If you already have meaningful comment history in r/consulting, you may be able to compress Phase 1 to 3–5 days of topical commenting before your first subtle mention. Check: https://www.reddit.com/user/xlone6/ — look at comment history filtered to r/consulting.
+
 ### Phase 1: Lurk and build karma (Days 1–14)
 
 Do not post about SignalBrief yet. Instead:

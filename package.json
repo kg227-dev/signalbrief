@@ -8,14 +8,15 @@
     "web": "node web/server.js",
     "bot": "node src/entrypoints/bot-server.js",
     "worker": "node src/entrypoints/scheduler-worker.js",
-    "check:module-linkage": "node --check scripts/module-linkage.mjs",
+    "check:module-linkage": "node --check scripts/check-module-linkage.mjs",
     "smoke:worker": "node scripts/smoke-worker.js",
     "smoke:admin-scheduler": "node scripts/smoke-admin-scheduler.js",
     "smoke:digest": "node src/entrypoints/digest.js --dry-run",
     "test": "node scripts/test-critical-paths.js",
     "qa:harness": "node test-harness/run-tests.js --deterministic",
     "qa:benchmark": "node test-harness/run-tests.js",
-    "qa:matrix": "node test-harness/run-matrix.js"
+    "qa:matrix": "node test-harness/run-matrix.js",
+    "report:marketing-weekly": "node scripts/report-marketing-weekly.js"
   },
   "engines": {
     "node": ">=22"

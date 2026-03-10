@@ -15,6 +15,7 @@ SignalBrief is a daily AI-curated strategy-news digest delivered through Telegra
 - 17 standard topics (10 industries + 7 capabilities)
 - Custom topics (`custom_<slug>`) supported end-to-end: storage, matching, and dedicated fetches during runs
 - Scheduled digest delivery via always-on worker (`scheduler-worker.js`) plus on-demand (`/digest`, admin trigger)
+- Telegram ingress via polling-first bot worker (`bot-server.js` long-polling `getUpdates`); webhook mode is legacy/optional
 - Per-user relevance scoring and depth transformation
 - Engagement telemetry and automatic topic-weight learning
 - User-scoped archive browsing + public share page
@@ -223,7 +224,7 @@ Logged fields include per-user served/failed breakdown and standard vs custom Pe
 
 - User writes are atomic (`.tmp` + rename)
 - Engagement/admin logs are append-only JSONL style
-- Input validation exists for core auth fields, but some preference fields are currently permissive (see `features.md`)
+- Input validation exists for core auth fields, but some preference fields are currently permissive (see `docs/features.md`)
 
 ---
 
@@ -294,8 +295,10 @@ Logged fields include per-user served/failed breakdown and standard vs custom Pe
 | `GET` | `/api/click` | `url` + optional `token/did/item` query | 302 redirect |
 | `POST` | `/api/bookmarks` | `{ token, action: add|remove, item: { url, ... } }` | bookmark state/count |
 | `POST` | `/api/request-link` | `{ email }` | `{ success: true }` (non-enumerating) |
-| `GET` | `/api/unsubscribe` | `token` query | 302 to settings confirmation |
-| `POST` | `/api/unsubscribe` | `token` query OR `email+sig` query | `{ success: true }` |
+| `GET` | `/api/unsubscribe/confirm` | `token` query | 302 to settings confirmation |
+| `POST` | `/api/unsubscribe/one-click` | `token` query | `{ success: true }` |
+| `GET`/`POST` | `/api/unsubscribe/legacy` | `email+sig` query | legacy bridge response (JSON/redirect) |
+| `GET`/`POST` | `/api/unsubscribe` | compatibility shim | forwards to explicit unsubscribe endpoints |
 
 ## Admin APIs
 

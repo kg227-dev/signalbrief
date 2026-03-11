@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { validateConfigSchema } = require("./config-schema-runtime");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const CONFIG_PATH = path.join(APP_ROOT, "config.json");
@@ -33,6 +34,11 @@ function loadConfig(opts = {}) {
     throw configError("invalid_shape", new Error("config root must be an object"));
   }
 
+  const validation = validateConfigSchema(parsed);
+  if (!validation.ok) {
+    throw configError("schema_failed", new Error(validation.errors.join("; ")));
+  }
+
   cachedConfig = parsed;
   return cachedConfig;
 }
@@ -40,4 +46,5 @@ function loadConfig(opts = {}) {
 module.exports = {
   CONFIG_PATH,
   loadConfig,
+  validateConfigSchema,
 };

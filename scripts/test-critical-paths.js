@@ -21,6 +21,10 @@ const { parseSourceDomain } = require("../src/domains/digest");
 const mailer = require("../src/platform/mailer");
 const store = require("../src/platform/store");
 const {
+  loadConfig,
+  validateConfigSchema,
+} = require("../src/runtime/config-provider");
+const {
   resetAdminAuthState,
   isAdminAuthed,
   getAdminActor,
@@ -270,6 +274,35 @@ async function testSharedSourceDomainContract() {
   assert.strictEqual(fromSource, "bloomberg.com", "source domain parser should fallback to source field");
 }
 
+async function testConfigSchemaContract() {
+  const currentConfig = loadConfig({ reload: true });
+  const valid = validateConfigSchema(currentConfig);
+  assert.strictEqual(valid.ok, true, "active config.json should satisfy schema validation");
+  assert.strictEqual(valid.errors.length, 0, "active config.json should produce zero schema errors");
+
+  const invalid = {
+    user: { email: "", deliveryTime: "7am", timezone: "" },
+    digest: { itemCount: 0 },
+    topics: [{ tag: "AI×TECH", queries: [] }],
+    admin: { email: "", salt: "", passwordHash: "" },
+    keys: {},
+  };
+  const bad = validateConfigSchema(invalid);
+  assert.strictEqual(bad.ok, false, "invalid config shape should be rejected");
+  assert.ok(
+    bad.errors.some((row) => row.includes("user.deliveryTime")),
+    "invalid config should include delivery-time schema error"
+  );
+  assert.ok(
+    bad.errors.some((row) => row.includes("digest.itemCount")),
+    "invalid config should include digest itemCount schema error"
+  );
+  assert.ok(
+    bad.errors.some((row) => row.includes("topics[0].queries")),
+    "invalid config should include topic queries schema error"
+  );
+}
+
 async function testMailerResultContract() {
   const emptySend = await mailer.sendEmail("", "Subject", "<p>Body</p>");
   assert.strictEqual(emptySend.ok, false, "sendEmail should fail for missing recipient");
@@ -491,6 +524,9 @@ async function main() {
 
   await testSharedSourceDomainContract();
   log("PASS shared source-domain contract");
+
+  await testConfigSchemaContract();
+  log("PASS config schema contract");
 
   await testMailerResultContract();
   log("PASS mailer result contract");

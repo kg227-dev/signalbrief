@@ -14,6 +14,7 @@ Audit-discovered items are tagged `[discovered by audit]` and include source ref
 
 ## Recently Completed
 
+- ✅ Startup `config.json` schema validation now fails fast on invalid shape/values (`src/runtime/config-provider.js`, `src/runtime/config-schema-runtime.js`)
 - ✅ Reliability floor Week 1 freeze completed with 7-day deploy + health checklist (`docs/planning/week1-freeze-2026-03-11.md`)
 - ✅ Scheduler watchdog now emits run-reason diagnostics and deterministic stale-heartbeat smoke checks (`scripts/watchdog-scheduler.js`, `scripts/smoke-admin-scheduler.js`) — from commit `c5f20b2`
 - ✅ Reliability floor runbook added with backup cadence, retention policy, and restore drill procedure (`docs/planning/reliability-floor-runbook.md`) — from commit `9f15641`
@@ -159,8 +160,8 @@ Important correction:
 
 ## Technical Debt
 
-- [ ] **Config duplication and drift risk** `[discovered by audit]`
-  Current behavior depends on values in both code defaults and `config.json`; add one authoritative schema validator at startup.
+- [~] **Config duplication and drift risk** `[discovered by audit]`
+  Startup schema validator is now in place (`src/runtime/config-schema-runtime.js`), but defaults still span code + config and should be unified behind one authoritative contract.
 
 - [ ] **Manual string-token matching for topic semantics** `[discovered by audit]`
   Source: `digest.js:690-812`

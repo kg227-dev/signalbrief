@@ -242,6 +242,8 @@ Template for re-engagement fallback job: `deploy/launchagents/com.jarvis.signalb
 
 ## Configuration Keys (`config.json`)
 
+SignalBrief now validates `config.json` schema at startup and fails fast on invalid shape/values (missing required objects, bad time format, invalid topic definitions, etc.).
+
 ### `keys`
 
 | Key | Required | Notes |

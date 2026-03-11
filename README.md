@@ -213,6 +213,8 @@ Persistent state is mounted on disk (`./data`, `./archive`), so user state and d
 
 Full VM cutover commands: [`docs/planning/production-cutover-ubuntu.md`](./docs/planning/production-cutover-ubuntu.md)
 
+Reliability-floor operations runbook (backups + restore drills): [`docs/planning/reliability-floor-runbook.md`](./docs/planning/reliability-floor-runbook.md)
+
 ### macOS LaunchAgents (local fallback only)
 
 Four plist files are installed at `~/Library/LaunchAgents/`:

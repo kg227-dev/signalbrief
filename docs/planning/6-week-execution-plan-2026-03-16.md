@@ -165,4 +165,4 @@ Do **not** replatform compute during this window.
 ## Progress Log
 
 - [x] Day 1 started and executed: backup + restore drill tooling implemented with tests and npm commands.
-- [ ] Day 2 pending.
+- [x] Day 2 completed: runbook added (`docs/planning/reliability-floor-runbook.md`) and commands validated (`ops:backup:state`, `ops:drill:restore-state -- --latest --clean`).

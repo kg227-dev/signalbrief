@@ -91,6 +91,14 @@ async function ensureTopicCatalogLoaded() {
 function toggleTopic(topicChip) {
   const topic = String(topicChip?.dataset?.topic || "").trim();
   if (!topic) return;
+  const currentlySelected = prefState
+    ? prefState.hasTopic(topic)
+    : topicChip.classList.contains("selected");
+
+  if (!currentlySelected && isCustomTopic(topic) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
+    syncCustomTopicLimitState();
+    return;
+  }
 
   const isSelected = prefState
     ? prefState.toggleTopic(topic)
@@ -116,17 +124,17 @@ function addCustomTopic() {
 
   const existing = findTopicChip(slug);
   if (existing) {
-    if (
-      isCustomTopic(slug)
-      && prefState
-      && !prefState.hasTopic(slug)
-      && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS
-    ) {
+    const existingSelected = prefState
+      ? prefState.hasTopic(slug)
+      : existing.classList.contains("selected");
+    if (isCustomTopic(slug) && !existingSelected && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
       syncCustomTopicLimitState();
       return;
     }
-    if (prefState && !prefState.hasTopic(slug)) {
+    if (prefState && !existingSelected) {
       prefState.addTopic(slug);
+      existing.classList.add("selected");
+    } else if (!prefState && !existingSelected) {
       existing.classList.add("selected");
     }
     input.value = "";

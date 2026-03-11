@@ -8,6 +8,9 @@ const https = require("https");
 const REQUIRED_SERVICES = ["web", "bot", "worker"];
 const HEALTH_URL = process.env.SCHEDULER_HEALTH_URL || "http://127.0.0.1:3003/api/health/scheduler";
 const HEALTH_TIMEOUT_MS = Math.max(1000, Number(process.env.SCHEDULER_HEALTH_TIMEOUT_MS || 5000));
+const HEALTH_RETRIES = Math.max(1, Number(process.env.SCHEDULER_HEALTH_RETRIES || 10));
+const HEALTH_RETRY_DELAY_MS = Math.max(250, Number(process.env.SCHEDULER_HEALTH_RETRY_DELAY_MS || 2500));
+const FAIL_LOG_TAIL_LINES = Math.max(20, Number(process.env.VERIFY_FAIL_LOG_TAIL_LINES || 120));
 const CANARY_CMD = process.env.DIGEST_CANARY_CMD || "node src/entrypoints/digest.js --dry-run";
 const SKIP_CANARY = process.argv.includes("--skip-canary");
 
@@ -107,6 +110,70 @@ function runCanary(command) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function serviceStateSnapshot(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return "no compose services returned";
+  return rows
+    .map((row) => `${rowServiceName(row) || "unknown"}=${rowState(row) || "unknown"}`)
+    .join(", ");
+}
+
+function collectFailureDiagnostics() {
+  const blocks = [];
+  const psRes = runCommand("docker compose ps");
+  if (psRes.ok) {
+    blocks.push("--- docker compose ps ---");
+    blocks.push(String(psRes.stdout || "").trim());
+  } else {
+    blocks.push("--- docker compose ps (failed) ---");
+    blocks.push(String(psRes.stderr || psRes.stdout || "").trim());
+  }
+
+  const logsRes = runCommand(`docker compose logs --no-color --tail=${FAIL_LOG_TAIL_LINES} web bot worker`);
+  if (logsRes.ok) {
+    blocks.push(`--- docker compose logs --tail=${FAIL_LOG_TAIL_LINES} (web bot worker) ---`);
+    blocks.push(String(logsRes.stdout || "").trim());
+  } else {
+    blocks.push("--- docker compose logs (failed) ---");
+    blocks.push(String(logsRes.stderr || logsRes.stdout || "").trim());
+  }
+
+  return blocks.filter(Boolean).join("\n");
+}
+
+async function probeSchedulerHealth({ url, timeoutMs, retries, retryDelayMs }) {
+  let lastError = null;
+  let lastResponse = null;
+
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    log(`Checking scheduler health endpoint (${attempt}/${retries}): ${url}`);
+    try {
+      const response = await fetchJson(url, timeoutMs);
+      lastResponse = response;
+      if (response.status === 200 && response?.data?.ok === true) {
+        return { ok: true, response };
+      }
+      log(`scheduler health probe not ready (status=${response.status}, ok=${response?.data?.ok})`);
+    } catch (error) {
+      lastError = error;
+      log(`scheduler health probe error: ${error.message}`);
+    }
+
+    if (attempt < retries) {
+      await sleep(retryDelayMs);
+    }
+  }
+
+  return {
+    ok: false,
+    lastResponse,
+    lastError,
+  };
+}
+
 async function main() {
   log("Checking compose service definitions");
   const declaredRes = runCommand("docker compose config --services");
@@ -159,27 +226,49 @@ async function main() {
   }
 
   if (notRunning.length > 0) {
-    const snapshot = rows
-      .map((row) => `${rowServiceName(row)}=${rowState(row) || "unknown"}`)
-      .join(", ");
-    fail(`required services not running: ${notRunning.join(", ")}`, snapshot);
+    const detail = [
+      `snapshot: ${serviceStateSnapshot(rows)}`,
+      collectFailureDiagnostics(),
+    ].join("\n");
+    fail(`required services not running: ${notRunning.join(", ")}`, detail);
   }
 
-  log(`Checking scheduler health endpoint: ${HEALTH_URL}`);
-  let healthResponse;
-  try {
-    healthResponse = await fetchJson(HEALTH_URL, HEALTH_TIMEOUT_MS);
-  } catch (error) {
-    fail(`scheduler health request failed: ${error.message}`);
+  const healthProbe = await probeSchedulerHealth({
+    url: HEALTH_URL,
+    timeoutMs: HEALTH_TIMEOUT_MS,
+    retries: HEALTH_RETRIES,
+    retryDelayMs: HEALTH_RETRY_DELAY_MS,
+  });
+  if (!healthProbe.ok) {
+    const response = healthProbe.lastResponse;
+    const responseBody = response && response.data && typeof response.data === "object"
+      ? JSON.stringify(response.data, null, 2)
+      : "<no JSON response>";
+    const detail = [
+      `snapshot: ${serviceStateSnapshot(rows)}`,
+      healthProbe.lastError ? `health request error: ${healthProbe.lastError.message}` : "",
+      `last health response status: ${Number(response?.status || 0)}`,
+      `last health response body: ${responseBody}`,
+      collectFailureDiagnostics(),
+    ].filter(Boolean).join("\n");
+    fail("scheduler health did not become healthy within retry window", detail);
   }
 
+  const healthResponse = healthProbe.response;
   if (!healthResponse.data || typeof healthResponse.data !== "object") {
-    fail("scheduler health response is malformed");
+    const detail = [
+      `snapshot: ${serviceStateSnapshot(rows)}`,
+      collectFailureDiagnostics(),
+    ].join("\n");
+    fail("scheduler health response is malformed", detail);
   }
   if (healthResponse.status !== 200 || healthResponse.data.ok !== true) {
     fail(
       `scheduler health is not OK (status=${healthResponse.status}, ok=${healthResponse.data.ok})`,
-      JSON.stringify(healthResponse.data, null, 2)
+      [
+        JSON.stringify(healthResponse.data, null, 2),
+        collectFailureDiagnostics(),
+      ].join("\n")
     );
   }
   log(`scheduler summary: ${healthResponse.data?.scheduler?.summary || "ok"}`);
@@ -191,6 +280,7 @@ async function main() {
       const detail = [
         String(canary.stdout || "").trim(),
         String(canary.stderr || "").trim(),
+        collectFailureDiagnostics(),
       ].filter(Boolean).join("\n");
       fail(`canary command failed (exit=${Number(canary.status || 1)})`, detail);
     }

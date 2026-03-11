@@ -8,6 +8,8 @@ const http = require("http");
 const https = require("https");
 
 const ROOT = path.resolve(__dirname, "..");
+const PUBLIC_VERIFY_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_ATTEMPTS, 8, 1);
+const PUBLIC_VERIFY_DELAY_MS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_DELAY_MS, 2500, 250);
 
 function log(message) {
   process.stdout.write(`[deploy-prod] ${message}\n`);
@@ -17,6 +19,12 @@ function fail(message, detail = "") {
   process.stderr.write(`[deploy-prod] FAIL: ${message}\n`);
   if (detail) process.stderr.write(`${detail}\n`);
   process.exit(1);
+}
+
+function parsePositiveInt(rawValue, fallback, min = 1) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.floor(parsed));
 }
 
 function shellQuote(value) {
@@ -74,6 +82,62 @@ function parseServiceList(rawValue) {
     .split(/[,\s]+/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function compactSnippet(text, maxLen = 280) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxLen) return normalized;
+  return `${normalized.slice(0, maxLen)}...`;
+}
+
+function responseDebugLines(response) {
+  if (!response || typeof response !== "object") return [];
+  const headers = response.headers && typeof response.headers === "object" ? response.headers : {};
+  const snippet = compactSnippet(response.body || "");
+  const lines = [
+    `url: ${response.url || "-"}`,
+    `status: ${Number(response.status || 0)}`,
+    `cache-control: ${headers["cache-control"] || "-"}`,
+    `location: ${headers.location || "-"}`,
+  ];
+  if (snippet) lines.push(`body: ${snippet}`);
+  return lines;
+}
+
+function createVerifyError(message, response = null, detail = "") {
+  const error = new Error(message);
+  error.response = response;
+  error.detail = detail;
+  return error;
+}
+
+function verifyErrorDetail(error) {
+  const lines = [];
+  if (error?.message) lines.push(String(error.message));
+  if (error?.detail) lines.push(String(error.detail));
+  lines.push(...responseDebugLines(error?.response));
+  return lines.filter(Boolean).join("\n");
+}
+
+async function eventually(label, attempts, delayMs, fn) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn(attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        log(`${label}: attempt ${attempt}/${attempts} failed (${String(error?.message || error)}); retrying in ${delayMs}ms`);
+        await sleep(delayMs);
+      }
+    }
+  }
+  throw lastError || new Error(`${label} failed`);
 }
 
 function fetchUrl(url, { timeoutMs = 8000, maxRedirects = 4 } = {}) {
@@ -136,46 +200,75 @@ function getGitShortSha() {
 async function verifyPublicEndpoints(publicBaseUrl) {
   const base = String(publicBaseUrl || "").replace(/\/+$/, "");
   if (!base) fail("public URL is required for verification");
+  const attempts = PUBLIC_VERIFY_ATTEMPTS;
+  const delayMs = PUBLIC_VERIFY_DELAY_MS;
 
-  log(`public verify: ${base}/`);
-  const home = await fetchUrl(`${base}/`);
-  if (home.status !== 200) {
-    fail(`homepage check failed: expected 200, got ${home.status}`);
-  }
-  if (!home.body.includes(`id="darkToggle"`)) {
-    fail("homepage check failed: dark-toggle button markup missing");
-  }
-  if (home.body.includes("__ASSET_VERSION__")) {
-    fail("homepage check failed: asset version token was not rendered");
-  }
-
-  const indexJsMatch = home.body.match(/<script\s+src="(index\.js\?v=[^"]+)"/i);
-  if (!indexJsMatch) {
-    fail("homepage check failed: cache-busted index.js script tag missing");
-  }
-  const indexJsPath = indexJsMatch[1];
-  log(`public verify: ${base}/${indexJsPath}`);
-  const indexJs = await fetchUrl(`${base}/${indexJsPath}`);
-  if (indexJs.status !== 200) {
-    fail(`index.js check failed: expected 200, got ${indexJs.status}`);
-  }
-  if (!indexJs.body.includes("window.toggleDark = toggleDark")) {
-    fail("index.js check failed: dark-mode runtime export missing");
-  }
-
-  log(`public verify: ${base}/api/health/scheduler`);
-  const scheduler = await fetchUrl(`${base}/api/health/scheduler`);
-  if (scheduler.status !== 200) {
-    fail(`scheduler health check failed: expected 200, got ${scheduler.status}`);
-  }
-  let parsed = null;
+  let homeCheck = null;
   try {
-    parsed = JSON.parse(scheduler.body || "{}");
-  } catch {
-    fail("scheduler health check failed: non-JSON response");
+    log(`public verify: ${base}/`);
+    homeCheck = await eventually("homepage check", attempts, delayMs, async () => {
+      const response = await fetchUrl(`${base}/`);
+      if (response.status !== 200) {
+        throw createVerifyError(`expected 200, got ${response.status}`, response);
+      }
+      if (!response.body.includes(`id="darkToggle"`)) {
+        throw createVerifyError("dark-toggle button markup missing", response);
+      }
+      if (response.body.includes("__ASSET_VERSION__")) {
+        throw createVerifyError("asset version token was not rendered", response);
+      }
+      const indexJsMatch = response.body.match(/<script\s+src="(index\.js\?v=[^"]+)"/i);
+      if (!indexJsMatch) {
+        throw createVerifyError("cache-busted index.js script tag missing", response);
+      }
+      return {
+        response,
+        indexJsPath: indexJsMatch[1],
+      };
+    });
+  } catch (error) {
+    fail("homepage check failed after retries", verifyErrorDetail(error));
   }
-  if (!parsed || parsed.ok !== true) {
-    fail("scheduler health check failed: api returned not-ok", JSON.stringify(parsed, null, 2));
+
+  try {
+    const indexJsUrl = `${base}/${homeCheck.indexJsPath}`;
+    log(`public verify: ${indexJsUrl}`);
+    await eventually("index.js check", attempts, delayMs, async () => {
+      const response = await fetchUrl(indexJsUrl);
+      if (response.status !== 200) {
+        throw createVerifyError(`expected 200, got ${response.status}`, response);
+      }
+      if (!response.body.includes("window.toggleDark = toggleDark")) {
+        throw createVerifyError("dark-mode runtime export missing", response);
+      }
+      return response;
+    });
+  } catch (error) {
+    fail("index.js check failed after retries", verifyErrorDetail(error));
+  }
+
+  try {
+    const healthUrl = `${base}/api/health/scheduler`;
+    log(`public verify: ${healthUrl}`);
+    await eventually("scheduler health check", attempts, delayMs, async () => {
+      const response = await fetchUrl(healthUrl);
+      let parsed = null;
+      try {
+        parsed = JSON.parse(response.body || "{}");
+      } catch {
+        throw createVerifyError(`non-JSON response (status=${response.status})`, response);
+      }
+      if (response.status !== 200 || !parsed || parsed.ok !== true) {
+        throw createVerifyError(
+          `expected status=200 and ok=true, got status=${response.status} ok=${parsed?.ok}`,
+          response,
+          `scheduler payload: ${JSON.stringify(parsed, null, 2)}`
+        );
+      }
+      return response;
+    });
+  } catch (error) {
+    fail("scheduler health check failed after retries", verifyErrorDetail(error));
   }
 
   log("public verification passed");
@@ -265,19 +358,26 @@ async function main() {
   const remoteSteps = [
     "set -euo pipefail",
     `cd ${shellQuote(remoteDir)}`,
+    "echo '[deploy-prod] remote: extract archive'",
     `tar -xzf ${shellQuote(remoteArchivePath)}`,
+    "echo '[deploy-prod] remote: compose up'",
     composeArgs.map((arg) => shellQuote(arg)).join(" "),
   ];
   if (!skipRemoteVerify) {
     remoteSteps.push(
+      "echo '[deploy-prod] remote: runtime verify'",
       "if command -v npm >/dev/null 2>&1; then "
       + "npm run -s ops:verify-runtime:quick; "
+      + "elif command -v node >/dev/null 2>&1; then "
+      + "node scripts/verify-runtime.js --skip-canary; "
       + "else "
-      + "echo '[deploy-prod] WARN: remote verify skipped (npm missing on VM host)' >&2; "
+      + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
       + "fi"
     );
   }
+  remoteSteps.push("echo '[deploy-prod] remote: compose ps'");
   remoteSteps.push("docker compose ps");
+  remoteSteps.push(`rm -f ${shellQuote(remoteArchivePath)}`);
 
   run("ssh", [
     "-i",

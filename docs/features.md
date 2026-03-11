@@ -1,6 +1,6 @@
 # SignalBrief Features, Bugs, and Audit Backlog
 
-*Refreshed: March 5, 2026*
+*Refreshed: March 11, 2026*
 
 This file tracks:
 - shipped work (recently completed)
@@ -14,6 +14,10 @@ Audit-discovered items are tagged `[discovered by audit]` and include source ref
 
 ## Recently Completed
 
+- ✅ Reliability floor Week 1 freeze completed with 7-day deploy + health checklist (`docs/planning/week1-freeze-2026-03-11.md`)
+- ✅ Scheduler watchdog now emits run-reason diagnostics and deterministic stale-heartbeat smoke checks (`scripts/watchdog-scheduler.js`, `scripts/smoke-admin-scheduler.js`) — from commit `c5f20b2`
+- ✅ Reliability floor runbook added with backup cadence, retention policy, and restore drill procedure (`docs/planning/reliability-floor-runbook.md`) — from commit `9f15641`
+- ✅ Backup + restore drill tooling and contract tests shipped (`scripts/backup-state.js`, `scripts/restore-state-drill.js`) — from commit `230c866`
 - ✅ Always-on scheduler worker and cloud deploy stack shipped (`scheduler-worker.js`, `docker-compose.yml`) — from commit `8d3ceb1`
 - ✅ Scheduler health and cloud cutover runbook shipped (`planning/production-cutover-ubuntu.md`) — from commit `33b328f`
 - ✅ Custom-topic recall and depth prompt rigor improved (`digest.js`) — from commit `3b44d02`

@@ -165,6 +165,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 .topic-chip.selected .check::after { content:'✓'; color:#fff; font-size:10px; font-weight:700; }
 .custom-topic-input { display:flex; gap:8px; margin-top:16px; }
 .custom-topic-input .input-field { flex:1; }
+.custom-topic-limit { display:none; margin-top:8px; font-size:12px; color:var(--text-secondary); }
+.custom-topic-limit.visible { display:block; }
 /* Custom (user-added) topic chips — amber signals "yours" */
 .topic-chip.topic-chip-custom { border-color: rgba(217,119,6,0.35); color: #92400E; background: #FFFBEB; }
 .topic-chip.topic-chip-custom:hover { border-color: #D97706; background: #FEF3C7; }
@@ -172,6 +174,8 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 .topic-chip.topic-chip-custom.selected:hover { background: #B45309; border-color: #B45309; }
 .add-btn { padding:10px 20px; background:var(--accent-light); color:var(--accent); border:1.5px solid var(--accent); border-radius:var(--radius-sm); font-size:14px; font-weight:600; cursor:pointer; transition:all 0.2s ease; font-family:inherit; white-space:nowrap; }
 .add-btn:hover { background:var(--accent); color:#fff; }
+.add-btn:disabled { background:#F3F4F6; border-color:#D1D5DB; color:#9CA3AF; cursor:not-allowed; }
+.add-btn:disabled:hover { background:#F3F4F6; color:#9CA3AF; }
 
 /* Depth */
 .depth-options { display:flex; flex-direction:column; gap:10px; }
@@ -391,8 +395,9 @@ select.input-field { appearance:none; background-image:url("data:image/svg+xml,%
 
       <div class="custom-topic-input">
         <input type="text" class="input-field" placeholder="Custom topic — e.g. GLP-1, DOGE, your client name" id="customTopic">
-        <button type="button" class="add-btn" onclick="addCustomTopic()">+ Add</button>
+        <button type="button" class="add-btn" id="addCustomTopicBtn" onclick="addCustomTopic()">+ Add</button>
       </div>
+      <div class="custom-topic-limit" id="customTopicLimitMessage" role="status" aria-live="polite"></div>
       <div style="font-size:12px;color:#9CA3AF;margin-top:8px;line-height:1.6;">
         Ideas: a specific drug class (GLP-1), a company you track (Nvidia, JPMorgan), a policy area (DOGE, IRA), a client or sector you're working in
       </div>

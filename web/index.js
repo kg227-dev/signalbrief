@@ -42,18 +42,21 @@ function selectedCustomKeywordCount() {
   return selectedTopicKeys().filter((topic) => isCustomTopic(topic)).length;
 }
 
-function showInlineSubmitError(message) {
-  const el = document.getElementById("submitError");
-  if (!el) return;
-  el.textContent = String(message || "");
-  el.classList.add("visible");
-}
+function syncCustomTopicLimitState() {
+  const customCount = selectedCustomKeywordCount();
+  const maxReached = customCount >= MAX_CUSTOM_KEYWORDS;
 
-function clearInlineSubmitError() {
-  const el = document.getElementById("submitError");
-  if (!el) return;
-  el.textContent = "";
-  el.classList.remove("visible");
+  const addButton = document.getElementById("addCustomTopicBtn");
+  if (addButton) {
+    addButton.disabled = maxReached;
+    addButton.setAttribute("aria-disabled", maxReached ? "true" : "false");
+  }
+
+  const limitMessage = document.getElementById("customTopicLimitMessage");
+  if (limitMessage) {
+    limitMessage.textContent = `Maximum of ${MAX_CUSTOM_KEYWORDS} custom keywords allowed.`;
+    limitMessage.classList.toggle("visible", maxReached);
+  }
 }
 
 function topicDisplayLabel(topic) {
@@ -119,7 +122,7 @@ function addCustomTopic() {
       && !prefState.hasTopic(slug)
       && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS
     ) {
-      showInlineSubmitError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
+      syncCustomTopicLimitState();
       return;
     }
     if (prefState && !prefState.hasTopic(slug)) {
@@ -127,13 +130,12 @@ function addCustomTopic() {
       existing.classList.add("selected");
     }
     input.value = "";
-    clearInlineSubmitError();
     updateProgress();
     return;
   }
 
   if (isCustomTopic(slug) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
-    showInlineSubmitError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
+    syncCustomTopicLimitState();
     return;
   }
 
@@ -149,7 +151,6 @@ function addCustomTopic() {
   if (prefState) prefState.addTopic(slug);
 
   input.value = "";
-  clearInlineSubmitError();
   updateProgress();
 }
 
@@ -312,6 +313,7 @@ function showLanding() {
 }
 
 function updateProgress() {
+  syncCustomTopicLimitState();
   if (indexForm && typeof indexForm.updateProgress === "function") {
     indexForm.updateProgress();
     return;

@@ -20,6 +20,11 @@ const { handlePublicStaticRoutes } = require("../web/api/public");
 const { parseSourceDomain } = require("../src/domains/digest");
 const mailer = require("../src/platform/mailer");
 const store = require("../src/platform/store");
+const {
+  resetAdminAuthState,
+  isAdminAuthed,
+  getAdminActor,
+} = require("../web/admin-auth");
 
 const TEST_FILE_SUFFIX = ".test.js";
 const TEST_DIR_EXCLUDES = new Set([
@@ -317,6 +322,88 @@ async function testAdminPageGuardContract() {
   );
 }
 
+async function testAdminLocalBypassContract() {
+  const prevNodeEnv = process.env.NODE_ENV;
+  const prevSignalbriefEnv = process.env.SIGNALBRIEF_ENV;
+  const prevDeployEnv = process.env.DEPLOY_ENV;
+  const prevAppEnv = process.env.APP_ENV;
+  const prevBypass = process.env.ADMIN_LOCAL_BYPASS;
+
+  const localReadOnlyReq = {
+    method: "GET",
+    url: "/api/admin/stats",
+    headers: {},
+    socket: { remoteAddress: "127.0.0.1" },
+  };
+  const localMutatingReq = {
+    method: "POST",
+    url: "/api/admin/delete-user",
+    headers: {},
+    socket: { remoteAddress: "127.0.0.1" },
+  };
+  const remoteReadOnlyReq = {
+    method: "GET",
+    url: "/api/admin/stats",
+    headers: {},
+    socket: { remoteAddress: "203.0.113.9" },
+  };
+
+  try {
+    process.env.ADMIN_LOCAL_BYPASS = "1";
+
+    process.env.NODE_ENV = "production";
+    delete process.env.SIGNALBRIEF_ENV;
+    delete process.env.DEPLOY_ENV;
+    delete process.env.APP_ENV;
+    resetAdminAuthState();
+    assert.strictEqual(
+      isAdminAuthed(localReadOnlyReq),
+      false,
+      "local admin bypass must never apply in production runtime"
+    );
+
+    process.env.NODE_ENV = "development";
+    resetAdminAuthState();
+    assert.strictEqual(
+      isAdminAuthed(localReadOnlyReq),
+      true,
+      "local read-only admin route should allow bypass in explicit non-production runtime"
+    );
+    assert.strictEqual(
+      getAdminActor(localReadOnlyReq),
+      "local-bypass",
+      "local bypass actor should be attributed for read-only bypass requests"
+    );
+    assert.strictEqual(
+      isAdminAuthed(localMutatingReq),
+      false,
+      "local bypass must not authorize mutating admin routes"
+    );
+    assert.strictEqual(
+      getAdminActor(localMutatingReq),
+      "unknown",
+      "mutating local admin routes should not be attributed as bypass actor"
+    );
+    assert.strictEqual(
+      isAdminAuthed(remoteReadOnlyReq),
+      false,
+      "local bypass must never apply to non-local clients"
+    );
+  } finally {
+    if (prevNodeEnv == null) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNodeEnv;
+    if (prevSignalbriefEnv == null) delete process.env.SIGNALBRIEF_ENV;
+    else process.env.SIGNALBRIEF_ENV = prevSignalbriefEnv;
+    if (prevDeployEnv == null) delete process.env.DEPLOY_ENV;
+    else process.env.DEPLOY_ENV = prevDeployEnv;
+    if (prevAppEnv == null) delete process.env.APP_ENV;
+    else process.env.APP_ENV = prevAppEnv;
+    if (prevBypass == null) delete process.env.ADMIN_LOCAL_BYPASS;
+    else process.env.ADMIN_LOCAL_BYPASS = prevBypass;
+    resetAdminAuthState();
+  }
+}
+
 async function testReplyHandlerCommandFlow() {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sb-critical-"));
   const dataDir = path.join(tmpRoot, "data");
@@ -410,6 +497,9 @@ async function main() {
 
   await testAdminPageGuardContract();
   log("PASS admin page auth guard");
+
+  await testAdminLocalBypassContract();
+  log("PASS admin local bypass contract");
 
   await testReplyHandlerCommandFlow();
   log("PASS reply-handler command flow");

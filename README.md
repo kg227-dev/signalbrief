@@ -407,7 +407,7 @@ Custom topics are stored as `custom_<slug>` and fetched as dedicated Perplexity 
 ## Known Limitations
 
 - User and admin session state is in-process memory/JSON files (no shared DB/session store).
-- Admin APIs are not localhost-only by default; protection is session auth, with optional local bypass flag.
+- Admin APIs are not localhost-only by default; protection is session auth. Local bypass is available only for explicit non-production runtimes (`NODE_ENV`/`SIGNALBRIEF_ENV` set to dev/test/local) and read-only local admin routes.
 - If a user JSON file is corrupt, `readUser()` falls back to defaults for that chatId.
 - Custom keyword tracking is capped at 3 per user (enforced by UI, API, and Telegram command path).
 

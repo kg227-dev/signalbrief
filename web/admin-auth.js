@@ -1,6 +1,21 @@
 const crypto = require("crypto");
 
 const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const NON_PROD_RUNTIME_VALUES = new Set(["development", "dev", "test", "local", "ci"]);
+const READ_ONLY_METHODS = new Set(["GET", "HEAD"]);
+const LOCAL_BYPASS_HTML_ROUTES = new Set([
+  "/admin",
+  "/admin/",
+  "/admin.html",
+  "/admin/user",
+  "/admin/sandbox",
+]);
+const LOCAL_BYPASS_API_ROUTES = new Set([
+  "/api/admin/check",
+  "/api/admin/stats",
+  "/api/admin/user-by-email",
+  "/api/admin/audit",
+]);
 
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW = 15 * 60 * 1000;
@@ -19,9 +34,26 @@ function resetAdminAuthState() {
   return ADMIN_AUTH_STATE;
 }
 
+function normalizeEnvName(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function resolveRuntimeEnv() {
+  return (
+    normalizeEnvName(process.env.NODE_ENV)
+    || normalizeEnvName(process.env.SIGNALBRIEF_ENV)
+    || normalizeEnvName(process.env.DEPLOY_ENV)
+    || normalizeEnvName(process.env.APP_ENV)
+  );
+}
+
+function isExplicitNonProductionRuntime() {
+  return NON_PROD_RUNTIME_VALUES.has(resolveRuntimeEnv());
+}
+
 function isAdminLocalBypassEnabled() {
   return process.env.ADMIN_LOCAL_BYPASS === "1"
-    && String(process.env.NODE_ENV || "").toLowerCase() !== "production";
+    && isExplicitNonProductionRuntime();
 }
 
 function pruneAdminSessions(now = Date.now()) {
@@ -82,24 +114,29 @@ function isLocalRequest(req) {
 }
 
 function isAdminBypassRoute(req) {
+  const method = String(req?.method || "GET").toUpperCase();
+  if (!READ_ONLY_METHODS.has(method)) return false;
   const pathname = String((req && req.url) || "/").split("?")[0];
-  return pathname === "/admin"
-    || pathname.startsWith("/admin/")
-    || pathname.startsWith("/api/admin");
+  if (LOCAL_BYPASS_HTML_ROUTES.has(pathname)) return true;
+  return LOCAL_BYPASS_API_ROUTES.has(pathname);
+}
+
+function canUseAdminLocalBypass(req) {
+  if (!isAdminLocalBypassEnabled()) return false;
+  if (!isLocalRequest(req)) return false;
+  return isAdminBypassRoute(req);
 }
 
 function getAdminActor(req) {
   const session = getAdminSession(req);
   if (session && session.email) return session.email;
-  if (isAdminLocalBypassEnabled() && isLocalRequest(req)) return "local-bypass";
+  if (canUseAdminLocalBypass(req)) return "local-bypass";
   return "unknown";
 }
 
 function isAdminAuthed(req) {
   if (validateAdminSession(req)) return true;
-  if (!isAdminLocalBypassEnabled()) return false;
-  if (!isLocalRequest(req)) return false;
-  return isAdminBypassRoute(req);
+  return canUseAdminLocalBypass(req);
 }
 
 function checkLoginRate(ip) {

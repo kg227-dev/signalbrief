@@ -92,6 +92,7 @@ async function main() {
     env: {
       ...process.env,
       PORT: String(PORT),
+      NODE_ENV: "test",
       ADMIN_LOCAL_BYPASS: "1",
       SCHEDULER_HEARTBEAT_FILE: HEARTBEAT,
       SIGNALBRIEF_DATA_DIR: DATA_DIR,

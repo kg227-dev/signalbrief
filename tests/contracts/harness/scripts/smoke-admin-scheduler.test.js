@@ -6,5 +6,9 @@ const { assertNodeSyntaxFile, assertSourceIncludesFile, assertModuleExports } = 
 const TARGET_REL = "scripts/smoke-admin-scheduler.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
-assertSourceIncludesFile(TARGET_PATH, ["spawn(process.execPath","[smoke-admin-scheduler] ok"]);
-
+assertSourceIncludesFile(TARGET_PATH, [
+  "spawn(process.execPath",
+  "[smoke-admin-scheduler] stale-health ok",
+  "[smoke-admin-scheduler] healthy-after-stale ok",
+  "[smoke-admin-scheduler] ok",
+]);

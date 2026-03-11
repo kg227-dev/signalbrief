@@ -167,3 +167,4 @@ Do **not** replatform compute during this window.
 - [x] Day 1 started and executed: backup + restore drill tooling implemented with tests and npm commands.
 - [x] Day 2 completed: runbook added (`docs/planning/reliability-floor-runbook.md`) and commands validated (`ops:backup:state`, `ops:drill:restore-state -- --latest --clean`).
 - [x] Day 3 completed: deploy/runtime verification hardened with retry-aware public checks, richer failure diagnostics, and script contract tests.
+- [x] Day 4 completed: scheduler watchdog diagnostics + run-reason metadata added and smoke test now deterministically validates stale scheduler health before recovery.

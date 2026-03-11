@@ -58,24 +58,34 @@ function getJson(url) {
   });
 }
 
-async function main() {
-  fs.rmSync(DATA_DIR, { recursive: true, force: true });
-  const payload = {
+function buildHeartbeatPayload({ updatedAt, status = "ok" } = {}) {
+  const nowIso = new Date().toISOString();
+  return {
     worker: "scheduler-worker",
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt || nowIso,
     poll_ms: 300000,
     in_flight: false,
+    status,
+    blocked: false,
     last_run: {
       trigger: "smoke",
       started_at: new Date(Date.now() - 1200).toISOString(),
-      finished_at: new Date().toISOString(),
+      finished_at: nowIso,
       duration_ms: 1200,
       exit_code: 0,
       signal: null,
       success: true,
     },
   };
-  fs.writeFileSync(HEARTBEAT, JSON.stringify(payload, null, 2));
+}
+
+async function main() {
+  fs.rmSync(DATA_DIR, { recursive: true, force: true });
+  const staleTs = new Date(Date.now() - (20 * 60 * 1000)).toISOString();
+  fs.writeFileSync(HEARTBEAT, JSON.stringify(buildHeartbeatPayload({
+    updatedAt: staleTs,
+    status: "smoke_stale_seed",
+  }), null, 2));
 
   const child = spawn(process.execPath, [SERVER], {
     cwd: ROOT,
@@ -94,6 +104,29 @@ async function main() {
   child.stdout.on("data", () => {});
 
   try {
+    const staleHealth = await waitFor(async () => {
+      const candidate = await getJson(`http://127.0.0.1:${PORT}/api/health/scheduler`);
+      if (candidate.status !== 503) return null;
+      const scheduler = candidate.data && candidate.data.scheduler;
+      if (!scheduler || scheduler.healthy !== false) return null;
+      const summary = String(scheduler.summary || "").toLowerCase();
+      if (!summary.includes("stale")) return null;
+      return candidate;
+    }, {
+      timeoutMs: 20000,
+      pollMs: 250,
+    });
+
+    if (staleHealth.status !== 503 || staleHealth?.data?.ok !== false) {
+      throw new Error("scheduler health endpoint did not report stale state deterministically");
+    }
+    process.stdout.write("[smoke-admin-scheduler] stale-health ok\n");
+
+    fs.writeFileSync(HEARTBEAT, JSON.stringify(buildHeartbeatPayload({
+      updatedAt: new Date().toISOString(),
+      status: "smoke_fresh_seed",
+    }), null, 2));
+
     const { res, scheduler, executiveSummary } = await waitFor(async () => {
       const candidate = await getJson(`http://127.0.0.1:${PORT}/api/admin/stats`);
       if (candidate.status !== 200) return null;
@@ -124,6 +157,7 @@ async function main() {
     ["refresh_health", "check_scheduler", "send_test_digest", "run_full_digest", "restart_worker"].forEach((id) => {
       if (!commandIds.has(id)) throw new Error(`executive_summary missing command id: ${id}`);
     });
+    process.stdout.write("[smoke-admin-scheduler] healthy-after-stale ok\n");
     process.stdout.write("[smoke-admin-scheduler] ok\n");
   } finally {
     child.kill("SIGTERM");

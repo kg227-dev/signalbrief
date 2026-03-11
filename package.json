@@ -15,6 +15,8 @@
     "ops:verify-runtime:quick": "node scripts/verify-runtime.js --skip-canary",
     "ops:deploy:prod": "node scripts/deploy-production.js",
     "ops:deploy:web": "DEPLOY_SERVICES=web node scripts/deploy-production.js",
+    "ops:backup:state": "node scripts/backup-state.js",
+    "ops:drill:restore-state": "node scripts/restore-state-drill.js",
     "ops:watchdog-scheduler": "node scripts/watchdog-scheduler.js",
     "smoke:digest": "node src/entrypoints/digest.js --dry-run",
     "test": "node scripts/test-critical-paths.js",

@@ -129,6 +129,8 @@ npm run ops:deploy:prod
 npm run ops:deploy:web
 npm run ops:verify-runtime:quick
 npm run ops:verify-runtime
+npm run ops:backup:state
+npm run ops:drill:restore-state -- --latest --clean
 npm run ops:watchdog-scheduler
 npm run qa:harness
 npm run qa:matrix

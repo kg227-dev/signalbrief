@@ -115,7 +115,7 @@ function serveStaticFile(res, pathname, deps) {
   } else if (NO_CACHE_STATIC_ROUTES.has(pathname)) {
     headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate";
   }
-  if (fileName === "index.html") {
+  if (fileName === "index.html" || fileName === "settings.html") {
     const indexPath = path.join(WEB_DIR, fileName);
     try {
       const html = fs.readFileSync(indexPath, "utf8");

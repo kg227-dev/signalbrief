@@ -785,6 +785,7 @@ async function main() {
 
   appendCostLog({
     date:                  now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }), // ET date (not UTC)
+    run_id:                runId,
     run_at:                now.toISOString(),
     run_at_et:             now.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }),
     on_demand:             !!targetChatId,
@@ -798,6 +799,7 @@ async function main() {
     total_cost_usd:        parseFloat(totalCost.toFixed(5)),
     users_targeted:        dueUsers.length,
     users_served:          deliveredUsers.length,
+    digest_url:            publicDigestUrl,
     per_user:              deliveredUsers,
     per_user_failed:       failedUsers,
   });

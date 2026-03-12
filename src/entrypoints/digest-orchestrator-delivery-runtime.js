@@ -291,6 +291,12 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         deliveredUsers.push({
           id: user.email || user.chatId,
           on_demand: Boolean(targetChatId),
+          digest_id: userDigestId,
+          digest_quality_score: Number.isFinite(Number(digestQuality?.score))
+            ? Number(digestQuality.score.toFixed(2))
+            : null,
+          digest_quality_band: String(digestQuality?.band || "") || null,
+          digest_url: String(publicDigestUrl || ""),
           engagement_event_failures: engagementWriteFailures,
         });
 

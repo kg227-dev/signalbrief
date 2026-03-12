@@ -208,7 +208,10 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <button onclick="logout()" style="font-size:12px;color:var(--text-secondary);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 14px;cursor:pointer;font-family:inherit;transition:all 0.15s;" onmouseover="this.style.borderColor='#9CA3AF'" onmouseout="this.style.borderColor='var(--border)'">Sign out</button>
     </div>
     <p id="headerSub" style="font-size:14px;color:var(--text-secondary);">Loading…</p>
-    <a id="archiveQuickLink" class="header-link" href="#" target="_blank" rel="noopener" style="display:none;">Open user archive →</a>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;">
+      <a id="archiveQuickLink" class="header-link" href="#" target="_blank" rel="noopener" style="display:none;">Open user archive →</a>
+      <a id="latestDigestQuickLink" class="header-link" href="#" target="_blank" rel="noopener" style="display:none;">Open latest digest →</a>
+    </div>
   </div>
 
   <div id="loadingState" class="loading-state">Loading user…</div>
@@ -422,6 +425,39 @@ function formatEtDateTime(iso) {
     minute: '2-digit',
     hour12: true,
   });
+}
+
+function toEtDateKey(iso) {
+  if (!iso) return '';
+  const ts = Date.parse(String(iso));
+  if (!Number.isFinite(ts)) return '';
+  return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+function parseDigestDateFromId(digestId) {
+  const match = String(digestId || '').trim().match(/^(\d{4}-\d{2}-\d{2}):/);
+  return match ? match[1] : '';
+}
+
+function resolveLatestDigestDateKey(user) {
+  const fromLastQualityDate = String(user?.last_quality_score?.date_et || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fromLastQualityDate)) return fromLastQualityDate;
+
+  const fromLastQualityDigestId = parseDigestDateFromId(user?.last_quality_score?.digest_id);
+  if (fromLastQualityDigestId) return fromLastQualityDigestId;
+
+  const history = Array.isArray(user?.quality_history) ? user.quality_history : [];
+  for (let idx = history.length - 1; idx >= 0; idx -= 1) {
+    const row = history[idx] || {};
+    const byDateEt = String(row.date_et || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(byDateEt)) return byDateEt;
+    const byDigestId = parseDigestDateFromId(row.digest_id);
+    if (byDigestId) return byDigestId;
+  }
+
+  const fallback = toEtDateKey(user?.last_digest_at);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fallback)) return fallback;
+  return '';
 }
 
 function updateTopicNote() {
@@ -727,6 +763,16 @@ async function init() {
         ? '/archive?token=' + encodeURIComponent(userToken) + '&admin=1&admin_return=' + encodeURIComponent(adminReturn)
         : '/archive?email=' + encodeURIComponent(userEmail) + '&admin=1&admin_return=' + encodeURIComponent(adminReturn);
       archiveQuickLink.style.display = 'inline-block';
+    }
+    const latestDigestQuickLink = document.getElementById('latestDigestQuickLink');
+    if (latestDigestQuickLink) {
+      const digestDateKey = resolveLatestDigestDateKey(user);
+      if (digestDateKey) {
+        latestDigestQuickLink.href = '/digest/' + encodeURIComponent(digestDateKey);
+        latestDigestQuickLink.style.display = 'inline-block';
+      } else {
+        latestDigestQuickLink.style.display = 'none';
+      }
     }
 
     buildMetaBar(user);

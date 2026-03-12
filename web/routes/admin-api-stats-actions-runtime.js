@@ -6,6 +6,7 @@ const {
   buildMonthRunSummary,
   buildPerUserCostRollup,
 } = require("../services/admin-stats-costs");
+const { enrichRunsWithDigestMetadata } = require("../services/admin-stats-runs");
 const {
   buildAdminRoster,
   buildDeliveryWarnings,
@@ -70,7 +71,9 @@ function buildAdminStatsPayload({
     parseEtNowParts,
   } = deps;
 
-  const runs = loadCostRunsNewest();
+  const runsRaw = loadCostRunsNewest();
+  const engagementEvents = loadEngagementEvents({ max_age_days: 120, dedupe: true });
+  const runs = enrichRunsWithDigestMetadata(runsRaw, engagementEvents);
   const now = new Date();
   const monthPrefix = now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }).slice(0, 7);
   const monthLabel = now.toLocaleDateString("en-US", {
@@ -89,7 +92,7 @@ function buildAdminStatsPayload({
   const engagement = buildEngagementMetrics({
     usersAll,
     referrals,
-    loadEngagementEvents,
+    loadEngagementEvents: () => engagementEvents,
     parseIsoTs,
   });
   const perUser = buildPerUserCostRollup(runs);

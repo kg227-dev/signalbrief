@@ -1033,11 +1033,13 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
           <th>Users</th>
           <th>Sent to</th>
           <th>Tokens (in / out)</th>
+          <th>Digest quality</th>
+          <th>Digest</th>
           <th>Total</th>
         </tr>
       </thead>
       <tbody id="runsBody">
-        <tr><td colspan="7" class="empty">Loading…</td></tr>
+        <tr><td colspan="9" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -1257,6 +1259,28 @@ function renderRunRecipients(run) {
     ? ` <span style="color:var(--text-secondary);">+${recipients.length - 3}</span>`
     : "";
   return `<span title="${esc(recipients.join(", "))}">${preview}${extra}</span>`;
+}
+function renderRunDigestQuality(run) {
+  const score = Number(run?.digest_quality_score);
+  if (!Number.isFinite(score)) return `<span style="color:var(--text-secondary);">—</span>`;
+  const tone = score >= 85 ? "#059669" : (score >= 75 ? "#D97706" : "#DC2626");
+  const samples = Number(run?.digest_quality_samples || 0);
+  const sampleLabel = samples > 0
+    ? `Average across ${samples} recipient${samples === 1 ? "" : "s"}`
+    : "";
+  return `<span class="mono" style="font-weight:700;color:${tone};" title="${esc(sampleLabel)}">${score.toFixed(1)}</span>`;
+}
+function resolveRunDigestHref(run) {
+  const rawHref = String(run?.digest_url || "").trim();
+  if (rawHref) return normalizeAdminActionHref(rawHref);
+  const dateKey = String(run?.digest_date_key || run?.date || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return `/digest/${encodeURIComponent(dateKey)}`;
+  return "";
+}
+function renderRunDigestLink(run) {
+  const href = resolveRunDigestHref(run);
+  if (!href) return `<span style="color:var(--text-secondary);">—</span>`;
+  return `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">view digest →</a>`;
 }
 function topicLabel(raw) {
   return String(raw || "").replace(/^custom_/, "").replace(/_/g, " ");
@@ -3079,7 +3103,7 @@ async function load(silent = false) {
       if (data.error === "admin access only") { window.location.href = "/admin/login"; return; }
       if (!silent) {
         document.getElementById("runsBody").innerHTML =
-          `<tr><td colspan="7" class="empty">Error loading stats: ${esc(data.error || `HTTP ${statsResp.status}`)}</td></tr>`;
+          `<tr><td colspan="9" class="empty">Error loading stats: ${esc(data.error || `HTTP ${statsResp.status}`)}</td></tr>`;
         showToast("err", data.error || "Failed to refresh admin stats");
       }
       setLastRefreshed(null);
@@ -3295,10 +3319,10 @@ async function load(silent = false) {
     document.getElementById("engagementReferrals").textContent = String(referralSignups);
     document.getElementById("engagementReferralsSub").textContent = "all-time attributed signups";
 
-    // ── Run log (condensed to 6 columns) ────────────────────────────────────────
+    // ── Run log ───────────────────────────────────────────────────────────────────
     const runsBody = document.getElementById("runsBody");
     if (!runs || runs.length === 0) {
-      runsBody.innerHTML = `<tr><td colspan="7" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
+      runsBody.innerHTML = `<tr><td colspan="9" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
     } else {
       runsBody.innerHTML = runs.map(r => {
         const typeBadge = r.on_demand
@@ -3326,6 +3350,8 @@ async function load(silent = false) {
         const tokensIn  = r.claude_tokens_in  || 0;
         const tokensOut = r.claude_tokens_out || 0;
         const recipients = renderRunRecipients(r);
+        const digestQuality = renderRunDigestQuality(r);
+        const digestLink = renderRunDigestLink(r);
         return `<tr>
           <td class="mono">${dateEt}</td>
           <td class="mono" style="color:#6B7280;">${timeEt}</td>
@@ -3333,6 +3359,8 @@ async function load(silent = false) {
           <td>${r.users_served || 0}</td>
           <td style="font-size:12px;line-height:1.4;">${recipients}</td>
           <td class="mono" style="color:#6B7280;">${fmtTokens(tokensIn)} / ${fmtTokens(tokensOut)}</td>
+          <td>${digestQuality}</td>
+          <td>${digestLink}</td>
           <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(r.total_cost_usd)}</td>
         </tr>`;
       }).join("");

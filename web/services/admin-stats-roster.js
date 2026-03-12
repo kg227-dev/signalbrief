@@ -53,6 +53,15 @@ function buildArchivePath(user, adminUserPath) {
   return `/archive?email=${encodeURIComponent(user.email)}&admin=1&admin_return=${encodeURIComponent(adminUserPath || "/admin")}`;
 }
 
+function buildSettingsPath(user, adminUserPath) {
+  if (user.token) {
+    return `/settings?token=${encodeURIComponent(user.token)}&admin=1&admin_return=${encodeURIComponent(adminUserPath || "/admin")}`;
+  }
+  if (adminUserPath) return adminUserPath;
+  if (user.email) return `/settings?email=${encodeURIComponent(user.email)}`;
+  return null;
+}
+
 function buildLastDigestPreview(user) {
   return (user.last_digest_items || []).slice(0, 3).map((item) => ({
     headline: (item.headline || "").slice(0, 80),
@@ -70,7 +79,6 @@ function buildAdminRosterEntry({
   computeQualityTrend,
   formatDaysLabel,
   computeNextDeliveryEt,
-  BASE_URL,
 }) {
   const prefs = user.preferences || {};
   const qualityTrend = computeQualityTrend(user.quality_history || []);
@@ -80,6 +88,7 @@ function buildAdminRosterEntry({
   const tgLinked = !!(user.chatId && !user.chatId.startsWith("email-"));
   const adminUserPath = user.email ? `/admin/user?email=${encodeURIComponent(user.email)}` : null;
   const archivePath = buildArchivePath(user, adminUserPath);
+  const settingsPath = buildSettingsPath(user, adminUserPath);
 
   return {
     name: user.name || "",
@@ -110,8 +119,8 @@ function buildAdminRosterEntry({
     depth: depthLabel(prefs.depth),
     next_delivery_et: nextDelivery?.label || "—",
     next_delivery_key: nextDelivery?.key || null,
-    settings_url: adminUserPath ? `${BASE_URL}${adminUserPath}` : null,
-    archive_url: archivePath ? `${BASE_URL}${archivePath}` : null,
+    settings_url: settingsPath,
+    archive_url: archivePath,
     dqs_current: qualityTrend.current,
     dqs_7d_avg: qualityTrend.avg_7d,
     dqs_14d_delta: qualityTrend.delta_14d,
@@ -126,7 +135,6 @@ function buildAdminRoster({
   computeQualityTrend,
   formatDaysLabel,
   computeNextDeliveryEt,
-  BASE_URL,
 }) {
   return usersAll
     .map((user) => buildAdminRosterEntry({
@@ -134,7 +142,6 @@ function buildAdminRoster({
       computeQualityTrend,
       formatDaysLabel,
       computeNextDeliveryEt,
-      BASE_URL,
     }))
     .sort((a, b) => (b.digests - a.digests));
 }

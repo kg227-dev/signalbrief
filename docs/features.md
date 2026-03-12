@@ -1,6 +1,6 @@
 # SignalBrief Features, Bugs, and Audit Backlog
 
-*Refreshed: March 11, 2026*
+*Refreshed: March 12, 2026*
 
 This file tracks:
 - shipped work (recently completed)
@@ -27,6 +27,7 @@ Audit-discovered items are tagged `[discovered by audit]` and include source ref
 - ✅ Public shareable digest pages are implemented (`GET /digest`, `GET /digest/:date`) — source: `web/routes/public-static.js`, `web/server-render-public-pages-runtime.js`
 - ✅ Auto topic-weight learning is implemented and persisted — source: `src/runtime/personalization/personalization-runtime.js`, `src/runtime/user-contract-runtime.js`
 - ✅ Digest feedback capture (`Great/Fine/Meh`) is implemented — source: `src/digest/runtime/digest-formatting-telegram-keyboard-runtime.js`, `src/runtime/reply/reply-command-engagement-runtime.js`
+- ✅ Settings API now normalizes `topics`, requires non-empty normalized `days_of_week`, and clamps `items_per_digest` to supported settings bounds (`web/services/web-user-settings-runtime.js`, `tests/contracts/web-api/services/web-user-handlers.test.js`)
 
 ---
 
@@ -112,13 +113,13 @@ Important correction:
   Source: `mailer.js:77`, `mailer.js:110`
   Why: `JSON.parse` is used without guard in both Resend and Google token callbacks; malformed/non-JSON upstream responses can throw and break delivery paths.
 
-- [ ] **Enforce `/api/settings` parity with onboarding constraints** `[bug][sev-high][discovered by audit]`
-  Source: `web/server.js:1322`, onboarding check at `web/server.js:1246`
-  Why: Signup enforces minimum 2 topics, but settings updates do not validate `topics` at all; API callers can store inconsistent preference state.
+- [x] **Enforce `/api/settings` parity with onboarding constraints** `[bug][sev-high][discovered by audit]`
+  Source: `web/services/web-user-settings-runtime.js`, `web/services/web-user-signup-actions-runtime.js`
+  Why: Settings now applies the same topic normalization and minimum-topic constraints as signup.
 
-- [ ] **Validate and clamp `items_per_digest` in API writes** `[bug][sev-high][discovered by audit]`
-  Source: `web/server.js:1322`, trim logic in `digest.js:1646`
-  Why: UIs only expose `5/10`, but API can persist arbitrary values, causing inconsistent behavior and oversized expectations.
+- [x] **Validate and clamp `items_per_digest` in API writes** `[bug][sev-high][discovered by audit]`
+  Source: `web/services/web-user-settings-runtime.js`
+  Why: Settings writes now normalize item count into supported settings bounds before persistence.
 
 - [ ] **Corrupt user-file handling should fail closed, not silently reset defaults** `[bug][sev-high][discovered by audit]`
   Source: `store.js:82-83`
@@ -136,9 +137,9 @@ Important correction:
   Source: `bot-server.js:11`, `bot-server.js:19`
   Why: `http` import and `PORT` constant are unused; header comment still says “webhook server” while implementation is long-polling.
 
-- [ ] **Constrain and normalize `days_of_week` in settings API** `[bug][sev-medium][discovered by audit]`
-  Source: `web/server.js:1322`
-  Why: API accepts arbitrary arrays without sanitization to `0..6`, potentially causing schedule drift and UI/API mismatch.
+- [x] **Constrain and normalize `days_of_week` in settings API** `[bug][sev-medium][discovered by audit]`
+  Source: `web/services/web-user-settings-runtime.js`
+  Why: Settings writes now require non-empty day arrays, normalize to deduped/sorted `0..6`, and derive frequency from canonical days.
 
 - [ ] **Add explicit timeout handling for Gmail send path parity** `[reliability][sev-medium][discovered by audit]`
   Source: `mailer.js:143`
@@ -177,7 +178,7 @@ Important correction:
 - **Token generation** is cryptographically secure (`crypto.randomBytes(32)`) — source: `store.js:11`.
 - **Admin routes** are cookie-session protected; they are not restricted to localhost by default — source: `web/server.js:507`.
 - **Unsubscribe via email** is signed with HMAC to avoid unauthenticated POST unsubscribes — source: `mailer.js:31`, `web/server.js:1400`.
-- **Input sanitization** is partial: key fields are validated, but some preference payload fields are permissive (`/api/settings`) — source: `web/server.js:1322`.
+- **Input sanitization** remains partial: settings write-path is now normalized, but some runtime inputs still rely on caller discipline outside `/api/settings`.
 
 ---
 

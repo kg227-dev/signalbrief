@@ -1,6 +1,61 @@
 const { normalizeUserRecord } = require("../../src/platform/store");
 const { normalizeTopicsForUserInput } = require("./topic-normalization-runtime");
 
+const WEEKDAY_DAYS = Object.freeze([1, 2, 3, 4, 5]);
+const ITEMS_PER_DIGEST_MIN = 5;
+const ITEMS_PER_DIGEST_MAX = 10;
+
+function deriveFrequencyFromDays(days) {
+  if (!Array.isArray(days) || days.length === 0) return "daily_weekday";
+  if (days.length === 7) return "daily_all";
+  if (days.length === WEEKDAY_DAYS.length && WEEKDAY_DAYS.every((day) => days.includes(day))) {
+    return "daily_weekday";
+  }
+  return "custom";
+}
+
+function normalizeItemsPerDigest(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false, error: "preferences.items_per_digest must be a positive number" };
+  }
+
+  // Settings UI exposes 5 and 10; normalize API writes to the same supported buckets.
+  const bounded = Math.min(ITEMS_PER_DIGEST_MAX, Math.max(ITEMS_PER_DIGEST_MIN, parsed));
+  const midpoint = (ITEMS_PER_DIGEST_MIN + ITEMS_PER_DIGEST_MAX) / 2;
+  const normalized = bounded <= midpoint ? ITEMS_PER_DIGEST_MIN : ITEMS_PER_DIGEST_MAX;
+  return { ok: true, itemsPerDigest: normalized };
+}
+
+function normalizeDaysOfWeek(value) {
+  if (!Array.isArray(value)) {
+    return { ok: false, error: "preferences.days_of_week must be an array of day indexes" };
+  }
+
+  const seen = new Set();
+  const days = [];
+  for (const day of value) {
+    const parsed = Number(day);
+    if (!Number.isFinite(parsed)) {
+      return { ok: false, error: "preferences.days_of_week must contain numbers between 0 and 6" };
+    }
+    const normalized = Math.floor(parsed);
+    if (normalized < 0 || normalized > 6) {
+      return { ok: false, error: "preferences.days_of_week must contain numbers between 0 and 6" };
+    }
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    days.push(normalized);
+  }
+
+  if (days.length === 0) {
+    return { ok: false, error: "preferences.days_of_week must include at least one day index" };
+  }
+
+  days.sort((a, b) => a - b);
+  return { ok: true, days };
+}
+
 function sanitizePreferencesPatch(rawPreferences) {
   if (
     !rawPreferences
@@ -22,34 +77,20 @@ function sanitizePreferencesPatch(rawPreferences) {
     }
 
     if (key === "items_per_digest") {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        return { ok: false, error: "preferences.items_per_digest must be a positive number" };
+      const itemsResult = normalizeItemsPerDigest(value);
+      if (!itemsResult.ok) {
+        return itemsResult;
       }
-      patch.items_per_digest = Math.floor(parsed);
+      patch.items_per_digest = itemsResult.itemsPerDigest;
       continue;
     }
 
     if (key === "days_of_week") {
-      if (!Array.isArray(value)) {
-        return { ok: false, error: "preferences.days_of_week must be an array of day indexes" };
+      const daysResult = normalizeDaysOfWeek(value);
+      if (!daysResult.ok) {
+        return daysResult;
       }
-      const seen = new Set();
-      const days = [];
-      for (const day of value) {
-        const parsed = Number(day);
-        if (!Number.isFinite(parsed)) {
-          return { ok: false, error: "preferences.days_of_week must contain numbers between 0 and 6" };
-        }
-        const normalized = Math.floor(parsed);
-        if (normalized < 0 || normalized > 6) {
-          return { ok: false, error: "preferences.days_of_week must contain numbers between 0 and 6" };
-        }
-        if (seen.has(normalized)) continue;
-        seen.add(normalized);
-        days.push(normalized);
-      }
-      patch.days_of_week = days;
+      patch.days_of_week = daysResult.days;
       continue;
     }
 
@@ -62,6 +103,10 @@ function sanitizePreferencesPatch(rawPreferences) {
     }
 
     return { ok: false, error: `preferences.${key} is not allowed` };
+  }
+
+  if (Array.isArray(patch.days_of_week)) {
+    patch.frequency = deriveFrequencyFromDays(patch.days_of_week);
   }
 
   return { ok: true, patch };

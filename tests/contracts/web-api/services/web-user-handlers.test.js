@@ -144,6 +144,12 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
     "preferences.unknown is not allowed"
   );
 
+  await assertSettingsValidation(
+    { token: "token-1", preferences: { days_of_week: [] } },
+    400,
+    "preferences.days_of_week must include at least one day index"
+  );
+
   const existingUser = {
     chatId: "c1",
     token: "token-1",
@@ -175,7 +181,28 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   assert.strictEqual(settingsRun.responses[settingsRun.responses.length - 1].status, 200);
   assert.strictEqual(settingsRun.writes.length, 1);
   assert.deepStrictEqual(settingsRun.writes[0].preferences.days_of_week, [1, 2, 3]);
-  assert.strictEqual(settingsRun.writes[0].preferences.items_per_digest, 7);
+  assert.strictEqual(settingsRun.writes[0].preferences.items_per_digest, 10);
   assert.strictEqual(settingsRun.writes[0].preferences.delivery_time, "08:15");
   assert.strictEqual(settingsRun.writes[0].preferences.telegram_enabled, false);
+  assert.strictEqual(settingsRun.writes[0].preferences.frequency, "custom");
+
+  const settingsTopicsRun = createDeps({
+    requireJsonBody: async () => ({
+      token: "token-1",
+      topics: [" ai×tech ", "custom_Cloud Security", "Cloud security", "AI×TECH"],
+    }),
+    findUserByToken: (token) => (token === "token-1" ? existingUser : null),
+    allUsers: () => [existingUser],
+  });
+  await createWebUserHandlers(settingsTopicsRun.deps).handleSettings({}, {});
+  assert.strictEqual(settingsTopicsRun.responses[settingsTopicsRun.responses.length - 1].status, 200);
+  assert.strictEqual(settingsTopicsRun.writes.length, 1);
+  assert.deepStrictEqual(
+    settingsTopicsRun.writes[0].topics,
+    ["AI×TECH", "custom_cloud_security"]
+  );
+  assert.deepStrictEqual(
+    settingsTopicsRun.writes[0].custom_topics,
+    ["custom_cloud_security"]
+  );
 })();

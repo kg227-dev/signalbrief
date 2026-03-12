@@ -19,6 +19,7 @@ const { handleCoreApiRoutes } = require("../web/api/core");
 const { handlePublicStaticRoutes } = require("../web/api/public");
 const { createAdminApiRouteHandler } = require("../web/routes/admin-api");
 const { createAdminRunDigestHandler } = require("../web/services/web-user-admin-runtime");
+const { createWebUserHandlers } = require("../web/services/web-user-handlers");
 const { parseSourceDomain } = require("../src/domains/digest");
 const mailer = require("../src/platform/mailer");
 const store = require("../src/platform/store");
@@ -409,6 +410,102 @@ async function testAdminApiAuthRegressionContract() {
   );
 }
 
+async function testSettingsInputNormalizationContract() {
+  const writes = [];
+  const responses = [];
+  const existingUser = {
+    chatId: "settings-critical",
+    token: "settings-token",
+    email: "settings@example.com",
+    topics: ["AI×TECH", "STRATEGY"],
+    preferences: {
+      depth: "headline_plus_why",
+      delivery_time: "07:00",
+      frequency: "daily_weekday",
+      days_of_week: [1, 2, 3, 4, 5],
+      items_per_digest: 5,
+      email_enabled: true,
+      telegram_enabled: true,
+    },
+  };
+
+  const handlers = createWebUserHandlers({
+    requireJsonBody: async () => ({
+      token: "settings-token",
+      topics: [" ai×tech ", "custom_Cloud Security", "cloud security", "AI×TECH"],
+      preferences: {
+        days_of_week: [6, "0", 2, 6],
+        items_per_digest: 99,
+      },
+    }),
+    json: (_res, data, status = 200) => {
+      responses.push({ status, data });
+      return { status, data };
+    },
+    getClientIp: () => "127.0.0.1",
+    checkRateLimit: () => ({ limited: false }),
+    allUsers: () => [existingUser],
+    findUserByToken: (token) => (token === "settings-token" ? existingUser : null),
+    normalizeReferralToken: () => "",
+    generateToken: () => "unused",
+    writeUser: (_chatId, payload) => {
+      writes.push(payload);
+    },
+    sendReferralThankYou: async () => {},
+    sendWelcomeEmail: async () => {},
+    queueDigestTrigger: async () => ({ ok: true }),
+    runDigestTrigger: async () => ({ ok: true }),
+    startDigestTrigger: async () => ({ ok: true }),
+    BASE_URL: "http://localhost:3003",
+    DEFAULT_TOPICS: ["AI×TECH", "STRATEGY"],
+    MAX_CUSTOM_KEYWORDS: 3,
+    PROTECTED_FIELDS: [
+      "chatId",
+      "token",
+      "joined_at",
+      "digests_received",
+      "bookmarks",
+      "last_digest_items",
+      "last_digest_at",
+      "digest_dates",
+      "last_email_open_at",
+      "email_opens_total",
+      "reengagement_state",
+      "custom_topics",
+      "signup_referral_source",
+    ],
+    isAdminAuthed: () => false,
+    logAdminActionEvent: () => {},
+  });
+
+  await handlers.handleSettings({}, {});
+
+  const last = responses[responses.length - 1];
+  assert.ok(last, "settings normalization contract should emit a JSON response");
+  assert.strictEqual(last.status, 200, "settings normalization contract should return 200");
+  assert.strictEqual(writes.length, 1, "settings normalization contract should write one user record");
+  assert.deepStrictEqual(
+    writes[0].topics,
+    ["AI×TECH", "custom_cloud_security"],
+    "settings normalization contract should canonicalize and dedupe topics"
+  );
+  assert.deepStrictEqual(
+    writes[0].preferences.days_of_week,
+    [0, 2, 6],
+    "settings normalization contract should sort and dedupe delivery days"
+  );
+  assert.strictEqual(
+    writes[0].preferences.items_per_digest,
+    10,
+    "settings normalization contract should clamp items_per_digest to supported bounds"
+  );
+  assert.strictEqual(
+    writes[0].preferences.frequency,
+    "custom",
+    "settings normalization contract should derive frequency from normalized days"
+  );
+}
+
 async function testSharedSourceDomainContract() {
   const fromUrl = parseSourceDomain({ url: "https://www.Example.com/path?a=1", source: "ignored" });
   assert.strictEqual(fromUrl, "example.com", "source domain parser should normalize hostname from URL");
@@ -667,6 +764,9 @@ async function main() {
 
   await testAdminApiAuthRegressionContract();
   log("PASS admin API auth regression contract");
+
+  await testSettingsInputNormalizationContract();
+  log("PASS settings input normalization contract");
 
   await testSharedSourceDomainContract();
   log("PASS shared source-domain contract");

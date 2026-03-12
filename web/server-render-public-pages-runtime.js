@@ -12,6 +12,7 @@ function createRenderPublicPages(deps) {
     dateLabel,
     quickScan,
     items,
+    digestMetaLine = "",
     refToken = "",
     baseUrl = "http://localhost:3003",
   }) {
@@ -24,6 +25,7 @@ function createRenderPublicPages(deps) {
       : `${baseUrl}/`;
     const safeDateLabel = escapeHtml(dateLabel || formatPublicDigestDateLabel(dateKey));
     const safeQuickScan = escapeHtml(String(quickScan || ""));
+    const safeDigestMetaLine = escapeHtml(String(digestMetaLine || "").trim());
     const safeItems = Array.isArray(items) ? items : [];
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");
@@ -76,6 +78,7 @@ function createRenderPublicPages(deps) {
     .kicker { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: #334155; font-weight: 700; margin-bottom: 8px; }
     h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; }
     .hero-sub { margin: 10px 0 0; color: var(--muted); line-height: 1.5; font-size: 15px; }
+    .hero-meta { margin: 8px 0 0; color: #1d4ed8; line-height: 1.4; font-size: 13px; font-weight: 700; }
     .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
     .btn { text-decoration: none; border-radius: 999px; padding: 10px 16px; font-size: 13px; font-weight: 700; display: inline-block; }
     .btn-primary { background: var(--accent); color: var(--accent-ink); }
@@ -105,6 +108,7 @@ function createRenderPublicPages(deps) {
       <div class="kicker">SignalBrief Public Digest</div>
       <h1>${safeDateLabel}</h1>
       <p class="hero-sub">A shareable briefing from SignalBrief: daily intelligence across AI, strategy, and business.</p>
+      ${safeDigestMetaLine ? `<p class="hero-meta">${safeDigestMetaLine}</p>` : ""}
       <div class="hero-actions">
         <a class="btn btn-primary" href="${escapeHtml(signupUrl)}" target="_blank" rel="noopener">Get your own personalized brief</a>
         <a class="btn btn-secondary" href="mailto:?subject=SignalBrief%20Digest&body=${encodeURIComponent(shareUrl)}">Forward this brief</a>

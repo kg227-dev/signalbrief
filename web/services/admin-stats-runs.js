@@ -30,14 +30,17 @@ function buildPreferredDigestUrl({ digestDateKey, recipients, tokenByRecipient, 
   const base = buildDigestUrl(digestDateKey);
   if (!base) return "";
 
+  const params = new URLSearchParams();
+  const normalizedRunId = String(runId || "").trim();
+  if (normalizedRunId) params.set("run", normalizedRunId);
+
   if (recipients instanceof Set && recipients.size === 1) {
     const onlyRecipient = Array.from(recipients)[0];
     const token = String(tokenByRecipient?.get?.(onlyRecipient) || "").trim();
-    if (token) return `${base}?ref=${encodeURIComponent(token)}`;
+    if (token) params.set("ref", token);
   }
 
-  const normalizedRunId = String(runId || "").trim();
-  if (normalizedRunId) return `${base}?run=${encodeURIComponent(normalizedRunId)}`;
+  if (params.size > 0) return `${base}?${params.toString()}`;
   return base;
 }
 

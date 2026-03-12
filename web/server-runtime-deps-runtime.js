@@ -91,6 +91,8 @@ function createServerRouteDependencies(deps) {
 
     // Public route deps
     assetVersion,
+    findUserByToken: findUserByTokenForPublic,
+    loadEngagementEvents: loadEngagementEventsForPublic,
     renderPublicDigestMissingPage,
     formatPublicDigestDateLabel,
     renderPublicDigestPageTemplate,
@@ -213,6 +215,8 @@ function createServerRouteDependencies(deps) {
     APP_ROOT,
     assetVersion,
     readArchiveFiles: readArchiveFilesForDir,
+    findUserByToken: findUserByTokenForPublic,
+    loadEngagementEvents: loadEngagementEventsForPublic,
     renderPublicDigestMissingPage,
     formatPublicDigestDateLabel,
     renderPublicDigestPage: (payload) => renderPublicDigestPageTemplate({

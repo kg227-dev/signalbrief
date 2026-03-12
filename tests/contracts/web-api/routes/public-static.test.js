@@ -16,5 +16,7 @@ assertSourceIncludesFile(TARGET_PATH, [
   "/settings-ui-runtime.js",
   "/settings-ui-topic-actions-runtime.js",
   "/settings-ui-preferences-actions-runtime.js",
+  "url.searchParams.get(\"run\")",
+  "event_type",
+  "digest_sent",
 ]);
-

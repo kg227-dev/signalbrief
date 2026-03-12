@@ -54,11 +54,141 @@ function resolveDigestDateKey(pathname, archiveFiles) {
   return null;
 }
 
+function parseDigestDateFromId(digestId) {
+  const match = String(digestId || "").trim().match(/^(\d{4}-\d{2}-\d{2}):/);
+  return match ? match[1] : "";
+}
+
+function normalizeLookupKey(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function sourceLabelFromUrl(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl || ""));
+    return parsed.hostname.replace(/^www\./i, "") || "source";
+  } catch {
+    return "source";
+  }
+}
+
+function mapDigestEventItemsToPublic(items) {
+  const rows = Array.isArray(items) ? items : [];
+  return rows.map((item) => ({
+    tag: String(item?.tag || "Signal").trim() || "Signal",
+    headline: String(item?.headline || "Untitled item").trim() || "Untitled item",
+    summary: "",
+    wim: "",
+    source: sourceLabelFromUrl(item?.url),
+    url: String(item?.url || "").trim(),
+  }));
+}
+
+function buildQuickScanFromDigestEventItems(items) {
+  const rows = Array.isArray(items) ? items : [];
+  const headlines = rows
+    .map((item) => String(item?.headline || "").trim())
+    .filter(Boolean)
+    .slice(0, 6);
+  return headlines.join(" · ");
+}
+
+function selectPreferredDigestEvent(events) {
+  const rows = Array.isArray(events) ? events.slice() : [];
+  if (!rows.length) return null;
+  rows.sort((left, right) => {
+    const leftChannel = String(left?.channel || "").toLowerCase();
+    const rightChannel = String(right?.channel || "").toLowerCase();
+    const leftChannelRank = leftChannel === "email" ? 2 : (leftChannel === "telegram" ? 1 : 0);
+    const rightChannelRank = rightChannel === "email" ? 2 : (rightChannel === "telegram" ? 1 : 0);
+    if (rightChannelRank !== leftChannelRank) return rightChannelRank - leftChannelRank;
+
+    const leftTs = Date.parse(String(left?.ts_utc || ""));
+    const rightTs = Date.parse(String(right?.ts_utc || ""));
+    const leftValid = Number.isFinite(leftTs) ? leftTs : 0;
+    const rightValid = Number.isFinite(rightTs) ? rightTs : 0;
+    return rightValid - leftValid;
+  });
+  return rows[0] || null;
+}
+
+function resolvePersonalizedDigestPayload({
+  dateKey,
+  runId,
+  refToken,
+  loadEngagementEvents,
+  findUserByToken,
+  formatPublicDigestDateLabel,
+}) {
+  const normalizedRunId = String(runId || "").trim();
+  const normalizedRef = String(refToken || "").trim().toLowerCase();
+  if (!normalizedRunId && !normalizedRef) return null;
+  if (typeof loadEngagementEvents !== "function") return null;
+
+  let user = null;
+  if (normalizedRef) {
+    if (typeof findUserByToken !== "function") return null;
+    user = findUserByToken(normalizedRef);
+    if (!user) return null;
+  }
+
+  let events = [];
+  try {
+    events = loadEngagementEvents({ max_age_days: 120, dedupe: false });
+  } catch {
+    return null;
+  }
+
+  const userEmailKey = normalizeLookupKey(user?.email);
+  const userChatIdKey = normalizeLookupKey(user?.chatId);
+  const candidates = events.filter((event) => {
+    if (String(event?.event_type || "") !== "digest_sent") return false;
+    const eventDateKey = String(event?.date_et || "").trim() || parseDigestDateFromId(event?.digest_id);
+    if (eventDateKey !== dateKey) return false;
+    if (normalizedRunId && String(event?.run_id || "").trim() !== normalizedRunId) return false;
+
+    if (!user) return true;
+    const eventEmailKey = normalizeLookupKey(event?.user_email);
+    const eventChatIdKey = normalizeLookupKey(event?.user_chat_id);
+    if (userEmailKey && eventEmailKey === userEmailKey) return true;
+    if (userChatIdKey && eventChatIdKey === userChatIdKey) return true;
+    return false;
+  });
+  if (!candidates.length) return null;
+
+  const selected = selectPreferredDigestEvent(candidates);
+  if (!selected) return null;
+  const eventItems = Array.isArray(selected?.metadata?.items) ? selected.metadata.items : [];
+  const mappedItems = mapDigestEventItemsToPublic(eventItems);
+  if (!mappedItems.length) return null;
+
+  const qualityScore = Number(selected?.metadata?.quality_score);
+  const itemCount = Number(selected?.metadata?.item_count || mappedItems.length);
+  const metaParts = [];
+  if (Number.isFinite(itemCount) && itemCount > 0) {
+    metaParts.push(`${itemCount} signals`);
+  }
+  if (Number.isFinite(qualityScore)) {
+    metaParts.push(`Match ${Math.round(qualityScore)}%`);
+  }
+  const digestMetaLine = metaParts.length ? `Personalized snapshot · ${metaParts.join(" · ")}` : "Personalized snapshot";
+
+  return {
+    dateKey,
+    dateLabel: formatPublicDigestDateLabel(dateKey),
+    quickScan: buildQuickScanFromDigestEventItems(eventItems),
+    items: mappedItems,
+    refToken: normalizedRef || "",
+    digestMetaLine,
+  };
+}
+
 function serveDigestPage(ctx, deps) {
   const { req, res, url, pathname } = ctx;
   const {
     path, fs, APP_ROOT, readArchiveFiles, renderPublicDigestMissingPage,
     formatPublicDigestDateLabel, renderPublicDigestPage,
+    loadEngagementEvents, findUserByToken,
   } = deps;
 
   if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
@@ -71,19 +201,36 @@ function serveDigestPage(ctx, deps) {
   }
 
   const archivePath = path.join(archiveDir, `${dateKey}.json`);
-  if (!fs.existsSync(archivePath)) {
-    return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
-  }
+  const runId = url.searchParams.get("run") || "";
+  const refToken = url.searchParams.get("ref") || "";
+  const personalizedPayload = resolvePersonalizedDigestPayload({
+    dateKey,
+    runId,
+    refToken,
+    loadEngagementEvents,
+    findUserByToken,
+    formatPublicDigestDateLabel,
+  });
 
   try {
-    const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
-    const dateLabel = String(parsed?.dateStr || "").trim() || formatPublicDigestDateLabel(dateKey);
+    let payload = personalizedPayload;
+    if (!payload) {
+      if (!fs.existsSync(archivePath)) {
+        return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
+      }
+      const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
+      const dateLabel = String(parsed?.dateStr || "").trim() || formatPublicDigestDateLabel(dateKey);
+      payload = {
+        dateKey,
+        dateLabel,
+        quickScan: parsed?.quickScan || "",
+        items: Array.isArray(parsed?.items) ? parsed.items : [],
+        refToken,
+      };
+    }
+
     const html = renderPublicDigestPage({
-      dateKey,
-      dateLabel,
-      quickScan: parsed?.quickScan || "",
-      items: Array.isArray(parsed?.items) ? parsed.items : [],
-      refToken: url.searchParams.get("ref") || "",
+      ...payload,
     });
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",

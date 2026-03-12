@@ -1185,6 +1185,19 @@ function esc(s) {
   if (!s) return "";
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+function normalizeAdminActionHref(rawHref) {
+  if (!rawHref) return "";
+  try {
+    const parsed = new URL(String(rawHref), window.location.origin);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    const trustedHosts = new Set([window.location.hostname, "getsignalbrief.com", "www.getsignalbrief.com"]);
+    if (!trustedHosts.has(parsed.hostname)) return parsed.href;
+    const normalizedPath = `/${String(parsed.pathname || "").replace(/^\/+/, "")}`;
+    return `${normalizedPath}${parsed.search}${parsed.hash}`;
+  } catch {
+    return `/${String(rawHref).replace(/^\/+/, "")}`;
+  }
+}
 function fmt$(n) {
   if (n === undefined || n === null) return "—";
   return "$" + n.toFixed(4);
@@ -2663,8 +2676,10 @@ function renderSubscriberDrawer(u) {
     : `<div class="subscriber-sub">No recent digest preview available.</div>`;
 
   const actionParts = [];
-  if (u.settings_url) actionParts.push(`<a class="table-action-link" href="${esc(u.settings_url)}" target="_blank" rel="noopener">edit prefs</a>`);
-  if (u.archive_url) actionParts.push(`<a class="table-action-link" href="${esc(u.archive_url)}" target="_blank" rel="noopener">view digests</a>`);
+  const settingsHref = normalizeAdminActionHref(u.settings_url);
+  if (settingsHref) actionParts.push(`<a class="table-action-link" href="${esc(settingsHref)}" target="_blank" rel="noopener">edit prefs</a>`);
+  const archiveHref = normalizeAdminActionHref(u.archive_url);
+  if (archiveHref) actionParts.push(`<a class="table-action-link" href="${esc(archiveHref)}" target="_blank" rel="noopener">view digests</a>`);
   if (u.email) actionParts.push(`<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.delivery_time_raw || "07:00")}, this)'>set time</button>`);
   const caps = getSendCapabilities(u);
   if (caps.canDigest || caps.canAnyMessage) {

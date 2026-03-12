@@ -64,7 +64,6 @@ function buildAdminStatsPayload({
     readJsonLineLog,
     ADMIN_MESSAGE_LOG,
     maskEmail,
-    BASE_URL,
     computeNextDeliveryEt,
     formatDaysLabel,
     computeQualityTrend,
@@ -100,7 +99,6 @@ function buildAdminStatsPayload({
     computeQualityTrend,
     formatDaysLabel,
     computeNextDeliveryEt,
-    BASE_URL,
   });
   const activeUsersCount = roster.filter((user) => user.status === "active").length;
   const activeTelegramUsersCount = roster.filter((user) => user.status === "active" && user.telegram).length;

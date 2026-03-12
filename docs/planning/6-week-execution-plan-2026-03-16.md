@@ -171,3 +171,4 @@ Do **not** replatform compute during this window.
 - [x] Day 5 completed: week freeze report added (`docs/planning/week1-freeze-2026-03-11.md`) with unresolved risks, Week 2 entry gate, and a runnable 7-day deploy + health checklist.
 - [x] Day 6 completed: admin local bypass is now explicit non-production only and read-only route scoped; added regression contract test coverage and smoke-script/runtime docs updates.
 - [x] Day 7 completed: startup config schema validation now fails fast on invalid `config.json` shape/values, with new critical-path coverage for schema pass/fail contracts.
+- [x] Day 8 completed: added route-level admin auth regression coverage across protected `/api/admin/*` endpoints (stats, user/audit, run-digest, bulk, messaging, sandbox, mutating actions) plus `/api/admin/check` unauthenticated-state assertion.

@@ -17,6 +17,8 @@ const {
 } = require("../src/jobs/digest-runner-runtime");
 const { handleCoreApiRoutes } = require("../web/api/core");
 const { handlePublicStaticRoutes } = require("../web/api/public");
+const { createAdminApiRouteHandler } = require("../web/routes/admin-api");
+const { createAdminRunDigestHandler } = require("../web/services/web-user-admin-runtime");
 const { parseSourceDomain } = require("../src/domains/digest");
 const mailer = require("../src/platform/mailer");
 const store = require("../src/platform/store");
@@ -215,6 +217,109 @@ async function invokeCoreRoute(method, rawUrl, pathname, depsOverrides = {}) {
   return res;
 }
 
+function createAdminJson(res, data, status = 200) {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(data));
+  return { status, data };
+}
+
+function buildAdminDeps(overrides = {}) {
+  const json = overrides.json || createAdminJson;
+  const isAdminAuthed = overrides.isAdminAuthed || (() => false);
+  const requireJsonBody = overrides.requireJsonBody || (async () => ({}));
+  const toRouteCtx = overrides.toRouteCtx || ((ctxOrReq, maybeRes) => (
+    ctxOrReq && ctxOrReq.req && ctxOrReq.res ? ctxOrReq : { req: ctxOrReq, res: maybeRes }
+  ));
+
+  const deps = {
+    json,
+    isAdminAuthed,
+    getClientIp: () => "127.0.0.1",
+    checkLoginRate: () => false,
+    requireJsonBody,
+    CONFIG: {
+      admin: {
+        email: "admin@example.com",
+        salt: "salt",
+        passwordHash: "00".repeat(64),
+      },
+    },
+    verifyAdminPassword: () => false,
+    createAdminSession: () => "session",
+    clearAdminSessionByRequest: () => false,
+    BASE_URL: "http://localhost:3003",
+    getBaseUrl: () => "http://localhost:3003",
+    emitIgnoredEventsIfDue: () => {},
+    getCachedOrRefreshSchedulerHeartbeat: () => ({
+      available: true,
+      healthy: true,
+      status: "ready",
+      updated_at: new Date().toISOString(),
+      summary: "ok",
+      age_seconds: 0,
+      poll_ms: 300000,
+      blocked: false,
+      in_flight: false,
+      last_error: null,
+      lock_state: null,
+      lock_error: null,
+      blocked_state: null,
+      consecutive_lock_unhealthy: 0,
+    }),
+    readSchedulerHeartbeat: () => null,
+    allUsers: () => [],
+    getRecentAutoAdjustmentsForUser: () => [],
+    readJsonLineLog: () => [],
+    ADMIN_ACTION_LOG: path.join(os.tmpdir(), "sb-admin-action-log.json"),
+    ADMIN_MESSAGE_LOG: path.join(os.tmpdir(), "sb-admin-message-log.json"),
+    normalizeDeliveryTimeInput: () => null,
+    writeUser: () => {},
+    deleteUser: () => {},
+    logAdminActionEvent: () => {},
+    formatTimeEt: () => "07:00 AM ET",
+    requestSchedulerWorkerRestart: () => ({ ok: true }),
+    sendMagicLinkEmail: async () => ({ ok: true }),
+    estimateSandboxCost: () => ({ ok: true }),
+    runSandboxPipeline: async () => ({ ok: true }),
+    toRouteCtx,
+    runDigestTrigger: async () => ({ ok: true }),
+    startDigestTrigger: async () => ({ ok: true }),
+    ...overrides,
+  };
+
+  deps.handleAdminRunDigest = overrides.handleAdminRunDigest || createAdminRunDigestHandler({
+    toRouteCtx,
+    json,
+    isAdminAuthed,
+    requireJsonBody,
+    allUsers: deps.allUsers,
+    runDigestTrigger: deps.runDigestTrigger,
+    startDigestTrigger: deps.startDigestTrigger,
+    logAdminActionEvent: deps.logAdminActionEvent,
+  });
+
+  return deps;
+}
+
+async function invokeAdminRoute(method, pathname, { search = "", depsOverrides = {} } = {}) {
+  const req = {
+    method,
+    url: `${pathname}${search}`,
+    headers: {},
+    socket: { remoteAddress: "127.0.0.1" },
+  };
+  const res = buildMockRes();
+  const ctx = {
+    req,
+    res,
+    pathname,
+    url: new URL(`http://localhost${pathname}${search}`),
+  };
+  const routeHandler = createAdminApiRouteHandler(buildAdminDeps(depsOverrides));
+  await routeHandler(ctx);
+  return res;
+}
+
 async function testCoreApiRoutesContract() {
   const topicsRes = await invokeCoreRoute("GET", "/api/topics", "/api/topics");
   assert.strictEqual(topicsRes.statusCode, 200, "/api/topics should return 200");
@@ -263,6 +368,44 @@ async function testCoreApiRoutesContract() {
   assert.ok(
     String(reactivateMissingTokenRes.headers.Location || "").includes("invalid_token=1"),
     "/api/reactivate missing token should redirect to explicit invalid token state"
+  );
+}
+
+async function testAdminApiAuthRegressionContract() {
+  const protectedRoutes = [
+    { method: "GET", pathname: "/api/admin/stats" },
+    { method: "GET", pathname: "/api/admin/user-by-email", search: "?email=user@example.com" },
+    { method: "GET", pathname: "/api/admin/audit", search: "?email=user@example.com" },
+    { method: "POST", pathname: "/api/admin/run-digest" },
+    { method: "POST", pathname: "/api/admin/update-delivery-time" },
+    { method: "POST", pathname: "/api/admin/set-user-status" },
+    { method: "POST", pathname: "/api/admin/delete-user" },
+    { method: "POST", pathname: "/api/admin/restart-scheduler-worker" },
+    { method: "POST", pathname: "/api/admin/bulk-action" },
+    { method: "POST", pathname: "/api/admin/message-user" },
+    { method: "POST", pathname: "/api/admin/sandbox/estimate" },
+    { method: "POST", pathname: "/api/admin/sandbox/run" },
+  ];
+
+  for (const route of protectedRoutes) {
+    const res = await invokeAdminRoute(route.method, route.pathname, { search: route.search || "" });
+    assert.strictEqual(
+      res.statusCode,
+      403,
+      `${route.method} ${route.pathname} should reject unauthenticated admin access`
+    );
+    assert.ok(
+      String(res.body || "").includes("admin access only"),
+      `${route.method} ${route.pathname} should return admin access error payload`
+    );
+  }
+
+  const checkRes = await invokeAdminRoute("GET", "/api/admin/check");
+  assert.strictEqual(checkRes.statusCode, 200, "/api/admin/check should stay reachable");
+  assert.deepStrictEqual(
+    JSON.parse(checkRes.body || "{}"),
+    { authenticated: false },
+    "/api/admin/check should report unauthenticated when no session/bypass"
   );
 }
 
@@ -521,6 +664,9 @@ async function main() {
 
   await testCoreApiRoutesContract();
   log("PASS core web API route contract");
+
+  await testAdminApiAuthRegressionContract();
+  log("PASS admin API auth regression contract");
 
   await testSharedSourceDomainContract();
   log("PASS shared source-domain contract");

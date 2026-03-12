@@ -56,6 +56,7 @@ const { resolveDueUsers } = require("./digest-orchestrator-schedule-runtime");
 const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrator-delivery-runtime");
 const { createDigestOrchestratorFetchRuntime } = require("./digest-orchestrator-fetch-runtime");
 const { createDigestOrchestratorSelectionRuntime } = require("./digest-orchestrator-selection-runtime");
+const { createDigestOrchestratorEnrichmentRuntime } = require("./digest-orchestrator-enrichment-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -701,12 +702,15 @@ async function main() {
     standardFetchCallsPlanned,
   });
 
-  const enrichment = await enrichItems(selected);
-  const enriched = enrichment.items;
-  const claudeUsage = {
-    input_tokens: Number(enrichment?.usage?.input_tokens || 0),
-    output_tokens: Number(enrichment?.usage?.output_tokens || 0),
-  };
+  const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
+    enrichItems,
+  });
+  const {
+    enriched,
+    claudeUsage,
+  } = await enrichmentRuntime.enrichSelectedItems({
+    selected,
+  });
 
   // Quick scan (shared archive/public page)
   const quickScan = enriched

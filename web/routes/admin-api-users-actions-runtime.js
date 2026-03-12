@@ -162,7 +162,21 @@ async function handleUpdateDeliveryTimeRoute({ ctx, deps }) {
 
   const user = allUsers().find((row) => (row.email || "").toLowerCase().trim() === email);
   if (!user) {
-    json(res, { error: "user not found" }, 404);
+    logAdminActionEvent(req, {
+      action: "delete_user",
+      target_email: email,
+      success: true,
+      details: {
+        existed: false,
+        idempotent: true,
+      },
+    });
+    json(res, {
+      success: true,
+      email,
+      existed: false,
+      message: "Subscriber already deleted",
+    });
     return true;
   }
   const previousDeliveryTime = String((user.preferences || {}).delivery_time || "07:00");

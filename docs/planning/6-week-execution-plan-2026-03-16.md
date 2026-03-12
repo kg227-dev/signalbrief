@@ -13,11 +13,27 @@ Do **not** replatform compute during this window.
 
 - Production recovery drill from backup completes in < 30 minutes.
 - Deploy path is one-command (`npm run ops:deploy:prod`) with verification gates passing.
+- Prod deploys are merge-gated by CI (no direct local-only push-to-prod path).
+- Staging/preview environment exists and is required for runtime-behavior changes before prod.
 - No single orchestrator/runtime composition file > 350 LOC in top critical paths.
 - State backend can run behind a feature flag (file-store and DB-backed adapter).
 - `qa:harness` composite score >= 75.
+- Release path supports canary + one-command rollback by commit SHA.
 
 ## Week-by-Week and Day-by-Day Backlog
+
+### Engineering Setup Gaps This Plan Now Explicitly Fixes (added Mar 12, 2026)
+
+- Local machine -> prod VM coupling on small changes:
+  - Fix: CI-gated merge-to-prod policy, staging verification lane, and canary rollout path.
+- Missing repository CI workflows:
+  - Fix: Add PR-required checks for tests, smoke contracts, and deploy verification dry-runs.
+- Single-VM shared-state operational fragility:
+  - Fix: Keep VM in this 6-week window, but isolate state concerns via store adapter + controlled backend cutover.
+- Architecture still mid-migration:
+  - Fix: Continue decomposition work on web/runtime seams with hard file-size and contract-test gates.
+- High orphan/coupling and test-health debt:
+  - Fix: Add explicit weekly burn-down targets and gate cutover on coverage/contract thresholds.
 
 ## Week 1 (Mar 16-22) - Reliability Floor
 
@@ -117,16 +133,32 @@ Do **not** replatform compute during this window.
 - Extract dependency composition blocks from `web/server-runtime.js`.
 
 ### Day 17
-- Split route bootstrap per domain (core/admin/public).
+- Split route bootstrap per domain (core/admin/public) and enforce import-boundary checks.
+- Add/enable repo CI workflow for PR checks (`npm test`, `smoke:worker`, `smoke:admin-scheduler`, targeted contract suites).
+- Exit criteria:
+  - PR checks run in CI and fail closed on regressions.
+  - Direct pushes to `main` are no longer required for normal iteration.
 
 ### Day 18
 - Isolate auth/session/error policies.
+- Stand up staging/preview deploy target (same runtime shape as prod, lower blast radius).
+- Exit criteria:
+  - Runtime behavior changes can be validated on staging before prod deploy.
+  - Staging has `/`, cache-busted asset render, and `/api/health/scheduler` checks wired.
 
 ### Day 19
 - Route-level contract tests and failure-mode tests.
+- Introduce release policy doc: when to ship immediately vs batch, required gates, rollback owner.
+- Exit criteria:
+  - Release policy is documented and linked from `README.md`.
+  - Contract tests cover core/admin/public failure paths for auth/session/serialization.
 
 ### Day 20
 - File-size/complexity pass and cleanup.
+- Add explicit coupling/orphan reduction pass for `web/**` and `src/entrypoints/**`.
+- Exit criteria:
+  - Web/runtime critical files meet size target.
+  - Measurable reduction in coupling/orphan findings from baseline scan.
 
 ## Week 5 (Apr 13-19) - State Backend Abstraction
 
@@ -135,32 +167,41 @@ Do **not** replatform compute during this window.
 
 ### Day 22
 - Implement SQLite adapter in parallel with file-store behavior parity.
+- Include write-path contention and recovery tests to retire shared-file fragility risks.
 
 ### Day 23
 - Add migration utility (`file -> sqlite`) with idempotent replay.
+- Add release artifact + migration preflight checklist for VM execution safety.
 
 ### Day 24
 - Dual-read compare mode in staging/local verification.
+- Add CI job for dual-read parity contracts on representative fixture set.
 
 ### Day 25
 - Migration risk review and go/no-go checklist for cutover.
+- Include explicit rollback-to-file-store path and verification script.
 
 ## Week 6 (Apr 20-26) - Controlled Cutover (Hybrid Complete)
 
 ### Day 26
 - Deploy feature-flagged state backend path to production (dark).
+- Add canary cohort + automated rollback trigger thresholds.
 
 ### Day 27
 - Enable backend for small cohort / shadow compare.
+- Require CI green + staging green before each cohort expansion.
 
 ### Day 28
 - Full enablement with rollback switch validated.
+- Enforce release batching cadence (non-hotfix changes shipped in planned windows).
 
 ### Day 29
 - Run live rollback drill and measure recovery time.
+- Validate one-command rollback by commit SHA + post-rollback health checklist.
 
 ### Day 30
 - Stabilization report, metrics closeout, and next-quarter infra decision.
+- Include decision memo: stay single-VM hardened vs managed-platform migration trigger conditions.
 
 ## Progress Log
 

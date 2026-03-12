@@ -54,6 +54,7 @@ const { createDigestDataRuntime } = require("../domains/digest");
 const { createDigestArchiveRuntime } = require("../domains/digest");
 const { resolveDueUsers } = require("./digest-orchestrator-schedule-runtime");
 const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrator-delivery-runtime");
+const { createDigestOrchestratorFetchRuntime } = require("./digest-orchestrator-fetch-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -649,128 +650,29 @@ async function main() {
   });
   const digestDateKey = formatEtDateKey(now);
   const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
-  const requestedCounts = dueUsers
-    .map((u) => Number(u?.preferences?.items_per_digest))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  const selectionTarget = Math.max(
-    Number(CONFIG.digest.itemCount || 7),
-    requestedCounts.length ? Math.max(...requestedCounts) : 0
-  );
-  const tagPriority = {};
-  for (const u of dueUsers) {
-    for (const topic of (u.topics || [])) {
-      const key = normalizeTopicToken(topic);
-      if (!key) continue;
-      tagPriority[key] = (tagPriority[key] || 0) + 1;
-    }
-  }
-
-  // For on-demand single-user runs, only fetch topics the user actually tracks.
-  // For scheduled multi-user runs, fetch all 17 standard topics.
-  let topicsToFetch = CONFIG.topics;
-  if (targetChatId && dueUsers.length === 1) {
-    const userStandardTopics = new Set(
-      (dueUsers[0].topics || []).filter(t => !t.startsWith("custom_"))
-    );
-    if (userStandardTopics.size > 0) {
-      topicsToFetch = CONFIG.topics.filter(t => userStandardTopics.has(t.tag));
-      log(`On-demand: fetching ${topicsToFetch.length}/${CONFIG.topics.length} topic(s) for user`);
-    }
-  }
-  const standardFetchCallsPlanned = topicsToFetch.length;
-  let standardFetchCalls = 0;
-  let customFetchCalls = 0;
-
-  // Fetch standard topics in parallel
-  const allResults = await Promise.all(topicsToFetch.map(fetchTopicNews));
-  standardFetchCalls = allResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
-  const standardItems = allResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
-  let allItems = standardItems.slice();
-  log(`Fetched ${allItems.length} raw items`);
-  const allStandardEmpty = standardFetchCallsPlanned > 0
-    && allResults.every((result) => Array.isArray(result?.items) && result.items.length === 0);
-  if (allStandardEmpty) {
-    await emitDigestIncident(
-      "zero-standard-results",
-      `All ${standardFetchCallsPlanned} standard topic fetches returned zero items`,
-      {
-        mode: runMode,
-        due_users: dueUsers.length,
-        standard_topics: standardFetchCallsPlanned,
-        selected_items: 0,
-      }
-    );
-  }
-
-  // Fetch custom topics for due users.
-  // Scale cap with user count so custom coverage doesn't collapse as users grow.
-  // Rank by demand frequency (how many due users follow each custom topic).
-  const customTopicCounts = new Map();
-  for (const u of dueUsers) {
-    for (const topic of (u.topics || [])) {
-      const topicRaw = String(topic || "");
-      if (!topicRaw.startsWith("custom_")) continue;
-      customTopicCounts.set(topicRaw, (customTopicCounts.get(topicRaw) || 0) + 1);
-    }
-  }
-  const configuredMaxCustomFetch = Number(CONFIG.digest.maxCustomFetchPerRun);
-  const dynamicCustomFetchCap = Number.isFinite(configuredMaxCustomFetch) && configuredMaxCustomFetch > 0
-    ? configuredMaxCustomFetch
-    : Math.min(18, Math.max(6, Math.ceil(dueUsers.length / 4)));
-  const rankedCustomTopicSlugs = [...customTopicCounts.entries()]
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0]);
-    })
-    .map(([slug]) => slug);
-  const customTopicSlugs = rankedCustomTopicSlugs.slice(0, dynamicCustomFetchCap);
-  if (rankedCustomTopicSlugs.length > customTopicSlugs.length) {
-    log(`Custom topic fetch cap hit: ${customTopicSlugs.length}/${rankedCustomTopicSlugs.length} topics this run`);
-  }
-  let customTags = [];
-
-  if (customTopicSlugs.length > 0) {
-    const customFetchTargets = customTopicSlugs.map(slug => {
-      const keyword = slug.replace(/^custom_/, "").replace(/_/g, " ").trim();
-      const queries = buildCustomTopicQueries(keyword);
-      return {
-        tag: keyword.toUpperCase(),   // e.g. "PFIZER", "GLP-1"
-        queries: queries.length ? queries : [`${keyword} business strategy developments last 48 hours`],
-        isCustom: true,
-      };
-    });
-    customTags = customFetchTargets.map((t) => t.tag);
-    customFetchCalls = 0;
-    log(`Fetching ${customFetchTargets.length} custom topic(s): ${customFetchTargets.map(t => t.tag).join(", ")}`);
-    const customResults = await Promise.all(customFetchTargets.map(fetchTopicNews));
-    customFetchCalls = customResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
-    const customItems = customResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
-    log(`Fetched ${customItems.length} custom topic item(s)`);
-    // Prepend so selectItems() sees custom items first — they have unique tags so they
-    // won't crowd out standard items; prepending ensures they're selected
-    allItems.unshift(...customItems);
-
-    const customKeywords = customTopicSlugs.map((slug) =>
-      normalizeTopicToken(String(slug || "").replace(/^custom_/, "").replace(/_/g, " "))
-    ).filter(Boolean);
-    const rescueItems = buildCustomRescueItemsFromStandard(standardItems, customKeywords, allItems, 1);
-    if (rescueItems.length > 0) {
-      allItems.unshift(...rescueItems);
-      log(`Custom keyword rescue added ${rescueItems.length} item(s) from standard pool`);
-    }
-  }
-  if (allItems.length === 0) {
-    await emitDigestIncident(
-      "zero-raw-items",
-      "No raw items available after standard and custom fetches",
-      {
-        mode: runMode,
-        due_users: dueUsers.length,
-        standard_topics: standardFetchCallsPlanned,
-        selected_items: 0,
-      }
-    );
-  }
+  const fetchRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG,
+    log,
+    normalizeTopicToken,
+    fetchTopicNews,
+    buildCustomTopicQueries,
+    buildCustomRescueItemsFromStandard,
+    emitDigestIncident,
+  });
+  const {
+    selectionTarget,
+    tagPriority,
+    allItems: fetchedItems,
+    customTags,
+    standardFetchCallsPlanned,
+    standardFetchCalls,
+    customFetchCalls,
+  } = await fetchRuntime.orchestrateFetch({
+    dueUsers,
+    targetChatId,
+    runMode,
+  });
+  let allItems = fetchedItems;
 
   const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
   const digestPolicies = createDigestPolicies(CONFIG.digest || {});

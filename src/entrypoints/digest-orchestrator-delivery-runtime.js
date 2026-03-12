@@ -1,5 +1,7 @@
 "use strict";
 
+const { createDigestOrchestratorDeliveryRankingRuntime } = require("./digest-orchestrator-delivery-ranking-runtime");
+
 function createDigestOrchestratorDeliveryRuntime(deps) {
   const {
     CONFIG,
@@ -32,6 +34,16 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     topicVisual,
     escapeHtml,
   } = deps;
+  const rankingRuntime = createDigestOrchestratorDeliveryRankingRuntime({
+    CONFIG,
+    log,
+    filterItemsByTopics,
+    applyTopicRelevanceScores,
+    suppressRecentlySentForUser,
+    isRecentRepeatItem,
+    parseSourceDomain,
+    reserveCustomKeywordSlot,
+  });
 
   function buildUserQuickScanRows(items) {
     return items.map((item, idx) => {
@@ -95,84 +107,17 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           ? buildLearningSummary(autoLearning.adjustments, 2)
           : "";
 
-        const prefs = user.preferences || {};
-
-        let wasFiltered = false;
-        let userItems = enriched;
-        let customKeywords = [];
-        let specialistMode = false;
-        const filteredResult = filterItemsByTopics(enriched, user.topics || [], {
-          minItems: depthPolicy.minFilteredItems,
-          strictZeroFallback: "specialist",
-        });
-        customKeywords = filteredResult.customKeywords || [];
-        specialistMode = Boolean(filteredResult.specialistMode);
-        userItems = filteredResult.items;
-        wasFiltered = filteredResult.wasFiltered;
-
-        const weights = user.topic_weights || {};
-        const hasWeights = Object.values(weights).some((value) => value !== 0);
-
-        if (hasWeights) {
-          log(`  [weights] ${user.email || user.chatId}: ${JSON.stringify(weights)}`);
-          log(`  [pre-sort] ${userItems.map((item) => `${item.tag}(${item.baseScore})`).join(", ")}`);
-        }
-
-        userItems = applyTopicRelevanceScores(userItems, user.topics || [], weights, {
-          specialistMode,
+        const ranked = rankingRuntime.rankAndSuppressUserItems({
+          user,
+          enriched,
+          repeatIndex,
           repeatPenalty,
-          isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
-          sourceDomainForItem: parseSourceDomain,
+          depthPolicy,
+          rankingPolicy,
         });
-        userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-        const minBaseScoreForFinal = Number(rankingPolicy.minBaseScoreForFinal || 6.5);
-        const requestedCount = Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5);
-        const perUserFreshnessMin = Math.max(1, Math.min(requestedCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
-        const suppression = suppressRecentlySentForUser(userItems, user, {
-          maxDigests: Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)),
-          minItems: perUserFreshnessMin,
-        });
-        if (suppression.removed > 0) {
-          userItems = suppression.items;
-          log(`  [freshness-user] ${user.email || user.chatId}: removed ${suppression.removed} recent URL repeat(s)${suppression.backfilled > 0 ? `, backfilled ${suppression.backfilled}` : ""}`);
-        }
-
-        const minStrongItems = Math.max(2, Math.min(requestedCount, 4));
-        const stronger = userItems.filter((item) =>
-          Number(item?.baseScore || 0) >= minBaseScoreForFinal
-          || (Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword"))
-        );
-        if (stronger.length >= minStrongItems) {
-          userItems = stronger;
-        }
-
-        if (hasWeights) {
-          log(`  [post-sort] ${userItems.map((item) => `${item.tag}(${item.relevanceScore})`).join(", ")}`);
-        }
-
-        const count = requestedCount;
-        userItems = reserveCustomKeywordSlot(userItems, count, customKeywords);
-
-        if (userItems.length === 0) {
-          const emergencyCount = Math.max(1, Math.min(3, count));
-          const emergency = applyTopicRelevanceScores(enriched, user.topics || [], weights, {
-            specialistMode: false,
-            repeatPenalty,
-            isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
-            sourceDomainForItem: parseSourceDomain,
-          })
-            .sort((a, b) => b.relevanceScore - a.relevanceScore)
-            .slice(0, emergencyCount);
-          if (emergency.length > 0) {
-            userItems = emergency;
-            wasFiltered = false;
-            log(`⚠️ Emergency fallback items used for ${user.email || user.chatId} (count=${emergency.length})`);
-          }
-        }
-        if (userItems.length === 0) {
-          throw new Error("No deliverable items after emergency fallback");
-        }
+        let userItems = ranked.userItems;
+        const wasFiltered = ranked.wasFiltered;
+        const prefs = user.preferences || {};
 
         const depth = prefs.depth || "full";
         userItems = applyDigestDepth(userItems, depth);

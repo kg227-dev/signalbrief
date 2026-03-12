@@ -55,6 +55,7 @@ const { createDigestArchiveRuntime } = require("../domains/digest");
 const { resolveDueUsers } = require("./digest-orchestrator-schedule-runtime");
 const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrator-delivery-runtime");
 const { createDigestOrchestratorFetchRuntime } = require("./digest-orchestrator-fetch-runtime");
+const { createDigestOrchestratorSelectionRuntime } = require("./digest-orchestrator-selection-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -674,78 +675,31 @@ async function main() {
   });
   let allItems = fetchedItems;
 
-  const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
-  const digestPolicies = createDigestPolicies(CONFIG.digest || {});
-  const rankingPolicy = digestPolicies.rankingPolicy;
-  const depthPolicy = digestPolicies.depthPolicy;
-  const dedupRes = dedupAgainstRecentArchives(allItems, {
-    days: crossDayDedupDays,
-    targetCount: selectionTarget,
-    minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || 3)),
+  const selectionRuntime = createDigestOrchestratorSelectionRuntime({
+    CONFIG,
+    log,
+    createDigestPolicies,
+    dedupAgainstRecentArchives,
+    buildRecentRepeatIndex,
+    selectItems,
+    loadRecentArchiveItems,
+    emitDigestIncident,
   });
-  allItems = dedupRes.items;
-  const repeatIndex = buildRecentRepeatIndex(crossDayDedupDays);
-  const repeatPenalty = Number(rankingPolicy.repeatPenalty || 0);
-  if (dedupRes.removed > 0) {
-    log(`Cross-day dedup removed ${dedupRes.removed} repeat item(s) using last ${dedupRes.archive_days_used} day(s) of archive history${dedupRes.backfilled > 0 ? ` (backfilled ${dedupRes.backfilled} to minimum)` : ""}`);
-  }
-  if ((repeatIndex.urlKeys.size > 0 || repeatIndex.headlineKeys.size > 0) && repeatPenalty > 0) {
-    log(`Freshness penalty active (days=${repeatIndex.days}, penalty=${repeatPenalty.toFixed(2)})`);
-  }
-
-  const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
-  const defaultMaxCustom = customTags.length > 0
-    ? Math.max(1, Math.floor(selectionTarget * 0.4))
-    : 0;
-  const maxCustomItems = Number.isFinite(configuredMaxCustom) && configuredMaxCustom >= 0
-    ? configuredMaxCustom
-    : defaultMaxCustom;
-  let selected = selectItems(allItems, {
-    maxItems: selectionTarget,
-    maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
+  const {
+    selected,
+    repeatIndex,
+    repeatPenalty,
+    rankingPolicy,
+    depthPolicy,
+  } = await selectionRuntime.selectForEnrichment({
+    allItems,
+    selectionTarget,
     customTags,
-    maxCustomItems,
     tagPriority,
-    maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
+    runMode,
+    dueUsersCount: dueUsers.length,
+    standardFetchCallsPlanned,
   });
-  if (selected.length === 0) {
-    const fallbackPool = loadRecentArchiveItems(5);
-    if (fallbackPool.length > 0) {
-      selected = selectItems(fallbackPool, {
-        maxItems: selectionTarget,
-        maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
-        customTags: [],
-        maxCustomItems: 0,
-        tagPriority,
-        maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
-      });
-      log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
-      await emitDigestIncident(
-        "archive-fallback-engaged",
-        `Live fetch produced zero selectable items; archive fallback selected ${selected.length}`,
-        {
-          mode: runMode,
-          due_users: dueUsers.length,
-          standard_topics: standardFetchCallsPlanned,
-          selected_items: selected.length,
-        }
-      );
-    }
-  }
-  if (selected.length === 0) {
-    await emitDigestIncident(
-      "no-selectable-items",
-      "No selectable items after archive fallback; digest run aborted",
-      {
-        mode: runMode,
-        due_users: dueUsers.length,
-        standard_topics: standardFetchCallsPlanned,
-        selected_items: 0,
-      }
-    );
-    throw new Error("No items available from live fetch or archive fallback; digest aborted");
-  }
-  log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
 
   const enrichment = await enrichItems(selected);
   const enriched = enrichment.items;

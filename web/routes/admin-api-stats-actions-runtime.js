@@ -71,9 +71,30 @@ function buildAdminStatsPayload({
     parseEtNowParts,
   } = deps;
 
+  const usersAll = allUsers();
+  const recipientTokenById = new Map();
+  for (const user of usersAll) {
+    const token = String(user?.token || "").trim();
+    if (!token) continue;
+    const emailKey = String(user?.email || "").toLowerCase().trim();
+    if (emailKey) recipientTokenById.set(emailKey, token);
+    const chatKey = String(user?.chatId || "").toLowerCase().trim();
+    if (chatKey) recipientTokenById.set(chatKey, token);
+  }
+
   const runsRaw = loadCostRunsNewest();
-  const engagementEvents = loadEngagementEvents({ max_age_days: 120, dedupe: true });
-  const runs = enrichRunsWithDigestMetadata(runsRaw, engagementEvents);
+  const engagementEventsForRuns = loadEngagementEvents({ max_age_days: 120, dedupe: false });
+  const runs = enrichRunsWithDigestMetadata(runsRaw, engagementEventsForRuns, {
+    recipientTokenById,
+  });
+  const engagementEvents = [];
+  const seenEventKeys = new Set();
+  for (const event of engagementEventsForRuns) {
+    const key = String(event?.event_key || "");
+    if (!key || seenEventKeys.has(key)) continue;
+    seenEventKeys.add(key);
+    engagementEvents.push(event);
+  }
   const now = new Date();
   const monthPrefix = now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }).slice(0, 7);
   const monthLabel = now.toLocaleDateString("en-US", {
@@ -87,7 +108,6 @@ function buildAdminStatsPayload({
     monthUniqueUsersLogSize,
   } = buildMonthRunSummary(runs, monthPrefix);
 
-  const usersAll = allUsers();
   const referrals = buildReferrals(usersAll);
   const engagement = buildEngagementMetrics({
     usersAll,

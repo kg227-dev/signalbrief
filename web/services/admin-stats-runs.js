@@ -26,6 +26,21 @@ function buildDigestUrl(dateKey) {
   return `/digest/${encodeURIComponent(key)}`;
 }
 
+function buildPreferredDigestUrl({ digestDateKey, recipients, tokenByRecipient, runId }) {
+  const base = buildDigestUrl(digestDateKey);
+  if (!base) return "";
+
+  if (recipients instanceof Set && recipients.size === 1) {
+    const onlyRecipient = Array.from(recipients)[0];
+    const token = String(tokenByRecipient?.get?.(onlyRecipient) || "").trim();
+    if (token) return `${base}?ref=${encodeURIComponent(token)}`;
+  }
+
+  const normalizedRunId = String(runId || "").trim();
+  if (normalizedRunId) return `${base}?run=${encodeURIComponent(normalizedRunId)}`;
+  return base;
+}
+
 function summarizeQuality(values) {
   const numeric = (Array.isArray(values) ? values : [])
     .map((value) => Number(value))
@@ -168,11 +183,15 @@ function summarizeEventEntryQuality(entry) {
   return summarizeQuality(Array.isArray(entry?.qualityFallback) ? entry.qualityFallback : []);
 }
 
-function enrichRunsWithDigestMetadata(runs, engagementEvents) {
+function enrichRunsWithDigestMetadata(runs, engagementEvents, opts = {}) {
   const rows = Array.isArray(runs) ? runs : [];
   if (!rows.length) return [];
 
   const runEventIndex = buildRunEventIndex(engagementEvents);
+  const tokenByRecipient = opts?.recipientTokenById instanceof Map
+    ? opts.recipientTokenById
+    : new Map();
+
   return rows.map((run) => {
     const row = run && typeof run === "object" ? { ...run } : {};
     const perUserMeta = summarizePerUserMeta(row.per_user);
@@ -196,6 +215,18 @@ function enrichRunsWithDigestMetadata(runs, engagementEvents) {
 
     if (!digestDateKey && DATE_KEY_RE.test(String(row.date || ""))) {
       digestDateKey = String(row.date);
+    }
+
+    if (digestDateKey) {
+      const preferredDigestUrl = buildPreferredDigestUrl({
+        digestDateKey,
+        recipients: perUserMeta.recipients,
+        tokenByRecipient,
+        runId: matched?.runId || row.run_id,
+      });
+      if (preferredDigestUrl) {
+        digestUrl = preferredDigestUrl;
+      }
     }
     if (!digestUrl && digestDateKey) {
       digestUrl = buildDigestUrl(digestDateKey);

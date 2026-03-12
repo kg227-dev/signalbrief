@@ -48,6 +48,34 @@ if (!Array.isArray(enriched) || enriched.length !== 1) {
 if (enriched[0].digest_quality_score !== 85) {
   throw new Error(`expected digest_quality_score=85, got ${String(enriched[0].digest_quality_score)}`);
 }
-if (enriched[0].digest_url !== "/digest/2026-03-11") {
-  throw new Error(`expected digest_url=/digest/2026-03-11, got ${String(enriched[0].digest_url)}`);
+if (enriched[0].digest_url !== "/digest/2026-03-11?run=scheduled%3A2026-03-11T15-00-00-120Z") {
+  throw new Error(`expected run-scoped digest_url, got ${String(enriched[0].digest_url)}`);
+}
+
+const singleRun = [
+  {
+    date: "2026-03-11",
+    run_at: "2026-03-11T23:09:31.148Z",
+    run_at_et: "Mar 11, 7:09 PM",
+    on_demand: true,
+    users_served: 1,
+    per_user: [{ id: "alpha@example.com" }],
+  },
+];
+const singleEvents = [
+  {
+    event_type: "digest_sent",
+    run_id: "targeted:2026-03-11T23-09-31-056Z",
+    user_email: "alpha@example.com",
+    digest_id: "2026-03-11:email-alpha",
+    metadata: { quality_score: 88.03 },
+  },
+];
+const recipientTokenById = new Map([["alpha@example.com", "token-alpha"]]);
+const enrichedSingle = enrichRunsWithDigestMetadata(singleRun, singleEvents, { recipientTokenById });
+if (enrichedSingle[0].digest_quality_score !== 88) {
+  throw new Error(`expected digest_quality_score=88, got ${String(enrichedSingle[0].digest_quality_score)}`);
+}
+if (enrichedSingle[0].digest_url !== "/digest/2026-03-11?ref=token-alpha") {
+  throw new Error(`expected token-scoped digest_url, got ${String(enrichedSingle[0].digest_url)}`);
 }

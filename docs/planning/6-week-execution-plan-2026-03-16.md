@@ -173,3 +173,4 @@ Do **not** replatform compute during this window.
 - [x] Day 7 completed: startup config schema validation now fails fast on invalid `config.json` shape/values, with new critical-path coverage for schema pass/fail contracts.
 - [x] Day 8 completed: added route-level admin auth regression coverage across protected `/api/admin/*` endpoints (stats, user/audit, run-digest, bulk, messaging, sandbox, mutating actions) plus `/api/admin/check` unauthenticated-state assertion.
 - [x] Day 9 completed: `/api/settings` now canonicalizes and validates topics, enforces non-empty normalized `days_of_week` (0-6 sorted/deduped), and clamps `items_per_digest` to supported settings bounds; added handler + critical-path regression coverage.
+- [x] Day 10 completed: security hardening review published with explicit merge-gate contract and verification evidence (`docs/planning/week2-security-hardening-review-2026-03-12.md`).

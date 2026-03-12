@@ -38,9 +38,6 @@ const {
   isAdminAuthed,
   checkLoginRate,
 } = require("./admin-auth");
-const { createCoreApiRouteHandler } = require("./api/core");
-const { createAdminApiRouteHandler } = require("./api/admin");
-const { createPublicStaticRouteHandler } = require("./api/public");
 const { createAdminOpsService } = require("./services/admin-ops");
 const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
 const { createSignupRateLimiter } = require("./services/web-rate-limit");
@@ -53,7 +50,7 @@ const {
   formatDaysLabel,
   computeNextDeliveryEt,
 } = require("./services/delivery-schedule");
-const { createWebUserHandlers } = require("./services/web-user-handlers");
+const { createServerRouteDependencies } = require("./server-runtime-deps-runtime");
 const {
   WEB_DIR,
   APP_ROOT,
@@ -207,10 +204,10 @@ const getAllowedArchiveDatesForUser = (user, archiveDir, files) => getAllowedArc
 // sendWelcomeEmail is defined in mailer.js and imported above
 
 const {
-  handleSignup,
-  handleSettings,
-  handleAdminRunDigest,
-} = createWebUserHandlers({
+  handleCoreApiRoute,
+  handleAdminApiRoute,
+  handlePublicStaticRoute,
+} = createServerRouteDependencies({
   requireJsonBody,
   json,
   getClientIp,
@@ -220,6 +217,7 @@ const {
   normalizeReferralToken,
   generateToken,
   writeUser,
+  deleteUser,
   sendReferralThankYou,
   sendWelcomeEmail,
   queueDigestTrigger,
@@ -228,31 +226,21 @@ const {
   getBaseUrl,
   DEFAULT_TOPICS,
   MAX_CUSTOM_KEYWORDS,
-  allowExampleEmails: allowExampleSignups,
+  allowExampleSignups,
   PROTECTED_FIELDS,
   isAdminAuthed,
   logAdminActionEvent,
-});
-
-const CORE_ROUTE_DEPS = {
-  json,
-  DEFAULT_TOPICS,
   INDUSTRY_TOPICS,
   CAPABILITY_TOPICS,
   digestRunStatus,
   getCachedOrRefreshSchedulerHeartbeat,
-  findUserByToken,
-  handleSignup,
-  handleSettings,
   signUnsubEmail,
-  allUsers,
-  writeUser,
   blankReengagementState,
   isLegacyArchiveEndpointEnabled,
   recordLegacyArchiveUsage,
   getArchiveLegacyDeprecationDeadlineUtc,
-  readArchiveFiles: readArchiveFilesForDir,
-  getAllowedArchiveDates: getAllowedArchiveDatesForUser,
+  readArchiveFilesForDir,
+  getAllowedArchiveDatesForUser,
   archiveRelevanceScore,
   path,
   fs,
@@ -260,45 +248,28 @@ const CORE_ROUTE_DEPS = {
   decodeDigestIdParam,
   buildDigestId,
   toEtDateKey,
-  appendEngagementEventChecked: appendWebEngagementEvent,
+  appendWebEngagementEvent,
   resetReengagementState,
   sendTransparentGif,
   normalizeEngagementUrl,
-  requireJsonBody,
   normalizeBookmarkUrl,
   sendMagicLinkEmail,
-};
-
-const ADMIN_ROUTE_DEPS = {
-  json,
-  isAdminAuthed,
-  getClientIp,
   checkLoginRate,
-  requireJsonBody,
   CONFIG,
   verifyAdminPassword,
   createAdminSession,
   clearAdminSessionByRequest,
-  getBaseUrl,
   emitIgnoredEventsIfDue,
   loadCostRunsNewest,
-  allUsers,
   loadEngagementEvents,
   parseIsoTs,
   computeFeedbackTrend,
-  digestRunStatus,
-  getCachedOrRefreshSchedulerHeartbeat,
   readJsonLineLog,
   ADMIN_MESSAGE_LOG,
   ADMIN_ACTION_LOG,
   maskEmail,
   getRecentAutoAdjustmentsForUser,
-  logAdminActionEvent,
   normalizeDeliveryTimeInput,
-  writeUser,
-  deleteUser,
-  sendMagicLinkEmail,
-  handleAdminRunDigest,
   logAdminMessageEvent,
   summarizeMessage,
   hashText,
@@ -313,28 +284,13 @@ const ADMIN_ROUTE_DEPS = {
   estimateSandboxCost,
   runSandboxPipeline,
   requestSchedulerWorkerRestart,
-};
-
-const PUBLIC_ROUTE_DEPS = {
-  path,
-  fs,
-  APP_ROOT,
   assetVersion: getWebAssetVersion(),
-  readArchiveFiles: readArchiveFilesForDir,
   renderPublicDigestMissingPage,
   formatPublicDigestDateLabel,
-  renderPublicDigestPage: (payload) => renderPublicDigestPageTemplate({
-    ...payload,
-    baseUrl: getBaseUrl(),
-  }),
-  isAdminAuthed,
+  renderPublicDigestPageTemplate,
   serveFile,
   WEB_DIR,
-};
-
-const handleCoreApiRoute = createCoreApiRouteHandler(CORE_ROUTE_DEPS);
-const handleAdminApiRoute = createAdminApiRouteHandler(ADMIN_ROUTE_DEPS);
-const handlePublicStaticRoute = createPublicStaticRouteHandler(PUBLIC_ROUTE_DEPS);
+});
 
 async function handleWebRequest(req, res) {
   try {

@@ -179,3 +179,4 @@ Do **not** replatform compute during this window.
 - [x] Day 13 completed: enrichment request/response handling extracted into `digest-orchestrator-enrichment-runtime` so orchestration normalizes enriched payload + Claude token usage through a dedicated stage contract.
 - [x] Day 14 completed: added orchestrator seam coverage that executes fetch -> selection -> enrichment -> delivery-ranking stage contracts end-to-end with deterministic stubs to guard stage interface regressions.
 - [x] Day 15 completed: added parity-shape contract coverage that locks stage output schemas (fetch, selection, enrichment, delivery-ranking) so refactor follow-ups preserve runtime interface compatibility.
+- [x] Day 16 completed: extracted web runtime dependency composition blocks into `web/server-runtime-deps-runtime.js`, keeping route wiring behavior intact while reducing `web/server-runtime.js` coupling; added route-composition contract coverage.

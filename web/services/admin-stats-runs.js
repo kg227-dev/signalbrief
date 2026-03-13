@@ -186,6 +186,49 @@ function summarizeEventEntryQuality(entry) {
   return summarizeQuality(Array.isArray(entry?.qualityFallback) ? entry.qualityFallback : []);
 }
 
+function summarizeMatchedQualityForRecipients(entry, recipients) {
+  const recipientSet = recipients instanceof Set ? recipients : new Set();
+  if (recipientSet.size === 1) {
+    const recipient = Array.from(recipientSet)[0];
+    const directScore = Number(entry?.qualityByRecipient?.get?.(recipient));
+    if (Number.isFinite(directScore)) {
+      return {
+        score: Number(directScore.toFixed(1)),
+        samples: 1,
+      };
+    }
+  }
+  return summarizeEventEntryQuality(entry);
+}
+
+function expandRunsByRecipient(runs) {
+  const rows = Array.isArray(runs) ? runs : [];
+  const expanded = [];
+
+  for (const run of rows) {
+    const row = run && typeof run === "object" ? { ...run } : {};
+    const perUserRows = (Array.isArray(row.per_user) ? row.per_user : [])
+      .filter((entry) => entry && typeof entry === "object" && String(entry.id || "").trim())
+      .map((entry) => ({ ...entry }));
+
+    if (perUserRows.length <= 1) {
+      row.per_user = perUserRows;
+      expanded.push(row);
+      continue;
+    }
+
+    for (const perUserRow of perUserRows) {
+      expanded.push({
+        ...row,
+        users_served: 1,
+        per_user: [{ ...perUserRow }],
+      });
+    }
+  }
+
+  return expanded;
+}
+
 function enrichRunsWithDigestMetadata(runs, engagementEvents, opts = {}) {
   const rows = Array.isArray(runs) ? runs : [];
   if (!rows.length) return [];
@@ -208,7 +251,7 @@ function enrichRunsWithDigestMetadata(runs, engagementEvents, opts = {}) {
     if (matched) {
       if (!row.run_id) row.run_id = matched.runId;
       if (!Number.isFinite(digestQualityScore)) {
-        const quality = summarizeEventEntryQuality(matched);
+        const quality = summarizeMatchedQualityForRecipients(matched, perUserMeta.recipients);
         digestQualityScore = quality.score;
         digestQualitySamples = quality.samples;
       }
@@ -247,6 +290,7 @@ function enrichRunsWithDigestMetadata(runs, engagementEvents, opts = {}) {
 
 module.exports = {
   enrichRunsWithDigestMetadata,
+  expandRunsByRecipient,
   parseRunIdMeta,
   parseDigestDateKey,
   buildDigestUrl,

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 
-const { spawnSync, execSync } = require("child_process");
+const { spawnSync } = require("child_process");
+const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const http = require("http");
@@ -194,17 +195,99 @@ function fetchUrl(url, { timeoutMs = 8000, maxRedirects = 4 } = {}) {
   });
 }
 
-function getGitShortSha() {
+function getGitShortSha(ref = "HEAD") {
+  const target = String(ref || "HEAD").trim() || "HEAD";
   try {
-    return String(execSync("git rev-parse --short HEAD", {
+    const result = spawnSync("git", ["rev-parse", "--short", `${target}^{commit}`], {
       cwd: ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-    }) || "").trim();
+    });
+    if (result.status !== 0) {
+      fail("unable to resolve git commit SHA", String(result.stderr || result.stdout || "").trim());
+    }
+    return String(result.stdout || "").trim();
   } catch (error) {
     fail("unable to resolve git commit SHA", String(error?.message || error));
   }
   return "";
+}
+
+function verifyGitCommit(ref) {
+  const target = String(ref || "").trim();
+  if (!target) fail("archive-sha cannot be empty");
+  const result = spawnSync("git", ["rev-parse", "--verify", `${target}^{commit}`], {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    fail(`archive-sha is not a valid commit: ${target}`, String(result.stderr || result.stdout || "").trim());
+  }
+}
+
+function packageWorkingTreeArchive(archivePath) {
+  run("tar", [
+    "-czf",
+    archivePath,
+    "--exclude=.git",
+    "--exclude=node_modules",
+    "--exclude=data",
+    "--exclude=archive",
+    "--exclude=config.json",
+    "--exclude=.env",
+    "--exclude=.env.*",
+    "--exclude=tmp",
+    "--exclude=.desloppify",
+    ".",
+  ], {
+    label: "pack",
+    env: {
+      COPYFILE_DISABLE: "1",
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+    },
+  });
+}
+
+function packageCommitArchive(archivePath, archiveSha) {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "signalbrief-pack-sha-"));
+  const sourceTarPath = path.join(tmpRoot, `source-${String(archiveSha).slice(0, 12)}.tar`);
+  const extractDir = path.join(tmpRoot, "extract");
+  fs.mkdirSync(extractDir, { recursive: true });
+
+  try {
+    run("git", [
+      "archive",
+      "--format=tar",
+      "--output",
+      sourceTarPath,
+      archiveSha,
+    ], { label: "pack source" });
+    run("tar", ["-xf", sourceTarPath, "-C", extractDir], { label: "pack extract" });
+    run("tar", [
+      "-czf",
+      archivePath,
+      "--exclude=.git",
+      "--exclude=node_modules",
+      "--exclude=data",
+      "--exclude=archive",
+      "--exclude=config.json",
+      "--exclude=.env",
+      "--exclude=.env.*",
+      "--exclude=tmp",
+      "--exclude=.desloppify",
+      ".",
+    ], {
+      cwd: extractDir,
+      label: "pack",
+      env: {
+        COPYFILE_DISABLE: "1",
+        COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+      },
+    });
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 }
 
 async function verifyPublicEndpoints(publicBaseUrl) {
@@ -298,6 +381,7 @@ async function main() {
         "  --remote-dir <remote-app-dir>",
         "  --remote-tmp-dir <remote-tmp-dir>",
         "  --public-url <https://public-host>",
+        "  --archive-sha <commit-sha>",
         "  --target-env <production|staging>",
         "  --services \"web bot worker\"",
         "  --release-windows-et <spec>",
@@ -320,6 +404,7 @@ async function main() {
   const remoteDir = readOption(options, "remote-dir", "remote_dir") || process.env.DEPLOY_REMOTE_DIR || "/opt/signalbrief/app";
   const remoteTmpDir = readOption(options, "remote-tmp-dir", "remote_tmp_dir") || process.env.DEPLOY_REMOTE_TMP_DIR || "/tmp";
   const publicUrl = readOption(options, "public-url", "public_url") || process.env.DEPLOY_PUBLIC_URL || "https://getsignalbrief.com";
+  const archiveSha = readOption(options, "archive-sha", "archive_sha");
   const targetEnv = (readOption(options, "target-env", "target_env") || process.env.DEPLOY_TARGET_ENV || "production")
     .toLowerCase()
     .trim();
@@ -332,7 +417,8 @@ async function main() {
   const skipPublicVerify = flags.has("skip-public-verify");
   const skipRemoteVerify = flags.has("skip-remote-verify");
 
-  const sha = getGitShortSha();
+  if (archiveSha) verifyGitCommit(archiveSha);
+  const sha = getGitShortSha(archiveSha || "HEAD");
   const archiveName = `signalbrief-deploy-${sha}.tgz`;
   const archivePath = path.join(os.tmpdir(), archiveName);
   const remoteArchivePath = `${remoteTmpDir.replace(/\/+$/, "")}/${archiveName}`;
@@ -371,26 +457,12 @@ async function main() {
   }
 
   log(`commit=${sha}`);
-  run("tar", [
-    "-czf",
-    archivePath,
-    "--exclude=.git",
-    "--exclude=node_modules",
-    "--exclude=data",
-    "--exclude=archive",
-    "--exclude=config.json",
-    "--exclude=.env",
-    "--exclude=.env.*",
-    "--exclude=tmp",
-    "--exclude=.desloppify",
-    ".",
-  ], {
-    label: "pack",
-    env: {
-      COPYFILE_DISABLE: "1",
-      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
-    },
-  });
+  if (archiveSha) {
+    log(`pack source commit=${archiveSha}`);
+    packageCommitArchive(archivePath, archiveSha);
+  } else {
+    packageWorkingTreeArchive(archivePath);
+  }
 
   run("scp", [
     "-i",

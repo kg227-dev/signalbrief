@@ -8,6 +8,8 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   "DEPLOY_PUBLIC_VERIFY_ATTEMPTS",
+  "archive-sha",
+  "pack source commit=",
   "release window gate",
   "Use --hotfix only for active incidents",
   "remote: runtime verify",

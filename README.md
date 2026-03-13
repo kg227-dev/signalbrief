@@ -113,6 +113,7 @@ npm run qa:matrix
 npm run ops:deploy:prod
 npm run ops:deploy:staging
 npm run ops:release:window-check
+npm run ops:rollback:sha -- --rollback-sha <sha>
 npm run ops:store:full-enable-validate -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite
 ```
 

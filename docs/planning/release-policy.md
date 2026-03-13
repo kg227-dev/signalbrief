@@ -65,7 +65,8 @@ Operator helpers:
 ## Rollback
 
 Primary rollback action:
-1. Re-deploy previous known-good commit with the same deploy command.
+1. Re-deploy previous known-good commit by SHA:
+  - `npm run ops:rollback:sha -- --rollback-sha <sha>`
 2. Re-run production gate checks.
 3. Confirm scheduler health and digest-lock status on `/api/health/scheduler`.
 

@@ -6,7 +6,10 @@ const {
   buildMonthRunSummary,
   buildPerUserCostRollup,
 } = require("../services/admin-stats-costs");
-const { enrichRunsWithDigestMetadata } = require("../services/admin-stats-runs");
+const {
+  enrichRunsWithDigestMetadata,
+  expandRunsByRecipient,
+} = require("../services/admin-stats-runs");
 const {
   buildAdminRoster,
   buildDeliveryWarnings,
@@ -87,6 +90,11 @@ function buildAdminStatsPayload({
   const runs = enrichRunsWithDigestMetadata(runsRaw, engagementEventsForRuns, {
     recipientTokenById,
   });
+  const runsForTable = enrichRunsWithDigestMetadata(
+    expandRunsByRecipient(runsRaw),
+    engagementEventsForRuns,
+    { recipientTokenById }
+  );
   const engagementEvents = [];
   const seenEventKeys = new Set();
   for (const event of engagementEventsForRuns) {
@@ -168,7 +176,7 @@ function buildAdminStatsPayload({
   return {
     summary,
     health,
-    runs: runs.slice(0, 10),
+    runs: runsForTable.slice(0, 10),
     per_user: perUser,
     roster,
     engagement,

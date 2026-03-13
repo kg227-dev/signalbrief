@@ -233,6 +233,11 @@ Dual-read parity compare (staging/local verification):
 - Run compare: `npm run ops:store:dual-read-compare -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
 - Report + CI gate details: [`docs/planning/week5-day24-dual-read-parity.md`](./docs/planning/week5-day24-dual-read-parity.md)
 
+Rollback tooling (sqlite -> file-store):
+- Replay rollback: `npm run ops:store:rollback:sqlite-to-file -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
+- Strict rollback verify: `npm run ops:store:rollback:verify -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
+- Risk review + go/no-go + rollback checklist: [`docs/planning/week5-day25-cutover-risk-review.md`](./docs/planning/week5-day25-cutover-risk-review.md)
+
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash
 SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler

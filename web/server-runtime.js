@@ -31,13 +31,8 @@ const {
   runPipeline: runSandboxPipeline,
 } = require("../src/sandbox-pipeline-runtime");
 const {
-  verifyAdminPassword,
-  createAdminSession,
-  clearAdminSessionByRequest,
-  getAdminActor,
-  isAdminAuthed,
-  checkLoginRate,
-} = require("./admin-auth");
+  createAdminAuthSessionPolicy,
+} = require("./server-runtime-auth-session-policy-runtime");
 const { createAdminOpsService } = require("./services/admin-ops");
 const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
 const { createSignupRateLimiter } = require("./services/web-rate-limit");
@@ -52,6 +47,11 @@ const {
 } = require("./services/delivery-schedule");
 const { createServerRouteDependencies } = require("./server-runtime-deps-runtime");
 const { createRouteBootstrapHandler } = require("./server-runtime-route-bootstrap-runtime");
+const {
+  applyCanonicalHostPolicy,
+  handleCorsPreflightPolicy,
+  handleRequestErrorPolicy,
+} = require("./server-runtime-request-policy-runtime");
 const {
   WEB_DIR,
   APP_ROOT,
@@ -85,6 +85,14 @@ const {
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
 const CONFIG = loadConfig();
+const {
+  verifyAdminPassword,
+  createAdminSession,
+  clearAdminSessionByRequest,
+  getAdminActor,
+  isAdminAuthed,
+  checkLoginRate,
+} = createAdminAuthSessionPolicy();
 
 let storeInitialized = false;
 function ensureStoreInitialized() {
@@ -304,24 +312,23 @@ async function handleWebRequest(req, res) {
     const port = getServerPort();
     const url = new URL(req.url, `http://localhost:${port}`);
     const pathname = url.pathname;
-    const host = getRequestHost(req);
-    const scheme = getRequestScheme(req);
 
     // Enforce a single canonical public origin for SEO + cache consistency.
-    if (PUBLIC_HOSTS.has(host) && (host !== CANONICAL_HOST || scheme !== "https")) {
-      const location = `https://${CANONICAL_HOST}${pathname}${url.search}`;
-      res.writeHead(301, {
-        Location: location,
-        "Cache-Control": "public, max-age=300",
-      });
-      return res.end();
-    }
+    const redirected = applyCanonicalHostPolicy({
+      req,
+      res,
+      url,
+      pathname,
+      getRequestHost,
+      getRequestScheme,
+      canonicalHost: CANONICAL_HOST,
+      publicHosts: PUBLIC_HOSTS,
+    });
+    if (redirected) return;
 
     // CORS preflight
-    if (req.method === "OPTIONS") {
-      res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type" });
-      return res.end();
-    }
+    const preflightHandled = handleCorsPreflightPolicy({ req, res });
+    if (preflightHandled) return;
 
     const routeCtx = { req, res, url, pathname };
     const routeHandled = await handleDomainRoute(routeCtx);
@@ -330,11 +337,7 @@ async function handleWebRequest(req, res) {
     res.writeHead(404);
     res.end("Not found");
   } catch (err) {
-    console.error(`[server error] ${req.method} ${req.url} →`, err.message);
-    if (!res.headersSent) {
-      res.writeHead(500);
-      res.end("Internal server error");
-    }
+    handleRequestErrorPolicy({ req, res, error: err, logger: console.error });
   }
 }
 

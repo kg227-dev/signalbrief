@@ -14,6 +14,7 @@
     "ops:verify-runtime": "node scripts/verify-runtime.js",
     "ops:verify-runtime:quick": "node scripts/verify-runtime.js --skip-canary",
     "ops:deploy:prod": "node scripts/deploy-production.js",
+    "ops:deploy:staging": "node scripts/deploy-staging.js",
     "ops:deploy:web": "DEPLOY_SERVICES=web node scripts/deploy-production.js",
     "ops:backup:state": "node scripts/backup-state.js",
     "ops:drill:restore-state": "node scripts/restore-state-drill.js",

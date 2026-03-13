@@ -20,6 +20,14 @@ assert.ok(
   "server-runtime.js should compose route dispatch via server-runtime-route-bootstrap-runtime"
 );
 assert.ok(
+  serverRuntimeSource.includes('require("./server-runtime-auth-session-policy-runtime")'),
+  "server-runtime.js should compose auth/session policy via server-runtime-auth-session-policy-runtime"
+);
+assert.ok(
+  serverRuntimeSource.includes('require("./server-runtime-request-policy-runtime")'),
+  "server-runtime.js should compose request/error policy via server-runtime-request-policy-runtime"
+);
+assert.ok(
   !serverRuntimeSource.includes('require("./api/core")')
     && !serverRuntimeSource.includes('require("./api/admin")')
     && !serverRuntimeSource.includes('require("./api/public")'),
@@ -40,4 +48,12 @@ assert.ok(
     && !routeBootstrapSource.includes('require("./api/admin")')
     && !routeBootstrapSource.includes('require("./api/public")'),
   "server-runtime-route-bootstrap-runtime.js should only dispatch handlers, not import domain handlers"
+);
+
+const requestPolicySource = readSource("web/server-runtime-request-policy-runtime.js");
+assert.ok(
+  !requestPolicySource.includes('require("./api/core")')
+    && !requestPolicySource.includes('require("./api/admin")')
+    && !requestPolicySource.includes('require("./api/public")'),
+  "server-runtime-request-policy-runtime.js should remain transport-policy only"
 );

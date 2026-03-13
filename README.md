@@ -195,6 +195,28 @@ Optional flags:
 - `--skip-remote-verify`
 - `--skip-public-verify`
 
+### Staging/preview deploy lane (required before runtime prod changes)
+
+Use the staging wrapper to run the same deploy + public-gate checks against a lower-blast-radius target:
+
+```bash
+export DEPLOY_STAGING_SSH_HOST=<staging-vm-host>
+export DEPLOY_STAGING_PUBLIC_URL=https://staging.getsignalbrief.com
+npm run ops:deploy:staging
+```
+
+Optional staging overrides:
+- `DEPLOY_STAGING_SSH_USER`
+- `DEPLOY_STAGING_SSH_KEY`
+- `DEPLOY_STAGING_REMOTE_DIR`
+- `DEPLOY_STAGING_REMOTE_TMP_DIR`
+- `DEPLOY_STAGING_SERVICES`
+
+Required staging gates (same shape as prod):
+- `GET /` returns `200`
+- cache-busted landing asset (`index.js?v=...`) is rendered
+- `GET /api/health/scheduler` returns `{"ok": true}`
+
 Smoke scripts now force an isolated temp data directory (`SIGNALBRIEF_DATA_DIR=/tmp/...`) to avoid polluting production-like user data during local/runtime checks.
 
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.

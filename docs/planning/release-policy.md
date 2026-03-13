@@ -1,0 +1,62 @@
+# SignalBrief Release Policy
+
+Last updated: **March 12, 2026**
+
+## Purpose
+
+Define a consistent release process so small changes are not pushed directly to production without pre-prod validation.
+
+## Required Path for Runtime Changes
+
+Runtime changes include edits under:
+- `web/**`
+- `src/**`
+- `scripts/**`
+- `docker-compose.yml`
+- `package*.json`
+
+For those changes, use this sequence:
+1. Open PR and pass CI gates:
+  - `npm run check:module-linkage`
+  - `npm test`
+  - `npm run smoke:worker`
+  - `npm run smoke:admin-scheduler`
+2. Deploy to staging/preview first:
+  - `npm run ops:deploy:staging`
+3. Validate staging gates:
+  - `GET /` -> `200`
+  - Landing page renders cache-busted `index.js?v=...`
+  - `GET /api/health/scheduler` -> `{"ok": true}`
+4. Promote to production:
+  - `npm run ops:deploy:prod`
+5. Validate production gates (same three checks).
+
+## Hotfix Path
+
+Use direct production deploy only for incidents with active user impact (service down, auth breakage, broken onboarding/settings, failed digest scheduling).
+
+Hotfix requirements:
+1. Run local gates (`npm test`, both smoke checks).
+2. Deploy with `npm run ops:deploy:prod`.
+3. Post deploy in ops log with:
+  - commit SHA
+  - incident summary
+  - rollback owner
+
+## Batching Rules
+
+- Non-incident runtime changes should be batched into planned release windows.
+- UI copy/docs-only changes may skip staging deploy.
+- If risk is medium/high, require two-person review before prod promotion.
+
+## Rollback
+
+Primary rollback action:
+1. Re-deploy previous known-good commit with the same deploy command.
+2. Re-run production gate checks.
+3. Confirm scheduler health and digest-lock status on `/api/health/scheduler`.
+
+Every production deployment must record:
+- deployed SHA
+- verification outcome
+- rollback candidate SHA

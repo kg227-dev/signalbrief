@@ -239,6 +239,8 @@ Reliability-floor operations runbook (backups + restore drills): [`docs/planning
 
 Week 2 security hardening review + merge gate: [`docs/planning/week2-security-hardening-review-2026-03-12.md`](./docs/planning/week2-security-hardening-review-2026-03-12.md)
 
+Release policy (staging-first + hotfix path): [`docs/planning/release-policy.md`](./docs/planning/release-policy.md)
+
 ### macOS LaunchAgents (local fallback only)
 
 Four plist files are installed at `~/Library/LaunchAgents/`:

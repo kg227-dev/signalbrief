@@ -13,6 +13,30 @@ function mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore) {
   };
 }
 
+function sortArchiveDatesDescending(values) {
+  return Array.from(new Set(
+    Array.from(values || [])
+      .map((value) => String(value || "").trim())
+      .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+  )).sort((a, b) => (a < b ? 1 : -1));
+}
+
+function resolveAllowedArchiveDatesForUser(user, archiveDir, deps) {
+  const {
+    getAllowedArchiveDates,
+    readArchiveFiles,
+  } = deps;
+
+  const preferred = getAllowedArchiveDates(user, archiveDir, []);
+  if (preferred.size > 0) return preferred;
+  if (Number(user?.digests_received || 0) <= 0) return preferred;
+
+  const files = readArchiveFiles(archiveDir);
+  if (!Array.isArray(files) || files.length === 0) return preferred;
+  const bounded = files.slice(0, Math.max(7, Math.min(files.length, Number(user?.digests_received || 0))));
+  return getAllowedArchiveDates(user, archiveDir, bounded);
+}
+
 function ensureLegacyArchiveEnabled(ctx, deps, routeLabel) {
   const {
     req,
@@ -67,19 +91,19 @@ function handleLegacyArchiveIndex(ctx, deps) {
   }
 
   const archiveDir = path.join(APP_ROOT, "archive");
-  const files = readArchiveFiles(archiveDir);
-  if (files.length === 0) {
+  const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
+  const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
+  if (allowedDateKeys.length === 0) {
     recordLegacyArchiveUsage(req, "/api/archive", "served_empty", { user_chat_id: String(user.chatId || "") });
     json(res, { digests: [] });
     return true;
   }
 
-  const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
-  const digests = files.flatMap((fileName) => {
-    const dateKey = fileName.replace(".json", "");
-    if (!allowedDates.has(dateKey)) return [];
+  const digests = allowedDateKeys.flatMap((dateKey) => {
     try {
-      const digest = JSON.parse(fs.readFileSync(path.join(archiveDir, fileName), "utf8"));
+      const digestPath = path.join(archiveDir, `${dateKey}.json`);
+      if (!fs.existsSync(digestPath)) return [];
+      const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
       return [{
         date: digest.date,
         dateStr: digest.dateStr,
@@ -127,24 +151,23 @@ function handleArchiveAllRoute(ctx, deps) {
   }
 
   const archiveDir = path.join(APP_ROOT, "archive");
-  const files = readArchiveFiles(archiveDir);
-  if (files.length === 0) {
+  const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
+  const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
+  if (allowedDateKeys.length === 0) {
     json(res, { items: [], digestCount: 0 });
     return true;
   }
 
-  const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
   const userTopics = Array.isArray(user.topics) ? user.topics : [];
   const topicWeights = user.topic_weights || {};
   const items = [];
   let digestCount = 0;
 
-  for (const fileName of files) {
-    const dateKey = fileName.replace(".json", "");
-    if (!allowedDates.has(dateKey)) continue;
-
+  for (const dateKey of allowedDateKeys) {
     try {
-      const digest = JSON.parse(fs.readFileSync(path.join(archiveDir, fileName), "utf8"));
+      const digestPath = path.join(archiveDir, `${dateKey}.json`);
+      if (!fs.existsSync(digestPath)) continue;
+      const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
       digestCount++;
       const digestItems = Array.isArray(digest.items) ? digest.items : [];
       digestItems.forEach((item, idx) => {
@@ -211,8 +234,7 @@ function handleArchiveDateRoute(ctx, deps) {
   }
 
   const archiveDir = path.join(APP_ROOT, "archive");
-  const files = readArchiveFiles(archiveDir);
-  const allowedDates = getAllowedArchiveDates(user, archiveDir, files);
+  const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
   if (!allowedDates.has(rawDate)) {
     recordLegacyArchiveUsage(req, "/api/archive/:date", "not_found", {
       date: rawDate,

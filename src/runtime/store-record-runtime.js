@@ -25,13 +25,83 @@ function createStoreRecordRuntime(deps) {
     return path.join(currentDataDir(), `user-${chatId}.json`);
   }
 
+  function tokenIndexFile() {
+    return path.join(currentDataDir(), "token-index.json");
+  }
+
+  function isUserRecordFileName(fileName) {
+    const normalized = String(fileName || "");
+    if (!normalized.startsWith("user-") || !normalized.endsWith(".json")) return false;
+    if (normalized === "user-token-index.json") return false;
+    return true;
+  }
+
+  function writeTokenIndexSnapshot() {
+    const filePath = tokenIndexFile();
+    const tmpPath = `${filePath}.tmp`;
+    const tokenIndex = currentTokenIndex();
+    const tokens = {};
+    for (const [token, chatId] of tokenIndex.entries()) {
+      const safeToken = String(token || "").trim();
+      const safeChatId = String(chatId || "").trim();
+      if (!safeToken || !safeChatId) continue;
+      tokens[safeToken] = safeChatId;
+    }
+    const payload = {
+      version: 1,
+      updated_at: new Date().toISOString(),
+      tokens,
+    };
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+      fs.renameSync(tmpPath, filePath);
+    } catch {
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {
+        // best-effort temp cleanup
+      }
+    }
+  }
+
+  function loadTokenIndexSnapshot() {
+    const filePath = tokenIndexFile();
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      const tokens = parsed && typeof parsed === "object" && parsed.tokens && typeof parsed.tokens === "object"
+        ? parsed.tokens
+        : null;
+      if (!tokens) return null;
+      const out = new Map();
+      for (const [token, chatId] of Object.entries(tokens)) {
+        const safeToken = String(token || "").trim();
+        const safeChatId = String(chatId || "").trim();
+        if (!safeToken || !safeChatId) continue;
+        out.set(safeToken, safeChatId);
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
+  function lookupTokenFromSnapshot(token) {
+    const snapshot = loadTokenIndexSnapshot();
+    if (!(snapshot instanceof Map) || snapshot.size === 0) return "";
+    const chatId = String(snapshot.get(token) || "").trim();
+    if (!chatId) return "";
+    currentTokenIndex().set(token, chatId);
+    return chatId;
+  }
+
   function rebuildTokenIndex() {
     const tokenIndex = currentTokenIndex();
     tokenIndex.clear();
     const dir = currentDataDir();
     if (!fs.existsSync(dir)) return;
     fs.readdirSync(dir)
-      .filter((fileName) => fileName.startsWith("user-") && fileName.endsWith(".json"))
+      .filter((fileName) => isUserRecordFileName(fileName))
       .forEach((fileName) => {
         const filePath = path.join(dir, fileName);
         const fallbackChatId = fileName.replace("user-", "").replace(".json", "");
@@ -56,6 +126,7 @@ function createStoreRecordRuntime(deps) {
           }
         }
       });
+    writeTokenIndexSnapshot();
   }
 
   function readUser(chatId) {
@@ -85,8 +156,15 @@ function createStoreRecordRuntime(deps) {
     ensureStoreInitialized();
     const tokenIndex = currentTokenIndex();
     const normalized = normalizeUserRecord(data, { chatId });
+    const id = String(chatId || "").trim();
+    for (const [token, mappedChatId] of tokenIndex.entries()) {
+      if (String(mappedChatId || "").trim() !== id) continue;
+      if (token === normalized.token) continue;
+      tokenIndex.delete(token);
+    }
     writeUserFileAtomic(userFile(chatId), normalized);
     if (normalized.token) tokenIndex.set(normalized.token, String(chatId));
+    writeTokenIndexSnapshot();
   }
 
   function deleteUser(chatId) {
@@ -126,6 +204,7 @@ function createStoreRecordRuntime(deps) {
     for (const [token, mappedChatId] of tokenIndex.entries()) {
       if (String(mappedChatId || "").trim() === id) tokenIndex.delete(token);
     }
+    writeTokenIndexSnapshot();
 
     return { ok: true, existed: existed || !!existingToken };
   }
@@ -135,7 +214,7 @@ function createStoreRecordRuntime(deps) {
     const dir = currentDataDir();
     if (!fs.existsSync(dir)) return [];
     return fs.readdirSync(dir)
-      .filter((fileName) => fileName.startsWith("user-") && fileName.endsWith(".json"))
+      .filter((fileName) => isUserRecordFileName(fileName))
       .map((fileName) => {
         const chatId = fileName.replace("user-", "").replace(".json", "");
         try {
@@ -151,13 +230,13 @@ function createStoreRecordRuntime(deps) {
   function findUserByToken(token) {
     ensureStoreInitialized();
     const tokenIndex = currentTokenIndex();
-    if (!token) return null;
-    const hit = tokenIndex.get(token);
+    const tokenKey = String(token || "").trim();
+    if (!tokenKey) return null;
+    const hit = tokenIndex.get(tokenKey);
     if (hit) return readUser(hit);
-    rebuildTokenIndex();
-    const refreshed = tokenIndex.get(token);
-    if (!refreshed) return null;
-    return readUser(refreshed);
+    const snapshotHit = lookupTokenFromSnapshot(tokenKey);
+    if (!snapshotHit) return null;
+    return readUser(snapshotHit);
   }
 
   return {

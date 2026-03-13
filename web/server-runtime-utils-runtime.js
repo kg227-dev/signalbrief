@@ -1,3 +1,5 @@
+const path = require("path");
+
 const TRANSPARENT_GIF = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
   "base64"
@@ -37,10 +39,67 @@ function sendTransparentGif(res) {
 
 function readArchiveFiles({ fs, archiveDir }) {
   if (!fs.existsSync(archiveDir)) return [];
-  return fs.readdirSync(archiveDir)
-    .filter((fileName) => fileName.endsWith(".json"))
+  const indexFiles = readArchiveFilesFromIndex({ fs, archiveDir });
+  if (indexFiles.length > 0) {
+    const newestFile = path.join(archiveDir, indexFiles[0]);
+    if (fs.existsSync(newestFile)) return indexFiles;
+  }
+
+  const files = fs.readdirSync(archiveDir)
+    .filter((fileName) => isArchiveDigestFileName(fileName))
     .sort()
     .reverse(); // newest first
+  writeArchiveIndexFromFiles({ fs, archiveDir, files });
+  return files;
+}
+
+function isArchiveDigestFileName(fileName) {
+  return /^\d{4}-\d{2}-\d{2}\.json$/.test(String(fileName || ""));
+}
+
+function normalizeArchiveDateList(values) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value || "").trim())
+      .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+  )).sort((a, b) => (a < b ? 1 : -1));
+}
+
+function readArchiveFilesFromIndex({ fs, archiveDir }) {
+  const indexPath = path.join(archiveDir, "index.json");
+  if (!fs.existsSync(indexPath)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+    const dates = normalizeArchiveDateList(parsed?.dates);
+    return dates.map((dateKey) => `${dateKey}.json`);
+  } catch {
+    return [];
+  }
+}
+
+function writeArchiveIndexFromFiles({ fs, archiveDir, files }) {
+  const indexPath = path.join(archiveDir, "index.json");
+  const tmpPath = `${indexPath}.tmp`;
+  const dates = normalizeArchiveDateList(
+    (Array.isArray(files) ? files : [])
+      .filter((fileName) => isArchiveDigestFileName(fileName))
+      .map((fileName) => String(fileName).replace(".json", ""))
+  );
+  const payload = {
+    version: 1,
+    updated_at: new Date().toISOString(),
+    dates,
+  };
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tmpPath, indexPath);
+  } catch {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {
+      // best-effort temp cleanup
+    }
+  }
 }
 
 function getAllowedArchiveDates({
@@ -57,8 +116,13 @@ function getAllowedArchiveDates({
   // Legacy backfill: older users may have digests_received ahead of digest_dates.
   if ((user.digests_received || 0) > allowedList.length) {
     const joinedET = toEtDateKey(user.joined_at);
-    const inferred = files
+    const missingCount = Math.max(0, Number(user.digests_received || 0) - allowedList.length);
+    const candidates = Array.isArray(files)
+      ? files.slice(0, Math.max(7, Math.min(files.length, missingCount)))
+      : [];
+    const inferred = candidates
       .map((fileName) => fileName.replace(".json", ""))
+      .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey))
       .filter((dateKey) => (!joinedET || dateKey >= joinedET));
     const merged = [...new Set([...allowedList, ...inferred])].sort();
     if (merged.length > allowedList.length) {

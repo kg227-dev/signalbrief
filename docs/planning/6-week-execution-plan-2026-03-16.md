@@ -309,10 +309,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 6 cutover continuation
   - Recommendation: complete the migration by changing the production default after sustained canary parity and rollback drills.
   - Status (Mar 13, 2026): production backend resolution now defaults to `sqlite` when no explicit store backend override is set, and full-enable validation exports steady-state `SIGNALBRIEF_STORE_BACKEND=sqlite` with `SIGNALBRIEF_STORE_ROLLBACK_BACKEND=file` retained for explicit emergency rollback.
-- [ ] P10 `Performance` remove whole-file scans from user lookup, engagement analysis, and archive reads on hot paths.
+- [x] P10 `Performance` remove whole-file scans from user lookup, engagement analysis, and archive reads on hot paths.
   - Files: `src/runtime/store-record-runtime.js`, `src/runtime/engagement/engagement-events-runtime.js`, `web/routes/core-api-archive-runtime.js`
   - Target window: Week 5 / Week 6 spillover
   - Recommendation: replace directory scans and full-file loads with indexed queries, pagination, or bounded reads.
+  - Status (Mar 13, 2026): token lookup misses no longer trigger full user-directory rebuild scans (snapshot-backed token index), engagement event loading now incrementally parses only appended bytes after initial cache build, and archive API routes now use user-allowed digest dates first with bounded legacy fallback instead of unconditional archive-directory scans.
 - [ ] P11 `Observability` convert runtime logging to structured events with stable `run_id`, `user_id`, provider, and outcome fields.
   - Files: `src/entrypoints/digest-orchestrator-core-runtime.js`, `web/server-runtime.js`, `start.sh`
   - Target window: Week 1 / Week 4 spillover
@@ -373,6 +374,7 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Carry-forward P7 completed: provider resilience policies now apply per-provider timeout/retry budgets (including 429/5xx retry rules), fetch orchestrator emits graded Perplexity degradation incidents, and enrichment degrades cleanly to fallback digest content when Anthropic is unhealthy.
 - [x] Carry-forward P8 completed: `/digest` cooldown now persists in runner-managed per-chat cooldown leases (file-backed and lock-coordinated), so restarts or multi-process command handling cannot bypass the throttle window.
 - [x] Carry-forward P9 completed: store backend selection now defaults to sqlite in production when `SIGNALBRIEF_STORE_BACKEND` is unset, and full-enable cutover outputs now target steady-state `backend=sqlite` with explicit file-backend rollback export retained.
+- [x] Carry-forward P10 completed: replaced hot-path full scans with lightweight index/cache paths across token lookup, engagement event analysis, and archive API date resolution (with bounded legacy fallback only when digest date history is missing).
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), confirmed `config.json` remains local-only via `.gitignore`, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
 - [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.

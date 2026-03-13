@@ -6,6 +6,10 @@ const { normalizeCanonicalUrl } = require("../url-normalization-runtime");
 const APP_ROOT = path.resolve(__dirname, "..", "..", "..");
 const DATA_DIR = path.join(APP_ROOT, "data");
 const EVENTS_FILE = path.join(DATA_DIR, "engagement-events.jsonl");
+const ENGAGEMENT_CACHE = new Map();
+const DEFAULT_CACHE_RETENTION_DAYS = 90;
+const MAX_CACHE_INVALID_TS_EVENTS = 2000;
+const MAX_CACHE_PARSE_ERROR_LINES = 2000;
 
 function etDateKey(date = new Date()) {
   return date.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -95,6 +99,121 @@ function appendEngagementEventChecked(input, opts = {}) {
   return outcome;
 }
 
+function readFileRangeSync(filePath, start, length) {
+  if (!Number.isFinite(length) || length <= 0) return "";
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    let bytesReadTotal = 0;
+    while (bytesReadTotal < length) {
+      const bytesRead = fs.readSync(fd, buffer, bytesReadTotal, length - bytesReadTotal, start + bytesReadTotal);
+      if (bytesRead <= 0) break;
+      bytesReadTotal += bytesRead;
+    }
+    if (bytesReadTotal <= 0) return "";
+    return buffer.subarray(0, bytesReadTotal).toString("utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function parseEventLines(raw, opts = {}) {
+  const startLine = Math.max(1, Number(opts.start_line || 1));
+  const parsedRows = String(raw || "").split("\n");
+  const events = [];
+  const parseErrorLines = [];
+  let parseErrors = 0;
+  for (let index = 0; index < parsedRows.length; index += 1) {
+    const line = String(parsedRows[index] || "").trim();
+    if (!line) continue;
+    const parsed = parseEventLine(line);
+    if (!parsed.ok) {
+      parseErrors += 1;
+      parseErrorLines.push(startLine + index);
+      continue;
+    }
+    events.push(parsed.event);
+  }
+  return {
+    events,
+    parseErrors,
+    parseErrorLines,
+    lineCount: parsedRows.length,
+  };
+}
+
+function createEngagementCacheEntry(filePath, stats, parsed, cacheRetentionDays) {
+  return {
+    filePath,
+    fileSize: Number(stats?.size || 0),
+    mtimeMs: Number(stats?.mtimeMs || 0),
+    totalLines: Number(parsed.lineCount || 0),
+    parseErrors: Number(parsed.parseErrors || 0),
+    parseErrorLines: Array.isArray(parsed.parseErrorLines)
+      ? parsed.parseErrorLines.slice(-MAX_CACHE_PARSE_ERROR_LINES)
+      : [],
+    events: pruneCachedEvents(parsed.events, cacheRetentionDays),
+  };
+}
+
+function pruneCachedEvents(events, cacheRetentionDays) {
+  const retentionDays = Number.isFinite(Number(cacheRetentionDays)) && Number(cacheRetentionDays) > 0
+    ? Number(cacheRetentionDays)
+    : DEFAULT_CACHE_RETENTION_DAYS;
+  const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const fresh = [];
+  const invalid = [];
+  for (const event of Array.isArray(events) ? events : []) {
+    const ts = Date.parse(event?.ts_utc || "");
+    if (Number.isFinite(ts)) {
+      if (ts >= cutoffMs) fresh.push(event);
+      continue;
+    }
+    invalid.push(event);
+  }
+  const invalidTail = invalid.slice(-MAX_CACHE_INVALID_TS_EVENTS);
+  return [...fresh, ...invalidTail];
+}
+
+function rebuildEngagementCache(eventsFile, cacheRetentionDays) {
+  const raw = fs.readFileSync(eventsFile, "utf8");
+  const parsed = parseEventLines(raw, { start_line: 1 });
+  const stats = fs.statSync(eventsFile);
+  const entry = createEngagementCacheEntry(eventsFile, stats, parsed, cacheRetentionDays);
+  ENGAGEMENT_CACHE.set(eventsFile, entry);
+  return entry;
+}
+
+function loadIncrementalEngagementCache(eventsFile, cacheRetentionDays) {
+  const stats = fs.statSync(eventsFile);
+  const cached = ENGAGEMENT_CACHE.get(eventsFile);
+  if (!cached) return rebuildEngagementCache(eventsFile, cacheRetentionDays);
+
+  const currentSize = Number(stats.size || 0);
+  const currentMtime = Number(stats.mtimeMs || 0);
+  const cachedSize = Number(cached.fileSize || 0);
+  if (!Number.isFinite(cachedSize) || currentSize < cachedSize) {
+    return rebuildEngagementCache(eventsFile, cacheRetentionDays);
+  }
+  if (currentSize === cachedSize && currentMtime === Number(cached.mtimeMs || 0)) {
+    return cached;
+  }
+  if (currentSize === cachedSize && currentMtime !== Number(cached.mtimeMs || 0)) {
+    return rebuildEngagementCache(eventsFile, cacheRetentionDays);
+  }
+
+  const appendedRaw = readFileRangeSync(eventsFile, cachedSize, currentSize - cachedSize);
+  const parsed = parseEventLines(appendedRaw, { start_line: Number(cached.totalLines || 0) + 1 });
+  cached.fileSize = currentSize;
+  cached.mtimeMs = currentMtime;
+  cached.totalLines = Number(cached.totalLines || 0) + Number(parsed.lineCount || 0);
+  cached.parseErrors = Number(cached.parseErrors || 0) + Number(parsed.parseErrors || 0);
+  cached.parseErrorLines = [...cached.parseErrorLines, ...parsed.parseErrorLines].slice(-MAX_CACHE_PARSE_ERROR_LINES);
+  cached.events = pruneCachedEvents([...(Array.isArray(cached.events) ? cached.events : []), ...parsed.events], cacheRetentionDays);
+  ENGAGEMENT_CACHE.set(eventsFile, cached);
+  return cached;
+}
+
 function parseEventLine(line) {
   try {
     return { event: JSON.parse(line), ok: true };
@@ -140,31 +259,30 @@ function loadEngagementEvents(opts = {}) {
   const maxAgeDays = Number.isFinite(maxAgeCandidate) && maxAgeCandidate > 0
     ? maxAgeCandidate
     : 45;
+  const cacheRetentionDays = Math.max(
+    maxAgeDays,
+    Number.isFinite(Number(opts.cache_retention_days)) && Number(opts.cache_retention_days) > 0
+      ? Number(opts.cache_retention_days)
+      : DEFAULT_CACHE_RETENTION_DAYS
+  );
   const includeInvalidTimestamps = opts.include_invalid_timestamps === true;
   const dedupe = opts.dedupe !== false;
   const captureParseErrorLines = opts.capture_parse_error_lines !== false;
   const returnMeta = opts.return_meta === true;
-  const raw = fs.readFileSync(eventsFile, "utf8");
-  if (!raw.trim()) return withParseMeta([], 0, [], returnMeta);
+  if (opts.force_cache_rebuild === true) ENGAGEMENT_CACHE.delete(eventsFile);
+  const cached = loadIncrementalEngagementCache(eventsFile, cacheRetentionDays);
+  if (!Array.isArray(cached.events) || cached.events.length === 0) {
+    return withParseMeta([], Number(cached.parseErrors || 0), captureParseErrorLines ? cached.parseErrorLines : [], returnMeta);
+  }
+
   const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-  const parseErrorLines = [];
-  let parseErrors = 0;
-  const rows = raw
-    .split("\n")
-    .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))
-    .filter(({ line }) => Boolean(line))
-    .map(({ line, lineNumber }) => {
-      const parsed = parseEventLine(line);
-      if (!parsed.ok) {
-        parseErrors += 1;
-        if (captureParseErrorLines) parseErrorLines.push(lineNumber);
-        return null;
-      }
-      return parsed.event;
-    })
-    .filter(Boolean)
+  const rows = cached.events
     .filter((event) => isEventWithinRetention(event, cutoffMs, includeInvalidTimestamps));
   const events = dedupe ? dedupeEventsByKey(rows) : rows;
+  const parseErrors = Number(cached.parseErrors || 0);
+  const parseErrorLines = captureParseErrorLines
+    ? (Array.isArray(cached.parseErrorLines) ? cached.parseErrorLines.slice() : [])
+    : [];
   return withParseMeta(events, parseErrors, parseErrorLines, returnMeta);
 }
 

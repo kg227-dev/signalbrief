@@ -294,10 +294,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 3 spillover
   - Recommendation: keep the orchestrator as a thin coordinator and move IO-heavy behavior into narrowly scoped runtimes with parity tests.
   - Status (Mar 13, 2026): complete — fetch/selection/enrichment/delivery plus archive, cost, lock, incident, HTTP transport, and runtime bootstrap concerns are delegated to dedicated entrypoint runtimes (`digest-orchestrator-*-runtime` seams), and the core orchestrator now acts as coordinator/wiring.
-- [ ] P7 `Resilience` add provider-specific timeout budgets, 429/5xx retry rules, and partial-delivery degradation when Anthropic or Perplexity are unhealthy.
+- [x] P7 `Resilience` add provider-specific timeout budgets, 429/5xx retry rules, and partial-delivery degradation when Anthropic or Perplexity are unhealthy.
   - Files: `src/digest/runtime/digest-data-enrich-runtime.js`, `src/digest/runtime/digest-data-fetch-runtime.js`, `src/entrypoints/digest-orchestrator-core-runtime.js`
   - Target window: Week 3 / Week 4 reliability spillover
   - Recommendation: treat provider failure as a graded incident path instead of an all-or-nothing digest failure.
+  - Status (Mar 13, 2026): provider-specific resilience policies now drive Perplexity and Anthropic request budgets (timeout/retries/retry-status codes), transport supports status-code retries, Perplexity partial degradation emits graded incidents, and Anthropic enrichment failures degrade to null-WIM delivery instead of run-fatal errors.
 - [ ] P8 `Resilience` move `/digest` cooldown from process memory to the persistent lock/lease mechanism so multi-process or restarted runtimes cannot bypass the throttle window.
   - Files: `src/runtime/reply/reply-command-digest-runtime.js`, `src/jobs/digest-runner-core-runtime.js`
   - Target window: Week 1 or Week 3 spillover
@@ -367,6 +368,7 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Carry-forward P6 phase 1 completed: extracted archive persistence coordination and run-cost accounting into dedicated entrypoint runtimes (`src/entrypoints/digest-orchestrator-archive-runtime.js`, `src/entrypoints/digest-orchestrator-cost-runtime.js`) and replaced inline core-orchestrator logic with seam calls plus contract tests.
 - [x] Carry-forward P6 phase 2 completed: extracted digest-lock and incident-logging/alert orchestration into dedicated entrypoint runtimes (`src/entrypoints/digest-orchestrator-lock-runtime.js`, `src/entrypoints/digest-orchestrator-incident-runtime.js`) and replaced inline core-orchestrator logic with seam calls plus contract tests.
 - [x] Carry-forward P6 phase 3 completed: extracted HTTP transport and runtime bootstrap concerns into dedicated entrypoint runtimes (`src/entrypoints/digest-orchestrator-transport-runtime.js`, `src/entrypoints/digest-orchestrator-bootstrap-runtime.js`), with contract coverage and linkage-map updates; P6 marked complete.
+- [x] Carry-forward P7 completed: provider resilience policies now apply per-provider timeout/retry budgets (including 429/5xx retry rules), fetch orchestrator emits graded Perplexity degradation incidents, and enrichment degrades cleanly to fallback digest content when Anthropic is unhealthy.
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), confirmed `config.json` remains local-only via `.gitignore`, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
 - [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.

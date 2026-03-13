@@ -93,4 +93,64 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
   assert.deepStrictEqual(emptyResult.allItems, []);
   assert.deepStrictEqual(emptyIncidents, ["zero-standard-results", "zero-raw-items"]);
+
+  const degradedIncidents = [];
+  const degradedRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [
+        { tag: "AI×TECH", queries: ["a"] },
+        { tag: "STRATEGY", queries: ["b"] },
+      ],
+      digest: { itemCount: 7 },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic) => {
+      if (topic.tag === "AI×TECH") {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "AI story", tag: topic.tag }],
+          diagnostics: {
+            provider: "perplexity",
+            degraded: false,
+            failed_calls: 0,
+            transport_errors: 0,
+            successful_calls: 1,
+            status_counts: {},
+          },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [],
+        diagnostics: {
+          provider: "perplexity",
+          degraded: true,
+          failed_calls: 1,
+          transport_errors: 0,
+          successful_calls: 0,
+          status_counts: { 503: 1 },
+        },
+      };
+    },
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async (...args) => {
+      degradedIncidents.push(args);
+    },
+  });
+
+  const degradedResult = await degradedRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["AI×TECH", "STRATEGY"], preferences: {} }],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(degradedResult.allItems.length, 1);
+  assert.deepStrictEqual(
+    degradedIncidents.map((args) => args[0]),
+    ["perplexity-partial-degradation"]
+  );
+  assert.strictEqual(degradedIncidents[0][2].degraded_topics, 1);
+  assert.strictEqual(degradedIncidents[0][2].fetched_topics, 2);
+  assert.strictEqual(degradedIncidents[0][2].failed_calls, 1);
 })();

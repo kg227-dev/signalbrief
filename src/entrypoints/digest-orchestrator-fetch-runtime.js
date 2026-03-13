@@ -85,6 +85,53 @@ function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
   });
 }
 
+function mergeStatusCounts(target, source) {
+  const out = target && typeof target === "object" ? target : {};
+  if (!source || typeof source !== "object") return out;
+  for (const [code, count] of Object.entries(source)) {
+    const normalizedCount = Number(count);
+    if (!Number.isFinite(normalizedCount) || normalizedCount <= 0) continue;
+    out[code] = (out[code] || 0) + normalizedCount;
+  }
+  return out;
+}
+
+function summarizePerplexityDiagnostics(results) {
+  const summary = {
+    topics: 0,
+    degraded_topics: 0,
+    failed_calls: 0,
+    transport_errors: 0,
+    successful_calls: 0,
+    status_counts: {},
+  };
+  for (const result of (Array.isArray(results) ? results : [])) {
+    const diagnostics = result?.diagnostics;
+    if (!diagnostics || diagnostics.provider !== "perplexity") continue;
+    summary.topics += 1;
+    summary.failed_calls += Number(diagnostics.failed_calls || 0);
+    summary.transport_errors += Number(diagnostics.transport_errors || 0);
+    summary.successful_calls += Number(diagnostics.successful_calls || 0);
+    mergeStatusCounts(summary.status_counts, diagnostics.status_counts);
+    if (diagnostics.degraded) summary.degraded_topics += 1;
+  }
+  return summary;
+}
+
+function mergePerplexityDiagnostics(base, extra) {
+  return {
+    topics: Number(base?.topics || 0) + Number(extra?.topics || 0),
+    degraded_topics: Number(base?.degraded_topics || 0) + Number(extra?.degraded_topics || 0),
+    failed_calls: Number(base?.failed_calls || 0) + Number(extra?.failed_calls || 0),
+    transport_errors: Number(base?.transport_errors || 0) + Number(extra?.transport_errors || 0),
+    successful_calls: Number(base?.successful_calls || 0) + Number(extra?.successful_calls || 0),
+    status_counts: mergeStatusCounts(
+      mergeStatusCounts({}, base?.status_counts),
+      extra?.status_counts
+    ),
+  };
+}
+
 function createDigestOrchestratorFetchRuntime(deps) {
   const {
     CONFIG,
@@ -123,6 +170,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const standardFetchCalls = standardResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
     const standardItems = standardResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
     let allItems = standardItems.slice();
+    let providerDiagnostics = summarizePerplexityDiagnostics(standardResults);
     logger(`Fetched ${allItems.length} raw items`);
 
     const allStandardEmpty = standardFetchCallsPlanned > 0
@@ -154,6 +202,10 @@ function createDigestOrchestratorFetchRuntime(deps) {
       const customResults = await Promise.all(customFetchTargets.map(fetchTopic));
       customFetchCalls = customResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
       const customItems = customResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
+      providerDiagnostics = mergePerplexityDiagnostics(
+        providerDiagnostics,
+        summarizePerplexityDiagnostics(customResults)
+      );
       logger(`Fetched ${customItems.length} custom topic item(s)`);
 
       // Prepend so custom items are visible to selection before broad pool balancing.
@@ -167,6 +219,25 @@ function createDigestOrchestratorFetchRuntime(deps) {
         allItems.unshift(...rescueItems);
         logger(`Custom keyword rescue added ${rescueItems.length} item(s) from standard pool`);
       }
+    }
+
+    if (providerDiagnostics.degraded_topics > 0) {
+      await emitIncident(
+        "perplexity-partial-degradation",
+        `Perplexity degraded for ${providerDiagnostics.degraded_topics}/${providerDiagnostics.topics} fetched topics`,
+        {
+          mode: runMode,
+          due_users: Array.isArray(dueUsers) ? dueUsers.length : 0,
+          standard_topics: standardFetchCallsPlanned,
+          selected_items: allItems.length,
+          provider: "perplexity",
+          degraded_topics: providerDiagnostics.degraded_topics,
+          fetched_topics: providerDiagnostics.topics,
+          failed_calls: providerDiagnostics.failed_calls,
+          transport_errors: providerDiagnostics.transport_errors,
+          status_counts: providerDiagnostics.status_counts,
+        }
+      );
     }
 
     if (allItems.length === 0) {

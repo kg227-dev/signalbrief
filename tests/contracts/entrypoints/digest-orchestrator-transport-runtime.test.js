@@ -15,7 +15,7 @@ const runtime = require(TARGET_PATH);
 const { createDigestOrchestratorTransportRuntime } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
-function createHttpsStub(steps, callsOut) {
+function createHttpsStub(steps, callsOut, timeoutCallsOut = []) {
   let idx = 0;
   return {
     request(options, onResponse) {
@@ -23,6 +23,7 @@ function createHttpsStub(steps, callsOut) {
       const req = new EventEmitter();
       req.write = () => {};
       req.setTimeout = (_ms, onTimeout) => {
+        timeoutCallsOut.push(_ms);
         req._onTimeout = onTimeout;
       };
       req.destroy = (error) => {
@@ -32,6 +33,12 @@ function createHttpsStub(steps, callsOut) {
         const step = steps[idx++] || { type: "success", statusCode: 200, body: "{}" };
         if (step.type === "error") {
           setImmediate(() => req.emit("error", new Error(step.message || "socket hang up")));
+          return;
+        }
+        if (step.type === "timeout") {
+          setImmediate(() => {
+            if (typeof req._onTimeout === "function") req._onTimeout();
+          });
           return;
         }
         const res = new EventEmitter();
@@ -80,7 +87,63 @@ async function testTransportJsonAndRetry() {
   assert.strictEqual(calls.length, 3, "retry path should issue a second request");
 }
 
-testTransportJsonAndRetry().catch((error) => {
+async function testTransportStatusRetryAndTimeoutOverride() {
+  const calls = [];
+  const timeoutCalls = [];
+  const https = createHttpsStub([
+    { type: "success", statusCode: 429, body: "{\"error\":\"rate limited\"}" },
+    { type: "success", statusCode: 503, body: "{\"error\":\"unavailable\"}" },
+    { type: "success", statusCode: 200, body: "{\"ok\":true}" },
+  ], calls, timeoutCalls);
+  const transport = createDigestOrchestratorTransportRuntime({
+    https,
+    defaultTimeoutMs: 1000,
+  });
+
+  const response = await transport.httpsPostWithRetry(
+    "api.example.com",
+    "/status-retry",
+    { "Content-Type": "application/json" },
+    { hello: "status-retry" },
+    {
+      retries: 2,
+      retryDelayMs: 1,
+      timeoutMs: 4321,
+      retryStatusCodes: [429, 503],
+    }
+  );
+  assert.strictEqual(response.status, 200);
+  assert.strictEqual(calls.length, 3, "status retry should reattempt while retries remain");
+  assert.ok(timeoutCalls.every((value) => value === 4321), "timeout override should apply to each attempt");
+}
+
+async function testTransportStatusRetryStopsWhenNotConfigured() {
+  const calls = [];
+  const https = createHttpsStub([
+    { type: "success", statusCode: 503, body: "{\"error\":\"unavailable\"}" },
+    { type: "success", statusCode: 200, body: "{\"ok\":true}" },
+  ], calls);
+  const transport = createDigestOrchestratorTransportRuntime({
+    https,
+    defaultTimeoutMs: 1000,
+  });
+
+  const response = await transport.httpsPostWithRetry(
+    "api.example.com",
+    "/status-no-retry",
+    { "Content-Type": "application/json" },
+    { hello: "status-no-retry" },
+    { retries: 2, retryDelayMs: 1, retryStatusCodes: [429] }
+  );
+  assert.strictEqual(response.status, 503);
+  assert.strictEqual(calls.length, 1, "non-configured status should not trigger retry");
+}
+
+(async () => {
+  await testTransportJsonAndRetry();
+  await testTransportStatusRetryAndTimeoutOverride();
+  await testTransportStatusRetryStopsWhenNotConfigured();
+})().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);
 });

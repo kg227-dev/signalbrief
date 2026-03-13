@@ -594,12 +594,15 @@ async function main() {
 
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
     enrichItems,
+    emitDigestIncident,
   });
   const {
     enriched,
     claudeUsage,
   } = await enrichmentRuntime.enrichSelectedItems({
     selected,
+    runMode,
+    dueUsersCount: dueUsers.length,
   });
 
   // Archive once per run (shared, date-keyed) before per-user filtering.

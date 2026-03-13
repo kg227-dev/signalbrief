@@ -36,7 +36,7 @@ function testLockAcquireReleaseCycle() {
     getDigestLockOwnerStatus,
     log: () => {},
     getPid: () => process.pid,
-    nowIso: () => "2026-03-13T16:00:00.000Z",
+    nowIso: () => new Date().toISOString(),
   });
 
   const first = lockRuntime.acquireDigestLock("scheduled");

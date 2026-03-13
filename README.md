@@ -229,6 +229,10 @@ File-to-SQLite migration tooling (with preflight + release artifact):
 - Execute migration: `npm run ops:store:migrate:file-to-sqlite -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
 - VM checklist + evidence contract: [`docs/planning/week5-day23-store-migration-preflight.md`](./docs/planning/week5-day23-store-migration-preflight.md)
 
+Dual-read parity compare (staging/local verification):
+- Run compare: `npm run ops:store:dual-read-compare -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
+- Report + CI gate details: [`docs/planning/week5-day24-dual-read-parity.md`](./docs/planning/week5-day24-dual-read-parity.md)
+
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash
 SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler

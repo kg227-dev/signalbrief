@@ -33,3 +33,44 @@ jobs:
 
       - name: Admin scheduler smoke test
         run: npm run smoke:admin-scheduler
+
+  store-dual-read-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare dual-read fixture workspace
+        run: |
+          set -euo pipefail
+          TMP_DIR="$(mktemp -d)"
+          echo "TMP_DIR=$TMP_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$TMP_DIR/data" "$TMP_DIR/backups" "$TMP_DIR/artifacts"
+          cp tests/fixtures/store-dual-read/data/user-*.json "$TMP_DIR/data/"
+          echo "backup" > "$TMP_DIR/backups/state-backup-ci.tgz"
+
+      - name: Seed sqlite from file-store fixture
+        run: |
+          npm run ops:store:migrate:file-to-sqlite -- \
+            --data-dir "$TMP_DIR/data" \
+            --sqlite-path "$TMP_DIR/data/signalbrief.sqlite" \
+            --backup-dir "$TMP_DIR/backups" \
+            --artifact-dir "$TMP_DIR/artifacts" \
+            --artifact-name ci-store-migration.json
+
+      - name: Verify file/sqlite dual-read parity
+        run: |
+          npm run ops:store:dual-read-compare -- \
+            --data-dir "$TMP_DIR/data" \
+            --sqlite-path "$TMP_DIR/data/signalbrief.sqlite" \
+            --artifact-dir "$TMP_DIR/artifacts" \
+            --artifact-name ci-dual-read-compare.json

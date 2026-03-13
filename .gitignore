@@ -2,6 +2,10 @@
 data/
 user-state.json
 config.json
+!tests/fixtures/
+!tests/fixtures/store-dual-read/
+!tests/fixtures/store-dual-read/data/
+!tests/fixtures/store-dual-read/data/*.json
 
 # Logs
 *.log

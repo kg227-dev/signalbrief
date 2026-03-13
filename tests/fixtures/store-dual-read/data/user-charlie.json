@@ -1,0 +1,30 @@
+{
+  "chatId": "charlie",
+  "name": "Charlie User",
+  "email": "charlie@example.com",
+  "token": "token_charlie_003",
+  "status": "paused",
+  "topics": ["Finance", "M&A"],
+  "topic_weights": {
+    "Finance": 1,
+    "M&A": 2
+  },
+  "digest_feedback": [
+    {
+      "score": "great",
+      "at": "2026-03-11T09:30:00.000Z"
+    }
+  ],
+  "preferences": {
+    "delivery_time": "06:45",
+    "timezone": "America/Chicago",
+    "frequency": "daily_weekday",
+    "depth": "deep",
+    "days_of_week": [1, 2, 3, 4, 5],
+    "items_per_digest": 7,
+    "email_enabled": true,
+    "telegram_enabled": false
+  },
+  "joined_at": "2026-03-10T14:00:00.000Z",
+  "last_updated": "2026-03-10T14:00:00.000Z"
+}

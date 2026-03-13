@@ -18,6 +18,7 @@
     "ops:deploy:web": "DEPLOY_SERVICES=web node scripts/deploy-production.js",
     "ops:store:migrate:file-to-sqlite": "node scripts/migrate-store-file-to-sqlite.js",
     "ops:store:migrate:file-to-sqlite:preflight": "node scripts/migrate-store-file-to-sqlite.js --preflight-only",
+    "ops:store:dual-read-compare": "node scripts/store-dual-read-compare.js",
     "ops:backup:state": "node scripts/backup-state.js",
     "ops:drill:restore-state": "node scripts/restore-state-drill.js",
     "ops:watchdog-scheduler": "node scripts/watchdog-scheduler.js",

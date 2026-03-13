@@ -1,0 +1,21 @@
+{
+  "chatId": "alpha",
+  "name": "Alpha User",
+  "email": "alpha@example.com",
+  "token": "token_alpha_001",
+  "status": "active",
+  "topics": ["AI", "Healthcare"],
+  "custom_topics": [],
+  "preferences": {
+    "delivery_time": "07:00",
+    "timezone": "America/New_York",
+    "frequency": "daily_weekday",
+    "depth": "headline_plus_why",
+    "days_of_week": [1, 2, 3, 4, 5],
+    "items_per_digest": 5,
+    "email_enabled": true,
+    "telegram_enabled": true
+  },
+  "joined_at": "2026-03-10T12:00:00.000Z",
+  "last_updated": "2026-03-10T12:00:00.000Z"
+}

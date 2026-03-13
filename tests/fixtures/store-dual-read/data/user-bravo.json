@@ -1,0 +1,21 @@
+{
+  "chatId": "bravo",
+  "name": "Bravo User",
+  "email": "bravo@example.com",
+  "token": null,
+  "status": "active",
+  "topics": ["Energy"],
+  "custom_topics": ["custom_green_hydrogen"],
+  "preferences": {
+    "delivery_time": "08:30",
+    "timezone": "America/Los_Angeles",
+    "frequency": "daily_weekday",
+    "depth": "headline_plus_why",
+    "days_of_week": [1, 2, 3, 4, 5],
+    "items_per_digest": 6,
+    "email_enabled": true,
+    "telegram_enabled": true
+  },
+  "joined_at": "2026-03-10T13:00:00.000Z",
+  "last_updated": "2026-03-10T13:00:00.000Z"
+}

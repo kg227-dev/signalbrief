@@ -15,8 +15,6 @@ const {
   sendEmail,
   sendWelcomeEmail,
   sendReferralThankYou,
-  signUnsubEmail,
-  verifyUnsubEmailSignature,
 } = require("../src/platform/mailer");
 const {
   appendEngagementEventChecked,
@@ -186,7 +184,7 @@ const sendMagicLinkEmail = createSendMagicLinkEmail({
 
 const sendTelegramText = createSendTelegramText({
   https,
-  getToken: () => CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken,
+  getToken: () => CONFIG.keys.signalBriefBotToken,
 });
 
 const allowExampleSignups = (
@@ -241,8 +239,6 @@ const {
   CAPABILITY_TOPICS,
   digestRunStatus,
   getCachedOrRefreshSchedulerHeartbeat,
-  signUnsubEmail,
-  verifyUnsubEmailSignature,
   blankReengagementState,
   isLegacyArchiveEndpointEnabled,
   recordLegacyArchiveUsage,

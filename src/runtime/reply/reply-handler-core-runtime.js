@@ -55,7 +55,7 @@ function createReplyHandlerRuntime(options = {}) {
 
   function getBotToken() {
     const keys = getConfigKeys();
-    return keys.signalBriefBotToken || keys.telegramBotToken || "";
+    return keys.signalBriefBotToken || "";
   }
 
   const telegramTransport = options.telegramTransport || createTelegramTransport(getBotToken);

@@ -472,7 +472,7 @@ async function sendTelegram(text, chatId, extra = {}) {
     provider: "telegram",
     outcome: "attempt",
   });
-  const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
+  const token = CONFIG.keys.signalBriefBotToken;
   const res = await httpsPostWithRetry(
     "api.telegram.org", `/bot${token}/sendMessage`,
     { "Content-Type": "application/json" },

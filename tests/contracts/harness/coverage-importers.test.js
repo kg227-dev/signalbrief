@@ -8,7 +8,7 @@ function assertExported(name, value) {
   assert.ok(kind === "object" || kind === "function", `${name} should export object/function, got ${kind}`);
 }
 
-const digestRoot = require("../../../digest.js");
+const digestEntrypoint = require("../../../src/entrypoints/digest.js");
 const mailerLifecycleRuntime = require("../../../src/runtime/mailer-lifecycle-runtime.js");
 const mailerLifecycleCommon = require("../../../src/runtime/mailer/lifecycle/common.js");
 const mailerLifecycleSenders = require("../../../src/runtime/mailer/lifecycle/lifecycle-senders.js");
@@ -24,7 +24,7 @@ const adminOpsAnalytics = require("../../../web/services/admin-ops-analytics.js"
 const adminOpsScheduler = require("../../../web/services/admin-ops-scheduler.js");
 const adminOpsUtils = require("../../../web/services/admin-ops-utils.js");
 
-assertExported("digest.js", digestRoot);
+assertExported("src/entrypoints/digest.js", digestEntrypoint);
 assertExported("src/runtime/mailer-lifecycle-runtime.js", mailerLifecycleRuntime);
 assertExported("src/runtime/mailer/lifecycle/common.js", mailerLifecycleCommon);
 assertExported("src/runtime/mailer/lifecycle/lifecycle-senders.js", mailerLifecycleSenders);

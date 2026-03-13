@@ -10,8 +10,8 @@ Execution note (2026-03-06): completed in production with VM-hosted `web`/`bot`/
 
 Target topology:
 - `web` container (`web/server.js`)
-- `bot` container (`bot-server.js`)
-- `worker` container (`scheduler-worker.js`)
+- `bot` container (`src/entrypoints/bot-server.js`)
+- `worker` container (`src/entrypoints/scheduler-worker.js`)
 
 All share persisted volumes:
 - `/opt/signalbrief/data`
@@ -105,8 +105,8 @@ Expected:
 
 ```bash
 cd /opt/signalbrief/app
-node --check digest.js
-node --check scheduler-worker.js
+node --check src/entrypoints/digest.js
+node --check src/entrypoints/scheduler-worker.js
 node --check web/server.js
 npm run smoke:worker
 npm run smoke:admin-scheduler
@@ -234,7 +234,7 @@ If VM runtime fails:
 
 ```bash
 cd /Users/kushgulati/Desktop/signalbrief
-node digest.js
+node src/entrypoints/digest.js
 ```
 
 ## 10) Ongoing Ops

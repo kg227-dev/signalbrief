@@ -25,7 +25,7 @@ services:
 
   bot:
     build: .
-    command: ["node", "bot-server.js"]
+    command: ["node", "src/entrypoints/bot-server.js"]
     env_file:
       - .env
     environment:
@@ -43,7 +43,7 @@ services:
       test:
         - CMD-SHELL
         - >
-          node -e "const fs=require('fs');const cmd=fs.readFileSync('/proc/1/cmdline','utf8');process.exit(cmd.includes('bot-server.js')?0:1);"
+          node -e "const fs=require('fs');const cmd=fs.readFileSync('/proc/1/cmdline','utf8');process.exit(cmd.includes('src/entrypoints/bot-server.js')?0:1);"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -51,7 +51,7 @@ services:
 
   worker:
     build: .
-    command: ["node", "scheduler-worker.js"]
+    command: ["node", "src/entrypoints/scheduler-worker.js"]
     env_file:
       - .env
     environment:

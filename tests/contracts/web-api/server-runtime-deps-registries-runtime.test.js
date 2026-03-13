@@ -78,8 +78,6 @@ function testCoreRegistryAliases() {
     digestRunStatus: noop,
     getCachedOrRefreshSchedulerHeartbeat: noop,
     findUserByToken: noop,
-    signUnsubEmail: noop,
-    verifyUnsubEmailSignature: noop,
     allUsers: noop,
     writeUser: noop,
     blankReengagementState: noop,

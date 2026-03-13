@@ -64,7 +64,6 @@ function baseDeps(overrides = {}) {
     findUserByToken: () => null,
     handleSignup: async () => {},
     handleSettings: async () => {},
-    signUnsubEmail: () => "sig",
     allUsers: () => [],
     writeUser: () => {},
     blankReengagementState: () => ({}),

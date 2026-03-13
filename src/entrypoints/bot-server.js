@@ -3,7 +3,6 @@
  * SignalBrief — bot-server.js
  * Polling-first Telegram ingress worker.
  * Continuously long-polls Telegram getUpdates and dispatches to src/domains/reply.
- * Webhook ingress is legacy/optional and not active in the default runtime.
  * 
  * Usage: node src/entrypoints/bot-server.js
 */
@@ -25,7 +24,7 @@ function loadConfig() {
 
 function getBotToken() {
   const config = loadConfig();
-  return config?.keys?.signalBriefBotToken || config?.keys?.telegramBotToken || "";
+  return config?.keys?.signalBriefBotToken || "";
 }
 
 let storeReady = false;

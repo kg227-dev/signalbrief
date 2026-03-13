@@ -12,14 +12,6 @@ async function handleCoreUnsubscribeRoutes(ctx, deps) {
     return actions.handleUnsubscribeOneClick(ctx);
   }
 
-  if (pathname === "/api/unsubscribe/legacy" && (req.method === "GET" || req.method === "POST")) {
-    return actions.handleUnsubscribeLegacy(ctx);
-  }
-
-  if (pathname === "/api/unsubscribe" && (req.method === "GET" || req.method === "POST")) {
-    return actions.handleUnsubscribeCompat(ctx);
-  }
-
   if (pathname === "/api/pause" && req.method === "GET") {
     return actions.handlePause(ctx);
   }

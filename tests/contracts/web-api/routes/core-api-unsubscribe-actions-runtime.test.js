@@ -13,8 +13,6 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
   createUnsubscribeActions,
-  resolveLegacyUnsubscribePolicyFromEnv,
-  LEGACY_UNSUBSCRIBE_RETIRED_CODE,
 } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
@@ -62,73 +60,56 @@ function buildCtx(method, rawUrl) {
     const actions = createUnsubscribeActions({
       json,
       findUserByToken: (token) => users.find((user) => user.token === token) || null,
-      signUnsubEmail: () => "legacy-sig",
-      verifyUnsubEmailSignature: (email, sig) => email === "user@example.com" && sig === "valid-sig",
-      allUsers: () => users,
       writeUser: (chatId, payload) => writes.push({ chatId, payload }),
       blankReengagementState: () => ({}),
-      resolveLegacyUnsubscribePolicy: () => ({ enabled: true, reason: "test", retireAfterUtc: null }),
     });
-    const ctx = buildCtx("GET", "/api/unsubscribe/legacy?email=user%40example.com&sig=valid-sig");
-    const handled = await actions.handleUnsubscribeLegacy(ctx);
+    const ctx = buildCtx("GET", "/api/unsubscribe/confirm?token=token-1");
+    const handled = await actions.handleUnsubscribeConfirm(ctx);
     assert.strictEqual(handled, true);
     assert.strictEqual(ctx.res.statusCode, 302);
     assert.ok(String(ctx.res.headers.Location || "").includes("/settings?token=token-1&unsubscribed=1"));
-    assert.strictEqual(writes.length, 1, "legacy unsubscribe should persist unsubscribed status");
+    assert.strictEqual(writes.length, 1, "confirm unsubscribe should persist unsubscribed status");
   }
 
   {
     const actions = createUnsubscribeActions({
       json,
-      findUserByToken: () => users[0],
-      signUnsubEmail: () => "legacy-sig",
-      verifyUnsubEmailSignature: () => true,
-      allUsers: () => users,
+      findUserByToken: () => null,
       writeUser: () => {},
       blankReengagementState: () => ({}),
-      resolveLegacyUnsubscribePolicy: () => ({
-        enabled: false,
-        reason: "deadline_passed",
-        retireAfterUtc: "2026-06-30T00:00:00Z",
-      }),
     });
-    const legacyCtx = buildCtx("GET", "/api/unsubscribe/legacy?email=user%40example.com&sig=valid-sig");
-    await actions.handleUnsubscribeLegacy(legacyCtx);
-    assert.strictEqual(legacyCtx.res.statusCode, 410);
-    const legacyBody = JSON.parse(legacyCtx.res.body);
-    assert.strictEqual(legacyBody.code, LEGACY_UNSUBSCRIBE_RETIRED_CODE);
+    const missingToken = buildCtx("POST", "/api/unsubscribe/one-click");
+    await actions.handleUnsubscribeOneClick(missingToken);
+    assert.strictEqual(missingToken.res.statusCode, 400);
 
-    const compatEmailCtx = buildCtx("POST", "/api/unsubscribe?email=user%40example.com&sig=valid-sig");
-    await actions.handleUnsubscribeCompat(compatEmailCtx);
-    assert.strictEqual(compatEmailCtx.res.statusCode, 410, "legacy email+sig compat should retire with 410");
-
-    const compatTokenCtx = buildCtx("POST", "/api/unsubscribe?token=token-1");
-    await actions.handleUnsubscribeCompat(compatTokenCtx);
-    assert.strictEqual(compatTokenCtx.res.statusCode, 200, "token compat path should continue to work");
+    const invalidToken = buildCtx("POST", "/api/unsubscribe/one-click?token=bad-token");
+    await actions.handleUnsubscribeOneClick(invalidToken);
+    assert.strictEqual(invalidToken.res.statusCode, 401);
   }
 
   {
-    const originalRetireAfter = process.env.UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC;
-    const originalForceEnable = process.env.UNSUBSCRIBE_LEGACY_FORCE_ENABLE;
-    const originalForceDisable = process.env.UNSUBSCRIBE_LEGACY_FORCE_DISABLE;
-    try {
-      process.env.UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC = "2020-01-01T00:00:00Z";
-      delete process.env.UNSUBSCRIBE_LEGACY_FORCE_ENABLE;
-      delete process.env.UNSUBSCRIBE_LEGACY_FORCE_DISABLE;
-      const retired = resolveLegacyUnsubscribePolicyFromEnv(Date.parse("2026-01-01T00:00:00Z"));
-      assert.strictEqual(retired.enabled, false);
+    const writes = [];
+    const actions = createUnsubscribeActions({
+      json,
+      findUserByToken: (token) => users.find((user) => user.token === token) || null,
+      writeUser: (chatId, payload) => writes.push({ chatId, payload }),
+      blankReengagementState: () => ({ day4_sent_at: null }),
+    });
 
-      process.env.UNSUBSCRIBE_LEGACY_FORCE_ENABLE = "1";
-      const forced = resolveLegacyUnsubscribePolicyFromEnv(Date.parse("2026-01-01T00:00:00Z"));
-      assert.strictEqual(forced.enabled, true);
-    } finally {
-      if (originalRetireAfter == null) delete process.env.UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC;
-      else process.env.UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC = originalRetireAfter;
-      if (originalForceEnable == null) delete process.env.UNSUBSCRIBE_LEGACY_FORCE_ENABLE;
-      else process.env.UNSUBSCRIBE_LEGACY_FORCE_ENABLE = originalForceEnable;
-      if (originalForceDisable == null) delete process.env.UNSUBSCRIBE_LEGACY_FORCE_DISABLE;
-      else process.env.UNSUBSCRIBE_LEGACY_FORCE_DISABLE = originalForceDisable;
-    }
+    const pauseCtx = buildCtx("GET", "/api/pause?token=token-1");
+    await actions.handlePause(pauseCtx);
+    assert.strictEqual(pauseCtx.res.statusCode, 302);
+    assert.ok(String(pauseCtx.res.headers.Location || "").includes("&paused=1"));
+    assert.strictEqual(writes[0].payload.status, "paused");
+    assert.strictEqual(writes[0].payload.preferences.email_enabled, false);
+
+    const reactivateCtx = buildCtx("GET", "/api/reactivate?token=token-1");
+    await actions.handleReactivate(reactivateCtx);
+    assert.strictEqual(reactivateCtx.res.statusCode, 302);
+    assert.ok(String(reactivateCtx.res.headers.Location || "").includes("&reactivated=1"));
+    assert.strictEqual(writes[1].payload.status, "active");
+    assert.strictEqual(writes[1].payload.preferences.email_enabled, true);
+    assert.deepStrictEqual(writes[1].payload.reengagement_state, { day4_sent_at: null });
   }
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

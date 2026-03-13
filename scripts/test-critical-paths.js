@@ -77,7 +77,6 @@ function buildCoreDeps(overrides = {}) {
     findUserByToken: () => null,
     handleSignup: () => ({ ok: true }),
     handleSettings: () => ({ ok: true }),
-    signUnsubEmail: () => "good-signature",
     allUsers: () => [],
     writeUser: () => {},
     blankReengagementState: () => ({ day4_sent_at: null, day8_sent_at: null, auto_paused_at: null, reactivated_at: null }),
@@ -336,15 +335,22 @@ async function testCoreApiRoutesContract() {
   });
   assert.strictEqual(signupCalled, true, "/api/signup should delegate to handleSignup");
 
-  const unsubRes = await invokeCoreRoute(
-    "GET",
-    "/api/unsubscribe/legacy?email=test%40example.com&sig=wrong",
-    "/api/unsubscribe/legacy",
+  const unsubOneClickMissingToken = await invokeCoreRoute(
+    "POST",
+    "/api/unsubscribe/one-click",
+    "/api/unsubscribe/one-click"
+  );
+  assert.strictEqual(unsubOneClickMissingToken.statusCode, 400, "/api/unsubscribe/one-click should require token");
+
+  const unsubOneClickInvalidToken = await invokeCoreRoute(
+    "POST",
+    "/api/unsubscribe/one-click?token=bad-token",
+    "/api/unsubscribe/one-click",
     {
-    signUnsubEmail: () => "expected",
+      findUserByToken: () => null,
     }
   );
-  assert.strictEqual(unsubRes.statusCode, 403, "/api/unsubscribe/legacy should reject bad signatures");
+  assert.strictEqual(unsubOneClickInvalidToken.statusCode, 401, "/api/unsubscribe/one-click should reject invalid token");
 
   const bookmarkMissingTokenRes = await invokeCoreRoute("POST", "/api/bookmarks", "/api/bookmarks", {
     requireJsonBody: async () => ({ action: "add", item: { url: "https://example.com/a" } }),

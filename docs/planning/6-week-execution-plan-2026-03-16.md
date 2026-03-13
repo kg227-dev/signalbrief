@@ -334,10 +334,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 1 or Week 6 spillover
   - Recommendation: shrink and harden the runtime image so local/staging/prod behavior is more reproducible.
   - Status (Mar 13, 2026): Dockerfile now uses digest-pinned multi-stage build (`deps` + `runtime`) with lockfile-backed `npm ci --omit=dev`, compose startup now enforces healthy-web dependency before bot/worker start, and explicit healthchecks are defined for web HTTP readiness plus bot process and worker heartbeat freshness.
-- [ ] P15 `Debt Burn-Down` remove legacy compatibility surface still carried by root entry shims, old bot-token fallback logic, and deprecated unsubscribe routes once replacement paths are fully stable.
+- [x] P15 `Debt Burn-Down` remove legacy compatibility surface still carried by root entry shims, old bot-token fallback logic, and deprecated unsubscribe routes once replacement paths are fully stable.
   - Files: `digest.js`, `bot-server.js`, `scheduler-worker.js`, `src/entrypoints/bot-server.js`, `web/routes/core-api-unsubscribe-actions-runtime.js`
   - Target window: after Week 6 stabilization report
   - Recommendation: define retirement criteria for each compatibility path and delete them once observability confirms no remaining callers.
+  - Status (Mar 13, 2026): removed root entry shims (`digest.js`, `bot-server.js`, `scheduler-worker.js`) and updated runtime callers to `src/entrypoints/*`, removed runtime fallback reads from `keys.telegramBotToken` in Telegram send paths, and retired deprecated `/api/unsubscribe` + `/api/unsubscribe/legacy` handlers so only one-click + confirm unsubscribe endpoints remain active.
 
 ## Progress Log
 
@@ -383,3 +384,4 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
 - [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.
 - [x] Carry-forward P4 completed: module-linkage CI gate now runs real import-target resolution checks and canonical dependency maps no longer include worktree mirror imports or stale missing edges.
+- [x] Carry-forward P15 completed: removed root shim entrypoints and migrated remaining runtime callers to `src/entrypoints/*`, eliminated Telegram runtime fallback to `telegramBotToken` in bot/digest/web/reply flows, and deleted deprecated legacy/compat unsubscribe handlers in favor of one-click + confirm routes only.

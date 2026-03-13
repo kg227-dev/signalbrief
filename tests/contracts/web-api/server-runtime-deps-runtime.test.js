@@ -45,7 +45,6 @@ const deps = {
   CAPABILITY_TOPICS: ["AI×TECH"],
   digestRunStatus: () => ({ running: false, state: "absent", lock: {} }),
   getCachedOrRefreshSchedulerHeartbeat: () => ({ healthy: true, available: true, status: "ready" }),
-  signUnsubEmail: () => "sig",
   blankReengagementState: () => ({}),
   isLegacyArchiveEndpointEnabled: () => true,
   recordLegacyArchiveUsage: noop,

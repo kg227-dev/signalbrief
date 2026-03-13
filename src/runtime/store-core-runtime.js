@@ -1,7 +1,7 @@
 /**
  * SignalBrief — store.js
  * User store runtime with adapter boundary.
- * Default backend remains JSON file-store; SQLite backend is opt-in.
+ * Default backend is SQLite in production; file-store remains available by explicit override.
  */
 // @ts-check
 
@@ -40,7 +40,16 @@ function resolveStoreBackend(options = {}) {
   if (typeof options.backend === "string" && options.backend.trim()) {
     return normalizeStoreBackend(options.backend);
   }
-  return normalizeStoreBackend(process.env.SIGNALBRIEF_STORE_BACKEND);
+  const envOverride = String(process.env.SIGNALBRIEF_STORE_BACKEND || "").trim();
+  if (envOverride) return normalizeStoreBackend(envOverride);
+
+  const nodeEnv = String(
+    (typeof options.nodeEnv === "string" && options.nodeEnv)
+      ? options.nodeEnv
+      : (process.env.NODE_ENV || "")
+  ).toLowerCase().trim();
+  if (nodeEnv === "production") return "sqlite";
+  return "file";
 }
 
 function createSqliteStoreAdapter(deps, options = {}) {

@@ -243,9 +243,7 @@ function runFullEnableValidate(rawOptions) {
     },
     pass,
     export: {
-      SIGNALBRIEF_STORE_BACKEND: "canary",
-      SIGNALBRIEF_STORE_CANARY_CHAT_IDS: fileChatIds.join(","),
-      SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES: "1",
+      SIGNALBRIEF_STORE_BACKEND: "sqlite",
       SIGNALBRIEF_STORE_ROLLBACK_BACKEND: "file",
     },
     warnings: warnings.filter(Boolean),
@@ -264,7 +262,7 @@ function printHelp() {
       "Usage: node scripts/store-full-enable-validate.js [options]",
       "",
       "Purpose:",
-      "  Validate full-cohort canary enablement readiness and rollback switch safety.",
+      "  Validate sqlite cutover readiness and rollback switch safety.",
       "",
       "Options:",
       "  --data-dir <dir>                 File-store directory (default: ./data)",
@@ -294,8 +292,6 @@ function main() {
       + `rollback_switch_validated=${report.checks.rollback_switch_validated}`
     );
     log(`export SIGNALBRIEF_STORE_BACKEND=${report.export.SIGNALBRIEF_STORE_BACKEND}`);
-    log(`export SIGNALBRIEF_STORE_CANARY_CHAT_IDS=${report.export.SIGNALBRIEF_STORE_CANARY_CHAT_IDS}`);
-    log(`export SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES=${report.export.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES}`);
     log(`export SIGNALBRIEF_STORE_ROLLBACK_BACKEND=${report.export.SIGNALBRIEF_STORE_ROLLBACK_BACKEND}`);
     log(`artifact=${report.artifact_path}`);
     if (!report.pass) process.exit(1);

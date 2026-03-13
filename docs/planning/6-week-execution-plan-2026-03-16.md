@@ -304,10 +304,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 1 or Week 3 spillover
   - Recommendation: unify user-facing cooldown and actual run-lock semantics in one source of truth.
   - Status (Mar 13, 2026): `/digest` now uses a file-backed per-chat cooldown lease (`data/digest-on-demand-cooldown.json`) managed in the digest runner core with lock-guarded read/write updates, and Telegram command handling enforces/reports cooldown from runner outcomes instead of in-memory `digestCooldown` state.
-- [ ] P9 `State Backend` make SQLite the default production backend path once parity evidence is stable, keeping file-store rollback as an explicit emergency fallback only.
+- [x] P9 `State Backend` make SQLite the default production backend path once parity evidence is stable, keeping file-store rollback as an explicit emergency fallback only.
   - Files: `src/runtime/store-core-runtime.js`, `scripts/migrate-store-file-to-sqlite.js`, `scripts/store-dual-read-compare.js`, `scripts/store-rollback-sqlite-to-file.js`
   - Target window: Week 6 cutover continuation
   - Recommendation: complete the migration by changing the production default after sustained canary parity and rollback drills.
+  - Status (Mar 13, 2026): production backend resolution now defaults to `sqlite` when no explicit store backend override is set, and full-enable validation exports steady-state `SIGNALBRIEF_STORE_BACKEND=sqlite` with `SIGNALBRIEF_STORE_ROLLBACK_BACKEND=file` retained for explicit emergency rollback.
 - [ ] P10 `Performance` remove whole-file scans from user lookup, engagement analysis, and archive reads on hot paths.
   - Files: `src/runtime/store-record-runtime.js`, `src/runtime/engagement/engagement-events-runtime.js`, `web/routes/core-api-archive-runtime.js`
   - Target window: Week 5 / Week 6 spillover
@@ -371,6 +372,7 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Carry-forward P6 phase 3 completed: extracted HTTP transport and runtime bootstrap concerns into dedicated entrypoint runtimes (`src/entrypoints/digest-orchestrator-transport-runtime.js`, `src/entrypoints/digest-orchestrator-bootstrap-runtime.js`), with contract coverage and linkage-map updates; P6 marked complete.
 - [x] Carry-forward P7 completed: provider resilience policies now apply per-provider timeout/retry budgets (including 429/5xx retry rules), fetch orchestrator emits graded Perplexity degradation incidents, and enrichment degrades cleanly to fallback digest content when Anthropic is unhealthy.
 - [x] Carry-forward P8 completed: `/digest` cooldown now persists in runner-managed per-chat cooldown leases (file-backed and lock-coordinated), so restarts or multi-process command handling cannot bypass the throttle window.
+- [x] Carry-forward P9 completed: store backend selection now defaults to sqlite in production when `SIGNALBRIEF_STORE_BACKEND` is unset, and full-enable cutover outputs now target steady-state `backend=sqlite` with explicit file-backend rollback export retained.
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), confirmed `config.json` remains local-only via `.gitignore`, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
 - [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.

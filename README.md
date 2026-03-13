@@ -36,6 +36,7 @@ Secret loading behavior:
 - If `config.json` is missing, runtime falls back to `config.example.json` for non-secret defaults.
 - CORS is allowlisted by origin (`TRUSTED_CORS_ORIGINS` / `CORS_ALLOWED_ORIGINS`) instead of wildcard defaults.
 - Legacy email+signature unsubscribe links can be retired by schedule (`UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC`) or immediate flags (`UNSUBSCRIBE_LEGACY_FORCE_DISABLE` / `UNSUBSCRIBE_LEGACY_FORCE_ENABLE`).
+- Store backend defaults to SQLite in production; use `SIGNALBRIEF_STORE_BACKEND=file` only as an emergency rollback override.
 
 Individual processes:
 
@@ -148,7 +149,7 @@ Production deploys now enforce release windows by default (Mon-Fri 11:00 ET and 
 - Anthropic Claude Haiku
 - Telegram Bot API via long polling
 - Resend with Gmail fallback
-- JSON file store with optional SQLite migration path
+- SQLite store (production default) with explicit file-store rollback override
 - Cloudflare Tunnel + Docker Compose runtime
 
 ## Contributing

@@ -81,8 +81,8 @@ try {
   assert.strictEqual(success.checks.file_users, 2);
   assert.strictEqual(success.checks.sqlite_users, 2);
   assert.strictEqual(success.checks.rollback_switch_validated, true);
-  assert.strictEqual(success.export.SIGNALBRIEF_STORE_BACKEND, "canary");
-  assert.strictEqual(success.export.SIGNALBRIEF_STORE_CANARY_CHAT_IDS, "a,b");
+  assert.strictEqual(success.export.SIGNALBRIEF_STORE_BACKEND, "sqlite");
+  assert.strictEqual(success.export.SIGNALBRIEF_STORE_ROLLBACK_BACKEND, "file");
   assert.ok(fs.existsSync(success.artifact_path));
 
   const { createStore } = require(path.join(process.cwd(), "src/runtime/store-core-runtime.js"));

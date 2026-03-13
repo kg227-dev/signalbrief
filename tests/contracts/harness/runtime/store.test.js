@@ -45,6 +45,19 @@ assert.strictEqual(normalizeStoreBackend("canary"), "canary");
 assert.strictEqual(normalizeStoreBackend("unexpected"), "file");
 assert.strictEqual(resolveStoreBackend({ backend: "sqlite" }), "sqlite");
 assert.strictEqual(resolveStoreBackend({ backend: "canary" }), "canary");
+assert.strictEqual(resolveStoreBackend({ nodeEnv: "production" }), "sqlite");
+assert.strictEqual(resolveStoreBackend({ nodeEnv: "development" }), "file");
+const originalStoreBackendEnv = process.env.SIGNALBRIEF_STORE_BACKEND;
+try {
+  process.env.SIGNALBRIEF_STORE_BACKEND = "canary";
+  assert.strictEqual(resolveStoreBackend({ nodeEnv: "production" }), "canary");
+} finally {
+  if (originalStoreBackendEnv == null) {
+    delete process.env.SIGNALBRIEF_STORE_BACKEND;
+  } else {
+    process.env.SIGNALBRIEF_STORE_BACKEND = originalStoreBackendEnv;
+  }
+}
 assert.deepStrictEqual(parseCanaryChatIds("a,b c"), ["a", "b", "c"]);
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-"));

@@ -31,9 +31,7 @@ What it validates:
 Artifact output:
 - `store-full-enable-validate-*.json`
 - includes export-ready values:
-  - `SIGNALBRIEF_STORE_BACKEND=canary`
-  - `SIGNALBRIEF_STORE_CANARY_CHAT_IDS=<all chat IDs>`
-  - `SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES=1`
+  - `SIGNALBRIEF_STORE_BACKEND=sqlite`
   - `SIGNALBRIEF_STORE_ROLLBACK_BACKEND=file`
 
 Rollback switch (operator action):

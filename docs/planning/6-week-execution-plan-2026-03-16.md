@@ -329,10 +329,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 4 / Week 6 spillover
   - Recommendation: require passing staging verification or an explicit override before `ops:deploy:prod` can proceed.
   - Status (Mar 13, 2026): production deploy now enforces a staging promotion gate via artifact validation (freshness + matching SHA + successful staging public verification), staging deploy writes the artifact automatically after successful verification, and explicit override paths are gated to `--hotfix` or `--skip-staging-gate`.
-- [ ] P14 `DevOps` harden the container build with multi-stage image construction, pinned install behavior, and explicit readiness expectations.
+- [x] P14 `DevOps` harden the container build with multi-stage image construction, pinned install behavior, and explicit readiness expectations.
   - Files: `Dockerfile`, `docker-compose.yml`
   - Target window: Week 1 or Week 6 spillover
   - Recommendation: shrink and harden the runtime image so local/staging/prod behavior is more reproducible.
+  - Status (Mar 13, 2026): Dockerfile now uses digest-pinned multi-stage build (`deps` + `runtime`) with lockfile-backed `npm ci --omit=dev`, compose startup now enforces healthy-web dependency before bot/worker start, and explicit healthchecks are defined for web HTTP readiness plus bot process and worker heartbeat freshness.
 - [ ] P15 `Debt Burn-Down` remove legacy compatibility surface still carried by root entry shims, old bot-token fallback logic, and deprecated unsubscribe routes once replacement paths are fully stable.
   - Files: `digest.js`, `bot-server.js`, `scheduler-worker.js`, `src/entrypoints/bot-server.js`, `web/routes/core-api-unsubscribe-actions-runtime.js`
   - Target window: after Week 6 stabilization report

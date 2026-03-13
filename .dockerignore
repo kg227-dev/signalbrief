@@ -1,5 +1,6 @@
 .git
 .gitignore
+.github
 .claude
 .interface-design
 node_modules
@@ -10,7 +11,20 @@ tmp
 data
 archive
 config.json
-features.md
-planning
-test-results
 
+# Local docs, tooling, and test assets not needed in runtime image
+AGENTS.md
+CLAUDE.md
+SPEC.md
+FORMAT-RULES.md
+scorecard.png
+.desloppify
+artifacts
+docs
+deploy
+test-results
+test-harness
+test-support
+tests
+planning
+features.md

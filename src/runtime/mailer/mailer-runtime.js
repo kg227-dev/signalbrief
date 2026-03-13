@@ -6,9 +6,9 @@
  * 1. Create account at resend.com (free tier: 3,000 emails/month)
  * 2. Add your domain (signalbrief.co or similar) and verify DNS
  * 3. Get API key from resend.com/api-keys
- * 4. Add to config.json: "resendApiKey": "re_..."
- * 5. Add to config.json: "fromEmail": "digest@signalbrief.co"
- * 6. Add to config.json: "fromName": "SignalBrief"
+ * 4. Add env: SIGNALBRIEF_RESEND_API_KEY="re_..."
+ * 5. Add env: SIGNALBRIEF_FROM_EMAIL="digest@signalbrief.co"
+ * 6. Add env: SIGNALBRIEF_FROM_NAME="SignalBrief"
  *
  * Until configured, falls back to Gmail OAuth (jarvisjones2922@gmail.com).
  */

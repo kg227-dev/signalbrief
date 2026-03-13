@@ -158,18 +158,18 @@
     }
   ],
   "admin": {
-    "email": "you@example.com",
-    "salt": "GENERATE_WITH: node -e \"console.log(require('crypto').randomBytes(16).toString('hex'))\"",
-    "passwordHash": "GENERATE_WITH: node -e \"const c=require('crypto'),s='YOUR_SALT';console.log(c.scryptSync('YOUR_PASSWORD',s,64).toString('hex'))\""
+    "email": "set-via-env@example.com",
+    "salt": "SET_VIA_ENV_SIGNALBRIEF_ADMIN_SALT",
+    "passwordHash": "SET_VIA_ENV_SIGNALBRIEF_ADMIN_PASSWORD_HASH"
   },
   "keys": {
-    "perplexity": "pplx-YOUR_KEY",
-    "anthropic": "sk-ant-YOUR_KEY",
-    "googleRefreshToken": "YOUR_REFRESH_TOKEN",
-    "googleClientId": "YOUR_CLIENT_ID",
-    "googleClientSecret": "YOUR_CLIENT_SECRET",
-    "telegramBotToken": "YOUR_JARVIS_BOT_TOKEN",
-    "signalBriefBotToken": "YOUR_SIGNALBRIEF_BOT_TOKEN",
+    "perplexity": "",
+    "anthropic": "",
+    "googleRefreshToken": "",
+    "googleClientId": "",
+    "googleClientSecret": "",
+    "telegramBotToken": "",
+    "signalBriefBotToken": "",
     "resendApiKey": "",
     "fromEmail": "digest@getsignalbrief.com",
     "fromName": "SignalBrief"

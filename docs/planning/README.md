@@ -20,6 +20,7 @@ These files remain in place while the current runtime transformation is in progr
 
 - [Week 1 Freeze Report](./week1-freeze-2026-03-11.md)
 - [Week 2 Security Hardening Review](./week2-security-hardening-review-2026-03-12.md)
+- [Security Credential Rotation Checklist (Mar 13, 2026)](./security-credential-rotation-checklist-2026-03-13.md)
 
 ## Store Migration And Canary Rollout
 

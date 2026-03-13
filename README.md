@@ -17,15 +17,23 @@ Each user gets a personalized morning digest with topic filtering, relevance ran
 Requirements:
 
 - Node.js 22+
-- `config.json` copied from `config.example.json`
+- `.env` with required `SIGNALBRIEF_*` secrets
+- `config.json` optional for non-secret local overrides
 
 Local boot:
 
 ```bash
 cp config.example.json config.json
+cp .env.example .env
 npm install
 ./start.sh
 ```
+
+Secret loading behavior:
+
+- Runtime credentials are loaded from environment variables first (see `.env.example`).
+- `config.json` is ignored by git and should not contain production secrets.
+- If `config.json` is missing, runtime falls back to `config.example.json` for non-secret defaults.
 
 Individual processes:
 

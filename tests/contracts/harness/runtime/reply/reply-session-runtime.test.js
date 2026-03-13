@@ -14,7 +14,6 @@ const { createReplyState, createReplySessionController } = runtime;
 
 const state = createReplyState();
 assert.ok(state.awaitingEmail instanceof Map);
-assert.ok(state.digestCooldown instanceof Map);
 assert.ok(state.digestInflight instanceof Set);
 assert.ok(state.pendingLinkVerifications instanceof Map);
 
@@ -45,4 +44,3 @@ assert.strictEqual(session.isStoreReady(), true, "resetReplyState should not res
 const resetRuntime = session.resetRuntimeState();
 assert.strictEqual(resetRuntime.awaitingEmail.size, 0);
 assert.strictEqual(session.isStoreReady(), false, "resetRuntimeState should reset store bootstrap state");
-

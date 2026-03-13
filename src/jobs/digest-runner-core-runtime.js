@@ -1,5 +1,6 @@
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 const {
   LOCK_STATES,
@@ -16,9 +17,15 @@ const { createDigestRunnerSpawnRuntime } = require("./digest-runner-spawn-runtim
 const ROOT = path.resolve(__dirname, "..", "..");
 const DIGEST_SCRIPT = path.join(ROOT, "src", "entrypoints", "digest.js");
 const DIGEST_RUN_LOCK_FILE = path.join(ROOT, "data", "digest-run.lock");
+const DIGEST_ON_DEMAND_COOLDOWN_FILE = path.join(ROOT, "data", "digest-on-demand-cooldown.json");
 
 const DIGEST_LOCK_EXIT_CODE = 4;
 const DEFAULT_WAIT_TIMEOUT_MS = 12 * 60 * 1000;
+const DEFAULT_ON_DEMAND_COOLDOWN_MS = 15 * 60 * 1000;
+const ON_DEMAND_COOLDOWN_MIN_MS = 30 * 1000;
+const ON_DEMAND_COOLDOWN_LOCK_WAIT_MS = 2_000;
+const ON_DEMAND_COOLDOWN_LOCK_POLL_MS = 40;
+const ON_DEMAND_COOLDOWN_LOCK_STALE_MS = 15_000;
 const LOCK_STATE_VALID = LOCK_STATES.VALID;
 const LOCK_STATE_STALE = LOCK_STATES.STALE;
 const LOCK_STATE_CORRUPT = LOCK_STATES.CORRUPT;
@@ -36,6 +43,7 @@ const DIGEST_TRIGGER_STATUS = Object.freeze({
   QUEUED: "queued",
   OK: "ok",
   BUSY: "busy",
+  COOLDOWN: "cooldown",
   LOCK_UNHEALTHY: "lock_unhealthy",
   FAILED: "failed",
   SPAWN_FAILED: "spawn_failed",
@@ -85,6 +93,228 @@ function getQueueStartConfirmPollMs() {
 
 function isDigestRunnerDebug() {
   return process.env.DEBUG_DIGEST_RUNNER === "1";
+}
+
+function resolveOnDemandCooldownFilePath(explicitPath = "") {
+  const fromArgs = String(explicitPath || "").trim();
+  if (fromArgs) return path.resolve(fromArgs);
+  const fromEnv = String(process.env.DIGEST_ON_DEMAND_COOLDOWN_FILE || "").trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return DIGEST_ON_DEMAND_COOLDOWN_FILE;
+}
+
+function normalizeCooldownChatKey(chatId) {
+  return String(chatId || "").trim();
+}
+
+function resolveOnDemandCooldownMs(value) {
+  return Math.max(
+    ON_DEMAND_COOLDOWN_MIN_MS,
+    toPositiveIntOrDefault(
+      value,
+      toPositiveIntOrDefault(process.env.DIGEST_ON_DEMAND_COOLDOWN_MS, DEFAULT_ON_DEMAND_COOLDOWN_MS)
+    )
+  );
+}
+
+function readOnDemandCooldownLeases(opts = {}) {
+  const cooldownFilePath = resolveOnDemandCooldownFilePath(opts.cooldownFilePath);
+  if (!fs.existsSync(cooldownFilePath)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(cooldownFilePath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const leases = parsed.leases;
+    if (!leases || typeof leases !== "object" || Array.isArray(leases)) return {};
+    return { ...leases };
+  } catch (err) {
+    if (isDigestRunnerDebug()) {
+      console.warn(`[digest-runner] cooldown lease parse failed (${cooldownFilePath}): ${err.message}`);
+    }
+    return {};
+  }
+}
+
+function pruneExpiredCooldownLeases(leases, nowMs) {
+  const normalizedLeases = leases && typeof leases === "object" ? leases : {};
+  const cutoff = Number(nowMs || Date.now());
+  let changed = false;
+  const out = {};
+  for (const [key, value] of Object.entries(normalizedLeases)) {
+    const chatKey = normalizeCooldownChatKey(key);
+    if (!chatKey) {
+      changed = true;
+      continue;
+    }
+    const expiresAtMs = Number(value?.expiresAtMs || 0);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= cutoff) {
+      changed = true;
+      continue;
+    }
+    out[chatKey] = {
+      expiresAtMs,
+      updatedAtMs: Number(value?.updatedAtMs || cutoff),
+    };
+  }
+  if (!changed && Object.keys(out).length !== Object.keys(normalizedLeases).length) {
+    changed = true;
+  }
+  return { leases: out, changed };
+}
+
+function writeOnDemandCooldownLeases(leases, opts = {}) {
+  const cooldownFilePath = resolveOnDemandCooldownFilePath(opts.cooldownFilePath);
+  const dir = path.dirname(cooldownFilePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmpPath = `${cooldownFilePath}.tmp-${process.pid}-${Date.now()}`;
+  const payload = {
+    updated_at: new Date().toISOString(),
+    leases: leases && typeof leases === "object" ? leases : {},
+  };
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tmpPath, cooldownFilePath);
+  } finally {
+    if (fs.existsSync(tmpPath)) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch {
+        // best-effort temp file cleanup
+      }
+    }
+  }
+  return cooldownFilePath;
+}
+
+async function withOnDemandCooldownLeaseLock(task, opts = {}) {
+  const cooldownFilePath = resolveOnDemandCooldownFilePath(opts.cooldownFilePath);
+  const lockFilePath = `${cooldownFilePath}.lock`;
+  const lockWaitMs = Math.max(
+    100,
+    toPositiveIntOrDefault(opts.lockWaitMs, ON_DEMAND_COOLDOWN_LOCK_WAIT_MS)
+  );
+  const lockPollMs = Math.max(
+    10,
+    toPositiveIntOrDefault(opts.lockPollMs, ON_DEMAND_COOLDOWN_LOCK_POLL_MS)
+  );
+  const lockStaleMs = Math.max(
+    500,
+    toPositiveIntOrDefault(opts.lockStaleMs, ON_DEMAND_COOLDOWN_LOCK_STALE_MS)
+  );
+  const startedAtMs = Date.now();
+
+  while (Date.now() - startedAtMs <= lockWaitMs) {
+    try {
+      const lockDir = path.dirname(lockFilePath);
+      if (!fs.existsSync(lockDir)) fs.mkdirSync(lockDir, { recursive: true });
+      const fd = fs.openSync(lockFilePath, "wx");
+      try {
+        fs.writeFileSync(fd, JSON.stringify({
+          pid: process.pid,
+          acquired_at: new Date().toISOString(),
+        }));
+      } finally {
+        fs.closeSync(fd);
+      }
+      try {
+        return await task();
+      } finally {
+        try {
+          fs.unlinkSync(lockFilePath);
+        } catch {
+          // best-effort lock release
+        }
+      }
+    } catch (err) {
+      if (err?.code !== "EEXIST") {
+        if (isDigestRunnerDebug()) {
+          console.warn(`[digest-runner] cooldown lock acquire failed (${lockFilePath}): ${err.message}`);
+        }
+        break;
+      }
+
+      let stale = false;
+      try {
+        const stat = fs.statSync(lockFilePath);
+        stale = (Date.now() - Number(stat.mtimeMs || 0)) > lockStaleMs;
+      } catch {
+        stale = true;
+      }
+      if (stale) {
+        try {
+          fs.unlinkSync(lockFilePath);
+        } catch {
+          // best-effort stale lock cleanup
+        }
+      }
+      await sleep(lockPollMs);
+    }
+  }
+
+  // Fail open so on-demand digest remains available even if lock file coordination fails.
+  return task();
+}
+
+async function reserveOnDemandCooldownLease(opts = {}) {
+  const chatKey = normalizeCooldownChatKey(opts.chatId);
+  if (!chatKey) return { ok: true, reserved: false, reason: "missing_chat_id" };
+
+  return withOnDemandCooldownLeaseLock(async () => {
+    const nowMs = Number.isFinite(opts.nowMs) ? Number(opts.nowMs) : Date.now();
+    const cooldownMs = resolveOnDemandCooldownMs(opts.cooldownMs);
+    const cooldownFilePath = resolveOnDemandCooldownFilePath(opts.cooldownFilePath);
+    const readLeases = readOnDemandCooldownLeases({ cooldownFilePath });
+    const pruned = pruneExpiredCooldownLeases(readLeases, nowMs);
+    const existing = Number(pruned.leases?.[chatKey]?.expiresAtMs || 0);
+    if (existing > nowMs) {
+      if (pruned.changed) {
+        writeOnDemandCooldownLeases(pruned.leases, { cooldownFilePath });
+      }
+      return {
+        ok: false,
+        code: "cooldown",
+        chatId: chatKey,
+        remainingMs: Math.max(0, existing - nowMs),
+        expiresAtMs: existing,
+      };
+    }
+
+    const expiresAtMs = nowMs + cooldownMs;
+    const nextLeases = {
+      ...pruned.leases,
+      [chatKey]: {
+        expiresAtMs,
+        updatedAtMs: nowMs,
+      },
+    };
+    writeOnDemandCooldownLeases(nextLeases, { cooldownFilePath });
+    return {
+      ok: true,
+      reserved: true,
+      chatId: chatKey,
+      expiresAtMs,
+      remainingMs: cooldownMs,
+    };
+  }, opts);
+}
+
+async function releaseOnDemandCooldownLease(opts = {}) {
+  const chatKey = normalizeCooldownChatKey(opts.chatId);
+  if (!chatKey) return { ok: true, cleared: false, reason: "missing_chat_id" };
+
+  return withOnDemandCooldownLeaseLock(async () => {
+    const nowMs = Number.isFinite(opts.nowMs) ? Number(opts.nowMs) : Date.now();
+    const cooldownFilePath = resolveOnDemandCooldownFilePath(opts.cooldownFilePath);
+    const readLeases = readOnDemandCooldownLeases({ cooldownFilePath });
+    const pruned = pruneExpiredCooldownLeases(readLeases, nowMs);
+    const hadKey = Object.prototype.hasOwnProperty.call(pruned.leases, chatKey);
+    if (!hadKey && !pruned.changed) {
+      return { ok: true, cleared: false, reason: "absent" };
+    }
+    const nextLeases = { ...pruned.leases };
+    delete nextLeases[chatKey];
+    writeOnDemandCooldownLeases(nextLeases, { cooldownFilePath });
+    return { ok: true, cleared: hadKey };
+  }, opts);
 }
 
 function createRunnerState() {
@@ -200,6 +430,8 @@ function isDigestLockUnhealthyCode(code) {
 
 function normalizeDigestTriggerResult(result) {
   const code = String(result?.code || "");
+  const cooldownRemainingMs = Math.max(0, Number(result?.cooldown_remaining_ms || 0));
+  const cooldownExpiresAtMs = Number(result?.cooldown_expires_at_ms || 0);
   if (result?.ok && code === "queued") {
     return {
       status: DIGEST_TRIGGER_STATUS.QUEUED,
@@ -208,6 +440,8 @@ function normalizeDigestTriggerResult(result) {
       lock_error: null,
       exit_code: null,
       signal: null,
+      cooldown_remaining_ms: null,
+      cooldown_expires_at_ms: null,
     };
   }
   if (result?.ok) {
@@ -218,6 +452,20 @@ function normalizeDigestTriggerResult(result) {
       lock_error: null,
       exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
       signal: result?.run?.signal || null,
+      cooldown_remaining_ms: null,
+      cooldown_expires_at_ms: null,
+    };
+  }
+  if (code === "cooldown") {
+    return {
+      status: DIGEST_TRIGGER_STATUS.COOLDOWN,
+      code,
+      lock_state: null,
+      lock_error: null,
+      exit_code: null,
+      signal: null,
+      cooldown_remaining_ms: cooldownRemainingMs,
+      cooldown_expires_at_ms: Number.isFinite(cooldownExpiresAtMs) ? cooldownExpiresAtMs : null,
     };
   }
   if (code === "busy") {
@@ -228,6 +476,8 @@ function normalizeDigestTriggerResult(result) {
       lock_error: result?.admission?.lock?.error || null,
       exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
       signal: result?.run?.signal || null,
+      cooldown_remaining_ms: null,
+      cooldown_expires_at_ms: null,
     };
   }
   if (isDigestLockUnhealthyCode(code)) {
@@ -238,6 +488,8 @@ function normalizeDigestTriggerResult(result) {
       lock_error: result?.admission?.lock?.error || result?.admission?.lock?.error_code || null,
       exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
       signal: result?.run?.signal || null,
+      cooldown_remaining_ms: null,
+      cooldown_expires_at_ms: null,
     };
   }
   if (code === "spawn_failed") {
@@ -248,6 +500,8 @@ function normalizeDigestTriggerResult(result) {
       lock_error: null,
       exit_code: null,
       signal: null,
+      cooldown_remaining_ms: null,
+      cooldown_expires_at_ms: null,
     };
   }
   return {
@@ -257,6 +511,8 @@ function normalizeDigestTriggerResult(result) {
     lock_error: result?.admission?.lock?.error || null,
     exit_code: Number.isFinite(result?.run?.code) ? result.run.code : null,
     signal: result?.run?.signal || null,
+    cooldown_remaining_ms: null,
+    cooldown_expires_at_ms: null,
   };
 }
 
@@ -268,6 +524,9 @@ function toDigestTriggerOutcome(result) {
     status,
     code: normalized.code,
     busy: status === DIGEST_TRIGGER_STATUS.BUSY,
+    cooldown: status === DIGEST_TRIGGER_STATUS.COOLDOWN,
+    cooldownRemainingMs: normalized.cooldown_remaining_ms,
+    cooldownExpiresAtMs: normalized.cooldown_expires_at_ms,
     lockUnhealthy: status === DIGEST_TRIGGER_STATUS.LOCK_UNHEALTHY,
     lockState: normalized.lock_state,
     lockError: normalized.lock_error,
@@ -397,6 +656,8 @@ async function confirmQueuedRunStarted(launched, opts = {}) {
 async function triggerDigest(opts = {}) {
   const queue = opts.queue !== false;
   const shouldSerialize = opts.serializeAdmission !== false;
+  const enforceOnDemandCooldown = opts.enforceOnDemandCooldown === true
+    && !!normalizeCooldownChatKey(opts.chatId);
   const requestId = `${Date.now()}-${++RUNNER_STATE.requestCounter}`;
   const admissionTask = () => waitForAdmission({ queue, maxAdmissionWaitMs: opts.maxAdmissionWaitMs });
   const admission = shouldSerialize
@@ -408,6 +669,22 @@ async function triggerDigest(opts = {}) {
     requestId,
   });
   const args = buildDigestArgs(opts);
+  let reservedCooldown = null;
+
+  async function releaseReservedCooldownIfNeeded() {
+    if (!reservedCooldown?.reserved) return;
+    reservedCooldown = null;
+    try {
+      await releaseOnDemandCooldownLease({
+        chatId: opts.chatId,
+        cooldownFilePath: opts.cooldownFilePath,
+      });
+    } catch (err) {
+      if (isDigestRunnerDebug()) {
+        console.warn(`[digest-runner] cooldown lease release failed: ${err.message}`);
+      }
+    }
+  }
 
   if (!admission.admitted) {
     const blockedByUnhealthyLock = admission.reason === "lock_unhealthy"
@@ -420,9 +697,33 @@ async function triggerDigest(opts = {}) {
     };
   }
 
+  if (enforceOnDemandCooldown) {
+    const reservation = await reserveOnDemandCooldownLease({
+      chatId: opts.chatId,
+      cooldownMs: opts.cooldownMs,
+      cooldownFilePath: opts.cooldownFilePath,
+    });
+    if (!reservation.ok && reservation.code === "cooldown") {
+      return {
+        ok: false,
+        code: "cooldown",
+        admission,
+        metadata,
+        cooldown_remaining_ms: Number(reservation.remainingMs || 0),
+        cooldown_expires_at_ms: Number(reservation.expiresAtMs || 0),
+      };
+    }
+    if (reservation.ok && reservation.reserved) {
+      reservedCooldown = reservation;
+    }
+  }
+
   if (opts.waitForExit) {
     const run = await runAndWait(args, metadata.env, opts);
     const isBusyExit = run.code === DIGEST_LOCK_EXIT_CODE;
+    if (run.code !== 0) {
+      await releaseReservedCooldownIfNeeded();
+    }
     return {
       ok: run.code === 0,
       code: isBusyExit ? "busy" : (run.code === 0 ? "ok" : "failed"),
@@ -439,6 +740,7 @@ async function triggerDigest(opts = {}) {
       pollMs: opts.queueConfirmPollMs,
     });
     if (!handshake.ok) {
+      await releaseReservedCooldownIfNeeded();
       return {
         ok: false,
         code: handshake.code || "busy",
@@ -460,6 +762,7 @@ async function triggerDigest(opts = {}) {
       launched,
     };
   } catch (err) {
+    await releaseReservedCooldownIfNeeded();
     return {
       ok: false,
       code: "spawn_failed",
@@ -475,6 +778,9 @@ async function queueDigestTrigger(opts = {}) {
     source: opts.source,
     trigger: opts.trigger,
     chatId: opts.chatId,
+    enforceOnDemandCooldown: opts.enforceOnDemandCooldown === true,
+    cooldownMs: opts.cooldownMs,
+    cooldownFilePath: opts.cooldownFilePath,
     queue: true,
     maxAdmissionWaitMs: toPositiveIntOrDefault(opts.maxAdmissionWaitMs, 60_000),
     serializeAdmission: true,
@@ -522,11 +828,19 @@ module.exports = {
   DIGEST_TRIGGER_STATUS,
   DIGEST_LOCK_EXIT_CODE,
   DIGEST_RUN_LOCK_FILE,
+  DIGEST_ON_DEMAND_COOLDOWN_FILE,
   clearDigestRunLock,
   confirmQueuedRunStarted,
   digestRunStatus,
   isDigestLockUnhealthyCode,
   normalizeDigestTriggerResult,
+  normalizeCooldownChatKey,
+  readOnDemandCooldownLeases,
+  writeOnDemandCooldownLeases,
+  reserveOnDemandCooldownLease,
+  releaseOnDemandCooldownLease,
+  resolveOnDemandCooldownMs,
+  resolveOnDemandCooldownFilePath,
   queueDigestTrigger,
   readDigestRunLock,
   resetRunnerState,

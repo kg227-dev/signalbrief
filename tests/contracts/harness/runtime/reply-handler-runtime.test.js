@@ -14,18 +14,15 @@ assert.strictEqual(typeof runtime.resetReplyRuntimeState, "function", "reply-han
 
 const state = runtime.createReplyState();
 assert.ok(state.awaitingEmail instanceof Map, "awaitingEmail should be a Map");
-assert.ok(state.digestCooldown instanceof Map, "digestCooldown should be a Map");
 assert.ok(state.digestInflight instanceof Set, "digestInflight should be a Set");
 assert.ok(state.pendingLinkVerifications instanceof Map, "pendingLinkVerifications should be a Map");
 
 state.awaitingEmail.set("chat-1", "user@example.com");
-state.digestCooldown.set("chat-1", 123);
 state.digestInflight.add("chat-1");
 state.pendingLinkVerifications.set("user@example.com", { code: "123456" });
 
 const fresh = runtime.createReplyState();
 assert.strictEqual(fresh.awaitingEmail.size, 0, "createReplyState should return isolated state");
-assert.strictEqual(fresh.digestCooldown.size, 0, "createReplyState should return isolated state");
 assert.strictEqual(fresh.digestInflight.size, 0, "createReplyState should return isolated state");
 assert.strictEqual(fresh.pendingLinkVerifications.size, 0, "createReplyState should return isolated state");
 

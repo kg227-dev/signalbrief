@@ -21,7 +21,6 @@
 /**
  * @typedef {Object} ReplyState
  * @property {Map<string, boolean|string>} awaitingEmail
- * @property {Map<string, number>} digestCooldown
  * @property {Set<string>} digestInflight
  * @property {Map<string, any>} pendingLinkVerifications
  */

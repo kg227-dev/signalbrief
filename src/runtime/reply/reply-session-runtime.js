@@ -8,7 +8,6 @@
 function createReplyState() {
   return {
     awaitingEmail: new Map(),
-    digestCooldown: new Map(),
     digestInflight: new Set(),
     pendingLinkVerifications: new Map(),
   };

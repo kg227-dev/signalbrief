@@ -314,10 +314,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 5 / Week 6 spillover
   - Recommendation: replace directory scans and full-file loads with indexed queries, pagination, or bounded reads.
   - Status (Mar 13, 2026): token lookup misses no longer trigger full user-directory rebuild scans (snapshot-backed token index), engagement event loading now incrementally parses only appended bytes after initial cache build, and archive API routes now use user-allowed digest dates first with bounded legacy fallback instead of unconditional archive-directory scans.
-- [ ] P11 `Observability` convert runtime logging to structured events with stable `run_id`, `user_id`, provider, and outcome fields.
-  - Files: `src/entrypoints/digest-orchestrator-core-runtime.js`, `web/server-runtime.js`, `start.sh`
+- [x] P11 `Observability` convert runtime logging to structured events with stable `run_id`, `user_id`, provider, and outcome fields.
+  - Files: `src/runtime/structured-logger-runtime.js`, `src/entrypoints/digest-orchestrator-core-runtime.js`, `web/server-runtime.js`, `web/server.js`, `start.sh`
   - Target window: Week 1 / Week 4 spillover
   - Recommendation: move from ad hoc line logging to machine-parseable events that can support incident reconstruction.
+  - Status (Mar 13, 2026): introduced shared structured logger runtime with stable event envelope fields, wired digest orchestrator/web runtime/start lifecycle logging onto structured events (including run start/skip/complete/failure and delivery attempt outcomes), and added contract coverage for logger runtime plus digest/web/start logging integration.
 - [ ] P12 `QA` replace syntax-only contract checks on hot paths with behavior-oriented assertions for digest output, auth, retries, and failure handling.
   - Files: `tests/contracts/entrypoints/*.test.js`, `tests/contracts/harness/**/*.test.js`, `scripts/test-critical-paths.js`
   - Target window: Week 4 / Week 5 spillover

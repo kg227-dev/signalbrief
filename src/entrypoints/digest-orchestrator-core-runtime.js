@@ -70,6 +70,7 @@ const { createDigestOrchestratorIncidentRuntime } = require("./digest-orchestrat
 const { createDigestOrchestratorLockRuntime } = require("./digest-orchestrator-lock-runtime");
 const { createDigestOrchestratorTransportRuntime } = require("./digest-orchestrator-transport-runtime");
 const { createDigestOrchestratorBootstrapRuntime } = require("./digest-orchestrator-bootstrap-runtime");
+const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -169,10 +170,33 @@ const SEARCH_COSTS = {
   "sonar-reasoning": 0.01,
 };
 
-function log(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}`;
-  console.log(line);
-  fs.appendFileSync(LOG_FILE, line + "\n");
+const digestBaseLogger = createStructuredLogger({
+  service: "digest-orchestrator",
+  filePath: LOG_FILE,
+});
+let digestLogger = digestBaseLogger;
+
+function setDigestLoggerContext(context = {}) {
+  digestLogger = digestBaseLogger.withContext(context);
+}
+
+function resetDigestLoggerContext() {
+  digestLogger = digestBaseLogger;
+}
+
+function log(msg, fields = {}) {
+  digestLogger.info("digest.log", {
+    message: String(msg || ""),
+    ...fields,
+  });
+}
+
+function logEvent(level, event, fields = {}) {
+  const safeLevel = String(level || "").trim().toLowerCase();
+  if (safeLevel === "error") return digestLogger.error(event, fields);
+  if (safeLevel === "warn") return digestLogger.warn(event, fields);
+  if (safeLevel === "debug") return digestLogger.debug(event, fields);
+  return digestLogger.info(event, fields);
 }
 
 function getDigestOrchestratorIncidentRuntime() {
@@ -443,7 +467,11 @@ function selectItems(allItems, opts = {}) {
 
 async function sendTelegram(text, chatId, extra = {}) {
   const targetId = chatId || CONFIG.user.telegramChatId;
-  log(`Sending Telegram to ${targetId}...`);
+  logEvent("info", "digest.delivery.telegram", {
+    user_id: String(targetId || ""),
+    provider: "telegram",
+    outcome: "attempt",
+  });
   const token = CONFIG.keys.signalBriefBotToken || CONFIG.keys.telegramBotToken;
   const res = await httpsPostWithRetry(
     "api.telegram.org", `/bot${token}/sendMessage`,
@@ -451,10 +479,21 @@ async function sendTelegram(text, chatId, extra = {}) {
     { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false, ...extra }
   );
   if (res.body?.ok) {
-    log(`✅ Telegram sent to ${targetId}`);
+    logEvent("info", "digest.delivery.telegram", {
+      user_id: String(targetId || ""),
+      provider: "telegram",
+      outcome: "sent",
+    });
     return;
   }
   const detail = res.body?.description || JSON.stringify(res.body) || `status ${res.status}`;
+  logEvent("error", "digest.delivery.telegram", {
+    user_id: String(targetId || ""),
+    provider: "telegram",
+    outcome: "failed",
+    detail,
+    status: Number(res.status || 0),
+  });
   throw new Error(`telegram send failed: ${detail}`);
 }
 
@@ -462,12 +501,25 @@ async function sendTelegram(text, chatId, extra = {}) {
 
 async function sendEmail(toEmail, subject, html, token = null) {
   const target = toEmail || CONFIG.user.email;
-  log(`Sending email to ${target}...`);
+  logEvent("info", "digest.delivery.email", {
+    user_id: String(target || ""),
+    provider: "email",
+    outcome: "attempt",
+  });
   const result = await sendEmailViaMailer(target, subject, html, token);
   if (result.ok) {
-    log(`✅ Email sent via ${result.via}`);
+    logEvent("info", "digest.delivery.email", {
+      user_id: String(target || ""),
+      provider: String(result.via || "email"),
+      outcome: "sent",
+    });
     return;
   }
+  logEvent("error", "digest.delivery.email", {
+    user_id: String(target || ""),
+    provider: String(result.via || "email"),
+    outcome: "failed",
+  });
   throw new Error(`email send failed via ${result.via || "mailer"}`);
 }
 
@@ -485,6 +537,16 @@ async function main() {
   const suppressWelcome = args.includes("--suppressWelcome");
   const runMode = targetChatId ? "targeted" : "scheduled";
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  setDigestLoggerContext({
+    run_id: runId,
+    user_id: targetChatId ? String(targetChatId) : null,
+  });
+  logEvent("info", "digest.run.started", {
+    provider: "orchestrator",
+    outcome: "started",
+    mode: runMode,
+    target_chat_id: targetChatId ? String(targetChatId) : null,
+  });
   const allowExampleEmails = (
     String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
     || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
@@ -496,6 +558,14 @@ async function main() {
     const mode = lock.lock?.mode || "unknown";
     const state = lock.lock?.state || lock.reason || "unknown";
     const detail = lock.lock?.error ? ` detail=${lock.lock.error}` : "";
+    logEvent("warn", "digest.run.skipped", {
+      provider: "lock",
+      outcome: "lock_unavailable",
+      lock_state: state,
+      lock_mode: mode,
+      lock_started_at: started,
+      lock_error: lock.lock?.error || null,
+    });
     log(`⏭️ Digest skipped: lock unavailable (state=${state}, mode=${mode}, started=${started})${detail}`);
     process.exit(4);
   }
@@ -517,14 +587,27 @@ async function main() {
 
   if (dueUsers.length === 0) {
     if (targetChatId) {
+      logEvent("warn", "digest.run.skipped", {
+        provider: "scheduler",
+        outcome: "target_not_due",
+      });
       log(`No active user found for on-demand chatId ${targetChatId}`);
       process.exit(2);
     }
+    logEvent("info", "digest.run.skipped", {
+      provider: "scheduler",
+      outcome: "no_due_users",
+    });
     process.exit(0); // no users due this window
   }
 
   if (dryRun) {
     const dueList = dueUsers.map((u) => u.email || u.chatId).filter(Boolean);
+    logEvent("info", "digest.run.skipped", {
+      provider: "orchestrator",
+      outcome: "dry_run",
+      due_users: dueUsers.length,
+    });
     log(`🧪 Dry run: ${dueUsers.length} user(s) due${dueList.length ? ` -> ${dueList.join(", ")}` : ""}`);
     process.exit(0);
   }
@@ -681,14 +764,37 @@ async function main() {
     publicDigestUrl,
   });
 
+  logEvent("info", "digest.run.completed", {
+    provider: "orchestrator",
+    outcome: "success",
+    due_users: dueUsers.length,
+    delivered_users: deliveredUsers.length,
+    failed_users: failedUsers.length,
+  });
   log(`=== SignalBrief complete — ${deliveredUsers.length}/${dueUsers.length} user(s) delivered ===`);
-  if (targetChatId && deliveredUsers.length === 0) process.exit(3);
+  if (targetChatId && deliveredUsers.length === 0) {
+    logEvent("warn", "digest.run.completed", {
+      provider: "orchestrator",
+      outcome: "target_delivery_missed",
+      due_users: dueUsers.length,
+      delivered_users: deliveredUsers.length,
+      failed_users: failedUsers.length,
+    });
+    process.exit(3);
+  }
 }
 
 function runCli() {
   return main().catch((e) => {
+    logEvent("error", "digest.run.failed", {
+      provider: "orchestrator",
+      outcome: "fatal",
+      message: String(e?.message || e),
+    });
     log(`FATAL: ${e.message}`);
     process.exit(1);
+  }).finally(() => {
+    resetDigestLoggerContext();
   });
 }
 

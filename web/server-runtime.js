@@ -90,11 +90,20 @@ const {
   createSendMagicLinkEmail,
   createSendTelegramText,
 } = require("./server-runtime-utils-runtime");
+const { createStructuredLogger } = require("../src/runtime/structured-logger-runtime");
 
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
 const CONFIG = loadConfig();
 const TRUSTED_CORS_ORIGINS = getTrustedCorsOrigins();
+const WEB_PROCESS_RUN_ID = `web-${process.pid}-${Date.now()}`;
+const webLogger = createStructuredLogger({
+  service: "web-server",
+  context: {
+    run_id: WEB_PROCESS_RUN_ID,
+    provider: "http",
+  },
+});
 const {
   verifyAdminPassword,
   createAdminSession,
@@ -337,7 +346,16 @@ async function handleWebRequest(req, res) {
     res.writeHead(404);
     res.end("Not found");
   } catch (err) {
-    handleRequestErrorPolicy({ req, res, error: err, logger: console.error });
+    const requestRunId = `${WEB_PROCESS_RUN_ID}:${Date.now()}`;
+    webLogger.error("web.request.error", {
+      run_id: requestRunId,
+      outcome: "failed",
+      method: String(req?.method || ""),
+      path: String(req?.url || ""),
+      message: String(err?.message || err || "unknown error"),
+      stack: String(err?.stack || ""),
+    });
+    handleRequestErrorPolicy({ req, res, error: err, logger: () => {} });
   }
 }
 
@@ -346,10 +364,20 @@ function installCrashProtection() {
   if (crashProtectionInstalled) return;
   crashProtectionInstalled = true;
   process.on("uncaughtException", (err) => {
-    console.error("[uncaughtException]", err.message, err.stack);
+    webLogger.error("web.process.uncaught_exception", {
+      outcome: "crash",
+      provider: "node",
+      message: String(err?.message || err || "unknown error"),
+      stack: String(err?.stack || ""),
+    });
   });
   process.on("unhandledRejection", (err) => {
-    console.error("[unhandledRejection]", err);
+    webLogger.error("web.process.unhandled_rejection", {
+      outcome: "crash",
+      provider: "node",
+      message: String(err?.message || err || "unknown rejection"),
+      stack: String(err?.stack || ""),
+    });
   });
 }
 

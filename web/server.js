@@ -11,6 +11,15 @@ const {
   handleWebRequest,
   installCrashProtection,
 } = require("./server-runtime");
+const { createStructuredLogger } = require("../src/runtime/structured-logger-runtime");
+
+const serverLogger = createStructuredLogger({
+  service: "web-server-entrypoint",
+  context: {
+    run_id: `web-entry-${process.pid}`,
+    provider: "http",
+  },
+});
 
 const server = http.createServer(async (req, res) => {
   await handleWebRequest(req, res);
@@ -21,7 +30,11 @@ function startServer() {
   installCrashProtection();
   const port = getServerPort();
   server.listen(port, () => {
-    console.log(`SignalBrief web running on http://localhost:${port}`);
+    serverLogger.info("web.server.started", {
+      outcome: "started",
+      port,
+      message: `SignalBrief web running on http://localhost:${port}`,
+    });
   });
   return server;
 }

@@ -27,6 +27,11 @@ These files remain in place while the current runtime transformation is in progr
 - [Week 5 Day 24 - Dual-Read Parity](./week5-day24-dual-read-parity.md)
 - [Week 5 Day 25 - Cutover Risk Review](./week5-day25-cutover-risk-review.md)
 - [Week 6 Day 26 - Canary Dark Deploy](./week6-day26-canary-dark-deploy.md)
+- [Week 6 Day 27 - Canary Cohort Expansion](./week6-day27-canary-cohort-expansion.md)
+- [Week 6 Day 28 - Full Enablement + Release Batching](./week6-day28-full-enable-release-batching.md)
+- [Week 6 Day 29 - Live Rollback Drill](./week6-day29-live-rollback-drill.md)
+- [Week 6 Day 30 - Stabilization Report](./week6-day30-stabilization-report.md)
+- [Week 6 Day 30 - Infrastructure Decision Memo](./week6-day30-infra-decision-memo.md)
 
 ## Supporting Strategy And Earlier Planning
 

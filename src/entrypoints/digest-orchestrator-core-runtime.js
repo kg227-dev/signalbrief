@@ -57,6 +57,15 @@ const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrat
 const { createDigestOrchestratorFetchRuntime } = require("./digest-orchestrator-fetch-runtime");
 const { createDigestOrchestratorSelectionRuntime } = require("./digest-orchestrator-selection-runtime");
 const { createDigestOrchestratorEnrichmentRuntime } = require("./digest-orchestrator-enrichment-runtime");
+const {
+  createDigestOrchestratorArchiveRuntime,
+} = require("./digest-orchestrator-archive-runtime");
+const {
+  createDigestOrchestratorCostRuntime,
+  DEFAULT_PERPLEXITY_COST_PER_CALL,
+  DEFAULT_CLAUDE_HAIKU_IN_PER_MTOK,
+  DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK,
+} = require("./digest-orchestrator-cost-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -71,6 +80,8 @@ let emailTemplateCache = null;
 let digestFormattingRuntimeCache = null;
 let digestDataRuntimeCache = null;
 let digestArchiveRuntimeCache = null;
+let digestOrchestratorArchiveRuntimeCache = null;
+let digestOrchestratorCostRuntimeCache = null;
 let runtimeBootstrapDone = false;
 
 function getConfig() {
@@ -139,9 +150,9 @@ function formatEtDateKey(date) {
 }
 
 // API cost estimates
-const PERPLEXITY_COST_PER_CALL  = 0.005;   // Sonar model per call
-const CLAUDE_HAIKU_IN_PER_MTOK  = 0.80;    // $/million input tokens
-const CLAUDE_HAIKU_OUT_PER_MTOK = 4.00;    // $/million output tokens
+const PERPLEXITY_COST_PER_CALL = DEFAULT_PERPLEXITY_COST_PER_CALL;
+const CLAUDE_HAIKU_IN_PER_MTOK = DEFAULT_CLAUDE_HAIKU_IN_PER_MTOK;
+const CLAUDE_HAIKU_OUT_PER_MTOK = DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK;
 
 // Model cost lookup maps (used by sandbox for dynamic model selection)
 const MODEL_COSTS = {
@@ -154,16 +165,6 @@ const SEARCH_COSTS = {
   "sonar-pro": 0.01,
   "sonar-reasoning": 0.01,
 };
-
-function appendCostLog(entry) {
-  try {
-    const dir = path.dirname(COST_LOG);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(COST_LOG, JSON.stringify(entry) + "\n");
-  } catch (e) {
-    log(`⚠️  Cost log write failed: ${e.message}`);
-  }
-}
 
 function appendIncidentLog(entry) {
   try {
@@ -429,6 +430,31 @@ function getDigestArchiveRuntime() {
   return digestArchiveRuntimeCache;
 }
 
+function getDigestOrchestratorArchiveRuntime() {
+  if (!digestOrchestratorArchiveRuntimeCache) {
+    digestOrchestratorArchiveRuntimeCache = createDigestOrchestratorArchiveRuntime({
+      saveToArchive: (...args) => getDigestArchiveRuntime().saveToArchive(...args),
+    });
+  }
+  return digestOrchestratorArchiveRuntimeCache;
+}
+
+function getDigestOrchestratorCostRuntime() {
+  if (!digestOrchestratorCostRuntimeCache) {
+    digestOrchestratorCostRuntimeCache = createDigestOrchestratorCostRuntime({
+      fs,
+      path,
+      costLogPath: COST_LOG,
+      log,
+      formatEtDateKey,
+      perplexityCostPerCall: PERPLEXITY_COST_PER_CALL,
+      claudeInputPerMtok: CLAUDE_HAIKU_IN_PER_MTOK,
+      claudeOutputPerMtok: CLAUDE_HAIKU_OUT_PER_MTOK,
+    });
+  }
+  return digestOrchestratorCostRuntimeCache;
+}
+
 function scoreColor(...args) {
   return getDigestFormattingRuntime().scoreColor(...args);
 }
@@ -517,8 +543,12 @@ function suppressRecentlySentForUser(...args) {
   return getDigestArchiveRuntime().suppressRecentlySentForUser(...args);
 }
 
-function saveToArchive(...args) {
-  return getDigestArchiveRuntime().saveToArchive(...args);
+function persistSharedArchive(...args) {
+  return getDigestOrchestratorArchiveRuntime().persistSharedArchive(...args);
+}
+
+function recordRunCost(...args) {
+  return getDigestOrchestratorCostRuntime().recordRunCost(...args);
 }
 
 function selectItems(allItems, opts = {}) {
@@ -712,14 +742,13 @@ async function main() {
     selected,
   });
 
-  // Quick scan (shared archive/public page)
-  const quickScan = enriched
-    .map((i) => i.headline.split(":")[0].split("—")[0].trim())
-    .join(" &nbsp;·&nbsp; ");
-
-  // Archive once per run (shared, date-keyed) — uses full enriched set before user filtering
-  // Must happen before per-user loop so the archive reflects all fetched items, not one user's filtered view
-  saveToArchive(now, enriched, dateStr, quickScan, { overwrite: !targetChatId });
+  // Archive once per run (shared, date-keyed) before per-user filtering.
+  persistSharedArchive({
+    now,
+    enriched,
+    dateStr,
+    targetChatId,
+  });
 
   log(`Delivering to ${dueUsers.length} user(s)...`);
   const engagementEvents = loadEngagementEvents({ max_age_days: 45, dedupe: true });
@@ -776,34 +805,18 @@ async function main() {
     engagementEvents,
   });
 
-  // ── Cost tracking ─────────────────────────────────────────────────────────
-  const perplexityCalls = standardFetchCalls + customFetchCalls;
-  const perplexityCost  = perplexityCalls * PERPLEXITY_COST_PER_CALL;
-  const claudeCost = (claudeUsage.input_tokens  / 1_000_000 * CLAUDE_HAIKU_IN_PER_MTOK)
-                   + (claudeUsage.output_tokens / 1_000_000 * CLAUDE_HAIKU_OUT_PER_MTOK);
-  const totalCost = perplexityCost + claudeCost;
-
-  appendCostLog({
-    date:                  now.toLocaleDateString("en-CA", { timeZone: "America/New_York" }), // ET date (not UTC)
-    run_id:                runId,
-    run_at:                now.toISOString(),
-    run_at_et:             now.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }),
-    on_demand:             !!targetChatId,
-    perplexity_calls:      perplexityCalls,
-    perplexity_calls_standard: standardFetchCalls,
-    perplexity_calls_custom: customFetchCalls,
-    perplexity_cost_usd:   parseFloat(perplexityCost.toFixed(5)),
-    claude_tokens_in:      claudeUsage.input_tokens,
-    claude_tokens_out:     claudeUsage.output_tokens,
-    claude_cost_usd:       parseFloat(claudeCost.toFixed(6)),
-    total_cost_usd:        parseFloat(totalCost.toFixed(5)),
-    users_targeted:        dueUsers.length,
-    users_served:          deliveredUsers.length,
-    digest_url:            publicDigestUrl,
-    per_user:              deliveredUsers,
-    per_user_failed:       failedUsers,
+  recordRunCost({
+    now,
+    runId,
+    targetChatId,
+    standardFetchCalls,
+    customFetchCalls,
+    claudeUsage,
+    dueUsers,
+    deliveredUsers,
+    failedUsers,
+    publicDigestUrl,
   });
-  log(`💰 Run cost: $${totalCost.toFixed(4)} (Perplexity $${perplexityCost.toFixed(3)} · Claude in=${claudeUsage.input_tokens} out=${claudeUsage.output_tokens} $${claudeCost.toFixed(4)})`);
 
   log(`=== SignalBrief complete — ${deliveredUsers.length}/${dueUsers.length} user(s) delivered ===`);
   if (targetChatId && deliveredUsers.length === 0) process.exit(3);

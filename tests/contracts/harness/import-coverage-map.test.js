@@ -211,7 +211,9 @@ function coverageImportMap() {
     import("../../src/runtime/reply/reply-command-handlers-core-runtime.js");
     import("../../src/runtime/reply/onboarding/onboarding-context.js");
     import("../../src/jobs/digest-runner-core-runtime.js");
+    import("../../src/entrypoints/digest-orchestrator-archive-runtime.js");
     import("../../src/entrypoints/digest-orchestrator-core-runtime.js");
+    import("../../src/entrypoints/digest-orchestrator-cost-runtime.js");
     import("../../src/entrypoints/digest-orchestrator-runtime.js");
     import("../../src/digest/runtime/digest-formatting-topic-runtime.js");
     import("../../src/digest/runtime/digest-formatting-telegram-runtime.js");

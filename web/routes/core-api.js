@@ -39,11 +39,23 @@ function sanitizePreferences(preferences) {
     const parsedItems = Number(preferences.items_per_digest);
     if (Number.isInteger(parsedItems) && parsedItems > 0) out.items_per_digest = parsedItems;
   }
-  if (preferences.email_enabled != null) out.email_enabled = Boolean(preferences.email_enabled);
-  if (preferences.telegram_enabled != null) out.telegram_enabled = Boolean(preferences.telegram_enabled);
+  if (preferences.email_enabled != null) out.email_enabled = normalizeBooleanLike(preferences.email_enabled);
+  if (preferences.telegram_enabled != null) out.telegram_enabled = normalizeBooleanLike(preferences.telegram_enabled);
   if (preferences.timezone != null) out.timezone = String(preferences.timezone || "").trim();
-  if (preferences.consultant_lens_mode != null) out.consultant_lens_mode = Boolean(preferences.consultant_lens_mode);
+  if (preferences.consultant_lens_mode != null) out.consultant_lens_mode = normalizeBooleanLike(preferences.consultant_lens_mode);
   return out;
+}
+
+function normalizeBooleanLike(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") return false;
+    if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") return true;
+  }
+  return Boolean(value);
 }
 
 function sanitizeTopicWeights(topicWeights) {

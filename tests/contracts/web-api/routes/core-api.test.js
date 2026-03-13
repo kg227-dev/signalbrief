@@ -152,6 +152,31 @@ async function invoke(handler, { method, pathname, search = "" }) {
   }
 
   {
+    const handler = createCoreApiRouteHandler(baseDeps({
+      findUserByToken: () => ({
+        chatId: "123",
+        email: "user@example.com",
+        preferences: {
+          email_enabled: "false",
+          telegram_enabled: "0",
+          consultant_lens_mode: "true",
+        },
+      }),
+    }));
+    const { handled, res } = await invoke(handler, {
+      method: "GET",
+      pathname: "/api/user",
+      search: "?token=test-token",
+    });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.strictEqual(body.preferences.email_enabled, false);
+    assert.strictEqual(body.preferences.telegram_enabled, false);
+    assert.strictEqual(body.preferences.consultant_lens_mode, true);
+  }
+
+  {
     const handler = createCoreApiRouteHandler(baseDeps());
     const { handled, res } = await invoke(handler, {
       method: "GET",

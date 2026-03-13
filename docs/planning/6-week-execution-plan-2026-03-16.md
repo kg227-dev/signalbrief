@@ -35,6 +35,63 @@ Do **not** replatform compute during this window.
 - High orphan/coupling and test-health debt:
   - Fix: Add explicit weekly burn-down targets and gate cutover on coverage/contract thresholds.
 
+### Current Runtime Architecture Snapshot (audit observed Mar 13, 2026)
+
+```text
+root shims
+  digest.js / bot-server.js / scheduler-worker.js
+        |
+        v
+  src/entrypoints/*
+        |
+        +--> src/jobs/digest-runner-core-runtime
+        |        |
+        |        +--> src/entrypoints/digest-orchestrator-core-runtime
+        |        |        |
+        |        |        +--> src/digest/runtime/*
+        |        |        +--> src/entrypoints/digest-orchestrator-delivery-runtime
+        |        |        +--> src/runtime/quality-score.js
+        |        |        +--> src/runtime/engagement/*
+        |        |        +--> src/runtime/store-*.js
+        |        |                 |
+        |        |                 +--> src/platform/store/*
+        |        |
+        |        +--> lock / run-state files
+        |
+        +--> src/entrypoints/bot-server.js
+        |        |
+        |        +--> src/runtime/reply/*
+        |
+        +--> src/entrypoints/scheduler-worker.js
+                 |
+                 +--> src/jobs/digest-runner-core-runtime
+
+web/server.js
+  -> web/server-runtime.js
+      -> web/server-runtime-deps-runtime.js   <--- actual DI hub
+          |
+          +--> web/api/core/index.js
+          +--> web/api/admin/index.js
+          +--> web/routes/*
+                 |
+                 +--> web/services/*
+                        |
+                        +--> src/domains/digest/*
+                        +--> src/platform/store/*
+                        +--> src/runtime/*
+
+scripts/*
+  -> deploy-production / staging / watchdog / backup / restore
+  -> directly inspect runtime state, logs, and docker/ssh surfaces
+
+test-harness/*
+  -> runtime/pipeline.js
+  -> suites/*
+
+tests/contracts/*
+  -> many import/export and existence assertions
+```
+
 ## Week 1 (Mar 16-22) - Reliability Floor
 
 ### Day 1 (Mar 16) - Backups + Restore Drill (Start execution now)
@@ -203,6 +260,71 @@ Do **not** replatform compute during this window.
 - Stabilization report, metrics closeout, and next-quarter infra decision.
 - Include decision memo: stay single-VM hardened vs managed-platform migration trigger conditions.
 
+## Audit-Derived Carry-Forward Backlog (added Mar 13, 2026)
+
+These items extend the existing execution plan without replacing completed day goals. Keep them priority-ordered and fold them into the next available reliability, security, runtime-decomposition, and cutover windows.
+
+- [ ] P1 `Security` remove tracked secrets from runtime config, rotate exposed admin/provider credentials, and move runtime secret loading to environment/secret storage.
+  - Files: `config.json`, `config.example.json`, `README.md`
+  - Target window: immediate hotfix before further prod changes
+  - Recommendation: scrub tracked secret material, document env-based setup, and verify no secret-bearing config remains in git history going forward.
+- [ ] P2 `Security` restrict CORS to explicit trusted origins and stop returning full user records from bearer-token query access.
+  - Files: `web/server-request-runtime.js`, `web/server-runtime-request-policy-runtime.js`, `web/routes/core-api.js`
+  - Target window: Week 2 spillover
+  - Recommendation: replace `Access-Control-Allow-Origin: *` on privileged JSON surfaces, and require a narrower authenticated/signed-user fetch path.
+- [ ] P3 `Security` replace weak unsubscribe signing and retire the legacy email+signature unsubscribe bridge after a migration window.
+  - Files: `src/runtime/mailer/mailer-runtime.js`, `web/routes/core-api-unsubscribe-actions-runtime.js`
+  - Target window: Week 2 spillover
+  - Recommendation: use a dedicated unsubscribe secret or nonce-backed token and remove compatibility routes once old links expire.
+- [ ] P4 `Architecture` make module-linkage enforcement real again and fail CI on actual boundary violations.
+  - Files: `package.json`, `scripts/check-module-linkage.mjs`, `scripts/module-linkage.mjs`, `src/dependency-links.mjs`
+  - Target window: Week 4 follow-up
+  - Recommendation: execute the real graph checker in CI, repair stale imports, and keep worktree mirrors out of canonical dependency analysis.
+- [ ] P5 `Architecture` split `web/server-runtime-deps-runtime.js` into smaller bounded registries so web-core, admin, digest, and store concerns stop flowing through one dependency hub.
+  - Files: `web/server-runtime-deps-runtime.js`, `web/server-runtime.js`, `web/api/**`, `web/routes/**`
+  - Target window: Week 4 spillover
+  - Recommendation: reduce the DI surface to explicit registries and route bundles with import-boundary contract tests per registry.
+- [ ] P6 `Architecture` continue digest runtime decomposition until fetch, enrich, archive, cost, and delivery coordination no longer live in one orchestrator file.
+  - Files: `src/entrypoints/digest-orchestrator-core-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js`, `src/digest/runtime/**`
+  - Target window: Week 3 spillover
+  - Recommendation: keep the orchestrator as a thin coordinator and move IO-heavy behavior into narrowly scoped runtimes with parity tests.
+- [ ] P7 `Resilience` add provider-specific timeout budgets, 429/5xx retry rules, and partial-delivery degradation when Anthropic or Perplexity are unhealthy.
+  - Files: `src/digest/runtime/digest-data-enrich-runtime.js`, `src/digest/runtime/digest-data-fetch-runtime.js`, `src/entrypoints/digest-orchestrator-core-runtime.js`
+  - Target window: Week 3 / Week 4 reliability spillover
+  - Recommendation: treat provider failure as a graded incident path instead of an all-or-nothing digest failure.
+- [ ] P8 `Resilience` move `/digest` cooldown from process memory to the persistent lock/lease mechanism so multi-process or restarted runtimes cannot bypass the throttle window.
+  - Files: `src/runtime/reply/reply-command-digest-runtime.js`, `src/jobs/digest-runner-core-runtime.js`
+  - Target window: Week 1 or Week 3 spillover
+  - Recommendation: unify user-facing cooldown and actual run-lock semantics in one source of truth.
+- [ ] P9 `State Backend` make SQLite the default production backend path once parity evidence is stable, keeping file-store rollback as an explicit emergency fallback only.
+  - Files: `src/runtime/store-core-runtime.js`, `scripts/migrate-store-file-to-sqlite.js`, `scripts/store-dual-read-compare.js`, `scripts/store-rollback-sqlite-to-file.js`
+  - Target window: Week 6 cutover continuation
+  - Recommendation: complete the migration by changing the production default after sustained canary parity and rollback drills.
+- [ ] P10 `Performance` remove whole-file scans from user lookup, engagement analysis, and archive reads on hot paths.
+  - Files: `src/runtime/store-record-runtime.js`, `src/runtime/engagement/engagement-events-runtime.js`, `web/routes/core-api-archive-runtime.js`
+  - Target window: Week 5 / Week 6 spillover
+  - Recommendation: replace directory scans and full-file loads with indexed queries, pagination, or bounded reads.
+- [ ] P11 `Observability` convert runtime logging to structured events with stable `run_id`, `user_id`, provider, and outcome fields.
+  - Files: `src/entrypoints/digest-orchestrator-core-runtime.js`, `web/server-runtime.js`, `start.sh`
+  - Target window: Week 1 / Week 4 spillover
+  - Recommendation: move from ad hoc line logging to machine-parseable events that can support incident reconstruction.
+- [ ] P12 `QA` replace syntax-only contract checks on hot paths with behavior-oriented assertions for digest output, auth, retries, and failure handling.
+  - Files: `tests/contracts/entrypoints/*.test.js`, `tests/contracts/harness/**/*.test.js`, `scripts/test-critical-paths.js`
+  - Target window: Week 4 / Week 5 spillover
+  - Recommendation: keep import smoke checks if useful, but shift the merge gate toward behavioral contracts and runtime parity assertions.
+- [ ] P13 `Release Process` enforce staging-before-prod in automation instead of relying only on documentation and operator discipline.
+  - Files: `package.json`, `scripts/deploy-production.js`, `scripts/deploy-staging.js`, `docs/planning/release-policy.md`
+  - Target window: Week 4 / Week 6 spillover
+  - Recommendation: require passing staging verification or an explicit override before `ops:deploy:prod` can proceed.
+- [ ] P14 `DevOps` harden the container build with multi-stage image construction, pinned install behavior, and explicit readiness expectations.
+  - Files: `Dockerfile`, `docker-compose.yml`
+  - Target window: Week 1 or Week 6 spillover
+  - Recommendation: shrink and harden the runtime image so local/staging/prod behavior is more reproducible.
+- [ ] P15 `Debt Burn-Down` remove legacy compatibility surface still carried by root entry shims, old bot-token fallback logic, and deprecated unsubscribe routes once replacement paths are fully stable.
+  - Files: `digest.js`, `bot-server.js`, `scheduler-worker.js`, `src/entrypoints/bot-server.js`, `web/routes/core-api-unsubscribe-actions-runtime.js`
+  - Target window: after Week 6 stabilization report
+  - Recommendation: define retirement criteria for each compatibility path and delete them once observability confirms no remaining callers.
+
 ## Progress Log
 
 - [x] Day 1 started and executed: backup + restore drill tooling implemented with tests and npm commands.
@@ -231,3 +353,4 @@ Do **not** replatform compute during this window.
 - [x] Day 24 completed: added `scripts/store-dual-read-compare.js` parity mode for local/staging verification (file vs sqlite) with JSON artifact output, introduced representative fixtures under `tests/fixtures/store-dual-read/data`, and wired CI gate job `store-dual-read-parity` to enforce migration+compare parity before merge.
 - [x] Day 25 completed: added explicit rollback runtime (`scripts/store-rollback-sqlite-to-file.js`) with strict post-rollback verification (`scripts/store-rollback-verify.js`), and published migration risk review + go/no-go/rollback checklist (`docs/planning/week5-day25-cutover-risk-review.md`).
 - [x] Day 26 completed: introduced canary backend routing mode (`SIGNALBRIEF_STORE_BACKEND=canary`) with cohort targeting + mirror-write support, added threshold-based canary guard automation (`scripts/store-canary-guard.js`), and documented dark-deploy/canary operations (`docs/planning/week6-day26-canary-dark-deploy.md`).
+- [x] Day 27 completed: added canary cohort expansion gate automation (`scripts/store-canary-cohort-update.js`) that blocks cohort growth unless CI-equivalent checks and staging health gates pass, with artifacted evidence + rollout exports documented in `docs/planning/week6-day27-canary-cohort-expansion.md`.

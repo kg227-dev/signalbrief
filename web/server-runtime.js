@@ -51,6 +51,7 @@ const {
   computeNextDeliveryEt,
 } = require("./services/delivery-schedule");
 const { createServerRouteDependencies } = require("./server-runtime-deps-runtime");
+const { createRouteBootstrapHandler } = require("./server-runtime-route-bootstrap-runtime");
 const {
   WEB_DIR,
   APP_ROOT,
@@ -291,6 +292,11 @@ const {
   serveFile,
   WEB_DIR,
 });
+const handleDomainRoute = createRouteBootstrapHandler({
+  handleCoreApiRoute,
+  handleAdminApiRoute,
+  handlePublicStaticRoute,
+});
 
 async function handleWebRequest(req, res) {
   try {
@@ -318,15 +324,8 @@ async function handleWebRequest(req, res) {
     }
 
     const routeCtx = { req, res, url, pathname };
-
-    const coreHandled = await handleCoreApiRoute(routeCtx);
-    if (coreHandled !== false) return;
-
-    const adminHandled = await handleAdminApiRoute(routeCtx);
-    if (adminHandled !== false) return;
-
-    const publicHandled = handlePublicStaticRoute(routeCtx);
-    if (publicHandled !== false) return;
+    const routeHandled = await handleDomainRoute(routeCtx);
+    if (routeHandled !== false) return;
 
     res.writeHead(404);
     res.end("Not found");

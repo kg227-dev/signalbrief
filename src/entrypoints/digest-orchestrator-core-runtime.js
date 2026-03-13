@@ -68,6 +68,8 @@ const {
 } = require("./digest-orchestrator-cost-runtime");
 const { createDigestOrchestratorIncidentRuntime } = require("./digest-orchestrator-incident-runtime");
 const { createDigestOrchestratorLockRuntime } = require("./digest-orchestrator-lock-runtime");
+const { createDigestOrchestratorTransportRuntime } = require("./digest-orchestrator-transport-runtime");
+const { createDigestOrchestratorBootstrapRuntime } = require("./digest-orchestrator-bootstrap-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -86,7 +88,8 @@ let digestOrchestratorArchiveRuntimeCache = null;
 let digestOrchestratorCostRuntimeCache = null;
 let digestOrchestratorIncidentRuntimeCache = null;
 let digestOrchestratorLockRuntimeCache = null;
-let runtimeBootstrapDone = false;
+let digestOrchestratorTransportRuntimeCache = null;
+let digestOrchestratorBootstrapRuntimeCache = null;
 
 function getConfig() {
   if (!configCache) configCache = loadConfig();
@@ -122,18 +125,14 @@ function getBaseUrl() {
 }
 
 function ensureDigestRuntimeBootstrap() {
-  if (runtimeBootstrapDone) return;
-  initStore();
-  process.on("exit", () => {
-    releaseDigestLock();
-  });
-  ["SIGINT", "SIGTERM"].forEach((sig) => {
-    process.on(sig, () => {
-      releaseDigestLock();
-      process.exit(1);
+  if (!digestOrchestratorBootstrapRuntimeCache) {
+    digestOrchestratorBootstrapRuntimeCache = createDigestOrchestratorBootstrapRuntime({
+      initStore,
+      releaseDigestLock,
+      processRef: process,
     });
-  });
-  runtimeBootstrapDone = true;
+  }
+  digestOrchestratorBootstrapRuntimeCache.ensureRuntimeBootstrap();
 }
 
 function buildPublicDigestUrl(dateKey) {
@@ -225,51 +224,22 @@ function emitDigestIncident(...args) {
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
 
-function httpsPostRuntime(hostname, path_, headers, body, isForm = false) {
-  return new Promise((resolve, reject) => {
-    const data = isForm ? body : JSON.stringify(body);
-    const req = https.request(
-      { hostname, path: path_, method: "POST",
-        headers: { ...headers, "Content-Length": Buffer.byteLength(data) } },
-      (res) => {
-        let out = "";
-        res.on("data", (c) => (out += c));
-        res.on("end", () => {
-          try { resolve({ status: res.statusCode, body: JSON.parse(out) }); }
-          catch { resolve({ status: res.statusCode, body: out }); }
-        });
-      }
-    );
-    req.on("error", reject);
-    req.setTimeout(30000, () => { req.destroy(new Error("HTTP timeout after 30s")); });
-    req.write(data);
-    req.end();
-  });
+function getDigestOrchestratorTransportRuntime() {
+  if (!digestOrchestratorTransportRuntimeCache) {
+    digestOrchestratorTransportRuntimeCache = createDigestOrchestratorTransportRuntime({
+      https,
+      defaultTimeoutMs: 30_000,
+    });
+  }
+  return digestOrchestratorTransportRuntimeCache;
 }
 
 function httpsPost(hostname, path_, headers, body) {
-  return httpsPostRuntime(hostname, path_, headers, body, false);
+  return getDigestOrchestratorTransportRuntime().httpsPost(hostname, path_, headers, body);
 }
 
-async function httpsPostWithRetry(hostname, path_, headers, body, opts = {}) {
-  const retries = Math.max(0, Number(opts.retries ?? 2));
-  const retryDelayMs = Math.max(100, Number(opts.retryDelayMs ?? 1200));
-  const isForm = !!opts.isForm;
-
-  let lastErr = null;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await httpsPostRuntime(hostname, path_, headers, body, isForm);
-    } catch (err) {
-      lastErr = err;
-      const msg = String(err?.message || "");
-      const retryable = /timeout|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(msg);
-      if (!retryable || attempt >= retries) break;
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)));
-    }
-  }
-
-  throw lastErr || new Error("HTTP request failed");
+function httpsPostWithRetry(hostname, path_, headers, body, opts = {}) {
+  return getDigestOrchestratorTransportRuntime().httpsPostWithRetry(hostname, path_, headers, body, opts);
 }
 
 function getDigestFormattingRuntime() {

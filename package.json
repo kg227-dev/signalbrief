@@ -19,6 +19,7 @@
     "ops:store:migrate:file-to-sqlite": "node scripts/migrate-store-file-to-sqlite.js",
     "ops:store:migrate:file-to-sqlite:preflight": "node scripts/migrate-store-file-to-sqlite.js --preflight-only",
     "ops:store:dual-read-compare": "node scripts/store-dual-read-compare.js",
+    "ops:store:canary:cohort-update": "node scripts/store-canary-cohort-update.js",
     "ops:store:canary-guard": "node scripts/store-canary-guard.js",
     "ops:store:rollback:sqlite-to-file": "node scripts/store-rollback-sqlite-to-file.js",
     "ops:store:rollback:verify": "node scripts/store-rollback-verify.js",

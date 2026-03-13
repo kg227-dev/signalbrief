@@ -238,6 +238,13 @@ Rollback tooling (sqlite -> file-store):
 - Strict rollback verify: `npm run ops:store:rollback:verify -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
 - Risk review + go/no-go + rollback checklist: [`docs/planning/week5-day25-cutover-risk-review.md`](./docs/planning/week5-day25-cutover-risk-review.md)
 
+Canary backend router + dark deploy path:
+- `SIGNALBRIEF_STORE_BACKEND=canary` enables per-chat backend routing
+- `SIGNALBRIEF_STORE_CANARY_CHAT_IDS=chat1,chat2` chooses sqlite canary cohort
+- `SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES=1` mirrors canary writes into file-store (default)
+- Guard thresholds: `npm run ops:store:canary-guard -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
+- Day 26 runbook: [`docs/planning/week6-day26-canary-dark-deploy.md`](./docs/planning/week6-day26-canary-dark-deploy.md)
+
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash
 SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler

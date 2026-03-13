@@ -32,6 +32,7 @@ function createStoreIndex() {
 function normalizeStoreBackend(value) {
   const normalized = String(value || "").toLowerCase().trim();
   if (normalized === "sqlite") return "sqlite";
+  if (normalized === "canary") return "canary";
   return "file";
 }
 
@@ -45,6 +46,35 @@ function resolveStoreBackend(options = {}) {
 function createSqliteStoreAdapter(deps, options = {}) {
   const { createSqliteStoreAdapter: createSqliteAdapterRuntime } = require("./store-adapter-sqlite-runtime");
   return createSqliteAdapterRuntime(deps, options);
+}
+
+function parseCanaryChatIds(raw) {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+  }
+  return String(raw || "")
+    .split(/[,\s]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function resolveCanaryChatIds(options = {}) {
+  if (Array.isArray(options.canaryChatIds)) {
+    return parseCanaryChatIds(options.canaryChatIds);
+  }
+  if (typeof options.canaryChatIds === "string" && options.canaryChatIds.trim()) {
+    return parseCanaryChatIds(options.canaryChatIds);
+  }
+  return parseCanaryChatIds(process.env.SIGNALBRIEF_STORE_CANARY_CHAT_IDS);
+}
+
+function resolveCanaryMirrorWrites(options = {}) {
+  if (typeof options.canaryMirrorWrites === "boolean") return options.canaryMirrorWrites;
+  const envRaw = String(process.env.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES || "").trim().toLowerCase();
+  if (envRaw === "0" || envRaw === "false" || envRaw === "no") return false;
+  return true;
 }
 
 function createStoreState(opts = {}) {
@@ -73,6 +103,14 @@ function createStore(options = {}) {
     : (message) => console.warn(message);
   const warningThrottleMs = Math.max(0, Number(options.warningThrottleMs || 60_000));
   const warningState = new Map();
+  const backend = resolveStoreBackend(options);
+  if (backend === "canary") {
+    return createCanaryStoreRuntime({
+      ...options,
+      onWarning,
+      warningThrottleMs,
+    });
+  }
   let storeState = createStoreState({ dataDir: options.dataDir });
 
   function warnStoreRecovery(code, context, detail = "") {
@@ -131,8 +169,6 @@ function createStore(options = {}) {
     if (typeof options.createStoreAdapter === "function") {
       return options.createStoreAdapter;
     }
-
-    const backend = resolveStoreBackend(options);
     if (backend === "sqlite") {
       const explicitSqlitePath = String(options.sqlitePath || process.env.SIGNALBRIEF_SQLITE_PATH || "").trim();
       const resolveSqlitePath = () => (
@@ -186,6 +222,152 @@ function createStoreRuntime(options = {}) {
   return createStore(options);
 }
 
+function createCanaryStoreRuntime(options = {}) {
+  const childOptionsBase = {
+    ...options,
+    warningThrottleMs: Math.max(0, Number(options.warningThrottleMs || 60_000)),
+    onWarning: typeof options.onWarning === "function" ? options.onWarning : undefined,
+  };
+  delete childOptionsBase.createStoreAdapter;
+  delete childOptionsBase.backend;
+  delete childOptionsBase.canaryChatIds;
+  delete childOptionsBase.canaryMirrorWrites;
+
+  const fileStore = createStore({
+    ...childOptionsBase,
+    backend: "file",
+  });
+  const sqliteStore = createStore({
+    ...childOptionsBase,
+    backend: "sqlite",
+  });
+
+  const mirrorWrites = resolveCanaryMirrorWrites(options);
+  let canaryChatIds = new Set(resolveCanaryChatIds(options));
+
+  function normalizeChatId(chatId) {
+    return String(chatId || "").trim();
+  }
+
+  function isCanaryChatId(chatId) {
+    const id = normalizeChatId(chatId);
+    if (!id) return false;
+    return canaryChatIds.has(id);
+  }
+
+  function setCanaryChatIds(values) {
+    canaryChatIds = new Set(parseCanaryChatIds(values));
+    return getCanaryChatIds();
+  }
+
+  function getCanaryChatIds() {
+    return Array.from(canaryChatIds.values()).sort((a, b) => a.localeCompare(b));
+  }
+
+  function initStore(opts = {}) {
+    fileStore.initStore(opts);
+    sqliteStore.initStore(opts);
+    if (Object.prototype.hasOwnProperty.call(opts, "canaryChatIds")) {
+      setCanaryChatIds(opts.canaryChatIds);
+    }
+    return {
+      dataDir: fileStore.getStateSnapshot().dataDir,
+      canary_count: canaryChatIds.size,
+      mirror_writes: mirrorWrites,
+    };
+  }
+
+  function resetStoreState(opts = {}) {
+    fileStore.resetStoreState(opts);
+    sqliteStore.resetStoreState(opts);
+    if (Object.prototype.hasOwnProperty.call(opts, "canaryChatIds")) {
+      setCanaryChatIds(opts.canaryChatIds);
+    }
+    return {
+      dataDir: fileStore.getStateSnapshot().dataDir,
+      canary_count: canaryChatIds.size,
+      mirror_writes: mirrorWrites,
+    };
+  }
+
+  function readUser(chatId) {
+    return isCanaryChatId(chatId) ? sqliteStore.readUser(chatId) : fileStore.readUser(chatId);
+  }
+
+  function writeUser(chatId, data) {
+    if (isCanaryChatId(chatId)) {
+      sqliteStore.writeUser(chatId, data);
+      if (mirrorWrites) fileStore.writeUser(chatId, data);
+      return;
+    }
+    fileStore.writeUser(chatId, data);
+  }
+
+  function deleteUser(chatId) {
+    if (isCanaryChatId(chatId)) {
+      const sqliteResult = sqliteStore.deleteUser(chatId);
+      if (mirrorWrites) fileStore.deleteUser(chatId);
+      return sqliteResult;
+    }
+    return fileStore.deleteUser(chatId);
+  }
+
+  function allUsers() {
+    const fileUsers = fileStore.allUsers();
+    const sqliteUsers = sqliteStore.allUsers();
+    const merged = new Map();
+
+    for (const user of fileUsers) {
+      const id = normalizeChatId(user?.chatId);
+      if (!id) continue;
+      if (isCanaryChatId(id) && !mirrorWrites) continue;
+      merged.set(id, user);
+    }
+
+    for (const user of sqliteUsers) {
+      const id = normalizeChatId(user?.chatId);
+      if (!id || !isCanaryChatId(id)) continue;
+      merged.set(id, user);
+    }
+
+    return Array.from(merged.values())
+      .sort((a, b) => String(a?.chatId || "").localeCompare(String(b?.chatId || "")));
+  }
+
+  function findUserByToken(token) {
+    const sqliteHit = sqliteStore.findUserByToken(token);
+    if (sqliteHit && isCanaryChatId(sqliteHit.chatId)) return sqliteHit;
+    return fileStore.findUserByToken(token);
+  }
+
+  function getStateSnapshot() {
+    return {
+      mode: "canary",
+      canary_count: canaryChatIds.size,
+      mirror_writes: mirrorWrites,
+      file: fileStore.getStateSnapshot(),
+      sqlite: sqliteStore.getStateSnapshot(),
+    };
+  }
+
+  return {
+    createStoreIndex,
+    createStoreState,
+    initStore,
+    resetStoreState,
+    readUser,
+    writeUser,
+    deleteUser,
+    allUsers,
+    defaultUser,
+    generateToken,
+    findUserByToken,
+    getStateSnapshot,
+    setCanaryChatIds,
+    getCanaryChatIds,
+  };
+}
+
 let singletonStore = null;
 
 function getSingletonStore() {
@@ -226,6 +408,9 @@ function findUserByToken(token) {
 module.exports = {
   createStoreIndex,
   createStoreState,
+  parseCanaryChatIds,
+  resolveCanaryChatIds,
+  resolveCanaryMirrorWrites,
   normalizeStoreBackend,
   resolveStoreBackend,
   createFileStoreAdapter,

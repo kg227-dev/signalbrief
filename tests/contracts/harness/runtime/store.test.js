@@ -21,6 +21,9 @@ const {
   createFileStoreAdapter,
   createSqliteStoreAdapter,
   createStoreRuntime,
+  parseCanaryChatIds,
+  resolveCanaryChatIds,
+  resolveCanaryMirrorWrites,
   normalizeStoreBackend,
   resolveStoreBackend,
   initStore,
@@ -34,13 +37,20 @@ const {
 assert.strictEqual(typeof createStoreRuntime, "function", "store should export explicit runtime factory");
 assert.strictEqual(typeof createFileStoreAdapter, "function", "store should expose default file adapter factory");
 assert.strictEqual(typeof createSqliteStoreAdapter, "function", "store should expose sqlite adapter factory");
+assert.strictEqual(typeof parseCanaryChatIds, "function", "store should expose canary chat-id parser");
+assert.strictEqual(typeof resolveCanaryChatIds, "function", "store should expose canary chat-id resolver");
+assert.strictEqual(typeof resolveCanaryMirrorWrites, "function", "store should expose canary mirror-write resolver");
 assert.strictEqual(normalizeStoreBackend("sqlite"), "sqlite");
+assert.strictEqual(normalizeStoreBackend("canary"), "canary");
 assert.strictEqual(normalizeStoreBackend("unexpected"), "file");
 assert.strictEqual(resolveStoreBackend({ backend: "sqlite" }), "sqlite");
+assert.strictEqual(resolveStoreBackend({ backend: "canary" }), "canary");
+assert.deepStrictEqual(parseCanaryChatIds("a,b c"), ["a", "b", "c"]);
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-"));
 const tempDirIsolated = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-iso-"));
 const sqliteDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-sqlite-test-"));
+const canaryDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-canary-test-"));
 try {
   resetStoreState({ dataDir: tempDir });
   initStore({ dataDir: tempDir, rebuildIndex: true });
@@ -154,9 +164,37 @@ try {
   const sqliteLookup = sqliteStore.findUserByToken(sqliteToken);
   assert.ok(sqliteLookup, "sqlite backend should resolve token index");
   assert.strictEqual(sqliteLookup.chatId, "sqlite-chat");
+
+  const canaryStore = createStore({
+    backend: "canary",
+    dataDir: canaryDir,
+    sqlitePath: path.join(canaryDir, "signalbrief.sqlite"),
+    canaryChatIds: ["canary-chat"],
+    canaryMirrorWrites: true,
+  });
+  canaryStore.initStore({ rebuildIndex: true });
+  const canaryToken = generateToken();
+  canaryStore.writeUser("canary-chat", {
+    ...canaryStore.readUser("canary-chat"),
+    email: "canary@example.com",
+    token: canaryToken,
+  });
+  canaryStore.writeUser("file-chat", {
+    ...canaryStore.readUser("file-chat"),
+    email: "file@example.com",
+    token: generateToken(),
+  });
+  const canaryRead = canaryStore.readUser("canary-chat");
+  assert.strictEqual(canaryRead.email, "canary@example.com");
+  const canaryByToken = canaryStore.findUserByToken(canaryToken);
+  assert.ok(canaryByToken, "canary backend should resolve token for canary cohort");
+  assert.strictEqual(canaryByToken.chatId, "canary-chat");
+  assert.strictEqual(canaryStore.allUsers().length, 2, "canary backend should merge file/sqlite user views");
+  assert.deepStrictEqual(canaryStore.getCanaryChatIds(), ["canary-chat"]);
 } finally {
   resetStoreState();
   fs.rmSync(tempDir, { recursive: true, force: true });
   fs.rmSync(tempDirIsolated, { recursive: true, force: true });
   fs.rmSync(sqliteDir, { recursive: true, force: true });
+  fs.rmSync(canaryDir, { recursive: true, force: true });
 }

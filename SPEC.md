@@ -1,6 +1,8 @@
 # SignalBrief — Product Specification
 
-*Last updated: March 5, 2026 (reflects current code in this branch)*
+*Last reviewed: March 13, 2026*
+
+Scope: current runtime behavior, persisted data shape, and API contracts. Setup, deployment, and operating procedures live in [README.md](./README.md) and the active docs under [`docs/planning/`](./docs/planning/).
 
 ---
 

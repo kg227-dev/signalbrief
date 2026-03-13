@@ -17,7 +17,7 @@ config.json
 # Runtime state (workspace-level, not repo-level)
 spend_state.json
 system_state.json
-archive/
+/archive/
 test-results/
 
 # Tooling and dependency artifacts

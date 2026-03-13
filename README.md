@@ -1,481 +1,142 @@
 # SignalBrief
 
-> AI-curated daily news digest for strategy professionals across AI, healthcare, finance, PE, policy, and more.
+AI-curated daily briefings for strategy professionals across AI, healthcare, finance, policy, private equity, and other cross-sector topics.
 
-Each user gets a personalized briefing: selected topics, delivery schedule, analysis depth, and item count. SignalBrief delivers to Telegram and email, tracks engagement, and continuously tunes relevance.
-
----
-
-## Current Focus (March 2026)
-
-- Tier 1 quality: measurable relevance, cross-day freshness, stronger analyst-grade output quality
-- Tier 2 personalization: save/click/feedback loops with automatic topic-weight adjustment
-- Tier 3 distribution: public digest pages, admin reliability controls, and cloud-first scheduling
-
-Roadmap + audit backlog: [`docs/features.md`](./docs/features.md)
-
----
-
-## Recent Changes (Last 24 Hours)
-
-- `3b44d02` Improved custom-topic recall and depth prompt rigor
-- `33b328f` Added cloud cutover runbook and scheduler health checks
-- `8d3ceb1` Added always-on scheduler worker and cloud deploy stack
-- `1d2f7bd` Admin now surfaces overdue deliveries in today schedule
-- `8f7f2eb` Added failed-delivery resend panel in admin
-
----
+Each user gets a personalized morning digest with topic filtering, relevance ranking, depth controls, and delivery through Telegram and HTML email.
 
 ## What It Does
 
-- Fetches business/strategy news via Perplexity Sonar across 17 standard topics
-- Fetches additional dedicated custom-topic pulls for active due users in the same run
-- Deduplicates against recent archives and enforces source/tag diversity caps
-- Enriches selected items with Claude Haiku (`wim_brief`, `wim`, `baseScore`, `implications`, `watch_next`)
-- Scores per-user relevance with topic match + topic weights + specialist-mode adjustment
-- Delivers scheduled and on-demand digests through Telegram and HTML email
-- Tracks engagement events (`sent`, `clicked`, `saved`, `ignored`, `feedback`, `topic_weight_adjusted`)
-- Computes and stores Digest Quality Score (DQS) history per user
-- Archives full run output by ET date and exposes user-scoped archive APIs
-- Provides admin operations for diagnostics, bulk actions, messaging, and run control
+- Fetches and deduplicates daily business and strategy news across 17 standard topics plus ranked custom topics.
+- Enriches items with consultant-grade "why it matters" analysis.
+- Personalizes delivery per user with topic weights, specialist-mode boosts, and engagement feedback.
+- Delivers scheduled and on-demand digests through Telegram and email.
+- Exposes onboarding, settings, archive, public digest, and admin workflows through the web runtime.
 
----
+## Quick Start
 
-## Architecture
+Requirements:
 
-```text
-scheduler-worker.js (optional startup run + 5-min interval loop)
-        |
-        v
-digest.js (run lock + due-user scheduling + catch-up window)
-        |
-        +--> Perplexity Sonar (standard topics)
-        +--> Perplexity Sonar (ranked custom topics, capped per run)
-        |
-        v
-cross-day dedup (archive-aware) + selectItems() caps
-        |
-        v
-Claude Haiku enrichment (wim + baseScore + implications + watch_next)
-        |
-        v
-Per-user fan-out:
-  - topic filter (standard + custom keyword matching)
-  - relevanceScore = base*0.6 + topicMatch*0.4 + weightBonus + specialistBonus
-  - depth transform (scan/brief/deep)
-  - DQS compute + engagement logging
-  - Telegram + email delivery
-        |
-        v
-archive/YYYY-MM-DD.json + data/cost-log.json + user JSON state updates
+- Node.js 22+
+- `config.json` copied from `config.example.json`
+
+Local boot:
+
+```bash
+cp config.example.json config.json
+npm install
+./start.sh
 ```
 
----
+Individual processes:
 
-## Repository Map
+```bash
+npm run web
+npm run bot
+npm run worker
+```
 
-| Path | Purpose |
-|------|---------|
-| `src/entrypoints/` | Process entrypoints (`digest`, `bot`, `worker`) |
-| `src/domains/` | Canonical domain imports (`digest`, `reply`, `personalization`, `engagement`) |
-| `src/platform/` | Canonical platform imports (`config`, `store`, `mailer`, `scheduler`, `types`) |
-| `src/digest/`, `src/runtime/` | Current implementation modules behind canonical facades |
-| `src/jobs/` | Background jobs (`digest-runner`, reengagement) |
-| `web/server/` | Canonical web server runtime imports |
-| `web/api/` | Canonical API grouping (`admin`, `core`, `public`) |
-| `web/services/` | Service grouping indexes and implementations |
-| `web/client/` | Canonical target for page/state/action client modules |
-| `web/*.html`, `web/*.js`, `web/style.css` | Static assets served in production |
-| `tests/contracts/` | Contract/integration tests |
-| `test-harness/` | Deterministic QA harness and matrix runner |
-| `scripts/` | Smoke checks and verification scripts |
-| `deploy/launchagents/` | LaunchAgent template files for local Mac fallback ops |
-| `docs/` | Backlog, planning, marketing, onboarding, and contribution docs |
-| `artifacts/` | Ignored generated local outputs |
+Core checks:
 
-Quick navigation for new engineers:
-- [Docs Index](./docs/INDEX.md)
+```bash
+npm test
+npm run smoke:worker
+npm run smoke:admin-scheduler
+```
+
+## Runtime At A Glance
+
+```text
+scheduler-worker -> digest pipeline -> per-user ranking -> Telegram/email delivery
+       |                    |                          |
+       |                    |                          +-> engagement events + user state
+       |                    +-> archive + cost log
+       +-> scheduler heartbeat + health surface
+```
+
+Primary processes:
+
+- `src/entrypoints/scheduler-worker.js`
+- `src/entrypoints/digest.js`
+- `src/entrypoints/bot-server.js`
+- `web/server.js`
+
+Canonical code surfaces:
+
+- `src/domains/*` for domain logic
+- `src/platform/*` for infrastructure adapters
+- `web/api/*` for route registration
+- `web/services/*` for web business logic
+- `web/client/*` for browser-facing modules
+
+## Documentation
+
+Start here:
+
+- [Documentation Index](./docs/INDEX.md)
+- [Product and System Contract](./SPEC.md)
+- [Format Rules](./FORMAT-RULES.md)
+- [Features and Backlog](./docs/features.md)
+
+Engineering reference:
+
+- [Repository Map](./docs/repository-map.md)
 - [First 30 Minutes](./docs/onboarding-first-30-minutes.md)
 - [Change-to-Test Map](./docs/change-to-test-map.md)
 - [Path and Import Rules](./docs/contributing-path-rules.md)
 
----
+Active planning:
 
-## Setup
+- [6-Week Execution Plan](./docs/planning/6-week-execution-plan-2026-03-16.md)
+- [Production Cutover Runbook](./docs/planning/production-cutover-ubuntu.md)
+- [Reliability Floor Runbook](./docs/planning/reliability-floor-runbook.md)
+- [Release Policy](./docs/planning/release-policy.md)
 
-```bash
-# 1. Configure
-cp config.example.json config.json
+Strategy and marketing:
 
-# 2. Start all local services
-./start.sh
+- [Marketing Strategy](./docs/strategy/marketing-strategy.md)
+- [Marketing Execution Playbook](./docs/strategy/marketing-execution-playbook.md)
 
-# Optional individual processes
-node web/server.js
-node src/entrypoints/bot-server.js
-node src/entrypoints/scheduler-worker.js
-
-# Manual digest runs
-node src/entrypoints/digest.js
-node src/entrypoints/digest.js --chatId 123456789
-```
-
-### Useful scripts
+## Common Commands
 
 ```bash
-npm run smoke:worker
-npm run smoke:admin-scheduler
-npm run ops:deploy:prod
-npm run ops:deploy:web
-npm run ops:verify-runtime:quick
-npm run ops:verify-runtime
-npm run ops:backup:state
-npm run ops:drill:restore-state -- --latest --clean
-npm run ops:watchdog-scheduler
+npm run web
+npm run bot
+npm run worker
+npm test
 npm run qa:harness
 npm run qa:matrix
-```
-
-### Production deployment (recommended — no laptop dependency)
-
-Run SignalBrief on an always-on Linux VM/container host. This removes dependency on a Mac being awake.
-
-Current production status (2026-03-06): live on always-on Ubuntu VM (`web` + `bot` + `worker`) with Cloudflare tunnel connector running on VM.
-
-1. Provision a small always-on host (2 vCPU / 2 GB RAM is enough for current scale).
-2. Copy repo + `config.json` to that host.
-3. Create `.env`:
-```bash
-cp .env.example .env
-```
-4. Start all services:
-```bash
-docker compose up -d --build
-```
-5. Verify runtime health before accepting traffic:
-```bash
-npm run ops:verify-runtime
-```
-
-### Fast production deploy (one command)
-
-From your local repo:
-```bash
 npm run ops:deploy:prod
-```
-
-For web-only/admin/UI hotfixes (no bot/worker restart):
-```bash
-npm run ops:deploy:web
-```
-
-This performs:
-1. Package current workspace to `/tmp/signalbrief-deploy-<sha>.tgz`
-2. Upload to VM over SSH
-3. Extract in `/opt/signalbrief/app`
-4. Restart `web bot worker` with `docker compose up -d --build`
-5. Run remote runtime checks (`ops:verify-runtime:quick`)
-6. Run public checks (`/`, cache-busted `index.js`, `/api/health/scheduler`)
-
-Deploy packaging intentionally excludes mutable/runtime state: `data/`, `archive/`, `config.json`, and `.env*` are not copied from local machine to production.
-
-Landing-page assets are automatically cache-busted at runtime (`?v=<asset_version>`) using server-side token replacement in `index.html`.
-
-Optional env overrides:
-- `DEPLOY_SSH_HOST` (default `129.213.92.102`)
-- `DEPLOY_SSH_USER` (default `ubuntu`)
-- `DEPLOY_SSH_KEY` (default `~/.ssh/signalbrief_vm`)
-- `DEPLOY_REMOTE_DIR` (default `/opt/signalbrief/app`)
-- `DEPLOY_PUBLIC_URL` (default `https://getsignalbrief.com`)
-- `DEPLOY_SERVICES` (default `web bot worker`)
-- `ALLOW_EXAMPLE_SIGNUPS` (`0` by default in `NODE_ENV=production`; set to `1` only for controlled testing)
-
-Optional flags:
-- `--skip-build`
-- `--skip-remote-verify`
-- `--skip-public-verify`
-
-### Staging/preview deploy lane (required before runtime prod changes)
-
-Use the staging wrapper to run the same deploy + public-gate checks against a lower-blast-radius target:
-
-```bash
-export DEPLOY_STAGING_SSH_HOST=<staging-vm-host>
-export DEPLOY_STAGING_PUBLIC_URL=https://staging.getsignalbrief.com
 npm run ops:deploy:staging
 ```
 
-Optional staging overrides:
-- `DEPLOY_STAGING_SSH_USER`
-- `DEPLOY_STAGING_SSH_KEY`
-- `DEPLOY_STAGING_REMOTE_DIR`
-- `DEPLOY_STAGING_REMOTE_TMP_DIR`
-- `DEPLOY_STAGING_SERVICES`
+## Production Notes
 
-Required staging gates (same shape as prod):
-- `GET /` returns `200`
-- cache-busted landing asset (`index.js?v=...`) is rendered
-- `GET /api/health/scheduler` returns `{"ok": true}`
+Production is cloud-first and VM-hosted. Detailed deploy, backup, rollback, and migration procedures intentionally live outside this README:
 
-Smoke scripts now force an isolated temp data directory (`SIGNALBRIEF_DATA_DIR=/tmp/...`) to avoid polluting production-like user data during local/runtime checks.
+- [Production Cutover Runbook](./docs/planning/production-cutover-ubuntu.md)
+- [Reliability Floor Runbook](./docs/planning/reliability-floor-runbook.md)
+- [Release Policy](./docs/planning/release-policy.md)
 
-Optional store backend switch (default remains file-store):
-- `SIGNALBRIEF_STORE_BACKEND=file` (default)
-- `SIGNALBRIEF_STORE_BACKEND=sqlite` (experimental, requires Node `node:sqlite`)
-- Optional SQLite path override: `SIGNALBRIEF_SQLITE_PATH=/opt/signalbrief/app/data/signalbrief.sqlite`
+The active execution plan remains in place at [`docs/planning/6-week-execution-plan-2026-03-16.md`](./docs/planning/6-week-execution-plan-2026-03-16.md) and is intentionally not summarized here.
 
-File-to-SQLite migration tooling (with preflight + release artifact):
-- Preflight only: `npm run ops:store:migrate:file-to-sqlite:preflight -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
-- Execute migration: `npm run ops:store:migrate:file-to-sqlite -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
-- VM checklist + evidence contract: [`docs/planning/week5-day23-store-migration-preflight.md`](./docs/planning/week5-day23-store-migration-preflight.md)
-
-Dual-read parity compare (staging/local verification):
-- Run compare: `npm run ops:store:dual-read-compare -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
-- Report + CI gate details: [`docs/planning/week5-day24-dual-read-parity.md`](./docs/planning/week5-day24-dual-read-parity.md)
-
-Rollback tooling (sqlite -> file-store):
-- Replay rollback: `npm run ops:store:rollback:sqlite-to-file -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
-- Strict rollback verify: `npm run ops:store:rollback:verify -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
-- Risk review + go/no-go + rollback checklist: [`docs/planning/week5-day25-cutover-risk-review.md`](./docs/planning/week5-day25-cutover-risk-review.md)
-
-Canary backend router + dark deploy path:
-- `SIGNALBRIEF_STORE_BACKEND=canary` enables per-chat backend routing
-- `SIGNALBRIEF_STORE_CANARY_CHAT_IDS=chat1,chat2` chooses sqlite canary cohort
-- `SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES=1` mirrors canary writes into file-store (default)
-- Guard thresholds: `npm run ops:store:canary-guard -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
-- Day 26 runbook: [`docs/planning/week6-day26-canary-dark-deploy.md`](./docs/planning/week6-day26-canary-dark-deploy.md)
-
-Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
-```bash
-SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler
-```
-
-Services in `docker-compose.yml`:
-- `web` — onboarding/settings/archive/admin HTTP layer
-- `bot` — Telegram command + callback handler via long polling (`getUpdates`)
-- `worker` — 24/7 scheduler loop that runs `digest.js` every 5 minutes
-
-Telegram ingress defaults to polling-first runtime mode. Webhook mode is legacy/optional and not active in normal production operation.
-
-Persistent state is mounted on disk (`./data`, `./archive`), so user state and digests survive restarts.
-
-Full VM cutover commands: [`docs/planning/production-cutover-ubuntu.md`](./docs/planning/production-cutover-ubuntu.md)
-
-Reliability-floor operations runbook (backups + restore drills): [`docs/planning/reliability-floor-runbook.md`](./docs/planning/reliability-floor-runbook.md)
-
-Week 2 security hardening review + merge gate: [`docs/planning/week2-security-hardening-review-2026-03-12.md`](./docs/planning/week2-security-hardening-review-2026-03-12.md)
-
-Release policy (staging-first + hotfix path): [`docs/planning/release-policy.md`](./docs/planning/release-policy.md)
-
-### macOS LaunchAgents (local fallback only)
-
-Four plist files are installed at `~/Library/LaunchAgents/`:
-
-| Service | LaunchAgent label |
-|---------|------------------|
-| Web server (port 3003) | `com.jarvis.signalbrief-web` |
-| Telegram bot | `com.jarvis.signalbrief-bot` |
-| Daily digest via LaunchAgent interval (legacy) | `com.jarvis.signalbrief-digest` |
-| Cloudflare Tunnel (public HTTPS) | `com.jarvis.signalbrief-tunnel` |
-
-Load them after filling in `config.json`:
-```bash
-launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-web.plist
-launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-bot.plist
-launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-digest.plist
-launchctl load ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist
-```
-
-`BASE_URL=https://getsignalbrief.com` is set in the web LaunchAgent — no extra config needed for production URLs.
-
-Note: these LaunchAgents are now fallback/rollback only and are intentionally unloaded in normal production operation.
-Template for re-engagement fallback job: `deploy/launchagents/com.jarvis.signalbrief-reengagement.plist`.
----
-
-## Configuration Keys (`config.json`)
-
-SignalBrief now validates `config.json` schema at startup and fails fast on invalid shape/values (missing required objects, bad time format, invalid topic definitions, etc.).
-
-### `keys`
-
-| Key | Required | Notes |
-|-----|----------|-------|
-| `perplexity` | Yes | Perplexity Sonar API key |
-| `anthropic` | Yes | Claude API key |
-| `signalBriefBotToken` | Yes | Primary Telegram bot token |
-| `telegramBotToken` | Optional | Legacy fallback bot token |
-| `resendApiKey` | Optional | If missing, mail falls back to Gmail OAuth |
-| `fromEmail` | Recommended | Sender email when using Resend |
-| `fromName` | Recommended | Sender display name |
-| `googleClientId` | Required for Gmail fallback | OAuth client ID |
-| `googleClientSecret` | Required for Gmail fallback | OAuth client secret |
-| `googleRefreshToken` | Required for Gmail fallback | OAuth refresh token |
-
-### `digest`
-
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `itemCount` | `7` | Base global selection target |
-| `maxItemsPerTag` | `2` | Diversity cap per tag |
-| `maxItemsPerSourceDomain` | `2` | Diversity cap per source domain |
-| `catchupWindowMinutes` | `720` | Scheduled catch-up window |
-| `crossDayDedupDays` | `3` | Archive lookback for duplicate suppression |
-| `maxCustomItemsPerRun` | `3` | Cap custom-topic items in selected pool |
-| `minBaseScoreForFinal` | `6.5` | Strong-item filtering threshold |
-| `lookbackHours` | `48` | News freshness target |
-
----
-
-## Telegram Commands
-
-| Command | Behavior |
-|---------|----------|
-| `/start` | Welcome + onboarding/link flow |
-| `/start your@email.com` | Link Telegram chat to existing account |
-| `/verify 123456` | Complete email verification for account linking |
-| `/digest` | Trigger on-demand digest (15-minute cooldown) |
-| `/settings` | Show preferences summary |
-| `/bookmarks` | Show saved items |
-| `/topics` | Show tracked topics and adjustments |
-| `/help` | Show command help |
-
-### Natural-language intents (Claude parsed)
-
-| Input Pattern | Parsed Action |
-|---------------|---------------|
-| `save 3`, `save 1,4,6` | Save digest items |
-| `more AI` | Increase topic weight |
-| `less pharma` | Decrease topic weight |
-| `add GLP-1` | Add custom topic |
-| `bookmarks` / `saved items` | Show bookmarks |
-| `settings` / `preferences` | Show settings summary |
-| `topics` | Show topics list |
-| Other question | Claude short-form answer |
-
-Inline callback buttons per digest item: `Save`, `More like this`, `Less like this`, plus digest-level feedback (`Great`, `Fine`, `Meh`).
-
----
-
-## Web Routes
-
-### User pages
-
-| URL | Purpose |
-|-----|---------|
-| `/` | Onboarding |
-| `/settings?token=...` | Settings editor |
-| `/archive` | Archive browser/search |
-| `/digest` or `/digest/YYYY-MM-DD` | Public share page |
-
-### Public APIs
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `GET` | `/api/topics` | Return standard topic lists |
-| `GET` | `/api/user?token=...` | Return user profile by token |
-| `GET` | `/api/health/scheduler` | Scheduler heartbeat + digest lock health (200 healthy, 503 unhealthy) |
-| `POST` | `/api/signup` | Create user + trigger welcome digest |
-| `POST` | `/api/settings` | Update token-authenticated user settings |
-| `GET` | `/api/archive?token=...` | User-scoped archive list |
-| `GET` | `/api/archive/all?token=...` | User-scoped flattened archive feed |
-| `GET` | `/api/archive/:date?token=...` | User-scoped full digest for date |
-| `GET` | `/api/click?token=...&did=...&item=...&url=...` | Tracked outbound redirect |
-| `POST` | `/api/bookmarks` | Add/remove bookmark by URL |
-| `POST` | `/api/request-link` | Send magic link email |
-| `GET` | `/api/unsubscribe/confirm?token=...` | Browser unsubscribe confirmation redirect |
-| `POST` | `/api/unsubscribe/one-click?token=...` | RFC8058 one-click unsubscribe |
-| `GET`/`POST` | `/api/unsubscribe/legacy?email=...&sig=...` | Legacy signed-email bridge |
-| `GET`/`POST` | `/api/unsubscribe` | Deprecated compatibility shim to new unsubscribe endpoints |
-
-### Admin pages + APIs (session-authenticated)
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `GET` | `/admin/login` | Admin login page |
-| `GET` | `/admin` | Admin dashboard |
-| `GET` | `/admin/user?email=...` | Per-user editor |
-| `POST` | `/api/admin/login` | Admin login, set cookie |
-| `POST` | `/api/admin/logout` | Clear admin cookie |
-| `GET` | `/api/admin/check` | Session health check |
-| `GET` | `/api/admin/stats` | Summary/health/runs/roster payload |
-| `GET` | `/api/admin/user-by-email?email=...` | User details + auto-adjustment history |
-| `GET` | `/api/admin/audit?email=...` | User action/message audit timeline |
-| `POST` | `/api/admin/bulk-action` | Dry-run or apply bulk user operations |
-| `POST` | `/api/admin/launch-agent-action` | Restart LaunchAgent service |
-| `POST` | `/api/admin/update-delivery-time` | Set one user’s delivery time |
-| `POST` | `/api/admin/run-digest` | Trigger targeted or full digest run |
-| `POST` | `/api/admin/message-user` | Send operator message via email/Telegram |
-
----
-
-## Topics (17)
-
-| Group | Tag |
-|-------|-----|
-| Industry | `HEALTHCARE` |
-| Industry | `FINANCIAL SERVICES` |
-| Industry | `PE×M&A` |
-| Industry | `ENERGY` |
-| Industry | `CONSUMER` |
-| Industry | `LIFE SCIENCES` |
-| Industry | `TECHNOLOGY` |
-| Industry | `INDUSTRIALS` |
-| Industry | `REAL ESTATE` |
-| Industry | `PUBLIC SECTOR` |
-| Capability | `AI×TECH` |
-| Capability | `STRATEGY` |
-| Capability | `POLICY×REGULATORY` |
-| Capability | `SUSTAINABILITY` |
-| Capability | `DIGITAL` |
-| Capability | `M&A ADVISORY` |
-| Capability | `TALENT` |
-
-Custom topics are stored as `custom_<slug>` and fetched as dedicated Perplexity queries for due users.
-
----
+Store-migration and canary rollout procedures remain under `docs/planning/` while the current execution plan is active.
 
 ## Stack
 
-- Node.js 22+ (stdlib-only)
+- Node.js 22+
 - Perplexity Sonar
-- Anthropic Claude Haiku (`claude-haiku-4-5`)
-- Telegram Bot API (long polling)
-- Resend (primary email)
-- Gmail OAuth2 (fallback email)
-- Cloudflare Tunnel + custom domain
-- JSON file storage (`data/`, `archive/`)
-
----
-
-## LaunchAgents (Legacy Mac Ops)
-
-| Service | LaunchAgent Label | Current Role |
-|---------|-------------------|--------------|
-| Web | `com.jarvis.signalbrief-web` | Active for local Mac runtime |
-| Bot | `com.jarvis.signalbrief-bot` | Active for local Mac runtime |
-| Digest Cron | `com.jarvis.signalbrief-digest` | Legacy/optional; expected stopped in cloud-first mode |
-| Tunnel | `com.jarvis.signalbrief-tunnel` | Active when exposing local runtime |
-
----
-
-## Known Limitations
-
-- User and admin session state is in-process memory/JSON files (no shared DB/session store).
-- Admin APIs are not localhost-only by default; protection is session auth. Local bypass is available only for explicit non-production runtimes (`NODE_ENV`/`SIGNALBRIEF_ENV` set to dev/test/local) and read-only local admin routes.
-- If a user JSON file is corrupt, `readUser()` falls back to defaults for that chatId.
-- Custom keyword tracking is capped at 3 per user (enforced by UI, API, and Telegram command path).
-
----
+- Anthropic Claude Haiku
+- Telegram Bot API via long polling
+- Resend with Gmail fallback
+- JSON file store with optional SQLite migration path
+- Cloudflare Tunnel + Docker Compose runtime
 
 ## Contributing
 
-1. Create a branch for focused changes.
-2. Run relevant smoke checks (`npm run smoke:worker`, `npm run smoke:admin-scheduler`).
-3. For ranking/quality changes, run harness suites (`npm run qa:harness`).
-4. Keep docs (`README.md`, `SPEC.md`, `docs/features.md`) in sync with behavior changes.
-
----
+1. Work from the canonical module surfaces when available.
+2. Use [Change-to-Test Map](./docs/change-to-test-map.md) to choose the right checks.
+3. Keep [README.md](./README.md), [SPEC.md](./SPEC.md), and [docs/features.md](./docs/features.md) aligned with behavior changes.
 
 ## License
 
-No license file is currently present in this repository. Add a `LICENSE` file before open-source redistribution.
+No license file is currently present in this repository.

@@ -1,6 +1,7 @@
 # SignalBrief CMO Playbook: 0 → 100 Daily Readers in 90 Days
 
 *Written March 6, 2026 · Grounded in the live product at getsignalbrief.com*
+*Historical note: archived during the March 2026 docs consolidation. Use [`docs/strategy/marketing-strategy.md`](../../../strategy/marketing-strategy.md) and [`docs/strategy/marketing-execution-playbook.md`](../../../strategy/marketing-execution-playbook.md) for current guidance.*
 
 ---
 
@@ -211,9 +212,9 @@ A user hasn't opened in 3 days. Here's the email:
 > I noticed you haven't opened SignalBrief in a few days. No judgment — inboxes are brutal.
 >
 > A few things that might help:
-> - **Wrong topics?** [Update your topics](settings link) — takes 30 seconds
-> - **Wrong time?** Your digest arrives at [their delivery time]. You can change it [here](settings link).
-> - **Too much?** Switch to "headline only" depth for a faster scan — [adjust here](settings link).
+> - **Wrong topics?** Update your topics (settings link) — takes 30 seconds
+> - **Wrong time?** Your digest arrives at [their delivery time]. You can change it from the settings link.
+> - **Too much?** Switch to "headline only" depth for a faster scan using the settings link.
 >
 > Or just reply to this email and tell me what's not working. I read every reply.
 >
@@ -227,7 +228,7 @@ A user hasn't opened in 3 days. Here's the email:
 
 **The churn moment:** Day 3–5 is the highest-risk window. The novelty has worn off, and the digest either has or hasn't earned its place. The most common reason for early churn isn't "bad content" — it's "not personalized enough yet." The user selected Healthcare and AI but keeps getting Industrial and Sustainability stories ranked too high.
 
-**Intervention:** After digest #3, include a one-line note in the email: "Your brief is getting smarter. Tap 'more' or 'less' on any topic to tune it, or [update your topics here](settings link)." Remind them that the product improves with use. This reframes "not perfect yet" as "learning phase" instead of "bad product."
+**Intervention:** After digest #3, include a one-line note in the email: "Your brief is getting smarter. Tap 'more' or 'less' on any topic to tune it, or update your topics from the settings link." Remind them that the product improves with use. This reframes "not perfect yet" as "learning phase" instead of "bad product."
 
 ---
 

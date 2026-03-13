@@ -1,52 +1,44 @@
 # Repository Map
 
-Use this document when you are new to SignalBrief and need to know where to read or change code.
+Use this document when you need to know where code should live or where to start reading.
 
-## Top-Level Layout
+## Canonical Surfaces
 
-| Path | What it contains | Start here when you need to... |
-| --- | --- | --- |
-| `src/entrypoints/` | Runtime entry processes (`digest`, `bot`, `scheduler`) | understand how a process boots and dispatches work |
-| `src/domains/` | Canonical domain import surfaces (`digest`, `reply`, `personalization`, `engagement`) | find the "official" entry module for domain logic |
-| `src/platform/` | Canonical infrastructure import surfaces (`config`, `store`, `mailer`, `scheduler`, `types`) | integrate storage, mail, config, or scheduler behavior |
-| `src/digest/` | Digest selection, formatting, and archive pipeline implementation | debug ranking/selection/output behavior |
-| `src/runtime/` | Runtime implementation modules and compatibility layers | patch existing runtime behavior with minimal churn |
-| `src/jobs/` | Background job orchestration (`digest-runner`, reengagement) | debug scheduled or batch execution flows |
-| `web/api/` | Canonical API route grouping (`admin`, `core`, `public`) | modify route registration or API boundaries |
-| `web/services/` | Service modules used by web/API layers (`admin`, `user`, `shared`) | change business logic behind routes |
-| `web/client/` | Canonical client/page state/action grouping | update browser-facing UI behavior |
-| `web/*.html`, `web/*.js`, `web/style.css` | Served static assets and compatibility runtime files | patch live page/UI behavior quickly |
-| `tests/contracts/` | Contract and integration tests grouped by subsystem (`entrypoints`, `web-api`, `jobs`, `harness`) | validate import/runtime contracts after refactors |
-| `test-harness/` | Deterministic quality harness and matrix tooling | run quality scoring and evaluation scenarios |
-| `scripts/` | Utility scripts (`smoke-*`, `check-*`, `report-*`) | run quick checks, operational smokes, and reports |
-| `docs/` | Engineering docs, onboarding, planning, and product notes | understand conventions and architecture decisions |
-| `artifacts/` | Local generated outputs (ignored) | inspect generated local files without polluting root |
+| Path | Use it for |
+| --- | --- |
+| `src/entrypoints/` | runtime bootstraps for digest, worker, and bot processes |
+| `src/domains/` | stable domain-level imports for digest, reply, personalization, and engagement |
+| `src/platform/` | stable infrastructure imports for config, store, mailer, scheduler, and shared types |
+| `web/api/` | API route grouping boundaries |
+| `web/services/` | web business logic behind routes |
+| `web/client/` | browser-side page, state, and action modules |
 
-## Canonical vs Compatibility Paths
+## Implementation Areas
 
-- Prefer canonical paths for new imports:
-  - `src/domains/*`
-  - `src/platform/*`
-  - `web/api/*`
-  - `web/services/*`
-  - `web/client/*`
-- Compatibility paths still exist for migration safety:
-  - `src/runtime/*`
-  - `src/digest/*`
-  - `web/routes/*`
-  - top-level runtime shim files
+| Path | What is there now |
+| --- | --- |
+| `src/digest/` | digest policy and runtime implementation modules |
+| `src/runtime/` | compatibility runtime modules that still back parts of the app |
+| `src/jobs/` | background jobs such as reengagement |
+| `web/server/` | web server composition helpers |
+| `web/routes/` | compatibility route modules still in use during migration |
+| `web/*.html`, `web/*.js`, `web/style.css` | static assets served directly in production |
+| `tests/contracts/` | contract and integration coverage grouped by subsystem |
+| `test-harness/` | deterministic quality harness and matrix tooling |
+| `scripts/` | smoke checks, reports, and operational utilities |
 
-When touching old paths, update callsites toward canonical paths in the same change when practical.
+## Documentation Areas
 
-## Process Entry Checklist
+| Path | Purpose |
+| --- | --- |
+| `docs/` | canonical engineering and planning docs |
+| `docs/strategy/` | living strategy and marketing docs |
+| `docs/archive/` | historical source material retained for context |
+| `artifacts/` | ignored generated outputs for local analysis and testing |
 
-- Digest run: `src/entrypoints/digest.js`
-- Bot process: `src/entrypoints/bot-server.js`
-- Scheduler loop: `src/entrypoints/scheduler-worker.js`
-- Web server: `web/server.js`
+## Start Here
 
-## Pair With
-
+- [Documentation Index](./INDEX.md)
 - [First 30 Minutes](./onboarding-first-30-minutes.md)
 - [Change-to-Test Map](./change-to-test-map.md)
 - [Path and Import Rules](./contributing-path-rules.md)

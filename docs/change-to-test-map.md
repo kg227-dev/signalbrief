@@ -19,6 +19,7 @@ Use this as the default "what should I run?" guide before opening a PR.
 | `web/*.html`, `web/*.js`, settings/onboarding client flow | `npm test` + `npm run smoke:admin-scheduler` | catches UI/runtime integration breaks through route checks |
 | `test-harness/*` | `npm test` + `npm run qa:harness` + `npm run qa:matrix` | ensures harness and matrix behavior remain consistent |
 | `scripts/smoke-*`, `scripts/check-*`, `scripts/report-*` | `npm test` + script-specific command | confirms script contract stays runnable |
+| `*.md`, doc moves, doc indexes | manual link/path verification | confirm canonical docs remain reachable from `README.md` or `docs/INDEX.md` and moved markdown links still resolve |
 
 ## Contract Test Locations
 

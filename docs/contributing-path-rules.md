@@ -54,3 +54,12 @@ Keep existing `npm run` script names stable unless there is an explicit migratio
 - Split move-only and behavior-changing edits into separate commits.
 - Preserve external route contracts and top-level runtime commands.
 - Include an explicit test command list in the PR description using [Change-to-Test Map](./change-to-test-map.md).
+
+## 7) Documentation Placement
+
+- keep canonical engineering docs under `docs/` or repo root when tool location requires it
+- keep living strategy docs under `docs/strategy/`
+- keep active execution docs under `docs/planning/`
+- move dated snapshots, generated content, and one-off campaigns into `docs/archive/`
+
+When you create or move a canonical doc, update [Documentation Index](./INDEX.md) in the same change.

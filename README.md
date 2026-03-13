@@ -86,6 +86,7 @@ Engineering reference:
 
 Active planning:
 
+- [Planning Hub](./docs/planning/README.md)
 - [6-Week Execution Plan](./docs/planning/6-week-execution-plan-2026-03-16.md)
 - [Production Cutover Runbook](./docs/planning/production-cutover-ubuntu.md)
 - [Reliability Floor Runbook](./docs/planning/reliability-floor-runbook.md)
@@ -95,6 +96,10 @@ Strategy and marketing:
 
 - [Marketing Strategy](./docs/strategy/marketing-strategy.md)
 - [Marketing Execution Playbook](./docs/strategy/marketing-execution-playbook.md)
+
+Historical material:
+
+- [Archive Policy](./docs/archive/README.md)
 
 ## Common Commands
 

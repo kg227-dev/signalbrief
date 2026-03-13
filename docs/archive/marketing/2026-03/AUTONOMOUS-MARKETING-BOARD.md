@@ -1,8 +1,10 @@
 # Autonomous Marketing Board (2026-03-06)
 
+*Historical note: archived during the March 2026 docs consolidation. Current guidance lives in [`docs/strategy/marketing-strategy.md`](../../../strategy/marketing-strategy.md) and [`docs/strategy/marketing-execution-playbook.md`](../../../strategy/marketing-execution-playbook.md).*
+
 ## Actions Completed
 
-- [x] Created automated weekly marketing report script: `scripts/marketing-weekly-report.js`
+- [x] Created automated weekly marketing report script (historical name): `scripts/marketing-weekly-report.js`
 - [x] Generated this week's metrics snapshot from live project data
 - [x] Prepared next-week LinkedIn post batch using recent digest signals
 - [x] Prepared outreach and community copy batch ready to paste and send
@@ -34,5 +36,5 @@
 ## Runbook
 
 ```bash
-node scripts/marketing-weekly-report.js --as-of 2026-03-06 > marketing/weekly-snapshot-2026-03-06.md
+node scripts/report-marketing-weekly.js --as-of 2026-03-06 > docs/archive/marketing/2026-03/weekly-snapshot-2026-03-06.md
 ```

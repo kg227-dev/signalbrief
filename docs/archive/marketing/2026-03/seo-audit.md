@@ -1,5 +1,6 @@
 # SignalBrief SEO Audit
 *Audited March 6, 2026 — from source files (site on Cloudflare Tunnel, not publicly crawlable by tools)*
+*Historical note: archived during the March 2026 docs consolidation. Current guidance lives in [`docs/strategy/marketing-strategy.md`](../../../strategy/marketing-strategy.md).*
 
 ---
 
@@ -155,7 +156,7 @@ getsignalbrief.com has a clean technical foundation — proper canonical tag, OG
 ### Strategic Investments — This Quarter
 
 1. **Publish 3 blog posts** (target: 1 per 2 weeks)
-   - Post 1: "Best Morning News Routine for Strategy Consultants (2026)" — draft is in `marketing/` folder
+   - Post 1: "Best Morning News Routine for Strategy Consultants (2026)" — archived draft lives in `docs/archive/marketing/2026-03/`
    - Post 2: "Morning Brew Isn't Built for Consultants — Here's What Is"
    - Post 3: "How AI Is Changing the Way Strategy Professionals Get Briefed"
 

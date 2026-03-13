@@ -50,16 +50,54 @@ function loadWelcomeTemplate() {
 }
 
 // ── HMAC helpers (legacy unsubscribe bridge) ───────────────────────────────────
-// Keeps backward compatibility for signed email-based legacy bridge URLs
-// (/api/unsubscribe/legacy) used by previously issued messages.
-function getUnsubscribeSigningSecret() {
-  const keys = getConfigKeys();
-  return (keys.anthropic || "").slice(-32) || "signalbrief-unsub-secret";
+// Legacy email+signature unsubscribe URLs are migration-only and can be retired
+// via UNSUBSCRIBE_LEGACY_* flags. Keep signature verification stable while
+// switching to a dedicated unsubscribe signing secret.
+function normalizeUnsubEmail(email) {
+  return String(email || "").toLowerCase().trim();
 }
 
-function signUnsubEmail(email) {
+function getUnsubscribeSigningSecret() {
+  const keys = getConfigKeys();
+  const explicit = String(process.env.SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET || "").trim()
+    || String(keys.unsubscribeSigningSecret || "").trim();
+  if (explicit) return explicit;
+  const adminHash = String(getConfig()?.admin?.passwordHash || "").trim();
+  if (adminHash) return adminHash;
+  return "signalbrief-unsub-secret-fallback";
+}
+
+function signUnsubEmail(email, options = {}) {
+  const normalized = normalizeUnsubEmail(email);
+  const legacy = options && options.legacy === true;
+  const payload = legacy ? normalized : `v2:${normalized}`;
+  const digest = crypto.createHmac("sha256", getUnsubscribeSigningSecret())
+    .update(payload)
+    .digest("hex");
+  return legacy ? digest.slice(0, 16) : digest;
+}
+
+function timingSafeStringEqual(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(left), Buffer.from(right));
+}
+
+function verifyUnsubEmailSignature(email, signature) {
+  const normalizedSig = String(signature || "").trim().toLowerCase();
+  if (!normalizedSig) return false;
+  const normalizedEmail = normalizeUnsubEmail(email);
+  if (!normalizedEmail) return false;
+  const expectedV2 = signUnsubEmail(normalizedEmail);
+  if (timingSafeStringEqual(normalizedSig, expectedV2)) return true;
+  const expectedLegacy = signUnsubEmailLegacy(normalizedEmail);
+  return timingSafeStringEqual(normalizedSig, expectedLegacy);
+}
+
+function signUnsubEmailLegacy(email) {
   return crypto.createHmac("sha256", getUnsubscribeSigningSecret())
-    .update(email.toLowerCase().trim())
+    .update(normalizeUnsubEmail(email))
     .digest("hex")
     .slice(0, 16);
 }
@@ -367,4 +405,5 @@ module.exports = {
   sendAutoPauseConfirmationEmail,
   buildOpenTrackingPixel,
   signUnsubEmail,
+  verifyUnsubEmailSignature,
 };

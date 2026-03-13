@@ -119,6 +119,7 @@ function validateConfigSchema(config) {
       "telegramBotToken",
       "signalBriefBotToken",
       "resendApiKey",
+      "unsubscribeSigningSecret",
       "fromEmail",
       "fromName",
     ].forEach((field) => {

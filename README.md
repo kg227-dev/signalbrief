@@ -35,6 +35,7 @@ Secret loading behavior:
 - `config.json` is ignored by git and should not contain production secrets.
 - If `config.json` is missing, runtime falls back to `config.example.json` for non-secret defaults.
 - CORS is allowlisted by origin (`TRUSTED_CORS_ORIGINS` / `CORS_ALLOWED_ORIGINS`) instead of wildcard defaults.
+- Legacy email+signature unsubscribe links can be retired by schedule (`UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC`) or immediate flags (`UNSUBSCRIBE_LEGACY_FORCE_DISABLE` / `UNSUBSCRIBE_LEGACY_FORCE_ENABLE`).
 
 Individual processes:
 

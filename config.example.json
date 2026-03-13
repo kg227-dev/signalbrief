@@ -171,6 +171,7 @@
     "telegramBotToken": "",
     "signalBriefBotToken": "",
     "resendApiKey": "",
+    "unsubscribeSigningSecret": "",
     "fromEmail": "digest@getsignalbrief.com",
     "fromName": "SignalBrief"
   }

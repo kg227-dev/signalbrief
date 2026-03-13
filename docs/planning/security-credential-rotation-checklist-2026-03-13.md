@@ -16,6 +16,9 @@ Secrets were previously present in tracked config. Runtime now loads secrets fro
    - generate a new salt
    - generate a new password hash from the new password + salt
    - update `SIGNALBRIEF_ADMIN_EMAIL`, `SIGNALBRIEF_ADMIN_SALT`, `SIGNALBRIEF_ADMIN_PASSWORD_HASH`
+6. Set a dedicated unsubscribe signing secret:
+   - update `SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET`
+   - set retirement window for legacy links via `UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC`
 
 ## Verification Steps
 

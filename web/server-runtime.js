@@ -11,7 +11,13 @@ const {
 } = require("./server-render-runtime");
 const { createStore } = require("../src/platform/store");
 const { loadConfig } = require("../src/platform/config");
-const { sendEmail, sendWelcomeEmail, sendReferralThankYou, signUnsubEmail } = require("../src/platform/mailer");
+const {
+  sendEmail,
+  sendWelcomeEmail,
+  sendReferralThankYou,
+  signUnsubEmail,
+  verifyUnsubEmailSignature,
+} = require("../src/platform/mailer");
 const {
   appendEngagementEventChecked,
   buildDigestId,
@@ -227,6 +233,7 @@ const {
   digestRunStatus,
   getCachedOrRefreshSchedulerHeartbeat,
   signUnsubEmail,
+  verifyUnsubEmailSignature,
   blankReengagementState,
   isLegacyArchiveEndpointEnabled,
   recordLegacyArchiveUsage,

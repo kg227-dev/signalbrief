@@ -1,4 +1,39 @@
 const { USER_STATUS } = require("../../src/platform/store");
+const LEGACY_UNSUBSCRIBE_RETIRED_CODE = "legacy_unsubscribe_retired";
+
+function resolveLegacyUnsubscribePolicyFromEnv(nowMs = Date.now()) {
+  const forceEnable = String(process.env.UNSUBSCRIBE_LEGACY_FORCE_ENABLE || "").trim() === "1";
+  const forceDisable = String(process.env.UNSUBSCRIBE_LEGACY_FORCE_DISABLE || "").trim() === "1";
+  const retireAfterUtc = String(process.env.UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC || "").trim();
+  if (forceEnable) {
+    return { enabled: true, reason: "force_enable", retireAfterUtc: retireAfterUtc || null };
+  }
+  if (forceDisable) {
+    return { enabled: false, reason: "force_disable", retireAfterUtc: retireAfterUtc || null };
+  }
+  if (!retireAfterUtc) {
+    return { enabled: true, reason: "no_deadline", retireAfterUtc: null };
+  }
+
+  const retireAfterMs = Date.parse(retireAfterUtc);
+  if (!Number.isFinite(retireAfterMs)) {
+    return { enabled: false, reason: "invalid_deadline", retireAfterUtc };
+  }
+  if (nowMs >= retireAfterMs) {
+    return { enabled: false, reason: "deadline_passed", retireAfterUtc };
+  }
+  return { enabled: true, reason: "deadline_active", retireAfterUtc };
+}
+
+function writeLegacyRetiredResponse(json, res, policy = {}) {
+  json(res, {
+    error: "legacy unsubscribe route retired",
+    code: LEGACY_UNSUBSCRIBE_RETIRED_CODE,
+    reason: String(policy.reason || "retired"),
+    retired_after_utc: policy.retireAfterUtc || null,
+    use: "/api/unsubscribe/one-click",
+  }, 410);
+}
 
 function buildResolveOneClickToken(findUserByToken) {
   return (rawToken) => {
@@ -10,12 +45,15 @@ function buildResolveOneClickToken(findUserByToken) {
   };
 }
 
-function buildResolveLegacyUnsubscribeToken(allUsers, signUnsubEmail) {
+function buildResolveLegacyUnsubscribeToken(allUsers, signUnsubEmail, verifyUnsubEmailSignature) {
   return (emailRaw, sigRaw) => {
     const email = decodeURIComponent(String(emailRaw || "")).toLowerCase().trim();
     const sig = String(sigRaw || "").trim();
     if (!email) return { ok: false, code: "email_required" };
-    if (!sig || sig !== signUnsubEmail(email)) return { ok: false, code: "invalid_signature" };
+    const signatureValid = typeof verifyUnsubEmailSignature === "function"
+      ? verifyUnsubEmailSignature(email, sig)
+      : (sig && sig === signUnsubEmail(email));
+    if (!signatureValid) return { ok: false, code: "invalid_signature" };
     const legacyUser = allUsers().find((user) => String(user.email || "").toLowerCase().trim() === email);
     return { ok: true, token: legacyUser?.token ? String(legacyUser.token) : "" };
   };
@@ -55,13 +93,22 @@ function createUnsubscribeActions(deps) {
     json,
     findUserByToken,
     signUnsubEmail,
+    verifyUnsubEmailSignature,
     allUsers,
     writeUser,
     blankReengagementState,
+    resolveLegacyUnsubscribePolicy,
   } = deps;
 
   const resolveOneClickToken = buildResolveOneClickToken(findUserByToken);
-  const resolveLegacyUnsubscribeToken = buildResolveLegacyUnsubscribeToken(allUsers, signUnsubEmail);
+  const resolveLegacyUnsubscribeToken = buildResolveLegacyUnsubscribeToken(
+    allUsers,
+    signUnsubEmail,
+    verifyUnsubEmailSignature
+  );
+  const resolveLegacyPolicy = typeof resolveLegacyUnsubscribePolicy === "function"
+    ? resolveLegacyUnsubscribePolicy
+    : () => resolveLegacyUnsubscribePolicyFromEnv();
   const unsubscribeByToken = buildUnsubscribeByToken(findUserByToken, writeUser);
 
   async function handleUnsubscribeConfirm(ctx) {
@@ -94,6 +141,12 @@ function createUnsubscribeActions(deps) {
 
   async function handleUnsubscribeLegacy(ctx) {
     const { req, res, url } = ctx;
+    const legacyPolicy = resolveLegacyPolicy();
+    if (!legacyPolicy.enabled) {
+      writeLegacyRetiredResponse(json, res, legacyPolicy);
+      return true;
+    }
+
     const legacy = resolveLegacyUnsubscribeToken(
       url.searchParams.get("email"),
       url.searchParams.get("sig")
@@ -125,6 +178,11 @@ function createUnsubscribeActions(deps) {
         return true;
       }
       if (emailParam || sigParam) {
+        const legacyPolicy = resolveLegacyPolicy();
+        if (!legacyPolicy.enabled) {
+          writeLegacyRetiredResponse(json, res, legacyPolicy);
+          return true;
+        }
         res.writeHead(302, {
           Location: `/api/unsubscribe/legacy?email=${encodeURIComponent(emailParam)}&sig=${encodeURIComponent(sigParam)}`,
           "Cache-Control": "no-store",
@@ -147,6 +205,11 @@ function createUnsubscribeActions(deps) {
     }
 
     if (emailParam || sigParam) {
+      const legacyPolicy = resolveLegacyPolicy();
+      if (!legacyPolicy.enabled) {
+        writeLegacyRetiredResponse(json, res, legacyPolicy);
+        return true;
+      }
       const legacy = resolveLegacyUnsubscribeToken(emailParam, sigParam);
       if (!legacy.ok) {
         if (legacy.code === "invalid_signature") json(res, { error: "invalid signature" }, 403);
@@ -224,5 +287,8 @@ function createUnsubscribeActions(deps) {
 }
 
 module.exports = {
+  LEGACY_UNSUBSCRIBE_RETIRED_CODE,
+  resolveLegacyUnsubscribePolicyFromEnv,
+  buildResolveLegacyUnsubscribeToken,
   createUnsubscribeActions,
 };

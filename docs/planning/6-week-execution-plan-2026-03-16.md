@@ -274,10 +274,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 2 spillover
   - Recommendation: replace `Access-Control-Allow-Origin: *` on privileged JSON surfaces, and require a narrower authenticated/signed-user fetch path.
   - Status (Mar 13, 2026): wildcard CORS removed in runtime response helpers and preflight policy now enforces explicit trusted origins (`TRUSTED_CORS_ORIGINS` / `CORS_ALLOWED_ORIGINS`); `/api/user` now returns a sanitized public user record instead of full stored user data.
-- [ ] P3 `Security` replace weak unsubscribe signing and retire the legacy email+signature unsubscribe bridge after a migration window.
+- [x] P3 `Security` replace weak unsubscribe signing and retire the legacy email+signature unsubscribe bridge after a migration window.
   - Files: `src/runtime/mailer/mailer-runtime.js`, `web/routes/core-api-unsubscribe-actions-runtime.js`
   - Target window: Week 2 spillover
   - Recommendation: use a dedicated unsubscribe secret or nonce-backed token and remove compatibility routes once old links expire.
+  - Status (Mar 13, 2026): unsubscribe signing now uses dedicated secret input (`SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET`) with verifier support for both new and legacy signatures; legacy email+sig routes are now retirement-gated by `UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC` (plus force enable/disable flags) and return `410` after retirement.
 - [ ] P4 `Architecture` make module-linkage enforcement real again and fail CI on actual boundary violations.
   - Files: `package.json`, `scripts/check-module-linkage.mjs`, `scripts/module-linkage.mjs`, `src/dependency-links.mjs`
   - Target window: Week 4 follow-up
@@ -361,3 +362,4 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Day 30 completed: published stabilization metrics closeout (`docs/planning/week6-day30-stabilization-report.md`) and infra decision memo with explicit managed-platform migration triggers (`docs/planning/week6-day30-infra-decision-memo.md`).
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), confirmed `config.json` remains local-only via `.gitignore`, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
+- [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.

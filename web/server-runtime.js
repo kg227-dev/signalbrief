@@ -50,6 +50,7 @@ const { createServerRouteDependencies } = require("./server-runtime-deps-runtime
 const { createRouteBootstrapHandler } = require("./server-runtime-route-bootstrap-runtime");
 const {
   applyCanonicalHostPolicy,
+  applyResponseCorsPolicy,
   handleCorsPreflightPolicy,
   handleRequestErrorPolicy,
 } = require("./server-runtime-request-policy-runtime");
@@ -60,6 +61,7 @@ const {
   PUBLIC_HOSTS,
   getServerPort,
   getBaseUrl,
+  getTrustedCorsOrigins,
   getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
@@ -86,6 +88,7 @@ const {
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
 const CONFIG = loadConfig();
+const TRUSTED_CORS_ORIGINS = getTrustedCorsOrigins();
 const {
   verifyAdminPassword,
   createAdminSession,
@@ -306,8 +309,18 @@ async function handleWebRequest(req, res) {
     });
     if (redirected) return;
 
+    applyResponseCorsPolicy({
+      req,
+      res,
+      trustedCorsOrigins: TRUSTED_CORS_ORIGINS,
+    });
+
     // CORS preflight
-    const preflightHandled = handleCorsPreflightPolicy({ req, res });
+    const preflightHandled = handleCorsPreflightPolicy({
+      req,
+      res,
+      trustedCorsOrigins: TRUSTED_CORS_ORIGINS,
+    });
     if (preflightHandled) return;
 
     const routeCtx = { req, res, url, pathname };

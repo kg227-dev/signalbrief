@@ -12,6 +12,7 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
+  applyResponseCorsPolicy,
   applyCanonicalHostPolicy,
   handleCorsPreflightPolicy,
   handleRequestErrorPolicy,
@@ -24,6 +25,12 @@ function buildMockRes() {
     headers: {},
     body: "",
     headersSent: false,
+    setHeader(name, value) {
+      this.headers[String(name)] = value;
+    },
+    getHeader(name) {
+      return this.headers[String(name)];
+    },
     writeHead(statusCode, headers = {}) {
       this.statusCode = statusCode;
       this.headers = { ...headers };
@@ -71,10 +78,36 @@ function buildMockRes() {
 
 {
   const res = buildMockRes();
-  const handled = handleCorsPreflightPolicy({ req: { method: "OPTIONS" }, res });
+  const handled = handleCorsPreflightPolicy({
+    req: {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://getsignalbrief.com",
+        "access-control-request-headers": "Content-Type, Authorization",
+      },
+    },
+    res,
+    trustedCorsOrigins: new Set(["https://getsignalbrief.com"]),
+  });
   assert.strictEqual(handled, true);
   assert.strictEqual(res.statusCode, 204);
-  assert.strictEqual(res.headers["Access-Control-Allow-Origin"], "*");
+  assert.strictEqual(res.headers["Access-Control-Allow-Origin"], "https://getsignalbrief.com");
+  assert.strictEqual(res.headers["Access-Control-Allow-Headers"], "Content-Type, Authorization");
+}
+
+{
+  const res = buildMockRes();
+  const handled = handleCorsPreflightPolicy({
+    req: {
+      method: "OPTIONS",
+      headers: { origin: "https://evil.example" },
+    },
+    res,
+    trustedCorsOrigins: new Set(["https://getsignalbrief.com"]),
+  });
+  assert.strictEqual(handled, true);
+  assert.strictEqual(res.statusCode, 403);
+  assert.strictEqual(JSON.parse(res.body).error, "origin not allowed");
 }
 
 {
@@ -82,6 +115,21 @@ function buildMockRes() {
   const handled = handleCorsPreflightPolicy({ req: { method: "GET" }, res });
   assert.strictEqual(handled, false);
   assert.strictEqual(res.headersSent, false);
+}
+
+{
+  const req = {
+    method: "GET",
+    headers: { origin: "https://getsignalbrief.com" },
+  };
+  const res = buildMockRes();
+  const allowed = applyResponseCorsPolicy({
+    req,
+    res,
+    trustedCorsOrigins: new Set(["https://getsignalbrief.com"]),
+  });
+  assert.strictEqual(allowed, "https://getsignalbrief.com");
+  assert.strictEqual(res.__corsOrigin, "https://getsignalbrief.com");
 }
 
 {

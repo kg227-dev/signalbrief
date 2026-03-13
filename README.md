@@ -34,6 +34,7 @@ Secret loading behavior:
 - Runtime credentials are loaded from environment variables first (see `.env.example`).
 - `config.json` is ignored by git and should not contain production secrets.
 - If `config.json` is missing, runtime falls back to `config.example.json` for non-secret defaults.
+- CORS is allowlisted by origin (`TRUSTED_CORS_ORIGINS` / `CORS_ALLOWED_ORIGINS`) instead of wildcard defaults.
 
 Individual processes:
 

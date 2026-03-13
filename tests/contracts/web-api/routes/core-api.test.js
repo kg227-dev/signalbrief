@@ -118,6 +118,40 @@ async function invoke(handler, { method, pathname, search = "" }) {
   }
 
   {
+    const handler = createCoreApiRouteHandler(baseDeps({
+      findUserByToken: () => ({
+        chatId: "123",
+        email: "user@example.com",
+        telegram: "jarvis",
+        name: "User Example",
+        status: "active",
+        topics: ["AI×TECH", "HEALTHCARE"],
+        custom_keywords: ["custom_ai"],
+        watchlist: ["Nvidia"],
+        bookmarks: [{ url: "https://example.com/a", title: "A", date: "2026-03-13", tag: "AI×TECH" }],
+        preferences: { depth: "headline_plus_why", days_of_week: [1, 3], items_per_digest: 7 },
+        topic_weights: { "AI×TECH": 2 },
+        token: "should-not-leak",
+        admin: { role: "owner" },
+      }),
+    }));
+    const { handled, res } = await invoke(handler, {
+      method: "GET",
+      pathname: "/api/user",
+      search: "?token=test-token",
+    });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.strictEqual(body.chatId, "123");
+    assert.strictEqual(body.email, "user@example.com");
+    assert.strictEqual(body.preferences.items_per_digest, 7);
+    assert.strictEqual(body.topic_weights["AI×TECH"], 2);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "token"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "admin"), false);
+  }
+
+  {
     const handler = createCoreApiRouteHandler(baseDeps());
     const { handled, res } = await invoke(handler, {
       method: "GET",

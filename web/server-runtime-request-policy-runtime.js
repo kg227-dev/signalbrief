@@ -1,5 +1,29 @@
 "use strict";
 
+function normalizeOrigin(rawOrigin) {
+  const candidate = String(rawOrigin || "").trim();
+  if (!candidate) return "";
+  try {
+    return new URL(candidate).origin.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function resolveAllowedCorsOrigin({ req, trustedCorsOrigins }) {
+  const origin = normalizeOrigin(req?.headers?.origin || "");
+  if (!origin) return "";
+  if (!(trustedCorsOrigins instanceof Set) || trustedCorsOrigins.size === 0) return "";
+  return trustedCorsOrigins.has(origin) ? origin : "";
+}
+
+function applyResponseCorsPolicy({ req, res, trustedCorsOrigins }) {
+  const allowedOrigin = resolveAllowedCorsOrigin({ req, trustedCorsOrigins });
+  if (!allowedOrigin) return "";
+  res.__corsOrigin = allowedOrigin;
+  return allowedOrigin;
+}
+
 function applyCanonicalHostPolicy({
   req,
   res,
@@ -25,11 +49,30 @@ function applyCanonicalHostPolicy({
   return true;
 }
 
-function handleCorsPreflightPolicy({ req, res }) {
+function handleCorsPreflightPolicy({ req, res, trustedCorsOrigins }) {
   if (req.method !== "OPTIONS") return false;
+  const allowedOrigin = resolveAllowedCorsOrigin({ req, trustedCorsOrigins });
+  if (!allowedOrigin) {
+    res.writeHead(403, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    res.end(JSON.stringify({ error: "origin not allowed" }));
+    return true;
+  }
+
+  const requestHeaders = String(req.headers?.["access-control-request-headers"] || "Content-Type")
+    .split(",")
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
   res.writeHead(204, {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": requestHeaders || "Content-Type",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Max-Age": "600",
+    Vary: "Origin",
   });
   res.end();
   return true;
@@ -45,6 +88,9 @@ function handleRequestErrorPolicy({ req, res, error, logger = console.error }) {
 }
 
 module.exports = {
+  normalizeOrigin,
+  resolveAllowedCorsOrigin,
+  applyResponseCorsPolicy,
   applyCanonicalHostPolicy,
   handleCorsPreflightPolicy,
   handleRequestErrorPolicy,

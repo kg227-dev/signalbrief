@@ -269,10 +269,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: immediate hotfix before further prod changes
   - Recommendation: scrub tracked secret material, document env-based setup, and verify no secret-bearing config remains in git history going forward.
   - Status (Mar 13, 2026): env-first secret loading implemented in `src/runtime/config-provider.js`, `config.json` removed from version control, and `.env.example` + README secret setup guidance added. External provider/admin credential rotation is still required and remains open.
-- [ ] P2 `Security` restrict CORS to explicit trusted origins and stop returning full user records from bearer-token query access.
+- [x] P2 `Security` restrict CORS to explicit trusted origins and stop returning full user records from bearer-token query access.
   - Files: `web/server-request-runtime.js`, `web/server-runtime-request-policy-runtime.js`, `web/routes/core-api.js`
   - Target window: Week 2 spillover
   - Recommendation: replace `Access-Control-Allow-Origin: *` on privileged JSON surfaces, and require a narrower authenticated/signed-user fetch path.
+  - Status (Mar 13, 2026): wildcard CORS removed in runtime response helpers and preflight policy now enforces explicit trusted origins (`TRUSTED_CORS_ORIGINS` / `CORS_ALLOWED_ORIGINS`); `/api/user` now returns a sanitized public user record instead of full stored user data.
 - [ ] P3 `Security` replace weak unsubscribe signing and retire the legacy email+signature unsubscribe bridge after a migration window.
   - Files: `src/runtime/mailer/mailer-runtime.js`, `web/routes/core-api-unsubscribe-actions-runtime.js`
   - Target window: Week 2 spillover
@@ -359,3 +360,4 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Day 29 completed: shipped one-command rollback by SHA (`ops:rollback:sha`) with commit-archive deploy path + post-rollback health checklist validation, and executed a live rollback drill (`f5951c5` -> `d8701dc`) with artifacted timings in `artifacts/releases/week6-day29-live-drill-r3.json` (`rollback=37.692s`, `restore=34.812s`).
 - [x] Day 30 completed: published stabilization metrics closeout (`docs/planning/week6-day30-stabilization-report.md`) and infra decision memo with explicit managed-platform migration triggers (`docs/planning/week6-day30-infra-decision-memo.md`).
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), removed tracked `config.json` from git, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
+- [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.

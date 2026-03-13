@@ -49,12 +49,17 @@ async function handleAdminAuthRoutes(ctx, deps) {
       "SameSite=Strict",
       isSecure ? "Secure" : "",
     ].filter(Boolean).join("; ");
-
-    res.writeHead(200, {
+    const corsOrigin = String(res.__corsOrigin || "").trim();
+    const loginHeaders = {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
       "Set-Cookie": cookieFlags,
-    });
+    };
+    if (corsOrigin) {
+      loginHeaders["Access-Control-Allow-Origin"] = corsOrigin;
+      loginHeaders.Vary = "Origin";
+    }
+
+    res.writeHead(200, loginHeaders);
     res.end(JSON.stringify({ success: true }));
     return true;
   }
@@ -62,7 +67,8 @@ async function handleAdminAuthRoutes(ctx, deps) {
   if (pathname === "/api/admin/logout" && req.method === "POST") {
     clearAdminSessionByRequest(req);
     const isSecure = resolveBaseUrl().startsWith("https");
-    res.writeHead(200, {
+    const corsOrigin = String(res.__corsOrigin || "").trim();
+    const logoutHeaders = {
       "Content-Type": "application/json",
       "Set-Cookie": [
         "sb_admin=deleted",
@@ -72,7 +78,12 @@ async function handleAdminAuthRoutes(ctx, deps) {
         "SameSite=Strict",
         isSecure ? "Secure" : "",
       ].filter(Boolean).join("; "),
-    });
+    };
+    if (corsOrigin) {
+      logoutHeaders["Access-Control-Allow-Origin"] = corsOrigin;
+      logoutHeaders.Vary = "Origin";
+    }
+    res.writeHead(200, logoutHeaders);
     res.end(JSON.stringify({ success: true }));
     return true;
   }

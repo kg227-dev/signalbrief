@@ -28,11 +28,16 @@ function serveFile(res, filePath, extraHeaders = null) {
 }
 
 function json(res, data, status = 200) {
-  res.writeHead(status, {
+  const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
     "X-Robots-Tag": "noindex, nofollow",
-  });
+  };
+  const corsOrigin = String(res.__corsOrigin || "").trim();
+  if (corsOrigin) {
+    headers["Access-Control-Allow-Origin"] = corsOrigin;
+    headers.Vary = "Origin";
+  }
+  res.writeHead(status, headers);
   res.end(JSON.stringify(data));
 }
 

@@ -4,6 +4,78 @@ const { handleCoreEngagementRoutes } = require("./core-api-engagement-runtime");
 const { handleCoreBookmarksRoute } = require("./core-api-bookmarks-runtime");
 const { handleCoreRequestLinkRoute } = require("./core-api-link-runtime");
 
+function sanitizeStringArray(values) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function sanitizeBookmarks(bookmarks) {
+  if (!Array.isArray(bookmarks)) return [];
+  return bookmarks
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      url: String(row.url || "").trim(),
+      title: String(row.title || "").trim(),
+      date: String(row.date || "").trim(),
+      tag: String(row.tag || "").trim(),
+    }))
+    .filter((row) => row.url);
+}
+
+function sanitizePreferences(preferences) {
+  if (!preferences || typeof preferences !== "object" || Array.isArray(preferences)) return {};
+  const out = {};
+  if (preferences.depth != null) out.depth = String(preferences.depth || "").trim() || "headline_plus_why";
+  if (preferences.delivery_time != null) out.delivery_time = String(preferences.delivery_time || "").trim();
+  if (preferences.frequency != null) out.frequency = String(preferences.frequency || "").trim();
+  if (Array.isArray(preferences.days_of_week)) {
+    out.days_of_week = preferences.days_of_week
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+  }
+  if (preferences.items_per_digest != null) {
+    const parsedItems = Number(preferences.items_per_digest);
+    if (Number.isInteger(parsedItems) && parsedItems > 0) out.items_per_digest = parsedItems;
+  }
+  if (preferences.email_enabled != null) out.email_enabled = Boolean(preferences.email_enabled);
+  if (preferences.telegram_enabled != null) out.telegram_enabled = Boolean(preferences.telegram_enabled);
+  if (preferences.timezone != null) out.timezone = String(preferences.timezone || "").trim();
+  if (preferences.consultant_lens_mode != null) out.consultant_lens_mode = Boolean(preferences.consultant_lens_mode);
+  return out;
+}
+
+function sanitizeTopicWeights(topicWeights) {
+  if (!topicWeights || typeof topicWeights !== "object" || Array.isArray(topicWeights)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(topicWeights)) {
+    const tag = String(key || "").trim();
+    if (!tag) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    out[tag] = numeric;
+  }
+  return out;
+}
+
+function buildPublicUserRecord(user) {
+  if (!user || typeof user !== "object" || Array.isArray(user)) return null;
+  return {
+    chatId: String(user.chatId || ""),
+    email: String(user.email || ""),
+    telegram: String(user.telegram || ""),
+    name: String(user.name || ""),
+    status: String(user.status || "active"),
+    topics: sanitizeStringArray(user.topics),
+    custom_keywords: sanitizeStringArray(user.custom_keywords),
+    watchlist: sanitizeStringArray(user.watchlist),
+    bookmarks: sanitizeBookmarks(user.bookmarks),
+    preferences: sanitizePreferences(user.preferences),
+    topic_weights: sanitizeTopicWeights(user.topic_weights),
+  };
+}
+
 function createCoreApiRouteHandler(deps) {
   const {
     json,
@@ -91,7 +163,7 @@ function createCoreApiRouteHandler(deps) {
         json(res, { error: "not found" }, 404);
         return true;
       }
-      json(res, user);
+      json(res, buildPublicUserRecord(user));
       return true;
     }
 
@@ -127,6 +199,7 @@ async function handleCoreApiRoutes(ctx, deps) {
 }
 
 module.exports = {
+  buildPublicUserRecord,
   createCoreApiRouteHandler,
   handleCoreApiRoutes,
 };

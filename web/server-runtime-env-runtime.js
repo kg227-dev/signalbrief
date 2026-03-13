@@ -6,6 +6,16 @@ const APP_ROOT = path.resolve(__dirname, "..");
 const CANONICAL_HOST = "getsignalbrief.com";
 const PUBLIC_HOSTS = new Set([CANONICAL_HOST, `www.${CANONICAL_HOST}`]);
 
+function normalizeOrigin(rawOrigin) {
+  const value = String(rawOrigin || "").trim();
+  if (!value) return "";
+  try {
+    return new URL(value).origin.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 function getServerPort() {
   const parsed = parseInt(process.env.PORT, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 3003;
@@ -13,6 +23,32 @@ function getServerPort() {
 
 function getBaseUrl() {
   return process.env.BASE_URL || `http://localhost:${getServerPort()}`;
+}
+
+function getTrustedCorsOrigins() {
+  const configured = String(
+    process.env.TRUSTED_CORS_ORIGINS
+    || process.env.CORS_ALLOWED_ORIGINS
+    || ""
+  ).trim();
+  if (configured) {
+    return new Set(
+      configured
+        .split(",")
+        .map((part) => normalizeOrigin(part))
+        .filter(Boolean)
+    );
+  }
+
+  const defaultOrigins = new Set([
+    "https://getsignalbrief.com",
+    "https://www.getsignalbrief.com",
+    "http://localhost:3003",
+    "http://127.0.0.1:3003",
+  ]);
+  const baseOrigin = normalizeOrigin(getBaseUrl());
+  if (baseOrigin) defaultOrigins.add(baseOrigin);
+  return defaultOrigins;
 }
 
 function getArchiveLegacyDeprecationDeadlineUtc() {
@@ -78,6 +114,7 @@ module.exports = {
   PUBLIC_HOSTS,
   getServerPort,
   getBaseUrl,
+  getTrustedCorsOrigins,
   getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,

@@ -319,10 +319,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 1 / Week 4 spillover
   - Recommendation: move from ad hoc line logging to machine-parseable events that can support incident reconstruction.
   - Status (Mar 13, 2026): introduced shared structured logger runtime with stable event envelope fields, wired digest orchestrator/web runtime/start lifecycle logging onto structured events (including run start/skip/complete/failure and delivery attempt outcomes), and added contract coverage for logger runtime plus digest/web/start logging integration.
-- [ ] P12 `QA` replace syntax-only contract checks on hot paths with behavior-oriented assertions for digest output, auth, retries, and failure handling.
+- [x] P12 `QA` replace syntax-only contract checks on hot paths with behavior-oriented assertions for digest output, auth, retries, and failure handling.
   - Files: `tests/contracts/entrypoints/*.test.js`, `tests/contracts/harness/**/*.test.js`, `scripts/test-critical-paths.js`
   - Target window: Week 4 / Week 5 spillover
   - Recommendation: keep import smoke checks if useful, but shift the merge gate toward behavioral contracts and runtime parity assertions.
+  - Status (Mar 13, 2026): replaced syntax-only hot-path contracts with executable behavior assertions for web entrypoint boot flow and scheduler failure-state handling, expanded auth/session policy contracts to validate real session+bypass+rate-limit behavior, and added digest Telegram output formatting contracts while preserving existing retry/degradation behavior coverage in fetch/enrich/transport runtimes.
 - [ ] P13 `Release Process` enforce staging-before-prod in automation instead of relying only on documentation and operator discipline.
   - Files: `package.json`, `scripts/deploy-production.js`, `scripts/deploy-staging.js`, `docs/planning/release-policy.md`
   - Target window: Week 4 / Week 6 spillover

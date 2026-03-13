@@ -7,6 +7,22 @@ function createRenderPublicPages(deps) {
     formatPublicDigestDateLabel,
   } = deps;
 
+  function normalizeQuickScan(rawQuickScan) {
+    return String(rawQuickScan || "")
+      .replace(/&amp;nbsp;/gi, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&#160;/gi, " ")
+      .replace(/&#xA0;/gi, " ")
+      .replace(/&amp;middot;/gi, "·")
+      .replace(/&middot;/gi, "·")
+      .replace(/&#183;/gi, "·")
+      .replace(/&#xB7;/gi, "·")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s*·\s*/g, " · ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function renderPublicDigestPage({
     dateKey,
     dateLabel,
@@ -23,7 +39,7 @@ function createRenderPublicPages(deps) {
       ? `${baseUrl}/?ref=${encodeURIComponent(referralToken)}`
       : `${baseUrl}/`;
     const safeDateLabel = escapeHtml(dateLabel || formatPublicDigestDateLabel(dateKey));
-    const safeQuickScan = escapeHtml(String(quickScan || ""));
+    const safeQuickScan = escapeHtml(normalizeQuickScan(quickScan));
     const safeItems = Array.isArray(items) ? items : [];
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");

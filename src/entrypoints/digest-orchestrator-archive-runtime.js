@@ -4,7 +4,7 @@ function buildQuickScan(items) {
   return (Array.isArray(items) ? items : [])
     .map((item) => String(item?.headline || "").split(":")[0].split("—")[0].trim())
     .filter(Boolean)
-    .join(" &nbsp;&middot;&nbsp; ");
+    .join(" · ");
 }
 
 function createDigestOrchestratorArchiveRuntime(deps) {

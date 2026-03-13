@@ -21,6 +21,9 @@ function testBuildQuickScan() {
   ]);
   assert.ok(quickScan.includes("Deal Desk"), "quick scan should keep left headline segment");
   assert.ok(quickScan.includes("AI shakeup - board update"), "quick scan should retain plain headlines");
+  assert.ok(quickScan.includes(" · "), "quick scan should use readable separators");
+  assert.ok(!quickScan.includes("&nbsp;"), "quick scan should not include HTML entities");
+  assert.ok(!quickScan.includes("&middot;"), "quick scan should not include HTML entities");
 }
 
 function testArchivePersistOverwriteBehavior() {

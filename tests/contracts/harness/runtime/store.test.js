@@ -18,6 +18,7 @@ assertModuleExports(() => store, TARGET_REL);
 
 const {
   createStore,
+  createFileStoreAdapter,
   createStoreRuntime,
   initStore,
   resetStoreState,
@@ -28,6 +29,7 @@ const {
   generateToken,
 } = store;
 assert.strictEqual(typeof createStoreRuntime, "function", "store should export explicit runtime factory");
+assert.strictEqual(typeof createFileStoreAdapter, "function", "store should expose default file adapter factory");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-"));
 const tempDirIsolated = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-iso-"));
@@ -95,6 +97,34 @@ try {
   assert.ok(
     warnings.some((message) => message.includes("[parse_failed]") || message.includes("parse_failed")),
     "corrupt user file should emit parse-failure recovery warning"
+  );
+
+  const adapterReads = [];
+  const injectedAdapterStore = createStore({
+    dataDir: tempDir,
+    createStoreAdapter: ({ defaultUser }) => ({
+      readUser(chatId) {
+        adapterReads.push(String(chatId));
+        return defaultUser(chatId);
+      },
+      writeUser() {},
+      deleteUser() { return { ok: true, existed: false }; },
+      allUsers() { return []; },
+      rebuildTokenIndex() {},
+      findUserByToken() { return null; },
+    }),
+  });
+  injectedAdapterStore.initStore({ rebuildIndex: true });
+  const adapterUser = injectedAdapterStore.readUser("adapter-chat");
+  assert.strictEqual(adapterUser.chatId, "adapter-chat");
+  assert.deepStrictEqual(adapterReads, ["adapter-chat"], "injected adapter should own readUser behavior");
+
+  assert.throws(
+    () => createStore({
+      createStoreAdapter: () => ({ readUser() {} }),
+    }),
+    /store adapter missing required method/,
+    "invalid adapters should fail fast at store construction"
   );
 } finally {
   resetStoreState();

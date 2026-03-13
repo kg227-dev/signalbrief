@@ -9,7 +9,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { createDefaultUser, normalizeUserRecord } = require("./user-contract-runtime");
-const { createStoreRecordRuntime } = require("./store-record-runtime");
+const { createFileStoreAdapter } = require("./store-adapter-file-runtime");
+const { assertStoreAdapterContract } = require("./store-adapter-contract-runtime");
 /** @typedef {import("./runtime-types").UserRecord} UserRecord */
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
@@ -99,7 +100,7 @@ function createStore(options = {}) {
     if (!storeState.initialized) initStore();
   }
 
-  const recordRuntime = createStoreRecordRuntime({
+  const adapterDeps = {
     currentDataDir,
     currentTokenIndex,
     ensureStoreInitialized,
@@ -107,7 +108,14 @@ function createStore(options = {}) {
     normalizeUserRecord,
     generateToken,
     warnStoreRecovery,
-  });
+  };
+  const adapterFactory = typeof options.createStoreAdapter === "function"
+    ? options.createStoreAdapter
+    : createFileStoreAdapter;
+  const recordRuntime = assertStoreAdapterContract(
+    adapterFactory(adapterDeps),
+    { label: "store adapter" }
+  );
   const {
     readUser,
     writeUser,
@@ -185,6 +193,7 @@ function findUserByToken(token) {
 module.exports = {
   createStoreIndex,
   createStoreState,
+  createFileStoreAdapter,
   createStore,
   createStoreRuntime,
   initStore,

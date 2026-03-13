@@ -28,6 +28,10 @@ assert.ok(
   "server-runtime.js should compose request/error policy via server-runtime-request-policy-runtime"
 );
 assert.ok(
+  serverRuntimeSource.includes('require("./server-runtime-scheduler-control-runtime")'),
+  "server-runtime.js should compose scheduler control policy via server-runtime-scheduler-control-runtime"
+);
+assert.ok(
   !serverRuntimeSource.includes('require("./api/core")')
     && !serverRuntimeSource.includes('require("./api/admin")')
     && !serverRuntimeSource.includes('require("./api/public")'),

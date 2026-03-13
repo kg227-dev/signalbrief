@@ -34,6 +34,7 @@ const {
   createAdminAuthSessionPolicy,
 } = require("./server-runtime-auth-session-policy-runtime");
 const { createAdminOpsService } = require("./services/admin-ops");
+const { createSchedulerWorkerRestartRequester } = require("./server-runtime-scheduler-control-runtime");
 const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
 const { createSignupRateLimiter } = require("./services/web-rate-limit");
 const { blankReengagementState, resetReengagementState } = require("./services/reengagement-state");
@@ -112,32 +113,11 @@ const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
 const ARCHIVE_LEGACY_USAGE_LOG = path.join(__dirname, "../data/archive-legacy-usage.jsonl");
 const SCHEDULER_CONTROL_FILE = getSchedulerControlFile();
-
-function requestSchedulerWorkerRestart({
-  reason = "manual_admin_request",
-  source = "admin_ui",
-  requestedBy = "admin",
-} = {}) {
-  const requestId = `restart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const requestedAt = new Date().toISOString();
-  const payload = {
-    restart_worker: {
-      request_id: requestId,
-      requested_at: requestedAt,
-      requested_by: String(requestedBy || "admin"),
-      reason: String(reason || "manual_admin_request"),
-      source: String(source || "admin_ui"),
-    },
-  };
-  const dir = path.dirname(SCHEDULER_CONTROL_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SCHEDULER_CONTROL_FILE, JSON.stringify(payload, null, 2));
-  return {
-    request_id: requestId,
-    requested_at: requestedAt,
-    control_file: SCHEDULER_CONTROL_FILE,
-  };
-}
+const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({
+  fs,
+  path,
+  schedulerControlFile: SCHEDULER_CONTROL_FILE,
+});
 
 const appendWebEngagementEvent = (payload, context) => (
   appendEngagementEventChecked(payload, { scope: "web", context })

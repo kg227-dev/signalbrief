@@ -23,6 +23,26 @@ function createRenderPublicPages(deps) {
       .trim();
   }
 
+  function extractQuickScanPoints(normalizedQuickScan) {
+    const text = String(normalizedQuickScan || "").trim();
+    if (!text) return [];
+
+    const points = text
+      .split(/\s+·\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (points.length > 1) return points.slice(0, 8);
+
+    // Fallback for older rows that used sentence-style delimiters instead of middot separators.
+    const sentencePoints = text
+      .split(/\s+\.\s+(?=[A-Z0-9#])/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (sentencePoints.length > 1) return sentencePoints.slice(0, 8);
+
+    return [text];
+  }
+
   function renderPublicDigestPage({
     dateKey,
     dateLabel,
@@ -39,7 +59,10 @@ function createRenderPublicPages(deps) {
       ? `${baseUrl}/?ref=${encodeURIComponent(referralToken)}`
       : `${baseUrl}/`;
     const safeDateLabel = escapeHtml(dateLabel || formatPublicDigestDateLabel(dateKey));
-    const safeQuickScan = escapeHtml(normalizeQuickScan(quickScan));
+    const quickScanPoints = extractQuickScanPoints(normalizeQuickScan(quickScan));
+    const quickScanHtml = quickScanPoints
+      .map((point) => `<li class="scan-pill">${escapeHtml(point)}</li>`)
+      .join("");
     const safeItems = Array.isArray(items) ? items : [];
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");
@@ -96,7 +119,10 @@ function createRenderPublicPages(deps) {
     .btn { text-decoration: none; border-radius: 999px; padding: 10px 16px; font-size: 13px; font-weight: 700; display: inline-block; }
     .btn-primary { background: var(--accent); color: var(--accent-ink); }
     .btn-secondary { background: var(--accent-soft); color: #166534; }
-    .scan { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 14px; padding: 12px 14px; color: #1e3a8a; font-size: 13px; line-height: 1.6; margin-top: 14px; }
+    .scan { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 14px; padding: 12px 14px; margin-top: 14px; }
+    .scan-heading { margin: 0 0 9px; color: #1e3a8a; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+    .scan-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+    .scan-pill { color: #1e3a8a; background: #fff; border: 1px solid #c7d2fe; border-radius: 999px; padding: 6px 10px; font-size: 13px; line-height: 1.35; font-weight: 500; }
     .item-list { display: grid; gap: 14px; }
     .item-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 16px; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04); }
     .item-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -112,6 +138,8 @@ function createRenderPublicPages(deps) {
       h1 { font-size: 28px; }
       .hero { padding: 18px; }
       .item-card { padding: 16px; }
+      .scan-list { gap: 6px; }
+      .scan-pill { width: 100%; border-radius: 10px; }
     }
   </style>
 </head>
@@ -125,7 +153,7 @@ function createRenderPublicPages(deps) {
         <a class="btn btn-primary" href="${escapeHtml(signupUrl)}" target="_blank" rel="noopener">Get your own personalized brief</a>
         <a class="btn btn-secondary" href="mailto:?subject=SignalBrief%20Digest&body=${encodeURIComponent(shareUrl)}">Forward this brief</a>
       </div>
-      ${safeQuickScan ? `<div class="scan"><strong>Quick scan:</strong> ${safeQuickScan}</div>` : ""}
+      ${quickScanHtml ? `<div class="scan"><p class="scan-heading">Quick scan</p><ul class="scan-list">${quickScanHtml}</ul></div>` : ""}
     </section>
     <section class="item-list">
       ${cards || `<div class="item-card"><p class="item-summary">No items available for this date.</p></div>`}

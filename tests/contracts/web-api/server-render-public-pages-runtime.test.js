@@ -18,7 +18,10 @@ const html = renderPublicDigestPage({
   items: [],
 });
 
-assert.ok(html.includes("Quick scan:"), "expected quick scan block to render");
-assert.ok(html.includes("One · Two · Three"), "expected legacy HTML entities to normalize to readable separators");
+assert.ok(html.includes('class="scan-heading"'), "expected quick scan heading to render");
+assert.ok(html.includes('class="scan-list"'), "expected quick scan list to render");
+assert.ok(html.includes(">One<"), "expected first quick scan point to render");
+assert.ok(html.includes(">Two<"), "expected second quick scan point to render");
+assert.ok(html.includes(">Three<"), "expected third quick scan point to render");
 assert.ok(!html.includes("&amp;nbsp;"), "expected normalized quick scan not to include escaped nbsp entity");
 assert.ok(!html.includes("&amp;middot;"), "expected normalized quick scan not to include escaped middot entity");

@@ -1,5 +1,7 @@
 # Archive Policy
 
+*Last reviewed: March 13, 2026*
+
 This directory holds historical docs that are kept for provenance, source material, and decision context.
 
 Archive rules:

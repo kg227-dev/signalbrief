@@ -1,5 +1,7 @@
 # Repository Map
 
+*Last reviewed: March 13, 2026*
+
 Use this document when you need to know where code should live or where to start reading.
 
 ## Canonical Surfaces

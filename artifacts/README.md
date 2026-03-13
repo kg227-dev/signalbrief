@@ -1,5 +1,7 @@
 # Artifacts (Ignored)
 
+See [Archive Policy](../docs/archive/README.md) for the difference between ignored generated artifacts and tracked historical docs.
+
 This directory is for generated local artifacts only.
 
 Examples:

@@ -1,5 +1,7 @@
 # First 30 Minutes
 
+*Last reviewed: March 13, 2026*
+
 Goal: boot the app, run the baseline checks, and trace one request end-to-end.
 
 ## 0-10 Minutes: Boot The System

@@ -1,5 +1,7 @@
 # Active Planning Docs
 
+*Last reviewed: March 13, 2026*
+
 This directory contains active execution, operations, and rollout planning documents.
 
 These files remain in place while the current runtime transformation is in progress. Do not treat this folder as archival storage during the active planning window.

@@ -1,5 +1,7 @@
 # Service Groupings
 
+See [Repository Map](../../docs/repository-map.md) for service-layer placement and migration context.
+
 Canonical service grouping for onboarding:
 
 - `admin/`: admin operations, analytics, scheduler, stats

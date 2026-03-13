@@ -1,5 +1,7 @@
 # Path and Import Rules
 
+*Last reviewed: March 13, 2026*
+
 These rules keep the project navigable for new engineers and prevent structure drift.
 
 ## 1) Import From Canonical Surfaces First

@@ -1,5 +1,7 @@
 # API Surface
 
+See [Repository Map](../../docs/repository-map.md) and [SPEC.md](../../SPEC.md) for the broader API and runtime context.
+
 Canonical HTTP API grouping.
 
 - `admin/`: authenticated admin route handlers

@@ -284,10 +284,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 4 follow-up
   - Recommendation: execute the real graph checker in CI, repair stale imports, and keep worktree mirrors out of canonical dependency analysis.
   - Status (Mar 13, 2026): `check:module-linkage` now executes a real resolver (`scripts/check-module-linkage.mjs`) instead of syntax-only parsing, stale non-repo edge imports were removed from canonical maps, and CI now fails on unresolved/non-canonical linkage entries.
-- [ ] P5 `Architecture` split `web/server-runtime-deps-runtime.js` into smaller bounded registries so web-core, admin, digest, and store concerns stop flowing through one dependency hub.
+- [x] P5 `Architecture` split `web/server-runtime-deps-runtime.js` into smaller bounded registries so web-core, admin, digest, and store concerns stop flowing through one dependency hub.
   - Files: `web/server-runtime-deps-runtime.js`, `web/server-runtime.js`, `web/api/**`, `web/routes/**`
   - Target window: Week 4 spillover
   - Recommendation: reduce the DI surface to explicit registries and route bundles with import-boundary contract tests per registry.
+  - Status (Mar 13, 2026): route dependency composition now fans into bounded registries (`server-runtime-shared-handlers-runtime`, `server-runtime-core-registry-runtime`, `server-runtime-admin-registry-runtime`, `server-runtime-public-registry-runtime`) and `server-runtime-deps-runtime` acts as thin composition-only wiring with registry-specific contract tests.
 - [ ] P6 `Architecture` continue digest runtime decomposition until fetch, enrich, archive, cost, and delivery coordination no longer live in one orchestrator file.
   - Files: `src/entrypoints/digest-orchestrator-core-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js`, `src/digest/runtime/**`
   - Target window: Week 3 spillover
@@ -361,6 +362,7 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Day 28 completed: enforced production release batching windows directly in `ops:deploy:prod` (hotfix/manual overrides explicit), added full-enable readiness validation (`scripts/store-full-enable-validate.js`) with rollback-switch safety checks, and documented operations in `docs/planning/week6-day28-full-enable-release-batching.md`.
 - [x] Day 29 completed: shipped one-command rollback by SHA (`ops:rollback:sha`) with commit-archive deploy path + post-rollback health checklist validation, and executed a live rollback drill (`f5951c5` -> `d8701dc`) with artifacted timings in `artifacts/releases/week6-day29-live-drill-r3.json` (`rollback=37.692s`, `restore=34.812s`).
 - [x] Day 30 completed: published stabilization metrics closeout (`docs/planning/week6-day30-stabilization-report.md`) and infra decision memo with explicit managed-platform migration triggers (`docs/planning/week6-day30-infra-decision-memo.md`).
+- [x] Carry-forward P5 completed: split web route dependency wiring into bounded registries and added registry-boundary contract coverage (`tests/contracts/web-api/server-runtime-deps-registries-runtime.test.js`) to prevent cross-concern coupling regressions.
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), confirmed `config.json` remains local-only via `.gitignore`, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
 - [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.

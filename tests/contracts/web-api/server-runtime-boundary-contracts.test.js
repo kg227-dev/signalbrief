@@ -45,6 +45,44 @@ assert.ok(
     && depsSource.includes('require("./api/public")'),
   "server-runtime-deps-runtime.js should remain the only route-handler composition boundary"
 );
+assert.ok(
+  depsSource.includes('require("./server-runtime-shared-handlers-runtime")')
+    && depsSource.includes('require("./server-runtime-core-registry-runtime")')
+    && depsSource.includes('require("./server-runtime-admin-registry-runtime")')
+    && depsSource.includes('require("./server-runtime-public-registry-runtime")'),
+  "server-runtime-deps-runtime.js should compose route handler deps through bounded registries"
+);
+assert.ok(
+  !depsSource.includes('require("./services/web-user-handlers")'),
+  "server-runtime-deps-runtime.js should not directly wire user handler internals"
+);
+
+const sharedRegistrySource = readSource("web/server-runtime-shared-handlers-runtime.js");
+assert.ok(
+  sharedRegistrySource.includes('require("./services/web-user-handlers")'),
+  "shared handler registry should be the only module wiring web-user-handlers"
+);
+
+const coreRegistrySource = readSource("web/server-runtime-core-registry-runtime.js");
+assert.ok(
+  !coreRegistrySource.includes('require("./api/admin")')
+    && !coreRegistrySource.includes('require("./api/public")'),
+  "core registry should stay route-dependency only and avoid cross-route imports"
+);
+
+const adminRegistrySource = readSource("web/server-runtime-admin-registry-runtime.js");
+assert.ok(
+  !adminRegistrySource.includes('require("./api/core")')
+    && !adminRegistrySource.includes('require("./api/public")'),
+  "admin registry should stay route-dependency only and avoid cross-route imports"
+);
+
+const publicRegistrySource = readSource("web/server-runtime-public-registry-runtime.js");
+assert.ok(
+  !publicRegistrySource.includes('require("./api/core")')
+    && !publicRegistrySource.includes('require("./api/admin")'),
+  "public registry should stay route-dependency only and avoid cross-route imports"
+);
 
 const routeBootstrapSource = readSource("web/server-runtime-route-bootstrap-runtime.js");
 assert.ok(

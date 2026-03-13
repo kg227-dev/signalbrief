@@ -116,6 +116,8 @@ import "./jobs/digest-runner-core-runtime.js";
 import "./entrypoints/digest-orchestrator-archive-runtime.js";
 import "./entrypoints/digest-orchestrator-core-runtime.js";
 import "./entrypoints/digest-orchestrator-cost-runtime.js";
+import "./entrypoints/digest-orchestrator-incident-runtime.js";
+import "./entrypoints/digest-orchestrator-lock-runtime.js";
 import "./runtime/reply/info-renderers-runtime.js";
 import "./runtime/reply/onboarding-service.js";
 import "./runtime/reply/onboarding/onboarding-context.js";

@@ -30,6 +30,8 @@ import "../src/entrypoints/bot-server.js";
 import "../src/entrypoints/digest.js";
 import "../src/entrypoints/digest-orchestrator-archive-runtime.js";
 import "../src/entrypoints/digest-orchestrator-cost-runtime.js";
+import "../src/entrypoints/digest-orchestrator-incident-runtime.js";
+import "../src/entrypoints/digest-orchestrator-lock-runtime.js";
 import "../src/entrypoints/scheduler-worker.js";
 import "../src/module-coverage-runtime.js";
 import "../src/module-coverage.test.js";
@@ -166,6 +168,8 @@ export const dependencyLinks = [
   "src/entrypoints/digest.js",
   "src/entrypoints/digest-orchestrator-archive-runtime.js",
   "src/entrypoints/digest-orchestrator-cost-runtime.js",
+  "src/entrypoints/digest-orchestrator-incident-runtime.js",
+  "src/entrypoints/digest-orchestrator-lock-runtime.js",
   "src/entrypoints/scheduler-worker.js",
   "src/module-coverage-runtime.js",
   "src/module-coverage.test.js",

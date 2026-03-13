@@ -66,6 +66,8 @@ const {
   DEFAULT_CLAUDE_HAIKU_IN_PER_MTOK,
   DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK,
 } = require("./digest-orchestrator-cost-runtime");
+const { createDigestOrchestratorIncidentRuntime } = require("./digest-orchestrator-incident-runtime");
+const { createDigestOrchestratorLockRuntime } = require("./digest-orchestrator-lock-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -82,6 +84,8 @@ let digestDataRuntimeCache = null;
 let digestArchiveRuntimeCache = null;
 let digestOrchestratorArchiveRuntimeCache = null;
 let digestOrchestratorCostRuntimeCache = null;
+let digestOrchestratorIncidentRuntimeCache = null;
+let digestOrchestratorLockRuntimeCache = null;
 let runtimeBootstrapDone = false;
 
 function getConfig() {
@@ -166,168 +170,54 @@ const SEARCH_COSTS = {
   "sonar-reasoning": 0.01,
 };
 
-function appendIncidentLog(entry) {
-  try {
-    const dir = path.dirname(DIGEST_INCIDENT_LOG);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(DIGEST_INCIDENT_LOG, JSON.stringify(entry) + "\n");
-  } catch (e) {
-    log(`⚠️ Incident log write failed: ${e.message}`);
-  }
-}
-
-function incidentKeySeenRecently(eventKey, maxAgeHours = 24) {
-  try {
-    if (!eventKey || !fs.existsSync(DIGEST_INCIDENT_LOG)) return false;
-    const cutoff = Date.now() - Math.max(1, Number(maxAgeHours || 24)) * 60 * 60 * 1000;
-    const lines = fs.readFileSync(DIGEST_INCIDENT_LOG, "utf8").split("\n").filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const row = JSON.parse(lines[i]);
-        const ts = Date.parse(row?.ts_utc || "");
-        if (Number.isFinite(ts) && ts < cutoff) break;
-        if (String(row?.event_key || "") === String(eventKey)) return true;
-      } catch (err) {
-        log(`⚠️ Incident log row parse failed: ${err.message}`);
-      }
-    }
-  } catch (err) {
-    log(`⚠️ Incident log read failed: ${err.message}`);
-  }
-  return false;
-}
-
-async function emitDigestIncident(type, summary, metadata = {}) {
-  const now = new Date();
-  const hourBucket = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
-  const eventKey = `digest-incident:${String(type || "unknown")}:${hourBucket}`;
-  if (incidentKeySeenRecently(eventKey, 48)) return false;
-
-  const entry = {
-    ts_utc: now.toISOString(),
-    date_et: formatEtDateKey(now),
-    event_key: eventKey,
-    type: String(type || "unknown"),
-    summary: String(summary || "").trim(),
-    metadata: metadata && typeof metadata === "object" ? metadata : {},
-  };
-  appendIncidentLog(entry);
-
-  const opsChatId = process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null;
-  if (opsChatId) {
-    const lines = [
-      "ALERT SignalBrief incident",
-      `Type: ${entry.type}`,
-      `Summary: ${entry.summary}`,
-      `ET date: ${entry.date_et}`,
-      `Mode: ${entry.metadata.mode || "scheduled"}`,
-      `Due users: ${entry.metadata.due_users != null ? entry.metadata.due_users : "-"}`,
-      `Standard topics: ${entry.metadata.standard_topics != null ? entry.metadata.standard_topics : "-"}`,
-      `Selected items: ${entry.metadata.selected_items != null ? entry.metadata.selected_items : "-"}`,
-    ];
-    try {
-      await sendTelegram(lines.join("\n"), opsChatId);
-    } catch (e) {
-      log(`⚠️ Incident alert send failed: ${e.message}`);
-    }
-  }
-  return true;
-}
-
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
   fs.appendFileSync(LOG_FILE, line + "\n");
 }
 
-let digestLockOwned = false;
-function readDigestLock() {
-  return readDigestLockState(DIGEST_RUN_LOCK, DIGEST_LOCK_STALE_MS);
+function getDigestOrchestratorIncidentRuntime() {
+  if (!digestOrchestratorIncidentRuntimeCache) {
+    digestOrchestratorIncidentRuntimeCache = createDigestOrchestratorIncidentRuntime({
+      fs,
+      path,
+      incidentLogPath: DIGEST_INCIDENT_LOG,
+      log,
+      formatEtDateKey,
+      resolveOpsChatId: () => process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null,
+      sendTelegram,
+    });
+  }
+  return digestOrchestratorIncidentRuntimeCache;
 }
 
-function clearDigestLock() {
-  const outcome = clearDigestLockFile(DIGEST_RUN_LOCK);
-  if (!outcome.ok) {
-    const detail = outcome.message ? ` (${outcome.message})` : "";
-    log(`⚠️ Failed to clear digest lock [${outcome.code || "unknown"}]${detail}`);
+function getDigestOrchestratorLockRuntime() {
+  if (!digestOrchestratorLockRuntimeCache) {
+    digestOrchestratorLockRuntimeCache = createDigestOrchestratorLockRuntime({
+      fs,
+      path,
+      lockFilePath: DIGEST_RUN_LOCK,
+      lockStaleMs: DIGEST_LOCK_STALE_MS,
+      lockStates: LOCK_STATES,
+      readDigestLockState,
+      clearDigestLockFile,
+      getDigestLockOwnerStatus,
+      log,
+    });
   }
-  return outcome;
+  return digestOrchestratorLockRuntimeCache;
 }
 
-function acquireDigestLock(mode) {
-  const existing = readDigestLock();
-  if (existing) {
-    if (existing.state === LOCK_STATES.STALE) {
-      const clearOutcome = clearDigestLock();
-      if (!clearOutcome.ok) {
-        return {
-          ok: false,
-          reason: "stale_uncleared",
-          lock: {
-            ...existing,
-            state: "stale_uncleared",
-            error: `stale_lock_clear_failed:${clearOutcome.code || "unknown"}`,
-            clear_error: clearOutcome.message || null,
-            clear_error_code: clearOutcome.error_code || null,
-          },
-        };
-      }
-    } else if (existing.state === LOCK_STATES.VALID) {
-      const owner = getDigestLockOwnerStatus(existing);
-      if (owner.alive === false) {
-        const clearOutcome = clearDigestLock();
-        if (!clearOutcome.ok) {
-          return {
-            ok: false,
-            reason: "pid_dead_uncleared",
-            lock: {
-              ...existing,
-              state: "pid_dead_uncleared",
-              error: `dead_pid_lock_clear_failed:${clearOutcome.code || "unknown"}`,
-              clear_error: clearOutcome.message || null,
-              clear_error_code: clearOutcome.error_code || null,
-              owner_pid: owner.pid,
-              owner_alive: false,
-            },
-          };
-        }
-      } else {
-        return { ok: false, reason: "locked", lock: existing };
-      }
-    } else {
-      log(`⚠️ Digest lock requires manual intervention (state=${existing.state}, detail=${existing.error || "unknown"})`);
-      return { ok: false, reason: existing.state, lock: existing };
-    }
-  }
-  const dir = path.dirname(DIGEST_RUN_LOCK);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const payload = {
-    startedAt: new Date().toISOString(),
-    pid: process.pid,
-    mode: mode || "scheduled",
-  };
-  try {
-    const fd = fs.openSync(DIGEST_RUN_LOCK, "wx");
-    try {
-      fs.writeFileSync(fd, JSON.stringify(payload));
-    } finally {
-      fs.closeSync(fd);
-    }
-    digestLockOwned = true;
-    return { ok: true, lock: payload };
-  } catch (err) {
-    if (err?.code !== "EEXIST") {
-      log(`⚠️ Failed to acquire digest lock: ${err.message}`);
-    }
-    const lock = readDigestLock();
-    return { ok: false, reason: "race_or_locked", lock };
-  }
+function acquireDigestLock(...args) {
+  return getDigestOrchestratorLockRuntime().acquireDigestLock(...args);
 }
 
-function releaseDigestLock() {
-  if (!digestLockOwned) return;
-  digestLockOwned = false;
-  clearDigestLock();
+function releaseDigestLock(...args) {
+  return getDigestOrchestratorLockRuntime().releaseDigestLock(...args);
+}
+
+function emitDigestIncident(...args) {
+  return getDigestOrchestratorIncidentRuntime().emitDigestIncident(...args);
 }
 
 // ── User state helpers ────────────────────────────────────────────────────────

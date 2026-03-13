@@ -110,6 +110,6 @@ const enrichedSingle = enrichRunsWithDigestMetadata(singleRun, singleEvents, { r
 if (enrichedSingle[0].digest_quality_score !== 88) {
   throw new Error(`expected digest_quality_score=88, got ${String(enrichedSingle[0].digest_quality_score)}`);
 }
-if (enrichedSingle[0].digest_url !== "/digest/2026-03-11?ref=token-alpha") {
-  throw new Error(`expected token-scoped digest_url, got ${String(enrichedSingle[0].digest_url)}`);
+if (enrichedSingle[0].digest_url !== "/digest/2026-03-11?run=targeted%3A2026-03-11T23-09-31-056Z&ref=token-alpha") {
+  throw new Error(`expected token+run scoped digest_url, got ${String(enrichedSingle[0].digest_url)}`);
 }

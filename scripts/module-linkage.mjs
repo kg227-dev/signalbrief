@@ -2,7 +2,6 @@
 // This file is not executed in production; it enumerates module relationships explicitly.
 
 import "../src/jobs/digest-runner-runtime.js";
-import "../eslint.config.js";
 import "../src/jobs/reengagement-runtime.js";
 import "../src/digest/domain/digest-policy-domain-runtime.js";
 import "../src/digest/domain/repeat-dedup-domain-runtime.js";
@@ -137,7 +136,6 @@ import "../web/settings.js";
 
 export const dependencyLinks = [
   "src/jobs/digest-runner-runtime.js",
-  "eslint.config.js",
   "src/jobs/reengagement-runtime.js",
   "src/digest/domain/digest-policy-domain-runtime.js",
   "src/digest/domain/repeat-dedup-domain-runtime.js",

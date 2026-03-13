@@ -8,7 +8,7 @@
     "web": "node web/server.js",
     "bot": "node src/entrypoints/bot-server.js",
     "worker": "node src/entrypoints/scheduler-worker.js",
-    "check:module-linkage": "node --check scripts/check-module-linkage.mjs",
+    "check:module-linkage": "node scripts/check-module-linkage.mjs",
     "smoke:worker": "node scripts/smoke-worker.js",
     "smoke:admin-scheduler": "node scripts/smoke-admin-scheduler.js",
     "ops:verify-runtime": "node scripts/verify-runtime.js",

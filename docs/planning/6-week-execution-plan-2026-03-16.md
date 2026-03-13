@@ -279,10 +279,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 2 spillover
   - Recommendation: use a dedicated unsubscribe secret or nonce-backed token and remove compatibility routes once old links expire.
   - Status (Mar 13, 2026): unsubscribe signing now uses dedicated secret input (`SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET`) with verifier support for both new and legacy signatures; legacy email+sig routes are now retirement-gated by `UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC` (plus force enable/disable flags) and return `410` after retirement.
-- [ ] P4 `Architecture` make module-linkage enforcement real again and fail CI on actual boundary violations.
+- [x] P4 `Architecture` make module-linkage enforcement real again and fail CI on actual boundary violations.
   - Files: `package.json`, `scripts/check-module-linkage.mjs`, `scripts/module-linkage.mjs`, `src/dependency-links.mjs`
   - Target window: Week 4 follow-up
   - Recommendation: execute the real graph checker in CI, repair stale imports, and keep worktree mirrors out of canonical dependency analysis.
+  - Status (Mar 13, 2026): `check:module-linkage` now executes a real resolver (`scripts/check-module-linkage.mjs`) instead of syntax-only parsing, stale non-repo edge imports were removed from canonical maps, and CI now fails on unresolved/non-canonical linkage entries.
 - [ ] P5 `Architecture` split `web/server-runtime-deps-runtime.js` into smaller bounded registries so web-core, admin, digest, and store concerns stop flowing through one dependency hub.
   - Files: `web/server-runtime-deps-runtime.js`, `web/server-runtime.js`, `web/api/**`, `web/routes/**`
   - Target window: Week 4 spillover
@@ -363,3 +364,4 @@ These items extend the existing execution plan without replacing completed day g
 - [x] Carry-forward P1 (phase 1) started: moved runtime secret resolution to env-first config provider (`SIGNALBRIEF_*` overrides), confirmed `config.json` remains local-only via `.gitignore`, and added contract coverage in `tests/contracts/harness/runtime/config-provider.test.js`; external key rotation remains a required manual follow-up.
 - [x] Carry-forward P2 completed: CORS now allows only explicit trusted origins (no wildcard defaults), and `/api/user` now returns a redacted public profile payload instead of full persisted user records.
 - [x] Carry-forward P3 completed: added dedicated unsubscribe signing secret support, upgraded legacy signature verification, and introduced env-driven retirement controls for legacy email+signature unsubscribe routes.
+- [x] Carry-forward P4 completed: module-linkage CI gate now runs real import-target resolution checks and canonical dependency maps no longer include worktree mirror imports or stale missing edges.

@@ -88,7 +88,7 @@ Important correction:
 
 ### Roadmap P4 — Infrastructure & Operations
 
-- `[ ]` **P4-1 SQLite migration** — not implemented (file-store remains active runtime path).
+- `[~]` **P4-1 SQLite migration** — partial (SQLite backend + `file->sqlite` migration tooling with idempotent replay and release artifacts now exist; file-store remains default active path).
 - `[ ]` **P4-2 Token rotation/expiry** — not implemented for settings/auth tokens.
 - `[~]` **P4-3 Health monitoring/alerting** — partial (`/api/health/scheduler` and watchdog tooling exist; no generic `/api/health` + external monitor config committed here).
 - `[ ]` **P4-4 Telegram webhook mode** — not implemented (`bot-server` remains long-polling).

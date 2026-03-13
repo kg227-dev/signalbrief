@@ -224,6 +224,11 @@ Optional store backend switch (default remains file-store):
 - `SIGNALBRIEF_STORE_BACKEND=sqlite` (experimental, requires Node `node:sqlite`)
 - Optional SQLite path override: `SIGNALBRIEF_SQLITE_PATH=/opt/signalbrief/app/data/signalbrief.sqlite`
 
+File-to-SQLite migration tooling (with preflight + release artifact):
+- Preflight only: `npm run ops:store:migrate:file-to-sqlite:preflight -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
+- Execute migration: `npm run ops:store:migrate:file-to-sqlite -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite`
+- VM checklist + evidence contract: [`docs/planning/week5-day23-store-migration-preflight.md`](./docs/planning/week5-day23-store-migration-preflight.md)
+
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash
 SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler

@@ -324,10 +324,11 @@ These items extend the existing execution plan without replacing completed day g
   - Target window: Week 4 / Week 5 spillover
   - Recommendation: keep import smoke checks if useful, but shift the merge gate toward behavioral contracts and runtime parity assertions.
   - Status (Mar 13, 2026): replaced syntax-only hot-path contracts with executable behavior assertions for web entrypoint boot flow and scheduler failure-state handling, expanded auth/session policy contracts to validate real session+bypass+rate-limit behavior, and added digest Telegram output formatting contracts while preserving existing retry/degradation behavior coverage in fetch/enrich/transport runtimes.
-- [ ] P13 `Release Process` enforce staging-before-prod in automation instead of relying only on documentation and operator discipline.
+- [x] P13 `Release Process` enforce staging-before-prod in automation instead of relying only on documentation and operator discipline.
   - Files: `package.json`, `scripts/deploy-production.js`, `scripts/deploy-staging.js`, `docs/planning/release-policy.md`
   - Target window: Week 4 / Week 6 spillover
   - Recommendation: require passing staging verification or an explicit override before `ops:deploy:prod` can proceed.
+  - Status (Mar 13, 2026): production deploy now enforces a staging promotion gate via artifact validation (freshness + matching SHA + successful staging public verification), staging deploy writes the artifact automatically after successful verification, and explicit override paths are gated to `--hotfix` or `--skip-staging-gate`.
 - [ ] P14 `DevOps` harden the container build with multi-stage image construction, pinned install behavior, and explicit readiness expectations.
   - Files: `Dockerfile`, `docker-compose.yml`
   - Target window: Week 1 or Week 6 spillover

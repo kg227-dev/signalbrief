@@ -122,6 +122,7 @@ npm test
 npm run qa:harness
 npm run qa:matrix
 npm run ops:deploy:prod
+npm run ops:deploy:prod:hotfix
 npm run ops:deploy:staging
 npm run ops:release:window-check
 npm run ops:rollback:sha -- --rollback-sha <sha>
@@ -141,6 +142,7 @@ The active execution plan remains in place at [`docs/planning/6-week-execution-p
 Store-migration and canary rollout procedures remain under `docs/planning/` while the current execution plan is active.
 
 Production deploys now enforce release windows by default (Mon-Fri 11:00 ET and 16:00 ET, +/- 45 min). Use `--hotfix` only for active incidents.
+Production promotion now also enforces a staging verification artifact gate (same SHA, fresh artifact, successful staging public checks) unless an explicit override is provided.
 
 ## Stack
 

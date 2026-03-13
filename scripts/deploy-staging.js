@@ -22,6 +22,8 @@ function printHelp() {
       "  DEPLOY_STAGING_REMOTE_DIR",
       "  DEPLOY_STAGING_REMOTE_TMP_DIR",
       "  DEPLOY_STAGING_SERVICES",
+      "  DEPLOY_STAGING_ARTIFACT_PATH",
+      "  DEPLOY_PROMOTION_ARTIFACT_PATH",
       "",
       "All args are forwarded to scripts/deploy-production.js",
       "(for example: --skip-build --skip-remote-verify).",

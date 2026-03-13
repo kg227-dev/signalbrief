@@ -11,6 +11,13 @@ const {
   DEFAULT_RELEASE_WINDOWS_ET,
   evaluateReleaseWindowGuard,
 } = require("./release-window-guard-runtime");
+const {
+  DEFAULT_STAGING_ARTIFACT_PATH,
+  DEFAULT_STAGING_ARTIFACT_MAX_AGE_MINUTES,
+  evaluateStagingPromotionGate,
+  formatStagingPromotionGateFailure,
+  writeStagingDeployArtifact,
+} = require("./deploy-promotion-gate-runtime");
 
 const ROOT = path.resolve(__dirname, "..");
 const PUBLIC_VERIFY_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_ATTEMPTS, 8, 1);
@@ -384,9 +391,12 @@ async function main() {
         "  --archive-sha <commit-sha>",
         "  --target-env <production|staging>",
         "  --services \"web bot worker\"",
+        "  --staging-artifact-path <path>",
+        "  --staging-artifact-max-age-minutes <n>",
         "  --release-windows-et <spec>",
         "  --release-window-tolerance-minutes <n>",
         "  --hotfix",
+        "  --skip-staging-gate",
         "  --allow-outside-window",
         "  --skip-build",
         "  --skip-remote-verify",
@@ -408,6 +418,14 @@ async function main() {
   const targetEnv = (readOption(options, "target-env", "target_env") || process.env.DEPLOY_TARGET_ENV || "production")
     .toLowerCase()
     .trim();
+  const stagingArtifactPath = readOption(options, "staging-artifact-path", "staging_artifact_path")
+    || process.env.DEPLOY_STAGING_ARTIFACT_PATH
+    || DEFAULT_STAGING_ARTIFACT_PATH;
+  const stagingArtifactMaxAgeMinutes = parsePositiveInt(
+    readOption(options, "staging-artifact-max-age-minutes", "staging_artifact_max_age_minutes")
+    || process.env.DEPLOY_STAGING_ARTIFACT_MAX_AGE_MINUTES,
+    DEFAULT_STAGING_ARTIFACT_MAX_AGE_MINUTES
+  );
 
   const serviceListRaw = readOption(options, "services") || process.env.DEPLOY_SERVICES || "web bot worker";
   const services = parseServiceList(serviceListRaw);
@@ -416,6 +434,11 @@ async function main() {
   const skipBuild = flags.has("skip-build");
   const skipPublicVerify = flags.has("skip-public-verify");
   const skipRemoteVerify = flags.has("skip-remote-verify");
+  const hotfixMode = flags.has("hotfix") || parseBoolean(process.env.DEPLOY_HOTFIX);
+  const skipStagingGate = flags.has("skip-staging-gate")
+    || parseBoolean(process.env.DEPLOY_SKIP_STAGING_GATE);
+  const allowOutsideWindow = flags.has("allow-outside-window")
+    || parseBoolean(process.env.DEPLOY_ALLOW_OUTSIDE_WINDOW);
 
   if (archiveSha) verifyGitCommit(archiveSha);
   const sha = getGitShortSha(archiveSha || "HEAD");
@@ -425,6 +448,29 @@ async function main() {
   const sshTarget = `${sshUser}@${sshHost}`;
 
   if (targetEnv === "production") {
+    const stagingGateResult = evaluateStagingPromotionGate({
+      targetEnv,
+      deploySha: sha,
+      artifactPath: stagingArtifactPath,
+      maxAgeMinutes: stagingArtifactMaxAgeMinutes,
+      bypass: hotfixMode || skipStagingGate,
+      bypassMode: hotfixMode ? "hotfix" : "manual_override",
+    });
+    if (!stagingGateResult.allowed) {
+      fail(
+        "staging promotion gate blocked deploy",
+        formatStagingPromotionGateFailure(stagingGateResult)
+      );
+    }
+    if (stagingGateResult.enforced) {
+      log(
+        "staging promotion gate: pass "
+        + `(artifact=${stagingGateResult.artifactPath}, age=${stagingGateResult.artifactAgeMinutes || 0}m)`
+      );
+    } else {
+      log(`staging promotion gate: bypass (mode=${stagingGateResult.mode})`);
+    }
+
     const releaseWindowResult = evaluateReleaseWindowGuard({
       windowsSpec: readOption(options, "release-windows-et", "release_windows_et")
         || process.env.DEPLOY_RELEASE_WINDOWS_ET
@@ -434,8 +480,8 @@ async function main() {
         || process.env.DEPLOY_RELEASE_WINDOW_TOLERANCE_MINUTES,
         45
       ),
-      hotfix: flags.has("hotfix") || parseBoolean(process.env.DEPLOY_HOTFIX),
-      allowOutsideWindow: flags.has("allow-outside-window") || parseBoolean(process.env.DEPLOY_ALLOW_OUTSIDE_WINDOW),
+      hotfix: hotfixMode,
+      allowOutsideWindow,
     });
 
     const nextWindow = releaseWindowResult.next_window
@@ -520,6 +566,20 @@ async function main() {
     await verifyPublicEndpoints(publicUrl);
   } else {
     log("public verification skipped by flag");
+  }
+
+  if (targetEnv === "staging" && !skipPublicVerify) {
+    const artifactResult = writeStagingDeployArtifact({
+      sha,
+      host: sshHost,
+      publicUrl,
+      services,
+      publicVerificationPassed: true,
+      completedAt: new Date().toISOString(),
+    }, { artifactPath: stagingArtifactPath });
+    log(`staging artifact recorded: ${artifactResult.artifactPath}`);
+  } else if (targetEnv === "staging") {
+    log("staging artifact skipped: public verification was not executed");
   }
 
   log(`DONE deploy=${sha} host=${sshHost}`);

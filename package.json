@@ -15,6 +15,7 @@
     "ops:verify-runtime:quick": "node scripts/verify-runtime.js --skip-canary",
     "ops:release:window-check": "node scripts/release-window-guard.js",
     "ops:deploy:prod": "node scripts/deploy-production.js",
+    "ops:deploy:prod:hotfix": "node scripts/deploy-production.js --hotfix",
     "ops:deploy:staging": "node scripts/deploy-staging.js",
     "ops:deploy:web": "DEPLOY_SERVICES=web node scripts/deploy-production.js",
     "ops:rollback:sha": "node scripts/deploy-rollback-by-sha.js",

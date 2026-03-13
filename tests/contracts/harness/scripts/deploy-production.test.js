@@ -10,6 +10,8 @@ assertSourceIncludesFile(TARGET_PATH, [
   "DEPLOY_PUBLIC_VERIFY_ATTEMPTS",
   "archive-sha",
   "pack source commit=",
+  "staging promotion gate",
+  "--skip-staging-gate",
   "release window gate",
   "Use --hotfix only for active incidents",
   "remote: runtime verify",

@@ -30,6 +30,7 @@ const config = resolveStagingDeployConfig({
   DEPLOY_STAGING_REMOTE_DIR: "/opt/staging/app",
   DEPLOY_STAGING_REMOTE_TMP_DIR: "/tmp",
   DEPLOY_STAGING_SERVICES: "web worker",
+  DEPLOY_STAGING_ARTIFACT_PATH: "/tmp/staging-artifact.json",
 });
 assert.strictEqual(config.host, "10.0.0.1");
 assert.strictEqual(config.publicUrl, "https://staging.getsignalbrief.com");
@@ -38,6 +39,7 @@ assert.strictEqual(config.key, "/tmp/key");
 assert.strictEqual(config.remoteDir, "/opt/staging/app");
 assert.strictEqual(config.remoteTmpDir, "/tmp");
 assert.strictEqual(config.services, "web worker");
+assert.strictEqual(config.artifactPath, "/tmp/staging-artifact.json");
 
 const args = buildDeployProductionArgs(config, ["--skip-build"]);
 assert.deepStrictEqual(args.slice(0, 2), ["scripts/deploy-production.js", "--host"]);
@@ -46,3 +48,5 @@ assert.ok(args.includes("https://staging.getsignalbrief.com"));
 assert.ok(args.includes("--target-env"));
 assert.ok(args.includes("staging"));
 assert.strictEqual(args[args.length - 1], "--skip-build");
+assert.ok(args.includes("--staging-artifact-path"));
+assert.ok(args.includes("/tmp/staging-artifact.json"));

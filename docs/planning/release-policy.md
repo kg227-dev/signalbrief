@@ -31,6 +31,11 @@ For those changes, use this sequence:
   - `npm run ops:deploy:prod`
 5. Validate production gates (same three checks).
 
+Promotion gate behavior in tooling:
+- `ops:deploy:staging` now writes a staging verification artifact to `artifacts/releases/latest-staging-deploy.json` when public verification passes.
+- `ops:deploy:prod` now blocks unless that artifact exists, is fresh, and matches the exact SHA being promoted.
+- Default freshness window is 24h (`DEPLOY_STAGING_ARTIFACT_MAX_AGE_MINUTES` or `--staging-artifact-max-age-minutes` to override).
+
 ## Hotfix Path
 
 Use direct production deploy only for incidents with active user impact (service down, auth breakage, broken onboarding/settings, failed digest scheduling).
@@ -43,6 +48,10 @@ Hotfix requirements:
   - incident summary
   - rollback owner
 
+Hotfix note:
+- `--hotfix` is treated as an explicit staging-gate override for production deploys.
+- Non-incident manual override is `--skip-staging-gate` (must include owner callout in release notes).
+
 ## Batching Rules
 
 - Non-incident runtime changes are batched into ET release windows enforced by deploy tooling.
@@ -53,6 +62,9 @@ Hotfix requirements:
 - Outside-window deploys require one of:
   - `--hotfix` (active incident path only)
   - `--allow-outside-window` (manual exceptional override with explicit owner callout)
+- Staging gate override options:
+  - `--hotfix` (incident path)
+  - `--skip-staging-gate` (manual non-incident override with explicit owner/rationale)
 - UI copy/docs-only changes may skip staging deploy.
 - If risk is medium/high, require two-person review before prod promotion.
 

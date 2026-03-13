@@ -24,6 +24,8 @@ function resolveStagingDeployConfig(env = process.env) {
   const remoteDir = readTrimmed(env.DEPLOY_STAGING_REMOTE_DIR) || "/opt/signalbrief-staging/app";
   const remoteTmpDir = readTrimmed(env.DEPLOY_STAGING_REMOTE_TMP_DIR) || "/tmp";
   const services = readTrimmed(env.DEPLOY_STAGING_SERVICES) || "web bot worker";
+  const artifactPath = readTrimmed(env.DEPLOY_STAGING_ARTIFACT_PATH)
+    || readTrimmed(env.DEPLOY_PROMOTION_ARTIFACT_PATH);
 
   return {
     host,
@@ -33,6 +35,7 @@ function resolveStagingDeployConfig(env = process.env) {
     remoteDir,
     remoteTmpDir,
     services,
+    artifactPath,
   };
 }
 
@@ -55,6 +58,9 @@ function buildDeployProductionArgs(config, passthroughArgs = []) {
     "staging",
     "--services",
     config.services,
+    ...(config.artifactPath
+      ? ["--staging-artifact-path", config.artifactPath]
+      : []),
     ...passthroughArgs,
   ];
 }

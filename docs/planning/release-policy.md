@@ -45,9 +45,22 @@ Hotfix requirements:
 
 ## Batching Rules
 
-- Non-incident runtime changes should be batched into planned release windows.
+- Non-incident runtime changes are batched into ET release windows enforced by deploy tooling.
+- Default release windows:
+  - Monday-Friday at **11:00 ET** and **16:00 ET**
+  - Window tolerance: +/- 45 minutes
+- `npm run ops:deploy:prod` now enforces this gate for `target-env=production`.
+- Outside-window deploys require one of:
+  - `--hotfix` (active incident path only)
+  - `--allow-outside-window` (manual exceptional override with explicit owner callout)
 - UI copy/docs-only changes may skip staging deploy.
 - If risk is medium/high, require two-person review before prod promotion.
+
+Operator helpers:
+- Check window status only: `npm run ops:release:window-check`
+- Override defaults if needed:
+  - `DEPLOY_RELEASE_WINDOWS_ET="MON@11:00,MON@16:00,..."`
+  - `DEPLOY_RELEASE_WINDOW_TOLERANCE_MINUTES=45`
 
 ## Rollback
 

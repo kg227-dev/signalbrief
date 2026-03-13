@@ -51,6 +51,8 @@ function buildDeployProductionArgs(config, passthroughArgs = []) {
     config.remoteTmpDir,
     "--public-url",
     config.publicUrl,
+    "--target-env",
+    "staging",
     "--services",
     config.services,
     ...passthroughArgs,

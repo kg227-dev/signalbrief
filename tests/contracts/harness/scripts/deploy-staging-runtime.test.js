@@ -43,4 +43,6 @@ const args = buildDeployProductionArgs(config, ["--skip-build"]);
 assert.deepStrictEqual(args.slice(0, 2), ["scripts/deploy-production.js", "--host"]);
 assert.ok(args.includes("--public-url"));
 assert.ok(args.includes("https://staging.getsignalbrief.com"));
+assert.ok(args.includes("--target-env"));
+assert.ok(args.includes("staging"));
 assert.strictEqual(args[args.length - 1], "--skip-build");

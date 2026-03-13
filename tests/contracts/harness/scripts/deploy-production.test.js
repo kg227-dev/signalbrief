@@ -8,6 +8,8 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   "DEPLOY_PUBLIC_VERIFY_ATTEMPTS",
+  "release window gate",
+  "Use --hotfix only for active incidents",
   "remote: runtime verify",
   "scheduler health check failed after retries",
 ]);

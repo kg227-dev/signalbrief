@@ -6,6 +6,10 @@ const os = require("os");
 const path = require("path");
 const http = require("http");
 const https = require("https");
+const {
+  DEFAULT_RELEASE_WINDOWS_ET,
+  evaluateReleaseWindowGuard,
+} = require("./release-window-guard-runtime");
 
 const ROOT = path.resolve(__dirname, "..");
 const PUBLIC_VERIFY_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_ATTEMPTS, 8, 1);
@@ -82,6 +86,12 @@ function parseServiceList(rawValue) {
     .split(/[,\s]+/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function parseBoolean(rawValue) {
+  const value = String(rawValue || "").trim().toLowerCase();
+  if (!value) return false;
+  return ["1", "true", "yes", "y", "on"].includes(value);
 }
 
 function sleep(ms) {
@@ -288,10 +298,17 @@ async function main() {
         "  --remote-dir <remote-app-dir>",
         "  --remote-tmp-dir <remote-tmp-dir>",
         "  --public-url <https://public-host>",
+        "  --target-env <production|staging>",
         "  --services \"web bot worker\"",
+        "  --release-windows-et <spec>",
+        "  --release-window-tolerance-minutes <n>",
+        "  --hotfix",
+        "  --allow-outside-window",
         "  --skip-build",
         "  --skip-remote-verify",
         "  --skip-public-verify",
+        "",
+        `Default release windows (ET): ${DEFAULT_RELEASE_WINDOWS_ET}`,
       ].join("\n")
     );
     return;
@@ -303,6 +320,9 @@ async function main() {
   const remoteDir = readOption(options, "remote-dir", "remote_dir") || process.env.DEPLOY_REMOTE_DIR || "/opt/signalbrief/app";
   const remoteTmpDir = readOption(options, "remote-tmp-dir", "remote_tmp_dir") || process.env.DEPLOY_REMOTE_TMP_DIR || "/tmp";
   const publicUrl = readOption(options, "public-url", "public_url") || process.env.DEPLOY_PUBLIC_URL || "https://getsignalbrief.com";
+  const targetEnv = (readOption(options, "target-env", "target_env") || process.env.DEPLOY_TARGET_ENV || "production")
+    .toLowerCase()
+    .trim();
 
   const serviceListRaw = readOption(options, "services") || process.env.DEPLOY_SERVICES || "web bot worker";
   const services = parseServiceList(serviceListRaw);
@@ -317,6 +337,38 @@ async function main() {
   const archivePath = path.join(os.tmpdir(), archiveName);
   const remoteArchivePath = `${remoteTmpDir.replace(/\/+$/, "")}/${archiveName}`;
   const sshTarget = `${sshUser}@${sshHost}`;
+
+  if (targetEnv === "production") {
+    const releaseWindowResult = evaluateReleaseWindowGuard({
+      windowsSpec: readOption(options, "release-windows-et", "release_windows_et")
+        || process.env.DEPLOY_RELEASE_WINDOWS_ET
+        || DEFAULT_RELEASE_WINDOWS_ET,
+      toleranceMinutes: parsePositiveInt(
+        readOption(options, "release-window-tolerance-minutes", "release_window_tolerance_minutes")
+        || process.env.DEPLOY_RELEASE_WINDOW_TOLERANCE_MINUTES,
+        45
+      ),
+      hotfix: flags.has("hotfix") || parseBoolean(process.env.DEPLOY_HOTFIX),
+      allowOutsideWindow: flags.has("allow-outside-window") || parseBoolean(process.env.DEPLOY_ALLOW_OUTSIDE_WINDOW),
+    });
+
+    const nextWindow = releaseWindowResult.next_window
+      ? `${releaseWindowResult.next_window.label} (in ${releaseWindowResult.next_window.eta})`
+      : "n/a";
+    if (!releaseWindowResult.allowed) {
+      fail(
+        "release window gate blocked deploy",
+        [
+          `now_et=${releaseWindowResult.now_et.weekday_label} ${releaseWindowResult.now_et.time} ${releaseWindowResult.now_et.timezone}`,
+          `next_window=${nextWindow}`,
+          "Use --hotfix only for active incidents, or ship in the next planned release window.",
+        ].join("\n")
+      );
+    }
+    log(`release window gate: pass (mode=${releaseWindowResult.mode}, next_window=${nextWindow})`);
+  } else {
+    log(`release window gate: skipped (target_env=${targetEnv})`);
+  }
 
   log(`commit=${sha}`);
   run("tar", [

@@ -112,6 +112,8 @@ npm run qa:harness
 npm run qa:matrix
 npm run ops:deploy:prod
 npm run ops:deploy:staging
+npm run ops:release:window-check
+npm run ops:store:full-enable-validate -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite
 ```
 
 ## Production Notes
@@ -125,6 +127,8 @@ Production is cloud-first and VM-hosted. Detailed deploy, backup, rollback, and 
 The active execution plan remains in place at [`docs/planning/6-week-execution-plan-2026-03-16.md`](./docs/planning/6-week-execution-plan-2026-03-16.md) and is intentionally not summarized here.
 
 Store-migration and canary rollout procedures remain under `docs/planning/` while the current execution plan is active.
+
+Production deploys now enforce release windows by default (Mon-Fri 11:00 ET and 16:00 ET, +/- 45 min). Use `--hotfix` only for active incidents.
 
 ## Stack
 

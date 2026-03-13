@@ -1,7 +1,7 @@
 /**
  * SignalBrief — store.js
- * Simple JSON-based data store. One file per user keyed by chatId.
- * Upgrade path: swap readUser/writeUser for SQLite when multi-user hits ~20+.
+ * User store runtime with adapter boundary.
+ * Default backend remains JSON file-store; SQLite backend is opt-in.
  */
 // @ts-check
 
@@ -27,6 +27,24 @@ function defaultDataDir() {
 
 function createStoreIndex() {
   return new Map();
+}
+
+function normalizeStoreBackend(value) {
+  const normalized = String(value || "").toLowerCase().trim();
+  if (normalized === "sqlite") return "sqlite";
+  return "file";
+}
+
+function resolveStoreBackend(options = {}) {
+  if (typeof options.backend === "string" && options.backend.trim()) {
+    return normalizeStoreBackend(options.backend);
+  }
+  return normalizeStoreBackend(process.env.SIGNALBRIEF_STORE_BACKEND);
+}
+
+function createSqliteStoreAdapter(deps, options = {}) {
+  const { createSqliteStoreAdapter: createSqliteAdapterRuntime } = require("./store-adapter-sqlite-runtime");
+  return createSqliteAdapterRuntime(deps, options);
 }
 
 function createStoreState(opts = {}) {
@@ -109,9 +127,24 @@ function createStore(options = {}) {
     generateToken,
     warnStoreRecovery,
   };
-  const adapterFactory = typeof options.createStoreAdapter === "function"
-    ? options.createStoreAdapter
-    : createFileStoreAdapter;
+  const adapterFactory = (() => {
+    if (typeof options.createStoreAdapter === "function") {
+      return options.createStoreAdapter;
+    }
+
+    const backend = resolveStoreBackend(options);
+    if (backend === "sqlite") {
+      const explicitSqlitePath = String(options.sqlitePath || process.env.SIGNALBRIEF_SQLITE_PATH || "").trim();
+      const resolveSqlitePath = () => (
+        explicitSqlitePath
+          ? path.resolve(explicitSqlitePath)
+          : path.join(currentDataDir(), "signalbrief.sqlite")
+      );
+      return (deps) => createSqliteStoreAdapter(deps, { resolveSqlitePath });
+    }
+
+    return createFileStoreAdapter;
+  })();
   const recordRuntime = assertStoreAdapterContract(
     adapterFactory(adapterDeps),
     { label: "store adapter" }
@@ -193,7 +226,10 @@ function findUserByToken(token) {
 module.exports = {
   createStoreIndex,
   createStoreState,
+  normalizeStoreBackend,
+  resolveStoreBackend,
   createFileStoreAdapter,
+  createSqliteStoreAdapter,
   createStore,
   createStoreRuntime,
   initStore,

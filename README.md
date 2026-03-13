@@ -219,6 +219,11 @@ Required staging gates (same shape as prod):
 
 Smoke scripts now force an isolated temp data directory (`SIGNALBRIEF_DATA_DIR=/tmp/...`) to avoid polluting production-like user data during local/runtime checks.
 
+Optional store backend switch (default remains file-store):
+- `SIGNALBRIEF_STORE_BACKEND=file` (default)
+- `SIGNALBRIEF_STORE_BACKEND=sqlite` (experimental, requires Node `node:sqlite`)
+- Optional SQLite path override: `SIGNALBRIEF_SQLITE_PATH=/opt/signalbrief/app/data/signalbrief.sqlite`
+
 Optional watchdog (for cron/systemd timer): auto-restart worker if scheduler heartbeat goes stale.
 ```bash
 SCHEDULER_WATCHDOG_AUTO_RESTART=1 npm run ops:watchdog-scheduler

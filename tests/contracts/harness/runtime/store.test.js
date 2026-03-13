@@ -19,7 +19,10 @@ assertModuleExports(() => store, TARGET_REL);
 const {
   createStore,
   createFileStoreAdapter,
+  createSqliteStoreAdapter,
   createStoreRuntime,
+  normalizeStoreBackend,
+  resolveStoreBackend,
   initStore,
   resetStoreState,
   readUser,
@@ -30,9 +33,14 @@ const {
 } = store;
 assert.strictEqual(typeof createStoreRuntime, "function", "store should export explicit runtime factory");
 assert.strictEqual(typeof createFileStoreAdapter, "function", "store should expose default file adapter factory");
+assert.strictEqual(typeof createSqliteStoreAdapter, "function", "store should expose sqlite adapter factory");
+assert.strictEqual(normalizeStoreBackend("sqlite"), "sqlite");
+assert.strictEqual(normalizeStoreBackend("unexpected"), "file");
+assert.strictEqual(resolveStoreBackend({ backend: "sqlite" }), "sqlite");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-"));
 const tempDirIsolated = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-test-iso-"));
+const sqliteDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-store-sqlite-test-"));
 try {
   resetStoreState({ dataDir: tempDir });
   initStore({ dataDir: tempDir, rebuildIndex: true });
@@ -126,8 +134,29 @@ try {
     /store adapter missing required method/,
     "invalid adapters should fail fast at store construction"
   );
+
+  const sqliteStore = createStore({
+    backend: "sqlite",
+    dataDir: sqliteDir,
+    sqlitePath: path.join(sqliteDir, "signalbrief.sqlite"),
+  });
+  sqliteStore.initStore({ rebuildIndex: true });
+  const sqliteDefault = sqliteStore.readUser("sqlite-chat");
+  const sqliteToken = generateToken();
+  sqliteStore.writeUser("sqlite-chat", {
+    ...sqliteDefault,
+    email: "sqlite-chat@example.com",
+    token: sqliteToken,
+  });
+  const sqlitePersisted = sqliteStore.readUser("sqlite-chat");
+  assert.strictEqual(sqlitePersisted.email, "sqlite-chat@example.com");
+  assert.strictEqual(sqlitePersisted.token, sqliteToken);
+  const sqliteLookup = sqliteStore.findUserByToken(sqliteToken);
+  assert.ok(sqliteLookup, "sqlite backend should resolve token index");
+  assert.strictEqual(sqliteLookup.chatId, "sqlite-chat");
 } finally {
   resetStoreState();
   fs.rmSync(tempDir, { recursive: true, force: true });
   fs.rmSync(tempDirIsolated, { recursive: true, force: true });
+  fs.rmSync(sqliteDir, { recursive: true, force: true });
 }

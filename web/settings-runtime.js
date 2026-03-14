@@ -287,7 +287,7 @@ async function initSettingsPage() {
     ? "⏸️ Digest paused. We will stop sending until you reactivate."
     : (params.get("reactivated") === "1"
       ? "✅ SignalBrief reactivated. Your digest will resume."
-      : (invalidToken ? "⚠️ That link is invalid or expired. Request a fresh settings link below." : ""));
+      : (invalidToken ? "Enter your email and we'll send you a link to your preferences page." : ""));
 
   const archiveNavLink = byId("archiveNavLink");
   if (archiveNavLink) {

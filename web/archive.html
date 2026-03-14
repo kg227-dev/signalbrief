@@ -1298,6 +1298,7 @@ async function loadArchiveFlatWithFallback(token) {
 
 async function init() {
   bindEvents();
+  const archiveAccessFallbackMessage = "Enter your email and we will send your private access link.";
 
   const params = new URLSearchParams(window.location.search);
   state.token = params.get("token");
@@ -1334,17 +1335,17 @@ async function init() {
     const userRes = await fetch("/api/user?token=" + encodeURIComponent(state.token));
     userData = await userRes.json();
     if (!userRes.ok || userData.error) {
-      showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
+      showGate(archiveAccessFallbackMessage);
       return;
     }
   } catch {
-    showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
+    showGate(archiveAccessFallbackMessage);
     return;
   }
 
   const archiveData = await loadArchiveFlatWithFallback(state.token);
   if (archiveData && archiveData.authError) {
-    showGate("That archive link is invalid or expired. Enter your email and we will send a fresh one.");
+    showGate(archiveAccessFallbackMessage);
     return;
   }
   if (!archiveData || archiveData.loadError) {

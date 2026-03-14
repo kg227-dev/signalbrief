@@ -19,7 +19,10 @@ async function handleCoreRequestLinkRoute(ctx, deps) {
 
   const user = allUsers().find((row) => (row.email || "").toLowerCase().trim() === email);
   if (!user || !user.token) {
-    json(res, { success: true });
+    json(res, {
+      success: false,
+      error: "No account found for that email. Sign up first.",
+    }, 404);
     return true;
   }
 

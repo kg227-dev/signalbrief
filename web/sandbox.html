@@ -5,22 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Digest Sandbox — SignalBrief</title>
 <meta name="robots" content="noindex,nofollow,noarchive">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #FAFAF8; --card: #FFFFFF; --text: #111111; --text-secondary: #6B7280;
-  --text-2: #374151; --text-light: #9CA3AF;
-  --accent: #2563EB; --accent-hover: #1D4ED8; --accent-light: #EFF6FF;
-  --border: rgba(0,0,0,0.08); --border-subtle: rgba(0,0,0,0.05); --radius: 12px;
+  --bg: #edeae4; --card: #FFFFFF; --text: #1a1a1a; --text-secondary: #6b6560;
+  --text-2: #3d3833; --text-light: #9a9490;
+  --accent: #3b5fc0; --accent-hover: #2d4ea0; --accent-light: #e8edf8;
+  --border: rgba(0,0,0,0.06); --border-subtle: rgba(0,0,0,0.04); --radius: 12px;
   --green: #16A34A; --yellow: #D97706; --red: #DC2626;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
 
 /* Header */
 .header { max-width:1560px; margin:0 auto; padding:28px 24px 16px; border-bottom:1px solid var(--border); margin-bottom:0; }
 .header-top { display:flex; align-items:center; gap:12px; }
-.header h1 { font-size:22px; font-weight:700; letter-spacing:-0.3px; }
+.header h1 { font-size:28px; font-weight:700; letter-spacing:-0.4px; }
 .header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; text-decoration:none; }
 .header .back-link { font-size:13px; color:var(--text-secondary); text-decoration:none; margin-left:auto; }
 .header .back-link:hover { color:var(--accent); }
@@ -107,7 +107,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 
 /* Telegram preview */
 .tg-preview { background:#1E293B; border-radius:12px; padding:20px; max-width:620px; margin:0 auto; }
-.tg-preview pre { color:#E2E8F0; font-size:13px; line-height:1.65; white-space:pre-wrap; word-wrap:break-word; font-family:'DM Sans',monospace; margin:0; }
+.tg-preview pre { color:#E2E8F0; font-size:13px; line-height:1.65; white-space:pre-wrap; word-wrap:break-word; font-family:'Inter',monospace; margin:0; }
 
 /* Data table */
 .data-section { margin-top:20px; }
@@ -201,12 +201,55 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 
 .tg-actions { display:flex; flex-wrap:wrap; gap:4px; margin:4px 8px 8px; }
 .tg-action-btn { background:#212D3B; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:5px 10px; font-size:11px; color:#5B9BD5; cursor:default; }
+
+/* Dark toggle */
+#darkToggle {
+  position:fixed; top:20px; right:20px; z-index:999;
+  width:42px; height:42px; border-radius:50%;
+  border:1px solid var(--border); background:var(--card);
+  cursor:pointer; font-size:18px;
+  display:flex; align-items:center; justify-content:center;
+  transition:all 0.2s ease;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+}
+#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+
+/* Dark mode */
+body.dark {
+  --bg: #1a1815; --card: #2a2622; --text: #e8e4de; --text-secondary: #9a9490;
+  --text-2: #c5bfb6; --text-light: #6b6560;
+  --accent: #6b8bd6; --accent-hover: #8ba3e0; --accent-light: rgba(107,139,214,0.12);
+  --border: rgba(255,255,255,0.08); --border-subtle: rgba(255,255,255,0.05);
+}
+body.dark .topic-chip { background:var(--card); }
+body.dark .topic-chip:hover { background:var(--accent-light); }
+body.dark .topic-chip.selected { background:var(--accent-light); }
+body.dark .topic-chip.custom-kw { background:rgba(217,119,6,0.12); color:#d4a574; border-color:rgba(217,119,6,0.25); }
+body.dark .topic-chip.custom-kw.selected { background:#D97706; color:#fff; }
+body.dark .depth-option { background:var(--card); }
+body.dark .depth-option.selected { background:var(--accent-light); }
+body.dark .depth-option.selected .depth-radio { box-shadow:inset 0 0 0 3px var(--card); }
+body.dark .pill { background:var(--card); }
+body.dark .pill.selected { background:var(--accent-light); }
+body.dark .kw-input-row input { background:var(--card); color:var(--text); }
+body.dark .adv-row select { background:var(--card); color:var(--text); }
+body.dark .estimate-card { background:rgba(107,139,214,0.1); border-color:rgba(107,139,214,0.2); }
+body.dark .loading-card { background:var(--card); }
+body.dark .stage-dot { background:var(--card); }
+body.dark .skeleton-block { background:linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.05) 75%); background-size:400px 100%; }
+body.dark .error-bar { background:rgba(185,28,28,0.12); border-color:rgba(185,28,28,0.3); color:#fca5a5; }
+body.dark .metric-card { background:var(--card); }
+body.dark .data-table th { border-bottom-color:var(--border); }
+body.dark .data-table td { border-bottom-color:var(--border-subtle); }
+body.dark .email-frame { background:#1a1815; }
+body.dark .left-panel { border-right-color:var(--border); }
 </style>
 </head>
 <body>
+<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
   <div class="header">
     <div class="header-top">
-      <h1>Digest Sandbox</h1>
+      <h1 style="font-family:'Playfair Display',serif;">Digest Sandbox</h1>
       <span class="badge">Internal</span>
       <a href="/admin" class="back-link">&larr; Back to Admin</a>
     </div>
@@ -421,6 +464,18 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
   </div>
 
 <script>
+/* Dark mode */
+var _darkToggle = document.getElementById('darkToggle');
+function setDarkMode(isDark) {
+  document.body.classList.toggle('dark', isDark);
+  if (_darkToggle) _darkToggle.textContent = isDark ? '\u2600\uFE0F' : '\uD83C\uDF19';
+  localStorage.setItem('sb-dark', isDark ? '1' : '0');
+}
+if (_darkToggle) _darkToggle.addEventListener('click', function() {
+  setDarkMode(!document.body.classList.contains('dark'));
+});
+if (localStorage.getItem('sb-dark') === '1') setDarkMode(true);
+
 // ── State ────────────────────────────────────────────────────────────────────
 let selectedTopics = [];
 let customKeywords = [];

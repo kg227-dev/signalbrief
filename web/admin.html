@@ -667,10 +667,11 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .ceo-health-panel {
   flex:1 1 560px;
   min-width:320px;
-  border:1px solid var(--border-subtle);
+  border:1.5px solid rgba(0,0,0,0.10);
   border-radius:10px;
-  background:linear-gradient(180deg, #FBFDFF 0%, #FFFFFF 100%);
-  padding:12px 14px;
+  background:linear-gradient(180deg, #f5f3ef 0%, #faf9f6 100%);
+  padding:14px 16px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.05);
 }
 .ceo-health-head {
   display:flex;
@@ -882,7 +883,7 @@ body.dark .schedule-empty-day { border-color:rgba(255,255,255,0.1); }
 body.dark .schedule-more { background:rgba(255,255,255,0.02); }
 body.dark .schedule-more button { background:var(--card); color:var(--accent); }
 body.dark .schedule-set-btn { background:var(--card); color:var(--accent); }
-body.dark .ceo-health-panel { background:linear-gradient(180deg, rgba(255,255,255,0.04) 0%, var(--card) 100%); }
+body.dark .ceo-health-panel { background:linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%); border-color:rgba(255,255,255,0.12); }
 body.dark .ceo-health-cell { background:rgba(255,255,255,0.03); }
 body.dark .ceo-action-now { background:rgba(255,255,255,0.03); }
 body.dark .ceo-command-btn { background:var(--card); color:var(--text-2); }
@@ -923,17 +924,26 @@ body.dark .modal-feedback.err { background:#2a0a0a; color:#fca5a5; border-color:
 body.dark .failed-delivery-row { background:var(--card); }
 body.dark .failed-delivery-error { color:#fca5a5; }
 body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-color:rgba(180,83,9,0.3); }
-body.dark .dark-toggle { color:var(--text-secondary); border-color:var(--border); background:var(--card); }
+#darkToggle {
+  position:fixed; top:20px; right:20px; z-index:999;
+  width:42px; height:42px; border-radius:50%;
+  border:1px solid var(--border); background:var(--card);
+  cursor:pointer; font-size:18px;
+  display:flex; align-items:center; justify-content:center;
+  transition:all 0.2s ease;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+}
+#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
 </style>
 </head>
 <body>
+<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
 <div class="container">
 
   <div class="header">
     <div class="header-top">
       <h1><span class="brand">SignalBrief</span> Admin</h1>
       <a href="/admin/sandbox" class="badge" style="text-decoration:none;cursor:pointer;">Sandbox</a>
-      <button onclick="toggleDarkMode()" class="btn-secondary dark-toggle" style="font-size:14px;border-radius:6px;padding:4px 10px;cursor:pointer;" title="Toggle dark mode" aria-label="Toggle dark mode">&#9684;</button>
       <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
@@ -1396,11 +1406,16 @@ body.dark .dark-toggle { color:var(--text-secondary); border-color:var(--border)
 
 <script>
 /* Dark mode */
-function toggleDarkMode() {
-  document.body.classList.toggle("dark");
-  localStorage.setItem("sb-dark", document.body.classList.contains("dark") ? "1" : "0");
+var _darkToggle = document.getElementById('darkToggle');
+function setDarkMode(isDark) {
+  document.body.classList.toggle('dark', isDark);
+  if (_darkToggle) _darkToggle.textContent = isDark ? '\u2600\uFE0F' : '\uD83C\uDF19';
+  localStorage.setItem('sb-dark', isDark ? '1' : '0');
 }
-if (localStorage.getItem("sb-dark") === "1") document.body.classList.add("dark");
+if (_darkToggle) _darkToggle.addEventListener('click', function() {
+  setDarkMode(!document.body.classList.contains('dark'));
+});
+if (localStorage.getItem('sb-dark') === '1') setDarkMode(true);
 
 function esc(s) {
   if (!s) return "";

@@ -56,6 +56,9 @@ const deps = {
   fs,
   APP_ROOT: appRoot,
   readArchiveFiles: () => [],
+  findUserByToken: () => null,
+  loadLatestDigestSnapshot: () => null,
+  loadDigestSnapshotByRunId: () => null,
   renderPublicDigestMissingPage: (dateKey) => `<html>missing:${dateKey || "none"}</html>`,
   formatPublicDigestDateLabel: (dateKey) => dateKey,
   renderPublicDigestPage: () => "<html>digest</html>",
@@ -103,4 +106,44 @@ const deps = {
   const handler = createPublicStaticRouteHandler(deps);
   const { handled } = invoke(handler, { method: "GET", pathname: "/not-found" });
   assert.strictEqual(handled, false);
+}
+
+{
+  fs.writeFileSync(path.join(archiveDir, "2026-03-14.json"), JSON.stringify({
+    dateStr: "Saturday, March 14, 2026",
+    quickScan: "Archive quick scan",
+    items: [{ headline: "Archive item" }],
+  }, null, 2));
+  let renderedPayload = null;
+  const handler = createPublicStaticRouteHandler({
+    ...deps,
+    readArchiveFiles: () => ["2026-03-14.json"],
+    findUserByToken: (token) => token === "tok-1" ? { chatId: "user-1" } : null,
+    loadLatestDigestSnapshot: () => ({
+      date_str: "Saturday, March 14, 2026",
+      quick_scan: "Latest snapshot",
+      items: [{ headline: "Latest snapshot item", wim_brief: "Latest brief" }],
+    }),
+    loadDigestSnapshotByRunId: (_userId, _dateKey, runId) => runId === "scheduled:run-1" ? ({
+      date_str: "Saturday, March 14, 2026",
+      quick_scan: "Run specific snapshot",
+      items: [{ headline: "Run item", wim_brief: "Run brief" }],
+    }) : null,
+    renderPublicDigestPage: (payload) => {
+      renderedPayload = payload;
+      return "<html>personalized</html>";
+    },
+  });
+  const { handled, res } = invoke(handler, {
+    method: "GET",
+    pathname: "/digest/2026-03-14",
+    search: "?ref=tok-1&run=scheduled%3Arun-1",
+  });
+  assert.strictEqual(handled, "<html>personalized</html>");
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Cache-Control"], "private, no-store");
+  assert.ok(renderedPayload);
+  assert.strictEqual(renderedPayload.quickScan, "Run specific snapshot");
+  assert.strictEqual(renderedPayload.items[0].headline, "Run item");
+  assert.strictEqual(renderedPayload.items[0].wim, "Run brief");
 }

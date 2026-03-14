@@ -113,6 +113,23 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     assert.strictEqual(Array.isArray(latestSnapshot.items), true);
     assert.strictEqual(latestSnapshot.items[0].headline, "Manual digest v2");
 
+    const scheduledByRun = deliveryRecords.loadDigestSnapshotByRunId(
+      "user-1",
+      "2026-03-13",
+      "scheduled:run-1"
+    );
+    assert.ok(scheduledByRun);
+    assert.strictEqual(scheduledByRun.mode, "scheduled");
+    assert.strictEqual(scheduledByRun.items[0].headline, "Pfizer pivots");
+
+    const manualByRun = deliveryRecords.loadDigestSnapshotByRunId(
+      "user-1",
+      "2026-03-13",
+      "manual:run-1"
+    );
+    assert.ok(manualByRun);
+    assert.strictEqual(manualByRun.items[0].headline, "Manual digest v1");
+
     const recent = deliveryRecords.loadRecentSentDigests("user-1", { limit: 3 });
     assert.strictEqual(recent.length, 1, "recent sent digests should collapse to one record per ET date");
     assert.strictEqual(recent[0].date_et, "2026-03-13");

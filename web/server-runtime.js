@@ -278,6 +278,7 @@ const {
   sendMagicLinkEmail,
   checkLoginRate,
   countArchiveDigestsForUser: (...args) => archiveDigestStatsRuntime.countArchiveDigestsForUser(...args),
+  loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),
   loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
   CONFIG,
   verifyAdminPassword,

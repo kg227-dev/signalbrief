@@ -213,8 +213,36 @@ function createDigestDeliveryRecordRuntime(deps) {
     return records[0] || null;
   }
 
+  function loadDigestSnapshotByRunId(userId, dateKey, runId) {
+    const targetDate = String(dateKey || "").trim();
+    const targetRunId = String(runId || "").trim();
+    if (!targetDate || !targetRunId) return null;
+
+    const files = loadRecordFilesForUser(userId);
+    const matches = [];
+    for (const filePath of files) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        const versions = Array.isArray(parsed?.versions) ? parsed.versions : [];
+        for (const rawVersion of versions) {
+          const row = normalizeVersionEntry(rawVersion);
+          if (row.status !== "sent") continue;
+          if (row.date_et !== targetDate) continue;
+          if (row.run_id !== targetRunId) continue;
+          matches.push(row);
+        }
+      } catch (err) {
+        logger(`⚠️ Failed to parse digest record ${filePath}: ${err.message}`);
+      }
+    }
+
+    matches.sort((left, right) => sortIsoDescending(left.sent_at, right.sent_at));
+    return matches[0] || null;
+  }
+
   return {
     beginDigestDeliveryRecord,
+    loadDigestSnapshotByRunId,
     loadLatestDigestSnapshot,
     loadRecentSentDigests,
     readDigestRecord,

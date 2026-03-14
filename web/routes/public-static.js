@@ -45,6 +45,46 @@ function writeMissingDigest(res, dateKey, renderPublicDigestMissingPage) {
   return res.end(renderPublicDigestMissingPage(dateKey));
 }
 
+function normalizeSnapshotItems(rawItems) {
+  return (Array.isArray(rawItems) ? rawItems : [])
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      ...item,
+      wim: item.wim || item.wim_brief || "",
+    }));
+}
+
+function resolvePersonalizedDigestSnapshot({
+  dateKey,
+  refToken,
+  runId,
+  findUserByToken,
+  loadLatestDigestSnapshot,
+  loadDigestSnapshotByRunId,
+}) {
+  const token = String(refToken || "").trim();
+  if (!token || typeof findUserByToken !== "function") return null;
+
+  const user = findUserByToken(token);
+  const userId = String(user?.chatId || "").trim();
+  if (!userId) return null;
+
+  let snapshot = null;
+  if (runId && typeof loadDigestSnapshotByRunId === "function") {
+    snapshot = loadDigestSnapshotByRunId(userId, dateKey, runId);
+  }
+  if (!snapshot && typeof loadLatestDigestSnapshot === "function") {
+    snapshot = loadLatestDigestSnapshot(userId, dateKey);
+  }
+  if (!snapshot) return null;
+
+  return {
+    dateLabel: String(snapshot.date_str || "").trim() || dateKey,
+    quickScan: String(snapshot.quick_scan || "").trim(),
+    items: normalizeSnapshotItems(snapshot.items),
+  };
+}
+
 function resolveDigestDateKey(pathname, archiveFiles) {
   const match = pathname.match(DIGEST_ROUTE_RE);
   if (!match) return null;
@@ -59,6 +99,7 @@ function serveDigestPage(ctx, deps) {
   const {
     path, fs, APP_ROOT, readArchiveFiles, renderPublicDigestMissingPage,
     formatPublicDigestDateLabel, renderPublicDigestPage,
+    findUserByToken, loadLatestDigestSnapshot, loadDigestSnapshotByRunId,
   } = deps;
 
   if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
@@ -71,6 +112,32 @@ function serveDigestPage(ctx, deps) {
   }
 
   const archivePath = path.join(archiveDir, `${dateKey}.json`);
+  const refToken = url.searchParams.get("ref") || "";
+  const runId = url.searchParams.get("run") || "";
+  const personalizedSnapshot = resolvePersonalizedDigestSnapshot({
+    dateKey,
+    refToken,
+    runId,
+    findUserByToken,
+    loadLatestDigestSnapshot,
+    loadDigestSnapshotByRunId,
+  });
+
+  if (personalizedSnapshot) {
+    const html = renderPublicDigestPage({
+      dateKey,
+      dateLabel: personalizedSnapshot.dateLabel || formatPublicDigestDateLabel(dateKey),
+      quickScan: personalizedSnapshot.quickScan,
+      items: personalizedSnapshot.items,
+      refToken,
+    });
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "private, no-store",
+    });
+    return res.end(html);
+  }
+
   if (!fs.existsSync(archivePath)) {
     return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
@@ -83,7 +150,7 @@ function serveDigestPage(ctx, deps) {
       dateLabel,
       quickScan: parsed?.quickScan || "",
       items: Array.isArray(parsed?.items) ? parsed.items : [],
-      refToken: url.searchParams.get("ref") || "",
+      refToken,
     });
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",

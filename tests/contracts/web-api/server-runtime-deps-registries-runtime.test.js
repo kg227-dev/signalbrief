@@ -170,6 +170,9 @@ function testPublicRegistryAddsBaseUrl() {
     APP_ROOT: process.cwd(),
     assetVersion: "abc123",
     readArchiveFilesForDir: () => [],
+    findUserByToken: noop,
+    loadLatestDigestSnapshot: noop,
+    loadDigestSnapshotByRunId: noop,
     renderPublicDigestMissingPage: () => "<html></html>",
     formatPublicDigestDateLabel: () => "Mar 13, 2026",
     renderPublicDigestPageTemplate: (payload) => payload,
@@ -183,6 +186,9 @@ function testPublicRegistryAddsBaseUrl() {
   const rendered = publicDeps.renderPublicDigestPage({ dateKey: "2026-03-13" });
   assert.strictEqual(rendered.baseUrl, "https://getsignalbrief.com");
   assert.strictEqual(publicDeps.readArchiveFiles, deps.readArchiveFilesForDir);
+  assert.strictEqual(publicDeps.findUserByToken, deps.findUserByToken);
+  assert.strictEqual(publicDeps.loadLatestDigestSnapshot, deps.loadLatestDigestSnapshot);
+  assert.strictEqual(publicDeps.loadDigestSnapshotByRunId, deps.loadDigestSnapshotByRunId);
 }
 
 testSharedHandlersRegistry();

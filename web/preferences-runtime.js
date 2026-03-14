@@ -223,7 +223,11 @@
   }
 
   function topicKeyFromInput(value, opts = {}) {
-    return topicKeyFromInputHelper(value, { ...opts, defaultTopics: DEFAULT_TOPICS });
+    return topicKeyFromInputHelper(value, {
+      ...opts,
+      defaultTopics: DEFAULT_TOPICS,
+      topicLabels: TOPIC_LABELS,
+    });
   }
 
   function isCustomTopic(topic) {

@@ -6,5 +6,10 @@ const { assertNodeSyntaxFile, assertSourceIncludesFile, assertModuleExports } = 
 const TARGET_REL = "web/index.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
-assertSourceIncludesFile(TARGET_PATH, ["window.SignalBriefPrefs","document.querySelector"]);
-
+assertSourceIncludesFile(TARGET_PATH, [
+  "window.SignalBriefPrefs",
+  "document.querySelector",
+  "matchDefault: true",
+  "You're already tracking",
+  "customTopicLimitMessage",
+]);

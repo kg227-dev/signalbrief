@@ -46,13 +46,32 @@
     return slug ? `custom_${slug}` : "";
   }
 
+  function normalizeTopicLookupValue(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/×/g, " x ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function topicKeyFromInput(value, opts = {}) {
     const raw = String(value || "").trim();
     if (!raw) return "";
 
     const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
+    const labels = opts.topicLabels && typeof opts.topicLabels === "object" ? opts.topicLabels : {};
     if (opts.matchDefault) {
-      const defaultMatch = defaults.find((topic) => topic.toLowerCase() === raw.toLowerCase());
+      const normalizedInput = normalizeTopicLookupValue(raw);
+      const defaultMatch = defaults.find((topic) => {
+        const key = String(topic || "");
+        const label = String(labels[key] || "");
+        return (
+          normalizeTopicLookupValue(key) === normalizedInput
+          || (label && normalizeTopicLookupValue(label) === normalizedInput)
+        );
+      });
       if (defaultMatch) return defaultMatch;
     }
 
@@ -87,6 +106,7 @@
     buildTopicCatalogSnapshot,
     deriveTopicCatalog,
     normalizeCustomTopicInput,
+    normalizeTopicLookupValue,
     topicKeyFromInput,
     isCustomTopic,
     formatCustomLabel,

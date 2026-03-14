@@ -230,6 +230,10 @@ input::placeholder { color: var(--text-light); }
   font-size: 13px;
   padding: 8px 12px;
 }
+.custom-topic-row input.input-error {
+  border-color: #DC2626;
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.12);
+}
 .btn-add-topic {
   padding: 8px 16px;
   background: var(--blue-light);

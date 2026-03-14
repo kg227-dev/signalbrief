@@ -83,7 +83,31 @@
     const raw = String(value || "").trim();
     if (!raw) return "";
     if (opts.matchDefault) {
-      const defaultMatch = DEFAULT_TOPICS.find((topic) => topic.toLowerCase() === raw.toLowerCase());
+      const normalizedInput = String(raw || "")
+        .toLowerCase()
+        .replace(/&/g, " and ")
+        .replace(/×/g, " x ")
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const defaultMatch = DEFAULT_TOPICS.find((topic) => {
+        const label = TOPIC_LABELS[topic] || "";
+        const normalizedTopic = String(topic || "")
+          .toLowerCase()
+          .replace(/&/g, " and ")
+          .replace(/×/g, " x ")
+          .replace(/[^a-z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const normalizedLabel = String(label || "")
+          .toLowerCase()
+          .replace(/&/g, " and ")
+          .replace(/×/g, " x ")
+          .replace(/[^a-z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        return normalizedTopic === normalizedInput || (normalizedLabel && normalizedLabel === normalizedInput);
+      });
       if (defaultMatch) return defaultMatch;
     }
     return normalizeCustomTopicInputFallback(raw);

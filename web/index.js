@@ -42,6 +42,45 @@ function selectedCustomKeywordCount() {
   return selectedTopicKeys().filter((topic) => isCustomTopic(topic)).length;
 }
 
+let customTopicFeedback = { message: "", tone: "" };
+
+function renderCustomTopicFeedback() {
+  const feedbackEl = document.getElementById("customTopicLimitMessage");
+  const input = document.getElementById("customTopic");
+  const maxReached = selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS;
+  const message = customTopicFeedback.message || (maxReached ? `You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.` : "");
+  const tone = customTopicFeedback.message ? customTopicFeedback.tone : (maxReached ? "info" : "");
+
+  if (feedbackEl) {
+    feedbackEl.textContent = message;
+    feedbackEl.classList.toggle("visible", !!message);
+    feedbackEl.classList.toggle("feedback-error", tone === "error");
+    feedbackEl.classList.toggle("feedback-info", tone === "info");
+  }
+
+  if (input) {
+    input.classList.toggle("input-error", tone === "error");
+    input.setAttribute("aria-invalid", tone === "error" ? "true" : "false");
+  }
+}
+
+function setCustomTopicFeedback(message, tone = "error") {
+  customTopicFeedback = {
+    message: String(message || "").trim(),
+    tone: message ? tone : "",
+  };
+  renderCustomTopicFeedback();
+}
+
+function clearCustomTopicFeedback() {
+  if (!customTopicFeedback.message) {
+    renderCustomTopicFeedback();
+    return;
+  }
+  customTopicFeedback = { message: "", tone: "" };
+  renderCustomTopicFeedback();
+}
+
 function syncCustomTopicLimitState() {
   const customCount = selectedCustomKeywordCount();
   const maxReached = customCount >= MAX_CUSTOM_KEYWORDS;
@@ -51,12 +90,7 @@ function syncCustomTopicLimitState() {
     addButton.disabled = maxReached;
     addButton.setAttribute("aria-disabled", maxReached ? "true" : "false");
   }
-
-  const limitMessage = document.getElementById("customTopicLimitMessage");
-  if (limitMessage) {
-    limitMessage.textContent = `Maximum of ${MAX_CUSTOM_KEYWORDS} custom keywords allowed.`;
-    limitMessage.classList.toggle("visible", maxReached);
-  }
+  renderCustomTopicFeedback();
 }
 
 function topicDisplayLabel(topic) {
@@ -105,6 +139,7 @@ function toggleTopic(topicChip) {
     : !topicChip.classList.contains("selected");
 
   topicChip.classList.toggle("selected", isSelected);
+  clearCustomTopicFeedback();
   updateProgress();
 }
 
@@ -113,52 +148,63 @@ function addCustomTopic() {
   const value = String(input?.value || "").trim();
   if (!value) return;
 
-  const slug = typeof Prefs.normalizeCustomTopicInput === "function"
-    ? Prefs.normalizeCustomTopicInput(value)
+  const topicKey = typeof Prefs.topicKeyFromInput === "function"
+    ? Prefs.topicKeyFromInput(value, { matchDefault: true })
     : `custom_${value.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 
-  if (!slug) {
+  if (!topicKey) {
     input.value = "";
+    clearCustomTopicFeedback();
     return;
   }
 
-  const existing = findTopicChip(slug);
+  const existing = findTopicChip(topicKey);
   if (existing) {
     const existingSelected = prefState
-      ? prefState.hasTopic(slug)
+      ? prefState.hasTopic(topicKey)
       : existing.classList.contains("selected");
-    if (isCustomTopic(slug) && !existingSelected && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
-      syncCustomTopicLimitState();
+    if (existingSelected) {
+      const duplicateLabel = isCustomTopic(topicKey) ? value : topicDisplayLabel(topicKey);
+      setCustomTopicFeedback(`You're already tracking "${duplicateLabel}". Try a different topic.`);
+      input.focus();
+      input.select();
+      return;
+    }
+    if (isCustomTopic(topicKey) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
+      setCustomTopicFeedback(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
       return;
     }
     if (prefState && !existingSelected) {
-      prefState.addTopic(slug);
+      prefState.addTopic(topicKey);
       existing.classList.add("selected");
     } else if (!prefState && !existingSelected) {
       existing.classList.add("selected");
     }
     input.value = "";
+    clearCustomTopicFeedback();
     updateProgress();
     return;
   }
 
-  if (isCustomTopic(slug) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
-    syncCustomTopicLimitState();
+  if (isCustomTopic(topicKey) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
+    setCustomTopicFeedback(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
     return;
   }
 
   const chip = document.createElement("div");
+  const chipLabel = isCustomTopic(topicKey) ? value : topicDisplayLabel(topicKey);
   chip.className = "topic-chip topic-chip-custom selected";
-  chip.dataset.topic = slug;
+  chip.dataset.topic = topicKey;
   chip.onclick = function onclick() { toggleTopic(chip); };
-  chip.innerHTML = `<span class="check"></span> ${value}`;
+  chip.innerHTML = `<span class="check"></span> ${chipLabel}`;
 
   const topicGrid = document.getElementById("topicGrid");
   if (topicGrid) topicGrid.appendChild(chip);
 
-  if (prefState) prefState.addTopic(slug);
+  if (prefState) prefState.addTopic(topicKey);
 
   input.value = "";
+  clearCustomTopicFeedback();
   updateProgress();
 }
 
@@ -169,6 +215,9 @@ if (customTopicInput) {
       event.preventDefault();
       addCustomTopic();
     }
+  });
+  customTopicInput.addEventListener("input", () => {
+    clearCustomTopicFeedback();
   });
 }
 

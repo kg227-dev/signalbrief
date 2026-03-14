@@ -6,6 +6,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - SIGNALBRIEF_STORE_BACKEND=file
       - PORT=3003
       - SCHEDULER_HEARTBEAT_FILE=/app/data/scheduler-heartbeat.json
     ports:
@@ -30,6 +31,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - SIGNALBRIEF_STORE_BACKEND=file
     volumes:
       - ./config.json:/app/config.json:ro
       - ./data:/app/data
@@ -56,6 +58,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      - SIGNALBRIEF_STORE_BACKEND=file
       - DIGEST_POLL_MS=300000
       - DIGEST_STARTUP_DELAY_MS=5000
       - DIGEST_RUN_ON_STARTUP=0

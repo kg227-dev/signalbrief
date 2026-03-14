@@ -882,13 +882,17 @@ async function init() {
       const btn = this;
       btn.disabled = true; btn.textContent = 'Sending…';
       try {
-        await fetch('/api/request-link', {
+        const r = await fetch('/api/request-link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: userEmail })
         });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !data || data.success !== true) {
+          throw new Error((data && data.error) || 'Failed to send link');
+        }
         showBanner('✅ Settings link sent to ' + userEmail);
-      } catch { showBanner('❌ Failed to send link', true); }
+      } catch (err) { showBanner('❌ ' + ((err && err.message) || 'Failed to send link'), true); }
       btn.disabled = false; btn.textContent = 'Resend settings link';
     });
 

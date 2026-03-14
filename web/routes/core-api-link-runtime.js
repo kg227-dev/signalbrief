@@ -18,10 +18,18 @@ async function handleCoreRequestLinkRoute(ctx, deps) {
   }
 
   const user = allUsers().find((row) => (row.email || "").toLowerCase().trim() === email);
-  if (user && user.token) {
-    sendMagicLinkEmail(user).catch((error) => console.error("[magic link]", error));
+  if (!user || !user.token) {
+    json(res, { success: true });
+    return true;
   }
-  json(res, { success: true });
+
+  try {
+    await sendMagicLinkEmail(user);
+    json(res, { success: true });
+  } catch (error) {
+    console.error("[magic link]", error);
+    json(res, { success: false, error: "Could not send link right now." }, 502);
+  }
   return true;
 }
 

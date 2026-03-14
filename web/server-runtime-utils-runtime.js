@@ -180,7 +180,14 @@ function createSendMagicLinkEmail({ sendEmail, getBaseUrl }) {
       <a href="${settingsUrl}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 32px;border-radius:100px;">Manage preferences →</a>
       <p style="margin-top:20px;font-size:13px;color:#6B7280;">Or view your <a href="${archiveUrl}" style="color:#2563EB;">past digests</a>.<br>This link is personal — keep it private.</p>
     </div>`;
-    await sendEmail(user.email, "Your SignalBrief access link", html);
+    const result = await sendEmail(user.email, "Your SignalBrief access link", html, user.token || null);
+    if (!result || result.ok !== true) {
+      const detail = result && typeof result.error === "string" && result.error.trim()
+        ? result.error.trim()
+        : "email delivery failed";
+      throw new Error(detail);
+    }
+    return result;
   };
 }
 

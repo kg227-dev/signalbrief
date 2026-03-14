@@ -1149,15 +1149,28 @@ async function requestLink() {
   btn.disabled = true;
   btn.textContent = "Sending…";
   try {
-    await fetch("/api/request-link", {
+    const res = await fetch("/api/request-link", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok || !data || data.success !== true) {
+      throw new Error(data && typeof data.error === "string" && data.error.trim()
+        ? data.error.trim()
+        : "Could not send link right now.");
+    }
     successEl.style.display = "block";
     btn.textContent = "Sent";
-  } catch {
-    errorEl.textContent = "Could not send link right now.";
+  } catch (error) {
+    errorEl.textContent = error && typeof error.message === "string" && error.message
+      ? error.message
+      : "Could not send link right now.";
     errorEl.style.display = "block";
     btn.disabled = false;
     btn.textContent = "Send my access link";

@@ -224,6 +224,67 @@ async function invoke(handler, { method, pathname, search = "" }) {
   }
 
   {
+    const handler = createCoreApiRouteHandler(baseDeps({
+      requireJsonBody: async () => ({ email: "not-an-email" }),
+    }));
+    const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(res.statusCode, 400);
+    assert.strictEqual(JSON.parse(res.body).error, "valid email required");
+  }
+
+  {
+    let sendCount = 0;
+    const handler = createCoreApiRouteHandler(baseDeps({
+      requireJsonBody: async () => ({ email: "user@example.com" }),
+      allUsers: () => [{ email: "user@example.com", token: "token-123" }],
+      sendMagicLinkEmail: async (user) => {
+        sendCount += 1;
+        assert.strictEqual(user.email, "user@example.com");
+        return { ok: true, via: "gmail" };
+      },
+    }));
+    const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(sendCount, 1);
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(JSON.parse(res.body), { success: true });
+  }
+
+  {
+    let sendCount = 0;
+    const handler = createCoreApiRouteHandler(baseDeps({
+      requireJsonBody: async () => ({ email: "missing@example.com" }),
+      allUsers: () => [{ email: "user@example.com", token: "token-123" }],
+      sendMagicLinkEmail: async () => {
+        sendCount += 1;
+      },
+    }));
+    const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(sendCount, 0);
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(JSON.parse(res.body), { success: true });
+  }
+
+  {
+    const handler = createCoreApiRouteHandler(baseDeps({
+      requireJsonBody: async () => ({ email: "user@example.com" }),
+      allUsers: () => [{ email: "user@example.com", token: "token-123" }],
+      sendMagicLinkEmail: async () => {
+        throw new Error("gmail send failed");
+      },
+    }));
+    const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(res.statusCode, 502);
+    assert.deepStrictEqual(JSON.parse(res.body), {
+      success: false,
+      error: "Could not send link right now.",
+    });
+  }
+
+  {
     const handler = createCoreApiRouteHandler(baseDeps());
     const { handled } = await invoke(handler, { method: "GET", pathname: "/no-such-route" });
     assert.strictEqual(handled, false);

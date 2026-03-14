@@ -183,6 +183,7 @@ async function invoke(pathname, search, deps) {
 
     const snapshotDeps = {
       ...steadyDeps,
+      archiveRelevanceScore: (item) => Number(item?.relevanceScore || 0),
       loadLatestDigestSnapshot: (userId, dateKey) => {
         if (userId !== "steady-user" || dateKey !== "2026-03-12") return null;
         return {
@@ -194,14 +195,38 @@ async function invoke(pathname, search, deps) {
           items: [
             {
               index: 1,
-              tag: "PFIZER",
-              headline: "Snapshot headline",
+              tag: "ENERGY",
+              headline: "Lower score snapshot headline",
               summary: "Snapshot summary",
-              url: "https://example.com/snapshot",
+              url: "https://example.com/snapshot-low",
               source: "Snapshot Source",
               source_domain: "snapshot.example.com",
-              baseScore: 9.1,
-              relevanceScore: 8.7,
+              baseScore: 6.8,
+              relevanceScore: 6.8,
+              wim: "Snapshot WIM",
+            },
+            {
+              index: 2,
+              tag: "SUSTAINABILITY",
+              headline: "Highest score snapshot headline",
+              summary: "Snapshot summary",
+              url: "https://example.com/snapshot-high",
+              source: "Snapshot Source",
+              source_domain: "snapshot.example.com",
+              baseScore: 7.6,
+              relevanceScore: 7.6,
+              wim: "Snapshot WIM",
+            },
+            {
+              index: 3,
+              tag: "TECHNOLOGY",
+              headline: "Middle score snapshot headline",
+              summary: "Snapshot summary",
+              url: "https://example.com/snapshot-mid",
+              source: "Snapshot Source",
+              source_domain: "snapshot.example.com",
+              baseScore: 7.2,
+              relevanceScore: 7.2,
               wim: "Snapshot WIM",
             },
           ],
@@ -213,8 +238,19 @@ async function invoke(pathname, search, deps) {
     assert.strictEqual(snapshotAllResult.handled, true);
     assert.strictEqual(snapshotAllResult.res.statusCode, 200);
     const snapshotAllBody = JSON.parse(snapshotAllResult.res.body || "{}");
-    assert.strictEqual(snapshotAllBody.items.length, 1);
-    assert.strictEqual(snapshotAllBody.items[0].headline, "Snapshot headline");
+    assert.strictEqual(snapshotAllBody.items.length, 3);
+    assert.deepStrictEqual(
+      snapshotAllBody.items.map((item) => item.headline),
+      [
+        "Highest score snapshot headline",
+        "Middle score snapshot headline",
+        "Lower score snapshot headline",
+      ]
+    );
+    assert.deepStrictEqual(
+      snapshotAllBody.items.map((item) => item.rank),
+      [1, 2, 3]
+    );
 
     fs.unlinkSync(path.join(archiveDir, "2026-03-12.json"));
     const snapshotDateResult = await invoke("/api/archive/2026-03-12", "?token=ok", snapshotDeps);
@@ -222,8 +258,15 @@ async function invoke(pathname, search, deps) {
     assert.strictEqual(snapshotDateResult.res.statusCode, 200);
     const snapshotDateBody = JSON.parse(snapshotDateResult.res.body || "{}");
     assert.strictEqual(snapshotDateBody.quickScan, "Snapshot-only digest");
-    assert.strictEqual(snapshotDateBody.items.length, 1);
-    assert.strictEqual(snapshotDateBody.items[0].headline, "Snapshot headline");
+    assert.strictEqual(snapshotDateBody.items.length, 3);
+    assert.deepStrictEqual(
+      snapshotDateBody.items.map((item) => item.headline),
+      [
+        "Highest score snapshot headline",
+        "Middle score snapshot headline",
+        "Lower score snapshot headline",
+      ]
+    );
   } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });
   }

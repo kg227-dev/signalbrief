@@ -29,6 +29,7 @@ import "./digest/runtime/digest-data-enrich-runtime.js";
 import "./digest/runtime/digest-delivery-record-runtime.js";
 import "./digest/runtime/digest-formatting-ai-runtime.js";
 import "./digest/runtime/digest-formatting-ai-generation-runtime.js";
+import "./digest/runtime/digest-item-ordering-runtime.js";
 import "./digest/runtime/digest-formatting-email-runtime.js";
 import "./digest/runtime/digest-formatting-runtime.js";
 import "./jobs/digest-runner-runtime.js";

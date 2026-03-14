@@ -146,6 +146,7 @@ function coverageImportMap() {
     import("../../src/digest/runtime/digest-formatting-email-items-runtime.js");
     import("../../src/digest/runtime/digest-formatting-email-template-runtime.js");
     import("../../src/digest/runtime/digest-formatting-email-runtime.js");
+    import("../../src/digest/runtime/digest-item-ordering-runtime.js");
     import("../../src/digest/runtime/digest-formatting-runtime.js");
     import("../../src/jobs/digest-runner-utils-runtime.js");
     import("../../src/runtime/reply/info-handlers-runtime.js");

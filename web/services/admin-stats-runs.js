@@ -1,3 +1,5 @@
+const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/digest-item-ordering-runtime");
+
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const RUN_ID_RE = /^([a-z_]+):(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/i;
 
@@ -172,7 +174,7 @@ function mergeRecipientDebug(detail, event) {
 function materializeRecipientDebug(detail) {
   if (!detail) return null;
   const qualitySummary = summarizeQuality(detail.qualityScores);
-  const items = normalizeDebugItems(detail.items);
+  const items = sortDigestItemsByScoreDescending(normalizeDebugItems(detail.items));
   const entityKeys = Array.from(new Set(items.flatMap((item) => item.entity_keys || []))).sort();
   const storylineIds = Array.from(new Set(items.map((item) => String(item.storyline_id || "").trim()).filter(Boolean))).sort();
   const deliveryVersions = Array.from(detail.deliveryVersions).sort((a, b) => a - b);

@@ -5,6 +5,7 @@ const {
   resolveDeliveredDigestItems,
   sortArchiveDatesDescending,
 } = require("../services/archive-digest-stats-runtime");
+const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/digest-item-ordering-runtime");
 
 function mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore) {
   return {
@@ -22,14 +23,17 @@ function mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore) {
 }
 
 function buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, topicWeights, archiveRelevanceScore) {
-  const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+  const items = sortDigestItemsByScoreDescending(
+    (Array.isArray(snapshot?.items) ? snapshot.items : [])
+      .map((item) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore))
+  );
   return {
     date: snapshot?.date_et || dateKey,
     dateStr: snapshot?.date_str || dateKey,
     quickScan: snapshot?.quick_scan || "",
     generatedAt: snapshot?.sent_at || snapshot?.selected_at || null,
     itemCount: items.length,
-    items: items.map((item) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore)),
+    items,
   };
 }
 
@@ -192,16 +196,19 @@ function handleArchiveAllRoute(ctx, deps) {
       const digestPath = path.join(archiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) continue;
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
-      const deliveredDigestItems = resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate);
+      const deliveredDigestItems = sortDigestItemsByScoreDescending(
+        resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate)
+          .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore))
+      );
       if (deliveredDigestItems.length === 0) continue;
       digestCount++;
-      deliveredDigestItems.forEach(({ item, rank }, idx) => {
+      deliveredDigestItems.forEach((item, idx) => {
         items.push({
           date: digest.date || dateKey,
           dateStr: digest.dateStr || dateKey,
           generatedAt: digest.generatedAt || null,
-          rank: Number.isFinite(Number(rank)) ? Number(rank) : idx + 1,
-          ...mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore),
+          rank: idx + 1,
+          ...item,
         });
       });
     } catch (error) {
@@ -294,8 +301,10 @@ function handleArchiveDateRoute(ctx, deps) {
     }
     const raw = JSON.parse(fs.readFileSync(file, "utf8"));
     const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
-    raw.items = resolveDeliveredDigestItems(rawDate, raw.items, deliveredItemsByDate)
-      .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore));
+    raw.items = sortDigestItemsByScoreDescending(
+      resolveDeliveredDigestItems(rawDate, raw.items, deliveredItemsByDate)
+        .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore))
+    );
     recordLegacyArchiveUsage(req, "/api/archive/:date", "served", {
       date: rawDate,
       user_chat_id: String(user.chatId || ""),

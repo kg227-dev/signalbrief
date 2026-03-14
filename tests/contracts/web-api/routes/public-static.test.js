@@ -122,12 +122,18 @@ const deps = {
     loadLatestDigestSnapshot: () => ({
       date_str: "Saturday, March 14, 2026",
       quick_scan: "Latest snapshot",
-      items: [{ headline: "Latest snapshot item", wim_brief: "Latest brief" }],
+      items: [
+        { headline: "Lower snapshot item", wim_brief: "Latest brief", relevanceScore: 6.8 },
+        { headline: "Highest snapshot item", wim_brief: "Latest brief", relevanceScore: 7.6 },
+      ],
     }),
     loadDigestSnapshotByRunId: (_userId, _dateKey, runId) => runId === "scheduled:run-1" ? ({
       date_str: "Saturday, March 14, 2026",
       quick_scan: "Run specific snapshot",
-      items: [{ headline: "Run item", wim_brief: "Run brief" }],
+      items: [
+        { headline: "Lower run item", wim_brief: "Run brief", relevanceScore: 6.8 },
+        { headline: "Highest run item", wim_brief: "Run brief", relevanceScore: 7.6 },
+      ],
     }) : null,
     renderPublicDigestPage: (payload) => {
       renderedPayload = payload;
@@ -144,6 +150,9 @@ const deps = {
   assert.strictEqual(res.headers["Cache-Control"], "private, no-store");
   assert.ok(renderedPayload);
   assert.strictEqual(renderedPayload.quickScan, "Run specific snapshot");
-  assert.strictEqual(renderedPayload.items[0].headline, "Run item");
+  assert.deepStrictEqual(
+    renderedPayload.items.map((item) => item.headline),
+    ["Highest run item", "Lower run item"]
+  );
   assert.strictEqual(renderedPayload.items[0].wim, "Run brief");
 }

@@ -1,3 +1,5 @@
+const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/digest-item-ordering-runtime");
+
 const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
 const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
 const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/sandbox"]);
@@ -46,12 +48,14 @@ function writeMissingDigest(res, dateKey, renderPublicDigestMissingPage) {
 }
 
 function normalizeSnapshotItems(rawItems) {
-  return (Array.isArray(rawItems) ? rawItems : [])
-    .filter((item) => item && typeof item === "object")
-    .map((item) => ({
-      ...item,
-      wim: item.wim || item.wim_brief || "",
-    }));
+  return sortDigestItemsByScoreDescending(
+    (Array.isArray(rawItems) ? rawItems : [])
+      .filter((item) => item && typeof item === "object")
+      .map((item) => ({
+        ...item,
+        wim: item.wim || item.wim_brief || "",
+      }))
+  );
 }
 
 function resolvePersonalizedDigestSnapshot({
@@ -149,7 +153,7 @@ function serveDigestPage(ctx, deps) {
       dateKey,
       dateLabel,
       quickScan: parsed?.quickScan || "",
-      items: Array.isArray(parsed?.items) ? parsed.items : [],
+      items: sortDigestItemsByScoreDescending(Array.isArray(parsed?.items) ? parsed.items : []),
       refToken,
     });
     res.writeHead(200, {

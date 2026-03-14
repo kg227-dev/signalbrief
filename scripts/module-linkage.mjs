@@ -23,6 +23,7 @@ import "../src/digest/runtime/digest-formatting-email-sections-runtime.js";
 import "../src/digest/runtime/digest-formatting-email-items-runtime.js";
 import "../src/digest/runtime/digest-formatting-email-template-runtime.js";
 import "../src/digest/runtime/digest-formatting-email-runtime.js";
+import "../src/digest/runtime/digest-item-ordering-runtime.js";
 import "../src/digest/runtime/digest-formatting-topic-runtime.js";
 import "../src/digest/runtime/digest-formatting-telegram-runtime.js";
 import "../src/dependency-links.mjs";
@@ -163,6 +164,7 @@ export const dependencyLinks = [
   "src/digest/runtime/digest-formatting-email-items-runtime.js",
   "src/digest/runtime/digest-formatting-email-template-runtime.js",
   "src/digest/runtime/digest-formatting-email-runtime.js",
+  "src/digest/runtime/digest-item-ordering-runtime.js",
   "src/digest/runtime/digest-formatting-topic-runtime.js",
   "src/digest/runtime/digest-formatting-telegram-runtime.js",
   "src/dependency-links.mjs",

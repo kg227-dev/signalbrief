@@ -1,6 +1,7 @@
 "use strict";
 
 const { createDigestOrchestratorDeliveryRankingRuntime } = require("./digest-orchestrator-delivery-ranking-runtime");
+const { sortDigestItemsByScoreDescending } = require("../digest/runtime/digest-item-ordering-runtime");
 
 function createDigestOrchestratorDeliveryRuntime(deps) {
   const {
@@ -204,7 +205,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         const prefs = user.preferences || {};
 
         const depth = prefs.depth || "full";
-        userItems = applyDigestDepth(userItems, depth);
+        userItems = sortDigestItemsByScoreDescending(applyDigestDepth(userItems, depth));
 
         const previousDigestItems = Array.isArray(user.last_digest_items) ? user.last_digest_items : [];
         const digestQuality = computeDigestQualityScore({

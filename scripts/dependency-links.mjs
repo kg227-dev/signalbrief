@@ -7,6 +7,7 @@ import "../src/digest/domain/selection-domain-runtime.js";
 import "../src/digest/domain/source-domain-runtime.js";
 import "../src/digest/domain/topic-domain-runtime.js";
 import "../src/digest/application/digest-service-runtime.js";
+import "../src/digest/runtime/digest-item-ordering-runtime.js";
 import "../src/entrypoints/digest.js";
 import "../src/module-coverage-runtime.js";
 import "../src/runtime/config-provider.js";

@@ -43,6 +43,47 @@ function createRenderPublicPages(deps) {
     return [text];
   }
 
+  function readItemScore(item) {
+    const directScore = Number(item?.relevanceScore);
+    if (Number.isFinite(directScore)) return directScore;
+    const legacyScore = Number(item?.relevance_score);
+    if (Number.isFinite(legacyScore)) return legacyScore;
+    return null;
+  }
+
+  function scoreTone(score) {
+    if (score >= 9.0) {
+      return { dot: "#10B981", text: "#065F46", bg: "#ECFDF5", glow: "0 0 6px rgba(16,185,129,0.35)" };
+    }
+    if (score >= 7.0) {
+      return { dot: "#34D399", text: "#065F46", bg: "#ECFDF5", glow: "0 0 6px rgba(52,211,153,0.3)" };
+    }
+    if (score >= 5.0) {
+      return { dot: "#F59E0B", text: "#92400E", bg: "#FFFBEB", glow: "0 0 5px rgba(245,158,11,0.24)" };
+    }
+    return { dot: "#9CA3AF", text: "#4B5563", bg: "#F3F4F6", glow: "none" };
+  }
+
+  function renderScorePill(score, className = "score-pill") {
+    const numericScore = Number(score);
+    if (!Number.isFinite(numericScore)) return "";
+    const tone = scoreTone(numericScore);
+    return `<span class="${className}" style="--score-dot:${tone.dot};--score-text:${tone.text};--score-bg:${tone.bg};--score-glow:${tone.glow};">
+      <span class="score-dot" aria-hidden="true"></span>
+      <span>${numericScore.toFixed(1)}</span>
+    </span>`;
+  }
+
+  function normalizeHeadlineLookup(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&amp;/g, "and")
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function renderPublicDigestPage({
     dateKey,
     dateLabel,
@@ -59,11 +100,24 @@ function createRenderPublicPages(deps) {
       ? `${baseUrl}/?ref=${encodeURIComponent(referralToken)}`
       : `${baseUrl}/`;
     const safeDateLabel = escapeHtml(dateLabel || formatPublicDigestDateLabel(dateKey));
+    const safeItems = Array.isArray(items) ? items : [];
+    const scoreByHeadline = new Map();
+    safeItems.forEach((item) => {
+      const headlineKey = normalizeHeadlineLookup(item?.headline);
+      const score = readItemScore(item);
+      if (!headlineKey || !Number.isFinite(score) || scoreByHeadline.has(headlineKey)) return;
+      scoreByHeadline.set(headlineKey, score);
+    });
     const quickScanPoints = extractQuickScanPoints(normalizeQuickScan(quickScan));
     const quickScanHtml = quickScanPoints
-      .map((point) => `<li class="scan-pill">${escapeHtml(point)}</li>`)
+      .map((point) => {
+        const pointScore = scoreByHeadline.get(normalizeHeadlineLookup(point));
+        return `<li class="scan-pill">
+          <span class="scan-pill-text">${escapeHtml(point)}</span>
+          ${renderScorePill(pointScore, "score-pill score-pill-compact")}
+        </li>`;
+      })
       .join("");
-    const safeItems = Array.isArray(items) ? items : [];
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");
       const headline = escapeHtml(item?.headline || "Untitled item");
@@ -71,14 +125,18 @@ function createRenderPublicPages(deps) {
       const wim = escapeHtml(stripHtml(item?.wim || ""));
       const source = escapeHtml(item?.source || "source");
       const href = sanitizePublicUrl(item?.url);
+      const scoreHtml = renderScorePill(readItemScore(item));
       const sourceLink = href
         ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">Read more -> ${source}</a>`
         : `<span>${source}</span>`;
       return `
       <article class="item-card">
         <div class="item-meta">
-          <span class="item-index">${idx + 1}</span>
-          <span class="item-tag">${tag}</span>
+          <div class="item-meta-left">
+            <span class="item-index">${idx + 1}</span>
+            <span class="item-tag">${tag}</span>
+          </div>
+          ${scoreHtml}
         </div>
         <h2>${headline}</h2>
         ${summary ? `<p class="item-summary">${summary}</p>` : ""}
@@ -122,12 +180,17 @@ function createRenderPublicPages(deps) {
     .scan { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 14px; padding: 12px 14px; margin-top: 14px; }
     .scan-heading { margin: 0 0 9px; color: #1e3a8a; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
     .scan-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
-    .scan-pill { color: #1e3a8a; background: #fff; border: 1px solid #c7d2fe; border-radius: 999px; padding: 6px 10px; font-size: 13px; line-height: 1.35; font-weight: 500; }
+    .scan-pill { color: #1e3a8a; background: #fff; border: 1px solid #c7d2fe; border-radius: 999px; padding: 6px 10px; font-size: 13px; line-height: 1.35; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
+    .scan-pill-text { min-width: 0; }
     .item-list { display: grid; gap: 14px; }
     .item-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 16px; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04); }
-    .item-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .item-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .item-meta-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
     .item-index { font-size: 12px; color: #64748b; font-weight: 700; }
     .item-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; background: var(--tag-bg); color: var(--tag-ink); border-radius: 999px; padding: 4px 8px; }
+    .score-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--score-bg); color: var(--score-text); font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap; flex-shrink: 0; }
+    .score-pill-compact { padding: 4px 8px; font-size: 11px; }
+    .score-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--score-dot); box-shadow: var(--score-glow); flex-shrink: 0; }
     h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; }
     .item-summary { margin: 0 0 8px; color: #334155; line-height: 1.6; font-size: 15px; }
     .item-wim { margin: 0 0 10px; color: #0f172a; line-height: 1.6; font-size: 14px; }
@@ -139,7 +202,7 @@ function createRenderPublicPages(deps) {
       .hero { padding: 18px; }
       .item-card { padding: 16px; }
       .scan-list { gap: 6px; }
-      .scan-pill { width: 100%; border-radius: 10px; }
+      .scan-pill { width: 100%; border-radius: 10px; justify-content: space-between; }
     }
   </style>
 </head>

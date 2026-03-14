@@ -67,11 +67,13 @@ function buildDigestRunnerHealth(digestRun) {
 function buildExecutiveHealthSummary({
   deliveryWarnings,
   deliveryReliability,
+  deliveryOperations,
   schedulerWorker,
   digestRunner,
 }) {
   const warnings = Array.isArray(deliveryWarnings) ? deliveryWarnings : [];
   const rel = deliveryReliability && typeof deliveryReliability === "object" ? deliveryReliability : {};
+  const ops = deliveryOperations && typeof deliveryOperations === "object" ? deliveryOperations : {};
   const scheduler = schedulerWorker && typeof schedulerWorker === "object" ? schedulerWorker : null;
 
   const schedulerMissing = !scheduler || scheduler.available === false;
@@ -79,13 +81,19 @@ function buildExecutiveHealthSummary({
   const schedulerBlocked = !!scheduler?.blocked || String(scheduler?.status || "").toLowerCase() === "blocked";
   const schedulerError = !!scheduler?.last_error;
   const lockUnhealthy = !!digestRunner?.unhealthy;
-  const runnerLongRunning = !!digestRunner?.running && Number(digestRunner?.age_seconds || 0) >= (20 * 60);
+  const runnerBlocked = !!digestRunner?.running && Number(digestRunner?.age_seconds || 0) >= (20 * 60);
 
   const reliability7dRaw = Number(rel.success_rate_7d);
   const reliability7d = Number.isFinite(reliability7dRaw) ? Number(reliability7dRaw.toFixed(1)) : null;
   const missed7d = Math.max(0, Number(rel.missed_current_7d || 0));
-  const usersAtRisk = warnings.length;
-  const canDeliverNextRun = !(schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy);
+  const usersAtRisk = Math.max(0, Number(ops.active_recovery_queue || 0));
+  const latestScheduledRunAt = ops.latest_scheduled_run_at || rel.last_successful_scheduled_run || null;
+  const latestScheduledRunClean = ops.latest_scheduled_run_clean === true;
+  const latestScheduledRunFailedUsers = Math.max(0, Number(ops.latest_scheduled_run_failed_users || 0));
+  const backfillNeeded = !!ops.backfill_needed;
+  const activeIncidentOpen = !!ops.active_incident_open;
+  const activeIncidentSummary = String(ops.active_incident_summary || "").trim();
+  const canDeliverNextRun = !(schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy || runnerBlocked);
 
   let status = "green";
   const reasons = [];
@@ -106,40 +114,59 @@ function buildExecutiveHealthSummary({
     status = "red";
     reasons.push(`digest lock unhealthy (${digestRunner?.state || "unknown"})`);
   }
-  if (Number.isFinite(reliability7d) && reliability7d < 90) {
+  if (runnerBlocked) {
     status = "red";
-    reasons.push(`7d delivery reliability ${reliability7d.toFixed(1)}%`);
+    reasons.push(`digest runner active for ${Math.floor(Number(digestRunner?.age_seconds || 0) / 60)}m`);
+  }
+  if (usersAtRisk > 0) {
+    status = "red";
+    reasons.push(`${usersAtRisk} failed user${usersAtRisk === 1 ? "" : "s"} remain from the latest scheduled run`);
+  }
+  if (backfillNeeded) {
+    status = "red";
+    reasons.push("scheduled delivery window was missed and needs backfill");
+  }
+  if (activeIncidentOpen) {
+    status = "red";
+    reasons.push(activeIncidentSummary ? `active incident: ${activeIncidentSummary}` : "active digest incident");
   }
 
   if (status !== "red") {
-    if ((Number.isFinite(reliability7d) && reliability7d < 98) || usersAtRisk > 0 || missed7d > 0 || schedulerError || runnerLongRunning) {
+    if ((Number.isFinite(reliability7d) && reliability7d < 98) || warnings.length > 0 || missed7d > 0 || schedulerError) {
       status = "yellow";
       if (Number.isFinite(reliability7d) && reliability7d < 98) reasons.push(`7d delivery reliability ${reliability7d.toFixed(1)}%`);
-      if (usersAtRisk > 0) reasons.push(`${usersAtRisk} user${usersAtRisk === 1 ? "" : "s"} missed 2+ delivery days`);
+      if (warnings.length > 0) reasons.push(`${warnings.length} user${warnings.length === 1 ? "" : "s"} missed 2+ delivery days recently`);
       if (missed7d > 0) reasons.push(`${missed7d} missed scheduled deliver${missed7d === 1 ? "y" : "ies"} in last 7d`);
       if (schedulerError) reasons.push("scheduler reported a recent error");
-      if (runnerLongRunning) reasons.push(`digest run active for ${Math.floor(Number(digestRunner.age_seconds || 0) / 60)}m`);
     }
   }
 
   if (reasons.length === 0) {
-    reasons.push("scheduler heartbeat healthy and delivery reliability stable");
+    reasons.push("next scheduled run is deliverable, latest scheduled run completed cleanly, and no recovery queue is active");
   }
 
-  let actionNow = "No immediate action. Send a test digest after major deploys or scheduler restarts.";
+  let actionNow = "No immediate recovery action required.";
   if (status === "red" && (schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy)) {
     actionNow = "Recover scheduler worker first, confirm heartbeat turns healthy, then send a test digest.";
-  } else if (status === "red") {
-    actionNow = "Run a full digest now and inspect failed deliveries before the next scheduled window.";
+  } else if (status === "red" && runnerBlocked) {
+    actionNow = "Inspect the stuck digest runner before the next scheduled window.";
+  } else if (status === "red" && usersAtRisk > 0) {
+    actionNow = "Review failed users from the latest scheduled run and clear the recovery queue.";
+  } else if (status === "red" && backfillNeeded) {
+    actionNow = "A scheduled window was missed. Run a full digest now to backfill affected users.";
+  } else if (status === "red" && activeIncidentOpen) {
+    actionNow = "Inspect the active incident and confirm provider health before the next scheduled run.";
   } else if (status === "yellow") {
-    actionNow = "Run a scheduler check and send a test digest to confirm end-to-end delivery before next send.";
+    actionNow = "System ready for next scheduled run. 7d reliability is below target due to recent misses; no immediate recovery action required.";
   }
 
   const headline = status === "green"
-    ? "System healthy: scheduled digests are on track."
+    ? "System ready for next scheduled run."
     : status === "yellow"
-      ? "Watchlist: delivery risk is elevated."
-      : "Action required: delivery pipeline is at risk.";
+      ? "System ready for next scheduled run. Historical reliability needs follow-up."
+      : canDeliverNextRun
+        ? "Recovery needed before confidence is fully restored."
+        : "Action required: next scheduled run is at risk.";
 
   const commands = [
     {
@@ -157,23 +184,29 @@ function buildExecutiveHealthSummary({
       label: "Send test digest",
       description: "Verify end-to-end delivery for a known target user.",
     },
-    {
-      id: "run_full_digest",
-      label: "Run full digest now",
-      description: "Queue a full delivery run for all eligible users.",
-    },
-    {
-      id: "restart_worker",
-      label: "Restart scheduler worker",
-      description: "Request a safe worker restart when heartbeat is stale or blocked.",
-    },
   ];
 
-  if (usersAtRisk > 0 || missed7d > 0) {
+  if (backfillNeeded) {
+    commands.push({
+      id: "run_full_digest",
+      label: "Run full digest now",
+      description: "Queue a recovery run for the missed scheduled window.",
+    });
+  }
+
+  if (usersAtRisk > 0) {
     commands.push({
       id: "review_missed_users",
       label: "Review missed users",
-      description: "Inspect missed/failed recipients and recover critical accounts.",
+      description: "Inspect failed recipients from the latest scheduled run and recover them.",
+    });
+  }
+
+  if (schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy || runnerBlocked) {
+    commands.push({
+      id: "restart_worker",
+      label: "Restart scheduler worker",
+      description: "Request a safe worker restart when heartbeat is stale or blocked.",
     });
   }
 
@@ -184,11 +217,18 @@ function buildExecutiveHealthSummary({
     action_now: actionNow,
     can_deliver_next_run: canDeliverNextRun,
     users_at_risk: usersAtRisk,
+    active_recovery_queue: usersAtRisk,
     missed_deliveries_7d: missed7d,
     reliability_7d: Number.isFinite(reliability7d) ? reliability7d : null,
     last_successful_scheduled_run: rel.last_successful_scheduled_run || null,
+    latest_scheduled_run_at: latestScheduledRunAt,
+    latest_scheduled_run_clean: latestScheduledRunClean,
+    latest_scheduled_run_failed_users: latestScheduledRunFailedUsers,
     next_expected_delivery_et: rel.next_expected_delivery_et || null,
     next_expected_countdown: rel.next_expected_countdown || null,
+    backfill_needed: backfillNeeded,
+    active_incident_open: activeIncidentOpen,
+    active_incident_summary: activeIncidentSummary || null,
     commands,
   };
 }
@@ -197,6 +237,7 @@ function buildHealthPayload({
   runs,
   deliveryWarnings,
   deliveryReliability,
+  deliveryOperations,
   schedulerWorker,
   digestRun,
   ignoredBackfill,
@@ -205,6 +246,7 @@ function buildHealthPayload({
   const executiveSummary = buildExecutiveHealthSummary({
     deliveryWarnings,
     deliveryReliability,
+    deliveryOperations,
     schedulerWorker,
     digestRunner,
   });
@@ -222,6 +264,7 @@ function buildHealthPayload({
     cron_schedule: "5-minute worker loop (always-on VM)",
     users_delivery_warning: deliveryWarnings,
     delivery_reliability: deliveryReliability,
+    delivery_operations: deliveryOperations,
     scheduler_worker: schedulerWorker,
     digest_runner: digestRunner,
     executive_summary: executiveSummary,

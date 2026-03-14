@@ -127,6 +127,7 @@ const { checkRateLimit } = createSignupRateLimiter({
 
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
+const DIGEST_INCIDENT_LOG = path.join(__dirname, "../data/digest-incident-log.jsonl");
 const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
 const ARCHIVE_LEGACY_USAGE_LOG = path.join(__dirname, "../data/archive-legacy-usage.jsonl");
 const SCHEDULER_CONTROL_FILE = getSchedulerControlFile();
@@ -279,6 +280,7 @@ const {
   readJsonLineLog,
   ADMIN_MESSAGE_LOG,
   ADMIN_ACTION_LOG,
+  DIGEST_INCIDENT_LOG,
   maskEmail,
   getRecentAutoAdjustmentsForUser,
   normalizeDeliveryTimeInput,

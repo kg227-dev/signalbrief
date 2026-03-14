@@ -14,7 +14,10 @@ const {
   buildAdminRoster,
   buildDeliveryWarnings,
 } = require("../services/admin-stats-roster");
-const { buildDeliveryReliabilitySnapshot } = require("../services/admin-stats-delivery");
+const {
+  buildDeliveryReliabilitySnapshot,
+  buildDeliveryOperationsSnapshot,
+} = require("../services/admin-stats-delivery");
 const { summarizeRosterQuality } = require("../services/admin-stats-quality");
 const {
   mapAdminMessages,
@@ -67,6 +70,7 @@ function buildAdminStatsPayload({
     digestRunStatus,
     readJsonLineLog,
     ADMIN_MESSAGE_LOG,
+    DIGEST_INCIDENT_LOG,
     maskEmail,
     computeNextDeliveryEt,
     formatDaysLabel,
@@ -141,6 +145,13 @@ function buildAdminStatsPayload({
     roster,
     parseEtNowParts,
   });
+  const deliveryOperations = buildDeliveryOperationsSnapshot({
+    runs,
+    roster,
+    parseEtNowParts,
+    readJsonLineLog,
+    digestIncidentLog: DIGEST_INCIDENT_LOG,
+  });
   const digestRun = digestRunStatus();
   const schedulerWorker = loadSchedulerHeartbeat();
   const adminMessages = mapAdminMessages({
@@ -168,6 +179,7 @@ function buildAdminStatsPayload({
     runs,
     deliveryWarnings,
     deliveryReliability,
+    deliveryOperations,
     schedulerWorker,
     digestRun,
     ignoredBackfill,

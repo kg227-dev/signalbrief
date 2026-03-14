@@ -883,11 +883,11 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
           <div class="health-metric-value" id="ceoCanDeliver">—</div>
         </div>
         <div class="ceo-health-cell">
-          <div class="health-metric-label">Users at risk</div>
+          <div class="health-metric-label">Recovery queue</div>
           <div class="health-metric-value" id="ceoUsersAtRisk">—</div>
         </div>
         <div class="ceo-health-cell">
-          <div class="health-metric-label">Last scheduled success</div>
+          <div class="health-metric-label">Latest scheduled run</div>
           <div class="health-metric-value" id="ceoLastSuccess">—</div>
         </div>
         <div class="ceo-health-cell">
@@ -1517,14 +1517,29 @@ function renderExecutiveSummary(health) {
     canDeliver.textContent = "—";
   }
 
-  const riskCount = Math.max(0, Number(summary.users_at_risk || 0));
+  const riskCountValue = summary.active_recovery_queue != null
+    ? summary.active_recovery_queue
+    : summary.users_at_risk;
+  const riskCount = Math.max(0, Number(riskCountValue || 0));
   usersAtRisk.innerHTML = riskCount > 0
-    ? `<a href="#rosterSection" style="color:var(--yellow);font-weight:700;text-decoration:none;">${riskCount}</a>`
+    ? `<a href="#failedDeliveryPanel" style="color:var(--red);font-weight:700;text-decoration:none;">${riskCount}</a>`
     : `<span style="color:var(--green);">0</span>`;
 
-  lastSuccess.textContent = summary.last_successful_scheduled_run
-    ? formatEtDateTime(summary.last_successful_scheduled_run)
-    : "No scheduled success yet";
+  const latestRunAt = summary.latest_scheduled_run_at || summary.last_successful_scheduled_run || null;
+  const latestRunClean = summary.latest_scheduled_run_clean === true;
+  const latestRunFailedUsers = Math.max(0, Number(summary.latest_scheduled_run_failed_users || 0));
+  if (latestRunAt) {
+    const runLabel = formatEtDateTime(latestRunAt);
+    if (latestRunClean) {
+      lastSuccess.innerHTML = `<span style="color:var(--green);">✅ ${esc(runLabel)}</span>`;
+    } else if (latestRunFailedUsers > 0) {
+      lastSuccess.innerHTML = `<span style="color:var(--red);">⚠️ ${esc(runLabel)}</span>`;
+    } else {
+      lastSuccess.textContent = runLabel;
+    }
+  } else {
+    lastSuccess.textContent = "No scheduled run yet";
+  }
   nextExpected.textContent = summary.next_expected_delivery_et
     ? `${summary.next_expected_delivery_et}${summary.next_expected_countdown ? ` (${summary.next_expected_countdown})` : ""}`
     : "—";
@@ -1575,7 +1590,7 @@ function runCeoCommand(commandId, triggerEl = null) {
   if (id === "review_missed_users") {
     const panel = document.getElementById("failedDeliveryPanel");
     if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
-    setOpsActionMessage("info", "Reviewing missed deliveries section.");
+    setOpsActionMessage("info", "Reviewing recovery queue.");
     return;
   }
   showToast("warn", "Command not wired yet");

@@ -8,8 +8,11 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 const source = fs.readFileSync(TARGET_PATH, "utf8");
 
 const requiredSnippets = [
-  "<th>Digest quality</th>",
-  "<th>Digest</th>",
+  "Digest quality</th>",
+  "Digest</th>",
+  "How to read this",
+  "Digest quality is a 0-100 score for the whole brief, not a match percentage.",
+  "why this scored this way",
   "function renderRunDigestQuality(run)",
   "function renderRunDigestLink(run)",
   "function renderRunDebugPanel(run)",

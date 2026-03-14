@@ -61,6 +61,85 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 
 /* Section headings */
 .section-title { font-size:13px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:12px; }
+.section-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+}
+.section-subcopy {
+  font-size:12px;
+  color:var(--text-secondary);
+  margin-top:4px;
+}
+.explain-card {
+  min-width:min(560px, 100%);
+  max-width:760px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:#fff;
+  padding:10px 12px;
+}
+.explain-card summary {
+  cursor:pointer;
+  list-style:none;
+  font-size:12px;
+  font-weight:700;
+  color:var(--accent);
+  user-select:none;
+}
+.explain-card summary::-webkit-details-marker { display:none; }
+.explain-card summary::before {
+  content:"▸";
+  display:inline-block;
+  margin-right:6px;
+  color:var(--text-secondary);
+}
+.explain-card[open] summary::before { content:"▾"; }
+.explain-body {
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:10px;
+}
+.explain-block {
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  background:#FAFAFB;
+  padding:10px;
+}
+.explain-label {
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
+  margin-bottom:6px;
+}
+.explain-copy {
+  font-size:12px;
+  color:var(--text-2);
+  line-height:1.5;
+}
+.explain-chip-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:8px;
+}
+.explain-chip {
+  display:inline-flex;
+  align-items:center;
+  padding:3px 7px;
+  border-radius:999px;
+  background:#F3F4F6;
+  color:var(--text-2);
+  font-size:10px;
+  font-weight:700;
+  line-height:1.2;
+}
 
 /* Tables */
 .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; margin-bottom:36px; }
@@ -754,6 +833,9 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   .cards { grid-template-columns:1fr 1fr; }
   .cards-kpi { grid-template-columns:1fr; }
   .cards-window { grid-template-columns:1fr; }
+  .section-head { align-items:stretch; }
+  .explain-card { min-width:100%; }
+  .explain-body { grid-template-columns:1fr; }
   .schedule-calendar { grid-template-columns:1fr; }
   .table-toolbar-controls { width:100%; margin-left:0; }
   .table-search { width:100%; }
@@ -768,6 +850,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 @media (min-width:641px) and (max-width:980px) {
   .cards-kpi { grid-template-columns:1fr 1fr; }
   .cards-window { grid-template-columns:1fr 1fr; }
+  .explain-body { grid-template-columns:1fr; }
   .schedule-calendar { grid-template-columns:repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width:981px) and (max-width:1280px) {
@@ -1043,20 +1126,61 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   </div>
 
   <!-- Run log -->
-  <div class="section-title" id="runsSection">Recent runs (last 10)</div>
+  <div class="section-head" id="runsSection">
+    <div>
+      <div class="section-title" style="margin-bottom:0;">Recent runs (last 10)</div>
+      <div class="section-subcopy">Each row is one digest run. Digest quality is a 0-100 brief score, not a match percentage.</div>
+    </div>
+    <details class="explain-card">
+      <summary>How to read this</summary>
+      <div class="explain-body">
+        <div class="explain-block">
+          <div class="explain-label">Run Metrics</div>
+          <div class="explain-copy">
+            <strong>Users</strong> is recipients actually served in that run. <strong>Tokens</strong> is Claude input/output usage. <strong>Total</strong> is API spend for the run: Perplexity plus Claude.
+          </div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">Digest Quality</div>
+          <div class="explain-copy">
+            This is a whole-brief score from 0 to 100. It rewards topic fit, ranking quality, analysis quality, freshness/diversity, and custom-topic coverage.
+          </div>
+          <div class="explain-chip-row">
+            <span class="explain-chip">topic = topic fit</span>
+            <span class="explain-chip">rank = ranking quality</span>
+            <span class="explain-chip">analysis = writeup quality</span>
+            <span class="explain-chip">fresh = novelty + diversity</span>
+            <span class="explain-chip">custom = custom-topic coverage</span>
+          </div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">Debug Chips</div>
+          <div class="explain-copy">
+            Inside each run, <strong>signal</strong> is the item score, <strong>strategic</strong> is business importance, <strong>routine</strong> is low-value/routine risk, and <strong>dup</strong> / <strong>sat</strong> are duplication and entity-saturation penalties.
+          </div>
+          <div class="explain-chip-row">
+            <span class="explain-chip">novelty = new vs recent history</span>
+            <span class="explain-chip">source = source authority</span>
+            <span class="explain-chip">story = storyline cluster</span>
+            <span class="explain-chip">entity = extracted company/topic</span>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Date (ET)</th>
-          <th>Time (ET)</th>
-          <th>Type</th>
-          <th>Users</th>
-          <th>Sent to</th>
-          <th>Tokens (in / out)</th>
-          <th>Digest quality</th>
-          <th>Digest</th>
-          <th>Total</th>
+          <th title="The ET calendar date of the digest run.">Date (ET)</th>
+          <th title="The ET time the run executed.">Time (ET)</th>
+          <th title="Scheduled is the normal automated run. On-demand is manually triggered.">Type</th>
+          <th title="How many recipients were actually served in that run.">Users</th>
+          <th title="Recipients who were served in the run.">Sent to</th>
+          <th title="Claude token usage for the run: input tokens / output tokens.">Tokens (in / out)</th>
+          <th title="Digest quality is a 0-100 score for the full brief, not a match percentage.">Digest quality</th>
+          <th title="Open the digest and inspect item-level scoring/debug details.">Digest</th>
+          <th title="Total API cost for the run: Perplexity plus Claude.">Total</th>
         </tr>
       </thead>
       <tbody id="runsBody">
@@ -1290,10 +1414,11 @@ function renderRunDigestQuality(run) {
   if (!Number.isFinite(score)) return `<span style="color:var(--text-secondary);">—</span>`;
   const tone = score >= 85 ? "#059669" : (score >= 75 ? "#D97706" : "#DC2626");
   const samples = Number(run?.digest_quality_samples || 0);
+  const baseLabel = "Digest quality is a 0-100 score for the whole brief, not a match percentage.";
   const sampleLabel = samples > 0
-    ? `Average across ${samples} recipient${samples === 1 ? "" : "s"}`
+    ? `Average across ${samples} recipient${samples === 1 ? "" : "s"}.`
     : "";
-  return `<span class="mono" style="font-weight:700;color:${tone};" title="${esc(sampleLabel)}">${score.toFixed(1)}</span>`;
+  return `<span class="mono" style="font-weight:700;color:${tone};" title="${esc(`${baseLabel} ${sampleLabel}`.trim())}">${score.toFixed(1)}</span>`;
 }
 function resolveRunDigestHref(run) {
   const rawHref = String(run?.digest_url || "").trim();
@@ -1401,7 +1526,7 @@ function renderRunDebugPanel(run) {
   const qualityPills = renderDigestQualityComponents(row?.quality_components);
 
   return `<details style="margin-top:8px;">
-    <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:600;">debug</summary>
+    <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:600;">why this scored this way</summary>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
       ${metaLine ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${metaLine}</div>` : ""}
       ${qualityPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${qualityPills}</div>` : ""}

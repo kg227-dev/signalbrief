@@ -67,6 +67,13 @@ async function invoke(pathname, search, deps) {
         url: "https://example.com/story",
         source: "Example",
       },
+      {
+        tag: "PE×M&A",
+        headline: "Second headline",
+        summary: "Second summary",
+        url: "https://example.com/second",
+        source: "Example",
+      },
     ],
   };
   fs.writeFileSync(path.join(archiveDir, "2026-03-12.json"), JSON.stringify(digest, null, 2));
@@ -95,6 +102,7 @@ async function invoke(pathname, search, deps) {
         return new Set(Array.isArray(user.digest_dates) ? user.digest_dates : []);
       },
       archiveRelevanceScore: () => 0,
+      loadEngagementEvents: () => [],
       path,
       fs,
       APP_ROOT: rootDir,
@@ -108,7 +116,7 @@ async function invoke(pathname, search, deps) {
     assert.strictEqual(steadyResult.res.statusCode, 200);
     const steadyBody = JSON.parse(steadyResult.res.body || "{}");
     assert.strictEqual(Array.isArray(steadyBody.items), true);
-    assert.strictEqual(steadyBody.items.length, 1);
+    assert.strictEqual(steadyBody.items.length, 2);
     assert.strictEqual(readArchiveFilesCalls, 0, "steady-state archive reads should not require directory scans");
 
     let fallbackCalls = 0;
@@ -138,8 +146,39 @@ async function invoke(pathname, search, deps) {
     assert.strictEqual(legacyResult.res.statusCode, 200);
     const legacyBody = JSON.parse(legacyResult.res.body || "{}");
     assert.strictEqual(Array.isArray(legacyBody.items), true);
-    assert.strictEqual(legacyBody.items.length, 1);
+    assert.strictEqual(legacyBody.items.length, 2);
     assert.strictEqual(fallbackCalls, 1, "legacy fallback may scan archive files when digest_dates are missing");
+
+    const deliveredSubsetDeps = {
+      ...steadyDeps,
+      loadEngagementEvents: () => [
+        {
+          event_type: "digest_sent",
+          user_chat_id: "steady-user",
+          date_et: "2026-03-12",
+          digest_id: "2026-03-12:steady-user",
+          ts_utc: "2026-03-12T10:05:00.000Z",
+          metadata: {
+            items: [
+              {
+                index: 1,
+                headline: "Test headline",
+                url: "https://example.com/story",
+                tag: "AI×TECH",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const deliveredSubsetResult = await invoke("/api/archive/all", "?token=ok", deliveredSubsetDeps);
+    assert.strictEqual(deliveredSubsetResult.handled, true);
+    assert.strictEqual(deliveredSubsetResult.res.statusCode, 200);
+    const deliveredSubsetBody = JSON.parse(deliveredSubsetResult.res.body || "{}");
+    assert.strictEqual(Array.isArray(deliveredSubsetBody.items), true);
+    assert.strictEqual(deliveredSubsetBody.items.length, 1);
+    assert.strictEqual(deliveredSubsetBody.items[0].headline, "Test headline");
   } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });
   }

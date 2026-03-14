@@ -21,6 +21,96 @@ function sortArchiveDatesDescending(values) {
   )).sort((a, b) => (a < b ? 1 : -1));
 }
 
+function normalizeArchiveLookupKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildDeliveredItemsByDate(user, deps) {
+  const { loadEngagementEvents } = deps;
+  if (typeof loadEngagementEvents !== "function") return new Map();
+
+  const chatId = String(user?.chatId || "").trim();
+  if (!chatId) return new Map();
+
+  const events = loadEngagementEvents({ max_age_days: 120, dedupe: true });
+  const bestByDate = new Map();
+
+  for (const event of (Array.isArray(events) ? events : [])) {
+    if (String(event?.event_type || "") !== "digest_sent") continue;
+    if (String(event?.user_chat_id || "").trim() !== chatId) continue;
+
+    const dateKey = String(event?.date_et || String(event?.digest_id || "").split(":")[0] || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+
+    const items = Array.isArray(event?.metadata?.items) ? event.metadata.items : [];
+    if (items.length === 0) continue;
+
+    const current = bestByDate.get(dateKey);
+    const currentCount = Array.isArray(current?.items) ? current.items.length : 0;
+    const candidateTs = Date.parse(String(event?.ts_utc || ""));
+    const currentTs = Number(current?.ts_ms || 0);
+    const shouldReplace = !current
+      || items.length > currentCount
+      || (items.length === currentCount && Number.isFinite(candidateTs) && candidateTs > currentTs);
+
+    if (shouldReplace) {
+      bestByDate.set(dateKey, {
+        items,
+        ts_ms: Number.isFinite(candidateTs) ? candidateTs : 0,
+      });
+    }
+  }
+
+  return new Map(Array.from(bestByDate.entries()).map(([dateKey, value]) => [dateKey, value.items]));
+}
+
+function resolveDeliveredDigestItems(dateKey, digestItems, deliveredItemsByDate) {
+  const rawItems = Array.isArray(digestItems) ? digestItems : [];
+  const deliveredRefs = deliveredItemsByDate instanceof Map ? deliveredItemsByDate.get(dateKey) : null;
+  if (!Array.isArray(deliveredRefs) || deliveredRefs.length === 0) {
+    return rawItems.map((item, idx) => ({ rank: idx + 1, item }));
+  }
+
+  const byUrl = new Map();
+  const byHeadlineTag = new Map();
+  rawItems.forEach((item, idx) => {
+    const urlKey = normalizeArchiveLookupKey(item?.url);
+    if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, { rank: idx + 1, item });
+
+    const headlineKey = normalizeArchiveLookupKey(item?.headline);
+    const tagKey = normalizeArchiveLookupKey(item?.tag);
+    const compositeKey = `${headlineKey}::${tagKey}`;
+    if (headlineKey && !byHeadlineTag.has(compositeKey)) {
+      byHeadlineTag.set(compositeKey, { rank: idx + 1, item });
+    }
+  });
+
+  return deliveredRefs
+    .map((ref, idx) => {
+      const urlKey = normalizeArchiveLookupKey(ref?.url);
+      const headlineKey = normalizeArchiveLookupKey(ref?.headline);
+      const tagKey = normalizeArchiveLookupKey(ref?.tag);
+      const compositeKey = `${headlineKey}::${tagKey}`;
+      const matched = (urlKey && byUrl.get(urlKey)) || (headlineKey && byHeadlineTag.get(compositeKey)) || null;
+      if (matched) return { rank: Number(ref?.index || idx + 1), item: matched.item };
+      return {
+        rank: Number(ref?.index || idx + 1),
+        item: {
+          tag: ref?.tag || "",
+          headline: ref?.headline || "",
+          summary: "",
+          wim: null,
+          implications: null,
+          watch_next: null,
+          url: ref?.url || "",
+          source: "",
+          baseScore: Number.isFinite(Number(ref?.base_score)) ? Number(ref.base_score) : null,
+        },
+      };
+    })
+    .filter((entry) => entry && entry.item);
+}
+
 function resolveAllowedArchiveDatesForUser(user, archiveDir, deps) {
   const {
     getAllowedArchiveDates,
@@ -93,6 +183,7 @@ function handleLegacyArchiveIndex(ctx, deps) {
   const archiveDir = path.join(APP_ROOT, "archive");
   const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
   const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
+  const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
   if (allowedDateKeys.length === 0) {
     recordLegacyArchiveUsage(req, "/api/archive", "served_empty", { user_chat_id: String(user.chatId || "") });
     json(res, { digests: [] });
@@ -104,11 +195,12 @@ function handleLegacyArchiveIndex(ctx, deps) {
       const digestPath = path.join(archiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) return [];
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
+      const deliveredDigestItems = resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate);
       return [{
         date: digest.date,
         dateStr: digest.dateStr,
         quickScan: digest.quickScan,
-        itemCount: digest.items?.length || 0,
+        itemCount: deliveredDigestItems.length,
       }];
     } catch {
       return [];
@@ -153,6 +245,7 @@ function handleArchiveAllRoute(ctx, deps) {
   const archiveDir = path.join(APP_ROOT, "archive");
   const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
   const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
+  const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
   if (allowedDateKeys.length === 0) {
     json(res, { items: [], digestCount: 0 });
     return true;
@@ -168,14 +261,15 @@ function handleArchiveAllRoute(ctx, deps) {
       const digestPath = path.join(archiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) continue;
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
+      const deliveredDigestItems = resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate);
+      if (deliveredDigestItems.length === 0) continue;
       digestCount++;
-      const digestItems = Array.isArray(digest.items) ? digest.items : [];
-      digestItems.forEach((item, idx) => {
+      deliveredDigestItems.forEach(({ item, rank }, idx) => {
         items.push({
           date: digest.date || dateKey,
           dateStr: digest.dateStr || dateKey,
           generatedAt: digest.generatedAt || null,
-          rank: idx + 1,
+          rank: Number.isFinite(Number(rank)) ? Number(rank) : idx + 1,
           ...mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore),
         });
       });
@@ -258,9 +352,9 @@ function handleArchiveDateRoute(ctx, deps) {
     const raw = JSON.parse(fs.readFileSync(file, "utf8"));
     const userTopics = Array.isArray(user.topics) ? user.topics : [];
     const topicWeights = user.topic_weights || {};
-    if (Array.isArray(raw.items)) {
-      raw.items = raw.items.map((item) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore));
-    }
+    const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
+    raw.items = resolveDeliveredDigestItems(rawDate, raw.items, deliveredItemsByDate)
+      .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore));
     recordLegacyArchiveUsage(req, "/api/archive/:date", "served", {
       date: rawDate,
       user_chat_id: String(user.chatId || ""),

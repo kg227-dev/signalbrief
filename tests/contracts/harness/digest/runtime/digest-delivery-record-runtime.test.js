@@ -121,6 +121,8 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     assert.ok(scheduledByRun);
     assert.strictEqual(scheduledByRun.mode, "scheduled");
     assert.strictEqual(scheduledByRun.items[0].headline, "Pfizer pivots");
+    assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-13", "scheduled"), true);
+    assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-14", "scheduled"), false);
 
     const manualByRun = deliveryRecords.loadDigestSnapshotByRunId(
       "user-1",

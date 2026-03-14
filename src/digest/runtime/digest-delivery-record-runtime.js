@@ -240,8 +240,15 @@ function createDigestDeliveryRecordRuntime(deps) {
     return matches[0] || null;
   }
 
+  function hasSentDigestRecord(userId, dateKey, mode = "scheduled") {
+    const current = readDigestRecord(userId, dateKey, mode)?.current;
+    const normalized = current ? normalizeVersionEntry(current) : null;
+    return normalized?.status === "sent";
+  }
+
   return {
     beginDigestDeliveryRecord,
+    hasSentDigestRecord,
     loadDigestSnapshotByRunId,
     loadLatestDigestSnapshot,
     loadRecentSentDigests,

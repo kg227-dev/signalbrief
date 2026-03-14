@@ -532,6 +532,37 @@ function resolveDeliveryEventSource(deliveryMode) {
   return "manual-rerun";
 }
 
+function filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime) {
+  const rows = Array.isArray(dueUsers) ? dueUsers.slice() : [];
+  const dateKey = String(digestDateKey || "").trim();
+  if (!rows.length || !dateKey || !digestDeliveryRecordRuntime || typeof digestDeliveryRecordRuntime.hasSentDigestRecord !== "function") {
+    return {
+      dueUsers: rows,
+      skippedUsers: [],
+    };
+  }
+
+  const eligible = [];
+  const skipped = [];
+  for (const user of rows) {
+    const userId = String(user?.chatId || user?.email || "").trim();
+    if (!userId) {
+      eligible.push(user);
+      continue;
+    }
+    if (digestDeliveryRecordRuntime.hasSentDigestRecord(userId, dateKey, "scheduled")) {
+      skipped.push(user);
+      continue;
+    }
+    eligible.push(user);
+  }
+
+  return {
+    dueUsers: eligible,
+    skippedUsers: skipped,
+  };
+}
+
 function prepareStorylinePool(enrichedItems, selectionTarget) {
   const storylineCandidates = buildStorylineCandidates(enrichedItems);
   const filtered = applyStrategicQualityGate(storylineCandidates, {
@@ -664,9 +695,27 @@ async function main() {
     log,
     allowExampleEmails,
   });
-  const {
-    dueUsers,
-  } = dueContext;
+  const digestDateKey = String(dueContext?.todayET || "").trim() || formatEtDateKey(new Date());
+  let dueUsers = Array.isArray(dueContext?.dueUsers) ? dueContext.dueUsers.slice() : [];
+
+  if (!targetChatId && dueUsers.length > 0) {
+    const digestDeliveryRecordRuntime = getDigestDeliveryRecordRuntime();
+    const preflight = filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime);
+    dueUsers = preflight.dueUsers;
+    if (preflight.skippedUsers.length > 0) {
+      const skippedList = preflight.skippedUsers
+        .map((user) => user?.email || user?.chatId)
+        .filter(Boolean)
+        .join(", ");
+      logEvent("info", "digest.run.skipped", {
+        provider: "delivery-record",
+        outcome: "already_sent_prefilter",
+        skipped_users: preflight.skippedUsers.length,
+        date_et: digestDateKey,
+      });
+      log(`⏭️ Prefiltered ${preflight.skippedUsers.length} user(s) already sent for ${digestDateKey}${skippedList ? ` -> ${skippedList}` : ""}`);
+    }
+  }
 
   if (dueUsers.length === 0) {
     if (targetChatId) {
@@ -709,7 +758,6 @@ async function main() {
   const shortDate = now.toLocaleDateString("en-US", {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
-  const digestDateKey = formatEtDateKey(now);
   const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG,
@@ -926,6 +974,7 @@ module.exports = {
   getEtNow,
   getEtNowParts,
   toEtDateString,
+  filterAlreadySentScheduledDueUsers,
   parseSourceDomain,
   normalizeUrlForDedup,
   headlineFingerprint,

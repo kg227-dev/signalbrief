@@ -5,22 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — SignalBrief</title>
 <meta name="robots" content="noindex,nofollow,noarchive">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #FAFAF8; --card: #FFFFFF; --text: #111111; --text-secondary: #6B7280;
-  --text-2: #374151; --text-light: #9CA3AF;
-  --accent: #2563EB; --accent-hover: #1D4ED8; --accent-light: #EFF6FF;
-  --border: rgba(0,0,0,0.08); --border-subtle: rgba(0,0,0,0.05); --radius: 12px;
+  --bg: #edeae4; --card: #FFFFFF; --text: #1a1a1a; --text-secondary: #6b6560;
+  --text-2: #3d3833; --text-light: #9a9490;
+  --accent: #3b5fc0; --accent-hover: #2d4ea0; --accent-light: #e8edf8;
+  --border: rgba(0,0,0,0.06); --border-subtle: rgba(0,0,0,0.04); --radius: 12px;
   --green: #16A34A; --yellow: #D97706; --red: #DC2626;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
 .container { max-width:1560px; margin:0 auto; padding:40px 24px 80px; }
 
-.header { margin-bottom:36px; padding-bottom:20px; border-bottom:1px solid var(--border); }
-.header-top { display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
-.header h1 { font-size:22px; font-weight:700; letter-spacing:-0.3px; }
+.header { margin-bottom:40px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+.header-top { display:flex; align-items:baseline; gap:12px; margin-bottom:6px; }
+.header h1 { font-size:28px; font-weight:700; letter-spacing:-0.4px; }
+.header h1 .brand { font-family:'Playfair Display',serif; }
 .header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; }
 .header p { font-size:14px; color:var(--text-secondary); }
 .stale-badge {
@@ -39,23 +40,23 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .stale-badge.show { display:inline-flex; align-items:center; }
 
 /* Summary cards */
-.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:36px; }
-.kpi-board { margin-bottom:36px; display:flex; flex-direction:column; gap:14px; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:20px; margin-bottom:36px; }
+.kpi-board { margin-bottom:40px; display:flex; flex-direction:column; gap:16px; }
 .kpi-row-title {
   font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
   color:var(--text-secondary); margin-bottom:10px;
 }
 .cards-kpi {
-  grid-template-columns:repeat(3, minmax(0, 1fr));
+  grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
   margin-bottom:0;
 }
 .cards-window {
   grid-template-columns:repeat(2, minmax(0, 1fr));
   margin-bottom:0;
 }
-.card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:24px 28px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
 .card-label { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:10px; }
-.card-value { font-size:28px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
+.card-value { font-size:32px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
 .card-sub { font-size:12px; color:var(--text-secondary); margin-top:4px; }
 .card-sub strong { color:var(--text); font-weight:600; }
 
@@ -145,7 +146,7 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
 .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; margin-bottom:36px; }
 table { width:100%; border-collapse:collapse; }
 thead th { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); padding:12px 16px; background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
-tbody td { font-size:13px; padding:11px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text); vertical-align:middle; }
+tbody td { font-size:13px; padding:13px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text); vertical-align:middle; }
 tbody tr:last-child td { border-bottom:none; }
 tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .th-sort {
@@ -407,7 +408,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .cost-med  { color:var(--yellow); }
 .cost-low  { color:var(--green); }
 
-.empty { padding:32px; text-align:center; color:var(--text-secondary); font-size:14px; }
+.empty { padding:48px 32px; text-align:center; color:var(--text-secondary); font-size:14px; line-height:1.6; }
 
 /* Roster status badges */
 .badge-active  { font-size:10px; font-weight:700; color:#fff; background:var(--green); padding:2px 7px; border-radius:100px; }
@@ -591,7 +592,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 }
 .schedule-set-btn:hover { border-color:var(--accent); background:var(--accent-light); }
 .schedule-set-btn:disabled { opacity:0.6; cursor:not-allowed; }
-.schedule-empty { padding:24px 16px; text-align:center; color:var(--text-secondary); font-size:13px; }
+.schedule-empty { padding:48px 24px; text-align:center; color:var(--text-secondary); font-size:14px; line-height:1.6; }
 .schedule-empty-day {
   border:1px dashed var(--border);
   border-radius:8px;
@@ -856,6 +857,73 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 @media (min-width:981px) and (max-width:1280px) {
   .schedule-calendar { grid-template-columns:repeat(4, minmax(0, 1fr)); }
 }
+
+/* Dark mode */
+body.dark {
+  --bg: #1a1815; --card: #2a2622; --text: #e8e4de; --text-secondary: #9a9490;
+  --text-2: #c5bfb6; --text-light: #6b6560;
+  --accent: #6b8bd6; --accent-hover: #8ba3e0; --accent-light: rgba(107,139,214,0.12);
+  --border: rgba(255,255,255,0.08); --border-subtle: rgba(255,255,255,0.05);
+}
+body.dark .card { box-shadow:0 1px 3px rgba(0,0,0,0.15); }
+body.dark thead th { background:rgba(255,255,255,0.03); }
+body.dark tbody tr:hover td { background:rgba(255,255,255,0.02); }
+body.dark .table-search,
+body.dark .table-filter,
+body.dark .test-target-select { background:var(--card); color:var(--text); }
+body.dark .table-wrap-subscribers thead th { background:var(--card); }
+body.dark .explain-card { background:var(--card); }
+body.dark .explain-block { background:rgba(255,255,255,0.03); }
+body.dark .explain-chip { background:rgba(255,255,255,0.08); color:var(--text-2); }
+body.dark .schedule-day-card { background:var(--card); }
+body.dark .schedule-day-header { background:rgba(255,255,255,0.03); }
+body.dark .schedule-row { background:var(--card); }
+body.dark .schedule-empty-day { border-color:rgba(255,255,255,0.1); }
+body.dark .schedule-more { background:rgba(255,255,255,0.02); }
+body.dark .schedule-more button { background:var(--card); color:var(--accent); }
+body.dark .schedule-set-btn { background:var(--card); color:var(--accent); }
+body.dark .ceo-health-panel { background:linear-gradient(180deg, rgba(255,255,255,0.04) 0%, var(--card) 100%); }
+body.dark .ceo-health-cell { background:rgba(255,255,255,0.03); }
+body.dark .ceo-action-now { background:rgba(255,255,255,0.03); }
+body.dark .ceo-command-btn { background:var(--card); color:var(--text-2); }
+body.dark .ceo-command-btn:hover { background:var(--accent-light); color:var(--accent); }
+body.dark .ceo-command-btn:disabled { background:rgba(255,255,255,0.04); color:var(--text-secondary); }
+body.dark .drawer-row td { background:rgba(255,255,255,0.02); }
+body.dark .drawer-card { background:var(--card); }
+body.dark .drawer-preview-item { background:var(--card); }
+body.dark .audit-item { background:var(--card); }
+body.dark .subscriber-row-main.expanded td { background:rgba(107,139,214,0.06); }
+body.dark .subscriber-row-main.expanded:hover td { background:rgba(107,139,214,0.08); }
+body.dark .modal-card { background:var(--card); box-shadow:0 16px 44px rgba(0,0,0,0.5); }
+body.dark .modal-close { background:var(--card); color:var(--text-secondary); }
+body.dark .modal-mode-btn { background:var(--card); color:var(--text-2); }
+body.dark .modal-mode-btn.active { background:var(--accent-light); }
+body.dark .modal-panel { background:rgba(255,255,255,0.02); }
+body.dark .modal-input,
+body.dark .modal-textarea { background:var(--card); color:var(--text); }
+body.dark .modal-btn { background:var(--card); color:var(--text-2); }
+body.dark .toast { background:var(--card); color:var(--text-2); }
+body.dark .toast.ok { background:#0a2a1a; color:#6ee7a0; border-color:#065F46; }
+body.dark .toast.err { background:#2a0a0a; color:#fca5a5; border-color:#991B1B; }
+body.dark .toast.warn { background:#2a1f0a; color:#fcd34d; border-color:#92400E; }
+body.dark .topic-chip-preset { background:rgba(107,139,214,0.15); color:#93b0e8; border-color:rgba(107,139,214,0.25); }
+body.dark .topic-chip-custom { background:rgba(16,163,87,0.12); color:#6ee7a0; border-color:rgba(16,163,87,0.25); }
+body.dark .send-btn { background:var(--card); color:var(--accent); }
+body.dark .send-btn:hover { background:var(--accent-light); }
+body.dark .danger-btn { background:rgba(185,28,28,0.12); color:#fca5a5; border-color:rgba(185,28,28,0.3); }
+body.dark .danger-btn:hover { background:rgba(185,28,28,0.18); }
+body.dark .btn-secondary { background:var(--card); color:var(--accent); }
+body.dark .btn-secondary:hover { background:var(--accent-light); }
+body.dark .table-action-link { background:var(--card); color:var(--accent); }
+body.dark .table-action-link:hover { background:var(--accent-light); }
+body.dark .expand-btn { background:var(--card); }
+body.dark .weights-pill { background:rgba(107,139,214,0.15); color:var(--accent); }
+body.dark .modal-feedback.ok { background:#0a2a1a; color:#6ee7a0; border-color:#065F46; }
+body.dark .modal-feedback.err { background:#2a0a0a; color:#fca5a5; border-color:#991B1B; }
+body.dark .failed-delivery-row { background:var(--card); }
+body.dark .failed-delivery-error { color:#fca5a5; }
+body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-color:rgba(180,83,9,0.3); }
+body.dark .dark-toggle { color:var(--text-secondary); border-color:var(--border); background:var(--card); }
 </style>
 </head>
 <body>
@@ -863,8 +931,9 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 
   <div class="header">
     <div class="header-top">
-      <h1>⚙️ SignalBrief Admin</h1>
+      <h1><span class="brand">SignalBrief</span> Admin</h1>
       <a href="/admin/sandbox" class="badge" style="text-decoration:none;cursor:pointer;">Sandbox</a>
+      <button onclick="toggleDarkMode()" class="btn-secondary dark-toggle" style="font-size:14px;border-radius:6px;padding:4px 10px;cursor:pointer;" title="Toggle dark mode" aria-label="Toggle dark mode">&#9684;</button>
       <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
@@ -954,26 +1023,8 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
     </div>
   </div>
 
-  <!-- Upcoming deliveries -->
-  <div class="section-title">Upcoming deliveries (next 7 days)</div>
-  <div class="schedule-wrap" id="scheduleWrap">
-    <div class="schedule-empty">Loading…</div>
-  </div>
-
-  <!-- Failed deliveries (today) -->
-  <div class="schedule-wrap failed-delivery-panel" id="failedDeliveryPanel" style="display:none;">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-      <div>
-        <div class="section-title" style="margin:0 0 2px;">Failed deliveries (today)</div>
-        <div id="failedDeliverySummary" class="table-meta" style="margin:0;">No failed deliveries in today's scheduled runs.</div>
-      </div>
-      <button id="resendAllFailedBtn" class="btn-secondary" onclick="resendFailedDeliveries()" disabled>Resend failed users</button>
-    </div>
-    <div id="failedDeliveryList" class="failed-delivery-list"></div>
-  </div>
-
   <!-- System health bar -->
-  <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:24px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;">
+  <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:36px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
     <div id="ceoHealthPanel" class="ceo-health-panel">
       <div class="ceo-health-head">
         <div class="health-metric-label" style="margin-bottom:0;">CEO system status</div>
@@ -1060,6 +1111,24 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
       <div id="opsActionMsg" class="ops-action-msg"></div>
     </div>
+  </div>
+
+  <!-- Upcoming deliveries -->
+  <div class="section-title">Upcoming deliveries (next 7 days)</div>
+  <div class="schedule-wrap" id="scheduleWrap">
+    <div class="schedule-empty">Loading…</div>
+  </div>
+
+  <!-- Failed deliveries (today) -->
+  <div class="schedule-wrap failed-delivery-panel" id="failedDeliveryPanel" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+      <div>
+        <div class="section-title" style="margin:0 0 2px;">Failed deliveries (today)</div>
+        <div id="failedDeliverySummary" class="table-meta" style="margin:0;">No failed deliveries in today's scheduled runs.</div>
+      </div>
+      <button id="resendAllFailedBtn" class="btn-secondary" onclick="resendFailedDeliveries()" disabled>Resend failed users</button>
+    </div>
+    <div id="failedDeliveryList" class="failed-delivery-list"></div>
   </div>
 
   <!-- Subscriber table -->
@@ -1326,6 +1395,13 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
 
 <script>
+/* Dark mode */
+function toggleDarkMode() {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("sb-dark", document.body.classList.contains("dark") ? "1" : "0");
+}
+if (localStorage.getItem("sb-dark") === "1") document.body.classList.add("dark");
+
 function esc(s) {
   if (!s) return "";
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");

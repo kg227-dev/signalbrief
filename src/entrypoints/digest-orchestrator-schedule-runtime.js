@@ -6,15 +6,21 @@ function resolveDueUsers(deps) {
     allUsers,
     USER_STATUS,
     getEtNow,
+    getEtNowParts,
     toEtDateString,
     CONFIG,
     log,
     allowExampleEmails = true,
   } = deps;
 
-  const etNow = getEtNow();
-  const todayET = etNow.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-  const nowMinutes = etNow.getHours() * 60 + etNow.getMinutes();
+  const now = getEtNow();
+  const etNow = typeof getEtNowParts === "function"
+    ? getEtNowParts(now)
+    : {};
+  const todayET = String(etNow.todayET || toEtDateString(now?.toISOString?.() || "") || "").trim();
+  const nowMinutes = Number.isFinite(Number(etNow.nowMinutes))
+    ? Number(etNow.nowMinutes)
+    : ((now.getHours() * 60) + now.getMinutes());
   const activeUsers = allUsers().filter((user) => user.status === USER_STATUS.ACTIVE);
   const allActive = allowExampleEmails
     ? activeUsers
@@ -28,7 +34,7 @@ function resolveDueUsers(deps) {
   if (targetChatId) {
     dueUsers = allActive.filter((user) => user.chatId === targetChatId);
   } else {
-    const todayDOW = etNow.getDay();
+    const todayDOW = Number.isInteger(etNow.todayDOW) ? etNow.todayDOW : now.getDay();
     const catchupWindowMinutes = Math.max(
       30,
       Number(CONFIG?.digest?.catchupWindowMinutes || (12 * 60))
@@ -60,7 +66,9 @@ function resolveDueUsers(deps) {
       const isDue = dueUsers.some((dueUser) => dueUser.chatId === user.chatId);
       return `${user.email || user.chatId}: target=${prefs.delivery_time} diff=${diff >= 0 ? "+" : ""}${diff}min → ${isDue ? "DUE" : "skip"}`;
     });
-    log(`[schedule] ${todayET} ${etNow.getHours().toString().padStart(2, "0")}:${etNow.getMinutes().toString().padStart(2, "0")} ET — ${parts.join(" | ")}`);
+    const etHour = Number.isFinite(Number(etNow.hour)) ? Number(etNow.hour) : now.getHours();
+    const etMinute = Number.isFinite(Number(etNow.minute)) ? Number(etNow.minute) : now.getMinutes();
+    log(`[schedule] ${todayET} ${etHour.toString().padStart(2, "0")}:${etMinute.toString().padStart(2, "0")} ET — ${parts.join(" | ")}`);
   }
 
   return {

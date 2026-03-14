@@ -2812,7 +2812,6 @@ function renderSubscriberDrawer(u) {
   if (settingsHref) actionParts.push(`<a class="table-action-link" href="${esc(settingsHref)}" target="_blank" rel="noopener">edit prefs</a>`);
   const archiveHref = normalizeAdminActionHref(u.archive_url);
   if (archiveHref) actionParts.push(`<a class="table-action-link" href="${esc(archiveHref)}" target="_blank" rel="noopener">view digests</a>`);
-  if (u.email) actionParts.push(`<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.delivery_time_raw || "07:00")}, this)'>set time</button>`);
   const caps = getSendCapabilities(u);
   if (caps.canDigest || caps.canAnyMessage) {
     actionParts.push(`<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`);

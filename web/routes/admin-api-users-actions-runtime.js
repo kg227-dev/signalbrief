@@ -61,6 +61,30 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
     .slice(0, limit);
 }
 
+function parseDigestDateKeyFromUser(user) {
+  const fromLastQualityDate = String(user?.last_quality_score?.date_et || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fromLastQualityDate)) return fromLastQualityDate;
+
+  const fromLastQualityDigestId = String(user?.last_quality_score?.digest_id || "").trim().match(/^(\d{4}-\d{2}-\d{2}):/);
+  if (fromLastQualityDigestId) return fromLastQualityDigestId[1];
+
+  const history = Array.isArray(user?.quality_history) ? user.quality_history : [];
+  for (let idx = history.length - 1; idx >= 0; idx -= 1) {
+    const row = history[idx] || {};
+    const dateEt = String(row.date_et || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateEt)) return dateEt;
+    const digestIdMatch = String(row.digest_id || "").trim().match(/^(\d{4}-\d{2}-\d{2}):/);
+    if (digestIdMatch) return digestIdMatch[1];
+  }
+
+  const lastDigestAt = String(user?.last_digest_at || "").trim();
+  const ts = Date.parse(lastDigestAt);
+  if (Number.isFinite(ts)) {
+    return new Date(ts).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  }
+  return "";
+}
+
 function handleUserByEmailRoute({ ctx, deps }) {
   const { req, res, url } = ctx;
   const {
@@ -68,6 +92,7 @@ function handleUserByEmailRoute({ ctx, deps }) {
     isAdminAuthed,
     allUsers,
     getRecentAutoAdjustmentsForUser,
+    loadLatestDigestSnapshot,
   } = deps;
 
   if (!isAdminAuthed(req)) {
@@ -89,9 +114,14 @@ function handleUserByEmailRoute({ ctx, deps }) {
     json(res, { error: "not found" }, 404);
     return true;
   }
+  const latestDigestDateKey = parseDigestDateKeyFromUser(adminUser);
+  const latestDigestRecord = latestDigestDateKey && typeof loadLatestDigestSnapshot === "function"
+    ? loadLatestDigestSnapshot(adminUser.chatId, latestDigestDateKey)
+    : null;
   json(res, {
     ...adminUser,
     auto_adjustments_recent: getRecentAutoAdjustmentsForUser(adminUser, autoLimit),
+    latest_digest_record: latestDigestRecord,
   });
   return true;
 }

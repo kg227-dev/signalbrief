@@ -16,3 +16,6 @@ if (!source.includes('message: "Subscriber already deleted"')) {
 if (!source.includes('json(res, { error: "user not found" }, 404);')) {
   throw new Error("non-delete user operations should still return user not found");
 }
+if (!source.includes("latest_digest_record: latestDigestRecord")) {
+  throw new Error("user-by-email handler should expose the latest digest record for admin debug");
+}

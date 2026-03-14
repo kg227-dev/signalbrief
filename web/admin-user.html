@@ -153,6 +153,7 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
   display:flex; align-items:flex-start; gap:10px; padding:10px 12px;
   background:#F9FAFB; border-radius:8px; font-size:13px;
 }
+.digest-item-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }
 .digest-item-tag {
   font-family:ui-monospace,monospace; font-size:11px; font-weight:700;
   color:var(--accent); background:var(--accent-light);
@@ -161,6 +162,14 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 .digest-item-headline { flex:1; color:var(--text); line-height:1.4; }
 .digest-item-link { font-size:12px; color:var(--accent); text-decoration:none; flex-shrink:0; }
 .digest-item-link:hover { text-decoration:underline; }
+.digest-item-debug { display:flex; flex-wrap:wrap; gap:6px; }
+.debug-pill {
+  display:inline-flex; align-items:center; gap:4px; padding:3px 7px; border-radius:999px;
+  background:#EEF2F7; color:var(--text-2); font-size:10px; font-weight:600; line-height:1.2;
+}
+.digest-delivery-meta {
+  display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px;
+}
 
 /* Action bar */
 .action-bar {
@@ -347,6 +356,7 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
     <div class="form-card" id="lastDigestCard" style="display:none;">
       <div class="card-title">Last delivery</div>
       <div class="card-heading">Most recent digest items</div>
+      <div id="lastDigestMeta" class="digest-delivery-meta"></div>
       <div id="lastDigestList" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
@@ -709,15 +719,44 @@ function buildAutoLearningPanel(user) {
 function buildLastDigestPanel(user) {
   const items = user.last_digest_items || [];
   if (!items.length) return;
+  const latestRecord = user.latest_digest_record && typeof user.latest_digest_record === 'object'
+    ? user.latest_digest_record
+    : null;
   const preview = items.slice(0, 5); // show up to 5
   document.getElementById('lastDigestCard').style.display = '';
+  const meta = [];
+  if (latestRecord) {
+    if (latestRecord.mode) meta.push(`<span class="debug-pill">mode ${esc(latestRecord.mode)}</span>`);
+    if (Number.isFinite(Number(latestRecord.version))) meta.push(`<span class="debug-pill">v${Number(latestRecord.version)}</span>`);
+    if (latestRecord.status) meta.push(`<span class="debug-pill">status ${esc(latestRecord.status)}</span>`);
+    if (latestRecord.sent_at) meta.push(`<span class="debug-pill">sent ${esc(formatEtDateTime(latestRecord.sent_at))}</span>`);
+    if (latestRecord.quick_scan) meta.push(`<span class="debug-pill">scan ${esc(String(latestRecord.quick_scan).slice(0, 90))}</span>`);
+  }
+  document.getElementById('lastDigestMeta').innerHTML = meta.join('');
   document.getElementById('lastDigestList').innerHTML = preview.map(item => {
     const headline = (item.headline || '').slice(0, 100);
     const tag = item.tag || '';
     const url = item.url || '';
+    const detailPills = [];
+    if (Number.isFinite(Number(item.relevanceScore))) detailPills.push(`<span class="debug-pill">signal ${esc(Number(item.relevanceScore).toFixed(1))}</span>`);
+    if (item.storyline_id) detailPills.push(`<span class="debug-pill">story ${esc(item.storyline_id)}</span>`);
+    if (Array.isArray(item.entity_keys) && item.entity_keys.length) detailPills.push(`<span class="debug-pill">entities ${esc(item.entity_keys.slice(0, 4).join(', '))}</span>`);
+    if (Number.isFinite(Number(item.strategic_value))) detailPills.push(`<span class="debug-pill">strategic ${esc(Number(item.strategic_value).toFixed(2))}</span>`);
+    if (Number.isFinite(Number(item.routine_item_score))) detailPills.push(`<span class="debug-pill">routine ${esc(Number(item.routine_item_score).toFixed(2))}</span>`);
+    if (item.source_tier) detailPills.push(`<span class="debug-pill">source ${esc(item.source_tier)}</span>`);
+    const breakdown = item.score_breakdown && typeof item.score_breakdown === 'object' ? item.score_breakdown : null;
+    if (breakdown) {
+      if (Number.isFinite(Number(breakdown.topical_relevance))) detailPills.push(`<span class="debug-pill">topic ${esc(Number(breakdown.topical_relevance).toFixed(2))}</span>`);
+      if (Number.isFinite(Number(breakdown.novelty))) detailPills.push(`<span class="debug-pill">novelty ${esc(Number(breakdown.novelty).toFixed(2))}</span>`);
+      if (Number.isFinite(Number(breakdown.duplication_penalty))) detailPills.push(`<span class="debug-pill">dup ${esc(Number(breakdown.duplication_penalty).toFixed(2))}</span>`);
+      if (Number.isFinite(Number(breakdown.entity_saturation_penalty))) detailPills.push(`<span class="debug-pill">sat ${esc(Number(breakdown.entity_saturation_penalty).toFixed(2))}</span>`);
+    }
     return `<div class="digest-item-row">
       <span class="digest-item-tag">${esc(tag)}</span>
-      <span class="digest-item-headline">${esc(headline)}${headline.length >= 100 ? '…' : ''}</span>
+      <div class="digest-item-main">
+        <span class="digest-item-headline">${esc(headline)}${headline.length >= 100 ? '…' : ''}</span>
+        ${detailPills.length ? `<div class="digest-item-debug">${detailPills.join('')}</div>` : ''}
+      </div>
       ${url ? `<a href="${esc(url)}" target="_blank" class="digest-item-link">↗</a>` : ''}
     </div>`;
   }).join('');

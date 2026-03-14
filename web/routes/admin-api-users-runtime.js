@@ -25,6 +25,7 @@ async function handleAdminUserRoutes(ctx, deps) {
     formatTimeEt,
     handleAdminRunDigest,
     requestSchedulerWorkerRestart,
+    loadLatestDigestSnapshot,
   } = deps;
 
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
@@ -40,6 +41,7 @@ async function handleAdminUserRoutes(ctx, deps) {
         isAdminAuthed,
         allUsers,
         getRecentAutoAdjustmentsForUser,
+        loadLatestDigestSnapshot,
       },
     });
   }

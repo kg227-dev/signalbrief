@@ -87,6 +87,114 @@ function summarizePerUserMeta(perUserRows) {
   };
 }
 
+function normalizeDebugItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      index: Number.isFinite(Number(item.index)) ? Number(item.index) : null,
+      headline: item.headline || null,
+      url: item.url || null,
+      tag: item.tag || null,
+      base_score: Number.isFinite(Number(item.base_score)) ? Number(item.base_score) : null,
+      topic_match: Number.isFinite(Number(item.topic_match)) ? Number(item.topic_match) : null,
+      relevance_score: Number.isFinite(Number(item.relevance_score)) ? Number(item.relevance_score) : null,
+      entity_keys: Array.isArray(item.entity_keys) ? item.entity_keys.slice() : [],
+      storyline_id: item.storyline_id || null,
+      storyline_key: item.storyline_key || null,
+      storyline_size: Number.isFinite(Number(item.storyline_size)) ? Number(item.storyline_size) : null,
+      source_domain: item.source_domain || null,
+      source_tier: item.source_tier || null,
+      strategic_value: Number.isFinite(Number(item.strategic_value)) ? Number(item.strategic_value) : null,
+      routine_item_score: Number.isFinite(Number(item.routine_item_score)) ? Number(item.routine_item_score) : null,
+      score_breakdown: item.score_breakdown && typeof item.score_breakdown === "object"
+        ? { ...item.score_breakdown }
+        : null,
+    }));
+}
+
+function createRecipientDebug(recipient) {
+  return {
+    recipient,
+    channels: new Set(),
+    sources: new Set(),
+    digestIds: new Set(),
+    deliveryModes: new Set(),
+    deliveryVersions: new Set(),
+    qualityScores: [],
+    qualityComponents: null,
+    items: [],
+    sentAt: null,
+  };
+}
+
+function mergeRecipientDebug(detail, event) {
+  if (!detail || !event || typeof event !== "object") return detail;
+  const metadata = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+
+  const channel = String(event.channel || "").trim();
+  if (channel) detail.channels.add(channel);
+
+  const source = String(event.source || "").trim();
+  if (source) detail.sources.add(source);
+
+  const digestId = String(event.digest_id || "").trim();
+  if (digestId) detail.digestIds.add(digestId);
+
+  const deliveryMode = String(metadata.delivery_mode || "").trim();
+  if (deliveryMode) detail.deliveryModes.add(deliveryMode);
+
+  const deliveryVersion = Number(metadata.delivery_version);
+  if (Number.isFinite(deliveryVersion)) detail.deliveryVersions.add(deliveryVersion);
+
+  const qualityScore = Number(metadata.quality_score);
+  if (Number.isFinite(qualityScore)) detail.qualityScores.push(qualityScore);
+
+  const qualityComponents = metadata.quality_components && typeof metadata.quality_components === "object"
+    ? metadata.quality_components
+    : null;
+  if (qualityComponents) {
+    const existingKeys = detail.qualityComponents ? Object.keys(detail.qualityComponents).length : 0;
+    const candidateKeys = Object.keys(qualityComponents).length;
+    if (!detail.qualityComponents || candidateKeys >= existingKeys) {
+      detail.qualityComponents = { ...qualityComponents };
+    }
+  }
+
+  const items = normalizeDebugItems(metadata.items);
+  if (items.length >= detail.items.length) detail.items = items;
+
+  const sentAt = String(event.ts_utc || "").trim();
+  if (sentAt && (!detail.sentAt || sentAt > detail.sentAt)) detail.sentAt = sentAt;
+
+  return detail;
+}
+
+function materializeRecipientDebug(detail) {
+  if (!detail) return null;
+  const qualitySummary = summarizeQuality(detail.qualityScores);
+  const items = normalizeDebugItems(detail.items);
+  const entityKeys = Array.from(new Set(items.flatMap((item) => item.entity_keys || []))).sort();
+  const storylineIds = Array.from(new Set(items.map((item) => String(item.storyline_id || "").trim()).filter(Boolean))).sort();
+  const deliveryVersions = Array.from(detail.deliveryVersions).sort((a, b) => a - b);
+  const deliveryModes = Array.from(detail.deliveryModes).sort();
+
+  return {
+    id: detail.recipient,
+    channels: Array.from(detail.channels).sort(),
+    sources: Array.from(detail.sources).sort(),
+    digest_ids: Array.from(detail.digestIds).sort(),
+    delivery_modes: deliveryModes,
+    delivery_versions: deliveryVersions,
+    quality_score: qualitySummary.score,
+    quality_score_samples: qualitySummary.samples,
+    quality_components: detail.qualityComponents ? { ...detail.qualityComponents } : null,
+    items,
+    debug_entities: entityKeys,
+    debug_storyline_ids: storylineIds,
+    sent_at: detail.sentAt || null,
+  };
+}
+
 function buildRunEventIndex(events) {
   const index = new Map();
   for (const event of (Array.isArray(events) ? events : [])) {
@@ -107,6 +215,7 @@ function buildRunEventIndex(events) {
         qualityFallback: [],
         digestDateKey: "",
         digestUrl: "",
+        recipientDebug: new Map(),
       };
       index.set(runId, entry);
     }
@@ -118,6 +227,9 @@ function buildRunEventIndex(events) {
       if (Number.isFinite(qualityScore) && !entry.qualityByRecipient.has(recipient)) {
         entry.qualityByRecipient.set(recipient, qualityScore);
       }
+      const detail = entry.recipientDebug.get(recipient) || createRecipientDebug(recipient);
+      mergeRecipientDebug(detail, event);
+      entry.recipientDebug.set(recipient, detail);
     } else if (Number.isFinite(qualityScore)) {
       entry.qualityFallback.push(qualityScore);
     }
@@ -129,6 +241,40 @@ function buildRunEventIndex(events) {
     }
   }
   return index;
+}
+
+function enrichPerUserRows(perUserRows, matchedEntry) {
+  const rows = (Array.isArray(perUserRows) ? perUserRows : []).map((row) => ({ ...row }));
+  return rows.map((row) => {
+    const recipient = normalizeRecipientKey(row.id);
+    const detail = recipient ? materializeRecipientDebug(matchedEntry?.recipientDebug?.get?.(recipient)) : null;
+    const rowDeliveryVersion = Number(row.delivery_version);
+    const rowDeliveryMode = String(row.delivery_mode || "").trim();
+
+    return {
+      ...row,
+      channels: Array.isArray(detail?.channels) ? detail.channels : [],
+      event_sources: Array.isArray(detail?.sources) ? detail.sources : [],
+      sent_at: detail?.sent_at || null,
+      digest_ids: Array.isArray(detail?.digest_ids) ? detail.digest_ids : [],
+      delivery_modes: Array.isArray(detail?.delivery_modes) && detail.delivery_modes.length
+        ? detail.delivery_modes
+        : (rowDeliveryMode ? [rowDeliveryMode] : []),
+      delivery_mode: rowDeliveryMode || (Array.isArray(detail?.delivery_modes) ? detail.delivery_modes[0] || null : null),
+      delivery_versions: Array.isArray(detail?.delivery_versions) && detail.delivery_versions.length
+        ? detail.delivery_versions
+        : (Number.isFinite(rowDeliveryVersion) ? [rowDeliveryVersion] : []),
+      delivery_version: Number.isFinite(rowDeliveryVersion)
+        ? rowDeliveryVersion
+        : (Array.isArray(detail?.delivery_versions) && detail.delivery_versions.length
+          ? detail.delivery_versions[detail.delivery_versions.length - 1]
+          : null),
+      quality_components: detail?.quality_components || null,
+      debug_items: Array.isArray(detail?.items) ? detail.items : [],
+      debug_entities: Array.isArray(detail?.debug_entities) ? detail.debug_entities : [],
+      debug_storyline_ids: Array.isArray(detail?.debug_storyline_ids) ? detail.debug_storyline_ids : [],
+    };
+  });
 }
 
 function findBestRunEventEntry(run, runEventIndex, runRecipients) {
@@ -278,12 +424,21 @@ function enrichRunsWithDigestMetadata(runs, engagementEvents, opts = {}) {
       digestUrl = buildDigestUrl(digestDateKey);
     }
 
+    const enrichedPerUser = enrichPerUserRows(row.per_user, matched);
+    const debugEntities = Array.from(new Set(enrichedPerUser.flatMap((entry) => entry.debug_entities || []))).slice(0, 12);
+    const debugStorylineIds = Array.from(new Set(enrichedPerUser.flatMap((entry) => entry.debug_storyline_ids || []))).slice(0, 12);
+    const deliveryModes = Array.from(new Set(enrichedPerUser.flatMap((entry) => entry.delivery_modes || []))).slice(0, 6);
+
     return {
       ...row,
+      per_user: enrichedPerUser,
       digest_quality_score: Number.isFinite(digestQualityScore) ? digestQualityScore : null,
       digest_quality_samples: Number.isFinite(digestQualitySamples) ? digestQualitySamples : 0,
       digest_date_key: digestDateKey || null,
       digest_url: digestUrl || "",
+      debug_entities: debugEntities,
+      debug_storyline_ids: debugStorylineIds,
+      delivery_modes: deliveryModes,
     };
   });
 }

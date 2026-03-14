@@ -1286,6 +1286,110 @@ function renderRunDigestLink(run) {
   if (!href) return `<span style="color:var(--text-secondary);">—</span>`;
   return `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">view digest →</a>`;
 }
+function fmtDebugNumber(value, digits = 2) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  return numeric.toFixed(digits);
+}
+function renderDebugPills(entries) {
+  const rows = Array.isArray(entries) ? entries.filter(Boolean) : [];
+  if (!rows.length) return "";
+  return rows.map(entry => {
+    const label = esc(entry.label || "debug");
+    const value = esc(entry.value || "—");
+    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;background:#F3F4F6;color:var(--text-2);font-size:10px;font-weight:600;line-height:1.2;">${label} ${value}</span>`;
+  }).join(" ");
+}
+function renderDigestQualityComponents(components) {
+  if (!components || typeof components !== "object") return "";
+  return renderDebugPills([
+    { label: "topic", value: fmtDebugNumber(components.topic_fit, 0) },
+    { label: "rank", value: fmtDebugNumber(components.relevance_fit, 0) },
+    { label: "analysis", value: fmtDebugNumber(components.analysis_quality, 0) },
+    { label: "fresh", value: fmtDebugNumber(components.freshness_diversity, 0) },
+    { label: "custom", value: fmtDebugNumber(components.custom_coverage, 0) },
+  ]);
+}
+function renderItemScoreBreakdown(breakdown) {
+  if (!breakdown || typeof breakdown !== "object") return "";
+  return renderDebugPills([
+    { label: "topic", value: fmtDebugNumber(breakdown.topical_relevance) },
+    { label: "strategic", value: fmtDebugNumber(breakdown.strategic_importance) },
+    { label: "novelty", value: fmtDebugNumber(breakdown.novelty) },
+    { label: "source", value: fmtDebugNumber(breakdown.source_authority) },
+    { label: "dup", value: fmtDebugNumber(breakdown.duplication_penalty) },
+    { label: "sat", value: fmtDebugNumber(breakdown.entity_saturation_penalty) },
+  ]);
+}
+function renderRunDebugPanel(run) {
+  const row = Array.isArray(run?.per_user) && run.per_user.length ? run.per_user[0] : null;
+  if (!row) return "";
+
+  const deliveryMode = String(row.delivery_mode || (Array.isArray(run?.delivery_modes) ? run.delivery_modes[0] : "") || "").trim();
+  const deliveryVersion = Number.isFinite(Number(row?.delivery_version))
+    ? Number(row.delivery_version)
+    : (Array.isArray(row?.delivery_versions) && row.delivery_versions.length
+      ? Number(row.delivery_versions[row.delivery_versions.length - 1])
+      : null);
+  const channels = Array.isArray(row?.channels) ? row.channels.filter(Boolean) : [];
+  const eventSources = Array.isArray(row?.event_sources) ? row.event_sources.filter(Boolean) : [];
+  const entities = Array.isArray(row?.debug_entities) ? row.debug_entities.slice(0, 8) : [];
+  const storylineIds = Array.isArray(row?.debug_storyline_ids) ? row.debug_storyline_ids.slice(0, 4) : [];
+  const debugItems = Array.isArray(row?.debug_items) ? row.debug_items.slice(0, 3) : [];
+  const hiddenItemCount = Math.max(0, (Array.isArray(row?.debug_items) ? row.debug_items.length : 0) - debugItems.length);
+
+  const metaLine = [
+    deliveryMode ? `mode ${deliveryMode}` : null,
+    Number.isFinite(deliveryVersion) ? `v${deliveryVersion}` : null,
+    channels.length ? `channels ${channels.join(" + ")}` : null,
+    eventSources.length ? `source ${eventSources.join(", ")}` : null,
+    row?.sent_at ? `sent ${formatEtDateTime(row.sent_at)}` : null,
+  ].filter(Boolean).join(" · ");
+
+  const itemsHtml = debugItems.map((item) => {
+    const itemHref = item?.url ? normalizeAdminActionHref(item.url) : "";
+    const headline = esc(String(item?.headline || "").trim() || "Untitled signal");
+    const header = itemHref
+      ? `<a href="${esc(itemHref)}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;font-weight:600;">${headline}</a>`
+      : `<span style="color:var(--text);font-weight:600;">${headline}</span>`;
+    const metaPills = renderDebugPills([
+      item?.tag ? { label: "tag", value: item.tag } : null,
+      Number.isFinite(Number(item?.relevance_score)) ? { label: "signal", value: fmtDebugNumber(item.relevance_score, 1) } : null,
+      Number.isFinite(Number(item?.strategic_value)) ? { label: "strategic", value: fmtDebugNumber(item.strategic_value) } : null,
+      Number.isFinite(Number(item?.routine_item_score)) ? { label: "routine", value: fmtDebugNumber(item.routine_item_score) } : null,
+      item?.source_tier ? { label: "source", value: item.source_tier } : null,
+    ]);
+    const subLine = [
+      item?.storyline_id ? `storyline ${esc(item.storyline_id)}` : null,
+      Array.isArray(item?.entity_keys) && item.entity_keys.length ? `entities ${esc(item.entity_keys.slice(0, 4).join(", "))}` : null,
+      item?.source_domain ? `domain ${esc(item.source_domain)}` : null,
+    ].filter(Boolean).join(" · ");
+    const breakdownPills = renderItemScoreBreakdown(item?.score_breakdown);
+    return `<div style="display:flex;flex-direction:column;gap:5px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#FAFAFB;">
+      <div>${header}</div>
+      ${metaPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${metaPills}</div>` : ""}
+      ${subLine ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${subLine}</div>` : ""}
+      ${breakdownPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${breakdownPills}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  const groupPills = renderDebugPills([
+    ...entities.map((entity) => ({ label: "entity", value: entity })),
+    ...storylineIds.map((storylineId) => ({ label: "story", value: storylineId })),
+  ]);
+  const qualityPills = renderDigestQualityComponents(row?.quality_components);
+
+  return `<details style="margin-top:8px;">
+    <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:600;">debug</summary>
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+      ${metaLine ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${metaLine}</div>` : ""}
+      ${qualityPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${qualityPills}</div>` : ""}
+      ${groupPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${groupPills}</div>` : ""}
+      ${itemsHtml || `<div style="font-size:11px;color:var(--text-secondary);">No item-level debug captured for this row.</div>`}
+      ${hiddenItemCount > 0 ? `<div style="font-size:11px;color:var(--text-secondary);">+${hiddenItemCount} more signal${hiddenItemCount === 1 ? "" : "s"} in this delivery</div>` : ""}
+    </div>
+  </details>`;
+}
 function topicLabel(raw) {
   return String(raw || "").replace(/^custom_/, "").replace(/_/g, " ");
 }
@@ -3356,6 +3460,7 @@ async function load(silent = false) {
         const recipients = renderRunRecipients(r);
         const digestQuality = renderRunDigestQuality(r);
         const digestLink = renderRunDigestLink(r);
+        const debugPanel = renderRunDebugPanel(r);
         return `<tr>
           <td class="mono">${dateEt}</td>
           <td class="mono" style="color:#6B7280;">${timeEt}</td>
@@ -3364,7 +3469,7 @@ async function load(silent = false) {
           <td style="font-size:12px;line-height:1.4;">${recipients}</td>
           <td class="mono" style="color:#6B7280;">${fmtTokens(tokensIn)} / ${fmtTokens(tokensOut)}</td>
           <td>${digestQuality}</td>
-          <td>${digestLink}</td>
+          <td>${digestLink}${debugPanel}</td>
           <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(r.total_cost_usd)}</td>
         </tr>`;
       }).join("");

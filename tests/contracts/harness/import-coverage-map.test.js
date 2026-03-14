@@ -121,6 +121,7 @@ function coverageImportMap() {
     import("../../web/settings-ui-runtime.js");
     import("../../web/settings.js");
     import("../../test-harness/runtime/matrix-runtime.js");
+    import("../../test-harness/runtime/replay-runtime.js");
     import("../../test-harness/matrix/config.js");
     import("../../test-harness/matrix/guardrails.js");
     import("../../test-harness/stages/dataset/live.js");
@@ -222,6 +223,7 @@ function coverageImportMap() {
     import("../../src/digest/runtime/digest-formatting-telegram-runtime.js");
     import("../../test-harness/cache/cache-claude-judge-core.js");
     import("../../test-harness/cache/cache-claude-enrich-core.js");
+    import("../../test-harness/replay-eval.js");
   }
 }
 

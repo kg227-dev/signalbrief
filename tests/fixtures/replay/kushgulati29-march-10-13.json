@@ -1,0 +1,189 @@
+{
+  "user": {
+    "chatId": "email-1772341871519",
+    "email": "kushgulati29@gmail.com",
+    "name": "kush",
+    "topics": [
+      "HEALTHCARE",
+      "STRATEGY",
+      "custom_pfizer"
+    ]
+  },
+  "deliveries": [
+    {
+      "date_et": "2026-03-10",
+      "mode": "scheduled",
+      "version": 1,
+      "run_id": "scheduled:2026-03-10T11-00-00-000Z",
+      "sent_at": "2026-03-10T11:00:00.000Z",
+      "quality_score": 68,
+      "quality_band": "watch",
+      "items": [
+        {
+          "index": 1,
+          "headline": "Inside the Boardroom: The Strategic Risks and Priorities Shaping 2026",
+          "summary": "Boardroom leaders discuss ESG integration into core strategy for capital access and measurable progress with board oversight.",
+          "wim": "This generic boardroom commentary says leaders must prioritize ESG and strategy but offers little concrete decision signal.",
+          "url": "https://youtube.com/watch?v=inside-boardroom-2026",
+          "tag": "STRATEGY",
+          "source": "youtube.com",
+          "source_domain": "youtube.com",
+          "baseScore": 5.4,
+          "relevanceScore": 8.2
+        },
+        {
+          "index": 2,
+          "headline": "Pfizer declares $0.43 quarterly dividend payable in March 2026",
+          "summary": "Pfizer announced its 349th consecutive quarterly dividend of $0.43 per share payable March 6, 2026.",
+          "wim": "This is a routine dividend and investor-relations update rather than a meaningful strategic development.",
+          "url": "https://ng.investing.com/news/company-news/pfizer-dividend-march-2026",
+          "tag": "PFIZER",
+          "source": "ng.investing.com",
+          "source_domain": "ng.investing.com",
+          "baseScore": 2.5,
+          "relevanceScore": 7.2
+        }
+      ]
+    },
+    {
+      "date_et": "2026-03-10",
+      "mode": "scheduled",
+      "version": 2,
+      "run_id": "scheduled:2026-03-10T11-06-00-000Z",
+      "sent_at": "2026-03-10T11:06:00.000Z",
+      "quality_score": 67,
+      "quality_band": "watch",
+      "items": [
+        {
+          "index": 1,
+          "headline": "Pfizer Provides 2026 Guidance: $59.5-$62.5B Revenue, Increased R&D Investment",
+          "summary": "Pfizer projects 2026 revenues of $59.5-$62.5 billion with R&D spend aimed at obesity and oncology assets.",
+          "wim": "Guidance reinforces the post-Covid repositioning around pipeline execution and heavier obesity and oncology investment.",
+          "url": "https://www.pfizer.com/news/press-release/pfizer-2026-guidance",
+          "tag": "PFIZER",
+          "source": "pfizer.com",
+          "source_domain": "pfizer.com",
+          "baseScore": 7.8,
+          "relevanceScore": 9.0
+        }
+      ]
+    },
+    {
+      "date_et": "2026-03-11",
+      "mode": "scheduled",
+      "version": 1,
+      "run_id": "scheduled:2026-03-11T11-00-00-000Z",
+      "sent_at": "2026-03-11T11:00:00.000Z",
+      "quality_score": 69,
+      "quality_band": "watch",
+      "items": [
+        {
+          "index": 1,
+          "headline": "States propose 79 bills across 25 states addressing private equity in healthcare",
+          "summary": "Private Equity Stakeholder Project documents 79 bills across 25 states with 16 introduced in early 2026.",
+          "wim": "This is a real regulatory signal that could materially reshape provider deal economics and private equity ownership constraints.",
+          "url": "https://pestakeholder.org/2026/03/private-equity-healthcare-bills",
+          "tag": "HEALTHCARE",
+          "source": "pestakeholder.org",
+          "source_domain": "pestakeholder.org",
+          "baseScore": 9.3,
+          "relevanceScore": 10
+        },
+        {
+          "index": 2,
+          "headline": "Pfizer Bets Big on Obesity and Oncology With 2026 Pipeline Push",
+          "summary": "Pfizer plans 20 pivotal studies in 2026 for obesity and oncology after major 2025 M&A.",
+          "wim": "The company is leaning on obesity and oncology pipeline execution to offset the patent cliff and reset growth expectations.",
+          "url": "https://www.nasdaq.com/articles/pfizer-obesity-oncology-pipeline-push-2026",
+          "tag": "PFIZER",
+          "source": "nasdaq.com",
+          "source_domain": "nasdaq.com",
+          "baseScore": 9.1,
+          "relevanceScore": 9.8
+        },
+        {
+          "index": 3,
+          "headline": "Target Outlines Strategic Plan for a New Chapter of Growth in 2026 and Beyond",
+          "summary": "Target plans $2 billion of incremental investment in 2026 across stores, operations, and digital capabilities.",
+          "wim": "This is a real operating plan, but the source is weak and the signal is more company-specific execution than cross-market strategy.",
+          "url": "https://www.barchart.com/story/news/302703004/target-2026-plan",
+          "tag": "STRATEGY",
+          "source": "barchart.com",
+          "source_domain": "barchart.com",
+          "baseScore": 7.7,
+          "relevanceScore": 9.2
+        }
+      ]
+    },
+    {
+      "date_et": "2026-03-12",
+      "mode": "scheduled",
+      "version": 1,
+      "run_id": "scheduled:2026-03-12T11-00-00-000Z",
+      "sent_at": "2026-03-12T11:00:00.000Z",
+      "quality_score": 68,
+      "quality_band": "watch",
+      "items": [
+        {
+          "index": 1,
+          "headline": "J.P. Morgan 2026: Pfizer's Pivot from Covid to Pipeline Execution",
+          "summary": "Pfizer shifts focus from Covid volatility to pipeline execution and selective M&A for 2026 momentum.",
+          "wim": "Management is still telling the same obesity and oncology repositioning story ahead of the patent cliff.",
+          "url": "https://www.pharmexec.com/view/jpm-2026-pfizer-pivot-pipeline-execution",
+          "tag": "PFIZER",
+          "source": "pharmexec.com",
+          "source_domain": "pharmexec.com",
+          "baseScore": 8.8,
+          "relevanceScore": 9.2
+        },
+        {
+          "index": 2,
+          "headline": "Strategy Inc. Shines at Strategy World 2026 with Enterprise AI and Bitcoin Ventures",
+          "summary": "Strategy Inc. showcased AI and Bitcoin initiatives at Strategy World 2026, boosting stock 9.27% amid investor optimism.",
+          "wim": "This is a conference recap and stock-promo style item, not a meaningful strategy signal for an operator.",
+          "url": "https://stockstotrade.com/news/strategy-world-2026-enterprise-ai-bitcoin",
+          "tag": "STRATEGY",
+          "source": "stockstotrade.com",
+          "source_domain": "stockstotrade.com",
+          "baseScore": 4.1,
+          "relevanceScore": 7.6
+        }
+      ]
+    },
+    {
+      "date_et": "2026-03-13",
+      "mode": "scheduled",
+      "version": 1,
+      "run_id": "scheduled:2026-03-13T11-00-00-000Z",
+      "sent_at": "2026-03-13T11:00:00.000Z",
+      "quality_score": 68,
+      "quality_band": "watch",
+      "items": [
+        {
+          "index": 1,
+          "headline": "Pfizer Fast-Tracks Obesity Programs in Race Against Patent Cliff",
+          "summary": "Pfizer accelerated a lead obesity asset into Phase III targeting a 2028 launch to offset patent cliff losses.",
+          "wim": "This is still the same post-Covid repositioning narrative centered on obesity and pipeline execution before looming LOE pressure.",
+          "url": "https://www.biospace.com/article/pfizer-fast-tracks-obesity-programs",
+          "tag": "PFIZER",
+          "source": "biospace.com",
+          "source_domain": "biospace.com",
+          "baseScore": 9.2,
+          "relevanceScore": 9.8
+        },
+        {
+          "index": 2,
+          "headline": "The 2026 Business Reality: Challenges CEOs Can't Ignore",
+          "summary": "CEOs must prioritize customer-centric strategy, supply chain restructuring, strategic positioning, and innovation velocity.",
+          "wim": "This is generic CEO thought leadership with little substance, weak sourcing, and no real operating signal.",
+          "url": "https://markets.financialcontent.com/stocks/article/abnewswire-2026-3-4-the-2026-business-reality-challenges-ceos-cant-ignore",
+          "tag": "STRATEGY",
+          "source": "markets.financialcontent.com",
+          "source_domain": "markets.financialcontent.com",
+          "baseScore": 3.2,
+          "relevanceScore": 7.0
+        }
+      ]
+    }
+  ]
+}

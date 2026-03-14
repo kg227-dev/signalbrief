@@ -2134,8 +2134,9 @@ function editDeliveryTime(email, currentDeliveryTime, btn) {
   openDeliveryTimeModal(email, currentDeliveryTime, btn);
 }
 
-function statusActionMeta(nextStatus) {
+function statusActionMeta(nextStatus, currentStatus = "active") {
   const normalized = normalizeUserStatus(nextStatus);
+  const current = normalizeUserStatus(currentStatus);
   if (normalized === "unsubscribed") {
     return {
       label: "unsubscribe",
@@ -2150,6 +2151,22 @@ function statusActionMeta(nextStatus) {
       title: "Pause subscriber",
       description: "This pauses scheduled digests until re-activated.",
       confirmLabel: "Pause",
+    };
+  }
+  if (current === "unsubscribed") {
+    return {
+      label: "resubscribe",
+      title: "Resubscribe subscriber",
+      description: "This reactivates the subscriber and restores their delivery channels.",
+      confirmLabel: "Resubscribe",
+    };
+  }
+  if (current === "paused") {
+    return {
+      label: "resume",
+      title: "Resume subscriber",
+      description: "This resumes scheduled digests and restores deliverability.",
+      confirmLabel: "Resume",
     };
   }
   return {
@@ -2173,7 +2190,7 @@ async function setSubscriberStatus(email, nextStatus, triggerBtn = null) {
     return;
   }
 
-  const meta = statusActionMeta(normalizedStatus);
+  const meta = statusActionMeta(normalizedStatus, user && user.status);
   const label = user ? (user.name || user.email || emailKey) : emailKey;
   const approved = await openConfirmModal(
     meta.title,
@@ -2836,8 +2853,10 @@ function renderSubscriberDrawer(u) {
     if (userStatus === "active") {
       actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "paused", this)'>pause</button>`);
       actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "unsubscribed", this)'>unsubscribe</button>`);
-    } else if (userStatus === "paused" || userStatus === "unsubscribed") {
-      actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "active", this)'>set active</button>`);
+    } else if (userStatus === "paused") {
+      actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "active", this)'>resume</button>`);
+    } else if (userStatus === "unsubscribed") {
+      actionParts.push(`<button class="schedule-set-btn" onclick='setSubscriberStatus(${JSON.stringify(u.email || "")}, "active", this)'>resubscribe</button>`);
     }
     actionParts.push(`<button class="danger-btn" onclick='deleteSubscriber(${JSON.stringify(u.email || "")}, this)'>delete user</button>`);
   }

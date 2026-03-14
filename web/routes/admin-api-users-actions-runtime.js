@@ -240,7 +240,53 @@ function normalizeManagedStatus(rawStatus) {
   return "";
 }
 
-function applyManagedStatus(user, nextStatus) {
+const PRE_UNSUBSCRIBE_CHANNELS_KEY = "_pre_unsubscribe_channels";
+
+function hasTelegramDeliveryIdentity(user) {
+  return !!(user?.chatId && !String(user.chatId).startsWith("email-"));
+}
+
+function deriveRestoredChannelPreferences(user, previousStatus) {
+  const prefs = user && user.preferences && typeof user.preferences === "object"
+    ? user.preferences
+    : {};
+  const saved = prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY] && typeof prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY] === "object"
+    ? prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY]
+    : null;
+  const telegramLinked = hasTelegramDeliveryIdentity(user);
+
+  if (saved) {
+    return {
+      email_enabled: saved.email_enabled === true && !!user?.email,
+      telegram_enabled: saved.telegram_enabled === true && telegramLinked,
+    };
+  }
+
+  if (previousStatus === "paused") {
+    return {
+      email_enabled: !!user?.email,
+      telegram_enabled: telegramLinked && prefs.telegram_enabled !== false,
+    };
+  }
+
+  return {
+    email_enabled: !!user?.email,
+    telegram_enabled: telegramLinked,
+  };
+}
+
+function buildStatusUpdateMessage(previousStatus, nextStatus) {
+  if (previousStatus === "unsubscribed" && nextStatus === "active") {
+    return "Subscriber re-subscribed";
+  }
+  if (previousStatus === "paused" && nextStatus === "active") {
+    return "Subscriber resumed";
+  }
+  return `Subscriber set to ${nextStatus}`;
+}
+
+function applyManagedStatus(user, nextStatus, opts = {}) {
+  const previousStatus = String(opts.previousStatus || user?.status || "active").toLowerCase().trim();
   const nowIso = new Date().toISOString();
   const updated = {
     ...user,
@@ -251,9 +297,22 @@ function applyManagedStatus(user, nextStatus) {
     },
   };
   if (nextStatus === "unsubscribed") {
+    updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY] = {
+      email_enabled: updated.preferences.email_enabled !== false && !!user?.email,
+      telegram_enabled: updated.preferences.telegram_enabled !== false && hasTelegramDeliveryIdentity(user),
+    };
     updated.email_unsubscribed_at = nowIso;
     updated.preferences.email_enabled = false;
     updated.preferences.telegram_enabled = false;
+  } else if (nextStatus === "active") {
+    const restored = deriveRestoredChannelPreferences(user, previousStatus);
+    updated.preferences.email_enabled = restored.email_enabled;
+    updated.preferences.telegram_enabled = restored.telegram_enabled;
+    delete updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY];
+    delete updated.email_unsubscribed_at;
+    if (typeof opts.blankReengagementState === "function") {
+      updated.reengagement_state = opts.blankReengagementState();
+    }
   }
   return updated;
 }
@@ -267,6 +326,7 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
     allUsers,
     writeUser,
     logAdminActionEvent,
+    blankReengagementState,
   } = deps;
 
   if (!isAdminAuthed(req)) {
@@ -305,7 +365,10 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
     return true;
   }
 
-  const updated = applyManagedStatus(user, nextStatus);
+  const updated = applyManagedStatus(user, nextStatus, {
+    previousStatus,
+    blankReengagementState,
+  });
   writeUser(user.chatId, updated);
   logAdminActionEvent(req, {
     action: "set_user_status",
@@ -323,7 +386,7 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
     email,
     from: previousStatus,
     status: nextStatus,
-    message: `Subscriber set to ${nextStatus}`,
+    message: buildStatusUpdateMessage(previousStatus, nextStatus),
   });
   return true;
 }

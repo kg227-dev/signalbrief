@@ -23,6 +23,7 @@ async function handleAdminUserRoutes(ctx, deps) {
     writeUser,
     deleteUser,
     logAdminActionEvent,
+    blankReengagementState,
     formatTimeEt,
     handleAdminRunDigest,
     requestSchedulerWorkerRestart,
@@ -87,6 +88,7 @@ async function handleAdminUserRoutes(ctx, deps) {
         allUsers,
         writeUser,
         logAdminActionEvent,
+        blankReengagementState,
       },
     });
   }

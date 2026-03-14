@@ -599,12 +599,24 @@ function updatePauseBtn(status) {
     btn.textContent = 'Resume deliveries';
     btn.className = 'btn btn-secondary';
   } else if (status === 'unsubscribed') {
-    btn.textContent = 'Re-activate';
+    btn.textContent = 'Resubscribe';
     btn.className = 'btn btn-secondary';
   } else {
     btn.textContent = 'Pause deliveries';
     btn.className = 'btn btn-warn';
   }
+}
+
+function updateUnsubBtn(status) {
+  const btn = document.getElementById('unsubBtn');
+  if (!btn) return;
+  if (status === 'unsubscribed') {
+    btn.disabled = true;
+    btn.textContent = 'Unsubscribed';
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Mark unsubscribed';
 }
 
 function buildMetaBar(user) {
@@ -867,6 +879,7 @@ async function init() {
 
     // Pause button state
     updatePauseBtn(userStatus);
+    updateUnsubBtn(userStatus);
 
     // --- Save preferences ---
     document.getElementById('saveBtn').addEventListener('click', async function() {
@@ -943,27 +956,44 @@ async function init() {
       const btn = this;
       let newStatus;
       if (userStatus === 'active') newStatus = 'paused';
-      else newStatus = 'active'; // resume or re-activate
+      else newStatus = 'active';
 
-      if (!confirm((newStatus === 'paused' ? 'Pause' : 'Resume') + ' deliveries for ' + userEmail + '?')) return;
+      const actionLabel = newStatus === 'paused'
+        ? 'Pause'
+        : userStatus === 'unsubscribed'
+          ? 'Resubscribe'
+          : 'Resume';
+      const actionDescription = newStatus === 'paused'
+        ? 'Pause deliveries'
+        : userStatus === 'unsubscribed'
+          ? 'Resubscribe this user'
+          : 'Resume deliveries';
+      if (!confirm(actionDescription + ' for ' + userEmail + '?')) return;
       btn.disabled = true;
       try {
-        const r = await fetch('/api/settings', {
+        const r = await fetch('/api/admin/set-user-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: userToken, status: newStatus })
+          body: JSON.stringify({ email: userEmail, status: newStatus })
         });
         const data = await r.json();
         if (data.success) {
           userStatus = newStatus;
           updatePauseBtn(userStatus);
+          updateUnsubBtn(userStatus);
           // Refresh meta bar status badge
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) {
             badge.className = 'status-badge ' + ({ active:'status-active', paused:'status-paused', unsubscribed:'status-unsubscribed' }[newStatus] || '');
             badge.textContent = newStatus;
           }
-          showBanner(newStatus === 'paused' ? '⏸ Deliveries paused' : '▶ Deliveries resumed');
+          const successMessage = data.message
+            || (newStatus === 'paused'
+              ? 'Deliveries paused'
+              : actionLabel === 'Resubscribe'
+                ? 'Subscriber re-subscribed'
+                : 'Deliveries resumed');
+          showBanner(`✅ ${successMessage}`);
         } else { showBanner('❌ ' + (data.error || 'Failed'), true); }
       } catch { showBanner('❌ Network error', true); }
       btn.disabled = false;
@@ -975,20 +1005,19 @@ async function init() {
       const btn = this;
       btn.disabled = true;
       try {
-        const r = await fetch('/api/settings', {
+        const r = await fetch('/api/admin/set-user-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: userToken, status: 'unsubscribed' })
+          body: JSON.stringify({ email: userEmail, status: 'unsubscribed' })
         });
         const data = await r.json();
         if (data.success) {
           userStatus = 'unsubscribed';
           updatePauseBtn(userStatus);
-          btn.disabled = true;
-          btn.textContent = 'Unsubscribed';
+          updateUnsubBtn(userStatus);
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) { badge.className = 'status-badge status-unsubscribed'; badge.textContent = 'unsubscribed'; }
-          showBanner('👋 User unsubscribed');
+          showBanner(`👋 ${data.message || 'Subscriber set to unsubscribed'}`);
         } else { showBanner('❌ ' + (data.error || 'Failed'), true); }
       } catch { showBanner('❌ Network error', true); }
     });

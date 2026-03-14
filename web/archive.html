@@ -211,6 +211,20 @@ body {
   color: var(--accent);
   border-color: rgba(37,99,235,0.28);
 }
+.filter-pill.filter-pill-custom {
+  background: #F6FBF8;
+  color: #0F766E;
+  border-color: #C7E8DB;
+}
+.filter-pill.filter-pill-custom:hover {
+  border-color: #8FD5BA;
+  background: #EEF9F3;
+}
+.filter-pill.filter-pill-custom.active {
+  background: #DCFCE7;
+  color: #166534;
+  border-color: #86EFAC;
+}
 
 .tag-pill {
   font-size: 11px;
@@ -222,6 +236,10 @@ body {
   border-radius: 4px;
   padding: 3px 8px;
   white-space: nowrap;
+}
+.tag-pill.tag-pill-custom {
+  color: #0F766E;
+  background: #ECFDF5;
 }
 
 .results-feed {
@@ -597,6 +615,7 @@ const state = {
   selectedSources: new Set(),
   tagCounts: new Map(),
   sourceCounts: new Map(),
+  customTagKeys: new Set(),
   visibleItems: [],
   filteredCount: 0,
   keyToItem: new Map(),
@@ -639,6 +658,34 @@ function normalizeUrl(value) {
   } catch {
     return raw.toLowerCase();
   }
+}
+
+function normalizeTagIdentity(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function formatCustomTopicLabel(topic) {
+  return String(topic || "")
+    .replace(/^custom_/i, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildCustomTopicTagSet(user) {
+  const topics = Array.isArray(user && user.topics) ? user.topics : [];
+  return new Set(
+    topics
+      .filter((topic) => /^custom_/i.test(String(topic || "")))
+      .map((topic) => normalizeTagIdentity(formatCustomTopicLabel(topic)))
+      .filter(Boolean)
+  );
+}
+
+function isCustomTopicTag(tag) {
+  return state.customTagKeys.has(normalizeTagIdentity(tag));
 }
 
 function parseDateKey(dateKey) {
@@ -751,8 +798,10 @@ function renderTagFilters() {
     return;
   }
   tagWrap.innerHTML = tags.map(([tag, count]) => {
-    const active = state.selectedTags.has(tag) ? " active" : "";
-    return `<button type="button" class="filter-pill${active}" data-filter="tag" data-value="${esc(tag)}">${esc(tag)} (${count})</button>`;
+    const classes = ["filter-pill"];
+    if (isCustomTopicTag(tag)) classes.push("filter-pill-custom");
+    if (state.selectedTags.has(tag)) classes.push("active");
+    return `<button type="button" class="${classes.join(" ")}" data-filter="tag" data-value="${esc(tag)}">${esc(tag)} (${count})</button>`;
   }).join("");
 }
 
@@ -930,11 +979,13 @@ function renderResults() {
     const wimHtml = safeWim ? highlightHtml(safeWim, query) : "";
     const implication = item.implications ? `<div class="analysis-extra">→ ${highlightText(item.implications, query)}</div>` : "";
     const watchNext = item.watch_next ? `<div class="analysis-extra">👀 ${highlightText(item.watch_next, query)}</div>` : "";
+    const tagClasses = ["tag-pill"];
+    if (isCustomTopicTag(item.tag)) tagClasses.push("tag-pill-custom");
 
     return `
       <article class="signal-card" style="animation-delay:${Math.min(idx * 0.02, 0.28)}s;">
         <div class="signal-top">
-          <span class="tag-pill">${esc(item.tag || "UNTAGGED")}</span>
+          <span class="${tagClasses.join(" ")}">${esc(item.tag || "UNTAGGED")}</span>
           <div class="signal-top-right">
             <span class="signal-date">${esc(formatDateShort(item.date))}</span>
             <button type="button" class="bookmark-btn${bookmarked ? " active" : ""}" data-action="bookmark" data-key="${esc(key)}" aria-pressed="${bookmarked ? "true" : "false"}">🔖</button>
@@ -1366,6 +1417,7 @@ async function init() {
       : "Your Signal Search";
   }
   const userBookmarks = Array.isArray(userData.bookmarks) ? userData.bookmarks : [];
+  state.customTagKeys = buildCustomTopicTagSet(userData);
   userBookmarks.forEach((b) => {
     const normalized = normalizeUrl(b && b.url);
     if (normalized) state.bookmarks.add(normalized);

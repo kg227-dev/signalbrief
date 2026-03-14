@@ -37,9 +37,24 @@ TASK: For each news item below, return five fields:
    - 5.0–6.9: Moderate interest (incremental update, early-stage signal worth watching)
    - Below 5.0: Routine or narrow-interest item
 
-4. "implications" — one actionable sentence naming a specific role (e.g. "CFO", "deal team", "payer CMO", "PE portfolio team") and the concrete action, question, or client meeting flag this story creates. Return null if it is fully covered by the wim already.
+4. "strategic_value" — a number from 0.0 to 1.0.
+   - 0.8–1.0: clearly strategic, decision-relevant, and worth surfacing to a senior strategy reader
+   - 0.5–0.79: useful but more incremental
+   - below 0.5: routine, noisy, or weakly strategic
 
-5. "watch_next" — one forward-looking sentence: name the specific signal, filing, earnings call, or regulatory decision to monitor in the next 2–4 weeks. Start with an entity name or date. Return null if this is a one-time development with no near-term pending catalysts.
+5. "content_flags" — an array of short strings describing the story type.
+   Use only values that apply:
+   ["routine_dividend", "investor_relations", "conference_recap", "stock_promo", "generic_commentary", "guidance", "trial_readout", "m_and_a", "regulatory", "earnings", "product_launch"]
+
+6. "storyline_hints" — an array of 1-3 short phrases capturing the broader storyline.
+   Examples:
+   ["obesity pipeline", "patent cliff response"]
+   ["capital return", "routine IR"]
+   ["boardroom commentary"]
+
+7. "implications" — one actionable sentence naming a specific role (e.g. "CFO", "deal team", "payer CMO", "PE portfolio team") and the concrete action, question, or client meeting flag this story creates. Return null if it is fully covered by the wim already.
+
+8. "watch_next" — one forward-looking sentence: name the specific signal, filing, earnings call, or regulatory decision to monitor in the next 2–4 weeks. Start with an entity name or date. Return null if this is a one-time development with no near-term pending catalysts.
 
 WHAT TO AVOID (too generic):
 ❌ "This could have significant implications for the industry." (says nothing)
@@ -50,7 +65,7 @@ WHAT TO AVOID (too generic):
 WHAT TO AIM FOR (specific, implication-forward):
 ✅ "<strong>Another payer going full care-delivery stack — point-solution vendors in drug management will feel it.</strong> Your buyer is now also your competitor's parent company. Any vendor with Cigna in their top-3 logos needs to stress-test that relationship."
 
-Return ONLY a JSON array with the same items plus "wim_brief", "wim", "baseScore", "implications", and "watch_next" fields. No markdown, no explanation.
+Return ONLY a JSON array with the same items plus "wim_brief", "wim", "baseScore", "strategic_value", "content_flags", "storyline_hints", "implications", and "watch_next" fields. No markdown, no explanation.
 
 Items:
 ${JSON.stringify(mapPromptItems(items), null, 2)}`;

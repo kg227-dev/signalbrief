@@ -103,6 +103,7 @@ async function invoke(pathname, search, deps) {
       },
       archiveRelevanceScore: () => 0,
       loadEngagementEvents: () => [],
+      loadLatestDigestSnapshot: () => null,
       path,
       fs,
       APP_ROOT: rootDir,
@@ -179,6 +180,50 @@ async function invoke(pathname, search, deps) {
     assert.strictEqual(Array.isArray(deliveredSubsetBody.items), true);
     assert.strictEqual(deliveredSubsetBody.items.length, 1);
     assert.strictEqual(deliveredSubsetBody.items[0].headline, "Test headline");
+
+    const snapshotDeps = {
+      ...steadyDeps,
+      loadLatestDigestSnapshot: (userId, dateKey) => {
+        if (userId !== "steady-user" || dateKey !== "2026-03-12") return null;
+        return {
+          user_id: userId,
+          date_et: dateKey,
+          date_str: "March 12, 2026",
+          quick_scan: "Snapshot-only digest",
+          sent_at: "2026-03-12T10:10:00.000Z",
+          items: [
+            {
+              index: 1,
+              tag: "PFIZER",
+              headline: "Snapshot headline",
+              summary: "Snapshot summary",
+              url: "https://example.com/snapshot",
+              source: "Snapshot Source",
+              source_domain: "snapshot.example.com",
+              baseScore: 9.1,
+              relevanceScore: 8.7,
+              wim: "Snapshot WIM",
+            },
+          ],
+        };
+      },
+    };
+
+    const snapshotAllResult = await invoke("/api/archive/all", "?token=ok", snapshotDeps);
+    assert.strictEqual(snapshotAllResult.handled, true);
+    assert.strictEqual(snapshotAllResult.res.statusCode, 200);
+    const snapshotAllBody = JSON.parse(snapshotAllResult.res.body || "{}");
+    assert.strictEqual(snapshotAllBody.items.length, 1);
+    assert.strictEqual(snapshotAllBody.items[0].headline, "Snapshot headline");
+
+    fs.unlinkSync(path.join(archiveDir, "2026-03-12.json"));
+    const snapshotDateResult = await invoke("/api/archive/2026-03-12", "?token=ok", snapshotDeps);
+    assert.strictEqual(snapshotDateResult.handled, true);
+    assert.strictEqual(snapshotDateResult.res.statusCode, 200);
+    const snapshotDateBody = JSON.parse(snapshotDateResult.res.body || "{}");
+    assert.strictEqual(snapshotDateBody.quickScan, "Snapshot-only digest");
+    assert.strictEqual(snapshotDateBody.items.length, 1);
+    assert.strictEqual(snapshotDateBody.items[0].headline, "Snapshot headline");
   } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });
   }

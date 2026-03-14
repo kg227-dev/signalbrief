@@ -11,6 +11,9 @@ const {
   applyTopicRelevanceScores,
   applyDigestDepth,
   reserveCustomKeywordSlot: reserveDigestCustomKeywordSlot,
+  buildStorylineCandidates,
+  applyStrategicQualityGate,
+  applyEntityCoverageCap,
   selectItemsByPolicy,
   createSelectionPolicy,
   createRankingPolicy,
@@ -69,8 +72,14 @@ function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
 function buildDigestForPersona(enrichedItems, persona, policyInput = {}) {
   const prefs = persona?.preferences || {};
   const { rankingPolicy, depthPolicy } = createDigestPolicies(policyInput);
+  const storylinePool = applyStrategicQualityGate(
+    buildStorylineCandidates(enrichedItems),
+    {
+      minKeep: Math.max(1, Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5)),
+    }
+  );
   const filterRes = filterItemsForPersona(
-    enrichedItems,
+    storylinePool,
     persona?.topics || [],
     depthPolicy,
     "specialist"
@@ -88,16 +97,20 @@ function buildDigestForPersona(enrichedItems, persona, policyInput = {}) {
   scored = scored.sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0));
 
   const requested = Number(prefs.items_per_digest) || Number(depthPolicy.defaultItemCount) || 5;
-  const minBaseScoreForFinal = Number(rankingPolicy.minBaseScoreForFinal || 6.5);
-  const minStrongItems = Math.max(2, Math.min(requested, 4));
-  const stronger = scored.filter((item) =>
-    Number(item?.baseScore || 0) >= minBaseScoreForFinal
-    || (Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword"))
-  );
-  if (stronger.length >= minStrongItems) scored = stronger;
+  const stronger = scored.filter((item) => (
+    !item?.hard_exclude
+    && Number(item?.strategic_value || 0) >= 0.34
+    && Number(item?.routine_item_score || 0) <= 0.74
+    && Number(item?.relevanceScore || 0) >= 6.2
+  ));
+  if (stronger.length > 0) scored = stronger;
+  scored = applyEntityCoverageCap(scored, 1);
 
   const preTrimCount = scored.length;
-  const trimmed = reserveCustomKeywordSlot(scored, requested, customKeywords);
+  const trimmed = applyEntityCoverageCap(
+    reserveCustomKeywordSlot(scored, requested, customKeywords),
+    1
+  );
   const preDepthItems = trimmed.map((i) => ({ ...i }));
   const depth = prefs.depth || "headline_plus_why";
   const finalItems = applyDepth(trimmed, depth);

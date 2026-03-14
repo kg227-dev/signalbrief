@@ -19,8 +19,8 @@ function createDigestEmailSectionsRuntime(deps) {
         <span style="color:#6B7280;">Each signal includes a strategic analysis written for how consultants think about implications — not just what happened, but who feels it and what moves next.</span>
       </div>
       <div style="margin-bottom:12px;">
-        <strong>🎯 Relevance scores</strong> — shown as signal pills like <span style="display:inline-block;background:#ECFDF5;color:#065F46;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 5px rgba(16,185,129,0.35);vertical-align:middle;margin-right:5px;"></span>8.5</span><br>
-        <span style="color:#6B7280;">Ranked 0–10 per story: 40% topic match · 35% market significance · 25% strategic utility.</span>
+        <strong>🎯 Signal scores</strong> — shown as signal pills like <span style="display:inline-block;background:#ECFDF5;color:#065F46;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 5px rgba(16,185,129,0.35);vertical-align:middle;margin-right:5px;"></span>8.5</span><br>
+        <span style="color:#6B7280;">Ranked 0–10 per story using topic fit, strategic value, source quality, novelty, and duplication penalties.</span>
       </div>
       <div>
         <strong>⚙️ Personalized to your topics</strong><br>

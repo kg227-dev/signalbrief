@@ -61,7 +61,7 @@ function formatTelegram(items, dateStr, state, opts = {}) {
     "_Your daily signal across AI, strategy, and business_",
   ];
 
-  if (quality) lines.push(`🎯 Digest match: ${quality.score}% · ${quality.band}`);
+  if (quality) lines.push(`🎯 Digest quality: ${quality.score}% · ${quality.band}`);
   if (learningSummary) lines.push(`🧠 ${learningSummary}`);
   if (publicDigestUrl) lines.push(`🔗 [Share today's brief](${publicDigestUrl})`);
   lines.push("");

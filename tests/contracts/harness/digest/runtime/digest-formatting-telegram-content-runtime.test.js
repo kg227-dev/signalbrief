@@ -45,7 +45,7 @@ const digestText = formatTelegram(
 );
 
 assert.ok(digestText.includes("☀️ *SignalBrief — Mar 13, 2026*"));
-assert.ok(digestText.includes("🎯 Digest match: 84% · strong"));
+assert.ok(digestText.includes("🎯 Digest quality: 84% · strong"));
 assert.ok(digestText.includes("🧠 Boosting AI based on your recent saves."));
 assert.ok(digestText.includes("🔗 [Share today's brief](https://getsignalbrief.com/digest/2026-03-13)"));
 assert.ok(digestText.includes("1⃣ *[AI×TECH]* Nvidia ships another enterprise model"));

@@ -78,6 +78,7 @@ function createDigestDataFetchRuntime(deps) {
   async function fetchTopicNews(topic, opts = {}) {
     const searchModel = opts.searchModel || "sonar";
     const providerPolicy = resolvePerplexityResilience(CONFIG?.digest);
+    const retrievedAt = new Date().toISOString();
     log(`Fetching: ${topic.tag}`);
     const queries = getTopicQueries(topic);
     const maxAttempts = topic?.isCustom ? Math.min(3, queries.length) : 1;
@@ -162,7 +163,8 @@ function createDigestDataFetchRuntime(deps) {
           continue;
         }
 
-        const normalized = enrichWithCitationUrls(parsed, citations, topic.tag, log);
+        const normalized = enrichWithCitationUrls(parsed, citations, topic.tag, log)
+          .map((item) => ({ ...item, retrieved_at: retrievedAt }));
         collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup);
       } catch (err) {
         log(`Parse error for ${topic.tag}: ${err.message}`);

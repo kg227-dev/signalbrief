@@ -22,13 +22,16 @@ assertModuleExports(() => runtime, TARGET_REL);
       digest: {
         perUserFreshnessMinItems: 3,
         perUserFreshnessDigests: 3,
+        perUserEntityHistoryDigests: 3,
+        maxSignalsPerEntity: 1,
       },
     },
     log: (line) => logs.push(String(line || "")),
     filterItemsByTopics: () => ({
       items: [
-        { tag: "AI×TECH", baseScore: 9.2, why_shown: [] },
-        { tag: "STRATEGY", baseScore: 5.5, why_shown: ["custom_keyword"] },
+        { tag: "AI×TECH", baseScore: 9.2, strategic_value: 0.86, routine_item_score: 0.1, entity_keys: ["nvidia"] },
+        { tag: "STRATEGY", baseScore: 5.5, strategic_value: 0.18, routine_item_score: 0.88, why_shown: ["custom_keyword"], entity_keys: ["pfizer"] },
+        { tag: "HEALTHCARE", baseScore: 8.4, strategic_value: 0.79, routine_item_score: 0.12, entity_keys: ["nvidia"] },
       ],
       customKeywords: ["glp_1"],
       specialistMode: false,
@@ -38,6 +41,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       scoreCallCount += 1;
       return items.map((item, idx) => ({ ...item, relevanceScore: 10 - idx }));
     },
+    buildRecentEntityHistory: () => ({ entityCounts: {}, storylineKeys: new Set() }),
     suppressRecentlySentForUser: (items) => ({
       items,
       removed: 0,
@@ -45,6 +49,15 @@ assertModuleExports(() => runtime, TARGET_REL);
     }),
     isRecentRepeatItem: () => false,
     parseSourceDomain: () => "example.com",
+    applyEntityCoverageCap: (items, limit) => {
+      const seen = new Set();
+      return items.filter((item) => {
+        const key = (item.entity_keys || [])[0] || item.tag;
+        if (seen.has(key) && limit === 1) return false;
+        seen.add(key);
+        return true;
+      });
+    },
     reserveCustomKeywordSlot: (items, count) => items.slice(0, count),
   });
 
@@ -59,12 +72,15 @@ assertModuleExports(() => runtime, TARGET_REL);
     repeatIndex: { days: 3, urlKeys: new Set(), headlineKeys: new Set() },
     repeatPenalty: 0.5,
     depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
-    rankingPolicy: { minBaseScoreForFinal: 6.5 },
+    rankingPolicy: { minSignalScoreForFinal: 6.2 },
+    recentDigestRecords: [],
+    nowIso: "2026-03-13T11:00:00.000Z",
   });
 
   assert.strictEqual(scoreCallCount, 1);
   assert.strictEqual(ranked.wasFiltered, true);
-  assert.strictEqual(ranked.userItems.length, 2);
+  assert.strictEqual(ranked.userItems.length, 1);
+  assert.strictEqual(ranked.userItems[0].tag, "AI×TECH");
   assert.ok(logs.some((line) => line.includes("[pre-sort]")));
   assert.ok(logs.some((line) => line.includes("[post-sort]")));
 
@@ -74,6 +90,8 @@ assertModuleExports(() => runtime, TARGET_REL);
       digest: {
         perUserFreshnessMinItems: 3,
         perUserFreshnessDigests: 3,
+        perUserEntityHistoryDigests: 3,
+        maxSignalsPerEntity: 1,
       },
     },
     log: () => {},
@@ -86,11 +104,13 @@ assertModuleExports(() => runtime, TARGET_REL);
     applyTopicRelevanceScores: () => {
       emergencyScoreCalls += 1;
       if (emergencyScoreCalls === 1) return [];
-      return [{ tag: "AI×TECH", baseScore: 7, relevanceScore: 8 }];
+      return [{ tag: "AI×TECH", baseScore: 7, relevanceScore: 8, strategic_value: 0.7, routine_item_score: 0.2, entity_keys: ["nvidia"] }];
     },
+    buildRecentEntityHistory: () => ({ entityCounts: {}, storylineKeys: new Set() }),
     suppressRecentlySentForUser: (items) => ({ items, removed: 0, backfilled: 0 }),
     isRecentRepeatItem: () => false,
     parseSourceDomain: () => "example.com",
+    applyEntityCoverageCap: (items) => items,
     reserveCustomKeywordSlot: (items) => items,
   });
 
@@ -105,7 +125,9 @@ assertModuleExports(() => runtime, TARGET_REL);
     repeatIndex: { days: 3, urlKeys: new Set(), headlineKeys: new Set() },
     repeatPenalty: 0.5,
     depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
-    rankingPolicy: { minBaseScoreForFinal: 6.5 },
+    rankingPolicy: { minSignalScoreForFinal: 6.2 },
+    recentDigestRecords: [],
+    nowIso: "2026-03-13T11:00:00.000Z",
   });
 
   assert.strictEqual(emergencyScoreCalls, 2);

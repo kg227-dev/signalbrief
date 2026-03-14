@@ -25,6 +25,29 @@ function normalizeArchiveLookupKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function loadDeliveredSnapshotForDate(user, dateKey, deps) {
+  const { loadLatestDigestSnapshot } = deps;
+  if (typeof loadLatestDigestSnapshot !== "function") return null;
+  const userId = String(user?.chatId || "").trim();
+  const key = String(dateKey || "").trim();
+  if (!userId || !key) return null;
+  const snapshot = loadLatestDigestSnapshot(userId, key);
+  if (!snapshot || !Array.isArray(snapshot.items) || snapshot.items.length === 0) return null;
+  return snapshot;
+}
+
+function buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, topicWeights, archiveRelevanceScore) {
+  const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+  return {
+    date: snapshot?.date_et || dateKey,
+    dateStr: snapshot?.date_str || dateKey,
+    quickScan: snapshot?.quick_scan || "",
+    generatedAt: snapshot?.sent_at || snapshot?.selected_at || null,
+    itemCount: items.length,
+    items: items.map((item) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore)),
+  };
+}
+
 function buildDeliveredItemsByDate(user, deps) {
   const { loadEngagementEvents } = deps;
   if (typeof loadEngagementEvents !== "function") return new Map();
@@ -192,6 +215,15 @@ function handleLegacyArchiveIndex(ctx, deps) {
 
   const digests = allowedDateKeys.flatMap((dateKey) => {
     try {
+      const snapshot = loadDeliveredSnapshotForDate(user, dateKey, deps);
+      if (snapshot) {
+        return [{
+          date: snapshot.date_et || dateKey,
+          dateStr: snapshot.date_str || dateKey,
+          quickScan: snapshot.quick_scan || "",
+          itemCount: Array.isArray(snapshot.items) ? snapshot.items.length : 0,
+        }];
+      }
       const digestPath = path.join(archiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) return [];
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
@@ -258,6 +290,22 @@ function handleArchiveAllRoute(ctx, deps) {
 
   for (const dateKey of allowedDateKeys) {
     try {
+      const snapshot = loadDeliveredSnapshotForDate(user, dateKey, deps);
+      if (snapshot) {
+        const snapshotDigest = buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, topicWeights, archiveRelevanceScore);
+        if (snapshotDigest.items.length === 0) continue;
+        digestCount++;
+        snapshotDigest.items.forEach((item, idx) => {
+          items.push({
+            date: snapshotDigest.date,
+            dateStr: snapshotDigest.dateStr,
+            generatedAt: snapshotDigest.generatedAt,
+            rank: idx + 1,
+            ...item,
+          });
+        });
+        continue;
+      }
       const digestPath = path.join(archiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) continue;
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
@@ -275,7 +323,7 @@ function handleArchiveAllRoute(ctx, deps) {
       });
     } catch (error) {
       if (process.env.DEBUG_WEB_SERVER === "1") {
-        console.warn(`[web] skipping malformed archive file ${fileName}: ${error.message}`);
+        console.warn(`[web] skipping malformed archive file ${dateKey}: ${error.message}`);
       }
     }
   }
@@ -339,7 +387,8 @@ function handleArchiveDateRoute(ctx, deps) {
   }
 
   const file = path.join(archiveDir, `${rawDate}.json`);
-  if (!fs.existsSync(file)) {
+  const snapshot = loadDeliveredSnapshotForDate(user, rawDate, deps);
+  if (!snapshot && !fs.existsSync(file)) {
     recordLegacyArchiveUsage(req, "/api/archive/:date", "file_missing", {
       date: rawDate,
       user_chat_id: String(user.chatId || ""),
@@ -349,9 +398,18 @@ function handleArchiveDateRoute(ctx, deps) {
   }
 
   try {
-    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
     const userTopics = Array.isArray(user.topics) ? user.topics : [];
     const topicWeights = user.topic_weights || {};
+    if (snapshot) {
+      const snapshotDigest = buildArchiveDigestFromSnapshot(rawDate, snapshot, userTopics, topicWeights, archiveRelevanceScore);
+      recordLegacyArchiveUsage(req, "/api/archive/:date", "served", {
+        date: rawDate,
+        user_chat_id: String(user.chatId || ""),
+      });
+      json(res, snapshotDigest);
+      return true;
+    }
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
     const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
     raw.items = resolveDeliveredDigestItems(rawDate, raw.items, deliveredItemsByDate)
       .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore));

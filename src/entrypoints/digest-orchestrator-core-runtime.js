@@ -27,6 +27,11 @@ const {
 const { computeDigestQualityScore } = require("../domains/digest");
 const { applyAutoTopicLearning } = require("../domains/personalization");
 const {
+  applyEntityCoverageCap,
+  applyStrategicQualityGate,
+  buildRecentEntityHistory,
+  buildStorylineCandidates,
+  createDigestDeliveryRecordRuntime,
   selectDigestItems,
   createDigestPolicies,
 } = require("../domains/digest");
@@ -85,6 +90,7 @@ let emailTemplateCache = null;
 let digestFormattingRuntimeCache = null;
 let digestDataRuntimeCache = null;
 let digestArchiveRuntimeCache = null;
+let digestDeliveryRecordRuntimeCache = null;
 let digestOrchestratorArchiveRuntimeCache = null;
 let digestOrchestratorCostRuntimeCache = null;
 let digestOrchestratorIncidentRuntimeCache = null;
@@ -314,6 +320,18 @@ function getDigestArchiveRuntime() {
   return digestArchiveRuntimeCache;
 }
 
+function getDigestDeliveryRecordRuntime() {
+  if (!digestDeliveryRecordRuntimeCache) {
+    digestDeliveryRecordRuntimeCache = createDigestDeliveryRecordRuntime({
+      APP_ROOT,
+      fs,
+      path,
+      log,
+    });
+  }
+  return digestDeliveryRecordRuntimeCache;
+}
+
 function getDigestOrchestratorArchiveRuntime() {
   if (!digestOrchestratorArchiveRuntimeCache) {
     digestOrchestratorArchiveRuntimeCache = createDigestOrchestratorArchiveRuntime({
@@ -450,18 +468,35 @@ function selectItems(allItems, opts = {}) {
   });
 }
 
-// ── 3b. Score items by relevance (zero extra API cost) ───────────────────────
-// baseScore comes from enrichItems (already paid for in that call).
-// topicMatch is computed locally — free.
-// finalScore = baseScore (60%) + topicMatch (40%) + weightBonus (+ optional specialist bonus)
-//
-// topic_weights (from "more X" / "less X" commands) are keyed by whatever string
-// Claude returns from intent parsing (e.g., "AI", "healthcare") — not necessarily
-// the canonical tag. matchWeightToTag() does case-insensitive substring matching
-// so "AI" matches "AI×TECH" and "health" matches "HEALTHCARE".
-// Each weight unit = ±0.6 points on the 0–10 scale (range: -5 to +5 → -3.0 to +3.0).
-// Specialist mode adds an additional boost/penalty for narrow-topic users so exact matches
-// are preserved at the top of the ranking before broad balancing.
+function resolveDeliveryModeFromTrigger(triggerSource, targetChatId) {
+  const source = String(triggerSource || "").trim().toLowerCase();
+  if (!targetChatId) return "scheduled";
+  if (source.includes("telegram:on_demand")) return "on_demand";
+  if (source.includes("signup_welcome")) return "welcome";
+  if (source.includes("admin_targeted")) return "manual";
+  if (source.includes("admin_full")) return "manual";
+  return "manual";
+}
+
+function resolveDeliveryEventSource(deliveryMode) {
+  if (deliveryMode === "scheduled") return "scheduled-job";
+  if (deliveryMode === "on_demand") return "on-demand";
+  if (deliveryMode === "welcome") return "welcome-trigger";
+  return "manual-rerun";
+}
+
+function prepareStorylinePool(enrichedItems, selectionTarget) {
+  const storylineCandidates = buildStorylineCandidates(enrichedItems);
+  const filtered = applyStrategicQualityGate(storylineCandidates, {
+    minStrategicValue: 0.34,
+    maxRoutineScore: 0.74,
+    minKeep: Math.min(
+      Math.max(2, Number(selectionTarget || 3)),
+      Math.max(3, storylineCandidates.length)
+    ),
+  });
+  return filtered;
+}
 
 // ── 6. Send via SignalBrief bot ───────────────────────────────────────────────
 
@@ -616,6 +651,9 @@ async function main() {
   else log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
 
   const now = new Date();
+  const triggerSource = String(process.env.SIGNALBRIEF_DIGEST_TRIGGER_SOURCE || "").trim();
+  const deliveryMode = resolveDeliveryModeFromTrigger(triggerSource, targetChatId);
+  const deliveryEventSource = resolveDeliveryEventSource(deliveryMode);
   const dateStr = now.toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
     timeZone: CONFIG.user.timezone,
@@ -687,17 +725,20 @@ async function main() {
     runMode,
     dueUsersCount: dueUsers.length,
   });
+  const storylinePool = prepareStorylinePool(enriched, selectionTarget);
+  log(`Storyline pool ready: ${storylinePool.length}/${enriched.length} candidate(s) retained after quality gate`);
 
   // Archive once per run (shared, date-keyed) before per-user filtering.
   persistSharedArchive({
     now,
-    enriched,
+    enriched: storylinePool,
     dateStr,
     targetChatId,
   });
 
   log(`Delivering to ${dueUsers.length} user(s)...`);
   const engagementEvents = loadEngagementEvents({ max_age_days: 45, dedupe: true });
+  const digestDeliveryRecordRuntime = getDigestDeliveryRecordRuntime();
   const deliveryRuntime = createDigestOrchestratorDeliveryRuntime({
     CONFIG,
     log,
@@ -706,14 +747,19 @@ async function main() {
     buildLearningSummary,
     filterItemsByTopics,
     applyTopicRelevanceScores,
+    buildRecentEntityHistory,
     suppressRecentlySentForUser,
     isRecentRepeatItem,
     parseSourceDomain,
+    applyEntityCoverageCap,
     reserveCustomKeywordSlot,
     applyDigestDepth,
     computeDigestQualityScore,
     buildDigestId,
     appendEngagementEventChecked,
+    beginDigestDeliveryRecord: (...args) => digestDeliveryRecordRuntime.beginDigestDeliveryRecord(...args),
+    updateDigestDeliveryRecord: (...args) => digestDeliveryRecordRuntime.updateDigestDeliveryRecord(...args),
+    loadRecentSentDigests: (...args) => digestDeliveryRecordRuntime.loadRecentSentDigests(...args),
     sendTelegram,
     formatTelegram,
     buildDigestInlineKeyboard,
@@ -734,7 +780,7 @@ async function main() {
     failedUsers,
   } = await deliveryRuntime.deliverDueUsers({
     dueUsers,
-    enriched,
+    enriched: storylinePool,
     now,
     shortDate,
     dateStr,
@@ -747,6 +793,8 @@ async function main() {
     publicDigestUrl,
     suppressWelcome,
     targetChatId,
+    deliveryMode,
+    deliveryEventSource,
     claudeUsage,
     engagementEvents,
   });

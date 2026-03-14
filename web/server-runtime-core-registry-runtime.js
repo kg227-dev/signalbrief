@@ -32,6 +32,7 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     normalizeBookmarkUrl,
     sendMagicLinkEmail,
     loadEngagementEvents,
+    loadLatestDigestSnapshot,
   } = deps;
   const { handleSignup, handleSettings } = sharedHandlers;
 
@@ -68,6 +69,7 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     normalizeBookmarkUrl,
     sendMagicLinkEmail,
     loadEngagementEvents,
+    loadLatestDigestSnapshot,
   };
 }
 

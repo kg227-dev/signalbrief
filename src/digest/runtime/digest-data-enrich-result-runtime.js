@@ -53,14 +53,37 @@ function normalizeBaseScore(value) {
   return typeof value === "number" ? value : 5.0;
 }
 
+function normalizeStrategicValue(value, fallbackBaseScore = 5) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.min(1, numeric));
+  return Math.max(0, Math.min(1, Number(fallbackBaseScore || 0) / 10));
+}
+
+function normalizeStringArray(value, maxItems = 6) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    out.push(trimmed);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
 function normalizeEnrichedItems(items, enriched) {
   return items.map((item, index) => {
     const candidate = enriched[index] || {};
+    const baseScore = normalizeBaseScore(candidate.baseScore);
     return {
       ...item,
       wim_brief: stringOrNull(candidate.wim_brief),
       wim: stringOrNull(candidate.wim),
-      baseScore: normalizeBaseScore(candidate.baseScore),
+      baseScore,
+      strategic_value: normalizeStrategicValue(candidate.strategic_value, baseScore),
+      content_flags: normalizeStringArray(candidate.content_flags),
+      storyline_hints: normalizeStringArray(candidate.storyline_hints, 4),
       implications: stringOrNull(candidate.implications),
       watch_next: stringOrNull(candidate.watch_next),
     };

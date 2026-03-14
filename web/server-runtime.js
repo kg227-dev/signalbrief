@@ -24,6 +24,7 @@ const {
   loadEngagementEvents,
 } = require("../src/domains/engagement");
 const { computeQualityTrend } = require("../src/domains/digest");
+const { createDigestDeliveryRecordRuntime } = require("../src/domains/digest");
 const {
   digestRunStatus,
   queueDigestTrigger,
@@ -205,6 +206,12 @@ const getAllowedArchiveDatesForUser = (user, archiveDir, files) => getAllowedArc
   path,
   writeUser,
 });
+const digestDeliveryRecordRuntime = createDigestDeliveryRecordRuntime({
+  APP_ROOT,
+  fs,
+  path,
+  log: (message) => webLogger.warn("web.digest_records", { message: String(message || "") }),
+});
 
 // sendWelcomeEmail is defined in mailer.js and imported above
 
@@ -259,6 +266,7 @@ const {
   normalizeBookmarkUrl,
   sendMagicLinkEmail,
   checkLoginRate,
+  loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
   CONFIG,
   verifyAdminPassword,
   createAdminSession,

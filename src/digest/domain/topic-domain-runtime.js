@@ -276,6 +276,26 @@ function filterItemsByTopics(items, userTopics, opts = {}) {
   };
 }
 
+function clamp(value, min = 0, max = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.max(min, Math.min(max, numeric));
+}
+
+function normalizeTopicRelevance(topicMatch) {
+  if (Number(topicMatch) >= 10) return 1;
+  if (Number(topicMatch) >= 7) return 0.68;
+  return 0.18;
+}
+
+function recencySignal(item, nowIso) {
+  const nowTs = Date.parse(String(nowIso || new Date().toISOString()));
+  const retrievedTs = Date.parse(String(item?.retrieved_at || ""));
+  if (!Number.isFinite(nowTs) || !Number.isFinite(retrievedTs)) return 1;
+  const ageHours = Math.max(0, (nowTs - retrievedTs) / (60 * 60 * 1000));
+  return clamp(1 - (ageHours / 72), 0.55, 1);
+}
+
 function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
   const allItems = Array.isArray(items) ? items : [];
   const specialistMode = !!opts.specialistMode;
@@ -286,28 +306,86 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
   const sourceDomainForItem = typeof opts.sourceDomainForItem === "function"
     ? opts.sourceDomainForItem
     : null;
+  const recentEntityCounts = opts.recentEntityCounts && typeof opts.recentEntityCounts === "object"
+    ? opts.recentEntityCounts
+    : {};
+  const recentStorylineKeys = opts.recentStorylineKeys instanceof Set
+    ? opts.recentStorylineKeys
+    : new Set(Array.isArray(opts.recentStorylineKeys) ? opts.recentStorylineKeys : []);
+  const nowIso = String(opts.nowIso || new Date().toISOString());
 
   return allItems.map((item) => {
     const signals = computeTopicSignals(item, userTopics);
     const topicMatch = signals.topicMatch;
     const base = typeof item?.baseScore === "number" ? item.baseScore : 5.0;
     const weight = matchWeightToTag(item?.tag, topicWeights);
-    const weightBonus = weight * 0.6;
+    const positivePreferenceBoost = clamp(weight / 5, 0, 1);
+    const negativePreferencePenalty = clamp(Math.abs(Math.min(weight, 0)) / 5, 0, 1);
+    const topicalRelevance = normalizeTopicRelevance(topicMatch);
+    const customRelevance = signals.customKeywordMatch ? 1 : 0;
+    const strategicImportance = clamp(
+      Number.isFinite(Number(item?.strategic_value))
+        ? Number(item?.strategic_value)
+        : (base / 10),
+      0,
+      1
+    );
+    const sourceAuthority = clamp(
+      Number.isFinite(Number(item?.source_authority))
+        ? Number(item?.source_authority)
+        : 0.5,
+      0,
+      1
+    );
+    const multiSourceConfirmation = clamp((Math.max(1, Number(item?.cross_source_count || 1)) - 1) / 2, 0, 1);
+    const recency = recencySignal(item, nowIso);
+    const entityKeys = Array.isArray(item?.entity_keys) ? item.entity_keys : [];
+    const storylineKey = String(item?.storyline_key || "").trim();
+    const recentEntityCount = entityKeys.reduce((maxCount, entityKey) => Math.max(maxCount, Number(recentEntityCounts[entityKey] || 0)), 0);
+    const storylineRepeated = storylineKey && recentStorylineKeys.has(storylineKey);
+    const novelty = storylineRepeated
+      ? 0.28
+      : clamp(1 - (recentEntityCount * 0.22), 0.35, 1);
+    const duplicationPenalty = isRecentRepeat(item) ? clamp(Math.max(0.2, repeatPenalty / 2), 0, 0.7) : 0;
+    const entitySaturationPenalty = clamp(recentEntityCount * 0.25, 0, 0.75);
 
-    let specialistBonus = 0;
+    let specialistBoost = 0;
     if (specialistMode) {
-      if (topicMatch >= 10) specialistBonus = 1.1;
-      else if (topicMatch >= 7) specialistBonus = 0.45;
-      else specialistBonus = -0.6;
+      if (topicMatch >= 10) specialistBoost = 0.05;
+      else if (topicMatch >= 7) specialistBoost = 0.02;
+      else specialistBoost = -0.03;
     }
 
-    const freshnessPenalty = isRecentRepeat(item) ? -repeatPenalty : 0;
-    const rawScore = base * 0.6 + topicMatch * 0.4 + weightBonus + specialistBonus + freshnessPenalty;
+    const rawScore = clamp(
+      0.18 * topicalRelevance
+      + 0.08 * customRelevance
+      + 0.28 * strategicImportance
+      + 0.15 * novelty
+      + 0.12 * sourceAuthority
+      + 0.08 * multiSourceConfirmation
+      + 0.05 * recency
+      + 0.06 * positivePreferenceBoost
+      + specialistBoost
+      - (0.06 * negativePreferencePenalty),
+      0,
+      1
+    );
+    const adjustedNorm = clamp(
+      rawScore
+      * (1 - (duplicationPenalty * 0.5))
+      * (1 - (entitySaturationPenalty * 0.35)),
+      0,
+      1
+    );
+    const signalScore = 10 * Math.pow(adjustedNorm, 0.92);
+
     const whyShown = [];
     if (topicMatch >= 7) whyShown.push("topic_match");
     if (signals.customKeywordMatch) whyShown.push("custom_keyword");
-    if (weightBonus > 0.25) whyShown.push("weight_boost");
+    if (positivePreferenceBoost > 0.2) whyShown.push("weight_boost");
     if (base >= 8.0) whyShown.push("high_base_score");
+    if (multiSourceConfirmation >= 0.5) whyShown.push("cross_source");
+    if (recentEntityCount > 0) whyShown.push("novelty_penalized");
 
     const sourceDomain = item?.source_domain
       || (sourceDomainForItem ? sourceDomainForItem(item) : null)
@@ -317,10 +395,26 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       ...item,
       source_domain: sourceDomain,
       topicMatch,
-      weightBonus,
-      specialistBonus,
-      freshnessPenalty,
-      relevanceScore: Math.min(10, Math.max(0, Math.round(rawScore * 10) / 10)),
+      weightBonus: Number((positivePreferenceBoost - negativePreferencePenalty).toFixed(3)),
+      specialistBonus: Number(specialistBoost.toFixed(3)),
+      freshnessPenalty: Number((-duplicationPenalty).toFixed(3)),
+      duplication_penalty: Number(duplicationPenalty.toFixed(3)),
+      entity_saturation_penalty: Number(entitySaturationPenalty.toFixed(3)),
+      relevanceScore: Math.min(10, Math.max(0, Math.round(signalScore * 10) / 10)),
+      score_breakdown: {
+        topical_relevance: Number(topicalRelevance.toFixed(3)),
+        custom_keyword_relevance: Number(customRelevance.toFixed(3)),
+        strategic_importance: Number(strategicImportance.toFixed(3)),
+        novelty: Number(novelty.toFixed(3)),
+        source_authority: Number(sourceAuthority.toFixed(3)),
+        multi_source_confirmation: Number(multiSourceConfirmation.toFixed(3)),
+        recency: Number(recency.toFixed(3)),
+        preference_boost: Number(positivePreferenceBoost.toFixed(3)),
+        duplication_penalty: Number(duplicationPenalty.toFixed(3)),
+        entity_saturation_penalty: Number(entitySaturationPenalty.toFixed(3)),
+        raw_score: Number(rawScore.toFixed(3)),
+        adjusted_score: Number(adjustedNorm.toFixed(3)),
+      },
       why_shown: whyShown,
     };
   });

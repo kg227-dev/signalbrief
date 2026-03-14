@@ -37,7 +37,7 @@ function createDigestEmailStyleRuntime() {
   function buildEmailHeaderMeta(itemsCount, digestQuality) {
     const quality = digestQualityLabel(digestQuality);
     const readMins = Math.max(2, Math.ceil(Number(itemsCount || 0) * 0.6));
-    return `${itemsCount} signals • ${readMins} min read${quality ? ` • Match ${quality.score}%` : ""}`;
+    return `${itemsCount} signals • ${readMins} min read${quality ? ` • Digest quality ${quality.score}%` : ""}`;
   }
 
   return {

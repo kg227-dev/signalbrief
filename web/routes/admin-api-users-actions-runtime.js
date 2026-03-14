@@ -92,6 +92,7 @@ function handleUserByEmailRoute({ ctx, deps }) {
     isAdminAuthed,
     allUsers,
     getRecentAutoAdjustmentsForUser,
+    countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
   } = deps;
 
@@ -118,8 +119,15 @@ function handleUserByEmailRoute({ ctx, deps }) {
   const latestDigestRecord = latestDigestDateKey && typeof loadLatestDigestSnapshot === "function"
     ? loadLatestDigestSnapshot(adminUser.chatId, latestDigestDateKey)
     : null;
+  const archiveDigestCountRaw = typeof countArchiveDigestsForUser === "function"
+    ? Number(countArchiveDigestsForUser(adminUser))
+    : NaN;
+  const archiveDigestCount = Number.isFinite(archiveDigestCountRaw)
+    ? Math.max(0, archiveDigestCountRaw)
+    : Math.max(0, Number(adminUser?.digests_received || 0));
   json(res, {
     ...adminUser,
+    archive_digest_count: archiveDigestCount,
     auto_adjustments_recent: getRecentAutoAdjustmentsForUser(adminUser, autoLimit),
     latest_digest_record: latestDigestRecord,
   });

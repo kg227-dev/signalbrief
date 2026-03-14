@@ -19,3 +19,6 @@ if (!source.includes('json(res, { error: "user not found" }, 404);')) {
 if (!source.includes("latest_digest_record: latestDigestRecord")) {
   throw new Error("user-by-email handler should expose the latest digest record for admin debug");
 }
+if (!source.includes("archive_digest_count: archiveDigestCount")) {
+  throw new Error("user-by-email handler should expose the canonical archive digest count");
+}

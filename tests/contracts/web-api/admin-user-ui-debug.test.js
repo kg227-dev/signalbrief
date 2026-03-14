@@ -10,6 +10,7 @@ const source = fs.readFileSync(TARGET_PATH, "utf8");
 const requiredSnippets = [
   'id="lastDigestMeta"',
   "latest_digest_record",
+  "archive_digest_count",
   "function buildLastDigestPanel(user)",
   "storyline_id",
   "score_breakdown",

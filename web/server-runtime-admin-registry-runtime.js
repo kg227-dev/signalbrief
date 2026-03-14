@@ -45,6 +45,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     estimateSandboxCost,
     runSandboxPipeline,
     requestSchedulerWorkerRestart,
+    countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
@@ -94,6 +95,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     estimateSandboxCost,
     runSandboxPipeline,
     requestSchedulerWorkerRestart,
+    countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
   };
 }

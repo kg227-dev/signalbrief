@@ -15,6 +15,7 @@ async function handleAdminUserRoutes(ctx, deps) {
     requireJsonBody,
     allUsers,
     getRecentAutoAdjustmentsForUser,
+    countArchiveDigestsForUser,
     readJsonLineLog,
     ADMIN_ACTION_LOG,
     ADMIN_MESSAGE_LOG,
@@ -41,6 +42,7 @@ async function handleAdminUserRoutes(ctx, deps) {
         isAdminAuthed,
         allUsers,
         getRecentAutoAdjustmentsForUser,
+        countArchiveDigestsForUser,
         loadLatestDigestSnapshot,
       },
     });

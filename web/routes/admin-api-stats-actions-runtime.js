@@ -71,6 +71,7 @@ function buildAdminStatsPayload({
     readJsonLineLog,
     ADMIN_MESSAGE_LOG,
     DIGEST_INCIDENT_LOG,
+    countArchiveDigestsForUser,
     maskEmail,
     computeNextDeliveryEt,
     formatDaysLabel,
@@ -131,6 +132,7 @@ function buildAdminStatsPayload({
 
   const roster = buildAdminRoster({
     usersAll,
+    countArchiveDigestsForUser,
     computeQualityTrend,
     formatDaysLabel,
     computeNextDeliveryEt,

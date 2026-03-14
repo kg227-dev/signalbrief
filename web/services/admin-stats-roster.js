@@ -78,6 +78,7 @@ function buildTopicsList(topics) {
 
 function buildAdminRosterEntry({
   user,
+  countArchiveDigestsForUser,
   computeQualityTrend,
   formatDaysLabel,
   computeNextDeliveryEt,
@@ -91,6 +92,11 @@ function buildAdminRosterEntry({
   const adminUserPath = user.email ? `/admin/user?email=${encodeURIComponent(user.email)}` : null;
   const archivePath = buildArchivePath(user, adminUserPath);
   const settingsPath = buildSettingsPath(user, adminUserPath);
+  const archiveDigestCountRaw = typeof countArchiveDigestsForUser === "function"
+    ? Number(countArchiveDigestsForUser(user))
+    : NaN;
+  const archiveDigestCount = Number.isFinite(archiveDigestCountRaw) ? Math.max(0, archiveDigestCountRaw) : null;
+  const digestCount = archiveDigestCount != null ? archiveDigestCount : Math.max(0, Number(user.digests_received || 0));
 
   return {
     name: user.name || "",
@@ -98,7 +104,9 @@ function buildAdminRosterEntry({
     chat_id: user.chatId || "",
     status: user.status || "active",
     joined: toETDate(user.joined_at),
-    digests: user.digests_received || 0,
+    digests: digestCount,
+    archive_digest_count: digestCount,
+    digests_legacy: Math.max(0, Number(user.digests_received || 0)),
     last_digest: toETDate(user.last_digest_at),
     telegram: tgLinked,
     email_enabled: prefs.email_enabled !== false,
@@ -134,6 +142,7 @@ function buildAdminRosterEntry({
 
 function buildAdminRoster({
   usersAll,
+  countArchiveDigestsForUser,
   computeQualityTrend,
   formatDaysLabel,
   computeNextDeliveryEt,
@@ -141,6 +150,7 @@ function buildAdminRoster({
   return usersAll
     .map((user) => buildAdminRosterEntry({
       user,
+      countArchiveDigestsForUser,
       computeQualityTrend,
       formatDaysLabel,
       computeNextDeliveryEt,

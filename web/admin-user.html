@@ -622,10 +622,13 @@ function buildMetaBar(user) {
     : tgLinked
       ? '<span style="color:var(--yellow);font-weight:600;">linked / disabled</span>'
       : '<span style="color:#D1D5DB;">not linked</span>';
+  const digestCount = Number.isFinite(Number(user.archive_digest_count))
+    ? Number(user.archive_digest_count)
+    : Number(user.digests_received || 0);
   const items = [
     { label: 'Status',    value: `<span class="status-badge ${statusClass}">${esc(user.status || 'active')}</span>` },
     { label: 'Joined',    value: esc(toETDate(user.joined_at)) },
-    { label: 'Digests',   value: esc(String(user.digests_received || 0)) },
+    { label: 'Digests',   value: esc(String(digestCount)) },
     { label: 'Last digest', value: esc(toETDate(user.last_digest_at)) },
     { label: 'Email',     value: emailVal },
     { label: 'Telegram',  value: tgVal },

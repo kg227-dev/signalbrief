@@ -44,6 +44,7 @@ const { getClientIp, getRequestHost, getRequestScheme } = require("./services/re
 const { createSignupRateLimiter } = require("./services/web-rate-limit");
 const { blankReengagementState, resetReengagementState } = require("./services/reengagement-state");
 const { archiveRelevanceScore } = require("./services/archive-scoring");
+const { createArchiveDigestStatsRuntime } = require("./services/archive-digest-stats-runtime");
 const {
   parseEtNowParts,
   formatTimeEt,
@@ -213,6 +214,15 @@ const digestDeliveryRecordRuntime = createDigestDeliveryRecordRuntime({
   path,
   log: (message) => webLogger.warn("web.digest_records", { message: String(message || "") }),
 });
+const archiveDigestStatsRuntime = createArchiveDigestStatsRuntime({
+  APP_ROOT,
+  fs,
+  path,
+  readArchiveFiles: readArchiveFilesForDir,
+  getAllowedArchiveDates: getAllowedArchiveDatesForUser,
+  loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
+  loadEngagementEvents,
+});
 
 // sendWelcomeEmail is defined in mailer.js and imported above
 
@@ -267,6 +277,7 @@ const {
   normalizeBookmarkUrl,
   sendMagicLinkEmail,
   checkLoginRate,
+  countArchiveDigestsForUser: (...args) => archiveDigestStatsRuntime.countArchiveDigestsForUser(...args),
   loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
   CONFIG,
   verifyAdminPassword,

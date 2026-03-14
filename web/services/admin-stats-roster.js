@@ -57,8 +57,10 @@ function buildSettingsPath(user, adminUserPath) {
   if (user.token) {
     return `/settings?token=${encodeURIComponent(user.token)}&admin=1&admin_return=${encodeURIComponent(adminUserPath || "/admin")}`;
   }
+  if (user.email) {
+    return `/settings?email=${encodeURIComponent(user.email)}&admin=1&admin_return=${encodeURIComponent(adminUserPath || "/admin")}`;
+  }
   if (adminUserPath) return adminUserPath;
-  if (user.email) return `/settings?email=${encodeURIComponent(user.email)}`;
   return null;
 }
 

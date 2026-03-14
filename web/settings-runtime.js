@@ -27,6 +27,14 @@ const prefState = typeof Prefs.createPreferenceState === "function"
 const byId = (id) => document.getElementById(id);
 let settingsUi = null;
 
+function sanitizeInternalPath(value, fallback) {
+  const candidate = String(value || "").trim();
+  if (!candidate) return fallback;
+  if (!candidate.startsWith("/")) return fallback;
+  if (candidate.startsWith("//")) return fallback;
+  return candidate;
+}
+
 function showError(msg) {
   const el = byId("saveError");
   if (!el) return;
@@ -161,6 +169,32 @@ function renderLoadError(loadingEl, notFoundEl, err) {
   loadingEl.style.display = "block";
 }
 
+function configureAdminNav(params, token) {
+  const archiveNavLink = byId("archiveNavLink");
+  const adminBackLink = byId("adminBackLink");
+  const isAdminView = params.get("admin") === "1";
+  const adminReturn = sanitizeInternalPath(params.get("admin_return"), "/admin");
+
+  if (archiveNavLink) {
+    if (isAdminView) {
+      archiveNavLink.href = token
+        ? `/archive?token=${encodeURIComponent(token)}&admin=1&admin_return=${encodeURIComponent(adminReturn)}`
+        : `/archive?admin=1&admin_return=${encodeURIComponent(adminReturn)}`;
+    } else {
+      archiveNavLink.href = token ? `/archive?token=${encodeURIComponent(token)}` : "/archive";
+    }
+  }
+
+  if (adminBackLink) {
+    if (isAdminView) {
+      adminBackLink.href = adminReturn;
+      adminBackLink.style.display = "inline-flex";
+    } else {
+      adminBackLink.style.display = "none";
+    }
+  }
+}
+
 function bindSaveHandler(effectiveToken, user) {
   const saveBtn = byId("saveBtn");
   if (!saveBtn || !prefState) return;
@@ -289,10 +323,7 @@ async function initSettingsPage() {
       ? "✅ SignalBrief reactivated. Your digest will resume."
       : (invalidToken ? "Enter your email and we'll send you a link to your preferences page." : ""));
 
-  const archiveNavLink = byId("archiveNavLink");
-  if (archiveNavLink) {
-    archiveNavLink.href = token ? `/archive?token=${encodeURIComponent(token)}` : "/archive";
-  }
+  configureAdminNav(params, token);
 
   const loadingEl = byId("loadingState");
   const formEl = byId("settingsForm");

@@ -1135,34 +1135,32 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
       <summary>How to read this</summary>
       <div class="explain-body">
         <div class="explain-block">
-          <div class="explain-label">Run Metrics</div>
+          <div class="explain-label">1. Did the digest go out?</div>
           <div class="explain-copy">
-            <strong>Users</strong> is recipients actually served in that run. <strong>Tokens</strong> is Claude input/output usage. <strong>Total</strong> is API spend for the run: Perplexity plus Claude.
+            <strong>Users</strong> tells you how many people actually got that run. <strong>Sent to</strong> shows who they were. <strong>Total</strong> is what that run cost.
           </div>
         </div>
         <div class="explain-block">
-          <div class="explain-label">Digest Quality</div>
+          <div class="explain-label">2. Was it a good brief?</div>
           <div class="explain-copy">
-            This is a whole-brief score from 0 to 100. It rewards topic fit, ranking quality, analysis quality, freshness/diversity, and custom-topic coverage.
+            <strong>Digest quality</strong> is a whole-brief score from 0 to 100. Think of it as a quick editorial health check.
           </div>
           <div class="explain-chip-row">
-            <span class="explain-chip">topic = topic fit</span>
-            <span class="explain-chip">rank = ranking quality</span>
-            <span class="explain-chip">analysis = writeup quality</span>
-            <span class="explain-chip">fresh = novelty + diversity</span>
-            <span class="explain-chip">custom = custom-topic coverage</span>
+            <span class="explain-chip">85+ = strong brief</span>
+            <span class="explain-chip">70-84 = decent brief</span>
+            <span class="explain-chip">below 70 = weak brief</span>
           </div>
         </div>
         <div class="explain-block">
-          <div class="explain-label">Debug Chips</div>
+          <div class="explain-label">3. If it was weak, why?</div>
           <div class="explain-copy">
-            Inside each run, <strong>signal</strong> is the item score, <strong>strategic</strong> is business importance, <strong>routine</strong> is low-value/routine risk, and <strong>dup</strong> / <strong>sat</strong> are duplication and entity-saturation penalties.
+            Open <strong>why this brief was strong or weak</strong>. You will see a plain-English summary first, then the top signals. The small score tags are only for debugging.
           </div>
           <div class="explain-chip-row">
-            <span class="explain-chip">novelty = new vs recent history</span>
-            <span class="explain-chip">source = source authority</span>
-            <span class="explain-chip">story = storyline cluster</span>
-            <span class="explain-chip">entity = extracted company/topic</span>
+            <span class="explain-chip">topic fit = relevance</span>
+            <span class="explain-chip">ranking = selection quality</span>
+            <span class="explain-chip">writeup = analysis quality</span>
+            <span class="explain-chip">freshness = novelty</span>
           </div>
         </div>
       </div>
@@ -1413,12 +1411,16 @@ function renderRunDigestQuality(run) {
   const score = Number(rawScore);
   if (!Number.isFinite(score)) return `<span style="color:var(--text-secondary);">—</span>`;
   const tone = score >= 85 ? "#059669" : (score >= 75 ? "#D97706" : "#DC2626");
+  const label = score >= 85 ? "Strong" : (score >= 70 ? "Decent" : "Weak");
   const samples = Number(run?.digest_quality_samples || 0);
   const baseLabel = "Digest quality is a 0-100 score for the whole brief, not a match percentage.";
   const sampleLabel = samples > 0
     ? `Average across ${samples} recipient${samples === 1 ? "" : "s"}.`
     : "";
-  return `<span class="mono" style="font-weight:700;color:${tone};" title="${esc(`${baseLabel} ${sampleLabel}`.trim())}">${score.toFixed(1)}</span>`;
+  return `<span title="${esc(`${baseLabel} ${sampleLabel}`.trim())}" style="display:inline-flex;align-items:center;gap:8px;">
+    <span class="mono" style="font-weight:700;color:${tone};">${score.toFixed(1)}</span>
+    <span style="font-size:11px;font-weight:700;color:${tone};text-transform:uppercase;letter-spacing:.08em;">${label}</span>
+  </span>`;
 }
 function resolveRunDigestHref(run) {
   const rawHref = String(run?.digest_url || "").trim();
@@ -1449,23 +1451,54 @@ function renderDebugPills(entries) {
 function renderDigestQualityComponents(components) {
   if (!components || typeof components !== "object") return "";
   return renderDebugPills([
-    { label: "topic", value: fmtDebugNumber(components.topic_fit, 0) },
-    { label: "rank", value: fmtDebugNumber(components.relevance_fit, 0) },
-    { label: "analysis", value: fmtDebugNumber(components.analysis_quality, 0) },
-    { label: "fresh", value: fmtDebugNumber(components.freshness_diversity, 0) },
+    { label: "topic fit", value: fmtDebugNumber(components.topic_fit, 0) },
+    { label: "ranking", value: fmtDebugNumber(components.relevance_fit, 0) },
+    { label: "writeup", value: fmtDebugNumber(components.analysis_quality, 0) },
+    { label: "freshness", value: fmtDebugNumber(components.freshness_diversity, 0) },
     { label: "custom", value: fmtDebugNumber(components.custom_coverage, 0) },
   ]);
 }
 function renderItemScoreBreakdown(breakdown) {
   if (!breakdown || typeof breakdown !== "object") return "";
   return renderDebugPills([
-    { label: "topic", value: fmtDebugNumber(breakdown.topical_relevance) },
-    { label: "strategic", value: fmtDebugNumber(breakdown.strategic_importance) },
+    { label: "topic fit", value: fmtDebugNumber(breakdown.topical_relevance) },
+    { label: "importance", value: fmtDebugNumber(breakdown.strategic_importance) },
     { label: "novelty", value: fmtDebugNumber(breakdown.novelty) },
     { label: "source", value: fmtDebugNumber(breakdown.source_authority) },
-    { label: "dup", value: fmtDebugNumber(breakdown.duplication_penalty) },
-    { label: "sat", value: fmtDebugNumber(breakdown.entity_saturation_penalty) },
+    { label: "dup penalty", value: fmtDebugNumber(breakdown.duplication_penalty) },
+    { label: "sat penalty", value: fmtDebugNumber(breakdown.entity_saturation_penalty) },
   ]);
+}
+function qualityComponentState(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "unknown";
+  if (numeric >= 80) return "strong";
+  if (numeric >= 60) return "okay";
+  return "weak";
+}
+function summarizeDigestQuality(row, score) {
+  const components = row?.quality_components || {};
+  const positives = [];
+  const negatives = [];
+  const checks = [
+    { value: components.topic_fit, strong: "strong topic fit", weak: "poor topic fit" },
+    { value: components.relevance_fit, strong: "good signal selection", weak: "weak signal selection" },
+    { value: components.analysis_quality, strong: "clear writeups", weak: "weak writeups" },
+    { value: components.freshness_diversity, strong: "fresh, non-repetitive coverage", weak: "repetitive or stale coverage" },
+    { value: components.custom_coverage, strong: "good custom-topic coverage", weak: "thin custom-topic coverage" },
+  ];
+  checks.forEach((check) => {
+    const state = qualityComponentState(check.value);
+    if (state === "strong") positives.push(check.strong);
+    if (state === "weak") negatives.push(check.weak);
+  });
+
+  const overall = score >= 85
+    ? "Strong brief."
+    : (score >= 70 ? "Decent brief." : "Weak brief.");
+  const positiveLine = positives.length ? ` Best part: ${positives.slice(0, 2).join(" and ")}.` : "";
+  const negativeLine = negatives.length ? ` Main issue: ${negatives.slice(0, 2).join(" and ")}.` : "";
+  return `${overall}${positiveLine}${negativeLine}`.trim();
 }
 function renderRunDebugPanel(run) {
   const row = Array.isArray(run?.per_user) && run.per_user.length ? run.per_user[0] : null;
@@ -1483,6 +1516,8 @@ function renderRunDebugPanel(run) {
   const storylineIds = Array.isArray(row?.debug_storyline_ids) ? row.debug_storyline_ids.slice(0, 4) : [];
   const debugItems = Array.isArray(row?.debug_items) ? row.debug_items.slice(0, 3) : [];
   const hiddenItemCount = Math.max(0, (Array.isArray(row?.debug_items) ? row.debug_items.length : 0) - debugItems.length);
+  const digestScore = Number(run?.digest_quality_score);
+  const summaryLine = Number.isFinite(digestScore) ? summarizeDigestQuality(row, digestScore) : "";
 
   const metaLine = [
     deliveryMode ? `mode ${deliveryMode}` : null,
@@ -1500,15 +1535,15 @@ function renderRunDebugPanel(run) {
       : `<span style="color:var(--text);font-weight:600;">${headline}</span>`;
     const metaPills = renderDebugPills([
       item?.tag ? { label: "tag", value: item.tag } : null,
-      Number.isFinite(Number(item?.relevance_score)) ? { label: "signal", value: fmtDebugNumber(item.relevance_score, 1) } : null,
-      Number.isFinite(Number(item?.strategic_value)) ? { label: "strategic", value: fmtDebugNumber(item.strategic_value) } : null,
-      Number.isFinite(Number(item?.routine_item_score)) ? { label: "routine", value: fmtDebugNumber(item.routine_item_score) } : null,
+      Number.isFinite(Number(item?.relevance_score)) ? { label: "signal score", value: fmtDebugNumber(item.relevance_score, 1) } : null,
+      Number.isFinite(Number(item?.strategic_value)) ? { label: "importance", value: fmtDebugNumber(item.strategic_value) } : null,
+      Number.isFinite(Number(item?.routine_item_score)) ? { label: "routine risk", value: fmtDebugNumber(item.routine_item_score) } : null,
       item?.source_tier ? { label: "source", value: item.source_tier } : null,
     ]);
-    const subLine = [
+    const subLine = item?.source_domain ? `source ${esc(item.source_domain)}` : "";
+    const technicalLine = [
       item?.storyline_id ? `storyline ${esc(item.storyline_id)}` : null,
       Array.isArray(item?.entity_keys) && item.entity_keys.length ? `entities ${esc(item.entity_keys.slice(0, 4).join(", "))}` : null,
-      item?.source_domain ? `domain ${esc(item.source_domain)}` : null,
     ].filter(Boolean).join(" · ");
     const breakdownPills = renderItemScoreBreakdown(item?.score_breakdown);
     return `<div style="display:flex;flex-direction:column;gap:5px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#FAFAFB;">
@@ -1516,23 +1551,25 @@ function renderRunDebugPanel(run) {
       ${metaPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${metaPills}</div>` : ""}
       ${subLine ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${subLine}</div>` : ""}
       ${breakdownPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${breakdownPills}</div>` : ""}
+      ${technicalLine ? `<details style="margin-top:2px;"><summary style="cursor:pointer;color:var(--text-secondary);font-size:11px;font-weight:500;">technical debug</summary><div style="margin-top:4px;font-size:11px;color:var(--text-secondary);line-height:1.45;">${technicalLine}</div></details>` : ""}
     </div>`;
   }).join("");
 
-  const groupPills = renderDebugPills([
+  const qualityPills = renderDigestQualityComponents(row?.quality_components);
+  const technicalSummary = renderDebugPills([
     ...entities.map((entity) => ({ label: "entity", value: entity })),
     ...storylineIds.map((storylineId) => ({ label: "story", value: storylineId })),
   ]);
-  const qualityPills = renderDigestQualityComponents(row?.quality_components);
 
   return `<details style="margin-top:8px;">
-    <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:600;">why this scored this way</summary>
+    <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:600;">why this brief was strong or weak</summary>
     <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+      ${summaryLine ? `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#F8FAFC;font-size:12px;font-weight:600;color:var(--text);line-height:1.5;">${esc(summaryLine)}</div>` : ""}
       ${metaLine ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${metaLine}</div>` : ""}
       ${qualityPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${qualityPills}</div>` : ""}
-      ${groupPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${groupPills}</div>` : ""}
       ${itemsHtml || `<div style="font-size:11px;color:var(--text-secondary);">No item-level debug captured for this row.</div>`}
       ${hiddenItemCount > 0 ? `<div style="font-size:11px;color:var(--text-secondary);">+${hiddenItemCount} more signal${hiddenItemCount === 1 ? "" : "s"} in this delivery</div>` : ""}
+      ${technicalSummary ? `<details><summary style="cursor:pointer;color:var(--text-secondary);font-size:11px;font-weight:500;">technical debug</summary><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">${technicalSummary}</div></details>` : ""}
     </div>
   </details>`;
 }

@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Up — SignalBrief</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #edeae4;
+  --card: #FFFFFF;
+  --text: #1a1a1a;
+  --text-secondary: #6b6560;
+  --text-body: #4a4540;
+  --accent: #3b5fc0;
+  --accent-hover: #2d4ea0;
+  --accent-light: rgba(59,95,192,0.08);
+  --border: rgba(0,0,0,0.06);
+  --border-subtle: rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.03);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Dark mode */
+body.dark {
+  --bg: #1a1815;
+  --card: #2a2622;
+  --text: #f0ede8;
+  --text-secondary: #9a9590;
+  --text-body: #c5c0ba;
+  --accent: #5b7fd0;
+  --accent-hover: #4a6ec0;
+  --accent-light: rgba(91,127,208,0.12);
+  --border: rgba(255,255,255,0.06);
+  --border-subtle: rgba(255,255,255,0.04);
+}
+body.dark .input-field { background: var(--card); color: var(--text); }
+body.dark select.input-field { background-color: var(--card); }
+body.dark .topic-chip { background: var(--card); }
+body.dark .topic-chip.topic-chip-custom { background: rgba(217,119,6,0.1); }
+body.dark .depth-card { background: var(--card); }
+body.dark .day-circle { background: var(--card); }
+body.dark .size-pill { background: var(--card); }
+body.dark .size-toggle { background: var(--card); }
+body.dark .review-card { background: var(--card); }
+body.dark .success-card { background: var(--card); }
+
+/* Dark toggle */
+#darkToggle {
+  position: fixed; top: 20px; right: 20px; z-index: 999;
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--card);
+  cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+#darkToggle:hover { transform: scale(1.06); }
+
+/* Progress bar */
+.progress-track {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 3px; background: var(--border);
+}
+.progress-fill {
+  height: 100%; background: var(--accent);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 0%;
+}
+
+/* Step container */
+.flow-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px 60px;
+}
+.step {
+  width: 100%;
+  max-width: 520px;
+  display: none;
+  opacity: 0;
+  transform: translateX(40px);
+}
+.step.active {
+  display: block;
+  animation: stepIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.step.exiting {
+  display: block;
+  animation: stepOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes stepIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes stepOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-40px); }
+}
+@keyframes stepInReverse {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Step header */
+.step-counter {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.step h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(26px, 3.5vw, 34px);
+  font-weight: 400;
+  letter-spacing: -0.3px;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+.step .step-sub {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+  margin-bottom: 32px;
+}
+
+/* Inputs */
+.input-group { margin-bottom: 20px; }
+.input-group:last-child { margin-bottom: 0; }
+.input-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+.input-label .optional { font-weight: 400; color: var(--text-secondary); }
+.input-field {
+  width: 100%;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--card);
+  transition: all 0.2s ease;
+  outline: none;
+}
+.input-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,95,192,0.1);
+}
+.input-field::placeholder { color: #b0aaa4; }
+select.input-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+/* Topic chips */
+.topic-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.topic-group-label:not(:first-child) { margin-top: 16px; }
+.topic-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.topic-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border: 1.5px solid var(--border);
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  background: var(--card);
+}
+.topic-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  transform: scale(1.02);
+}
+.topic-chip.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  color: var(--accent);
+}
+.topic-chip .check {
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  font-size: 9px;
+}
+.topic-chip.selected .check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.topic-chip.selected .check::after { content: '\2713'; }
+
+/* Custom topic chips */
+.topic-chip.topic-chip-custom { border-color: rgba(217,119,6,0.35); color: #92400E; background: #FFFBEB; }
+.topic-chip.topic-chip-custom:hover { border-color: #D97706; background: #FEF3C7; }
+.topic-chip.topic-chip-custom.selected { border-color: #D97706; background: #D97706; color: #fff; }
+.topic-chip.topic-chip-custom.selected .check { background: rgba(255,255,255,0.3); border-color: rgba(255,255,255,0.5); }
+
+.custom-topic-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.custom-topic-row .input-field { flex: 1; }
+.add-btn {
+  padding: 10px 18px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.add-btn:hover { background: var(--accent); color: #fff; }
+.topic-feedback {
+  display: none;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 8px;
+  color: var(--text-secondary);
+}
+.topic-feedback.visible { display: block; }
+.topic-feedback.error { color: #DC2626; }
+.topic-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* Depth cards */
+.depth-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.depth-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--card);
+}
+.depth-card:hover {
+  border-color: var(--accent);
+}
+.depth-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.depth-radio {
+  width: 20px; height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+.depth-card.selected .depth-radio { border-color: var(--accent); }
+.depth-card.selected .depth-radio::after {
+  content: '';
+  width: 10px; height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.depth-label { font-size: 16px; font-weight: 600; }
+.depth-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+.depth-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 3px 10px;
+  border-radius: 100px;
+  flex-shrink: 0;
+}
+
+/* Day circles + schedule */
+.schedule-group { margin-bottom: 24px; }
+.schedule-group:last-child { margin-bottom: 0; }
+.frequency-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.day-presets { display: flex; gap: 6px; }
+.day-preset-btn {
+  padding: 6px 14px;
+  border-radius: 100px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.day-preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+.day-preset-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.day-divider { width: 1px; height: 24px; background: var(--border); }
+.day-circles { display: flex; gap: 6px; }
+.day-circle {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.day-circle:hover { border-color: var(--accent); color: var(--accent); }
+.day-circle.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+/* Size toggle */
+.size-toggle {
+  display: flex;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--card);
+  margin-top: 8px;
+}
+.size-pill {
+  flex: 1;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.size-pill:first-child { border-right: 1px solid var(--border); }
+.size-pill:hover { background: var(--accent-light); color: var(--accent); }
+.size-pill.selected { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* Navigation buttons */
+.step-nav {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.continue-btn {
+  width: 100%;
+  padding: 16px 24px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 100px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  letter-spacing: -0.2px;
+  box-shadow: 0 4px 16px rgba(59,95,192,0.2);
+}
+.continue-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(59,95,192,0.25);
+}
+.continue-btn:active { transform: translateY(0); }
+.continue-btn:disabled {
+  background: #b0aaa4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 8px;
+  text-align: center;
+  transition: color 0.2s ease;
+}
+.back-btn:hover { color: var(--text); }
+
+/* Step error */
+.step-error {
+  display: none;
+  color: #DC2626;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+  text-align: center;
+}
+.step-error.visible { display: block; }
+
+/* Review card */
+.review-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 8px;
+}
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+}
+.review-row:last-child { border-bottom: none; }
+.review-label { color: var(--text-secondary); font-weight: 500; }
+.review-value { color: var(--text); font-weight: 600; text-align: right; max-width: 60%; }
+
+/* Success */
+.success-card {
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 48px 32px;
+}
+.success-icon {
+  width: 72px; height: 72px;
+  background: #ECFDF5;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 24px;
+  font-size: 32px;
+}
+.success-card h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 30px;
+  font-weight: 400;
+  margin-bottom: 12px;
+}
+.success-card p {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 380px;
+  margin: 0 auto;
+}
+.success-links {
+  margin-top: 24px;
+  font-size: 14px;
+}
+.success-links a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.success-links a:hover { text-decoration: underline; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .flow-container { padding: 60px 20px 40px; }
+  .step h2 { font-size: 24px; }
+  .step .step-sub { font-size: 14px; margin-bottom: 24px; }
+  .topic-chip { font-size: 12px; padding: 7px 12px; }
+  .frequency-row { gap: 6px; }
+  .day-circle { width: 32px; height: 32px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+
+<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
+
+<div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+
+<div class="flow-container">
+
+  <!-- Step 0: Details -->
+  <div class="step active" id="step-0">
+    <div class="step-counter">Step 1 of 5</div>
+    <h2>Let's set up your briefing</h2>
+    <p class="step-sub">We'll deliver a personalized digest at your chosen time.</p>
+    <div class="input-group">
+      <label class="input-label">Full name</label>
+      <input type="text" class="input-field" placeholder="e.g. Jane Smith" id="name" autocomplete="name">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Email address</label>
+      <input type="email" class="input-field" placeholder="you@company.com" id="email" autocomplete="email">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Telegram username <span class="optional">(optional)</span></label>
+      <input type="text" class="input-field" placeholder="@yourusername" id="telegram">
+    </div>
+    <div class="step-error" id="error-0"></div>
+    <div class="step-nav">
+      <button class="continue-btn" id="next-0">Continue</button>
+      <a href="/" class="back-btn">&larr; Back to home</a>
+    </div>
+  </div>
+
+  <!-- Step 1: Topics -->
+  <div class="step" id="step-1">
+    <div class="step-counter">Step 2 of 5</div>
+    <h2>What signals matter to you?</h2>
+    <p class="step-sub">Pick at least 2 topics across Industries and Capabilities.</p>
+    <div id="topicGrid"></div>
+    <div class="custom-topic-row">
+      <input type="text" class="input-field" placeholder="Custom topic &mdash; e.g. GLP-1, DOGE" id="customTopic">
+      <button type="button" class="add-btn" id="addCustomBtn">+ Add</button>
+    </div>
+    <div class="topic-feedback" id="topicFeedback"></div>
+    <div class="topic-hint">Ideas: a drug class, a company you track, a policy area, or a client sector.</div>
+    <div class="step-error" id="error-1"></div>
+    <div class="step-nav">
+      <button class="continue-btn" id="next-1">Continue</button>
+      <button class="back-btn" id="back-1">&larr; Back</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Depth -->
+  <div class="step" id="step-2">
+    <div class="step-counter">Step 3 of 5</div>
+    <h2>How much context per story?</h2>
+    <p class="step-sub">Choose the analysis depth for each item in your digest.</p>
+    <div class="depth-options">
+      <div class="depth-card" data-depth="headline_only">
+        <div class="depth-radio"></div>
+        <div>
+          <div class="depth-label">Scan</div>
+          <div class="depth-desc">Headline + source link. 60-second read.</div>
+        </div>
+      </div>
+      <div class="depth-card" data-depth="headline_plus_oneliner">
+        <div class="depth-radio"></div>
+        <div>
+          <div class="depth-label">Brief</div>
+          <div class="depth-desc">Headline + one-line takeaway. 2-minute read.</div>
+        </div>
+      </div>
+      <div class="depth-card selected" data-depth="headline_plus_why">
+        <div class="depth-radio"></div>
+        <div>
+          <div class="depth-label">Deep</div>
+          <div class="depth-desc">Headline + strategic "why it matters." 4-minute read.</div>
+        </div>
+        <span class="depth-badge">Recommended</span>
+      </div>
+    </div>
+    <div class="step-error" id="error-2"></div>
+    <div class="step-nav">
+      <button class="continue-btn" id="next-2">Continue</button>
+      <button class="back-btn" id="back-2">&larr; Back</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Schedule -->
+  <div class="step" id="step-3">
+    <div class="step-counter">Step 4 of 5</div>
+    <h2>When should your briefing arrive?</h2>
+    <p class="step-sub">Set your delivery time, days, and digest size.</p>
+
+    <div class="schedule-group">
+      <label class="input-label">Delivery time</label>
+      <select class="input-field" id="deliveryTime">
+        <option value="05:00">5:00 AM ET</option>
+        <option value="05:30">5:30 AM ET</option>
+        <option value="06:00">6:00 AM ET</option>
+        <option value="06:30">6:30 AM ET</option>
+        <option value="07:00" selected>7:00 AM ET</option>
+        <option value="07:30">7:30 AM ET</option>
+        <option value="08:00">8:00 AM ET</option>
+        <option value="08:30">8:30 AM ET</option>
+        <option value="09:00">9:00 AM ET</option>
+        <option value="09:30">9:30 AM ET</option>
+        <option value="10:00">10:00 AM ET</option>
+        <option value="10:30">10:30 AM ET</option>
+        <option value="11:00">11:00 AM ET</option>
+        <option value="11:30">11:30 AM ET</option>
+        <option value="12:00">12:00 PM ET</option>
+        <option value="12:30">12:30 PM ET</option>
+        <option value="13:00">1:00 PM ET</option>
+        <option value="13:30">1:30 PM ET</option>
+        <option value="14:00">2:00 PM ET</option>
+        <option value="14:30">2:30 PM ET</option>
+        <option value="15:00">3:00 PM ET</option>
+        <option value="15:30">3:30 PM ET</option>
+        <option value="16:00">4:00 PM ET</option>
+        <option value="16:30">4:30 PM ET</option>
+        <option value="17:00">5:00 PM ET</option>
+        <option value="17:30">5:30 PM ET</option>
+        <option value="18:00">6:00 PM ET</option>
+        <option value="18:30">6:30 PM ET</option>
+        <option value="19:00">7:00 PM ET</option>
+        <option value="19:30">7:30 PM ET</option>
+        <option value="20:00">8:00 PM ET</option>
+        <option value="20:30">8:30 PM ET</option>
+        <option value="21:00">9:00 PM ET</option>
+        <option value="21:30">9:30 PM ET</option>
+      </select>
+    </div>
+
+    <div class="schedule-group">
+      <label class="input-label">Delivery days</label>
+      <div class="frequency-row">
+        <div class="day-presets">
+          <button type="button" class="day-preset-btn" id="preset-weekdays">Weekdays</button>
+          <button type="button" class="day-preset-btn" id="preset-everyday">Every day</button>
+        </div>
+        <div class="day-divider"></div>
+        <div class="day-circles" id="dayCircles">
+          <div class="day-circle" data-day="1">M</div>
+          <div class="day-circle" data-day="2">T</div>
+          <div class="day-circle" data-day="3">W</div>
+          <div class="day-circle" data-day="4">T</div>
+          <div class="day-circle" data-day="5">F</div>
+          <div class="day-circle" data-day="6">S</div>
+          <div class="day-circle" data-day="0">S</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="schedule-group">
+      <label class="input-label">Items per digest</label>
+      <div class="size-toggle" id="sizeToggle">
+        <div class="size-pill selected" data-size="5">5 items &mdash; quick scan</div>
+        <div class="size-pill" data-size="10">10 items &mdash; full picture</div>
+      </div>
+    </div>
+
+    <div class="step-error" id="error-3"></div>
+    <div class="step-nav">
+      <button class="continue-btn" id="next-3">Continue</button>
+      <button class="back-btn" id="back-3">&larr; Back</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Review -->
+  <div class="step" id="step-4">
+    <div class="step-counter">Step 5 of 5</div>
+    <h2>Here's your setup</h2>
+    <p class="step-sub">Review your preferences before we start your briefing.</p>
+    <div class="review-card" id="reviewCard"></div>
+    <div class="step-error" id="error-4"></div>
+    <div class="step-nav">
+      <button class="continue-btn" id="next-4">Start my SignalBrief &rarr;</button>
+      <button class="back-btn" id="back-4">&larr; Back</button>
+    </div>
+  </div>
+
+  <!-- Step 5: Success -->
+  <div class="step" id="step-5">
+    <div class="success-card">
+      <div class="success-icon">&#x2713;</div>
+      <h2>You're all set</h2>
+      <p id="successMsg">Your first SignalBrief is on its way.</p>
+      <div class="success-links" id="successLinks">
+        <a href="/settings">Manage preferences &rarr;</a>
+        &nbsp;&middot;&nbsp;
+        <a href="/archive">Browse digests &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="preferences-topic-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="preferences-schedule-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="preferences-state-core-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="preferences-state-model-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="preferences-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="preferences-state-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="preferences-shared.js?v=__ASSET_VERSION__"></script>
+<script src="index-helpers-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="index-form-submit-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="signup-flow.js?v=__ASSET_VERSION__"></script>
+
+</body>
+</html>

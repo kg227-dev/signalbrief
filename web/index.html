@@ -33,598 +33,560 @@
   ]
 }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #FAFAF8; --card: #FFFFFF; --text: #111111; --text-secondary: #6B7280;
-  --text-2: #374151;
-  --accent: #2563EB; --accent-light: #EFF6FF; --accent-hover: #1D4ED8;
-  --border: rgba(0,0,0,0.08); --border-subtle: rgba(0,0,0,0.05);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
-  --radius: 12px; --radius-sm: 8px;
+  --bg: #edeae4;
+  --card: #FFFFFF;
+  --text: #1a1a1a;
+  --text-secondary: #6b6560;
+  --text-body: #4a4540;
+  --accent: #3b5fc0;
+  --accent-hover: #2d4ea0;
+  --accent-light: rgba(59,95,192,0.08);
+  --border: rgba(0,0,0,0.06);
+  --border-subtle: rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.03);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.08);
+  --radius: 14px;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
-.container { max-width:1320px; margin:0 auto; padding:44px 40px 96px; }
-
-/* Hero */
-.hero { text-align:center; padding:60px 0 0; margin:0 auto 64px; max-width:1140px; animation:fadeUp 0.6s ease both; }
-.hero h1 { font-family:'Instrument Serif',Georgia,serif; font-size:clamp(52px,4.8vw,74px); font-weight:400; letter-spacing:-0.6px; margin-bottom:12px; }
-.hero .tagline { font-family:'Instrument Serif',Georgia,serif; font-style:italic; color:var(--text-secondary); font-size:clamp(20px,1.9vw,28px); margin-bottom:22px; }
-.hero .description { color:var(--text-secondary); font-size:19px; line-height:1.6; max-width:780px; margin:0 auto 42px; }
-.hero-cta { display:inline-block; background:var(--accent); color:#fff; font-family:inherit; font-size:18px; font-weight:600; padding:18px 46px; border-radius:100px; border:none; cursor:pointer; transition:all 0.2s ease; box-shadow:0 4px 20px rgba(37,99,235,0.25); letter-spacing:-0.2px; text-decoration:none; }
-.hero-cta:hover { background:var(--accent-hover); transform:translateY(-2px); box-shadow:0 8px 28px rgba(37,99,235,0.3); }
-.hero-cta:active { transform:translateY(0); }
-
-/* Digest preview mockup */
-.digest-preview { margin:48px auto 38px; max-width:900px; background:#fff; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.08); text-align:left; animation:fadeUp 0.6s ease 0.15s both; }
-.dp-header { padding:20px 26px 16px; border-bottom:1px solid var(--border); }
-.dp-brand { font-family:'Instrument Serif',Georgia,serif; font-size:20px; font-weight:400; color:var(--text); }
-.dp-meta { font-size:13px; color:#9CA3AF; margin-top:2px; }
-.dp-scan { background:#F8F9FA; padding:16px 26px; border-bottom:1px solid var(--border); }
-.dp-scan-label { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
-.dp-scan-row { display:flex; align-items:baseline; gap:10px; padding:3px 0; }
-.dp-scan-num { font-size:12px; color:#9CA3AF; font-weight:600; width:14px; flex-shrink:0; }
-.dp-scan-tag { font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent); white-space:nowrap; flex-shrink:0; }
-.dp-scan-hl { font-size:14px; color:#374151; line-height:1.4; }
-.dp-items { padding:0 26px; }
-.dp-item { padding:20px 0; border-bottom:1px solid var(--border-subtle); }
-.dp-item:last-child { border-bottom:none; }
-.dp-item-meta { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
-.dp-item-num { font-size:13px; color:#9CA3AF; font-weight:600; }
-.dp-tag { font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:3px 8px; border-radius:5px; }
-.dp-score { font-size:11px; font-weight:700; padding:3px 8px; border-radius:5px; }
-.dp-title { font-size:clamp(18px,1.6vw,22px); font-weight:700; color:var(--text); line-height:1.35; margin-bottom:6px; }
-.dp-wim { font-size:clamp(13px,1.1vw,16px); color:var(--text-secondary); line-height:1.55; }
-.dp-wim strong { color:var(--text-2); }
-
-/* Header (legacy alias kept for progress bar spacing) */
-.header { text-align:center; margin-bottom:48px; animation:fadeUp 0.6s ease both; }
-.header .sun { font-size:36px; margin-bottom:8px; }
-.header h1 { font-family:'Instrument Serif',Georgia,serif; font-size:42px; font-weight:400; letter-spacing:-0.5px; margin-bottom:8px; }
-.header .tagline { font-family:'Instrument Serif',Georgia,serif; font-style:italic; color:var(--text-secondary); font-size:18px; margin-bottom:16px; }
-.header .description { color:var(--text-secondary); font-size:15px; line-height:1.6; max-width:480px; margin:0 auto; }
-
-/* Progress */
-.progress-bar { display:flex; align-items:flex-start; margin-bottom:40px; animation:fadeUp 0.6s ease 0.1s both; position:relative; }
-.progress-bar::before { content:''; position:absolute; top:14px; left:12.5%; right:12.5%; height:2px; background:var(--border); z-index:0; transition:background 0.3s; }
-.progress-step { flex:1; display:flex; flex-direction:column; align-items:center; position:relative; z-index:1; }
-.step-circle { width:28px; height:28px; border-radius:50%; border:2px solid var(--border); background:var(--bg); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#9CA3AF; transition:all 0.3s ease; }
-.progress-step.filled .step-circle { border-color:var(--accent); background:var(--accent); color:#fff; }
-.step-label { font-size:11px; font-weight:500; color:#9CA3AF; margin-top:6px; white-space:nowrap; transition:color 0.3s ease; }
-.progress-step.filled .step-label { color:var(--accent); font-weight:600; }
-#onboard-form { max-width:920px; margin:0 auto; }
-.back-home-row { margin-bottom:14px; }
-.back-home-btn {
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  border:1.5px solid var(--border);
-  background:var(--card);
-  color:var(--text-secondary);
-  font-family:inherit;
-  font-size:13px;
-  font-weight:600;
-  line-height:1;
-  padding:8px 14px;
-  border-radius:100px;
-  cursor:pointer;
-  transition:all 0.2s ease;
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-.back-home-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
 
 /* Dark mode */
-body.dark { --bg:#0F172A; --card:#1E293B; --text:#F1F5F9; --text-secondary:#94A3B8; --text-2:#CBD5E1; --border:rgba(255,255,255,0.08); --border-subtle:rgba(255,255,255,0.05); --accent:#3B82F6; --accent-light:#1e3a5f; --accent-hover:#2563EB; --shadow-sm:0 1px 2px rgba(0,0,0,0.2); --shadow-md:0 4px 12px rgba(0,0,0,0.25); }
-body.dark .input-field { background:var(--card); color:var(--text); }
-body.dark select.input-field { background-color:var(--card); }
-body.dark .topic-chip, body.dark .depth-option, body.dark .size-pill { background:var(--card); }
-body.dark .size-toggle { background:var(--card); }
-body.dark .day-circle { background:var(--card); }
-body.dark .digest-preview { background:var(--card); }
-body.dark .dp-scan { background:#1a2744; }
-body.dark .dp-scan-hl { color:#F1F5F9; }
-body.dark .dp-item-meta .dp-tag { background:#1e3a5f; }
-body.dark .dp-title { color:var(--text); }
-body.dark .dp-wim { color:var(--text-secondary); }
-body.dark .success-card { background:var(--card); }
-/* Dark toggle button */
-#darkToggle { position:fixed; top:16px; right:16px; z-index:999; width:40px; height:40px; border-radius:50%; border:1.5px solid var(--border); background:var(--card); cursor:pointer; font-size:18px; transition:all 0.2s ease; box-shadow:var(--shadow-sm); line-height:1; display:flex; align-items:center; justify-content:center; }
-#darkToggle:hover { box-shadow:var(--shadow-md); transform:scale(1.08); }
+body.dark {
+  --bg: #1a1815;
+  --card: #2a2622;
+  --text: #f0ede8;
+  --text-secondary: #9a9590;
+  --text-body: #c5c0ba;
+  --accent: #5b7fd0;
+  --accent-hover: #4a6ec0;
+  --accent-light: rgba(91,127,208,0.12);
+  --border: rgba(255,255,255,0.06);
+  --border-subtle: rgba(255,255,255,0.04);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.15), 0 12px 40px rgba(0,0,0,0.2);
+}
+body.dark .dp-scan { background: #232019; }
+body.dark .dp-tag-pe { background: rgba(146,64,14,0.2); color: #d4a574; }
+body.dark .dp-tag-ai { background: rgba(30,64,175,0.2); color: #93b4f4; }
+body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
 
-/* Form sections */
-.form-section { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:32px; margin-bottom:24px; box-shadow:var(--shadow-sm); animation:fadeUp 0.5s ease both; }
-.form-section:nth-child(2) { animation-delay:0.15s; }
-.form-section:nth-child(3) { animation-delay:0.25s; }
-.form-section:nth-child(4) { animation-delay:0.35s; }
+/* Dark toggle */
+#darkToggle {
+  position: fixed; top: 20px; right: 20px; z-index: 999;
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--card);
+  cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+#darkToggle:hover { transform: scale(1.06); box-shadow: var(--shadow-elevated); }
 
-.section-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
-.section-number { width:28px; height:28px; background:var(--accent); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; flex-shrink:0; }
-.section-title { font-size:17px; font-weight:600; letter-spacing:-0.2px; }
-.section-subtitle { color:var(--text-secondary); font-size:14px; margin-bottom:20px; line-height:1.5; }
+/* Layout */
+.page { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
 
-/* Inputs */
-.input-group { margin-bottom:16px; }
-.input-group:last-child { margin-bottom:0; }
-.input-label { display:block; font-size:13px; font-weight:600; color:var(--text); margin-bottom:6px; letter-spacing:0.2px; }
-.input-field { width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:15px; font-family:inherit; color:var(--text); background:var(--bg); transition:all 0.2s ease; outline:none; }
-.input-field:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,0.1); background:#fff; }
-.input-field.input-error { border-color:#DC2626; box-shadow:0 0 0 3px rgba(220,38,38,0.12); background:#fff; }
-.input-field::placeholder { color:#B0B8C4; }
-.input-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-select.input-field { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; background-color:var(--bg); padding-right:40px; cursor:pointer; }
+/* ── Hero ── */
+.hero {
+  text-align: center;
+  padding: 120px 0 80px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.hero h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(54px, 5.5vw, 80px);
+  font-weight: 400;
+  letter-spacing: -1px;
+  line-height: 1.05;
+  margin-bottom: 20px;
+  opacity: 0; animation: fadeUp 0.8s ease 0.1s forwards;
+}
+.hero .tagline {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 400;
+  margin-bottom: 28px;
+  opacity: 0; animation: fadeUp 0.8s ease 0.25s forwards;
+}
+.hero .description {
+  color: var(--text-body);
+  font-size: 17px;
+  line-height: 1.7;
+  max-width: 560px;
+  margin: 0 auto 44px;
+  opacity: 0; animation: fadeUp 0.8s ease 0.4s forwards;
+}
+.hero-cta {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 16px 44px;
+  border-radius: 100px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: -0.2px;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 20px rgba(59,95,192,0.25);
+  opacity: 0; animation: fadeUp 0.8s ease 0.55s forwards;
+}
+.hero-cta:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(59,95,192,0.3);
+}
+.hero-cta:active { transform: translateY(0); }
 
-/* Topic chips */
-.topic-group-label { width:100%; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); padding:4px 0 2px; }
-.topic-group-label:not(:first-child) { margin-top:6px; }
-.topic-grid { display:flex; flex-wrap:wrap; gap:10px; }
-.topic-chip { display:flex; align-items:center; gap:8px; padding:10px 16px; border:1.5px solid var(--border); border-radius:100px; font-size:14px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:all 0.2s ease; user-select:none; background:#fff; }
-.topic-chip:hover { border-color:var(--accent); color:var(--text); background:var(--accent-light); }
-.topic-chip.selected { border-color:var(--accent); background:var(--accent-light); color:var(--accent); }
-.topic-chip .check { width:18px; height:18px; border:1.5px solid var(--border); border-radius:50%; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease; flex-shrink:0; }
-.topic-chip.selected .check { background:var(--accent); border-color:var(--accent); }
-.topic-chip.selected .check::after { content:'✓'; color:#fff; font-size:10px; font-weight:700; }
-.custom-topic-input { display:flex; gap:8px; margin-top:16px; }
-.custom-topic-input .input-field { flex:1; }
-.custom-topic-limit { display:none; margin-top:8px; font-size:12px; line-height:1.5; }
-.custom-topic-limit.visible { display:block; }
-.custom-topic-limit.feedback-info { color:var(--text-secondary); }
-.custom-topic-limit.feedback-error { color:#DC2626; }
-/* Custom (user-added) topic chips — amber signals "yours" */
-.topic-chip.topic-chip-custom { border-color: rgba(217,119,6,0.35); color: #92400E; background: #FFFBEB; }
-.topic-chip.topic-chip-custom:hover { border-color: #D97706; background: #FEF3C7; }
-.topic-chip.topic-chip-custom.selected { border-color: #D97706; background: #D97706; color: #fff; }
-.topic-chip.topic-chip-custom.selected:hover { background: #B45309; border-color: #B45309; }
-.add-btn { padding:10px 20px; background:var(--accent-light); color:var(--accent); border:1.5px solid var(--accent); border-radius:var(--radius-sm); font-size:14px; font-weight:600; cursor:pointer; transition:all 0.2s ease; font-family:inherit; white-space:nowrap; }
-.add-btn:hover { background:var(--accent); color:#fff; }
-.add-btn:disabled { background:#F3F4F6; border-color:#D1D5DB; color:#9CA3AF; cursor:not-allowed; }
-.add-btn:disabled:hover { background:#F3F4F6; color:#9CA3AF; }
-
-/* Depth */
-.depth-options { display:flex; flex-direction:column; gap:10px; }
-.depth-option { display:flex; align-items:center; gap:14px; padding:16px 18px; border:1.5px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; transition:all 0.2s ease; background:#fff; }
-.depth-option:hover { border-color:var(--accent); background:var(--accent-light); }
-.depth-option.selected { border-color:var(--accent); background:var(--accent-light); }
-.depth-radio { width:20px; height:20px; border:2px solid var(--border); border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s ease; }
-.depth-option.selected .depth-radio { border-color:var(--accent); }
-.depth-option.selected .depth-radio::after { content:''; width:10px; height:10px; background:var(--accent); border-radius:50%; display:block; }
-.depth-label { font-size:15px; font-weight:600; }
-.depth-desc { font-size:13px; color:var(--text-secondary); margin-top:1px; }
-.depth-badge { margin-left:auto; font-size:11px; font-weight:600; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:100px; flex-shrink:0; }
-
-/* Day circle frequency picker */
-.frequency-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.day-presets { display:flex; gap:6px; }
-.day-preset-btn { padding:5px 12px; border-radius:100px; border:1.5px solid var(--border); background:#fff; color:var(--text-secondary); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.2s ease; white-space:nowrap; }
-.day-preset-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
-.day-preset-btn.active { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
-.day-divider { width:1px; height:24px; background:var(--border); }
-.day-circles { display:flex; gap:6px; }
-.day-circle { width:34px; height:34px; border-radius:50%; border:1.5px solid var(--border); background:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:var(--text-secondary); cursor:pointer; transition:all 0.2s ease; user-select:none; }
-.day-circle:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
-.day-circle.active { border-color:var(--accent); background:var(--accent); color:#fff; }
-
-/* Size toggle (2-pill) */
-.size-toggle { display:flex; gap:0; border:1.5px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; background:#fff; }
-.size-pill { flex:1; padding:11px 16px; text-align:center; font-size:14px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:all 0.2s ease; user-select:none; }
-.size-pill:first-child { border-right:1px solid var(--border); }
-.size-pill:hover { background:var(--accent-light); color:var(--accent); }
-.size-pill.selected { background:var(--accent); color:#fff; font-weight:600; }
-.size-pill.selected:hover { background:var(--accent-hover); }
-
-/* Submit */
-.submit-section { animation:fadeUp 0.5s ease 0.45s both; }
-.submit-btn { width:100%; padding:16px 24px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius-sm); font-size:16px; font-weight:600; font-family:inherit; cursor:pointer; transition:all 0.2s ease; box-shadow:var(--shadow-md); letter-spacing:-0.2px; }
-.submit-btn:hover { background:var(--accent-hover); transform:translateY(-1px); box-shadow:0 12px 40px rgba(0,0,0,0.08); }
-.submit-btn:active { transform:translateY(0); }
-.submit-btn:disabled { background:#9CA3AF; cursor:not-allowed; transform:none; }
-.submit-note { text-align:center; color:var(--text-secondary); font-size:13px; margin-top:12px; line-height:1.5; }
-.submit-error { display:none; margin-top:10px; text-align:center; font-size:13px; color:#DC2626; font-weight:500; }
-.submit-error.visible { display:block; }
-
-/* Success */
-.success-card { display:none; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:48px 32px; text-align:center; box-shadow:var(--shadow-md); animation:fadeUp 0.5s ease both; }
-.success-card.visible { display:block; }
-.success-icon { width:64px; height:64px; background:#ECFDF5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px; }
-.success-card h2 { font-family:'Instrument Serif',Georgia,serif; font-size:28px; font-weight:400; margin-bottom:12px; }
-.success-card p { color:var(--text-secondary); font-size:15px; line-height:1.6; max-width:400px; margin:0 auto; }
-
-/* SEO content */
-.seo-content {
-  max-width: 920px;
-  margin: 28px auto 0;
+/* ── Digest Card ── */
+.digest-section {
+  padding: 0 0 100px;
+  display: flex;
+  justify-content: center;
+}
+.digest-card {
+  width: 100%;
+  max-width: 880px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  padding: 24px;
-  animation: fadeUp 0.5s ease 0.45s both;
+  overflow: hidden;
+  box-shadow: var(--shadow-elevated);
+  position: relative;
+  /* fade-up on scroll */
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
 }
-.seo-content h2 {
-  font-family:'Instrument Serif',Georgia,serif;
-  font-size: 30px;
+.digest-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Bottom fade overlay */
+.digest-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 120px;
+  background: linear-gradient(to bottom, transparent, var(--card));
+  pointer-events: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.dp-header {
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.dp-brand {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px;
   font-weight: 400;
-  letter-spacing: -0.3px;
-  margin-bottom: 10px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.seo-content p {
+.dp-meta {
+  font-size: 13px;
   color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.65;
+  margin-top: 4px;
+  letter-spacing: 0.01em;
+}
+
+.dp-scan {
+  background: rgba(0,0,0,0.015);
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+}
+.dp-scan-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
   margin-bottom: 10px;
 }
-.seo-content p:last-child { margin-bottom: 0; }
+.dp-scan-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+}
+.dp-scan-num {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  width: 14px;
+  flex-shrink: 0;
+}
+.dp-scan-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.dp-scan-tag-pe { color: #92400E; background: #FFFBEB; }
+.dp-scan-tag-ai { color: #1e40af; background: #dbeafe; }
+.dp-scan-tag-policy { color: #5b21b6; background: #ede9fe; }
+.dp-scan-hl {
+  font-size: 14px;
+  color: var(--text-body);
+  line-height: 1.4;
+}
 
-/* Footer */
-.footer { max-width:920px; text-align:center; margin:48px auto 0; padding-top:24px; border-top:1px solid var(--border); color:var(--text-secondary); font-size:13px; animation:fadeUp 0.5s ease 0.5s both; }
-.footer a { color:var(--accent); text-decoration:none; }
+.dp-items { padding: 0 32px; }
+.dp-item {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dp-item:last-child { border-bottom: none; }
+.dp-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.dp-item-num {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.dp-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 5px;
+}
+.dp-tag-pe { color: #92400E; background: #FFFBEB; }
+.dp-tag-ai { color: #1e40af; background: #dbeafe; }
+.dp-tag-policy { color: #5b21b6; background: #ede9fe; }
+.dp-score {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+.dp-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(18px, 1.6vw, 22px);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 8px;
+  letter-spacing: -0.2px;
+}
+.dp-lede {
+  font-size: 15px;
+  color: var(--text-body);
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+.dp-lede strong { color: var(--text); }
+.dp-wim {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
 
-/* Animation */
-@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+/* ── Email Capture ── */
+.signup-section {
+  padding: 0 0 120px;
+  text-align: center;
+  /* fade-up on scroll */
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.signup-section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.signup-section h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
+  letter-spacing: -0.5px;
+  margin-bottom: 12px;
+}
+.signup-section .signup-sub {
+  color: var(--text-secondary);
+  font-size: 15px;
+  margin-bottom: 32px;
+}
+.signup-form {
+  display: flex;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.signup-form input {
+  flex: 1;
+  padding: 14px 20px;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--card);
+  outline: none;
+  transition: all 0.2s ease;
+}
+.signup-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,95,192,0.1);
+}
+.signup-form input::placeholder { color: #b0aaa4; }
+.signup-form button {
+  padding: 14px 32px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 100px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(59,95,192,0.2);
+}
+.signup-form button:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(59,95,192,0.25);
+}
+.signup-form button:active { transform: translateY(0); }
+.signup-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 16px;
+  letter-spacing: 0.01em;
+}
+.signup-error {
+  display: none;
+  color: #DC2626;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 10px;
+}
+.signup-error.visible { display: block; }
 
-/* Mobile */
-@media (max-width:600px) {
-  .container { padding:24px 16px 60px; }
-  .hero { padding:40px 0 0; }
-  .hero h1 { font-size:38px; }
-  .hero .tagline { font-size:17px; }
-  .hero .description { font-size:14px; }
-  .hero-cta { font-size:16px; padding:16px 34px; }
-  .digest-preview { margin:28px auto 24px; }
-  .dp-header { padding:14px 16px 12px; }
-  .dp-brand { font-size:16px; }
-  .dp-meta { font-size:11px; }
-  .dp-scan { padding:12px 16px; }
-  .dp-scan-hl { font-size:12px; }
-  .dp-items { padding:0 16px; }
-  .dp-item { padding:14px 0; }
-  .dp-title { font-size:14px; }
-  .dp-wim { font-size:11px; }
-  .form-section { padding:24px 20px; }
-  .input-row { grid-template-columns:1fr; }
-  .topic-chip { font-size:13px; padding:8px 14px; }
-  .frequency-row { gap:8px; }
-  .day-circle { width:30px; height:30px; font-size:11px; }
-  .seo-content { padding:20px; }
-  .seo-content h2 { font-size:26px; }
+/* ── Footer ── */
+.footer {
+  text-align: center;
+  padding: 32px 40px 48px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+.footer a { color: var(--text-secondary); text-decoration: none; opacity: 0.4; font-size: 11px; }
+.footer a:hover { opacity: 0.7; }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .page { padding: 0 20px; }
+  .hero { padding: 80px 0 56px; }
+  .hero h1 { font-size: 40px; letter-spacing: -0.5px; }
+  .hero .tagline { font-size: 17px; }
+  .hero .description { font-size: 15px; margin-bottom: 32px; }
+  .hero-cta { font-size: 15px; padding: 14px 36px; }
+  .digest-section { padding: 0 0 64px; }
+  .dp-header { padding: 18px 20px 14px; }
+  .dp-brand { font-size: 17px; }
+  .dp-meta { font-size: 12px; }
+  .dp-scan { padding: 14px 20px; }
+  .dp-scan-hl { font-size: 12px; }
+  .dp-items { padding: 0 20px; }
+  .dp-item { padding: 18px 0; }
+  .dp-title { font-size: 16px; }
+  .dp-lede { font-size: 13px; }
+  .dp-wim { font-size: 12px; }
+  .signup-section { padding: 0 0 80px; }
+  .signup-form { flex-direction: column; }
+  .signup-form button { padding: 14px 24px; }
+  .footer { padding: 24px 20px 36px; }
 }
 </style>
 </head>
 <body>
 
-<button id="darkToggle" type="button" onclick="toggleDark()" title="Toggle dark mode">🌙</button>
+<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
 
-<div class="container">
+<div class="page">
 
-  <!-- HERO -->
-  <div class="hero">
+  <!-- ── Hero ── -->
+  <section class="hero">
     <h1>SignalBrief</h1>
     <p class="tagline">Your daily signal across AI, strategy, and business</p>
-    <p class="description">AI-curated news digests for strategy professionals. 5 minutes every morning across every vertical that matters.</p>
+    <p class="description">AI-curated briefings for strategy professionals. Five minutes every morning across the verticals that matter.</p>
+    <a href="#signup" class="hero-cta">Get started &mdash; it's free</a>
+  </section>
 
-    <!-- Sample digest preview -->
-    <div class="digest-preview">
+  <!-- ── Digest Preview Card ── -->
+  <section class="digest-section">
+    <div class="digest-card" id="digestCard">
       <div class="dp-header">
-        <div class="dp-brand">☀️ SignalBrief</div>
-        <div class="dp-meta">Saturday, March 1, 2026 &nbsp;·&nbsp; 7 signals · 4 min read</div>
+        <div class="dp-brand">&#x2600;&#xFE0F; SignalBrief</div>
+        <div class="dp-meta">Saturday, March 1, 2026 &nbsp;&middot;&nbsp; 7 signals &middot; 4 min read</div>
       </div>
+
       <div class="dp-scan">
         <div class="dp-scan-label">Today's Signals</div>
-        <div class="dp-scan-row"><span class="dp-scan-num">1</span><span class="dp-scan-tag">PE×M&amp;A</span><span class="dp-scan-hl">KKR Acquires Cotiviti in $11B Healthcare IT Buyout</span></div>
-        <div class="dp-scan-row"><span class="dp-scan-num">2</span><span class="dp-scan-tag">AI×TECH</span><span class="dp-scan-hl">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</span></div>
-        <div class="dp-scan-row"><span class="dp-scan-num">3</span><span class="dp-scan-tag">POLICY×REGULATORY</span><span class="dp-scan-hl">FTC Signals Scrutiny on AI-Adjacent M&amp;A</span></div>
+        <div class="dp-scan-row">
+          <span class="dp-scan-num">1</span>
+          <span class="dp-scan-tag dp-scan-tag-pe">PE&times;M&amp;A</span>
+          <span class="dp-scan-hl">KKR Acquires Cotiviti in $11B Healthcare IT Buyout</span>
+        </div>
+        <div class="dp-scan-row">
+          <span class="dp-scan-num">2</span>
+          <span class="dp-scan-tag dp-scan-tag-ai">AI&times;TECH</span>
+          <span class="dp-scan-hl">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</span>
+        </div>
+        <div class="dp-scan-row">
+          <span class="dp-scan-num">3</span>
+          <span class="dp-scan-tag dp-scan-tag-policy">POLICY&times;REGULATORY</span>
+          <span class="dp-scan-hl">FTC Signals Scrutiny on AI-Adjacent M&amp;A</span>
+        </div>
       </div>
+
       <div class="dp-items">
         <div class="dp-item">
           <div class="dp-item-meta">
             <span class="dp-item-num">1</span>
-            <span class="dp-tag">PE×M&amp;A</span>
+            <span class="dp-tag dp-tag-pe">PE&times;M&amp;A</span>
             <span class="dp-score" style="color:#fff;background:#16A34A;">9.1</span>
           </div>
           <div class="dp-title">KKR Acquires Cotiviti in $11B Healthcare IT Leveraged Buyout</div>
-          <div class="dp-wim"><strong>The largest healthcare IT LBO of 2026 resets comparable multiples across the sector.</strong> Any PE-backed health tech asset in late-stage diligence needs to recalibrate its comps deck now. Cotiviti's payer analytics focus signals continued sponsor appetite for recurring-revenue, mission-critical SaaS in healthcare.</div>
+          <div class="dp-lede"><strong>The largest healthcare IT LBO of 2026 resets comparable multiples across the sector.</strong> Any PE-backed health tech asset in late-stage diligence needs to recalibrate its comps deck now.</div>
+          <div class="dp-wim">Cotiviti's payer analytics focus signals continued sponsor appetite for recurring-revenue, mission-critical SaaS in healthcare.</div>
         </div>
+
         <div class="dp-item">
           <div class="dp-item-meta">
             <span class="dp-item-num">2</span>
-            <span class="dp-tag">AI×TECH</span>
+            <span class="dp-tag dp-tag-ai">AI&times;TECH</span>
             <span class="dp-score" style="color:#fff;background:#22C55E;">8.4</span>
           </div>
           <div class="dp-title">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</div>
-          <div class="dp-wim"><strong>Compliance buyers now have a credible AI alternative to building in-house.</strong> Enterprise procurement cycles just compressed — incumbents in GRC and legal workflow software face accelerating displacement pressure.</div>
+          <div class="dp-lede"><strong>Compliance buyers now have a credible AI alternative to building in-house.</strong> Enterprise procurement cycles just compressed.</div>
+          <div class="dp-wim">Incumbents in GRC and legal workflow software face accelerating displacement pressure.</div>
         </div>
+
         <div class="dp-item">
           <div class="dp-item-meta">
             <span class="dp-item-num">3</span>
-            <span class="dp-tag">POLICY×REGULATORY</span>
+            <span class="dp-tag dp-tag-policy">POLICY&times;REGULATORY</span>
             <span class="dp-score" style="color:#111827;background:#EAB308;">6.8</span>
           </div>
           <div class="dp-title">FTC Signals Closer Scrutiny on AI-Adjacent M&amp;A</div>
-          <div class="dp-wim"><strong>Any deal with an AI component now requires a regulatory narrative built into the thesis from day one.</strong> Deal teams underwriting AI-adjacent targets should stress-test their HSR timelines — expect 6–9 month delays becoming standard.</div>
+          <div class="dp-lede"><strong>Any deal with an AI component now requires a regulatory narrative built into the thesis from day one.</strong></div>
+          <div class="dp-wim">Deal teams underwriting AI-adjacent targets should stress-test their HSR timelines &mdash; expect 6&ndash;9 month delays becoming standard.</div>
         </div>
       </div>
     </div>
-
-    <button class="hero-cta" onclick="showOnboarding()">Get started — it's free &nbsp;→</button>
-  </div>
-
-  <!-- PROGRESS + FORM (hidden until CTA clicked) -->
-  <div id="onboard-form" style="display:none;scroll-margin-top:32px;">
-  <div class="back-home-row">
-    <button type="button" class="back-home-btn" onclick="showLanding()">← Back to home</button>
-  </div>
-  <div class="progress-bar">
-    <div class="progress-step" id="prog-1"><div class="step-circle">1</div><div class="step-label">Details</div></div>
-    <div class="progress-step" id="prog-2"><div class="step-circle">2</div><div class="step-label">Topics</div></div>
-    <div class="progress-step" id="prog-3"><div class="step-circle">3</div><div class="step-label">Depth</div></div>
-    <div class="progress-step" id="prog-4"><div class="step-circle">4</div><div class="step-label">Schedule</div></div>
-  </div>
-
-  <form id="onboardForm">
-
-    <!-- SECTION 1: BASICS -->
-    <div class="form-section" id="section-1">
-      <div class="section-header">
-        <div class="section-number">1</div>
-        <div class="section-title">Your details</div>
-      </div>
-      <p class="section-subtitle">We'll deliver your digest at your chosen time.</p>
-
-      <div class="input-group">
-        <label class="input-label">Full name</label>
-        <input type="text" class="input-field" placeholder="e.g. John Doe" id="name" required>
-      </div>
-
-      <div class="input-group">
-        <label class="input-label">Email address</label>
-        <input type="email" class="input-field" placeholder="you@company.com" id="email" required>
-      </div>
-
-      <div class="input-group">
-        <label class="input-label">Telegram username <span style="font-weight:400;color:var(--text-secondary)">(optional — for mobile digest)</span></label>
-        <input type="text" class="input-field" placeholder="@yourusername" id="telegram">
-      </div>
-    </div>
-
-    <!-- SECTION 2: TOPICS -->
-    <div class="form-section" id="section-2">
-      <div class="section-header">
-        <div class="section-number">2</div>
-        <div class="section-title">What signals matter to you?</div>
-      </div>
-      <p class="section-subtitle">Select from Industries and Capabilities below. Pick at least 2 total.</p>
-
-      <div class="topic-grid" id="topicGrid"></div>
-
-      <div class="custom-topic-input">
-        <input type="text" class="input-field" placeholder="Custom topic — e.g. GLP-1, DOGE, your client name" id="customTopic">
-        <button type="button" class="add-btn" id="addCustomTopicBtn" onclick="addCustomTopic()">+ Add</button>
-      </div>
-      <div class="custom-topic-limit" id="customTopicLimitMessage" aria-live="polite" aria-atomic="true"></div>
-      <div style="font-size:12px;color:#9CA3AF;margin-top:8px;line-height:1.6;">
-        Ideas: a specific drug class (GLP-1), a company you track (Nvidia, JPMorgan), a policy area (DOGE, IRA), a client or sector you're working in
-      </div>
-    </div>
-
-    <!-- SECTION 3: DEPTH -->
-    <div class="form-section" id="section-3">
-      <div class="section-header">
-        <div class="section-number">3</div>
-        <div class="section-title">Analysis depth</div>
-      </div>
-      <p class="section-subtitle">How much context do you want per story?</p>
-
-      <div class="depth-options">
-        <div class="depth-option" data-depth="headline_only" onclick="setSelectedDepth(this)">
-          <div class="depth-radio"></div>
-          <div>
-            <div class="depth-label">Scan</div>
-            <div class="depth-desc">Headline + source link. 60-second read.</div>
-          </div>
-        </div>
-        <div class="depth-option" data-depth="headline_plus_oneliner" onclick="setSelectedDepth(this)">
-          <div class="depth-radio"></div>
-          <div>
-            <div class="depth-label">Brief</div>
-            <div class="depth-desc">Headline + one-line takeaway. 2-minute read.</div>
-          </div>
-        </div>
-        <div class="depth-option" data-depth="headline_plus_why" onclick="setSelectedDepth(this)">
-          <div class="depth-radio"></div>
-          <div>
-            <div class="depth-label">Deep</div>
-            <div class="depth-desc">Headline + strategic "why it matters." 4-minute read.</div>
-          </div>
-          <span class="depth-badge">Recommended</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- SECTION 4: SCHEDULE -->
-    <div class="form-section" id="section-4">
-      <div class="section-header">
-        <div class="section-number">4</div>
-        <div class="section-title">Delivery schedule</div>
-      </div>
-      <p class="section-subtitle">When and how often you want your briefing.</p>
-
-      <!-- Delivery time -->
-      <div class="input-group">
-        <label class="input-label">Delivery time</label>
-        <select class="input-field" id="deliveryTime">
-          <option value="05:00">5:00 AM ET</option>
-          <option value="05:30">5:30 AM ET</option>
-          <option value="06:00">6:00 AM ET</option>
-          <option value="06:30">6:30 AM ET</option>
-          <option value="07:00" selected>7:00 AM ET</option>
-          <option value="07:30">7:30 AM ET</option>
-          <option value="08:00">8:00 AM ET</option>
-          <option value="08:30">8:30 AM ET</option>
-          <option value="09:00">9:00 AM ET</option>
-          <option value="09:30">9:30 AM ET</option>
-          <option value="10:00">10:00 AM ET</option>
-          <option value="10:30">10:30 AM ET</option>
-          <option value="11:00">11:00 AM ET</option>
-          <option value="11:30">11:30 AM ET</option>
-          <option value="12:00">12:00 PM ET</option>
-          <option value="12:30">12:30 PM ET</option>
-          <option value="13:00">1:00 PM ET</option>
-          <option value="13:30">1:30 PM ET</option>
-          <option value="14:00">2:00 PM ET</option>
-          <option value="14:30">2:30 PM ET</option>
-          <option value="15:00">3:00 PM ET</option>
-          <option value="15:30">3:30 PM ET</option>
-          <option value="16:00">4:00 PM ET</option>
-          <option value="16:30">4:30 PM ET</option>
-          <option value="17:00">5:00 PM ET</option>
-          <option value="17:30">5:30 PM ET</option>
-          <option value="18:00">6:00 PM ET</option>
-          <option value="18:30">6:30 PM ET</option>
-          <option value="19:00">7:00 PM ET</option>
-          <option value="19:30">7:30 PM ET</option>
-          <option value="20:00">8:00 PM ET</option>
-          <option value="20:30">8:30 PM ET</option>
-          <option value="21:00">9:00 PM ET</option>
-          <option value="21:30">9:30 PM ET</option>
-        </select>
-      </div>
-
-      <!-- Frequency: day circles -->
-      <div class="input-group" style="margin-top:16px;">
-        <label class="input-label">Delivery days</label>
-        <div class="frequency-row" style="margin-top:8px;">
-          <div class="day-presets">
-            <button type="button" class="day-preset-btn" id="preset-weekdays" onclick="setDays('weekdays')">Weekdays</button>
-            <button type="button" class="day-preset-btn" id="preset-everyday" onclick="setDays('everyday')">Every day</button>
-          </div>
-          <div class="day-divider"></div>
-          <div class="day-circles" id="dayCircles">
-            <div class="day-circle" data-day="1" onclick="toggleDay(this)">M</div>
-            <div class="day-circle" data-day="2" onclick="toggleDay(this)">T</div>
-            <div class="day-circle" data-day="3" onclick="toggleDay(this)">W</div>
-            <div class="day-circle" data-day="4" onclick="toggleDay(this)">T</div>
-            <div class="day-circle" data-day="5" onclick="toggleDay(this)">F</div>
-            <div class="day-circle" data-day="6" onclick="toggleDay(this)">S</div>
-            <div class="day-circle" data-day="0" onclick="toggleDay(this)">S</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Items per digest: 2-pill toggle -->
-      <div class="input-group" style="margin-top:16px;">
-        <label class="input-label">Items per digest</label>
-        <div class="size-toggle" style="margin-top:6px;" id="sizeToggle">
-          <div class="size-pill selected" data-size="5" onclick="selectItemsPerDigest(this)">5 items — quick scan</div>
-          <div class="size-pill" data-size="10" onclick="selectItemsPerDigest(this)">10 items — full picture</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- SUBMIT -->
-    <div class="submit-section">
-      <button type="submit" class="submit-btn">Start my SignalBrief →</button>
-      <p class="submit-note">Free to use. Your digest arrives at your chosen time.<br>Update your preferences anytime from your settings page.</p>
-      <div class="submit-error" id="submitError"></div>
-    </div>
-
-  </form>
-
-  <!-- SUCCESS STATE -->
-  <div class="success-card" id="successCard">
-    <div class="success-icon">✓</div>
-    <h2>You're all set</h2>
-    <p id="successDeliveryMsg">Your first SignalBrief is on its way. Here's a preview of what to expect:</p>
-
-    <div style="display:flex;gap:8px;margin:20px 0 12px;justify-content:center;">
-      <button onclick="switchPreview('telegram',this)" class="prev-tab prev-active" style="padding:6px 16px;border-radius:100px;border:1.5px solid #2563EB;background:#EFF6FF;color:#2563EB;font-size:13px;font-weight:600;cursor:pointer;">📱 Telegram</button>
-      <button onclick="switchPreview('email',this)" class="prev-tab" style="padding:6px 16px;border-radius:100px;border:1.5px solid #E5E7EB;background:#fff;color:#6B7280;font-size:13px;font-weight:500;cursor:pointer;">📧 Email</button>
-    </div>
-
-    <div id="prev-telegram" class="preview-box" style="background:#1a1a1a;color:#e5e5e5;border-radius:12px;padding:20px;text-align:left;line-height:1.7;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-      <div style="margin-bottom:10px;">
-        <span style="font-weight:700;color:#fff;">☀️ SignalBrief — Mon, Mar 3</span>
-        <span style="color:#9CA3AF;font-style:italic;font-size:13px;"> Your daily signal across AI, strategy, and business</span>
-      </div>
-      <div style="margin-bottom:10px;">
-        <span style="color:#60A5FA;font-weight:600;">1⃣</span> <span style="color:#93C5FD;font-weight:600;">[AI×TECH]</span> OpenAI strikes enterprise deal with Goldman Sachs<br>
-        <span style="color:#D1D5DB;font-size:13px;">Model deployment inside regulated workflows. Compliance teams are next buyers.</span><br>
-        <span style="color:#6B7280;font-size:12px;">→ ft.com</span>
-      </div>
-      <div style="margin-bottom:10px;">
-        <span style="color:#60A5FA;font-weight:600;">2⃣</span> <span style="color:#93C5FD;font-weight:600;">[PE×M&A]</span> KKR acquires majority stake in Cotiviti<br>
-        <span style="color:#D1D5DB;font-size:13px;">Health data analytics becoming a PE consolidation play.</span><br>
-        <span style="color:#6B7280;font-size:12px;">→ wsj.com</span>
-      </div>
-      <div style="margin-bottom:10px;">
-        <span style="color:#60A5FA;font-weight:600;">3⃣</span> <span style="color:#93C5FD;font-weight:600;">[POLICY×REGULATORY]</span> FTC signals renewed scrutiny of serial acquisitions<br>
-        <span style="color:#D1D5DB;font-size:13px;">Deal structuring is changing. Counsel will price this in immediately.</span><br>
-        <span style="color:#6B7280;font-size:12px;">→ axios.com</span>
-      </div>
-      <div style="border-top:1px solid #374151;padding-top:10px;margin-top:4px;color:#6B7280;font-size:12px;">
-        📧 Deeper takes in your email &nbsp;·&nbsp; 💾 save [#] &nbsp;·&nbsp; 📊 more/less [topic] &nbsp;·&nbsp; ⚙️ settings
-      </div>
-    </div>
-
-    <div id="prev-email" class="preview-box" style="display:none;text-align:left;padding:0;overflow:hidden;border-radius:12px;border:1px solid #E5E7EB;">
-      <div style="background:#fff;padding:14px 18px;border-bottom:1px solid #E5E7EB;">
-        <div style="font-family:'Instrument Serif',serif;font-size:17px;">☀️ SignalBrief</div>
-        <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">Monday, March 3, 2026 · 7 signals · 4 min read</div>
-      </div>
-      <div style="background:#FAFAFA;padding:14px 18px;">
-        <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E5E7EB;border-left:3px solid #2563EB;padding-left:12px;">
-          <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#2563EB;background:#EFF6FF;padding:2px 7px;border-radius:4px;">AI×TECH</span>
-          <div style="font-size:14px;font-weight:600;margin:6px 0 4px;">OpenAI Strikes Enterprise Deal with Goldman Sachs</div>
-          <div style="font-size:12px;color:#6B7280;line-height:1.5;"><strong>Model deployment inside regulated workflows changes the procurement conversation.</strong> Compliance and risk teams become the buyer, not just IT.</div>
-        </div>
-        <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #E5E7EB;">
-          <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#2563EB;background:#EFF6FF;padding:2px 7px;border-radius:4px;">PE×M&A</span>
-          <div style="font-size:14px;font-weight:600;margin:6px 0 4px;">KKR Acquires Majority Stake in Cotiviti</div>
-          <div style="font-size:12px;color:#6B7280;line-height:1.5;"><strong>Health data analytics is becoming a PE consolidation play.</strong> Expect follow-on bolt-ons targeting claims intelligence and risk adjustment.</div>
-        </div>
-        <div>
-          <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#2563EB;background:#EFF6FF;padding:2px 7px;border-radius:4px;">POLICY×REGULATORY</span>
-          <div style="font-size:14px;font-weight:600;margin:6px 0 4px;">FTC Signals Renewed Scrutiny of Serial Acquisitions</div>
-          <div style="font-size:12px;color:#6B7280;line-height:1.5;"><strong>Deal structuring is changing now, not after a filing.</strong> Counsel will price this in on anything platform-adjacent.</div>
-        </div>
-      </div>
-    </div>
-
-    <p style="margin-top:20px;font-size:13px;color:#6B7280;">
-      <a id="settingsLink" href="/settings" style="color:#2563EB;">Manage preferences →</a>
-      &nbsp;·&nbsp;
-      <a id="archiveLink" href="/archive" style="color:#2563EB;">Browse digests →</a>
-    </p>
-  </div>
-
-  </div><!-- /onboard-form -->
-
-  <section class="seo-content" aria-labelledby="why-signalbrief">
-    <h2 id="why-signalbrief">AI Briefings For Strategy Teams</h2>
-    <p>SignalBrief helps consultants, operators, and investors stay ahead with a daily strategy-grade digest across AI, healthcare, private equity, finance, policy, and technology.</p>
-    <p>Each briefing combines fresh reporting with concise analysis so you can quickly understand what changed, why it matters, and what to watch next.</p>
-    <p>Choose your focus areas, preferred delivery time, and depth level, then receive a personalized morning briefing by email and Telegram.</p>
   </section>
 
-  <!-- FOOTER -->
-  <div class="footer" id="formFooter">
-    SignalBrief · Daily intelligence for strategy professionals
-    <span style="margin-left:12px;opacity:0.3;"><a href="/admin/login" style="color:inherit;text-decoration:none;font-size:11px;">Admin</a></span>
-  </div>
+  <!-- ── Email Capture ── -->
+  <section class="signup-section" id="signup">
+    <h2>Get your daily signal</h2>
+    <p class="signup-sub">Free. Personalized. Cancel anytime.</p>
+    <form class="signup-form" id="signupForm">
+      <input type="email" placeholder="you@company.com" id="signupEmail" required>
+      <button type="submit">Subscribe</button>
+    </form>
+    <div class="signup-error" id="signupError"></div>
+    <p class="signup-note">Join strategy professionals who start their morning with SignalBrief.</p>
+  </section>
 
 </div>
 
-<script src="preferences-topic-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="preferences-schedule-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="preferences-state-core-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="preferences-state-model-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="preferences-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="preferences-state-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="preferences-shared.js?v=__ASSET_VERSION__"></script>
-<script src="index-helpers-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="index-form-submit-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="index-form-context-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="index-form-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="index.js?v=__ASSET_VERSION__"></script>
+<!-- ── Footer ── -->
+<footer class="footer">
+  SignalBrief &middot; Daily intelligence for strategy professionals
+  <span style="margin-left:12px;"><a href="/admin/login">Admin</a></span>
+</footer>
+
+<script>
+/* Dark mode */
+(function() {
+  var toggle = document.getElementById('darkToggle');
+  function apply(isDark) {
+    document.body.classList.toggle('dark', isDark);
+    if (toggle) toggle.textContent = isDark ? '\u2600\uFE0F' : '\uD83C\uDF19';
+  }
+  try { if (localStorage.getItem('sbDark') === '1') apply(true); } catch(e) {}
+  if (toggle) toggle.addEventListener('click', function() {
+    var isDark = !document.body.classList.contains('dark');
+    apply(isDark);
+    try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
+  });
+})();
+
+/* Scroll reveal */
+(function() {
+  var targets = document.querySelectorAll('.digest-card, .signup-section');
+  if (!('IntersectionObserver' in window)) {
+    targets.forEach(function(el) { el.classList.add('visible'); });
+    return;
+  }
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  targets.forEach(function(el) { observer.observe(el); });
+})();
+
+/* Email capture */
+(function() {
+  var form = document.getElementById('signupForm');
+  var input = document.getElementById('signupEmail');
+  var errorEl = document.getElementById('signupError');
+  var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!form) return;
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.remove('visible'); }
+    var email = (input.value || '').trim();
+    if (!email || !emailRe.test(email)) {
+      if (errorEl) { errorEl.textContent = 'Please enter a valid email address.'; errorEl.classList.add('visible'); }
+      input.focus();
+      return;
+    }
+    window.location.href = '/signup?email=' + encodeURIComponent(email);
+  });
+})();
+</script>
 
 </body>
 </html>

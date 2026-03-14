@@ -29,7 +29,11 @@ function buildSummaryPayload({
   activeTelegramUsersCount,
   quality,
   feedbackTrend,
+  trailing7dCost,
+  projected7dCost,
 }) {
+  const trailing = trailing7dCost && typeof trailing7dCost === "object" ? trailing7dCost : {};
+  const projected = projected7dCost && typeof projected7dCost === "object" ? projected7dCost : {};
   return {
     all_time_cost: parseFloat(sumRuns(runs, "total_cost_usd").toFixed(4)),
     all_time_runs: runs.length,
@@ -47,6 +51,17 @@ function buildSummaryPayload({
     month_label: monthLabel,
     quality,
     feedback: feedbackTrend,
+    trailing_7d_cost: parseFloat(Number(trailing.total_cost || 0).toFixed(4)),
+    trailing_7d_scheduled_cost: parseFloat(Number(trailing.scheduled_cost || 0).toFixed(4)),
+    trailing_7d_on_demand_cost: parseFloat(Number(trailing.on_demand_cost || 0).toFixed(4)),
+    trailing_7d_runs: Math.max(0, Number(trailing.runs?.length || 0)),
+    trailing_7d_scheduled_runs: Math.max(0, Number(trailing.scheduled_runs || 0)),
+    trailing_7d_on_demand_runs: Math.max(0, Number(trailing.on_demand_runs || 0)),
+    trailing_7d_deliveries: Math.max(0, Number(trailing.deliveries || 0)),
+    projected_7d_cost: parseFloat(Number(projected.total_cost || 0).toFixed(4)),
+    projected_7d_runs: Math.max(0, Number(projected.scheduled_runs || 0)),
+    projected_7d_deliveries: Math.max(0, Number(projected.projected_deliveries || 0)),
+    projected_7d_active_users: Math.max(0, Number(projected.active_users || 0)),
   };
 }
 

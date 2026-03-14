@@ -5,6 +5,8 @@ const {
 const {
   buildMonthRunSummary,
   buildPerUserCostRollup,
+  buildTrailingWindowCostSummary,
+  buildProjectedWindowCostSummary,
 } = require("../services/admin-stats-costs");
 const {
   enrichRunsWithDigestMetadata,
@@ -77,6 +79,8 @@ function buildAdminStatsPayload({
     formatDaysLabel,
     computeQualityTrend,
     parseEtNowParts,
+    CONFIG,
+    estimateSandboxCost,
   } = deps;
 
   const usersAll = allUsers();
@@ -164,6 +168,18 @@ function buildAdminStatsPayload({
 
   const quality = summarizeRosterQuality(roster);
   const feedbackTrend = computeFeedbackTrend(usersAll);
+  const nowParts = parseEtNowParts();
+  const trailing7dCost = buildTrailingWindowCostSummary(runs, {
+    nowParts,
+    days: 7,
+  });
+  const projected7dCost = buildProjectedWindowCostSummary({
+    roster,
+    nowParts,
+    config: CONFIG,
+    estimateSandboxCost,
+    days: 7,
+  });
   const summary = buildSummaryPayload({
     runs,
     monthRuns,
@@ -176,6 +192,8 @@ function buildAdminStatsPayload({
     activeTelegramUsersCount,
     quality,
     feedbackTrend,
+    trailing7dCost,
+    projected7dCost,
   });
   const health = buildHealthPayload({
     runs,

@@ -13,7 +13,7 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertModuleExports(() => require(TARGET_PATH), TARGET_REL);
 
-const { buildExecutiveHealthSummary } = require(TARGET_PATH);
+const { buildExecutiveHealthSummary, buildSummaryPayload } = require(TARGET_PATH);
 
 function buildHealthyScheduler() {
   return {
@@ -127,3 +127,40 @@ assert.ok(
   !backfillSummary.commands.some((command) => command.id === "review_missed_users"),
   "backfill without failed recipients should not expose review missed users"
 );
+
+const summary = buildSummaryPayload({
+  runs: [{ total_cost_usd: 0.2, users_served: 2 }, { total_cost_usd: 0.1, users_served: 1 }],
+  monthRuns: [{ total_cost_usd: 0.2 }, { total_cost_usd: 0.1 }],
+  monthDeliveries: 3,
+  monthLabel: "March 2026",
+  monthUsersServedFromRoster: 2,
+  monthUniqueUsersLogSize: 2,
+  roster: [{}, {}],
+  activeUsersCount: 2,
+  activeTelegramUsersCount: 1,
+  quality: {},
+  feedbackTrend: {},
+  trailing7dCost: {
+    total_cost: 0.3,
+    scheduled_cost: 0.2,
+    on_demand_cost: 0.1,
+    runs: [{}, {}],
+    scheduled_runs: 1,
+    on_demand_runs: 1,
+    deliveries: 3,
+  },
+  projected7dCost: {
+    total_cost: 0.42,
+    scheduled_runs: 5,
+    projected_deliveries: 9,
+    active_users: 2,
+  },
+});
+
+assert.strictEqual(summary.trailing_7d_cost, 0.3);
+assert.strictEqual(summary.trailing_7d_scheduled_cost, 0.2);
+assert.strictEqual(summary.trailing_7d_on_demand_cost, 0.1);
+assert.strictEqual(summary.trailing_7d_runs, 2);
+assert.strictEqual(summary.projected_7d_cost, 0.42);
+assert.strictEqual(summary.projected_7d_runs, 5);
+assert.strictEqual(summary.projected_7d_deliveries, 9);

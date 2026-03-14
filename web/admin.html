@@ -49,6 +49,10 @@ body { font-family:'DM Sans',-apple-system,sans-serif; background:var(--bg); col
   grid-template-columns:repeat(3, minmax(0, 1fr));
   margin-bottom:0;
 }
+.cards-window {
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  margin-bottom:0;
+}
 .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; }
 .card-label { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:10px; }
 .card-value { font-size:28px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
@@ -749,6 +753,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 @media (max-width:640px) {
   .cards { grid-template-columns:1fr 1fr; }
   .cards-kpi { grid-template-columns:1fr; }
+  .cards-window { grid-template-columns:1fr; }
   .schedule-calendar { grid-template-columns:1fr; }
   .table-toolbar-controls { width:100%; margin-left:0; }
   .table-search { width:100%; }
@@ -762,6 +767,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 }
 @media (min-width:641px) and (max-width:980px) {
   .cards-kpi { grid-template-columns:1fr 1fr; }
+  .cards-window { grid-template-columns:1fr 1fr; }
   .schedule-calendar { grid-template-columns:repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width:981px) and (max-width:1280px) {
@@ -800,6 +806,21 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
           <div class="card-label">Users reached</div>
           <div class="card-value" id="monthUsers">—</div>
           <div class="card-sub" id="monthOnDemand">— on-demand</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="kpi-row-title">7-day view</div>
+      <div class="cards cards-window">
+        <div class="card">
+          <div class="card-label">Last 7 days</div>
+          <div class="card-value" id="costLast7d">—</div>
+          <div class="card-sub" id="costLast7dSub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Next 7 days projected</div>
+          <div class="card-value" id="costNext7d">—</div>
+          <div class="card-sub" id="costNext7dSub">—</div>
         </div>
       </div>
     </div>
@@ -3425,6 +3446,12 @@ async function load(silent = false) {
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${monthUniqueUsers}</a>`;
     document.getElementById("monthOnDemand").innerHTML =
       `<strong>${monthDeliveries}</strong> deliveries · <strong>${summary.month_on_demand}</strong> on-demand runs`;
+    document.getElementById("costLast7d").textContent = fmt$(summary.trailing_7d_cost);
+    document.getElementById("costLast7dSub").innerHTML =
+      `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_on_demand_runs || 0}</strong> on-demand · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries`;
+    document.getElementById("costNext7d").textContent = fmt$(summary.projected_7d_cost);
+    document.getElementById("costNext7dSub").innerHTML =
+      `<strong>${summary.projected_7d_runs || 0}</strong> scheduled runs · <strong>${summary.projected_7d_deliveries || 0}</strong> projected deliveries · scheduled baseline only`;
 
     const totalUsers = roster ? roster.length : (summary.total_users || 0);
     const activeUsers = roster ? countActiveUsers(roster) : (summary.active_users || 0);

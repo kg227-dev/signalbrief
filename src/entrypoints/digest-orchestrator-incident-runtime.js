@@ -28,7 +28,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
   function incidentKeySeenRecently(eventKey, maxAgeHours = 24) {
     try {
       if (!eventKey || !fs.existsSync(incidentLogPath)) return false;
-      const cutoff = Date.now() - Math.max(1, Number(maxAgeHours || 24)) * 60 * 60 * 1000;
+      const cutoff = nowProvider().getTime() - Math.max(1, Number(maxAgeHours || 24)) * 60 * 60 * 1000;
       const lines = fs.readFileSync(incidentLogPath, "utf8").split("\n").filter(Boolean);
       for (let i = lines.length - 1; i >= 0; i--) {
         try {

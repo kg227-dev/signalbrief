@@ -290,10 +290,12 @@ function normalizeTopicRelevance(topicMatch) {
 
 function recencySignal(item, nowIso) {
   const nowTs = Date.parse(String(nowIso || new Date().toISOString()));
+  const pubTs = Date.parse(String(item?.published_date || ""));
   const retrievedTs = Date.parse(String(item?.retrieved_at || ""));
-  if (!Number.isFinite(nowTs) || !Number.isFinite(retrievedTs)) return 1;
-  const ageHours = Math.max(0, (nowTs - retrievedTs) / (60 * 60 * 1000));
-  return clamp(1 - (ageHours / 72), 0.55, 1);
+  const bestTs = Number.isFinite(pubTs) ? pubTs : retrievedTs;
+  if (!Number.isFinite(nowTs) || !Number.isFinite(bestTs)) return 1;
+  const ageHours = Math.max(0, (nowTs - bestTs) / (60 * 60 * 1000));
+  return clamp(1 - (ageHours / 72), 0.15, 1);
 }
 
 function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {

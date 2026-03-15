@@ -57,6 +57,7 @@ const { parseSourceDomain: parseSourceDomainShared } = require("../domains/diges
 const { createDigestFormattingRuntime } = require("../domains/digest");
 const { createDigestDataRuntime } = require("../domains/digest");
 const { createDigestArchiveRuntime } = require("../domains/digest");
+const { articleAgeTooOld } = require("../digest/runtime/digest-data-fetch-items-runtime");
 const { resolveDueUsers } = require("./digest-orchestrator-schedule-runtime");
 const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrator-delivery-runtime");
 const { createDigestOrchestratorFetchRuntime } = require("./digest-orchestrator-fetch-runtime");
@@ -792,6 +793,7 @@ async function main() {
     selectItems,
     loadRecentArchiveItems,
     emitDigestIncident,
+    articleAgeTooOld,
   });
   const {
     selected,

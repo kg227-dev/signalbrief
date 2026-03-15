@@ -19,6 +19,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     selectItems,
     loadRecentArchiveItems,
     emitDigestIncident,
+    articleAgeTooOld,
   } = deps;
 
   async function selectForEnrichment(params) {
@@ -41,7 +42,14 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       targetCount: selectionTarget,
       minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || 3)),
     });
-    const dedupedItems = dedupRes.items;
+    const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 72);
+    const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;
+    const freshItems = dedupRes.items.filter((item) => !ageFilter(item, maxArticleAgeHours));
+    const staleRemoved = dedupRes.items.length - freshItems.length;
+    if (staleRemoved > 0) {
+      log(`Freshness gate removed ${staleRemoved} stale item(s) older than ${maxArticleAgeHours}h`);
+    }
+    const dedupedItems = freshItems;
     const repeatIndex = buildRecentRepeatIndex(crossDayDedupDays);
     const repeatPenalty = Number(rankingPolicy.repeatPenalty || 0);
 

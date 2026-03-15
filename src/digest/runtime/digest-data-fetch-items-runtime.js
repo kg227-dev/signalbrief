@@ -1,5 +1,21 @@
 "use strict";
 
+const MAX_ARTICLE_AGE_HOURS = 72;
+
+function articleAgeTooOld(item, maxAgeHours) {
+  const limit = Number.isFinite(maxAgeHours) ? maxAgeHours : MAX_ARTICLE_AGE_HOURS;
+  const now = Date.now();
+  const pubDate = Date.parse(String(item?.published_date || ""));
+  if (Number.isFinite(pubDate)) {
+    return (now - pubDate) / (60 * 60 * 1000) > limit;
+  }
+  const retrieved = Date.parse(String(item?.retrieved_at || ""));
+  if (Number.isFinite(retrieved)) {
+    return (now - retrieved) / (60 * 60 * 1000) > limit;
+  }
+  return false;
+}
+
 function parsePerplexityItems(content) {
   const cleaned = String(content || "")
     .replace(/```json\n?/g, "")
@@ -40,6 +56,7 @@ function enrichWithCitationUrls(items, citations, topicTag, log) {
 function collectUniqueItems(items, seenHeadline, seenUrl, out, normalizeUrlForDedup) {
   for (const item of items) {
     if (!item || !item.headline) continue;
+    if (articleAgeTooOld(item, MAX_ARTICLE_AGE_HOURS)) continue;
     const headKey = String(item.headline || "").toLowerCase().trim().slice(0, 80);
     const urlKey = normalizeUrlForDedup(item.url || "");
     if (headKey && seenHeadline.has(headKey)) continue;
@@ -63,4 +80,6 @@ module.exports = {
   enrichWithCitationUrls,
   collectUniqueItems,
   shouldStopAttempts,
+  articleAgeTooOld,
+  MAX_ARTICLE_AGE_HOURS,
 };

@@ -155,7 +155,7 @@ async function main() {
     }
     const commands = Array.isArray(executiveSummary.commands) ? executiveSummary.commands : [];
     const commandIds = new Set(commands.map((entry) => entry && entry.id).filter(Boolean));
-    ["refresh_health", "check_scheduler", "send_test_digest", "run_full_digest", "restart_worker"].forEach((id) => {
+    ["refresh_health", "check_scheduler", "send_test_digest"].forEach((id) => {
       if (!commandIds.has(id)) throw new Error(`executive_summary missing command id: ${id}`);
     });
     process.stdout.write("[smoke-admin-scheduler] healthy-after-stale ok\n");

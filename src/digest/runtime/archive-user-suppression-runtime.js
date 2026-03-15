@@ -27,20 +27,46 @@ function createArchiveUserSuppressionRuntime(deps) {
     return keys;
   }
 
+  function getUserRecentStorylineKeys(user, opts = {}) {
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+    const keys = new Set();
+    const history = Array.isArray(user?.recent_digest_url_history)
+      ? user.recent_digest_url_history.slice(-maxDigests)
+      : [];
+    for (const row of history) {
+      const storylineKeys = Array.isArray(row?.storyline_keys) ? row.storyline_keys : [];
+      for (const key of storylineKeys) {
+        if (key) keys.add(key);
+      }
+    }
+    return keys;
+  }
+
   function suppressRecentlySentForUser(items, user, opts = {}) {
     const arr = Array.isArray(items) ? items : [];
     const minItems = Math.max(1, Number(opts.minItems || 3));
-    const recentKeys = getUserRecentDigestUrlKeys(user, opts);
-    if (!recentKeys.size) {
-      return { items: arr, removed: 0, recent_keys: 0, backfilled: 0 };
+    const recentUrlKeys = getUserRecentDigestUrlKeys(user, opts);
+    const recentStorylineKeys = getUserRecentStorylineKeys(user, opts);
+    if (!recentUrlKeys.size && !recentStorylineKeys.size) {
+      return { items: arr, removed: 0, recent_keys: 0, backfilled: 0, storyline_suppressed: 0 };
     }
 
     const kept = [];
     const removed = [];
+    let storylineSuppressed = 0;
     for (const item of arr) {
-      const key = normalizeUrlForDedup(item?.url);
-      if (key && recentKeys.has(key)) removed.push(item);
-      else kept.push(item);
+      const urlKey = normalizeUrlForDedup(item?.url);
+      if (urlKey && recentUrlKeys.has(urlKey)) {
+        removed.push(item);
+        continue;
+      }
+      const storylineKey = String(item?.storyline_key || "").trim();
+      if (storylineKey && recentStorylineKeys.has(storylineKey)) {
+        removed.push(item);
+        storylineSuppressed++;
+        continue;
+      }
+      kept.push(item);
     }
 
     let backfilled = 0;
@@ -53,13 +79,15 @@ function createArchiveUserSuppressionRuntime(deps) {
     return {
       items: kept,
       removed: removed.length,
-      recent_keys: recentKeys.size,
+      recent_keys: recentUrlKeys.size,
       backfilled,
+      storyline_suppressed: storylineSuppressed,
     };
   }
 
   return {
     getUserRecentDigestUrlKeys,
+    getUserRecentStorylineKeys,
     suppressRecentlySentForUser,
   };
 }

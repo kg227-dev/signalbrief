@@ -346,7 +346,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const recentEntityCount = entityKeys.reduce((maxCount, entityKey) => Math.max(maxCount, Number(recentEntityCounts[entityKey] || 0)), 0);
     const storylineRepeated = storylineKey && recentStorylineKeys.has(storylineKey);
     const novelty = storylineRepeated
-      ? 0.28
+      ? 0.15
       : clamp(1 - (recentEntityCount * 0.22), 0.35, 1);
     const duplicationPenalty = isRecentRepeat(item) ? clamp(Math.max(0.2, repeatPenalty / 2), 0, 0.7) : 0;
     const entitySaturationPenalty = clamp(recentEntityCount * 0.25, 0, 0.75);
@@ -363,9 +363,9 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       + 0.08 * customRelevance
       + 0.28 * strategicImportance
       + 0.15 * novelty
-      + 0.12 * sourceAuthority
-      + 0.08 * multiSourceConfirmation
-      + 0.05 * recency
+      + 0.16 * sourceAuthority
+      + 0.06 * multiSourceConfirmation
+      + 0.03 * recency
       + 0.06 * positivePreferenceBoost
       + specialistBoost
       - (0.06 * negativePreferencePenalty),
@@ -379,7 +379,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       0,
       1
     );
-    const signalScore = 10 * Math.pow(adjustedNorm, 0.92);
+    const signalScore = 10 * Math.pow(adjustedNorm, 1.15);
 
     const whyShown = [];
     if (topicMatch >= 7) whyShown.push("topic_match");

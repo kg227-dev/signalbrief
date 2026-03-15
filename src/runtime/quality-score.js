@@ -270,6 +270,28 @@ function computeFreshnessAndDiversity(items, previousItems) {
   };
 }
 
+function computeNarrativeUniqueness(items) {
+  if (!Array.isArray(items) || items.length < 2) return 100;
+  let totalSim = 0;
+  let pairs = 0;
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const entityA = Array.isArray(items[i]?.entity_keys) ? items[i].entity_keys : [];
+      const entityB = Array.isArray(items[j]?.entity_keys) ? items[j].entity_keys : [];
+      const entitySim = jaccardSimilarity(entityA, entityB);
+      const headlineSim = overlapRatio(items[i]?.headline || "", items[j]?.headline || "");
+      const keyA = String(items[i]?.storyline_key || "").trim();
+      const keyB = String(items[j]?.storyline_key || "").trim();
+      const sameStoryline = (keyA && keyB && keyA === keyB) ? 1 : 0;
+      const pairSim = Math.max(sameStoryline, 0.5 * entitySim + 0.5 * headlineSim);
+      totalSim += pairSim;
+      pairs++;
+    }
+  }
+  const avgSim = pairs > 0 ? totalSim / pairs : 0;
+  return clamp((1 - avgSim) * 100, 0, 100);
+}
+
 function computeCustomCoverage(items, userTopics) {
   const topics = (Array.isArray(userTopics) ? userTopics : [])
     .filter((t) => String(t).startsWith("custom_"))
@@ -320,7 +342,8 @@ function computeDigestQualityScore(opts = {}) {
   const freshness = computeFreshnessAndDiversity(items, previousItems);
   const F = freshness.score;
   const C = computeCustomCoverage(items, topics);
-  const score = clamp(0.25 * T + 0.2 * R + 0.3 * A + 0.15 * F + 0.1 * C, 0, 100);
+  const N = computeNarrativeUniqueness(items);
+  const score = clamp(0.25 * T + 0.18 * R + 0.25 * A + 0.12 * F + 0.10 * C + 0.10 * N, 0, 100);
 
   return {
     score: Number(score.toFixed(2)),
@@ -331,6 +354,7 @@ function computeDigestQualityScore(opts = {}) {
       analysis_quality: Number(A.toFixed(2)),
       freshness_diversity: Number(F.toFixed(2)),
       custom_coverage: Number(C.toFixed(2)),
+      narrative_uniqueness: Number(N.toFixed(2)),
       diversity: freshness.diversity,
       freshness: freshness.freshness,
     },

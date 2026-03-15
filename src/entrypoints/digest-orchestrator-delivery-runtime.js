@@ -409,6 +409,11 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             .map((item) => normalizeUrlForDedup(item?.url))
             .filter(Boolean)
         )];
+        const currentStorylineKeys = [...new Set(
+          userItems
+            .map((item) => String(item?.storyline_key || "").trim())
+            .filter(Boolean)
+        )];
         const priorUrlHistory = Array.isArray(user.recent_digest_url_history)
           ? user.recent_digest_url_history.slice()
           : [];
@@ -416,6 +421,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           date_et: digestDateKey,
           digest_id: userDigestId,
           urls: currentUrlKeys,
+          storyline_keys: currentStorylineKeys,
         });
         user.recent_digest_url_history = priorUrlHistory.slice(-Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)));
         user.digests_received = (user.digests_received || 0) + 1;

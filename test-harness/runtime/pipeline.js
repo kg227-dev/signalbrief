@@ -101,7 +101,7 @@ function buildDigestForPersona(enrichedItems, persona, policyInput = {}) {
     !item?.hard_exclude
     && Number(item?.strategic_value || 0) >= 0.34
     && Number(item?.routine_item_score || 0) <= 0.74
-    && Number(item?.relevanceScore || 0) >= 6.2
+    && Number(item?.relevanceScore || 0) >= 5.0
   ));
   if (stronger.length > 0) scored = stronger;
   scored = applyEntityCoverageCap(scored, 1);

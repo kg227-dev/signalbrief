@@ -75,7 +75,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
 
     const minStrategicValue = Math.max(0, Math.min(1, Number(CONFIG.digest.minStrategicValue ?? rankingPolicy.minStrategicValue ?? 0.34)));
     const maxRoutineScore = Math.max(0, Math.min(1, Number(CONFIG.digest.maxRoutineScore ?? rankingPolicy.maxRoutineScore ?? 0.74)));
-    const minSignalScoreForFinal = Number(CONFIG.digest.minSignalScoreForFinal ?? rankingPolicy.minSignalScoreForFinal ?? 6.2);
+    const minSignalScoreForFinal = Number(CONFIG.digest.minSignalScoreForFinal ?? rankingPolicy.minSignalScoreForFinal ?? 5.0);
     const qualityEligible = userItems.filter((item) => (
       !item?.hard_exclude
       && Number(item?.strategic_value || 0) >= minStrategicValue

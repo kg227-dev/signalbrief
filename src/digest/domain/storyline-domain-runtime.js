@@ -64,38 +64,34 @@ const GENERIC_ENTITY_STOPWORDS = new Set([
 const SOURCE_TIER_RULES = Object.freeze({
   premium: {
     score: 0.95,
-    domains: ["reuters.com", "bloomberg.com", "ft.com", "wsj.com", "sec.gov", "fda.gov", "cms.gov"],
+    domains: [
+      "reuters.com", "bloomberg.com", "ft.com", "wsj.com",
+      "sec.gov", "fda.gov", "cms.gov",
+      "nytimes.com", "economist.com", "nature.com",
+    ],
   },
   strong: {
     score: 0.8,
     domains: [
-      "spglobal.com",
-      "gartner.com",
-      "nasdaq.com",
-      "esgtoday.com",
-      "esgdive.com",
-      "pharmexec.com",
-      "biospace.com",
-      "fiercebiotech.com",
-      "fiercehealthcare.com",
-      "modernhealthcare.com",
+      "spglobal.com", "gartner.com", "nasdaq.com",
+      "esgtoday.com", "esgdive.com",
+      "pharmexec.com", "biospace.com",
+      "fiercebiotech.com", "fiercehealthcare.com", "modernhealthcare.com",
+      "cnbc.com", "axios.com", "thehill.com", "politico.com",
+      "healthaffairs.org", "statnews.com",
+      "utilitydive.com", "energydive.com",
     ],
   },
   standard: {
     score: 0.6,
     domains: [
-      "xtalks.com",
-      "pestakeholder.org",
-      "lawrenceevans.com",
-      "cpapracticeadvisor.com",
-      "bottomline.com",
-      "conference-board.org",
-      "fintechfutures.com",
-      "crowdfundinsider.com",
-      "reinsurancene.ws",
-      "apmdigest.com",
-      "deloitte.com",
-      "forvismazars.us",
+      "xtalks.com", "pestakeholder.org", "lawrenceevans.com",
+      "cpapracticeadvisor.com", "bottomline.com",
+      "conference-board.org", "fintechfutures.com",
+      "crowdfundinsider.com", "reinsurancene.ws",
+      "apmdigest.com", "deloitte.com", "forvismazars.us",
+      "techcrunch.com", "venturebeat.com", "zdnet.com", "theverge.com",
+      "hbr.org",
     ],
   },
   corporate: {
@@ -105,15 +101,10 @@ const SOURCE_TIER_RULES = Object.freeze({
   weak: {
     score: 0.22,
     domains: [
-      "investing.com",
-      "ng.investing.com",
-      "barchart.com",
-      "financialcontent.com",
-      "markets.financialcontent.com",
-      "mexc.com",
-      "promptinjection.net",
-      "stockstotrade.com",
-      "youtube.com",
+      "investing.com", "ng.investing.com",
+      "barchart.com", "financialcontent.com", "markets.financialcontent.com",
+      "mexc.com", "promptinjection.net", "stockstotrade.com",
+      "youtube.com", "medium.com", "seekingalpha.com",
     ],
   },
 });
@@ -130,6 +121,8 @@ const FLAG_RULES = [
   { flag: "regulatory", pattern: /\b(rule|rules|regulation|regulatory|deadline|bill|approval|approved)\b/i },
   { flag: "earnings", pattern: /\b(earnings|results|quarter|q1|q2|q3|q4)\b/i },
   { flag: "product_launch", pattern: /\b(launch|approval|approved|rollout)\b/i },
+  { flag: "evergreen_trend", pattern: /\b(trends?\s+(every|ceos?|leaders?|executives?|companies)|must.{0,20}(watch|know|prepare)|can't ignore|game.?chang|transform(?:ing|ation)\s+(?:every|your|the)|future of .{3,20}(?:is|looks)|(?:revolution|disruption)\s+(?:is|in)\s+(?:here|coming))\b/i },
+  { flag: "thin_listicle", pattern: /\b\d+\s+(?:ways?|things?|tips?|strategies?|reasons?|steps?)\s+(?:to|for|why|every|that)\b/i },
 ];
 
 const HINT_RULES = [
@@ -169,6 +162,20 @@ function tokenSet(value) {
   );
 }
 
+function headlineTrigramOverlap(leftItem, rightItem) {
+  const leftWords = normalizeMatchText(leftItem?.headline || "").split(" ").filter((t) => t.length >= 3);
+  const rightWords = normalizeMatchText(rightItem?.headline || "").split(" ").filter((t) => t.length >= 3);
+  if (leftWords.length < 3 || rightWords.length < 3) return 0;
+  const trigrams = (words) => {
+    const set = new Set();
+    for (let i = 0; i <= words.length - 3; i++) {
+      set.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+    }
+    return set;
+  };
+  return jaccard(trigrams(leftWords), trigrams(rightWords));
+}
+
 function jaccard(aValues, bValues) {
   const a = new Set(Array.isArray(aValues) ? aValues : aValues instanceof Set ? Array.from(aValues) : []);
   const b = new Set(Array.isArray(bValues) ? bValues : bValues instanceof Set ? Array.from(bValues) : []);
@@ -190,7 +197,13 @@ function classifySourceTier(sourceDomainRaw) {
       return { source_tier: sourceTier, source_authority: rule.score };
     }
   }
-  return { source_tier: "unknown", source_authority: 0.5 };
+  if (sourceDomain.endsWith(".medium.com")) {
+    return { source_tier: "weak", source_authority: 0.28 };
+  }
+  if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) {
+    return { source_tier: "standard", source_authority: 0.48 };
+  }
+  return { source_tier: "unknown", source_authority: 0.38 };
 }
 
 function normalizePromptFlags(flags) {
@@ -261,6 +274,8 @@ function computeRoutineItemScore(contentFlags, sourceInfo) {
   if (flags.has("routine_dividend")) score += 0.82;
   if (flags.has("stock_promo")) score += 0.88;
   if (flags.has("generic_commentary")) score += 0.58;
+  if (flags.has("evergreen_trend")) score += 0.42;
+  if (flags.has("thin_listicle")) score += 0.38;
   if (flags.has("conference_recap")) score += 0.46;
   if (flags.has("investor_relations")) score += 0.34;
   if (sourceInfo.source_tier === "weak") score += 0.16;
@@ -282,10 +297,16 @@ function computeStrategicValue(item, sourceInfo, routineItemScore, contentFlags)
   if (flags.has("guidance")) bonus += 0.04;
   if (flags.has("earnings")) bonus += 0.03;
   if (flags.has("product_launch")) bonus += 0.03;
-  if (flags.has("generic_commentary")) bonus -= 0.08;
+  if (flags.has("generic_commentary")) bonus -= 0.14;
+  if (flags.has("evergreen_trend")) bonus -= 0.12;
+  if (flags.has("thin_listicle")) bonus -= 0.10;
   if (flags.has("conference_recap")) bonus -= 0.06;
   if (flags.has("routine_dividend")) bonus -= 0.28;
   if (flags.has("stock_promo")) bonus -= 0.34;
+
+  const text = `${item?.headline || ""} ${item?.summary || ""}`;
+  if (/\b(deadline|effective date|enforcement|compliance date|due by|expires?)\b/i.test(text)) bonus += 0.06;
+  if (/\b(capex|capital expenditure|\$\d+[BMT]|\d+\s*billion|\d+\s*million\s+investment)\b/i.test(text)) bonus += 0.04;
 
   const score = (
     0.6 * promptStrategic
@@ -366,12 +387,17 @@ function storylineSimilarity(leftItem, rightItem) {
   if (entityOverlap >= 0.5 && textOverlap >= 0.34) return 0.8;
   if (textOverlap >= 0.52 && (tagRelated > 0 || entityOverlap >= 0.2)) return 0.78;
 
-  return (
+  const weightedScore = (
     0.38 * entityOverlap
     + 0.28 * hintOverlap
     + 0.24 * textOverlap
     + 0.1 * tagRelated
   );
+  const trigramSim = headlineTrigramOverlap(leftItem, rightItem);
+  if (trigramSim >= 0.35 && tagRelated > 0) {
+    return Math.min(1, weightedScore + 0.12);
+  }
+  return weightedScore;
 }
 
 function chooseRepresentative(items) {
@@ -407,7 +433,7 @@ function clusterStorylines(items = []) {
       const similarity = scores.length
         ? scores.reduce((sum, value) => sum + value, 0) / scores.length
         : 0;
-      if (similarity >= 0.58 && similarity > bestScore) {
+      if (similarity >= 0.46 && similarity > bestScore) {
         bestScore = similarity;
         bestCluster = cluster;
       }

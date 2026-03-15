@@ -37,7 +37,7 @@ function resolveDueUsers(deps) {
     const todayDOW = Number.isInteger(etNow.todayDOW) ? etNow.todayDOW : now.getDay();
     const catchupWindowMinutes = Math.max(
       30,
-      Number(CONFIG?.digest?.catchupWindowMinutes || (12 * 60))
+      Number(CONFIG?.digest?.catchupWindowMinutes || 60)
     );
     dueUsers = allActive.filter((user) => {
       const prefs = user.preferences || {};

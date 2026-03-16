@@ -83,7 +83,18 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       && Number(item?.relevanceScore || 0) >= minSignalScoreForFinal
     ));
     if (qualityEligible.length > 0) {
-      userItems = qualityEligible;
+      if (qualityEligible.length < requestedCount) {
+        const qualityUrls = new Set(qualityEligible.map((i) => i.url));
+        const backfill = userItems
+          .filter((item) => !item?.hard_exclude && !qualityUrls.has(item.url))
+          .slice(0, requestedCount - qualityEligible.length);
+        userItems = [...qualityEligible, ...backfill];
+        if (backfill.length > 0) {
+          log(`  [quality-backfill] added ${backfill.length} item(s) to reach ${requestedCount}`);
+        }
+      } else {
+        userItems = qualityEligible;
+      }
     } else {
       userItems = userItems.filter((item) => !item?.hard_exclude);
     }

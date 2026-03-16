@@ -5,6 +5,8 @@ async function handleCoreRequestLinkRoute(ctx, deps) {
     requireJsonBody,
     allUsers,
     sendMagicLinkEmail,
+    checkMagicLinkRateLimit,
+    getClientIp,
   } = deps;
 
   if (pathname !== "/api/request-link" || req.method !== "POST") return false;
@@ -17,12 +19,21 @@ async function handleCoreRequestLinkRoute(ctx, deps) {
     return true;
   }
 
+  // Rate limit: apply before user lookup to prevent enumeration via timing.
+  // Return generic success even when limited or when email is not found.
+  if (checkMagicLinkRateLimit && getClientIp) {
+    const ip = getClientIp(req);
+    const rl = checkMagicLinkRateLimit(ip, email);
+    if (rl.limited) {
+      json(res, { success: true }, 200);
+      return true;
+    }
+  }
+
   const user = allUsers().find((row) => (row.email || "").toLowerCase().trim() === email);
   if (!user || !user.token) {
-    json(res, {
-      success: false,
-      error: "No account found for that email. Sign up first.",
-    }, 404);
+    // Return generic success to prevent user enumeration.
+    json(res, { success: true }, 200);
     return true;
   }
 

@@ -31,6 +31,8 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     requireJsonBody,
     normalizeBookmarkUrl,
     sendMagicLinkEmail,
+    checkMagicLinkRateLimit,
+    getClientIp,
     loadEngagementEvents,
     loadLatestDigestSnapshot,
   } = deps;
@@ -68,6 +70,8 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     requireJsonBody,
     normalizeBookmarkUrl,
     sendMagicLinkEmail,
+    checkMagicLinkRateLimit,
+    getClientIp,
     loadEngagementEvents,
     loadLatestDigestSnapshot,
   };

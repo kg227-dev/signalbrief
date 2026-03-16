@@ -116,6 +116,8 @@ function createSettingsHandler({
   toRouteCtx,
   requireJsonBody,
   json,
+  getClientIp,
+  checkSettingsRateLimit,
   findUserByToken,
   allUsers,
   writeUser,
@@ -125,6 +127,13 @@ function createSettingsHandler({
 }) {
   return async function handleSettings(ctxOrReq, maybeRes) {
     const { req, res } = toRouteCtx(ctxOrReq, maybeRes);
+
+    if (checkSettingsRateLimit && getClientIp) {
+      const ip = getClientIp(req);
+      const rl = checkSettingsRateLimit(ip);
+      if (rl.limited) return json(res, { error: rl.reason }, 429);
+    }
+
     const body = await requireJsonBody(req, res);
     if (body == null) return;
 

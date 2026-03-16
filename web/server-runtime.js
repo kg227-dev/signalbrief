@@ -41,7 +41,7 @@ const {
 const { createAdminOpsService } = require("./services/admin-ops");
 const { createSchedulerWorkerRestartRequester } = require("./server-runtime-scheduler-control-runtime");
 const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
-const { createSignupRateLimiter } = require("./services/web-rate-limit");
+const { createSignupRateLimiter, createMagicLinkRateLimiter, createSettingsRateLimiter } = require("./services/web-rate-limit");
 const { blankReengagementState, resetReengagementState } = require("./services/reengagement-state");
 const { archiveRelevanceScore } = require("./services/archive-scoring");
 const { createArchiveDigestStatsRuntime } = require("./services/archive-digest-stats-runtime");
@@ -125,6 +125,8 @@ const { checkRateLimit } = createSignupRateLimiter({
   ipWindowMs: 15 * 60 * 1000,
   emailCooldownMs: 10 * 60 * 1000,
 });
+const { checkMagicLinkRateLimit } = createMagicLinkRateLimiter();
+const { checkSettingsRateLimit } = createSettingsRateLimiter();
 
 const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
 const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
@@ -276,6 +278,8 @@ const {
   normalizeEngagementUrl,
   normalizeBookmarkUrl,
   sendMagicLinkEmail,
+  checkMagicLinkRateLimit,
+  checkSettingsRateLimit,
   checkLoginRate,
   countArchiveDigestsForUser: (...args) => archiveDigestStatsRuntime.countArchiveDigestsForUser(...args),
   loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),

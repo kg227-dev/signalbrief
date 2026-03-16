@@ -263,11 +263,9 @@ async function invoke(handler, { method, pathname, search = "" }) {
     const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
     assert.strictEqual(handled, true);
     assert.strictEqual(sendCount, 0);
-    assert.strictEqual(res.statusCode, 404);
-    assert.deepStrictEqual(JSON.parse(res.body), {
-      success: false,
-      error: "No account found for that email. Sign up first.",
-    });
+    // Returns generic 200 for unknown emails to prevent user enumeration.
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(JSON.parse(res.body), { success: true });
   }
 
   {

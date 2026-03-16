@@ -1,5 +1,7 @@
 "use strict";
 
+const MAX_CUSTOM_SLUG_LENGTH = 60;
+
 function canonicalizeTopicKey(rawTopic, defaultTopics = []) {
   const input = String(rawTopic || "").trim();
   if (!input) return "";
@@ -13,7 +15,7 @@ function canonicalizeTopicKey(rawTopic, defaultTopics = []) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   if (!slug) return "";
-  return `custom_${slug}`;
+  return `custom_${slug.slice(0, MAX_CUSTOM_SLUG_LENGTH)}`;
 }
 
 function normalizeTopicsForUserInput(rawTopics, opts = {}) {
@@ -55,4 +57,5 @@ function normalizeTopicsForUserInput(rawTopics, opts = {}) {
 module.exports = {
   canonicalizeTopicKey,
   normalizeTopicsForUserInput,
+  MAX_CUSTOM_SLUG_LENGTH,
 };

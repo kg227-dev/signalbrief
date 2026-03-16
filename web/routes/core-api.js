@@ -132,28 +132,16 @@ function createCoreApiRouteHandler(deps) {
         scheduler: {
           available: !!heartbeat?.available,
           healthy: heartbeatHealthy,
-          worker: heartbeat?.worker || "scheduler-worker",
           status: heartbeat?.status || null,
           blocked: workerBlocked,
-          summary: heartbeat?.summary || "Scheduler heartbeat unavailable",
           updated_at: heartbeat?.updated_at || null,
           age_seconds: heartbeat?.age_seconds ?? null,
-          poll_ms: heartbeat?.poll_ms ?? null,
           in_flight: heartbeat?.in_flight ?? null,
-          last_error: heartbeat?.last_error || null,
-          lock_state: heartbeat?.lock_state || null,
-          lock_error: heartbeat?.lock_error || null,
-          blocked_state: heartbeat?.blocked_state || null,
-          consecutive_lock_unhealthy: heartbeat?.consecutive_lock_unhealthy ?? null,
         },
         digest_lock: {
           running: !!digestRun?.running,
           state: lockState,
           unhealthy: lockUnhealthy,
-          mode: digestRun?.lock?.mode || null,
-          started_at: digestRun?.lock?.startedAtIso || digestRun?.lock?.startedAt || null,
-          age_seconds: digestRun?.lock?.ageMs != null ? Math.round(Math.max(0, digestRun.lock.ageMs) / 1000) : null,
-          error: digestRun?.lock?.error || null,
         },
       }, statusCode);
       return true;

@@ -520,13 +520,20 @@ async function main() {
   if (!skipBuild) composeArgs.push("--build");
   composeArgs.push(...services);
 
+  // Build separately with --no-cache so Docker doesn't serve stale source files
+  // from a cached COPY layer. The deps stage (npm ci) is still fast because
+  // package.json/package-lock.json rarely change and are in a separate stage.
+  const buildNoCacheArgs = services.map((s) => shellQuote(s)).join(" ");
+
   const remoteSteps = [
     "set -euo pipefail",
     `cd ${shellQuote(remoteDir)}`,
     "echo '[deploy-prod] remote: extract archive'",
     `tar -xzf ${shellQuote(remoteArchivePath)}`,
+    "echo '[deploy-prod] remote: compose build'",
+    skipBuild ? "echo '[deploy-prod] remote: build skipped'" : `docker compose build --no-cache ${buildNoCacheArgs}`,
     "echo '[deploy-prod] remote: compose up'",
-    composeArgs.map((arg) => shellQuote(arg)).join(" "),
+    composeArgs.filter((a) => a !== "--build").map((arg) => shellQuote(arg)).join(" "),
   ];
   if (!skipRemoteVerify) {
     remoteSteps.push(

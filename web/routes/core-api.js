@@ -133,6 +133,7 @@ function createCoreApiRouteHandler(deps) {
         scheduler: {
           available: !!heartbeat?.available,
           healthy: heartbeatHealthy,
+          summary: heartbeat?.summary || null,
           status: heartbeat?.status || null,
           blocked: workerBlocked,
           updated_at: heartbeat?.updated_at || null,

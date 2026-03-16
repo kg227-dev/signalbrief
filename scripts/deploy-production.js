@@ -303,10 +303,9 @@ async function verifyPublicEndpoints(publicBaseUrl) {
   const attempts = PUBLIC_VERIFY_ATTEMPTS;
   const delayMs = PUBLIC_VERIFY_DELAY_MS;
 
-  let homeCheck = null;
   try {
     log(`public verify: ${base}/`);
-    homeCheck = await eventually("homepage check", attempts, delayMs, async () => {
+    await eventually("homepage check", attempts, delayMs, async () => {
       const response = await fetchUrl(`${base}/`);
       if (response.status !== 200) {
         throw createVerifyError(`expected 200, got ${response.status}`, response);
@@ -317,34 +316,30 @@ async function verifyPublicEndpoints(publicBaseUrl) {
       if (response.body.includes("__ASSET_VERSION__")) {
         throw createVerifyError("asset version token was not rendered", response);
       }
-      const indexJsMatch = response.body.match(/<script\s+src="(index\.js\?v=[^"]+)"/i);
-      if (!indexJsMatch) {
-        throw createVerifyError("cache-busted index.js script tag missing", response);
-      }
-      return {
-        response,
-        indexJsPath: indexJsMatch[1],
-      };
+      return response;
     });
   } catch (error) {
     fail("homepage check failed after retries", verifyErrorDetail(error));
   }
 
   try {
-    const indexJsUrl = `${base}/${homeCheck.indexJsPath}`;
-    log(`public verify: ${indexJsUrl}`);
-    await eventually("index.js check", attempts, delayMs, async () => {
-      const response = await fetchUrl(indexJsUrl);
+    log(`public verify: ${base}/signup`);
+    await eventually("signup page check", attempts, delayMs, async () => {
+      const response = await fetchUrl(`${base}/signup`);
       if (response.status !== 200) {
         throw createVerifyError(`expected 200, got ${response.status}`, response);
       }
-      if (!response.body.includes("window.toggleDark = toggleDark")) {
-        throw createVerifyError("dark-mode runtime export missing", response);
+      if (response.body.includes("__ASSET_VERSION__")) {
+        throw createVerifyError("asset version token was not rendered in signup page", response);
+      }
+      const versionedScript = response.body.match(/<script\s+src="[^"]+\?v=([^"]+)"/i);
+      if (!versionedScript) {
+        throw createVerifyError("no cache-busted script tags found in signup page", response);
       }
       return response;
     });
   } catch (error) {
-    fail("index.js check failed after retries", verifyErrorDetail(error));
+    fail("signup page check failed after retries", verifyErrorDetail(error));
   }
 
   try {

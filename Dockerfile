@@ -19,6 +19,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY . .
 
+# Bake the deploy SHA into the image so every deploy gets unique asset URLs.
+# This prevents CDN/proxy caches from serving stale JS/CSS after a deploy.
+ARG DEPLOY_SHA=dev
+ENV WEB_ASSET_VERSION=${DEPLOY_SHA}
+
 EXPOSE 3003
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

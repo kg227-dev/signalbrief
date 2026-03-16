@@ -531,7 +531,7 @@ async function main() {
     "echo '[deploy-prod] remote: extract archive'",
     `tar -xzf ${shellQuote(remoteArchivePath)}`,
     "echo '[deploy-prod] remote: compose build'",
-    skipBuild ? "echo '[deploy-prod] remote: build skipped'" : `docker compose build --no-cache ${buildNoCacheArgs}`,
+    skipBuild ? "echo '[deploy-prod] remote: build skipped'" : `docker compose build --no-cache --build-arg ${shellQuote(`DEPLOY_SHA=${sha}`)} ${buildNoCacheArgs}`,
     "echo '[deploy-prod] remote: compose up'",
     composeArgs.filter((a) => a !== "--build").map((arg) => shellQuote(arg)).join(" "),
   ];

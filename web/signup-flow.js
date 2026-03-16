@@ -35,6 +35,19 @@
     if (el) { el.textContent = ""; el.classList.remove("visible"); }
   }
 
+  function showFieldError(id, html) {
+    var el = byId(id);
+    if (el) { el.innerHTML = html; el.classList.add("visible"); }
+  }
+  function clearFieldError(id) {
+    var el = byId(id);
+    if (el) { el.innerHTML = ""; el.classList.remove("visible"); }
+  }
+  function setInputError(id, hasError) {
+    var el = byId(id);
+    if (el) el.classList.toggle("input-error", hasError);
+  }
+
   function selectedTopicKeys() {
     if (prefState) return prefState.getTopics();
     return Array.from(document.querySelectorAll(".topic-chip.selected"))
@@ -148,6 +161,86 @@
       return true;
     }
     return true;
+  }
+
+  async function sendMagicLinkInline(email) {
+    var sendBtn = byId("sendAccessBtn");
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "Sending\u2026"; }
+    try {
+      await fetch("/api/request-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email }),
+      });
+      // Server always returns 200 regardless of whether email is found
+      var emailErrEl = byId("email-error");
+      if (emailErrEl) {
+        emailErrEl.innerHTML = '\u2713 Check your inbox \u2014 we sent your access link.';
+        emailErrEl.classList.add("visible");
+        emailErrEl.style.color = "#059669";
+      }
+    } catch (err) {
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send me my access link \u2192"; }
+    }
+  }
+
+  async function advanceStep0() {
+    clearError(0);
+    clearFieldError("email-error");
+    clearFieldError("telegram-error");
+    setInputError("email", false);
+    setInputError("telegram", false);
+
+    var name = (byId("name").value || "").trim();
+    var email = (byId("email").value || "").trim();
+
+    if (!name) { showError(0, "Please enter your name."); byId("name").focus(); return; }
+    if (!email || !emailRe.test(email)) { showError(0, "Please enter a valid email address."); byId("email").focus(); return; }
+
+    var btn = byId("next-0");
+    if (btn) { btn.disabled = true; btn.textContent = "Checking\u2026"; }
+
+    try {
+      var telegram = (byId("telegram").value || "").trim();
+      var response = await fetch("/api/check-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, telegram: telegram || null }),
+      });
+      var result = response.ok ? await response.json() : {};
+
+      var hasConflict = false;
+
+      if (result.emailTaken) {
+        setInputError("email", true);
+        showFieldError("email-error",
+          "An account with this email already exists. " +
+          '<button class="send-access-btn" id="sendAccessBtn" type="button">Send me my access link \u2192</button>'
+        );
+        var sendBtn = byId("sendAccessBtn");
+        if (sendBtn) {
+          var capturedEmail = email;
+          sendBtn.addEventListener("click", function() { sendMagicLinkInline(capturedEmail); });
+        }
+        hasConflict = true;
+      }
+
+      if (result.telegramTaken) {
+        setInputError("telegram", true);
+        showFieldError("telegram-error", "That Telegram username is already linked to another account.");
+        hasConflict = true;
+      }
+
+      if (!hasConflict) {
+        goToStep(1);
+      }
+    } catch (err) {
+      // Network error — fall through to let the server catch conflicts at submit
+      goToStep(1);
+    } finally {
+      var b = byId("next-0");
+      if (b) { b.disabled = false; b.textContent = "Continue"; }
+    }
   }
 
   function advanceStep() {
@@ -521,8 +614,12 @@
     initDepth();
     initSchedule();
 
-    // Continue buttons
-    for (var i = 0; i < TOTAL_STEPS - 1; i++) {
+    // Step 0 Continue — async availability check
+    var next0Btn = byId("next-0");
+    if (next0Btn) next0Btn.addEventListener("click", function() { advanceStep0(); });
+
+    // Continue buttons for steps 1–3
+    for (var i = 1; i < TOTAL_STEPS - 1; i++) {
       (function(idx) {
         var btn = byId("next-" + idx);
         if (btn) btn.addEventListener("click", function() { advanceStep(); });
@@ -553,11 +650,11 @@
       if (e.key === "Enter") { e.preventDefault(); addCustomTopic(); }
     });
 
-    // Enter key to advance on input steps
+    // Enter key to advance on step 0 inputs
     ["name", "email", "telegram"].forEach(function(id) {
       var input = byId(id);
       if (input) input.addEventListener("keydown", function(e) {
-        if (e.key === "Enter") { e.preventDefault(); advanceStep(); }
+        if (e.key === "Enter") { e.preventDefault(); advanceStep0(); }
       });
     });
   }

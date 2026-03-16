@@ -453,6 +453,44 @@ select.input-field {
 }
 .step-error.visible { display: block; }
 
+/* Per-field inline error */
+.field-error {
+  display: none;
+  font-size: 13px;
+  color: #DC2626;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.field-error.visible { display: block; }
+.input-field.input-error {
+  border-color: #DC2626;
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.1);
+}
+.input-field.input-error:focus {
+  border-color: #DC2626;
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.15);
+}
+.send-access-btn {
+  display: inline;
+  margin-left: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.send-access-btn:hover { color: var(--accent-hover); }
+.send-access-btn:disabled { color: var(--text-secondary); cursor: default; text-decoration: none; }
+.magic-link-sent {
+  color: #059669;
+  font-weight: 500;
+}
+
 /* Review card */
 .review-card {
   background: var(--card);
@@ -543,10 +581,12 @@ select.input-field {
     <div class="input-group">
       <label class="input-label">Email address</label>
       <input type="email" class="input-field" placeholder="you@company.com" id="email" autocomplete="email">
+      <div class="field-error" id="email-error"></div>
     </div>
     <div class="input-group">
       <label class="input-label">Telegram username <span class="optional">(optional)</span></label>
       <input type="text" class="input-field" placeholder="@yourusername" id="telegram">
+      <div class="field-error" id="telegram-error"></div>
     </div>
     <div class="step-error" id="error-0"></div>
     <div class="step-nav">

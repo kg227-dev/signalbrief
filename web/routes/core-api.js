@@ -73,6 +73,19 @@ function sanitizeTopicWeights(topicWeights) {
   return out;
 }
 
+function sanitizeSourcePreferences(sp) {
+  const normList = (arr) => Array.isArray(arr)
+    ? arr.map((d) => String(d || "").trim().toLowerCase()).filter((d) => d.length > 0 && d.length <= 120)
+    : [];
+  if (!sp || typeof sp !== "object" || Array.isArray(sp)) {
+    return { trusted_sources: [], blocked_sources: [] };
+  }
+  return {
+    trusted_sources: normList(sp.trusted_sources),
+    blocked_sources: normList(sp.blocked_sources),
+  };
+}
+
 function buildPublicUserRecord(user) {
   if (!user || typeof user !== "object" || Array.isArray(user)) return null;
   return {
@@ -87,6 +100,7 @@ function buildPublicUserRecord(user) {
     bookmarks: sanitizeBookmarks(user.bookmarks),
     preferences: sanitizePreferences(user.preferences),
     topic_weights: sanitizeTopicWeights(user.topic_weights),
+    source_preferences: sanitizeSourcePreferences(user.source_preferences),
   };
 }
 

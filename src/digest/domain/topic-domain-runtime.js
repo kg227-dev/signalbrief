@@ -339,7 +339,12 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       0,
       1
     );
-    const multiSourceConfirmation = clamp((Math.max(1, Number(item?.cross_source_count || 1)) - 1) / 2, 0, 1);
+    const rawMultiSourceCount = clamp((Math.max(1, Number(item?.cross_source_count || 1)) - 1) / 2, 0, 1);
+    const supportingAvgAuthority = Number.isFinite(Number(item?.supporting_sources_avg_authority))
+      ? Number(item.supporting_sources_avg_authority)
+      : 0.5;
+    const corroborationQuality = clamp(supportingAvgAuthority / 0.6, 0.3, 1.0);
+    const multiSourceConfirmation = rawMultiSourceCount * corroborationQuality;
     const recency = recencySignal(item, nowIso);
     const entityKeys = Array.isArray(item?.entity_keys) ? item.entity_keys : [];
     const storylineKey = String(item?.storyline_key || "").trim();
@@ -351,6 +356,15 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const duplicationPenalty = isRecentRepeat(item) ? clamp(Math.max(0.2, repeatPenalty / 2), 0, 0.7) : 0;
     const entitySaturationPenalty = clamp(recentEntityCount * 0.25, 0, 0.75);
 
+    const originalitySignal = clamp(
+      Number.isFinite(Number(item?.originality_signal))
+        ? Number(item.originality_signal)
+        : 0.5,
+      0,
+      1
+    );
+    const topicDomainFit = clamp(Number(item?.topic_fit || 0), 0, 1);
+
     let specialistBoost = 0;
     if (specialistMode) {
       if (topicMatch >= 10) specialistBoost = 0.05;
@@ -359,14 +373,16 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     }
 
     const rawScore = clamp(
-      0.18 * topicalRelevance
-      + 0.08 * customRelevance
-      + 0.28 * strategicImportance
-      + 0.15 * novelty
-      + 0.16 * sourceAuthority
-      + 0.06 * multiSourceConfirmation
+      0.16 * topicalRelevance
+      + 0.07 * customRelevance
+      + 0.26 * strategicImportance
+      + 0.13 * novelty
+      + 0.20 * sourceAuthority
+      + 0.04 * multiSourceConfirmation
       + 0.03 * recency
-      + 0.06 * positivePreferenceBoost
+      + 0.05 * positivePreferenceBoost
+      + 0.03 * originalitySignal
+      + 0.03 * topicDomainFit
       + specialistBoost
       - (0.06 * negativePreferencePenalty),
       0,
@@ -410,6 +426,8 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
         novelty: Number(novelty.toFixed(3)),
         source_authority: Number(sourceAuthority.toFixed(3)),
         multi_source_confirmation: Number(multiSourceConfirmation.toFixed(3)),
+        originality_signal: Number(originalitySignal.toFixed(3)),
+        topic_domain_fit: Number(topicDomainFit.toFixed(3)),
         recency: Number(recency.toFixed(3)),
         preference_boost: Number(positivePreferenceBoost.toFixed(3)),
         duplication_penalty: Number(duplicationPenalty.toFixed(3)),

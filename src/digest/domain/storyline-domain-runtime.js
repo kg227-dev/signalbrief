@@ -66,8 +66,10 @@ const SOURCE_TIER_RULES = Object.freeze({
     score: 0.95,
     domains: [
       "reuters.com", "bloomberg.com", "ft.com", "wsj.com",
-      "sec.gov", "fda.gov", "cms.gov",
+      "sec.gov", "fda.gov", "cms.gov", "treasury.gov", "federalreserve.gov",
       "nytimes.com", "economist.com", "nature.com",
+      "apnews.com", "washingtonpost.com", "bbc.com", "theguardian.com",
+      "lancet.com",
     ],
   },
   strong: {
@@ -80,34 +82,156 @@ const SOURCE_TIER_RULES = Object.freeze({
       "cnbc.com", "axios.com", "thehill.com", "politico.com",
       "healthaffairs.org", "statnews.com",
       "utilitydive.com", "energydive.com",
+      // Industry Dive family
+      "ciodive.com", "supplychaindive.com", "retaildive.com", "hrdive.com",
+      "biopharmadive.com", "healthcaredive.com", "cybersecuritydive.com", "cfodive.com",
+      // Fierce family
+      "fiercepharma.com", "fierceelectronics.com", "fiercewireless.com",
+      // Top analysis / trade
+      "morningstar.com", "barrons.com", "hbr.org",
+      "wired.com", "arstechnica.com", "theregister.com",
+      "mckinsey.com", "bcg.com", "bain.com",
+      "scientificamerican.com", "fortune.com",
     ],
   },
   standard: {
     score: 0.6,
     domains: [
-      "xtalks.com", "pestakeholder.org", "lawrenceevans.com",
       "cpapracticeadvisor.com", "bottomline.com",
       "conference-board.org", "fintechfutures.com",
       "crowdfundinsider.com", "reinsurancene.ws",
       "apmdigest.com", "deloitte.com", "forvismazars.us",
       "techcrunch.com", "venturebeat.com", "zdnet.com", "theverge.com",
-      "hbr.org",
+      // Additional trade / analysis
+      "businessinsider.com", "inc.com", "fastcompany.com", "semafor.com",
+      "therecord.media", "darkreading.com", "pymnts.com",
+      "beckershospitalreview.com", "medpagetoday.com",
+      "insurancejournal.com", "healthleadersmedia.com",
     ],
   },
   corporate: {
     score: 0.42,
-    domains: ["pfizer.com", "businesswire.com", "prnewswire.com"],
+    domains: [
+      "pfizer.com", "businesswire.com", "prnewswire.com",
+      "globenewswire.com", "accesswire.com", "newswire.com",
+    ],
   },
   weak: {
     score: 0.22,
     domains: [
-      "investing.com", "ng.investing.com",
+      "investing.com",
       "barchart.com", "financialcontent.com", "markets.financialcontent.com",
       "mexc.com", "promptinjection.net", "stockstotrade.com",
       "youtube.com", "medium.com", "seekingalpha.com",
+      "benzinga.com", "fool.com", "substack.com",
     ],
   },
 });
+
+// Legitimate .net domains that should NOT be flagged as suspect
+const KNOWN_LEGIT_NET = new Set([
+  "zdnet.com", // already in standard tier — won't reach heuristics, but defensive
+]);
+
+// Heuristic patterns for detecting suspect unknown domains
+const SUSPECT_DOMAIN_PATTERNS = [
+  // SEO-style compound names with multiple hyphens: cloudcomputing-news.net, ai-daily-report.com
+  { test: (d) => (d.split(".")[0].match(/-/g) || []).length >= 2, reason: "seo-compound-name" },
+  // Unestablished .net TLD (known legit .net domains are already classified in tiers above)
+  { test: (d) => d.endsWith(".net") && !KNOWN_LEGIT_NET.has(d), reason: "unestablished-net" },
+  // .info TLD — almost always low quality for news
+  { test: (d) => d.endsWith(".info"), reason: "info-tld" },
+  // Long domain names with SEO news patterns
+  { test: (d) => {
+    const base = d.split(".")[0];
+    return base.length > 18 && /(?:news|daily|report|digest|insider|alert|update)/.test(base);
+  }, reason: "seo-news-pattern" },
+  // Numeric-heavy domains
+  { test: (d) => /\d{3,}/.test(d.split(".")[0]), reason: "numeric-domain" },
+];
+
+// Topic-specific authority overrides: { domain: { topicToken: overrideScore } }
+const TOPIC_AUTHORITY_OVERRIDES = Object.freeze({
+  // Healthcare / Life Sciences specialists
+  "statnews.com": { "healthcare": 0.90, "life sciences": 0.90 },
+  "fiercehealthcare.com": { "healthcare": 0.90 },
+  "fiercepharma.com": { "healthcare": 0.88, "life sciences": 0.90 },
+  "modernhealthcare.com": { "healthcare": 0.90 },
+  "healthaffairs.org": { "healthcare": 0.92, "public sector": 0.85 },
+  "biospace.com": { "life sciences": 0.88, "healthcare": 0.82 },
+  "fiercebiotech.com": { "life sciences": 0.90, "healthcare": 0.85 },
+  "biopharmadive.com": { "life sciences": 0.88, "healthcare": 0.85 },
+  "healthcaredive.com": { "healthcare": 0.88 },
+  "beckershospitalreview.com": { "healthcare": 0.78 },
+  "medpagetoday.com": { "healthcare": 0.78, "life sciences": 0.75 },
+  // Sustainability / Energy specialists
+  "esgtoday.com": { "sustainability": 0.90, "energy": 0.85 },
+  "esgdive.com": { "sustainability": 0.90, "energy": 0.85 },
+  "utilitydive.com": { "energy": 0.88, "sustainability": 0.82 },
+  "energydive.com": { "energy": 0.88, "sustainability": 0.82 },
+  // Technology specialists
+  "ciodive.com": { "technology": 0.85, "digital": 0.85, "ai tech": 0.82 },
+  "techcrunch.com": { "technology": 0.80, "ai tech": 0.80, "digital": 0.78 },
+  "zdnet.com": { "technology": 0.78, "digital": 0.78 },
+  "theverge.com": { "technology": 0.78, "digital": 0.75 },
+  "wired.com": { "technology": 0.85, "ai tech": 0.82 },
+  "arstechnica.com": { "technology": 0.85 },
+  "cybersecuritydive.com": { "technology": 0.85, "digital": 0.82 },
+  // Financial / Regulatory specialists
+  "sec.gov": { "financial services": 0.98, "pe m a": 0.95, "policy regulatory": 0.95 },
+  "fda.gov": { "healthcare": 0.98, "life sciences": 0.98 },
+  "cms.gov": { "healthcare": 0.95, "public sector": 0.90 },
+  "treasury.gov": { "financial services": 0.98, "policy regulatory": 0.95 },
+  "federalreserve.gov": { "financial services": 0.98 },
+  "cnbc.com": { "financial services": 0.85 },
+  "barrons.com": { "financial services": 0.88 },
+  "morningstar.com": { "financial services": 0.85 },
+  // Industry / Supply chain
+  "supplychaindive.com": { "industrials": 0.85, "consumer": 0.80 },
+  "retaildive.com": { "consumer": 0.85 },
+  // Strategy / Consulting
+  "mckinsey.com": { "strategy": 0.88 },
+  "bcg.com": { "strategy": 0.88 },
+  "bain.com": { "strategy": 0.85, "pe m a": 0.85 },
+  "hbr.org": { "strategy": 0.88 },
+});
+
+// Source type classification for originality detection
+const SOURCE_TYPE_MAP = Object.freeze({
+  primary: [
+    "sec.gov", "fda.gov", "cms.gov", "treasury.gov", "federalreserve.gov",
+    "whitehouse.gov", "congress.gov", "irs.gov",
+  ],
+  wire: [
+    "businesswire.com", "prnewswire.com", "globenewswire.com",
+    "accesswire.com", "newswire.com",
+  ],
+  top_tier: [
+    "reuters.com", "bloomberg.com", "ft.com", "wsj.com",
+    "nytimes.com", "economist.com", "apnews.com",
+    "washingtonpost.com", "bbc.com", "theguardian.com",
+  ],
+  aggregator: [
+    "investing.com", "barchart.com", "benzinga.com",
+    "financialcontent.com", "seekingalpha.com", "fool.com",
+    "stockstotrade.com", "mexc.com",
+  ],
+});
+
+// Headline patterns indicating derivative/low-originality content
+const DERIVATIVE_HEADLINE_PATTERNS = [
+  /\b(?:pushes|drives|leads)\s+companies\s+to\s+(?:invest|spend)\b/i,
+  /\bmarket\s+(?:expected|projected|set)\s+to\s+(?:reach|grow|hit)\b/i,
+  /\b(?:companies|firms)\s+are\s+(?:investing|spending|pouring)\s+billions\b/i,
+  /\btop\s+\d+\s+(?:trends?|stocks?|companies|things)\b/i,
+  /\beverything\s+you\s+need\s+to\s+know\b/i,
+  /\bwhat\s+you\s+(?:need|should)\s+to\s+know\b/i,
+];
+
+// Patterns suggesting press release rewrites (not from original company or wire)
+const PRESS_RELEASE_REWRITE_PATTERNS = [
+  /\b(?:announces?|declares?|reports?|appoints?|names?)\s/i,
+];
 
 const FLAG_RULES = [
   { flag: "routine_dividend", pattern: /\b(dividend|shareholders? of record|quarterly payout|consecutive quarterly dividend|payable march)\b/i },
@@ -188,22 +312,130 @@ function jaccard(aValues, bValues) {
   return intersection / union;
 }
 
-function classifySourceTier(sourceDomainRaw) {
-  const sourceDomain = String(sourceDomainRaw || "").trim().toLowerCase().replace(/^www\./, "");
-  if (!sourceDomain) return { source_tier: "unknown", source_authority: 0.45 };
+function normalizeSourceDomain(raw) {
+  let d = String(raw || "").trim().toLowerCase().replace(/^www\./, "");
+  // Strip common non-content subdomains so ng.investing.com → investing.com
+  d = d.replace(/^(?:ng|m|amp|mobile|rss|feeds|api|cdn|static|images)\./i, "");
+  // Strip single-letter subdomains (e.g., t.co-style but for longer domains)
+  d = d.replace(/^[a-z]\./i, "");
+  return d;
+}
 
+function classifySourceTier(sourceDomainRaw, tag) {
+  const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
+  if (!sourceDomain) return { source_tier: "unknown", source_authority: 0.45, topic_fit: 0 };
+
+  let baseTier = null;
+  let baseScore = 0;
   for (const [sourceTier, rule] of Object.entries(SOURCE_TIER_RULES)) {
     if (rule.domains.some((domain) => sourceDomain === domain || sourceDomain.endsWith(`.${domain}`))) {
-      return { source_tier: sourceTier, source_authority: rule.score };
+      baseTier = sourceTier;
+      baseScore = rule.score;
+      break;
     }
   }
-  if (sourceDomain.endsWith(".medium.com")) {
-    return { source_tier: "weak", source_authority: 0.28 };
+
+  if (!baseTier) {
+    if (sourceDomain.endsWith(".medium.com")) {
+      baseTier = "weak";
+      baseScore = 0.28;
+    } else if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) {
+      baseTier = "blog";
+      baseScore = 0.48;
+    }
   }
-  if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) {
-    return { source_tier: "standard", source_authority: 0.48 };
+
+  // For unknown domains, apply suspect heuristics
+  if (!baseTier) {
+    const suspectMatch = SUSPECT_DOMAIN_PATTERNS.find((p) => p.test(sourceDomain));
+    if (suspectMatch) {
+      baseTier = "suspect";
+      baseScore = 0.15;
+    } else {
+      baseTier = "unknown";
+      baseScore = 0.30;
+    }
   }
-  return { source_tier: "unknown", source_authority: 0.38 };
+
+  // Apply topic-domain fit overrides
+  const fit = computeTopicDomainFit(sourceDomain, tag);
+  const finalScore = fit.overrideScore != null && fit.overrideScore > baseScore
+    ? fit.overrideScore
+    : baseScore;
+
+  return {
+    source_tier: baseTier,
+    source_authority: finalScore,
+    topic_fit: fit.topicFit,
+  };
+}
+
+function computeTopicDomainFit(sourceDomain, tag) {
+  if (!tag || !sourceDomain) return { overrideScore: null, topicFit: 0 };
+  const tagToken = normalizeTopicToken(tag);
+  const overrides = TOPIC_AUTHORITY_OVERRIDES[sourceDomain];
+  if (!overrides) return { overrideScore: null, topicFit: 0 };
+
+  // Direct match
+  if (overrides[tagToken] != null) {
+    return { overrideScore: overrides[tagToken], topicFit: 1.0 };
+  }
+
+  // Related topic match
+  for (const [overrideTag, overrideVal] of Object.entries(overrides)) {
+    if (topicsRelated(tagToken, overrideTag)) {
+      return { overrideScore: overrideVal, topicFit: 0.7 };
+    }
+  }
+
+  return { overrideScore: null, topicFit: 0 };
+}
+
+function classifySourceType(sourceDomainRaw) {
+  const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
+  if (!sourceDomain) return "unknown";
+
+  for (const [sourceType, domains] of Object.entries(SOURCE_TYPE_MAP)) {
+    if (domains.some((d) => sourceDomain === d || sourceDomain.endsWith(`.${d}`))) {
+      return sourceType;
+    }
+  }
+  if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog") || sourceDomain.endsWith(".medium.com")) {
+    return "blog";
+  }
+  return "unknown";
+}
+
+function computeOriginalitySignal(item, sourceInfo) {
+  const sourceType = sourceInfo?.source_type || "unknown";
+  let score = 1.0;
+
+  // Source type penalties
+  if (sourceType === "wire") score = 0.5;
+  else if (sourceType === "aggregator") score = 0.35;
+  else if (sourceType === "blog" || sourceInfo?.source_tier === "suspect") score = 0.4;
+
+  // Derivative headline detection
+  const headline = String(item?.headline || "");
+  for (const pattern of DERIVATIVE_HEADLINE_PATTERNS) {
+    if (pattern.test(headline)) {
+      score -= 0.15;
+      break; // apply only once
+    }
+  }
+
+  // Press release rewrite detection: headline looks like a press release
+  // but source is not the company itself and not a wire service
+  if (sourceType !== "wire" && sourceType !== "primary" && sourceInfo?.source_tier !== "corporate") {
+    for (const pattern of PRESS_RELEASE_REWRITE_PATTERNS) {
+      if (pattern.test(headline)) {
+        score -= 0.1;
+        break;
+      }
+    }
+  }
+
+  return clamp(score, 0, 1);
 }
 
 function normalizePromptFlags(flags) {
@@ -278,6 +510,7 @@ function computeRoutineItemScore(contentFlags, sourceInfo) {
   if (flags.has("thin_listicle")) score += 0.38;
   if (flags.has("conference_recap")) score += 0.46;
   if (flags.has("investor_relations")) score += 0.34;
+  if (sourceInfo.source_tier === "suspect") score += 0.24;
   if (sourceInfo.source_tier === "weak") score += 0.16;
   if (sourceInfo.source_tier === "corporate") score += 0.08;
   return clamp(score, 0, 1);
@@ -308,10 +541,12 @@ function computeStrategicValue(item, sourceInfo, routineItemScore, contentFlags)
   if (/\b(deadline|effective date|enforcement|compliance date|due by|expires?)\b/i.test(text)) bonus += 0.06;
   if (/\b(capex|capital expenditure|\$\d+[BMT]|\d+\s*billion|\d+\s*million\s+investment)\b/i.test(text)) bonus += 0.04;
 
+  const topicFit = Number(sourceInfo?.topic_fit || 0);
   const score = (
-    0.6 * promptStrategic
-    + 0.25 * baseNorm
+    0.59 * promptStrategic
+    + 0.24 * baseNorm
     + 0.15 * sourceInfo.source_authority
+    + 0.02 * topicFit
     + bonus
     - (routineItemScore * 0.42)
   );
@@ -330,7 +565,10 @@ function annotateEditorialSignals(items = []) {
     const promptHints = normalizePromptHints(item?.storyline_hints);
     const localFlags = detectLocalContentFlags(item);
     const contentFlags = uniqSorted([...promptFlags, ...localFlags]);
-    const sourceInfo = classifySourceTier(item?.source_domain || item?.source);
+    const sourceInfo = classifySourceTier(item?.source_domain || item?.source, item?.tag);
+    const sourceType = classifySourceType(item?.source_domain || item?.source);
+    const extendedSourceInfo = { ...sourceInfo, source_type: sourceType };
+    const originalitySignal = computeOriginalitySignal(item, extendedSourceInfo);
     const storylineHints = buildStorylineHints(item, contentFlags, promptHints);
     const entityKeys = extractEntityKeys(item);
     const routineItemScore = computeRoutineItemScore(contentFlags, sourceInfo);
@@ -344,6 +582,9 @@ function annotateEditorialSignals(items = []) {
       storyline_hints: storylineHints,
       source_tier: sourceInfo.source_tier,
       source_authority: Number(sourceInfo.source_authority.toFixed(3)),
+      source_type: sourceType,
+      topic_fit: Number((sourceInfo.topic_fit || 0).toFixed(3)),
+      originality_signal: Number(originalitySignal.toFixed(3)),
       routine_item_score: Number(routineItemScore.toFixed(3)),
       strategic_value: Number(strategicValue.toFixed(3)),
       hard_exclude: hardExclude,
@@ -403,16 +644,18 @@ function storylineSimilarity(leftItem, rightItem) {
 function chooseRepresentative(items) {
   const ranked = (Array.isArray(items) ? items : []).slice().sort((left, right) => {
     const leftScore = (
-      Number(left?.strategic_value || 0) * 0.46
-      + Number(left?.source_authority || 0) * 0.18
-      + clamp(Number(left?.baseScore || 0) / 10, 0, 1) * 0.2
-      + (1 - Number(left?.routine_item_score || 0)) * 0.16
+      Number(left?.strategic_value || 0) * 0.40
+      + Number(left?.source_authority || 0) * 0.24
+      + clamp(Number(left?.baseScore || 0) / 10, 0, 1) * 0.16
+      + (1 - Number(left?.routine_item_score || 0)) * 0.10
+      + Number(left?.originality_signal || 0.5) * 0.10
     );
     const rightScore = (
-      Number(right?.strategic_value || 0) * 0.46
-      + Number(right?.source_authority || 0) * 0.18
-      + clamp(Number(right?.baseScore || 0) / 10, 0, 1) * 0.2
-      + (1 - Number(right?.routine_item_score || 0)) * 0.16
+      Number(right?.strategic_value || 0) * 0.40
+      + Number(right?.source_authority || 0) * 0.24
+      + clamp(Number(right?.baseScore || 0) / 10, 0, 1) * 0.16
+      + (1 - Number(right?.routine_item_score || 0)) * 0.10
+      + Number(right?.originality_signal || 0.5) * 0.10
     );
     return rightScore - leftScore;
   });
@@ -477,23 +720,37 @@ function clusterStorylines(items = []) {
   });
 }
 
+function computeSupportingSourcesAvgAuthority(supportingSources) {
+  const sources = Array.isArray(supportingSources) ? supportingSources.filter(Boolean) : [];
+  if (sources.length === 0) return 0.5;
+  const total = sources.reduce((sum, domain) => {
+    const info = classifySourceTier(domain);
+    return sum + info.source_authority;
+  }, 0);
+  return total / sources.length;
+}
+
 function buildStorylineCandidates(items = []) {
-  return clusterStorylines(items).map((cluster) => ({
-    ...(cluster.representative || {}),
-    storyline_id: cluster.storyline_id,
-    storyline_size: cluster.storyline_size,
-    supporting_sources: cluster.supporting_sources,
-    supporting_headlines: cluster.supporting_headlines,
-    cross_source_count: cluster.cross_source_count,
-    entity_keys: cluster.entity_keys,
-    storyline_hints: cluster.storyline_hints,
-    cluster_confidence: cluster.cluster_confidence,
-    storyline_strategic_value: cluster.strategic_value,
-    storyline_key: buildStorylineFingerprint({
+  return clusterStorylines(items).map((cluster) => {
+    const avgAuthority = computeSupportingSourcesAvgAuthority(cluster.supporting_sources);
+    return {
+      ...(cluster.representative || {}),
+      storyline_id: cluster.storyline_id,
+      storyline_size: cluster.storyline_size,
+      supporting_sources: cluster.supporting_sources,
+      supporting_headlines: cluster.supporting_headlines,
+      cross_source_count: cluster.cross_source_count,
+      supporting_sources_avg_authority: Number(avgAuthority.toFixed(3)),
       entity_keys: cluster.entity_keys,
       storyline_hints: cluster.storyline_hints,
-    }),
-  }));
+      cluster_confidence: cluster.cluster_confidence,
+      storyline_strategic_value: cluster.strategic_value,
+      storyline_key: buildStorylineFingerprint({
+        entity_keys: cluster.entity_keys,
+        storyline_hints: cluster.storyline_hints,
+      }),
+    };
+  });
 }
 
 function applyStrategicQualityGate(items = [], opts = {}) {
@@ -578,9 +835,13 @@ module.exports = {
   buildStorylineCandidates,
   buildStorylineFingerprint,
   classifySourceTier,
+  classifySourceType,
   clusterStorylines,
+  computeOriginalitySignal,
   computeStrategicValue,
+  computeTopicDomainFit,
   detectLocalContentFlags,
   extractEntityKeys,
+  normalizeSourceDomain,
   storylineSimilarity,
 };

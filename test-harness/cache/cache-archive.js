@@ -16,7 +16,7 @@ function loadArchiveDigests(archiveDir) {
   if (!fs.existsSync(archiveDir)) return [];
   return fs
     .readdirSync(archiveDir)
-    .filter((fileName) => fileName.endsWith(".json"))
+    .filter((fileName) => /^\d{4}-\d{2}-\d{2}\.json$/.test(fileName))
     .sort()
     .map((fileName) => readArchiveDigest(path.join(archiveDir, fileName)))
     .filter(Boolean);

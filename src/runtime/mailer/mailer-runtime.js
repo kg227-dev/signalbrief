@@ -24,6 +24,8 @@ const APP_ROOT = path.resolve(__dirname, "..", "..", "..");
 const WELCOME_TEMPLATE_PATH = path.join(APP_ROOT, "templates", "welcome.html");
 let welcomeTemplateCache = null;
 
+const MAILER_TIMEOUT_MS = Math.max(1000, Number(process.env.SIGNALBRIEF_MAILER_TIMEOUT_MS || 15000));
+
 function getBaseUrl() {
   return process.env.BASE_URL || "https://getsignalbrief.com";
 }
@@ -195,6 +197,7 @@ function sendViaResend(to, subject, html, token = null) {
       hostname: "api.resend.com",
       path: "/emails",
       method: "POST",
+      timeout: MAILER_TIMEOUT_MS,
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -229,6 +232,7 @@ function sendViaResend(to, subject, html, token = null) {
         });
       });
     });
+    req.on("timeout", () => { req.destroy(new Error(`[mailer] resend request timed out after ${MAILER_TIMEOUT_MS}ms`)); });
     req.on("error", reject);
     req.write(body);
     req.end();
@@ -251,6 +255,7 @@ function refreshGoogleToken() {
       hostname: "oauth2.googleapis.com",
       path: "/token",
       method: "POST",
+      timeout: MAILER_TIMEOUT_MS,
       headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": Buffer.byteLength(formData) },
     }, (res) => {
       let out = "";
@@ -274,6 +279,7 @@ function refreshGoogleToken() {
         resolve(accessToken);
       });
     });
+    req.on("timeout", () => { req.destroy(new Error(`[mailer] google token refresh timed out after ${MAILER_TIMEOUT_MS}ms`)); });
     req.on("error", reject);
     req.write(formData);
     req.end();
@@ -312,6 +318,7 @@ async function sendViaGmail(to, subject, html, token = null) {
       hostname: "gmail.googleapis.com",
       path: "/gmail/v1/users/me/messages/send",
       method: "POST",
+      timeout: MAILER_TIMEOUT_MS,
       headers: {
         "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json",
@@ -334,6 +341,7 @@ async function sendViaGmail(to, subject, html, token = null) {
         });
       });
     });
+    req.on("timeout", () => { req.destroy(new Error(`[mailer] gmail send timed out after ${MAILER_TIMEOUT_MS}ms`)); });
     req.on("error", reject);
     req.write(body);
     req.end();

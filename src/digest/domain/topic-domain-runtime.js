@@ -315,6 +315,12 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     ? opts.recentStorylineKeys
     : new Set(Array.isArray(opts.recentStorylineKeys) ? opts.recentStorylineKeys : []);
   const nowIso = String(opts.nowIso || new Date().toISOString());
+  const blockedSources = opts.blockedSources instanceof Set
+    ? opts.blockedSources
+    : new Set(Array.isArray(opts.blockedSources) ? opts.blockedSources : []);
+  const trustedSources = opts.trustedSources instanceof Set
+    ? opts.trustedSources
+    : new Set(Array.isArray(opts.trustedSources) ? opts.trustedSources : []);
 
   return allItems.map((item) => {
     const signals = computeTopicSignals(item, userTopics);
@@ -365,6 +371,13 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     );
     const topicDomainFit = clamp(Number(item?.topic_fit || 0), 0, 1);
 
+    // Per-user source preference adjustments
+    const itemDomain = String(item?.source_domain || "").trim().toLowerCase().replace(/^www\./, "");
+    const sourceBlocked = itemDomain && blockedSources.has(itemDomain);
+    const sourceTrusted = itemDomain && trustedSources.has(itemDomain);
+    const sourcePreferencePenalty = sourceBlocked ? 0.85 : 0;
+    const sourcePreferenceBoost = sourceTrusted ? 0.08 : 0;
+
     let specialistBoost = 0;
     if (specialistMode) {
       if (topicMatch >= 10) specialistBoost = 0.05;
@@ -389,9 +402,10 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       1
     );
     const adjustedNorm = clamp(
-      rawScore
+      (rawScore + sourcePreferenceBoost)
       * (1 - (duplicationPenalty * 0.5))
-      * (1 - (entitySaturationPenalty * 0.35)),
+      * (1 - (entitySaturationPenalty * 0.35))
+      * (1 - sourcePreferencePenalty),
       0,
       1
     );
@@ -404,6 +418,8 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     if (base >= 8.0) whyShown.push("high_base_score");
     if (multiSourceConfirmation >= 0.5) whyShown.push("cross_source");
     if (recentEntityCount > 0) whyShown.push("novelty_penalized");
+    if (sourceBlocked) whyShown.push("source_blocked");
+    if (sourceTrusted) whyShown.push("source_trusted");
 
     const sourceDomain = item?.source_domain
       || (sourceDomainForItem ? sourceDomainForItem(item) : null)

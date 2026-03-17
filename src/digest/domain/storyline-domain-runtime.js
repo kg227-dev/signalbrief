@@ -321,6 +321,13 @@ function normalizeSourceDomain(raw) {
   return d;
 }
 
+// Learned domain authority adjustments (populated at runtime via setLearnedDomainAdjustments)
+let _learnedAdjustments = null;
+
+function setLearnedDomainAdjustments(adjustmentsMap) {
+  _learnedAdjustments = adjustmentsMap instanceof Map ? adjustmentsMap : null;
+}
+
 function classifySourceTier(sourceDomainRaw, tag) {
   const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
   if (!sourceDomain) return { source_tier: "unknown", source_authority: 0.45, topic_fit: 0 };
@@ -354,6 +361,16 @@ function classifySourceTier(sourceDomainRaw, tag) {
     } else {
       baseTier = "unknown";
       baseScore = 0.30;
+    }
+  }
+
+  // Apply learned domain authority for unknown/suspect domains
+  if ((baseTier === "unknown" || baseTier === "suspect") && _learnedAdjustments && _learnedAdjustments.has(sourceDomain)) {
+    const learned = _learnedAdjustments.get(sourceDomain);
+    if (Number.isFinite(learned) && learned > 0) {
+      baseScore = learned;
+      if (learned >= 0.45) baseTier = "learned-standard";
+      else if (learned <= 0.18) baseTier = "learned-suspect";
     }
   }
 
@@ -730,8 +747,25 @@ function computeSupportingSourcesAvgAuthority(supportingSources) {
   return total / sources.length;
 }
 
+function flagClusterDerivatives(cluster) {
+  if (!cluster || !Array.isArray(cluster.items) || cluster.items.length < 2) return;
+  const primaryTypes = new Set(["primary", "top_tier"]);
+  const hasPrimary = cluster.items.some((item) => primaryTypes.has(item.source_type));
+  if (!hasPrimary) return;
+  for (const item of cluster.items) {
+    if (primaryTypes.has(item.source_type)) continue;
+    const sourceType = item.source_type || "unknown";
+    if (sourceType === "wire" || sourceType === "aggregator" || sourceType === "blog"
+      || item.source_tier === "suspect" || item.source_tier === "weak") {
+      item.derivative_of_primary = true;
+      item.originality_signal = clamp(Number(item.originality_signal || 0.5) - 0.15, 0, 1);
+    }
+  }
+}
+
 function buildStorylineCandidates(items = []) {
   return clusterStorylines(items).map((cluster) => {
+    flagClusterDerivatives(cluster);
     const avgAuthority = computeSupportingSourcesAvgAuthority(cluster.supporting_sources);
     return {
       ...(cluster.representative || {}),
@@ -843,5 +877,6 @@ module.exports = {
   detectLocalContentFlags,
   extractEntityKeys,
   normalizeSourceDomain,
+  setLearnedDomainAdjustments,
   storylineSimilarity,
 };

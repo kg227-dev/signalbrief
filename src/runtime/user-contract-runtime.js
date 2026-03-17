@@ -56,6 +56,20 @@ function normalizeBoolean(value, fallback = false) {
   return fallback;
 }
 
+function normalizeSourcePreferences(raw) {
+  const obj = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return {
+    blocked_sources: normalizeStringArray(
+      (Array.isArray(obj.blocked_sources) ? obj.blocked_sources : [])
+        .map((d) => String(d || "").trim().toLowerCase().replace(/^www\./, ""))
+    ),
+    trusted_sources: normalizeStringArray(
+      (Array.isArray(obj.trusted_sources) ? obj.trusted_sources : [])
+        .map((d) => String(d || "").trim().toLowerCase().replace(/^www\./, ""))
+    ),
+  };
+}
+
 function normalizePreferences(rawPreferences, defaults) {
   const raw = rawPreferences && typeof rawPreferences === "object" && !Array.isArray(rawPreferences)
     ? rawPreferences
@@ -121,6 +135,10 @@ function createDefaultUser(chatId, nowIso = new Date().toISOString()) {
       auto_paused_at: null,
       reactivated_at: null,
     },
+    source_preferences: {
+      blocked_sources: [],
+      trusted_sources: [],
+    },
     signup_referral_source: null,
     preferences: {
       delivery_time: "07:00",
@@ -167,6 +185,7 @@ function normalizeUserRecord(input, opts = {}) {
       ...defaults.reengagement_state,
       ...(raw.reengagement_state && typeof raw.reengagement_state === "object" ? raw.reengagement_state : {}),
     },
+    source_preferences: normalizeSourcePreferences(raw.source_preferences),
     signup_referral_source: raw.signup_referral_source && typeof raw.signup_referral_source === "object"
       ? raw.signup_referral_source
       : null,

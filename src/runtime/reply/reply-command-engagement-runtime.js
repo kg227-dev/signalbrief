@@ -277,6 +277,87 @@ function createEngagementCommandHandlers(deps) {
     await send(chatId, `➕ Added *${displayLabel}* to your topics. You'll see it in tomorrow's digest.`);
   }
 
+  function resolveSourceDomainFromItem(user, itemIndex) {
+    const idx = Number(itemIndex || 0);
+    if (!Number.isFinite(idx) || idx < 1) return null;
+    const items = Array.isArray(user?.last_digest_items) ? user.last_digest_items : [];
+    const item = items[idx - 1];
+    return String(item?.source_domain || "").trim().toLowerCase().replace(/^www\./, "") || null;
+  }
+
+  async function handleSourceBlock(chatId, input) {
+    const user = readUser(chatId);
+    if (!user.source_preferences) user.source_preferences = { blocked_sources: [], trusted_sources: [] };
+    const domain = /^\d+$/.test(String(input || "").trim())
+      ? resolveSourceDomainFromItem(user, Number(input))
+      : String(input || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[\/\s]/)[0];
+    if (!domain) {
+      await send(chatId, "Tell me which source to block — for example: *block 3* (item number) or *block benzinga.com*.");
+      return;
+    }
+    if (!Array.isArray(user.source_preferences.blocked_sources)) user.source_preferences.blocked_sources = [];
+    if (user.source_preferences.blocked_sources.includes(domain)) {
+      await send(chatId, `🚫 *${domain}* is already blocked.`);
+      return;
+    }
+    user.source_preferences.blocked_sources.push(domain);
+    // Remove from trusted if present
+    if (Array.isArray(user.source_preferences.trusted_sources)) {
+      user.source_preferences.trusted_sources = user.source_preferences.trusted_sources.filter((d) => d !== domain);
+    }
+    writeUser(chatId, user);
+    await send(chatId, `🚫 Blocked *${domain}* — stories from this source will be heavily deprioritized.`);
+  }
+
+  async function handleSourceTrust(chatId, input) {
+    const user = readUser(chatId);
+    if (!user.source_preferences) user.source_preferences = { blocked_sources: [], trusted_sources: [] };
+    const domain = /^\d+$/.test(String(input || "").trim())
+      ? resolveSourceDomainFromItem(user, Number(input))
+      : String(input || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[\/\s]/)[0];
+    if (!domain) {
+      await send(chatId, "Tell me which source to trust — for example: *trust 2* (item number) or *trust reuters.com*.");
+      return;
+    }
+    if (!Array.isArray(user.source_preferences.trusted_sources)) user.source_preferences.trusted_sources = [];
+    if (user.source_preferences.trusted_sources.includes(domain)) {
+      await send(chatId, `✅ *${domain}* is already trusted.`);
+      return;
+    }
+    user.source_preferences.trusted_sources.push(domain);
+    // Remove from blocked if present
+    if (Array.isArray(user.source_preferences.blocked_sources)) {
+      user.source_preferences.blocked_sources = user.source_preferences.blocked_sources.filter((d) => d !== domain);
+    }
+    writeUser(chatId, user);
+    await send(chatId, `✅ Trusted *${domain}* — stories from this source will get a small boost.`);
+  }
+
+  async function handleSourceUnblock(chatId, input) {
+    const user = readUser(chatId);
+    if (!user.source_preferences) user.source_preferences = { blocked_sources: [], trusted_sources: [] };
+    const domain = String(input || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[\/\s]/)[0];
+    if (!domain) {
+      await send(chatId, "Tell me which source to unblock — for example: *unblock benzinga.com*.");
+      return;
+    }
+    let removed = false;
+    if (Array.isArray(user.source_preferences.blocked_sources)) {
+      const before = user.source_preferences.blocked_sources.length;
+      user.source_preferences.blocked_sources = user.source_preferences.blocked_sources.filter((d) => d !== domain);
+      removed = user.source_preferences.blocked_sources.length < before;
+    }
+    if (Array.isArray(user.source_preferences.trusted_sources)) {
+      const before = user.source_preferences.trusted_sources.length;
+      user.source_preferences.trusted_sources = user.source_preferences.trusted_sources.filter((d) => d !== domain);
+      if (user.source_preferences.trusted_sources.length < before) removed = true;
+    }
+    writeUser(chatId, user);
+    await send(chatId, removed
+      ? `↩️ Removed *${domain}* from your source preferences.`
+      : `*${domain}* wasn't in your blocked or trusted list.`);
+  }
+
   function parseInlineCallbackData(data) {
     const raw = String(data || "").trim();
     const parts = raw.split(":");
@@ -332,6 +413,9 @@ function createEngagementCommandHandlers(deps) {
     handleTopicLess,
     handleDigestFeedback,
     handleTopicAdd,
+    handleSourceBlock,
+    handleSourceTrust,
+    handleSourceUnblock,
     handleCallback,
   };
 }

@@ -27,6 +27,9 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     } = params;
 
     const prefs = user.preferences || {};
+    const sourcePrefs = user.source_preferences || {};
+    const blockedSources = new Set(Array.isArray(sourcePrefs.blocked_sources) ? sourcePrefs.blocked_sources : []);
+    const trustedSources = new Set(Array.isArray(sourcePrefs.trusted_sources) ? sourcePrefs.trusted_sources : []);
     let wasFiltered = false;
     let userItems = enriched;
     const filteredResult = filterItemsByTopics(enriched, user.topics || [], {
@@ -58,6 +61,8 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       sourceDomainForItem: parseSourceDomain,
       recentEntityCounts: recentHistory.entityCounts,
       recentStorylineKeys: recentHistory.storylineKeys,
+      blockedSources,
+      trustedSources,
       nowIso,
     });
     userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
@@ -117,6 +122,8 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         sourceDomainForItem: parseSourceDomain,
         recentEntityCounts: recentHistory.entityCounts,
         recentStorylineKeys: recentHistory.storylineKeys,
+        blockedSources,
+        trustedSources,
         nowIso,
       })
         .sort((a, b) => b.relevanceScore - a.relevanceScore)

@@ -85,6 +85,13 @@ const {
   toEtDateString,
   formatEtDateKey,
 } = require("./digest-orchestrator-time-runtime");
+const {
+  loadDomainStats,
+  saveDomainStats,
+  accumulateDomainStats,
+  computeLearnedAuthorityAdjustments,
+} = require("../digest/domain/domain-learning-runtime");
+const { setLearnedDomainAdjustments } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 
 const digestStore = createStore();
@@ -723,6 +730,14 @@ async function main() {
     runMode,
     dueUsersCount: dueUsers.length,
   });
+  // Load learned domain authority adjustments from historical stats
+  const domainStats = loadDomainStats();
+  const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
+  if (learnedAdjustments.size > 0) {
+    setLearnedDomainAdjustments(learnedAdjustments);
+    log(`[domain-learning] ${learnedAdjustments.size} learned domain adjustment(s) applied`);
+  }
+
   const storylinePool = prepareStorylinePool(enriched, selectionTarget);
   log(`Storyline pool ready: ${storylinePool.length}/${enriched.length} candidate(s) retained after quality gate`);
 
@@ -796,6 +811,17 @@ async function main() {
     claudeUsage,
     engagementEvents,
   });
+
+  // Accumulate domain stats from delivered items for dynamic domain learning
+  try {
+    const deliveredItems = storylinePool;
+    const updatedStats = accumulateDomainStats(deliveredItems, domainStats);
+    saveDomainStats(updatedStats);
+  } catch (_err) {
+    // Non-critical — domain learning failure should not block digest
+  }
+  // Clear learned adjustments after run to avoid stale state
+  setLearnedDomainAdjustments(null);
 
   recordRunCost({
     now,

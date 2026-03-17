@@ -58,6 +58,9 @@ function createReplyCommandHandlers({
     handleTopicLess,
     handleDigestFeedback,
     handleTopicAdd,
+    handleSourceBlock,
+    handleSourceTrust,
+    handleSourceUnblock,
     handleCallback,
   } = createEngagementCommandHandlers({
     send,
@@ -75,6 +78,9 @@ function createReplyCommandHandlers({
     handleTopicLess,
     handleDigestFeedback,
     handleTopicAdd,
+    handleSourceBlock,
+    handleSourceTrust,
+    handleSourceUnblock,
     handleCallback,
   };
 }

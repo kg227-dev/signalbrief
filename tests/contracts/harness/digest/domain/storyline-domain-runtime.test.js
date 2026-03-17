@@ -233,3 +233,41 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(classifySourceTier("fool.com").source_tier, "weak");
   assert.strictEqual(classifySourceTier("substack.com").source_tier, "weak");
 }
+
+// ── Derivative flagging: cluster with top_tier + weak sources ──
+{
+  const clusterItems = [
+    {
+      tag: "TECHNOLOGY",
+      headline: "Hyperscaler AI capex hits $650B as cloud giants race",
+      summary: "AWS, Azure, Google invest heavily in AI infrastructure.",
+      source_domain: "reuters.com",
+      baseScore: 8.0,
+      strategic_value: 0.80,
+    },
+    {
+      tag: "TECHNOLOGY",
+      headline: "AI demand pushes companies to invest billions in cloud infrastructure",
+      summary: "Tech firms expected to spend $650B on AI cloud.",
+      source_domain: "benzinga.com",
+      baseScore: 8.5,
+      strategic_value: 0.82,
+    },
+  ];
+  const candidates = buildStorylineCandidates(clusterItems);
+  // If clustered, the weak/aggregator item should be flagged as derivative
+  if (candidates.length === 1) {
+    // Clustered: representative should be reuters
+    assert.strictEqual(candidates[0].source_domain, "reuters.com",
+      "reuters should be representative over benzinga in a cluster");
+  }
+  // Verify derivative_of_primary flag is set on non-primary items within clusters
+  const allClusterItems = candidates.flatMap((c) => c.items || []);
+  const benzingaItem = allClusterItems.find((i) => i.source_domain === "benzinga.com");
+  if (benzingaItem && candidates.length === 1) {
+    assert.strictEqual(benzingaItem.derivative_of_primary, true,
+      "benzinga item should be flagged as derivative when clustered with reuters");
+    assert.ok(benzingaItem.originality_signal <= 0.35,
+      `derivative item originality should be penalized, got ${benzingaItem.originality_signal}`);
+  }
+}

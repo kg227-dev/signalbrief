@@ -28,11 +28,8 @@ const { computeDigestQualityScore } = require("../domains/digest");
 const { applyAutoTopicLearning } = require("../domains/personalization");
 const {
   applyEntityCoverageCap,
-  applyStrategicQualityGate,
   buildRecentEntityHistory,
-  buildStorylineCandidates,
   createDigestDeliveryRecordRuntime,
-  selectDigestItems,
   createDigestPolicies,
 } = require("../domains/digest");
 const {
@@ -76,6 +73,18 @@ const { createDigestOrchestratorIncidentRuntime } = require("./digest-orchestrat
 const { createDigestOrchestratorLockRuntime } = require("./digest-orchestrator-lock-runtime");
 const { createDigestOrchestratorTransportRuntime } = require("./digest-orchestrator-transport-runtime");
 const { createDigestOrchestratorBootstrapRuntime } = require("./digest-orchestrator-bootstrap-runtime");
+const {
+  createDigestOrchestratorPipelineRuntime,
+  resolveDeliveryModeFromTrigger,
+  resolveDeliveryEventSource,
+  filterAlreadySentScheduledDueUsers,
+} = require("./digest-orchestrator-pipeline-runtime");
+const {
+  getEtNow,
+  getEtNowParts,
+  toEtDateString,
+  formatEtDateKey,
+} = require("./digest-orchestrator-time-runtime");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 
 const digestStore = createStore();
@@ -149,63 +158,7 @@ function buildPublicDigestUrl(dateKey) {
   return `${getBaseUrl()}/digest/${key}`;
 }
 
-// ET time helpers
-const ET_WEEKDAY_MAP = Object.freeze({
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-});
-const ET_NOW_PARTS_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  weekday: "short",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-function getEtNow() {
-  return new Date();
-}
-function getEtNowParts(date = new Date()) {
-  const currentDate = date instanceof Date ? date : new Date(date);
-  const rawParts = ET_NOW_PARTS_FORMATTER.formatToParts(currentDate);
-  const parts = {};
-  for (const part of rawParts) {
-    if (part.type === "literal") continue;
-    parts[part.type] = part.value;
-  }
-
-  const year = String(parts.year || "").trim();
-  const month = String(parts.month || "").trim();
-  const day = String(parts.day || "").trim();
-  const hour = Number(parts.hour || 0);
-  const minute = Number(parts.minute || 0);
-  const todayDOW = ET_WEEKDAY_MAP[String(parts.weekday || "").trim()] ?? null;
-  const todayET = year && month && day
-    ? `${year}-${month}-${day}`
-    : null;
-
-  return {
-    todayET,
-    todayDOW,
-    hour,
-    minute,
-    nowMinutes: (hour * 60) + minute,
-  };
-}
-function toEtDateString(iso) {
-  return iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null;
-}
-function formatEtDateKey(date) {
-  return date.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
+// ET time helpers — imported from digest-orchestrator-time-runtime.js
 
 // API cost estimates
 const PERPLEXITY_COST_PER_CALL = DEFAULT_PERPLEXITY_COST_PER_CALL;
@@ -501,80 +454,27 @@ function recordRunCost(...args) {
   return getDigestOrchestratorCostRuntime().recordRunCost(...args);
 }
 
-function selectItems(allItems, opts = {}) {
-  return selectDigestItems(allItems, {
-    maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
-    maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
-    maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
-    customTags: opts.customTags || [],
-    tagPriority: opts.tagPriority,
-    maxCustomItems: opts.maxCustomItems,
-    normalizeUrl: normalizeUrlForDedup,
-    parseDomain: parseSourceDomain,
-    normalizeTopicToken,
-    isCandidate: (_item, ctx) => Boolean(ctx.headlineKey),
-  });
-}
+// Pipeline helpers — imported from digest-orchestrator-pipeline-runtime.js
 
-function resolveDeliveryModeFromTrigger(triggerSource, targetChatId) {
-  const source = String(triggerSource || "").trim().toLowerCase();
-  if (!targetChatId) return "scheduled";
-  if (source.includes("telegram:on_demand")) return "on_demand";
-  if (source.includes("signup_welcome")) return "welcome";
-  if (source.includes("admin_targeted")) return "manual";
-  if (source.includes("admin_full")) return "manual";
-  return "manual";
-}
-
-function resolveDeliveryEventSource(deliveryMode) {
-  if (deliveryMode === "scheduled") return "scheduled-job";
-  if (deliveryMode === "on_demand") return "on-demand";
-  if (deliveryMode === "welcome") return "welcome-trigger";
-  return "manual-rerun";
-}
-
-function filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime) {
-  const rows = Array.isArray(dueUsers) ? dueUsers.slice() : [];
-  const dateKey = String(digestDateKey || "").trim();
-  if (!rows.length || !dateKey || !digestDeliveryRecordRuntime || typeof digestDeliveryRecordRuntime.hasSentDigestRecord !== "function") {
-    return {
-      dueUsers: rows,
-      skippedUsers: [],
-    };
+let pipelineRuntimeCache = null;
+function getPipelineRuntime() {
+  if (!pipelineRuntimeCache) {
+    pipelineRuntimeCache = createDigestOrchestratorPipelineRuntime({
+      normalizeUrlForDedup,
+      parseSourceDomain,
+      normalizeTopicToken,
+      getConfig,
+    });
   }
-
-  const eligible = [];
-  const skipped = [];
-  for (const user of rows) {
-    const userId = String(user?.chatId || user?.email || "").trim();
-    if (!userId) {
-      eligible.push(user);
-      continue;
-    }
-    if (digestDeliveryRecordRuntime.hasSentDigestRecord(userId, dateKey, "scheduled")) {
-      skipped.push(user);
-      continue;
-    }
-    eligible.push(user);
-  }
-
-  return {
-    dueUsers: eligible,
-    skippedUsers: skipped,
-  };
+  return pipelineRuntimeCache;
 }
 
-function prepareStorylinePool(enrichedItems, selectionTarget) {
-  const storylineCandidates = buildStorylineCandidates(enrichedItems);
-  const filtered = applyStrategicQualityGate(storylineCandidates, {
-    minStrategicValue: 0.34,
-    maxRoutineScore: 0.74,
-    minKeep: Math.min(
-      Math.max(2, Number(selectionTarget || 3)),
-      Math.max(3, storylineCandidates.length)
-    ),
-  });
-  return filtered;
+function selectItems(...args) {
+  return getPipelineRuntime().selectItems(...args);
+}
+
+function prepareStorylinePool(...args) {
+  return getPipelineRuntime().prepareStorylinePool(...args);
 }
 
 // ── 6. Send via SignalBrief bot ───────────────────────────────────────────────

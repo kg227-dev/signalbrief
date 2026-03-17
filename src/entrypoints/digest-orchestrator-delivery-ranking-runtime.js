@@ -61,6 +61,9 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       nowIso,
     });
     userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    userItems = typeof applyEntityCoverageCap === "function"
+      ? applyEntityCoverageCap(userItems, Math.max(1, Number(CONFIG.digest.maxSignalsPerEntity || 1)))
+      : userItems;
 
     const requestedCount = Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5);
     const perUserFreshnessMin = Math.max(1, Math.min(requestedCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
@@ -104,9 +107,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     }
 
     userItems = reserveCustomKeywordSlot(userItems, requestedCount, customKeywords);
-    userItems = typeof applyEntityCoverageCap === "function"
-      ? applyEntityCoverageCap(userItems, Math.max(1, Number(CONFIG.digest.maxSignalsPerEntity || 1)))
-      : userItems;
 
     if (userItems.length === 0) {
       const emergencyCount = Math.max(1, Math.min(3, requestedCount));

@@ -167,6 +167,29 @@ function createSettingsHandler({
       safeBody.topics = topicsResult.topics;
     }
 
+    if (safeBody.source_preferences != null) {
+      const sp = safeBody.source_preferences;
+      if (typeof sp !== "object" || Array.isArray(sp)) {
+        return json(res, { error: "source_preferences must be an object" }, 400);
+      }
+      const normalizeDomainList = (arr, field) => {
+        if (!Array.isArray(arr)) return { ok: false, error: `source_preferences.${field} must be an array` };
+        const out = [];
+        for (const d of arr) {
+          const s = String(d || "").trim().toLowerCase().replace(/^www\./, "");
+          if (!s || s.length > 120) continue;
+          if (!/^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$/.test(s)) continue;
+          if (!out.includes(s)) out.push(s);
+        }
+        return { ok: true, value: out };
+      };
+      const t = normalizeDomainList(sp.trusted_sources || [], "trusted_sources");
+      if (!t.ok) return json(res, { error: t.error }, 400);
+      const b = normalizeDomainList(sp.blocked_sources || [], "blocked_sources");
+      if (!b.ok) return json(res, { error: b.error }, 400);
+      safeBody.source_preferences = { trusted_sources: t.value, blocked_sources: b.value };
+    }
+
     if (safeBody.telegram != null) {
       safeBody.telegram = String(safeBody.telegram).replace(/^@+/, "").trim() || null;
       if (safeBody.telegram) {

@@ -252,6 +252,11 @@ function bindSaveHandler(effectiveToken, user) {
             },
           };
 
+      const sourceState = globalScope._signalBriefSourceState;
+      if (sourceState && typeof sourceState.snapshot === "function") {
+        payload.source_preferences = sourceState.snapshot();
+      }
+
       const data = await fetchJsonStrict("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

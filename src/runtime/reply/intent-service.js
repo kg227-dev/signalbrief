@@ -6,6 +6,9 @@ const ALLOWED_ACTIONS = new Set([
   "topic_more",
   "topic_less",
   "topic_add",
+  "source_block",
+  "source_trust",
+  "source_unblock",
   "settings",
   "bookmarks",
   "topics",
@@ -19,6 +22,7 @@ function createBaseIntent(action = "unknown") {
     action,
     items: [],
     topic: null,
+    source: null,
     question: null,
     email: null,
     code: null,
@@ -101,6 +105,18 @@ function normalizeIntentPayload(payload, opts = {}) {
     return intent;
   }
 
+  if (action === "source_block" || action === "source_trust" || action === "source_unblock") {
+    const raw = String(payload?.source || payload?.domain || payload?.topic || "").trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split(/[/\s]/)[0];
+    intent.source = raw || null;
+    if (!intent.source) return createBaseIntent("unknown");
+    intent.action = action;
+    return intent;
+  }
+
   if (action === "question") {
     const fallbackQuestion = normalizeIntentQuestion(opts.fallbackQuestion);
     intent.question = normalizeIntentQuestion(payload?.question) || fallbackQuestion;
@@ -127,6 +143,18 @@ function parseCommandIntent(message) {
     const parts = normalizedMessage.split(/\s+/);
     return normalizeIntentPayload({ action: "verify_link", code: parts[1] || null });
   }
+  if (m.startsWith("/block ") || m.startsWith("/block\t")) {
+    const source = normalizedMessage.slice(7).trim();
+    return normalizeIntentPayload({ action: "source_block", source: source || null });
+  }
+  if (m.startsWith("/trust ") || m.startsWith("/trust\t")) {
+    const source = normalizedMessage.slice(7).trim();
+    return normalizeIntentPayload({ action: "source_trust", source: source || null });
+  }
+  if (m.startsWith("/unblock ") || m.startsWith("/unblock\t")) {
+    const source = normalizedMessage.slice(9).trim();
+    return normalizeIntentPayload({ action: "source_unblock", source: source || null });
+  }
   return null;
 }
 
@@ -135,9 +163,10 @@ function buildIntentPrompt(message) {
 
 Parse intent. Return ONLY valid JSON:
 {
-  "action": "save" | "topic_more" | "topic_less" | "topic_add" | "settings" | "bookmarks" | "topics" | "help" | "question" | "unknown",
+  "action": "save" | "topic_more" | "topic_less" | "topic_add" | "source_block" | "source_trust" | "source_unblock" | "settings" | "bookmarks" | "topics" | "help" | "question" | "unknown",
   "items": [],
   "topic": null,
+  "source": null,
   "question": null
 }
 
@@ -146,6 +175,9 @@ Rules:
 - more [topic] / I want more [topic] / more [topic] stories → action=topic_more, topic=normalized tag
 - less/fewer [topic] → action=topic_less, topic=normalized tag
 - add/track [keyword] → action=topic_add, topic=keyword
+- block/hide/suppress/stop showing [domain] → action=source_block, source=domain
+- trust/boost/prefer [domain] → action=source_trust, source=domain
+- unblock/restore/undo block [domain] → action=source_unblock, source=domain
 - settings/preferences/config → action=settings
 - bookmarks/saved/my saves → action=bookmarks
 - topics/what do you cover → action=topics
@@ -153,17 +185,21 @@ Rules:
 - otherwise → action=question or unknown
 
 Normalize topics: "ai" → "AI", "pharma" → "PHARMA", "M&A" → "M&A", "digital health" → "DIGITAL HEALTH", etc.
+Normalize sources: strip http(s)://, www., and any path. E.g. "https://www.reuters.com/article/x" → "reuters.com"
 Item numbers: parse "1,4,6" or "1 4 6" or "#3" or "item 3" or "number 3" — all as arrays of integers.
 
 Examples:
-"save 3" → {"action":"save","items":[3],"topic":null,"question":null}
-"Save #3" → {"action":"save","items":[3],"topic":null,"question":null}
-"bookmark 1, 4, 6" → {"action":"save","items":[1,4,6],"topic":null,"question":null}
-"save 1 4 6" → {"action":"save","items":[1,4,6],"topic":null,"question":null}
-"more AI" → {"action":"topic_more","items":[],"topic":"AI","question":null}
-"less pharma m&a" → {"action":"topic_less","items":[],"topic":"PHARMA×M&A","question":null}
-"add GLP-1" → {"action":"topic_add","items":[],"topic":"GLP-1","question":null}
-"what does 340B mean?" → {"action":"question","items":[],"topic":null,"question":"what does 340B mean?"}`;
+"save 3" → {"action":"save","items":[3],"topic":null,"source":null,"question":null}
+"Save #3" → {"action":"save","items":[3],"topic":null,"source":null,"question":null}
+"bookmark 1, 4, 6" → {"action":"save","items":[1,4,6],"topic":null,"source":null,"question":null}
+"more AI" → {"action":"topic_more","items":[],"topic":"AI","source":null,"question":null}
+"less pharma m&a" → {"action":"topic_less","items":[],"topic":"PHARMA×M&A","source":null,"question":null}
+"add GLP-1" → {"action":"topic_add","items":[],"topic":"GLP-1","source":null,"question":null}
+"block benzinga.com" → {"action":"source_block","items":[],"topic":null,"source":"benzinga.com","question":null}
+"stop showing reuters.com" → {"action":"source_block","items":[],"topic":null,"source":"reuters.com","question":null}
+"trust wsj.com" → {"action":"source_trust","items":[],"topic":null,"source":"wsj.com","question":null}
+"unblock benzinga.com" → {"action":"source_unblock","items":[],"topic":null,"source":"benzinga.com","question":null}
+"what does 340B mean?" → {"action":"question","items":[],"topic":null,"source":null,"question":"what does 340B mean?"}`;
 }
 
 function parseIntentModelResponse(responseBodyText) {

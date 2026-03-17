@@ -36,6 +36,20 @@
     display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
   .saved-banner.visible { display: block; }
+  /* Source chips */
+  .source-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; min-height:4px; }
+  .source-chip {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 8px 3px 10px; border-radius:100px;
+    font-size:12px; font-weight:500; background:#F1F5F9; color:#1E293B;
+    border:1.5px solid #E2E8F0;
+  }
+  .source-chip-remove {
+    background:none; border:none; cursor:pointer; padding:0;
+    font-size:15px; line-height:1; color:#94A3B8;
+  }
+  .source-chip-remove:hover { color:#EF4444; }
+  .source-error { font-size:12px; color:#DC2626; margin-top:4px; display:none; }
   /* Dropdown arrow (style.css sets appearance:none but no arrow image) */
   select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");
@@ -130,6 +144,33 @@
           <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
           <div><div class="depth-label">Deep</div><div class="depth-desc">Headline + strategic "why it matters." 4-minute read.</div></div>
         </label>
+      </div>
+    </div>
+
+    <!-- Sources -->
+    <div class="section visible">
+      <div class="section-header">
+        <div class="section-num">Sources</div>
+        <div class="section-title">Source preferences</div>
+        <div class="section-subtitle">Boost sources you trust. Suppress ones you don't.</div>
+      </div>
+      <div class="field">
+        <label>Trusted sources <span class="optional">(prioritized in your digest)</span></label>
+        <div class="source-chips" id="trustedChips"></div>
+        <div class="custom-topic-row">
+          <input type="text" id="trustedSourceInput" placeholder="e.g. reuters.com">
+          <button type="button" class="btn-add-topic" id="addTrustedBtn">+ Trust</button>
+        </div>
+        <div class="source-error" id="trustedSourceError"></div>
+      </div>
+      <div class="field" style="margin-top:16px;">
+        <label>Blocked sources <span class="optional">(excluded from your digest)</span></label>
+        <div class="source-chips" id="blockedChips"></div>
+        <div class="custom-topic-row">
+          <input type="text" id="blockedSourceInput" placeholder="e.g. benzinga.com">
+          <button type="button" class="btn-add-topic" id="addBlockedBtn">+ Block</button>
+        </div>
+        <div class="source-error" id="blockedSourceError"></div>
       </div>
     </div>
 
@@ -252,6 +293,7 @@
 <script src="settings-ui-topic-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-ui-preferences-actions-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-ui-preferences-runtime.js?v=__ASSET_VERSION__"></script>
+<script src="settings-ui-sources-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-ui-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings.js?v=__ASSET_VERSION__"></script>

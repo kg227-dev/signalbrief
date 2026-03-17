@@ -4,6 +4,7 @@ const { handleCoreEngagementRoutes } = require("./core-api-engagement-runtime");
 const { handleCoreBookmarksRoute } = require("./core-api-bookmarks-runtime");
 const { handleCoreRequestLinkRoute } = require("./core-api-link-runtime");
 const { handleCheckAvailabilityRoute } = require("./core-api-availability-runtime");
+const { handleHealthRoute } = require("./core-api-health-runtime");
 
 function sanitizeStringArray(values) {
   if (!Array.isArray(values)) return [];
@@ -110,6 +111,8 @@ function createCoreApiRouteHandler(deps) {
 
   return async function handleCoreApiRoutes(ctx) {
     const { req, res, url, pathname } = ctx;
+
+    if (handleHealthRoute(ctx, { json, getCachedOrRefreshSchedulerHeartbeat, digestRunStatus })) return true;
 
     if (pathname === "/api/health/scheduler" && req.method === "GET") {
       const now = Date.now();

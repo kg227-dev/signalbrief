@@ -25,8 +25,9 @@ Use this document when you need to know where code should live or where to start
 | `web/server/` | web server composition helpers |
 | `web/routes/` | compatibility route modules still in use during migration |
 | `web/*.html`, `web/*.js`, `web/style.css` | static assets served directly in production |
-| `tests/contracts/` | contract and integration coverage grouped by subsystem |
-| `test-harness/` | deterministic quality harness and matrix tooling |
+| `tests/contracts/` | contract tests — verify module syntax, exports, and integration shape |
+| `test-harness/` | QA pipeline — evaluates digest quality (topic matching, relevance scoring, diversity, replay regressions) |
+| `test-support/` | shared test utilities (e.g. `module-contract-helper.js` used by contract tests) |
 | `scripts/` | smoke checks, reports, and operational utilities |
 
 ## Documentation Areas

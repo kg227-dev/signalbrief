@@ -27,12 +27,12 @@ function createDigestEmailItemsRuntime(deps) {
 
     const isDeep = depth === "headline_plus_why" || depth === "full" || depth === "deep";
 
-    // Bold wim merged with summary in one block
+    // WIM (already contains <strong> markup from enrichment) merged with summary
     const bodyHtml = (() => {
-      const wim = item.wim ? `<strong style="font-family:Georgia,'Times New Roman',serif;">${item.wim}</strong> ` : "";
+      const wim = item.wim || "";
       const summary = item.summary || "";
       return (wim || summary)
-        ? `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${wim}${summary}</div>`
+        ? `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${wim}${summary ? " " + summary : ""}</div>`
         : "";
     })();
 
@@ -56,7 +56,7 @@ function createDigestEmailItemsRuntime(deps) {
           </tr>
         </table>
         <a href="${trackedLinkUrl}" style="text-decoration:none;color:inherit;">
-          <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;">${item.headline}</div>
+          <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;font-family:'Playfair Display',Georgia,serif;">${item.headline}</div>
         </a>
         ${bodyHtml}
         ${implHtml}

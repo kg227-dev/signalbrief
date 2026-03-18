@@ -175,9 +175,9 @@ Rules:
 - more [topic] / I want more [topic] / more [topic] stories → action=topic_more, topic=normalized tag
 - less/fewer [topic] → action=topic_less, topic=normalized tag
 - add/track [keyword] → action=topic_add, topic=keyword
-- block/hide/suppress/stop showing [domain] → action=source_block, source=domain
-- trust/boost/prefer [domain] → action=source_trust, source=domain
-- unblock/restore/undo block [domain] → action=source_unblock, source=domain
+- block/hide/suppress/stop showing [domain or item#] → action=source_block, source=domain or source="N" (item number as string)
+- trust/boost/prefer [domain or item#] → action=source_trust, source=domain or source="N" (item number as string)
+- unblock/restore/undo block [domain or item#] → action=source_unblock, source=domain or source="N" (item number as string)
 - settings/preferences/config → action=settings
 - bookmarks/saved/my saves → action=bookmarks
 - topics/what do you cover → action=topics
@@ -185,7 +185,7 @@ Rules:
 - otherwise → action=question or unknown
 
 Normalize topics: "ai" → "AI", "pharma" → "PHARMA", "M&A" → "M&A", "digital health" → "DIGITAL HEALTH", etc.
-Normalize sources: strip http(s)://, www., and any path. E.g. "https://www.reuters.com/article/x" → "reuters.com"
+Normalize sources: strip http(s)://, www., and any path. E.g. "https://www.reuters.com/article/x" → "reuters.com". If source is a bare number (item reference), keep it as-is: "block 3" → source="3".
 Item numbers: parse "1,4,6" or "1 4 6" or "#3" or "item 3" or "number 3" — all as arrays of integers.
 
 Examples:
@@ -197,8 +197,11 @@ Examples:
 "add GLP-1" → {"action":"topic_add","items":[],"topic":"GLP-1","source":null,"question":null}
 "block benzinga.com" → {"action":"source_block","items":[],"topic":null,"source":"benzinga.com","question":null}
 "stop showing reuters.com" → {"action":"source_block","items":[],"topic":null,"source":"reuters.com","question":null}
+"block 3" → {"action":"source_block","items":[],"topic":null,"source":"3","question":null}
 "trust wsj.com" → {"action":"source_trust","items":[],"topic":null,"source":"wsj.com","question":null}
+"trust 2" → {"action":"source_trust","items":[],"topic":null,"source":"2","question":null}
 "unblock benzinga.com" → {"action":"source_unblock","items":[],"topic":null,"source":"benzinga.com","question":null}
+"unblock 4" → {"action":"source_unblock","items":[],"topic":null,"source":"4","question":null}
 "what does 340B mean?" → {"action":"question","items":[],"topic":null,"source":null,"question":"what does 340B mean?"}`;
 }
 

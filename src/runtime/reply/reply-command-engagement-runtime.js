@@ -336,9 +336,11 @@ function createEngagementCommandHandlers(deps) {
   async function handleSourceUnblock(chatId, input) {
     const user = readUser(chatId);
     if (!user.source_preferences) user.source_preferences = { blocked_sources: [], trusted_sources: [] };
-    const domain = String(input || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[\/\s]/)[0];
+    const domain = /^\d+$/.test(String(input || "").trim())
+      ? resolveSourceDomainFromItem(user, Number(input))
+      : String(input || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[\/\s]/)[0];
     if (!domain) {
-      await send(chatId, "Tell me which source to unblock — for example: *unblock benzinga.com*.");
+      await send(chatId, "Tell me which source to unblock — for example: *unblock 3* (item number) or *unblock benzinga.com*.");
       return;
     }
     let removed = false;

@@ -40,7 +40,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const dedupRes = dedupAgainstRecentArchives(allItems, {
       days: crossDayDedupDays,
       targetCount: selectionTarget,
-      minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || 3)),
+      minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || depthPolicy.defaultItemCount || 5)),
     });
     const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 72);
     const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;

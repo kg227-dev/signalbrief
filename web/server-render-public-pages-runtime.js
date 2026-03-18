@@ -193,7 +193,7 @@ function createRenderPublicPages(deps) {
     .score-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--score-dot); box-shadow: var(--score-glow); flex-shrink: 0; }
     h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; }
     .item-summary { margin: 0 0 8px; color: #334155; line-height: 1.6; font-size: 15px; }
-    .item-wim { margin: 0 0 10px; color: #0f172a; line-height: 1.6; font-size: 14px; }
+    .item-wim { margin: 0 0 10px; color: #0f172a; line-height: 1.6; font-size: 14px; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
     .item-link a { color: #2563eb; text-decoration: none; font-weight: 600; font-size: 14px; }
     .item-link span { color: #64748b; font-size: 14px; }
     .footer { margin-top: 18px; text-align: center; color: #64748b; font-size: 13px; }

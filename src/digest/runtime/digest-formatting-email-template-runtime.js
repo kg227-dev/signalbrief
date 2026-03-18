@@ -17,7 +17,7 @@ function createDigestEmailTemplateRuntime() {
       .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, slots.digestDateKey || "")
       .replace(
         /<!-- Items -->[\s\S]*<!-- Footer -->/,
-        `<!-- Items -->\n    <div class="items" style="padding:18px 18px 10px;background:#FFFFFF;">\n${slots.itemsHtml || ""}\n    </div>\n\n    <!-- Footer -->`
+        `<!-- Items -->\n    <div class="items" style="padding:0;background:#FFFFFF;">\n${slots.itemsHtml || ""}\n    </div>\n\n    <!-- Footer -->`
       );
   }
 

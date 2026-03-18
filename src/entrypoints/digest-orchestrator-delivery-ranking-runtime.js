@@ -113,6 +113,30 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
 
     userItems = reserveCustomKeywordSlot(userItems, requestedCount, customKeywords);
 
+    // Minimum-count backfill: if we have fewer than requestedCount items,
+    // pull additional items from the full enriched pool (re-scored) to reach the minimum.
+    if (userItems.length > 0 && userItems.length < requestedCount) {
+      const currentUrls = new Set(userItems.map((i) => i.url));
+      const poolCandidates = applyTopicRelevanceScores(enriched, user.topics || [], weights, {
+        specialistMode: false,
+        repeatPenalty,
+        isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
+        sourceDomainForItem: parseSourceDomain,
+        recentEntityCounts: recentHistory.entityCounts,
+        recentStorylineKeys: recentHistory.storylineKeys,
+        blockedSources,
+        trustedSources,
+        nowIso,
+      })
+        .filter((item) => !item?.hard_exclude && !currentUrls.has(item.url))
+        .sort((a, b) => b.relevanceScore - a.relevanceScore)
+        .slice(0, requestedCount - userItems.length);
+      if (poolCandidates.length > 0) {
+        userItems = [...userItems, ...poolCandidates];
+        log(`  [min-count-backfill] added ${poolCandidates.length} item(s) from enriched pool to reach ${userItems.length}/${requestedCount}`);
+      }
+    }
+
     if (userItems.length === 0) {
       const emergencyCount = Math.max(1, Math.min(3, requestedCount));
       const emergency = applyTopicRelevanceScores(enriched, user.topics || [], weights, {

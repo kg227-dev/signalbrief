@@ -295,7 +295,7 @@ function recencySignal(item, nowIso) {
   const bestTs = Number.isFinite(pubTs) ? pubTs : retrievedTs;
   if (!Number.isFinite(nowTs) || !Number.isFinite(bestTs)) return 1;
   const ageHours = Math.max(0, (nowTs - bestTs) / (60 * 60 * 1000));
-  return clamp(1 - (ageHours / 72), 0.15, 1);
+  return clamp(1 - (ageHours / 72), 0.3, 1);
 }
 
 function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = {}) {
@@ -345,7 +345,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       0,
       1
     );
-    const rawMultiSourceCount = clamp((Math.max(1, Number(item?.cross_source_count || 1)) - 1) / 2, 0, 1);
+    const rawMultiSourceCount = clamp((Math.max(1, Number(item?.cross_source_count || 1)) - 1) / 2, 0.2, 1);
     const supportingAvgAuthority = Number.isFinite(Number(item?.supporting_sources_avg_authority))
       ? Number(item.supporting_sources_avg_authority)
       : 0.5;
@@ -409,7 +409,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       0,
       1
     );
-    const signalScore = 10 * Math.pow(adjustedNorm, 1.15);
+    const signalScore = 10 * adjustedNorm;
 
     const whyShown = [];
     if (topicMatch >= 7) whyShown.push("topic_match");

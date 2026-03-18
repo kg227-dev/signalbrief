@@ -2,13 +2,13 @@
 
 function createDigestEmailStyleRuntime() {
   function scoreColor(score) {
-    if (score >= 9.0) {
+    if (score >= 8.0) {
       return { dot: "#10B981", text: "#065F46", bg: "#ECFDF5", glow: "0 0 6px rgba(16,185,129,0.35)", solid: "#10B981" };
     }
-    if (score >= 7.0) {
+    if (score >= 6.0) {
       return { dot: "#34D399", text: "#065F46", bg: "#ECFDF5", glow: "0 0 6px rgba(52,211,153,0.3)", solid: "#34D399" };
     }
-    if (score >= 5.0) {
+    if (score >= 4.0) {
       return { dot: "#F59E0B", text: "#92400E", bg: "#FFFBEB", glow: "0 0 5px rgba(245,158,11,0.24)", solid: "#F59E0B" };
     }
     return { dot: "#9CA3AF", text: "#4B5563", bg: "#F3F4F6", glow: "none", solid: "#9CA3AF" };

@@ -77,7 +77,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     nowIso: "2026-03-13T11:00:00.000Z",
   });
 
-  assert.strictEqual(scoreCallCount, 1);
+  assert.strictEqual(scoreCallCount, 2); // 1 initial + 1 min-count-backfill (userItems < requestedCount)
   assert.strictEqual(ranked.wasFiltered, true);
   assert.strictEqual(ranked.userItems.length, 1);
   assert.strictEqual(ranked.userItems[0].tag, "AI×TECH");

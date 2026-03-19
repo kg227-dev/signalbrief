@@ -28,15 +28,16 @@ function buildTagPriority(dueUsers, normalizeTopicToken) {
 function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, log }) {
   const topics = Array.isArray(configTopics) ? configTopics : [];
   const logger = typeof log === "function" ? log : () => {};
-  if (!targetChatId || !Array.isArray(dueUsers) || dueUsers.length !== 1) return topics;
-
-  const userStandardTopics = new Set(
-    (Array.isArray(dueUsers[0]?.topics) ? dueUsers[0].topics : []).filter((topic) => !String(topic || "").startsWith("custom_"))
-  );
-  if (userStandardTopics.size === 0) return topics;
-  const filtered = topics.filter((topic) => userStandardTopics.has(topic.tag));
-  logger(`On-demand: fetching ${filtered.length}/${topics.length} topic(s) for user`);
-  return filtered;
+  // Always fetch all configured topics — even for targeted on-demand runs.
+  // Narrowing to the user's subscribed topics produced thin raw pools that
+  // were decimated by cross-day dedup, resulting in 2-3 signal digests.
+  // Per-user topic filtering downstream handles relevance just fine.
+  if (targetChatId && Array.isArray(dueUsers) && dueUsers.length === 1) {
+    const userTopicCount = (Array.isArray(dueUsers[0]?.topics) ? dueUsers[0].topics : [])
+      .filter((topic) => !String(topic || "").startsWith("custom_")).length;
+    logger(`On-demand: fetching all ${topics.length} topic(s) (user subscribes to ${userTopicCount})`);
+  }
+  return topics;
 }
 
 function resolveCustomTopicSlugs({ dueUsers, maxCustomFetchPerRun, log }) {

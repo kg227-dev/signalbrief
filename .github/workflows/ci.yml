@@ -74,3 +74,39 @@ jobs:
             --sqlite-path "$TMP_DIR/data/signalbrief.sqlite" \
             --artifact-dir "$TMP_DIR/artifacts" \
             --artifact-name ci-dual-read-compare.json
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [runtime-gates, store-dual-read-parity]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/signalbrief_vm
+          chmod 600 ~/.ssh/signalbrief_vm
+
+      - name: Deploy to production
+        run: |
+          node scripts/deploy-production.js \
+            --host "${{ secrets.DEPLOY_SSH_HOST }}" \
+            --key ~/.ssh/signalbrief_vm \
+            --hotfix
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}

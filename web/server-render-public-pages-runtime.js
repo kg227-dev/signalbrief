@@ -61,7 +61,7 @@ function createRenderPublicPages(deps) {
     if (score >= 4.0) {
       return { dot: "#F59E0B", text: "#92400E", bg: "#FFFBEB", glow: "0 0 5px rgba(245,158,11,0.24)" };
     }
-    return { dot: "#9CA3AF", text: "#4B5563", bg: "#F3F4F6", glow: "none" };
+    return { dot: "#EF4444", text: "#991B1B", bg: "#FEF2F2", glow: "0 0 5px rgba(239,68,68,0.24)" };
   }
 
   function renderScorePill(score, className = "score-pill") {

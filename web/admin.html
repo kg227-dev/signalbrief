@@ -3458,6 +3458,27 @@ async function triggerFullDigest(triggerEl = null) {
   }
 }
 
+const DIGEST_PROGRESS_STEPS = [
+  { label: "Fetching news from sources", pct: 10, delayMs: 0 },
+  { label: "Deduplicating against recent archives", pct: 25, delayMs: 8000 },
+  { label: "Selecting top candidates", pct: 35, delayMs: 4000 },
+  { label: "Enriching with AI analysis", pct: 55, delayMs: 6000 },
+  { label: "Scoring and ranking signals", pct: 75, delayMs: 18000 },
+  { label: "Formatting and delivering", pct: 90, delayMs: 12000 },
+];
+
+function renderDigestProgress(msg, stepIdx, elapsed) {
+  if (!msg) return;
+  const step = DIGEST_PROGRESS_STEPS[Math.min(stepIdx, DIGEST_PROGRESS_STEPS.length - 1)];
+  const elapsedSec = Math.floor(elapsed / 1000);
+  const bar = `<div style="margin-top:6px;height:4px;border-radius:2px;background:#E5E7EB;overflow:hidden;">
+    <div style="height:100%;width:${step.pct}%;background:var(--accent);border-radius:2px;transition:width 0.6s ease;"></div>
+  </div>`;
+  msg.innerHTML = `<span style="font-size:12px;color:var(--text-secondary);">${step.label}… <span class="mono">${elapsedSec}s</span></span>${bar}`;
+  msg.style.display = "block";
+  msg.style.color = "var(--text-secondary)";
+}
+
 async function triggerTestDigest(triggerEl = null) {
   const btn = triggerEl || document.getElementById("testDigestBtn");
   const msg = document.getElementById("testDigestMsg");
@@ -3468,34 +3489,44 @@ async function triggerTestDigest(triggerEl = null) {
     : targetChatId;
   if (!targetChatId) {
     renderTestDigestStatus({ state: "failed", message: "Choose a Telegram-linked test target first." });
-    setOpsActionMessage("err", "Choose a Telegram-linked test target first.");
     return;
   }
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "🧪 Sending…";
+    btn.textContent = "🧪 Running…";
   }
-  if (msg) msg.style.display = "none";
-  setOpsActionMessage("info", "Sending test digest…");
+
+  let stepIdx = 0;
+  const t0 = Date.now();
+  renderDigestProgress(msg, 0, 0);
+  const progressTimer = setInterval(() => {
+    const elapsed = Date.now() - t0;
+    const nextStep = DIGEST_PROGRESS_STEPS[stepIdx + 1];
+    if (nextStep) {
+      const cumulativeDelay = DIGEST_PROGRESS_STEPS.slice(0, stepIdx + 2).reduce((s, st) => s + st.delayMs, 0);
+      if (elapsed >= cumulativeDelay) stepIdx = Math.min(stepIdx + 1, DIGEST_PROGRESS_STEPS.length - 1);
+    }
+    renderDigestProgress(msg, stepIdx, elapsed);
+  }, 500);
+
   try {
     const resp = await apiFetchJson("/api/admin/run-digest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId: targetChatId }),
     });
+    clearInterval(progressTimer);
     const data = resp.data;
     if (!resp.ok || !data.success) {
       renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${resp.status})` });
-      setOpsActionMessage("err", data.error || "Test digest failed.");
       showToast("err", data.error || "Test digest failed");
       return;
     }
     renderTestDigestStatus({ state: "success", message: data.message || `Digest sent to ${targetLabel}` });
-    setOpsActionMessage("ok", data.message || `Digest sent to ${targetLabel}`);
     showToast("ok", data.message || `Digest sent to ${targetLabel}`);
   } catch (e) {
+    clearInterval(progressTimer);
     renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
-    setOpsActionMessage("err", e.message || "Network error starting test digest");
     showToast("err", e.message || "Network error starting test digest");
   }
 }

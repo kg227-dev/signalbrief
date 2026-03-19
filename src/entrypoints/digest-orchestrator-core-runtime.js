@@ -788,53 +788,59 @@ async function main() {
     topicVisual,
     escapeHtml,
   });
-  const {
-    deliveredUsers,
-    failedUsers,
-  } = await deliveryRuntime.deliverDueUsers({
-    dueUsers,
-    enriched: storylinePool,
-    now,
-    shortDate,
-    dateStr,
-    digestDateKey,
-    runId,
-    repeatIndex,
-    repeatPenalty,
-    depthPolicy,
-    rankingPolicy,
-    publicDigestUrl,
-    suppressWelcome,
-    targetChatId,
-    deliveryMode,
-    deliveryEventSource,
-    claudeUsage,
-    engagementEvents,
-  });
 
-  // Accumulate domain stats from delivered items for dynamic domain learning
+  // Wrap delivery + post-delivery in try/finally so cost is always recorded,
+  // even if delivery throws after API tokens have been spent.
+  let deliveredUsers = [];
+  let failedUsers = [];
   try {
-    const deliveredItems = storylinePool;
-    const updatedStats = accumulateDomainStats(deliveredItems, domainStats);
-    saveDomainStats(updatedStats);
-  } catch (_err) {
-    // Non-critical — domain learning failure should not block digest
-  }
-  // Clear learned adjustments after run to avoid stale state
-  setLearnedDomainAdjustments(null);
+    const deliveryResult = await deliveryRuntime.deliverDueUsers({
+      dueUsers,
+      enriched: storylinePool,
+      now,
+      shortDate,
+      dateStr,
+      digestDateKey,
+      runId,
+      repeatIndex,
+      repeatPenalty,
+      depthPolicy,
+      rankingPolicy,
+      publicDigestUrl,
+      suppressWelcome,
+      targetChatId,
+      deliveryMode,
+      deliveryEventSource,
+      claudeUsage,
+      engagementEvents,
+    });
+    deliveredUsers = deliveryResult.deliveredUsers;
+    failedUsers = deliveryResult.failedUsers;
 
-  recordRunCost({
-    now,
-    runId,
-    targetChatId,
-    standardFetchCalls,
-    customFetchCalls,
-    claudeUsage,
-    dueUsers,
-    deliveredUsers,
-    failedUsers,
-    publicDigestUrl,
-  });
+    // Accumulate domain stats from delivered items for dynamic domain learning
+    try {
+      const deliveredItems = storylinePool;
+      const updatedStats = accumulateDomainStats(deliveredItems, domainStats);
+      saveDomainStats(updatedStats);
+    } catch (_err) {
+      // Non-critical — domain learning failure should not block digest
+    }
+    // Clear learned adjustments after run to avoid stale state
+    setLearnedDomainAdjustments(null);
+  } finally {
+    recordRunCost({
+      now,
+      runId,
+      targetChatId,
+      standardFetchCalls,
+      customFetchCalls,
+      claudeUsage,
+      dueUsers,
+      deliveredUsers,
+      failedUsers,
+      publicDigestUrl,
+    });
+  }
 
   logEvent("info", "digest.run.completed", {
     provider: "orchestrator",

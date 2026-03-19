@@ -144,6 +144,16 @@ const appendWebEngagementEvent = (payload, context) => (
   appendEngagementEventChecked(payload, { scope: "web", context })
 );
 
+function appendSandboxCostLog(entry) {
+  try {
+    const dir = path.dirname(COST_LOG_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(COST_LOG_PATH, `${JSON.stringify(entry)}\n`);
+  } catch (_e) {
+    // non-critical — sandbox cost logging failure should not break the response
+  }
+}
+
 const {
   isLegacyArchiveEndpointEnabled,
   recordLegacyArchiveUsage,
@@ -313,6 +323,7 @@ const {
   computeQualityTrend,
   estimateSandboxCost,
   runSandboxPipeline,
+  appendSandboxCostLog,
   requestSchedulerWorkerRestart,
   assetVersion: getWebAssetVersion(),
   renderPublicDigestMissingPage,

@@ -42,6 +42,9 @@ function createDigestEmailItemsRuntime(deps) {
     const watchHtml = (isDeep && item.watch_next)
       ? `<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-bottom:8px;font-style:italic;">👀 ${item.watch_next}</div>`
       : "";
+    const whyShownHtml = Array.isArray(item.why_shown) && item.why_shown.length
+      ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why shown: ${item.why_shown.map((key) => String(key).replace(/_/g, " ")).join(" · ")}</div>`
+      : "";
 
     const itemStyle = "padding:22px 28px;border-bottom:1px solid #EAECEF;";
     return `
@@ -61,6 +64,8 @@ function createDigestEmailItemsRuntime(deps) {
         ${bodyHtml}
         ${implHtml}
         ${watchHtml}
+        ${whyShownHtml}
+        <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}</span></div>
       </div>`;
   }
 

@@ -501,6 +501,9 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .modal-btn:hover { border-color:var(--accent); }
 .modal-btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
 .modal-btn.primary:disabled { background:#9CA3AF; border-color:#9CA3AF; cursor:not-allowed; }
+.modal-btn.primary.loading { background:#6B7280; border-color:#6B7280; cursor:wait; }
+.modal-btn.primary.loading::before { content:""; display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; margin-right:6px; vertical-align:middle; }
+@keyframes spin { to { transform:rotate(360deg); } }
 
 /* Upcoming deliveries */
 .schedule-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:36px; padding:12px; }
@@ -2233,7 +2236,10 @@ function closeSendModal() {
 async function submitSendModal() {
   if (!sendModalUser) return;
   const submitBtn = document.getElementById("sendModalSubmit");
+  const originalLabel = submitBtn.textContent;
   submitBtn.disabled = true;
+  submitBtn.classList.add("loading");
+  submitBtn.textContent = sendMode === "digest" ? "Sending digest…" : "Sending…";
   setSendModalFeedback(null, "");
   const userEmailKey = String(sendModalUser.email || "").toLowerCase().trim();
 
@@ -2296,6 +2302,8 @@ async function submitSendModal() {
     setSendModalFeedback("err", e.message || "Network error sending message");
     setRowActionStatus(userEmailKey, "err", e.message || "Network error");
   } finally {
+    submitBtn.classList.remove("loading");
+    submitBtn.textContent = originalLabel;
     syncSendModalState();
   }
 }

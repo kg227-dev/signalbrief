@@ -56,12 +56,14 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   assert.strictEqual(fetched.selectionTarget, 10);
-  assert.strictEqual(fetched.standardFetchCallsPlanned, 1);
-  assert.strictEqual(fetched.standardFetchCalls, 1);
+  // On-demand targeted runs now fetch ALL configured topics (not just user's)
+  // to prevent thin digest pools from cross-day dedup decimation.
+  assert.strictEqual(fetched.standardFetchCallsPlanned, 2);
+  assert.strictEqual(fetched.standardFetchCalls, 2);
   assert.strictEqual(fetched.customFetchCalls, 2);
   assert.deepStrictEqual(
     fetchCalls.map((topic) => topic.tag),
-    ["AI×TECH", "GLP 1"]
+    ["AI×TECH", "STRATEGY", "GLP 1"]
   );
   assert.strictEqual(fetched.tagPriority["ai×tech"], 1);
   assert.strictEqual(fetched.tagPriority.custom_glp_1, 1);

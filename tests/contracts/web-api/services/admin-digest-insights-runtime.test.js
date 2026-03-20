@@ -14,6 +14,7 @@ const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 
 const {
+  annotateHistoricalRepeatEvidence,
   buildDigestInsights,
   resolveRowFailureMode,
 } = runtime;
@@ -40,6 +41,29 @@ const {
     ],
   }), "weak_source");
 
+  const repeatRows = annotateHistoricalRepeatEvidence([
+    {
+      recipient: "repeat@example.com",
+      user_email: "repeat@example.com",
+      date_et: "2026-03-19",
+      run_at_utc: "2026-03-19T11:01:00.000Z",
+      sent_item_count: 1,
+      sent_items: [{ url: "https://example.com/repeat-story", storyline_key: "repeat|story" }],
+    },
+    {
+      recipient: "repeat@example.com",
+      user_email: "repeat@example.com",
+      date_et: "2026-03-20",
+      run_at_utc: "2026-03-20T11:01:00.000Z",
+      sent_item_count: 1,
+      sent_items: [{ url: "https://example.com/repeat-story", storyline_key: "repeat|story" }],
+    },
+  ]);
+  assert.strictEqual(repeatRows[1].historical_repeat_count, 1);
+  assert.strictEqual(repeatRows[1].repeat_evidence_count, 1);
+  assert.strictEqual(resolveRowFailureMode(repeatRows[1]), "repeat");
+  assert.strictEqual(repeatRows[1].repeat_details.length, 1);
+
   const insights = buildDigestInsights([
     {
       recipient: "repeat@example.com",
@@ -60,13 +84,34 @@ const {
       refill_count: 2,
       dominant_failure_mode: "thin_pool",
     },
+    {
+      recipient: "repeat@example.com",
+      user_email: "repeat@example.com",
+      date_et: "2026-03-18",
+      run_at_utc: "2026-03-18T11:01:00.000Z",
+      quality_score: 66,
+      sent_item_count: 1,
+      sent_items: [{ url: "https://example.com/repeat-story", storyline_key: "repeat|story" }],
+    },
+    {
+      recipient: "repeat@example.com",
+      user_email: "repeat@example.com",
+      date_et: "2026-03-20",
+      run_at_utc: "2026-03-20T11:01:00.001Z",
+      quality_score: 64,
+      sent_item_count: 1,
+      sent_items: [{ url: "https://example.com/repeat-story", storyline_key: "repeat|story" }],
+    },
   ], { days: 7 });
 
   assert.strictEqual(insights.users.length, 1);
   assert.strictEqual(insights.users[0].recipient, "repeat@example.com");
-  assert.strictEqual(insights.users[0].digests, 2);
+  assert.strictEqual(insights.users[0].digests, 4);
   assert.strictEqual(insights.users[0].repeat_blocks, 3);
+  assert.strictEqual(insights.users[0].repeat_sent_count, 1);
+  assert.strictEqual(insights.users[0].repeat_evidence_count, 4);
   assert.strictEqual(insights.users[0].refill_count, 2);
+  assert.strictEqual(insights.users[0].repeat_details.length, 1);
 })();
 
 process.stdout.write("[admin-digest-insights-runtime] all assertions passed\n");

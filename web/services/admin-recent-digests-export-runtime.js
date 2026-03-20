@@ -1,6 +1,9 @@
 "use strict";
 
-const { resolveRowFailureMode } = require("./admin-digest-insights-runtime");
+const {
+  annotateHistoricalRepeatEvidence,
+  resolveRowFailureMode,
+} = require("./admin-digest-insights-runtime");
 
 function toEtDateKey(value = new Date()) {
   return new Date(value).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -266,8 +269,12 @@ function createRecentDigestsExporter(deps) {
             scope: engagementScope,
           },
         });
-        rows[rows.length - 1].dominant_failure_mode = resolveRowFailureMode(rows[rows.length - 1]);
       }
+    }
+
+    annotateHistoricalRepeatEvidence(rows);
+    for (const row of rows) {
+      row.dominant_failure_mode = resolveRowFailureMode(row);
     }
 
     rows.sort((left, right) => {

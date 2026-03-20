@@ -1216,7 +1216,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           <th>Digests</th>
           <th>Avg quality</th>
           <th>Avg items</th>
-          <th>Repeat blocks</th>
+          <th>Repeat signals</th>
           <th>Refills</th>
           <th>Failure mode</th>
         </tr>
@@ -1556,6 +1556,28 @@ function failureModeLabel(mode) {
   if (normalized === "topic_fit") return "Topic fit";
   return "Unknown";
 }
+function renderRepeatDetails(details) {
+  const rows = Array.isArray(details) ? details.filter(Boolean).slice(0, 5) : [];
+  if (!rows.length) return "";
+  const body = rows.map((detail) => {
+    const label = esc(String(detail.label || "Unknown repeat"));
+    const dates = Array.isArray(detail.dates_et) ? detail.dates_et.filter(Boolean) : [];
+    const datesLabel = dates.length ? dates.join(", ") : "unknown dates";
+    const occurrences = Math.max(0, Number(detail.occurrences || 0));
+    const href = String(detail.url || "").trim();
+    const title = href
+      ? `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${label}</a>`
+      : label;
+    return `<div style="display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid var(--border-subtle);">
+      <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4;">${title}</div>
+      <div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${occurrences} sends · ${esc(datesLabel)}</div>
+    </div>`;
+  }).join("");
+  return `<details style="margin-top:6px;">
+    <summary style="cursor:pointer;color:var(--text-secondary);font-size:11px;font-weight:600;">repeat details</summary>
+    <div style="margin-top:6px;">${body}</div>
+  </details>`;
+}
 function renderDigestInsights(insights) {
   const body = document.getElementById("digestInsightsBody");
   if (!body) return;
@@ -1572,12 +1594,14 @@ function renderDigestInsights(insights) {
     const qualityTone = Number.isFinite(quality)
       ? (quality >= 85 ? "#059669" : (quality >= 70 ? "#D97706" : "#DC2626"))
       : "var(--text-secondary)";
+    const repeatSignals = Math.max(0, Number(row.repeat_evidence_count || row.repeat_blocks || 0));
+    const repeatDetails = renderRepeatDetails(row.repeat_details);
     return `<tr>
-      <td>${userHref ? `<a href="${userHref}" style="color:var(--accent);text-decoration:none;">${esc(userLabel)}</a>` : esc(userLabel)}</td>
+      <td>${userHref ? `<a href="${userHref}" style="color:var(--accent);text-decoration:none;">${esc(userLabel)}</a>` : esc(userLabel)}${repeatDetails}</td>
       <td>${Math.max(0, Number(row.digests || 0))}</td>
       <td><span class="mono" style="color:${qualityTone};">${Number.isFinite(quality) ? quality.toFixed(1) : "—"}</span></td>
       <td class="mono">${Number.isFinite(Number(row.avg_item_count)) ? Number(row.avg_item_count).toFixed(1) : "—"}</td>
-      <td class="mono">${Math.max(0, Number(row.repeat_blocks || 0))}</td>
+      <td class="mono">${repeatSignals}</td>
       <td class="mono">${Math.max(0, Number(row.refill_count || 0))}</td>
       <td>${esc(failureModeLabel(row.dominant_failure_mode))}</td>
     </tr>`;

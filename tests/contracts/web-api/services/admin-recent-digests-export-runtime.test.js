@@ -39,6 +39,20 @@ const {
         delivery_mode: "scheduled",
         delivery_version: 1,
       }],
+    }, {
+      date: "2026-03-19",
+      run_id: "scheduled:2026-03-19T11-01-00-000Z",
+      run_at: "2026-03-19T11:01:00.000Z",
+      run_at_et: "Mar 19, 7:01 AM",
+      on_demand: false,
+      per_user: [{
+        id: "user@example.com",
+        digest_id: "2026-03-19:chat-1",
+        digest_quality_score: 75.5,
+        digest_quality_band: "decent",
+        delivery_mode: "scheduled",
+        delivery_version: 1,
+      }],
     }],
     allUsers: () => [{
       chatId: "chat-1",
@@ -75,7 +89,7 @@ const {
         feedback: { label: "great" },
       },
     ],
-    loadDigestSnapshotByRunId: () => ({
+    loadDigestSnapshotByRunId: (_userId, dateEt) => (dateEt === "2026-03-20" ? {
       sent_at: "2026-03-20T11:01:20.000Z",
       version: 1,
       requested_count: 5,
@@ -89,12 +103,16 @@ const {
       thin_pool: true,
       dominant_failure_mode: "repeat",
       items: [{ index: 1, headline: "Fresh item", url: "https://example.com/fresh", tag: "AI", freshness_key: "ai|fresh" }],
+    } : {
+      sent_at: "2026-03-19T11:01:20.000Z",
+      version: 1,
+      items: [{ index: 1, headline: "Earlier item", url: "https://example.com/earlier", tag: "AI" }],
     }),
     loadLatestDigestSnapshot: () => null,
   });
 
   const payload = buildRecentDigestsExport({ days: 7, now });
-  assert.strictEqual(payload.row_count, 1);
+  assert.strictEqual(payload.row_count, 2);
   const row = payload.rows[0];
   assert.strictEqual(row.recipient, "user@example.com");
   assert.strictEqual(row.user_id, "chat-1");
@@ -112,6 +130,59 @@ const {
   assert.strictEqual(row.engagement.clicks, 1);
   assert.strictEqual(row.engagement.feedback_submitted, 1);
   assert.deepStrictEqual(row.engagement.feedback_labels, ["great"]);
+
+  const priorRow = payload.rows[1];
+  assert.strictEqual(priorRow.date_et, "2026-03-19");
+  assert.strictEqual(priorRow.historical_repeat_count, 0);
+  assert.strictEqual(priorRow.repeat_evidence_count, 0);
+})();
+
+(() => {
+  const now = new Date("2026-03-20T15:00:00.000Z");
+  const buildRecentDigestsExport = createRecentDigestsExporter({
+    loadCostRunsNewest: () => [{
+      date: "2026-03-20",
+      run_id: "scheduled:2026-03-20T11-01-00-000Z",
+      run_at: "2026-03-20T11:01:00.000Z",
+      run_at_et: "Mar 20, 7:01 AM",
+      on_demand: false,
+      per_user: [{
+        id: "repeat@example.com",
+        digest_id: "2026-03-20:chat-2",
+        digest_quality_score: 70,
+        digest_quality_band: "decent",
+      }],
+    }, {
+      date: "2026-03-19",
+      run_id: "scheduled:2026-03-19T11-01-00-000Z",
+      run_at: "2026-03-19T11:01:00.000Z",
+      run_at_et: "Mar 19, 7:01 AM",
+      on_demand: false,
+      per_user: [{
+        id: "repeat@example.com",
+        digest_id: "2026-03-19:chat-2",
+        digest_quality_score: 72,
+        digest_quality_band: "decent",
+      }],
+    }],
+    allUsers: () => [{ chatId: "chat-2", email: "repeat@example.com" }],
+    loadEngagementEvents: () => [],
+    loadDigestSnapshotByRunId: (_userId, dateEt) => ({
+      sent_at: `${dateEt}T11:01:20.000Z`,
+      version: 1,
+      items: [{ index: 1, headline: "Repeat story", url: "https://example.com/repeat", tag: "AI" }],
+    }),
+    loadLatestDigestSnapshot: () => null,
+  });
+
+  const payload = buildRecentDigestsExport({ days: 7, now });
+  assert.strictEqual(payload.row_count, 2);
+  const newerRow = payload.rows[0];
+  assert.strictEqual(newerRow.date_et, "2026-03-20");
+  assert.strictEqual(newerRow.historical_repeat_count, 1);
+  assert.strictEqual(newerRow.repeat_evidence_count, 1);
+  assert.strictEqual(newerRow.dominant_failure_mode, "repeat");
+  assert.strictEqual(newerRow.repeat_details.length, 1);
 })();
 
 process.stdout.write("[admin-recent-digests-export-runtime] all assertions passed\n");

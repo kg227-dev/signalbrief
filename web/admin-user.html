@@ -802,6 +802,24 @@ function failureModeLabel(mode) {
   return 'Unknown';
 }
 
+function buildRepeatEvidencePanel(details) {
+  const rows = Array.isArray(details) ? details.filter(Boolean).slice(0, 4) : [];
+  if (!rows.length) return '';
+  const body = rows.map((detail) => {
+    const label = esc(String(detail.label || 'Unknown repeat'));
+    const dates = Array.isArray(detail.prior_dates_et) ? detail.prior_dates_et.filter(Boolean).join(', ') : '';
+    const href = String(detail.url || '').trim();
+    const title = href
+      ? `<a href="${esc(href)}" target="_blank" class="digest-item-link">${label}</a>`
+      : label;
+    return `<div class="digest-outcome-sub">${title}${dates ? ` · seen on ${esc(dates)}` : ''}</div>`;
+  }).join('');
+  return `<details style="margin-top:6px;">
+    <summary class="digest-item-link" style="cursor:pointer;">Repeat evidence</summary>
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px;">${body}</div>
+  </details>`;
+}
+
 function buildDigestTimelinePanel(user) {
   const rows = Array.isArray(user?.recent_digests) ? user.recent_digests : [];
   if (!rows.length) return;
@@ -816,6 +834,7 @@ function buildDigestTimelinePanel(user) {
     if (row.mode) pills.push(`<span class="debug-pill">mode ${esc(row.mode)}</span>`);
     if (Number.isFinite(Number(row.sent_item_count))) pills.push(`<span class="debug-pill">items ${Number(row.sent_item_count)}</span>`);
     if (Math.max(0, Number(row.freshness_block_count || 0)) > 0) pills.push(`<span class="debug-pill">repeat blocks ${Math.max(0, Number(row.freshness_block_count || 0))}</span>`);
+    if (Math.max(0, Number(row.historical_repeat_count || 0)) > 0) pills.push(`<span class="debug-pill">repeat sent ${Math.max(0, Number(row.historical_repeat_count || 0))}</span>`);
     if (Math.max(0, Number(row.refill_count || 0)) > 0) pills.push(`<span class="debug-pill">refills ${Math.max(0, Number(row.refill_count || 0))}</span>`);
     if (Math.max(0, Number(row.alternate_queries_used || 0)) > 0) pills.push(`<span class="debug-pill">alt queries ${Math.max(0, Number(row.alternate_queries_used || 0))}</span>`);
     if (row.thin_pool === true) pills.push(`<span class="debug-pill">thin pool</span>`);
@@ -837,6 +856,7 @@ function buildDigestTimelinePanel(user) {
         </div>
         ${pills.length ? `<div class="digest-item-debug">${pills.join('')}</div>` : ''}
         ${itemPreview ? `<div class="digest-outcome-sub">${itemPreview}</div>` : ''}
+        ${buildRepeatEvidencePanel(row.repeat_details)}
         ${digestHref ? `<div><a href="${digestHref}" target="_blank" class="digest-item-link">Open digest ↗</a></div>` : ''}
       </div>
     `;

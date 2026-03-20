@@ -1,8 +1,10 @@
 # Marketing Execution Playbook
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
 This is the canonical execution playbook for outreach, lifecycle messaging, community seeding, and content cadence. March 2026 source materials are archived under [`docs/archive/marketing/2026-03/`](../archive/marketing/2026-03/README.md).
+
+Use [marketing-metrics.md](./marketing-metrics.md) as the live KPI snapshot and weekly review companion.
 
 ## Weekly Operating Cadence
 
@@ -93,5 +95,5 @@ Content rules:
 
 - keep a single source of truth for messaging in this file and [`marketing-strategy.md`](./marketing-strategy.md)
 - archive dated campaigns and generated copy instead of letting them accumulate as active docs
-- update the tracker and KPI review weekly
+- update the tracker and KPI review weekly using [`marketing-metrics.md`](./marketing-metrics.md)
 - stop channels that create signups without retained opens

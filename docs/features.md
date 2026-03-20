@@ -1,8 +1,8 @@
 # SignalBrief Features And Backlog
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
-This file is the living backlog for product, reliability, and infrastructure work. Historical completion detail now lives in the planning docs and git history.
+This file is the living backlog for product, reliability, and infrastructure work. Closed execution details now live in the planning archive and git history.
 
 ## Current Priorities
 
@@ -10,16 +10,20 @@ This file is the living backlog for product, reliability, and infrastructure wor
 
 - [ ] Harden mail-provider response parsing and timeout behavior across all send paths.
 - [ ] Fail closed on corrupt user records instead of silently rebuilding defaults.
-- [ ] Finish full-text search across archive surfaces rather than partial search-only coverage.
+- [ ] Persist durable per-user delivery records keyed by user, date, and run mode.
+- [ ] Make archive APIs prefer delivered snapshots over shared run archives.
 - [ ] Complete the health and alerting story beyond scheduler heartbeat visibility.
+- [ ] Verify and enforce branch protection plus required CI checks on `main`.
 - [ ] Document and enforce the intended admin exposure model at the edge and in ops.
 
 ### P2 — Differentiation
 
+- [ ] Add storyline hints and same-day narrative collapse for repeated story variants.
+- [ ] Replace item scoring with a componentized signal model that includes novelty, source authority, confirmation, and saturation penalties.
 - [ ] Add company and entity watchlists.
 - [ ] Add a dedicated "ask about this" deep-dive flow for digest items.
 - [ ] Add structured consultant-lens implications instead of a single free-form analysis block.
-- [ ] Add multi-source corroboration indicators.
+- [ ] Replace misleading `Match %` copy with `Digest quality` or `Signal score`.
 
 ### P3 — Growth
 
@@ -40,14 +44,14 @@ This file is the living backlog for product, reliability, and infrastructure wor
 ### Retention
 
 - Implemented: implicit topic-weight learning, digest feedback loop, duplicate detection across days, per-user timezone support, and "why you're seeing this" rendering.
-- Partial: archive search is present on the web surface but not as a full product-wide search capability.
+- Partial: archive search is present on the web surface, but durable per-user delivery snapshots are still missing.
 - Open: weekly synthesis digest, client briefing export, signal threading across days, breaking-news alerts.
 
 ### Differentiation
 
 - Implemented: custom-topic fetches, source diversity caps, Telegram save/more/less buttons, email click tracking.
 - Partial: shareable public digest pages exist, but end-user sharing UX is still limited.
-- Open: watchlists, calendar integrations, dedicated deep-dive follow-ups, corroboration indicators.
+- Open: storyline collapse, richer score composition, watchlists, dedicated deep-dive follow-ups.
 
 ### Growth
 
@@ -57,21 +61,21 @@ This file is the living backlog for product, reliability, and infrastructure wor
 
 ### Infrastructure And Operations
 
-- Partial: SQLite backend and migration tooling exist, but file-store remains the default live path.
+- Partial: SQLite backend and migration tooling exist, but file-store remains the explicit rollback path.
 - Partial: worker health visibility exists, but general monitoring and alerting are incomplete.
-- Open: token lifecycle management, graceful shutdown completion, structured logging, fine-grained rollout controls.
+- Open: token lifecycle management, structured logging, fine-grained rollout controls, and branch-protection enforcement.
 
 ## Active Risks
 
 - Mailer pathways still need stronger timeout and parse-hardening parity.
 - File-backed state remains vulnerable to silent corruption handling in some paths.
 - Admin sessions remain in-memory and are invalidated on restart.
-- Multi-process consistency is still constrained by shared-file assumptions until store migration is complete.
+- Multi-process consistency is still constrained by shared-file assumptions until store migration is fully closed.
+- `qa:harness` remains below target and continues to threaten retention and trust.
 
 ## Evidence And References
 
-- [6-Week Execution Plan](./planning/6-week-execution-plan-2026-03-16.md)
-- [Reliability Floor Runbook](./planning/reliability-floor-runbook.md)
-- [Release Policy](./planning/release-policy.md)
-- [Week 1 Freeze Report](./planning/week1-freeze-2026-03-11.md)
-- [Week 2 Security Hardening Review](./planning/week2-security-hardening-review-2026-03-12.md)
+- [Ops Hub](./ops/README.md)
+- [Reliability Floor Runbook](./ops/reliability-floor-runbook.md)
+- [Release Policy](./ops/release-policy.md)
+- [March 2026 Planning Archive](./archive/planning/2026-03/README.md)

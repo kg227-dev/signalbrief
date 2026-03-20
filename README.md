@@ -29,14 +29,7 @@ npm install
 ./start.sh
 ```
 
-Secret loading behavior:
-
-- Runtime credentials are loaded from environment variables first (see `.env.example`).
-- `config.json` is ignored by git and should not contain production secrets.
-- If `config.json` is missing, runtime falls back to `config.example.json` for non-secret defaults.
-- CORS is allowlisted by origin (`TRUSTED_CORS_ORIGINS` / `CORS_ALLOWED_ORIGINS`) instead of wildcard defaults.
-- Legacy email+signature unsubscribe links can be retired by schedule (`UNSUBSCRIBE_LEGACY_RETIRE_AFTER_UTC`) or immediate flags (`UNSUBSCRIBE_LEGACY_FORCE_DISABLE` / `UNSUBSCRIBE_LEGACY_FORCE_ENABLE`).
-- Store backend defaults to SQLite in production; use `SIGNALBRIEF_STORE_BACKEND=file` only as an emergency rollback override.
+Operational config, secrets, release windows, rollback, and recovery procedures live in [Ops Hub](./docs/ops/README.md).
 
 Individual processes:
 
@@ -95,22 +88,28 @@ Engineering reference:
 - [Change-to-Test Map](./docs/change-to-test-map.md)
 - [Path and Import Rules](./docs/contributing-path-rules.md)
 
-Active planning:
+Ops:
 
-- [Planning Hub](./docs/planning/README.md)
-- [6-Week Execution Plan](./docs/planning/6-week-execution-plan-2026-03-16.md)
-- [Production Cutover Runbook](./docs/planning/production-cutover-ubuntu.md)
-- [Reliability Floor Runbook](./docs/planning/reliability-floor-runbook.md)
-- [Release Policy](./docs/planning/release-policy.md)
+- [Ops Hub](./docs/ops/README.md)
+- [Production Cutover Runbook](./docs/ops/production-cutover-ubuntu.md)
+- [Reliability Floor Runbook](./docs/ops/reliability-floor-runbook.md)
+- [Release Policy](./docs/ops/release-policy.md)
 
 Strategy and marketing:
 
 - [Marketing Strategy](./docs/strategy/marketing-strategy.md)
 - [Marketing Execution Playbook](./docs/strategy/marketing-execution-playbook.md)
+- [Marketing Metrics](./docs/strategy/marketing-metrics.md)
+
+Active planning:
+
+- [Planning Hub](./docs/planning/README.md)
 
 Historical material:
 
 - [Archive Policy](./docs/archive/README.md)
+- [March 2026 Planning Archive](./docs/archive/planning/2026-03/README.md)
+- [March 2026 Marketing Archive](./docs/archive/marketing/2026-03/README.md)
 
 ## Common Commands
 
@@ -121,28 +120,20 @@ npm run worker
 npm test
 npm run qa:harness
 npm run qa:matrix
-npm run ops:deploy:prod
-npm run ops:deploy:prod:hotfix
 npm run ops:deploy:staging
-npm run ops:release:window-check
-npm run ops:rollback:sha -- --rollback-sha <sha>
-npm run ops:store:full-enable-validate -- --data-dir /opt/signalbrief/app/data --sqlite-path /opt/signalbrief/app/data/signalbrief.sqlite
+npm run ops:deploy:prod
 ```
 
 ## Production Notes
 
-Production is cloud-first and VM-hosted. Detailed deploy, backup, rollback, and migration procedures intentionally live outside this README:
+Production is cloud-first and VM-hosted.
 
-- [Production Cutover Runbook](./docs/planning/production-cutover-ubuntu.md)
-- [Reliability Floor Runbook](./docs/planning/reliability-floor-runbook.md)
-- [Release Policy](./docs/planning/release-policy.md)
+- Secrets and runtime config policy: [Ops Hub](./docs/ops/README.md)
+- Deployment, release windows, and rollback: [Release Policy](./docs/ops/release-policy.md)
+- State protection and restore drills: [Reliability Floor Runbook](./docs/ops/reliability-floor-runbook.md)
+- Host bootstrap and cutover: [Production Cutover Runbook](./docs/ops/production-cutover-ubuntu.md)
 
-The active execution plan remains in place at [`docs/planning/6-week-execution-plan-2026-03-16.md`](./docs/planning/6-week-execution-plan-2026-03-16.md) and is intentionally not summarized here.
-
-Store-migration and canary rollout procedures remain under `docs/planning/` while the current execution plan is active.
-
-Production deploys now enforce release windows by default (Mon-Fri 11:00 ET and 16:00 ET, +/- 45 min). Use `--hotfix` only for active incidents.
-Production promotion now also enforces a staging verification artifact gate (same SHA, fresh artifact, successful staging public checks) unless an explicit override is provided.
+The closed March 2026 execution bundle now lives under [docs/archive/planning/2026-03](./docs/archive/planning/2026-03/README.md). `docs/planning/` is reserved for future in-flight execution bundles.
 
 ## Stack
 

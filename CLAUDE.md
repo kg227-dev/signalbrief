@@ -10,16 +10,16 @@ Agent overlay for this repository. This file is intentionally narrow: use it for
 - [FORMAT-RULES.md](./FORMAT-RULES.md)
 - [docs/features.md](./docs/features.md)
 
-If your work touches the active runtime transformation, also read:
+If your work needs March 2026 execution history, read:
 
-- [docs/planning/6-week-execution-plan-2026-03-16.md](./docs/planning/6-week-execution-plan-2026-03-16.md)
+- [March 2026 Planning Archive](./docs/archive/planning/2026-03/README.md)
 
 ## Repo Truths
 
 - Runtime is Node.js stdlib-first; `eslint` is the only declared dev dependency.
 - Canonical module surfaces are `src/domains/*`, `src/platform/*`, `web/api/*`, `web/services/*`, and `web/client/*`.
 - Compatibility runtime modules still exist under `src/runtime/*`, `src/digest/*`, `web/routes/*`, and top-level shims. Do not expand those paths when a canonical surface exists.
-- The active 6-week execution plan is pinned in place during the current transformation. Do not rename, move, or casually rewrite it.
+- `docs/planning/` is reserved for future in-flight execution bundles; the closed March 2026 plan set now lives under `docs/archive/planning/2026-03/`.
 
 ## Current Entrypoints
 

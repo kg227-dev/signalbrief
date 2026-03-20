@@ -1,8 +1,10 @@
 # Marketing Strategy
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
 This is the canonical marketing strategy doc. Source materials from the March 2026 planning burst are archived under [`docs/archive/marketing/2026-03/`](../archive/marketing/2026-03/README.md).
+
+Live KPI tracking lives in [marketing-metrics.md](./marketing-metrics.md).
 
 ## Audience
 

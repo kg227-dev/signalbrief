@@ -1,5 +1,7 @@
 # SignalBrief Release Policy
 
+*Last reviewed: March 20, 2026*
+
 Last updated: **March 12, 2026**
 
 ## Purpose

@@ -1,40 +1,14 @@
 # Active Planning Docs
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
-This directory contains active execution, operations, and rollout planning documents.
+This directory is reserved for in-flight execution bundles only.
 
-These files remain in place while the current runtime transformation is in progress. Do not treat this folder as archival storage during the active planning window.
+As of March 20, 2026, there is no open active execution bundle tracked here. The closed March 2026 plan set was moved to the planning archive, and evergreen operational runbooks were promoted into `docs/ops/`.
 
-## Pinned Plan
+Use this directory only when a plan is actively driving work. Once the plan is closed, move the bundle into `docs/archive/` and update [Documentation Index](../INDEX.md) in the same change.
 
-- [6-Week Execution Plan](./6-week-execution-plan-2026-03-16.md)
+Current routing:
 
-## Operations And Release Control
-
-- [Production Cutover Runbook](./production-cutover-ubuntu.md)
-- [Reliability Floor Runbook](./reliability-floor-runbook.md)
-- [Release Policy](./release-policy.md)
-
-## Status And Review Checkpoints
-
-- [Week 1 Freeze Report](./week1-freeze-2026-03-11.md)
-- [Week 2 Security Hardening Review](./week2-security-hardening-review-2026-03-12.md)
-- [Security Credential Rotation Checklist (Mar 13, 2026)](./security-credential-rotation-checklist-2026-03-13.md)
-
-## Store Migration And Canary Rollout
-
-- [Week 5 Day 23 - Store Migration Preflight](./week5-day23-store-migration-preflight.md)
-- [Week 5 Day 24 - Dual-Read Parity](./week5-day24-dual-read-parity.md)
-- [Week 5 Day 25 - Cutover Risk Review](./week5-day25-cutover-risk-review.md)
-- [Week 6 Day 26 - Canary Dark Deploy](./week6-day26-canary-dark-deploy.md)
-- [Week 6 Day 27 - Canary Cohort Expansion](./week6-day27-canary-cohort-expansion.md)
-- [Week 6 Day 28 - Full Enablement + Release Batching](./week6-day28-full-enable-release-batching.md)
-- [Week 6 Day 29 - Live Rollback Drill](./week6-day29-live-rollback-drill.md)
-- [Week 6 Day 30 - Stabilization Report](./week6-day30-stabilization-report.md)
-- [Week 6 Day 30 - Infrastructure Decision Memo](./week6-day30-infra-decision-memo.md)
-
-## Supporting Strategy And Earlier Planning
-
-- [Phase 0 Planning Pack](./phase-0-planning-pack.md)
-- [Monetization Playbook (Private)](./monetization-playbook.private.md)
+- Live runbooks: [Ops Hub](../ops/README.md)
+- Archived March 2026 execution bundle: [March 2026 Planning Archive](../archive/planning/2026-03/README.md)

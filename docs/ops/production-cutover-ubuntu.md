@@ -1,5 +1,7 @@
 # SignalBrief Production Cutover Runbook (Ubuntu VM + Docker Compose)
 
+*Last reviewed: March 20, 2026*
+
 Updated: 2026-03-06 (America/New_York)
 
 ## Goal
@@ -64,15 +66,10 @@ mkdir -p data archive
 
 ## 4) Secrets + Runtime Config
 
-Copy your existing `config.json` from current production machine.
+Provision runtime secrets through `.env`. `config.json` is optional and should be used only for non-secret local overrides.
 
 ```bash
-# from local machine
-scp /Users/kushgulati/Desktop/signalbrief/config.json ubuntu@$SB_HOST:/tmp/config.json
-
-# on VM
 cd /opt/signalbrief/app
-mv /tmp/config.json ./config.json
 cp .env.example .env
 ```
 
@@ -85,6 +82,9 @@ nano /opt/signalbrief/app/.env
 Minimum values:
 - `BASE_URL=https://getsignalbrief.com`
 - `OPS_ALERT_CHAT_ID=<your ops chat id>` (recommended)
+- provider/admin secrets via `SIGNALBRIEF_*` env vars
+
+If you rely on `config.json` for non-secret overrides, copy it separately after `.env` is in place.
 
 ## 5) First Boot
 

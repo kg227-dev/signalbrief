@@ -1,6 +1,6 @@
 # Path and Import Rules
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
 These rules keep the project navigable for new engineers and prevent structure drift.
 
@@ -60,8 +60,9 @@ Keep existing `npm run` script names stable unless there is an explicit migratio
 ## 7) Documentation Placement
 
 - keep canonical engineering docs under `docs/` or repo root when tool location requires it
-- keep living strategy docs under `docs/strategy/`
-- keep active execution docs under `docs/planning/`
-- move dated snapshots, generated content, and one-off campaigns into `docs/archive/`
+- keep live runbooks and release procedures under `docs/ops/`
+- keep active in-flight execution bundles under `docs/planning/`
+- keep living strategy, KPI, and private business docs under `docs/strategy/`
+- move closed plan bundles, dated snapshots, and generated campaigns into `docs/archive/`
 
-When you create or move a canonical doc, update [Documentation Index](./INDEX.md) in the same change.
+When an execution plan closes, move the bundle to `docs/archive/` and update [Documentation Index](./INDEX.md) in the same change.

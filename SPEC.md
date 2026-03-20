@@ -1,8 +1,8 @@
 # SignalBrief — Product Specification
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
-Scope: current runtime behavior, persisted data shape, and API contracts. Setup, deployment, and operating procedures live in [README.md](./README.md) and the active docs under [`docs/planning/`](./docs/planning/).
+Scope: current runtime behavior, persisted data shape, and API contracts. Setup, deployment, and operating procedures live in [README.md](./README.md) and [`docs/ops/`](./docs/ops/README.md). Historical execution context lives under [`docs/archive/planning/`](./docs/archive/planning/2026-03/README.md).
 
 ---
 

@@ -1,4 +1,6 @@
-# Security Credential Rotation Checklist (P1 Follow-Through)
+# Security Credential Rotation Checklist
+
+*Last reviewed: March 20, 2026*
 
 Date: **March 13, 2026**
 

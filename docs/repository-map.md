@@ -1,6 +1,6 @@
 # Repository Map
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: March 20, 2026*
 
 Use this document when you need to know where code should live or where to start reading.
 
@@ -26,16 +26,18 @@ Use this document when you need to know where code should live or where to start
 | `web/routes/` | compatibility route modules still in use during migration |
 | `web/*.html`, `web/*.js`, `web/style.css` | static assets served directly in production |
 | `tests/contracts/` | contract tests — verify module syntax, exports, and integration shape |
-| `test-harness/` | QA pipeline — evaluates digest quality (topic matching, relevance scoring, diversity, replay regressions) |
-| `test-support/` | shared test utilities (e.g. `module-contract-helper.js` used by contract tests) |
-| `scripts/` | smoke checks, reports, and operational utilities |
+| `test-harness/` | QA pipeline — evaluates digest quality and replay regressions |
+| `test-support/` | shared test utilities used by contract and harness suites |
+| `scripts/` | smoke checks, reports, deploy tooling, and operational utilities |
 
 ## Documentation Areas
 
 | Path | Purpose |
 | --- | --- |
-| `docs/` | canonical engineering and planning docs |
-| `docs/strategy/` | living strategy and marketing docs |
+| `docs/` | canonical engineering docs and the primary docs router |
+| `docs/ops/` | live operational runbooks, release procedures, and credential guidance |
+| `docs/planning/` | reserved for in-flight execution plan bundles only |
+| `docs/strategy/` | living strategy, marketing, KPI, and private business docs |
 | `docs/archive/` | historical source material retained for context |
 | `artifacts/` | ignored generated outputs for local analysis and testing |
 

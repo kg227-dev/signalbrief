@@ -1216,7 +1216,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           <th>Digests</th>
           <th>Avg quality</th>
           <th>Avg items</th>
-          <th>Repeat signals</th>
+          <th title="Repeat signals count extra repeated sends beyond the first send of each repeated story in the 7-day window.">Repeat signals</th>
           <th>Refills</th>
           <th>Failure mode</th>
         </tr>
@@ -1556,9 +1556,17 @@ function failureModeLabel(mode) {
   if (normalized === "topic_fit") return "Topic fit";
   return "Unknown";
 }
-function renderRepeatDetails(details) {
-  const rows = Array.isArray(details) ? details.filter(Boolean).slice(0, 5) : [];
+function renderRepeatDetails(details, repeatSignals) {
+  const allRows = Array.isArray(details) ? details.filter(Boolean) : [];
+  const rows = allRows.slice(0, 5);
   if (!rows.length) return "";
+  const formulaTerms = allRows
+    .map((detail) => Math.max(0, Number(detail?.occurrences || 0)))
+    .filter((occurrences) => occurrences > 1)
+    .map((occurrences) => `(${occurrences}-1)`);
+  const formulaLine = formulaTerms.length
+    ? `Repeat signals count extra sends beyond the first: ${formulaTerms.join(" + ")} = ${Math.max(0, Number(repeatSignals || 0))}`
+    : "Repeat signals count extra sends beyond the first occurrence of each repeated story.";
   const body = rows.map((detail) => {
     const label = esc(String(detail.label || "Unknown repeat"));
     const dates = Array.isArray(detail.dates_display) ? detail.dates_display.filter(Boolean) : (Array.isArray(detail.dates_et) ? detail.dates_et.filter(Boolean) : []);
@@ -1575,7 +1583,10 @@ function renderRepeatDetails(details) {
   }).join("");
   return `<details style="margin-top:6px;">
     <summary style="cursor:pointer;color:var(--text-secondary);font-size:11px;font-weight:600;">repeat details</summary>
-    <div style="margin-top:6px;">${body}</div>
+    <div style="margin-top:6px;">
+      <div style="font-size:11px;color:var(--text-secondary);line-height:1.45;padding:4px 0 6px;">${esc(formulaLine)}</div>
+      ${body}
+    </div>
   </details>`;
 }
 function renderDigestInsights(insights) {
@@ -1599,7 +1610,7 @@ function renderDigestInsights(insights) {
       ? (avgItems >= 5 ? "#059669" : "#DC2626")
       : "var(--text-secondary)";
     const repeatSignals = Math.max(0, Number(row.repeat_evidence_count || row.repeat_blocks || 0));
-    const repeatDetails = renderRepeatDetails(row.repeat_details);
+    const repeatDetails = renderRepeatDetails(row.repeat_details, repeatSignals);
     return `<tr>
       <td>${userHref ? `<a href="${userHref}" style="color:var(--accent);text-decoration:none;">${esc(userLabel)}</a>` : esc(userLabel)}${repeatDetails}</td>
       <td>${Math.max(0, Number(row.digests || 0))}</td>

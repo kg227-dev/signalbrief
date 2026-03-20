@@ -71,14 +71,25 @@ function readOption(options, ...keys) {
   return "";
 }
 
-function run(command, args, { cwd = ROOT, label = "", capture = false, env = null } = {}) {
-  const pretty = [command, ...args].join(" ");
+function run(command, args, {
+  cwd = ROOT,
+  label = "",
+  capture = false,
+  env = null,
+  input = null,
+  prettyOverride = "",
+} = {}) {
+  const pretty = prettyOverride || [command, ...args].join(" ");
   log(`${label ? `${label}: ` : ""}${pretty}`);
+  const stdio = capture
+    ? ["pipe", "pipe", "pipe"]
+    : (input == null ? "inherit" : ["pipe", "inherit", "inherit"]);
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    stdio,
     env: env ? { ...process.env, ...env } : process.env,
+    input,
   });
   if (result.status !== 0) {
     const detail = capture
@@ -100,6 +111,10 @@ function parseBoolean(rawValue) {
   const value = String(rawValue || "").trim().toLowerCase();
   if (!value) return false;
   return ["1", "true", "yes", "y", "on"].includes(value);
+}
+
+function hasValue(rawValue) {
+  return String(rawValue || "").trim().length > 0;
 }
 
 function sleep(ms) {
@@ -297,6 +312,114 @@ function packageCommitArchive(archivePath, archiveSha) {
   }
 }
 
+function buildComposeServiceArgs(services) {
+  return (Array.isArray(services) ? services : []).map((service) => shellQuote(service)).join(" ");
+}
+
+function buildComposeEnvPrefix(appImage) {
+  const image = String(appImage || "").trim();
+  if (!image) return "";
+  return `SIGNALBRIEF_APP_IMAGE=${shellQuote(image)} `;
+}
+
+function buildImageDeployRemoteSteps({
+  remoteDir,
+  services,
+  skipRemoteVerify,
+  appImage,
+}) {
+  const composeServices = buildComposeServiceArgs(services);
+  const composeEnvPrefix = buildComposeEnvPrefix(appImage);
+  const steps = [
+    "set -euo pipefail",
+    `cd ${shellQuote(remoteDir)}`,
+    "echo '[deploy-prod] remote: compose pull'",
+    `${composeEnvPrefix}docker compose pull ${composeServices}`.trim(),
+    "echo '[deploy-prod] remote: compose up'",
+    `${composeEnvPrefix}docker compose up -d --no-build ${composeServices}`.trim(),
+  ];
+  if (!skipRemoteVerify) {
+    steps.push(
+      "echo '[deploy-prod] remote: runtime verify'",
+      "if command -v npm >/dev/null 2>&1; then "
+      + "npm run -s ops:verify-runtime:quick; "
+      + "elif command -v node >/dev/null 2>&1; then "
+      + "node scripts/verify-runtime.js --skip-canary; "
+      + "else "
+      + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
+      + "fi"
+    );
+  }
+  steps.push("echo '[deploy-prod] remote: compose ps'");
+  steps.push("docker compose ps");
+  return steps;
+}
+
+function buildArchiveDeployRemoteSteps({
+  remoteDir,
+  remoteArchivePath,
+  services,
+  skipBuild,
+  skipRemoteVerify,
+  sha,
+}) {
+  const composeArgs = ["docker", "compose", "up", "-d"];
+  if (!skipBuild) composeArgs.push("--build");
+  composeArgs.push(...services);
+
+  // Build separately with --no-cache so Docker doesn't serve stale source files
+  // from a cached COPY layer. The deps stage (npm ci) is still fast because
+  // package.json/package-lock.json rarely change and are in a separate stage.
+  const buildNoCacheArgs = services.map((s) => shellQuote(s)).join(" ");
+
+  const steps = [
+    "set -euo pipefail",
+    `cd ${shellQuote(remoteDir)}`,
+    "echo '[deploy-prod] remote: extract archive'",
+    `tar -xzf ${shellQuote(remoteArchivePath)}`,
+    "echo '[deploy-prod] remote: compose build'",
+    skipBuild ? "echo '[deploy-prod] remote: build skipped'" : `docker compose build --no-cache --build-arg ${shellQuote(`DEPLOY_SHA=${sha}`)} ${buildNoCacheArgs}`,
+    "echo '[deploy-prod] remote: compose up'",
+    composeArgs.filter((arg) => arg !== "--build").map((arg) => shellQuote(arg)).join(" "),
+  ];
+  if (!skipRemoteVerify) {
+    steps.push(
+      "echo '[deploy-prod] remote: runtime verify'",
+      "if command -v npm >/dev/null 2>&1; then "
+      + "npm run -s ops:verify-runtime:quick; "
+      + "elif command -v node >/dev/null 2>&1; then "
+      + "node scripts/verify-runtime.js --skip-canary; "
+      + "else "
+      + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
+      + "fi"
+    );
+  }
+  steps.push("echo '[deploy-prod] remote: compose ps'");
+  steps.push("docker compose ps");
+  steps.push(`rm -f ${shellQuote(remoteArchivePath)}`);
+  return steps;
+}
+
+function remoteDockerLogin({ sshKey, sshTarget, registry, user, password }) {
+  if (!hasValue(registry) || !hasValue(user) || !hasValue(password)) return;
+  run("ssh", [
+    "-i",
+    sshKey,
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "ConnectTimeout=30",
+    sshTarget,
+    `docker login ${shellQuote(registry)} -u ${shellQuote(user)} --password-stdin`,
+  ], {
+    label: "remote registry login",
+    input: `${String(password)}\n`,
+    prettyOverride: `ssh -i ${sshKey} ${sshTarget} docker login ${registry} -u ${user} --password-stdin`,
+  });
+}
+
 async function verifyPublicEndpoints(publicBaseUrl) {
   const base = String(publicBaseUrl || "").replace(/\/+$/, "");
   if (!base) fail("public URL is required for verification");
@@ -383,6 +506,9 @@ async function main() {
         "  --remote-dir <remote-app-dir>",
         "  --remote-tmp-dir <remote-tmp-dir>",
         "  --public-url <https://public-host>",
+        "  --app-image <registry/image:tag>",
+        "  --registry <registry-host>",
+        "  --registry-user <registry-user>",
         "  --archive-sha <commit-sha>",
         "  --target-env <production|staging>",
         "  --services \"web bot worker\"",
@@ -409,6 +535,10 @@ async function main() {
   const remoteDir = readOption(options, "remote-dir", "remote_dir") || process.env.DEPLOY_REMOTE_DIR || "/opt/signalbrief/app";
   const remoteTmpDir = readOption(options, "remote-tmp-dir", "remote_tmp_dir") || process.env.DEPLOY_REMOTE_TMP_DIR || "/tmp";
   const publicUrl = readOption(options, "public-url", "public_url") || process.env.DEPLOY_PUBLIC_URL || "https://getsignalbrief.com";
+  const appImage = readOption(options, "app-image", "app_image") || process.env.DEPLOY_APP_IMAGE || "";
+  const registry = readOption(options, "registry") || process.env.DEPLOY_REGISTRY || "";
+  const registryUser = readOption(options, "registry-user", "registry_user") || process.env.DEPLOY_REGISTRY_USER || "";
+  const registryPassword = process.env.DEPLOY_REGISTRY_PASSWORD || "";
   const archiveSha = readOption(options, "archive-sha", "archive_sha");
   const targetEnv = (readOption(options, "target-env", "target_env") || process.env.DEPLOY_TARGET_ENV || "production")
     .toLowerCase()
@@ -441,6 +571,20 @@ async function main() {
   const archivePath = path.join(os.tmpdir(), archiveName);
   const remoteArchivePath = `${remoteTmpDir.replace(/\/+$/, "")}/${archiveName}`;
   const sshTarget = `${sshUser}@${sshHost}`;
+  const imageDeployEnabled = hasValue(appImage);
+
+  if (imageDeployEnabled && hasValue(archiveSha)) {
+    fail("--archive-sha cannot be combined with --app-image");
+  }
+  if (!imageDeployEnabled && (hasValue(registry) || hasValue(registryUser) || hasValue(registryPassword))) {
+    fail("registry credentials require --app-image deploy mode");
+  }
+  if (imageDeployEnabled) {
+    const partialRegistryConfig = [registry, registryUser, registryPassword].filter(hasValue).length;
+    if (partialRegistryConfig > 0 && partialRegistryConfig < 3) {
+      fail("registry deploy requires registry, registry user, and DEPLOY_REGISTRY_PASSWORD together");
+    }
+  }
 
   if (targetEnv === "production") {
     const stagingGateResult = evaluateStagingPromotionGate({
@@ -498,58 +642,50 @@ async function main() {
   }
 
   log(`commit=${sha}`);
-  if (archiveSha) {
-    log(`pack source commit=${archiveSha}`);
-    packageCommitArchive(archivePath, archiveSha);
+  let remoteSteps = [];
+  if (imageDeployEnabled) {
+    log(`deploy mode=image (app_image=${appImage})`);
+    remoteDockerLogin({
+      sshKey,
+      sshTarget,
+      registry,
+      user: registryUser,
+      password: registryPassword,
+    });
+    remoteSteps = buildImageDeployRemoteSteps({
+      remoteDir,
+      services,
+      skipRemoteVerify,
+      appImage,
+    });
   } else {
-    packageWorkingTreeArchive(archivePath);
+    if (archiveSha) {
+      log(`pack source commit=${archiveSha}`);
+      packageCommitArchive(archivePath, archiveSha);
+    } else {
+      packageWorkingTreeArchive(archivePath);
+    }
+
+    run("scp", [
+      "-i",
+      sshKey,
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "StrictHostKeyChecking=no",
+      archivePath,
+      `${sshTarget}:${remoteArchivePath}`,
+    ], { label: "upload" });
+
+    remoteSteps = buildArchiveDeployRemoteSteps({
+      remoteDir,
+      remoteArchivePath,
+      services,
+      skipBuild,
+      skipRemoteVerify,
+      sha,
+    });
   }
-
-  run("scp", [
-    "-i",
-    sshKey,
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "StrictHostKeyChecking=no",
-    archivePath,
-    `${sshTarget}:${remoteArchivePath}`,
-  ], { label: "upload" });
-
-  const composeArgs = ["docker", "compose", "up", "-d"];
-  if (!skipBuild) composeArgs.push("--build");
-  composeArgs.push(...services);
-
-  // Build separately with --no-cache so Docker doesn't serve stale source files
-  // from a cached COPY layer. The deps stage (npm ci) is still fast because
-  // package.json/package-lock.json rarely change and are in a separate stage.
-  const buildNoCacheArgs = services.map((s) => shellQuote(s)).join(" ");
-
-  const remoteSteps = [
-    "set -euo pipefail",
-    `cd ${shellQuote(remoteDir)}`,
-    "echo '[deploy-prod] remote: extract archive'",
-    `tar -xzf ${shellQuote(remoteArchivePath)}`,
-    "echo '[deploy-prod] remote: compose build'",
-    skipBuild ? "echo '[deploy-prod] remote: build skipped'" : `docker compose build --no-cache --build-arg ${shellQuote(`DEPLOY_SHA=${sha}`)} ${buildNoCacheArgs}`,
-    "echo '[deploy-prod] remote: compose up'",
-    composeArgs.filter((a) => a !== "--build").map((arg) => shellQuote(arg)).join(" "),
-  ];
-  if (!skipRemoteVerify) {
-    remoteSteps.push(
-      "echo '[deploy-prod] remote: runtime verify'",
-      "if command -v npm >/dev/null 2>&1; then "
-      + "npm run -s ops:verify-runtime:quick; "
-      + "elif command -v node >/dev/null 2>&1; then "
-      + "node scripts/verify-runtime.js --skip-canary; "
-      + "else "
-      + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
-      + "fi"
-    );
-  }
-  remoteSteps.push("echo '[deploy-prod] remote: compose ps'");
-  remoteSteps.push("docker compose ps");
-  remoteSteps.push(`rm -f ${shellQuote(remoteArchivePath)}`);
 
   run("ssh", [
     "-i",

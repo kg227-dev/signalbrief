@@ -1,6 +1,11 @@
+x-app-image: &app-image
+  image: ${SIGNALBRIEF_APP_IMAGE:-app-signalbrief:latest}
+  build:
+    context: .
+
 services:
   web:
-    build: .
+    <<: *app-image
     command: ["node", "web/server.js"]
     env_file:
       - .env
@@ -25,7 +30,7 @@ services:
       start_period: 15s
 
   bot:
-    build: .
+    <<: *app-image
     command: ["node", "src/entrypoints/bot-server.js"]
     env_file:
       - .env
@@ -52,7 +57,7 @@ services:
       start_period: 20s
 
   worker:
-    build: .
+    <<: *app-image
     command: ["node", "src/entrypoints/scheduler-worker.js"]
     env_file:
       - .env

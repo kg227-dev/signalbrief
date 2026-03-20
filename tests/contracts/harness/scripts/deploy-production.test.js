@@ -8,6 +8,10 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   "DEPLOY_PUBLIC_VERIFY_ATTEMPTS",
+  "DEPLOY_APP_IMAGE",
+  "deploy mode=image",
+  "remote registry login",
+  "remote: compose pull",
   "archive-sha",
   "pack source commit=",
   "staging promotion gate",

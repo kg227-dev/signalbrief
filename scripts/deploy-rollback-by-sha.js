@@ -32,6 +32,7 @@ function printHelp() {
       "  --services \"web bot worker\"",
       "  --skip-build --skip-remote-verify --skip-public-verify",
       "  --verify-attempts <n> --verify-delay-ms <ms>",
+      "  --emergency-source-build                Use legacy source-build rollback path",
       "  --respect-release-window                Disable outside-window override",
       "  --no-hotfix                             Disable hotfix override",
       "  --keep-worktrees                        Keep temporary git worktrees for debug",

@@ -37,6 +37,7 @@ const resolved = resolveRollbackByShaOptions([
   "--artifact-name", "rollback.json",
   "--verify-attempts", "5",
   "--verify-delay-ms", "1234",
+  "--emergency-source-build",
   "--respect-release-window",
   "--no-hotfix",
 ], {}, rootDir);
@@ -47,6 +48,7 @@ assert.strictEqual(resolved.artifactDir, path.join(rootDir, "artifacts"));
 assert.strictEqual(resolved.artifactName, "rollback.json");
 assert.strictEqual(resolved.verifyAttempts, 5);
 assert.strictEqual(resolved.verifyDelayMs, 1234);
+assert.strictEqual(resolved.emergencySourceBuild, true);
 assert.strictEqual(resolved.allowOutsideWindow, false);
 assert.strictEqual(resolved.hotfix, false);
 

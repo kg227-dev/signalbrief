@@ -235,17 +235,86 @@ function getGitShortSha(ref = "HEAD") {
   return "";
 }
 
+function getGitFullSha(ref = "HEAD") {
+  const target = String(ref || "HEAD").trim() || "HEAD";
+  try {
+    const result = spawnSync("git", ["rev-parse", `${target}^{commit}`], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.status !== 0) {
+      fail("unable to resolve full git commit SHA", String(result.stderr || result.stdout || "").trim());
+    }
+    return String(result.stdout || "").trim();
+  } catch (error) {
+    fail("unable to resolve full git commit SHA", String(error?.message || error));
+  }
+  return "";
+}
+
 function verifyGitCommit(ref) {
   const target = String(ref || "").trim();
-  if (!target) fail("archive-sha cannot be empty");
+  if (!target) fail("deploy-sha cannot be empty");
   const result = spawnSync("git", ["rev-parse", "--verify", `${target}^{commit}`], {
     cwd: ROOT,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.status !== 0) {
-    fail(`archive-sha is not a valid commit: ${target}`, String(result.stderr || result.stdout || "").trim());
+    fail(`deploy-sha is not a valid commit: ${target}`, String(result.stderr || result.stdout || "").trim());
   }
+}
+
+function readGitRemoteOriginUrl() {
+  try {
+    const result = spawnSync("git", ["config", "--get", "remote.origin.url"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.status !== 0) return "";
+    return String(result.stdout || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function parseGithubRepoFromRemote(remoteUrl) {
+  const raw = String(remoteUrl || "").trim();
+  if (!raw) return null;
+  let match = raw.match(/^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/i);
+  if (!match) {
+    match = raw.match(/^https:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?$/i);
+  }
+  if (!match) return null;
+  return {
+    owner: String(match[1] || "").trim().toLowerCase(),
+    repo: String(match[2] || "").trim().toLowerCase(),
+  };
+}
+
+function resolveDefaultAppImageRepo() {
+  const explicitRepo = String(process.env.DEPLOY_APP_IMAGE_REPO || "").trim().toLowerCase();
+  if (explicitRepo) return explicitRepo;
+  const githubRepo = String(process.env.GITHUB_REPOSITORY || "").trim();
+  if (githubRepo) {
+    const [owner, repo] = githubRepo.split("/", 2);
+    if (owner && repo) return `ghcr.io/${owner.toLowerCase()}/${repo.toLowerCase()}`;
+  }
+  const parsedRemote = parseGithubRepoFromRemote(readGitRemoteOriginUrl());
+  if (parsedRemote?.owner && parsedRemote?.repo) {
+    return `ghcr.io/${parsedRemote.owner}/${parsedRemote.repo}`;
+  }
+  return "";
+}
+
+function inferRegistryFromImage(appImage) {
+  const raw = String(appImage || "").trim();
+  if (!raw) return "";
+  const firstSegment = raw.split("/")[0] || "";
+  if (firstSegment.includes(".") || firstSegment.includes(":")) return firstSegment;
+  return "";
 }
 
 function packageWorkingTreeArchive(archivePath) {
@@ -507,15 +576,17 @@ async function main() {
         "  --remote-tmp-dir <remote-tmp-dir>",
         "  --public-url <https://public-host>",
         "  --app-image <registry/image:tag>",
+        "  --deploy-sha <commit-sha>",
         "  --registry <registry-host>",
         "  --registry-user <registry-user>",
-        "  --archive-sha <commit-sha>",
+        "  --archive-sha <commit-sha> (legacy alias for --deploy-sha)",
         "  --target-env <production|staging>",
         "  --services \"web bot worker\"",
         "  --staging-artifact-path <path>",
         "  --staging-artifact-max-age-minutes <n>",
         "  --release-windows-et <spec>",
         "  --release-window-tolerance-minutes <n>",
+        "  --emergency-source-build",
         "  --hotfix",
         "  --skip-staging-gate",
         "  --allow-outside-window",
@@ -535,11 +606,11 @@ async function main() {
   const remoteDir = readOption(options, "remote-dir", "remote_dir") || process.env.DEPLOY_REMOTE_DIR || "/opt/signalbrief/app";
   const remoteTmpDir = readOption(options, "remote-tmp-dir", "remote_tmp_dir") || process.env.DEPLOY_REMOTE_TMP_DIR || "/tmp";
   const publicUrl = readOption(options, "public-url", "public_url") || process.env.DEPLOY_PUBLIC_URL || "https://getsignalbrief.com";
-  const appImage = readOption(options, "app-image", "app_image") || process.env.DEPLOY_APP_IMAGE || "";
-  const registry = readOption(options, "registry") || process.env.DEPLOY_REGISTRY || "";
+  let appImage = readOption(options, "app-image", "app_image") || process.env.DEPLOY_APP_IMAGE || "";
+  let registry = readOption(options, "registry") || process.env.DEPLOY_REGISTRY || "";
   const registryUser = readOption(options, "registry-user", "registry_user") || process.env.DEPLOY_REGISTRY_USER || "";
   const registryPassword = process.env.DEPLOY_REGISTRY_PASSWORD || "";
-  const archiveSha = readOption(options, "archive-sha", "archive_sha");
+  const deploySha = readOption(options, "deploy-sha", "deploy_sha", "archive-sha", "archive_sha");
   const targetEnv = (readOption(options, "target-env", "target_env") || process.env.DEPLOY_TARGET_ENV || "production")
     .toLowerCase()
     .trim();
@@ -564,20 +635,43 @@ async function main() {
     || parseBoolean(process.env.DEPLOY_SKIP_STAGING_GATE);
   const allowOutsideWindow = flags.has("allow-outside-window")
     || parseBoolean(process.env.DEPLOY_ALLOW_OUTSIDE_WINDOW);
+  const emergencySourceBuild = flags.has("emergency-source-build")
+    || parseBoolean(process.env.DEPLOY_EMERGENCY_SOURCE_BUILD);
 
-  if (archiveSha) verifyGitCommit(archiveSha);
-  const sha = getGitShortSha(archiveSha || "HEAD");
+  if (deploySha) verifyGitCommit(deploySha);
+  const sha = getGitShortSha(deploySha || "HEAD");
+  const fullSha = getGitFullSha(deploySha || "HEAD");
   const archiveName = `signalbrief-deploy-${sha}.tgz`;
   const archivePath = path.join(os.tmpdir(), archiveName);
   const remoteArchivePath = `${remoteTmpDir.replace(/\/+$/, "")}/${archiveName}`;
   const sshTarget = `${sshUser}@${sshHost}`;
+  if (!hasValue(appImage) && targetEnv === "production" && !emergencySourceBuild) {
+    const inferredRepo = resolveDefaultAppImageRepo();
+    if (inferredRepo) {
+      appImage = `${inferredRepo}:${fullSha}`;
+      log(`app image inferred from git remote (app_image=${appImage})`);
+    }
+  }
+  if (!hasValue(registry) && hasValue(appImage)) {
+    registry = inferRegistryFromImage(appImage);
+  }
   const imageDeployEnabled = hasValue(appImage);
 
-  if (imageDeployEnabled && hasValue(archiveSha)) {
-    fail("--archive-sha cannot be combined with --app-image");
+  if (imageDeployEnabled && emergencySourceBuild) {
+    fail("--emergency-source-build cannot be combined with --app-image");
   }
   if (!imageDeployEnabled && (hasValue(registry) || hasValue(registryUser) || hasValue(registryPassword))) {
     fail("registry credentials require --app-image deploy mode");
+  }
+  if (targetEnv === "production" && !imageDeployEnabled && !emergencySourceBuild) {
+    fail(
+      "production deploy requires a CI-built image or an explicit emergency fallback",
+      [
+        `resolved_commit=${fullSha}`,
+        "Normal production deploys now pull a prebuilt image by commit SHA.",
+        "Provide --app-image / DEPLOY_APP_IMAGE, or use --emergency-source-build only for incident fallback.",
+      ].join("\n")
+    );
   }
   if (imageDeployEnabled) {
     const partialRegistryConfig = [registry, registryUser, registryPassword].filter(hasValue).length;
@@ -659,9 +753,10 @@ async function main() {
       appImage,
     });
   } else {
-    if (archiveSha) {
-      log(`pack source commit=${archiveSha}`);
-      packageCommitArchive(archivePath, archiveSha);
+    log("deploy mode=emergency_source_build");
+    if (deploySha) {
+      log(`pack source commit=${deploySha}`);
+      packageCommitArchive(archivePath, deploySha);
     } else {
       packageWorkingTreeArchive(archivePath);
     }

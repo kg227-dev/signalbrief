@@ -101,6 +101,7 @@ function resolveRollbackByShaOptions(argv, env = process.env, baseDir = ROOT) {
     skipBuild: flags.has("skip-build"),
     skipRemoteVerify: flags.has("skip-remote-verify"),
     skipPublicVerify: flags.has("skip-public-verify"),
+    emergencySourceBuild: flags.has("emergency-source-build"),
     keepWorktrees: flags.has("keep-worktrees"),
     allowOutsideWindow: !flags.has("respect-release-window"),
     hotfix: !flags.has("no-hotfix"),
@@ -238,6 +239,7 @@ function buildDeployArgs(stepOptions) {
   if (stepOptions.skipBuild) args.push("--skip-build");
   if (stepOptions.skipRemoteVerify) args.push("--skip-remote-verify");
   if (stepOptions.skipPublicVerify) args.push("--skip-public-verify");
+  if (stepOptions.emergencySourceBuild) args.push("--emergency-source-build");
   if (stepOptions.host) args.push("--host", stepOptions.host);
   if (stepOptions.user) args.push("--user", stepOptions.user);
   if (stepOptions.key) args.push("--key", stepOptions.key);
@@ -247,7 +249,7 @@ function buildDeployArgs(stepOptions) {
   if (stepOptions.services && stepOptions.services.length) {
     args.push("--services", stepOptions.services.join(" "));
   }
-  if (stepOptions.archiveSha) args.push("--archive-sha", stepOptions.archiveSha);
+  if (stepOptions.deploySha) args.push("--deploy-sha", stepOptions.deploySha);
   return args;
 }
 
@@ -255,7 +257,7 @@ function deployCommitViaArchiveSha(commitSha, options = {}, deps = {}) {
   const run = typeof deps.runCommand === "function" ? deps.runCommand : runCommand;
   const deployArgs = buildDeployArgs({
     ...options,
-    archiveSha: commitSha,
+    deploySha: commitSha,
   });
   const deploy = run("npm", deployArgs, {
     cwd: ROOT,
@@ -330,6 +332,7 @@ async function runRollbackBySha(rawOptions, deps = {}) {
     hotfix: rawOptions.hotfix !== false,
     allowOutsideWindow: rawOptions.allowOutsideWindow !== false,
     keepWorktrees: rawOptions.keepWorktrees === true,
+    emergencySourceBuild: rawOptions.emergencySourceBuild === true,
     skipBuild: rawOptions.skipBuild === true,
     skipRemoteVerify: rawOptions.skipRemoteVerify === true,
     skipPublicVerify: rawOptions.skipPublicVerify === true,

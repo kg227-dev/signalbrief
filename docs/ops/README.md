@@ -22,6 +22,7 @@ Common operator commands:
 ```bash
 npm run ops:deploy:staging
 npm run ops:deploy:prod
+npm run ops:deploy:prod:emergency-source
 npm run ops:release:window-check
 npm run ops:rollback:sha -- --rollback-sha <sha>
 ```

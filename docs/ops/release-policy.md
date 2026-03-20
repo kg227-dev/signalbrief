@@ -36,6 +36,7 @@ For those changes, use this sequence:
 Promotion gate behavior in tooling:
 - `ops:deploy:staging` now writes a staging verification artifact to `artifacts/releases/latest-staging-deploy.json` when public verification passes.
 - `ops:deploy:prod` now blocks unless that artifact exists, is fresh, and matches the exact SHA being promoted.
+- `ops:deploy:prod` now defaults to the CI-built image for that SHA; source-build deploys are emergency-only via `npm run ops:deploy:prod:emergency-source` or `--emergency-source-build`.
 - Default freshness window is 24h (`DEPLOY_STAGING_ARTIFACT_MAX_AGE_MINUTES` or `--staging-artifact-max-age-minutes` to override).
 
 ## Hotfix Path
@@ -53,6 +54,7 @@ Hotfix requirements:
 Hotfix note:
 - `--hotfix` is treated as an explicit staging-gate override for production deploys.
 - Non-incident manual override is `--skip-staging-gate` (must include owner callout in release notes).
+- If the CI image path is unavailable during an incident, use `--emergency-source-build` as the explicit fallback and record why the normal image promotion path was bypassed.
 
 ## Batching Rules
 

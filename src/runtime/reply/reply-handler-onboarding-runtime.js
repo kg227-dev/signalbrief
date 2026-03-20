@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { sendEmail: sendEmailViaMailer } = require("../mailer/mailer-runtime");
 const { createOnboardingService } = require("./onboarding-service");
+const { resolveSignalBriefRuntimePaths } = require("../runtime-state-paths-runtime");
 
 function createReplyOnboardingService(deps) {
   const {
@@ -52,7 +53,10 @@ function createReplyOnboardingService(deps) {
     };
     writeUser(chatId, updated);
     if (oldChatId && String(oldChatId) !== String(chatId)) {
-      const oldFile = path.join(appRoot, "data", `user-${oldChatId}.json`);
+      const oldFile = path.join(
+        resolveSignalBriefRuntimePaths({ appRoot, env: process.env }).dataDir,
+        `user-${oldChatId}.json`
+      );
       if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
     }
     return updated;

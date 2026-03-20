@@ -13,11 +13,16 @@ const {
   sleep,
 } = require("./digest-runner-utils-runtime");
 const { createDigestRunnerSpawnRuntime } = require("./digest-runner-spawn-runtime");
+const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const DIGEST_SCRIPT = path.join(ROOT, "src", "entrypoints", "digest.js");
-const DIGEST_RUN_LOCK_FILE = path.join(ROOT, "data", "digest-run.lock");
-const DIGEST_ON_DEMAND_COOLDOWN_FILE = path.join(ROOT, "data", "digest-on-demand-cooldown.json");
+const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
+  appRoot: ROOT,
+  env: process.env,
+});
+const DIGEST_RUN_LOCK_FILE = RUNTIME_PATHS.digestRunLockPath;
+const DIGEST_ON_DEMAND_COOLDOWN_FILE = RUNTIME_PATHS.digestOnDemandCooldownPath;
 
 const DIGEST_LOCK_EXIT_CODE = 4;
 const DEFAULT_WAIT_TIMEOUT_MS = 12 * 60 * 1000;

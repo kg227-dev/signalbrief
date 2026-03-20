@@ -2,10 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { normalizeCanonicalUrl } = require("../url-normalization-runtime");
+const { resolveSignalBriefRuntimePaths } = require("../runtime-state-paths-runtime");
 
-const APP_ROOT = path.resolve(__dirname, "..", "..", "..");
-const DATA_DIR = path.join(APP_ROOT, "data");
-const EVENTS_FILE = path.join(DATA_DIR, "engagement-events.jsonl");
+const EVENTS_FILE = resolveSignalBriefRuntimePaths().engagementEventsPath;
 const ENGAGEMENT_CACHE = new Map();
 const DEFAULT_CACHE_RETENTION_DAYS = 90;
 const MAX_CACHE_INVALID_TS_EVENTS = 2000;
@@ -17,7 +16,7 @@ function etDateKey(date = new Date()) {
 
 function resolveEventsFile(filePath) {
   const raw = String(filePath || "").trim();
-  return raw ? path.resolve(raw) : EVENTS_FILE;
+  return raw ? path.resolve(raw) : resolveSignalBriefRuntimePaths().engagementEventsPath;
 }
 
 function ensureEventsFile(filePath = EVENTS_FILE) {
@@ -78,7 +77,7 @@ function appendEngagementEvent(input) {
   }
 
   try {
-    const eventsFile = ensureEventsFile(input?.events_file || EVENTS_FILE);
+    const eventsFile = ensureEventsFile(resolveEventsFile(input?.events_file));
     fs.appendFileSync(eventsFile, `${JSON.stringify(payload)}\n`);
     return appendResult(true, payload);
   } catch (err) {
@@ -254,7 +253,7 @@ function withParseMeta(events, parseErrors, parseErrorLines, returnMeta) {
 }
 
 function loadEngagementEvents(opts = {}) {
-  const eventsFile = ensureEventsFile(opts.events_file || EVENTS_FILE);
+  const eventsFile = ensureEventsFile(resolveEventsFile(opts.events_file));
   const maxAgeCandidate = Number(opts.max_age_days);
   const maxAgeDays = Number.isFinite(maxAgeCandidate) && maxAgeCandidate > 0
     ? maxAgeCandidate
@@ -387,6 +386,7 @@ module.exports = {
   etDateKey,
   buildDigestId,
   normalizeUrl,
+  resolveEventsFile,
   appendEngagementEvent,
   appendEngagementEventChecked,
   loadEngagementEvents,

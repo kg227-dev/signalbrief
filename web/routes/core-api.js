@@ -117,6 +117,9 @@ function createCoreApiRouteHandler(deps) {
     handleSettings,
     ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC,
     getArchiveLegacyDeprecationDeadlineUtc,
+    requestSchedulerWorkerRestart,
+    forkSchedulerWorker,
+    getRuntimeStateHealth,
   } = deps;
 
   const resolveArchiveLegacyDeprecationDeadlineUtc = typeof getArchiveLegacyDeprecationDeadlineUtc === "function"
@@ -126,7 +129,14 @@ function createCoreApiRouteHandler(deps) {
   return async function handleCoreApiRoutes(ctx) {
     const { req, res, url, pathname } = ctx;
 
-    if (handleHealthRoute(ctx, { json, getCachedOrRefreshSchedulerHeartbeat, digestRunStatus })) return true;
+    if (handleHealthRoute(ctx, {
+      json,
+      getCachedOrRefreshSchedulerHeartbeat,
+      digestRunStatus,
+      requestSchedulerWorkerRestart,
+      forkSchedulerWorker,
+      getRuntimeStateHealth,
+    })) return true;
 
     if (pathname === "/api/health/scheduler" && req.method === "GET") {
       const now = Date.now();
@@ -141,7 +151,10 @@ function createCoreApiRouteHandler(deps) {
       const lockUnhealthy = lockState === "corrupt" || lockState === "io_error" || lockState === "stale_uncleared";
       const heartbeatHealthy = !!heartbeat?.healthy;
       const workerBlocked = !!heartbeat?.blocked || String(heartbeat?.status || "").toLowerCase() === "blocked";
-      const healthy = heartbeatHealthy && !lockUnhealthy && !workerBlocked;
+      const runtimeState = typeof getRuntimeStateHealth === "function"
+        ? getRuntimeStateHealth()
+        : { ok: true, status: "ok" };
+      const healthy = heartbeatHealthy && !lockUnhealthy && !workerBlocked && runtimeState.ok !== false;
       const statusCode = healthy ? 200 : 503;
 
       json(res, {
@@ -162,6 +175,7 @@ function createCoreApiRouteHandler(deps) {
           state: lockState,
           unhealthy: lockUnhealthy,
         },
+        runtime_state: runtimeState,
       }, statusCode);
       return true;
     }

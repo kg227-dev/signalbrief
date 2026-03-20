@@ -21,6 +21,7 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     path,
     fs,
     APP_ROOT,
+    archiveDir,
     decodeDigestIdParam,
     buildDigestId,
     toEtDateKey,
@@ -35,6 +36,9 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     getClientIp,
     loadEngagementEvents,
     loadLatestDigestSnapshot,
+    requestSchedulerWorkerRestart,
+    forkSchedulerWorker,
+    getRuntimeStateHealth,
   } = deps;
   const { handleSignup, handleSettings } = sharedHandlers;
 
@@ -60,6 +64,7 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     path,
     fs,
     APP_ROOT,
+    archiveDir,
     decodeDigestIdParam,
     buildDigestId,
     toEtDateKey,
@@ -74,6 +79,9 @@ function createCoreRouteDependencies({ deps, sharedHandlers }) {
     getClientIp,
     loadEngagementEvents,
     loadLatestDigestSnapshot,
+    requestSchedulerWorkerRestart,
+    forkSchedulerWorker,
+    getRuntimeStateHealth,
   };
 }
 

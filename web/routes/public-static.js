@@ -105,21 +105,21 @@ function resolveDigestDateKey(pathname, archiveFiles) {
 function serveDigestPage(ctx, deps) {
   const { req, res, url, pathname } = ctx;
   const {
-    path, fs, APP_ROOT, readArchiveFiles, renderPublicDigestMissingPage,
+    path, fs, APP_ROOT, archiveDir, readArchiveFiles, renderPublicDigestMissingPage,
     formatPublicDigestDateLabel, renderPublicDigestPage,
     findUserByToken, loadLatestDigestSnapshot, loadDigestSnapshotByRunId,
   } = deps;
 
   if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
 
-  const archiveDir = path.join(APP_ROOT, "archive");
-  const files = readArchiveFiles(archiveDir);
+  const resolvedArchiveDir = archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
+  const files = readArchiveFiles(resolvedArchiveDir);
   const dateKey = resolveDigestDateKey(pathname, files);
   if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
     return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
 
-  const archivePath = path.join(archiveDir, `${dateKey}.json`);
+  const archivePath = path.join(resolvedArchiveDir, `${dateKey}.json`);
   const refToken = url.searchParams.get("ref") || "";
   const runId = url.searchParams.get("run") || "";
   const personalizedSnapshot = resolvePersonalizedDigestSnapshot({

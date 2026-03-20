@@ -1,53 +1,43 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
-const path = require("path");
+const { createStore } = require("../src/platform/store");
+const { loadEngagementEvents } = require("../src/domains/engagement");
 
-const ROOT = path.join(__dirname, "..");
-const DATA_DIR = path.join(ROOT, "data");
-const EVENTS_FILE = path.join(DATA_DIR, "engagement-events.jsonl");
+const weeklyReportStore = createStore();
+let storeInitialized = false;
 
 function logDataWarning(scope, identifier, err) {
   const message = err && err.message ? err.message : String(err || "unknown error");
   process.stderr.write(`[marketing-report] skipped ${scope} (${identifier}): ${message}\n`);
 }
 
+function ensureStoreInitialized() {
+  if (storeInitialized) return;
+  weeklyReportStore.initStore();
+  storeInitialized = true;
+}
+
 function readUsers() {
-  const files = fs
-    .readdirSync(DATA_DIR)
-    .filter((f) => f.startsWith("user-") && f.endsWith(".json"));
-  const users = [];
-  for (const file of files) {
-    try {
-      const fullPath = path.join(DATA_DIR, file);
-      const raw = JSON.parse(fs.readFileSync(fullPath, "utf8"));
-      users.push(raw);
-    } catch (err) {
-      // Skip malformed user files so one bad record does not block reporting.
-      logDataWarning("user file", file, err);
-    }
+  ensureStoreInitialized();
+  try {
+    return weeklyReportStore.allUsers();
+  } catch (err) {
+    logDataWarning("user store", "allUsers", err);
+    return [];
   }
-  return users;
 }
 
 function readEvents() {
-  if (!fs.existsSync(EVENTS_FILE)) return [];
-  const lines = fs
-    .readFileSync(EVENTS_FILE, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const events = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    try {
-      events.push(JSON.parse(line));
-    } catch (err) {
-      // Skip malformed lines.
-      logDataWarning("event line", `line ${i + 1}`, err);
-    }
+  try {
+    return loadEngagementEvents({
+      max_age_days: 365,
+      dedupe: false,
+      capture_parse_error_lines: false,
+    });
+  } catch (err) {
+    logDataWarning("engagement events", "loadEngagementEvents", err);
+    return [];
   }
-  return events;
 }
 
 function parseDate(value) {

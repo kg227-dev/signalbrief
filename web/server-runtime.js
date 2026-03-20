@@ -1,6 +1,8 @@
 const https = require("https");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const childProcess = require("child_process");
 const { serveFile, json, requireJsonBody } = require("./server-request-runtime");
 const {
   normalizeReferralToken,
@@ -39,6 +41,8 @@ const {
   createAdminAuthSessionPolicy,
 } = require("./server-runtime-auth-session-policy-runtime");
 const { createAdminOpsService } = require("./services/admin-ops");
+const { createRecentDigestsExporter } = require("./services/admin-recent-digests-export-runtime");
+const { createRuntimeStateInspector } = require("./services/runtime-state-runtime");
 const { createSchedulerWorkerRestartRequester } = require("./server-runtime-scheduler-control-runtime");
 const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
 const { createSignupRateLimiter, createMagicLinkRateLimiter, createSettingsRateLimiter } = require("./services/web-rate-limit");
@@ -91,6 +95,10 @@ const {
   createSendTelegramText,
 } = require("./server-runtime-utils-runtime");
 const { createStructuredLogger } = require("../src/runtime/structured-logger-runtime");
+const {
+  resolveSignalBriefRuntimePaths,
+  describeRuntimePathAlignment,
+} = require("../src/runtime/runtime-state-paths-runtime");
 
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
@@ -128,17 +136,33 @@ const { checkRateLimit } = createSignupRateLimiter({
 const { checkMagicLinkRateLimit } = createMagicLinkRateLimiter();
 const { checkSettingsRateLimit } = createSettingsRateLimiter();
 
-const ADMIN_MESSAGE_LOG = path.join(__dirname, "../data/admin-message-log.json");
-const ADMIN_ACTION_LOG = path.join(__dirname, "../data/admin-action-log.json");
-const DIGEST_INCIDENT_LOG = path.join(__dirname, "../data/digest-incident-log.jsonl");
-const COST_LOG_PATH = path.join(__dirname, "../data/cost-log.json");
-const ARCHIVE_LEGACY_USAGE_LOG = path.join(__dirname, "../data/archive-legacy-usage.jsonl");
-const SCHEDULER_CONTROL_FILE = getSchedulerControlFile();
+const runtimePaths = resolveSignalBriefRuntimePaths({
+  appRoot: APP_ROOT,
+  env: process.env,
+});
+const ADMIN_MESSAGE_LOG = runtimePaths.adminMessageLogPath;
+const ADMIN_ACTION_LOG = runtimePaths.adminActionLogPath;
+const DIGEST_INCIDENT_LOG = runtimePaths.digestIncidentLogPath;
+const COST_LOG_PATH = runtimePaths.costLogPath;
+const ARCHIVE_LEGACY_USAGE_LOG = runtimePaths.archiveLegacyUsageLogPath;
+const SCHEDULER_CONTROL_FILE = runtimePaths.schedulerControlPath;
 const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({
   fs,
   path,
   schedulerControlFile: SCHEDULER_CONTROL_FILE,
 });
+
+const { fork } = childProcess;
+const SCHEDULER_WORKER_PATH = path.resolve(__dirname, "../src/entrypoints/scheduler-worker.js");
+function forkSchedulerWorker() {
+  const child = fork(SCHEDULER_WORKER_PATH, [], {
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env },
+  });
+  child.unref();
+  return child.pid;
+}
 
 const appendWebEngagementEvent = (payload, context) => (
   appendEngagementEventChecked(payload, { scope: "web", context })
@@ -222,12 +246,14 @@ const getAllowedArchiveDatesForUser = (user, archiveDir, files) => getAllowedArc
 });
 const digestDeliveryRecordRuntime = createDigestDeliveryRecordRuntime({
   APP_ROOT,
+  digestRecordsDir: runtimePaths.digestRecordsDir,
   fs,
   path,
   log: (message) => webLogger.warn("web.digest_records", { message: String(message || "") }),
 });
 const archiveDigestStatsRuntime = createArchiveDigestStatsRuntime({
   APP_ROOT,
+  archiveDir: runtimePaths.archiveDir,
   fs,
   path,
   readArchiveFiles: readArchiveFilesForDir,
@@ -235,6 +261,32 @@ const archiveDigestStatsRuntime = createArchiveDigestStatsRuntime({
   loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
   loadEngagementEvents,
 });
+const runtimeStateInspector = createRuntimeStateInspector({
+  fs,
+  childProcess,
+  os,
+  processRef: process,
+  runtimePaths,
+  store: webStore,
+  loadCostRunsNewest,
+  loadEngagementEvents,
+  digestDeliveryRecordRuntime,
+});
+const buildRecentDigestsExport = createRecentDigestsExporter({
+  loadCostRunsNewest,
+  allUsers,
+  loadEngagementEvents,
+  loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),
+  loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
+});
+const runtimePathAlignment = describeRuntimePathAlignment(runtimePaths);
+if (!runtimePathAlignment.ok) {
+  webLogger.error("web.runtime_state.mismatch", {
+    outcome: "mismatch",
+    divergent_components: runtimePathAlignment.divergent_components,
+    component_roots: runtimePathAlignment.component_roots,
+  });
+}
 
 // sendWelcomeEmail is defined in mailer.js and imported above
 
@@ -279,6 +331,7 @@ const {
   path,
   fs,
   APP_ROOT,
+  archiveDir: runtimePaths.archiveDir,
   decodeDigestIdParam,
   buildDigestId,
   toEtDateKey,
@@ -325,12 +378,16 @@ const {
   runSandboxPipeline,
   appendSandboxCostLog,
   requestSchedulerWorkerRestart,
+  forkSchedulerWorker,
+  getRuntimeStateHealth: () => runtimeStateInspector.getRuntimeStateHealth(),
   assetVersion: getWebAssetVersion(),
   renderPublicDigestMissingPage,
   formatPublicDigestDateLabel,
   renderPublicDigestPageTemplate,
   serveFile,
   WEB_DIR,
+  getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
+  buildRecentDigestsExport,
 });
 const handleDomainRoute = createRouteBootstrapHandler({
   handleCoreApiRoute,

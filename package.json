@@ -18,6 +18,8 @@
     "ops:deploy:prod:hotfix": "node scripts/deploy-production.js --hotfix",
     "ops:deploy:staging": "node scripts/deploy-staging.js",
     "ops:deploy:web": "DEPLOY_SERVICES=web node scripts/deploy-production.js",
+    "ops:runtime-state:export": "node scripts/export-live-recent-digests.js",
+    "ops:runtime-state:migrate": "node scripts/migrate-runtime-state-root.js",
     "ops:rollback:sha": "node scripts/deploy-rollback-by-sha.js",
     "ops:store:migrate:file-to-sqlite": "node scripts/migrate-store-file-to-sqlite.js",
     "ops:store:migrate:file-to-sqlite:preflight": "node scripts/migrate-store-file-to-sqlite.js --preflight-only",

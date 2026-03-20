@@ -85,6 +85,7 @@ function buildExecutiveHealthSummary({
   deliveryOperations,
   schedulerWorker,
   digestRunner,
+  runtimeState,
 }) {
   const warnings = Array.isArray(deliveryWarnings) ? deliveryWarnings : [];
   const rel = deliveryReliability && typeof deliveryReliability === "object" ? deliveryReliability : {};
@@ -97,6 +98,7 @@ function buildExecutiveHealthSummary({
   const schedulerError = !!scheduler?.last_error;
   const lockUnhealthy = !!digestRunner?.unhealthy;
   const runnerBlocked = !!digestRunner?.running && Number(digestRunner?.age_seconds || 0) >= (20 * 60);
+  const runtimeMismatch = runtimeState && runtimeState.ok === false;
 
   const reliability7dRaw = Number(rel.success_rate_7d);
   const reliability7d = Number.isFinite(reliability7dRaw) ? Number(reliability7dRaw.toFixed(1)) : null;
@@ -108,7 +110,7 @@ function buildExecutiveHealthSummary({
   const backfillNeeded = !!ops.backfill_needed;
   const activeIncidentOpen = !!ops.active_incident_open;
   const activeIncidentSummary = String(ops.active_incident_summary || "").trim();
-  const canDeliverNextRun = !(schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy || runnerBlocked);
+  const canDeliverNextRun = !(schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy || runnerBlocked || runtimeMismatch);
 
   let status = "green";
   const reasons = [];
@@ -132,6 +134,10 @@ function buildExecutiveHealthSummary({
   if (runnerBlocked) {
     status = "red";
     reasons.push(`digest runner active for ${Math.floor(Number(digestRunner?.age_seconds || 0) / 60)}m`);
+  }
+  if (runtimeMismatch) {
+    status = "red";
+    reasons.push(`runtime state mismatch (${(runtimeState?.roots?.divergent_components || []).join(", ") || "unknown"})`);
   }
   if (usersAtRisk > 0) {
     status = "red";
@@ -163,6 +169,8 @@ function buildExecutiveHealthSummary({
   let actionNow = "No immediate recovery action required.";
   if (status === "red" && (schedulerMissing || schedulerStale || schedulerBlocked || lockUnhealthy)) {
     actionNow = "Recover scheduler worker first, confirm heartbeat turns healthy, then send a test digest.";
+  } else if (status === "red" && runtimeMismatch) {
+    actionNow = "Unify runtime state roots before relying on admin analytics or the next deploy verification.";
   } else if (status === "red" && runnerBlocked) {
     actionNow = "Inspect the stuck digest runner before the next scheduled window.";
   } else if (status === "red" && usersAtRisk > 0) {
@@ -256,6 +264,7 @@ function buildHealthPayload({
   schedulerWorker,
   digestRun,
   ignoredBackfill,
+  runtimeState,
 }) {
   const digestRunner = buildDigestRunnerHealth(digestRun);
   const executiveSummary = buildExecutiveHealthSummary({
@@ -264,6 +273,7 @@ function buildHealthPayload({
     deliveryOperations,
     schedulerWorker,
     digestRunner,
+    runtimeState,
   });
   const lastRun = runs[0] || null;
   const serverUptimeSecs = Math.floor(process.uptime());
@@ -282,6 +292,7 @@ function buildHealthPayload({
     delivery_operations: deliveryOperations,
     scheduler_worker: schedulerWorker,
     digest_runner: digestRunner,
+    runtime_state: runtimeState,
     executive_summary: executiveSummary,
     engagement_events: {
       ignored_backfill_emitted: ignoredBackfill.emitted || 0,

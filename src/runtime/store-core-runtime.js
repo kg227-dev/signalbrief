@@ -11,19 +11,11 @@ const crypto = require("crypto");
 const { createDefaultUser, normalizeUserRecord } = require("./user-contract-runtime");
 const { createFileStoreAdapter } = require("./store-adapter-file-runtime");
 const { assertStoreAdapterContract } = require("./store-adapter-contract-runtime");
+const {
+  defaultDataDir,
+  resolveSignalBriefRuntimePaths,
+} = require("./runtime-state-paths-runtime");
 /** @typedef {import("./runtime-types").UserRecord} UserRecord */
-
-const APP_ROOT = path.resolve(__dirname, "..", "..");
-
-function defaultDataDir() {
-  const explicit = String(process.env.SIGNALBRIEF_DATA_DIR || "").trim();
-  if (explicit) return path.resolve(explicit);
-  const nodeEnv = String(process.env.NODE_ENV || "").toLowerCase().trim();
-  if (nodeEnv === "test") {
-    return path.resolve(path.join(APP_ROOT, ".tmp", "test-data"));
-  }
-  return path.resolve(path.join(APP_ROOT, "data"));
-}
 
 function createStoreIndex() {
   return new Map();
@@ -113,6 +105,11 @@ function createStore(options = {}) {
   const warningThrottleMs = Math.max(0, Number(options.warningThrottleMs || 60_000));
   const warningState = new Map();
   const backend = resolveStoreBackend(options);
+  const resolveSqlitePath = () => resolveSignalBriefRuntimePaths({
+    env: process.env,
+    dataDir: currentDataDir(),
+    sqlitePath: options.sqlitePath || process.env.SIGNALBRIEF_SQLITE_PATH || "",
+  }).sqlitePath;
   if (backend === "canary") {
     return createCanaryStoreRuntime({
       ...options,
@@ -179,12 +176,6 @@ function createStore(options = {}) {
       return options.createStoreAdapter;
     }
     if (backend === "sqlite") {
-      const explicitSqlitePath = String(options.sqlitePath || process.env.SIGNALBRIEF_SQLITE_PATH || "").trim();
-      const resolveSqlitePath = () => (
-        explicitSqlitePath
-          ? path.resolve(explicitSqlitePath)
-          : path.join(currentDataDir(), "signalbrief.sqlite")
-      );
       return (deps) => createSqliteStoreAdapter(deps, { resolveSqlitePath });
     }
 
@@ -205,7 +196,9 @@ function createStore(options = {}) {
 
   function getStateSnapshot() {
     return {
+      backend,
       dataDir: currentDataDir(),
+      sqlitePath: backend === "sqlite" ? resolveSqlitePath() : null,
       initialized: storeState.initialized,
       tokenCount: currentTokenIndex().size,
     };

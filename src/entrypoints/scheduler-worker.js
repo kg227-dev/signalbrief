@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 const {
   DIGEST_LOCK_EXIT_CODE,
   runDigestTrigger,
@@ -10,12 +11,12 @@ const {
 
 function getWorkerConfig() {
   const appRoot = path.resolve(__dirname, "..", "..");
-  const heartbeatFile = process.env.SCHEDULER_HEARTBEAT_FILE
-    ? path.resolve(process.env.SCHEDULER_HEARTBEAT_FILE)
-    : path.join(appRoot, "data", "scheduler-heartbeat.json");
-  const controlFile = process.env.SCHEDULER_CONTROL_FILE
-    ? path.resolve(process.env.SCHEDULER_CONTROL_FILE)
-    : path.join(path.dirname(heartbeatFile), "scheduler-control.json");
+  const runtimePaths = resolveSignalBriefRuntimePaths({
+    appRoot,
+    env: process.env,
+  });
+  const heartbeatFile = runtimePaths.schedulerHeartbeatPath;
+  const controlFile = runtimePaths.schedulerControlPath;
   const pollMs = Math.max(60 * 1000, Number(process.env.DIGEST_POLL_MS || (5 * 60 * 1000)));
   const startupDelayMs = Math.max(0, Number(process.env.DIGEST_STARTUP_DELAY_MS || 3000));
   const runOnStartup = String(process.env.DIGEST_RUN_ON_STARTUP || "1").trim() === "1";

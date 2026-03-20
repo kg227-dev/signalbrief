@@ -13,8 +13,13 @@ const fs = require("fs");
 const path = require("path");
 
 const APP_ROOT = path.resolve(__dirname, "..");
-const RECORDS_DIR = path.join(APP_ROOT, "data", "digest-records");
-const STATS_FILE = path.join(APP_ROOT, "data", "domain-stats.json");
+const { resolveSignalBriefRuntimePaths } = require("../src/runtime/runtime-state-paths-runtime");
+const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
+  appRoot: APP_ROOT,
+  env: process.env,
+});
+const RECORDS_DIR = RUNTIME_PATHS.digestRecordsDir;
+const STATS_FILE = RUNTIME_PATHS.domainStatsPath;
 
 const {
   accumulateDomainStats,

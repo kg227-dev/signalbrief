@@ -17,11 +17,13 @@ function createDigestDeliveryRecordRuntime(deps) {
     fs,
     path,
     log,
+    digestRecordsDir,
   } = deps;
 
   const logger = typeof log === "function" ? log : () => {};
 
   function recordsRoot() {
+    if (digestRecordsDir) return path.resolve(String(digestRecordsDir));
     return path.join(APP_ROOT, "data", "digest-records");
   }
 
@@ -170,6 +172,21 @@ function createDigestDeliveryRecordRuntime(deps) {
       .map((fileName) => path.join(dirPath, fileName));
   }
 
+  function walkRecordFiles(dirPath = recordsRoot()) {
+    if (!fs.existsSync(dirPath)) return [];
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const files = [];
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...walkRecordFiles(fullPath));
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".json")) files.push(fullPath);
+    }
+    return files;
+  }
+
   function loadCurrentRecordsForUser(userId) {
     const files = loadRecordFilesForUser(userId);
     const records = [];
@@ -246,15 +263,74 @@ function createDigestDeliveryRecordRuntime(deps) {
     return normalized?.status === "sent";
   }
 
+  function loadAllCurrentRecords(opts = {}) {
+    const sinceDateEt = String(opts.sinceDateEt || "").trim();
+    const statusFilter = String(opts.status || "").trim().toLowerCase();
+    const userIdFilter = String(opts.userId || "").trim();
+    const rows = [];
+
+    for (const filePath of walkRecordFiles()) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        if (!parsed?.current || typeof parsed.current !== "object") continue;
+        const row = normalizeVersionEntry(parsed.current);
+        if (sinceDateEt && String(row.date_et || "").trim() < sinceDateEt) continue;
+        if (statusFilter && String(row.status || "").trim().toLowerCase() !== statusFilter) continue;
+        if (userIdFilter && String(row.user_id || "").trim() !== userIdFilter) continue;
+        rows.push(row);
+      } catch (err) {
+        logger(`⚠️ Failed to parse digest record ${filePath}: ${err.message}`);
+      }
+    }
+
+    rows.sort((left, right) => sortIsoDescending(
+      left.sent_at || left.selected_at || left.sending_at || "",
+      right.sent_at || right.selected_at || right.sending_at || ""
+    ));
+    return rows;
+  }
+
+  function summarizeRecordsState() {
+    const files = walkRecordFiles();
+    let latestTimestamp = "";
+    let currentRecordCount = 0;
+
+    for (const filePath of files) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        const candidate = String(
+          parsed?.current?.sent_at
+          || parsed?.current?.sending_at
+          || parsed?.current?.selected_at
+          || parsed?.updated_at
+          || ""
+        ).trim();
+        if (candidate && candidate > latestTimestamp) latestTimestamp = candidate;
+        if (parsed?.current && typeof parsed.current === "object") currentRecordCount += 1;
+      } catch (err) {
+        logger(`⚠️ Failed to summarize digest record ${filePath}: ${err.message}`);
+      }
+    }
+
+    return {
+      root: recordsRoot(),
+      file_count: files.length,
+      current_record_count: currentRecordCount,
+      latest_timestamp: latestTimestamp || null,
+    };
+  }
+
   return {
     beginDigestDeliveryRecord,
     hasSentDigestRecord,
+    loadAllCurrentRecords,
     loadDigestSnapshotByRunId,
     loadLatestDigestSnapshot,
     loadRecentSentDigests,
     readDigestRecord,
     recordFile,
     recordsRoot,
+    summarizeRecordsState,
     updateDigestDeliveryRecord,
   };
 }

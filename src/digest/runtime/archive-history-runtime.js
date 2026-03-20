@@ -8,19 +8,24 @@ function createArchiveHistoryRuntime(deps) {
     log,
     createRepeatIndex,
     dedupItemsAgainstRepeatIndex,
+    archiveDir,
   } = deps;
 
+  function resolveArchiveDir() {
+    return archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
+  }
+
   function loadRecentArchiveItems(days = 3) {
-    const archiveDir = path.join(APP_ROOT, "archive");
-    if (!fs.existsSync(archiveDir)) return [];
-    const files = fs.readdirSync(archiveDir).filter((f) => f.endsWith(".json")).sort();
+    const targetArchiveDir = resolveArchiveDir();
+    if (!fs.existsSync(targetArchiveDir)) return [];
+    const files = fs.readdirSync(targetArchiveDir).filter((f) => f.endsWith(".json")).sort();
     if (!files.length) return [];
 
     const recent = files.slice(-Math.max(1, Number(days || 3)));
     const items = [];
     for (const file of recent) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(path.join(archiveDir, file), "utf8"));
+        const parsed = JSON.parse(fs.readFileSync(path.join(targetArchiveDir, file), "utf8"));
         items.push(...(parsed?.items || []));
       } catch (err) {
         log(`⚠️ Failed to parse archive file ${file}: ${err.message}`);

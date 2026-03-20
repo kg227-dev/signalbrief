@@ -7,6 +7,7 @@ const { createArchivePersistenceRuntime } = require("./archive-persistence-runti
 function createDigestArchiveRuntime(deps) {
   const {
     APP_ROOT,
+    archiveDir,
     log,
     formatEtDateKey,
     isRepeatedItem,
@@ -28,6 +29,7 @@ function createDigestArchiveRuntime(deps) {
   });
   const archivePersistenceRuntime = createArchivePersistenceRuntime({
     APP_ROOT,
+    archiveDir,
     fs: deps.fs,
     path: deps.path,
     log,

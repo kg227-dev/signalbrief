@@ -2,9 +2,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveSignalBriefRuntimePaths } = require("../../runtime/runtime-state-paths-runtime");
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const STATS_FILE = path.join(DATA_DIR, "domain-stats.json");
+const STATS_FILE = resolveSignalBriefRuntimePaths({
+  appRoot: process.cwd(),
+  env: process.env,
+}).domainStatsPath;
 const MAX_DOMAINS = 500;
 const MIN_APPEARANCES = 3;
 const DECAY_FACTOR = 0.92; // per-digest decay so old data fades
@@ -21,7 +24,8 @@ function loadDomainStats() {
 
 function saveDomainStats(stats) {
   try {
-    if (!fs.existsSync(DATA_DIR)) return;
+    const dir = path.dirname(STATS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     // Prune to MAX_DOMAINS by keeping highest-appearance domains
     const entries = Object.entries(stats);
     if (entries.length > MAX_DOMAINS) {

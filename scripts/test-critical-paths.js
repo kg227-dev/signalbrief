@@ -99,6 +99,7 @@ function buildCoreDeps(overrides = {}) {
     requireJsonBody: async () => ({}),
     normalizeBookmarkUrl: (value) => String(value || ""),
     sendMagicLinkEmail: async () => {},
+    getRuntimeStateHealth: () => ({ ok: true, status: "ok" }),
     ...overrides,
   };
 }
@@ -281,6 +282,8 @@ function buildAdminDeps(overrides = {}) {
     sendMagicLinkEmail: async () => ({ ok: true }),
     estimateSandboxCost: () => ({ ok: true }),
     runSandboxPipeline: async () => ({ ok: true }),
+    getRuntimeStateDiagnostics: () => ({ ok: true, status: "ok" }),
+    buildRecentDigestsExport: () => ({ row_count: 0, rows: [] }),
     toRouteCtx,
     runDigestTrigger: async () => ({ ok: true }),
     startDigestTrigger: async () => ({ ok: true }),
@@ -381,6 +384,8 @@ async function testCoreApiRoutesContract() {
 async function testAdminApiAuthRegressionContract() {
   const protectedRoutes = [
     { method: "GET", pathname: "/api/admin/stats" },
+    { method: "GET", pathname: "/api/admin/runtime-state" },
+    { method: "GET", pathname: "/api/admin/export/recent-digests", search: "?days=7" },
     { method: "GET", pathname: "/api/admin/user-by-email", search: "?email=user@example.com" },
     { method: "GET", pathname: "/api/admin/audit", search: "?email=user@example.com" },
     { method: "POST", pathname: "/api/admin/run-digest" },
@@ -413,6 +418,35 @@ async function testAdminApiAuthRegressionContract() {
     JSON.parse(checkRes.body || "{}"),
     { authenticated: false },
     "/api/admin/check should report unauthenticated when no session/bypass"
+  );
+}
+
+async function testAdminRuntimeStateRouteContract() {
+  const runtimeStateRes = await invokeAdminRoute("GET", "/api/admin/runtime-state", {
+    depsOverrides: {
+      isAdminAuthed: () => true,
+      getRuntimeStateDiagnostics: () => ({ ok: false, status: "mismatch", roots: { divergent_components: ["archive"] } }),
+    },
+  });
+  assert.strictEqual(runtimeStateRes.statusCode, 200, "/api/admin/runtime-state should return 200 for authed admins");
+  assert.deepStrictEqual(
+    JSON.parse(runtimeStateRes.body || "{}"),
+    { ok: false, status: "mismatch", roots: { divergent_components: ["archive"] } },
+    "/api/admin/runtime-state should return the runtime diagnostics payload"
+  );
+
+  const exportRes = await invokeAdminRoute("GET", "/api/admin/export/recent-digests", {
+    search: "?days=14",
+    depsOverrides: {
+      isAdminAuthed: () => true,
+      buildRecentDigestsExport: ({ days }) => ({ row_count: 1, rows: [{ recipient: "user@example.com" }], requested_days: days }),
+    },
+  });
+  assert.strictEqual(exportRes.statusCode, 200, "/api/admin/export/recent-digests should return 200 for authed admins");
+  assert.deepStrictEqual(
+    JSON.parse(exportRes.body || "{}"),
+    { row_count: 1, rows: [{ recipient: "user@example.com" }], requested_days: 14 },
+    "/api/admin/export/recent-digests should honor the requested day window"
   );
 }
 
@@ -770,6 +804,9 @@ async function main() {
 
   await testAdminApiAuthRegressionContract();
   log("PASS admin API auth regression contract");
+
+  await testAdminRuntimeStateRouteContract();
+  log("PASS admin runtime-state/export route contract");
 
   await testSettingsInputNormalizationContract();
   log("PASS settings input normalization contract");

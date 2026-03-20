@@ -48,6 +48,8 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     requestSchedulerWorkerRestart,
     countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
+    getRuntimeStateDiagnostics,
+    buildRecentDigestsExport,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
 
@@ -99,6 +101,8 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     requestSchedulerWorkerRestart,
     countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
+    getRuntimeStateDiagnostics,
+    buildRecentDigestsExport,
   };
 }
 

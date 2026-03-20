@@ -130,13 +130,18 @@ function createArchiveDigestStatsRuntime(deps) {
     APP_ROOT,
     fs,
     path,
+    archiveDir,
   } = deps;
+
+  function resolveArchiveDir() {
+    return archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
+  }
 
   function countArchiveDigestsForUser(user) {
     if (!user || !APP_ROOT || !fs || !path) return Math.max(0, Number(user?.digests_received || 0));
 
-    const archiveDir = path.join(APP_ROOT, "archive");
-    const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
+    const targetArchiveDir = resolveArchiveDir();
+    const allowedDates = resolveAllowedArchiveDatesForUser(user, targetArchiveDir, deps);
     const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
     if (allowedDateKeys.length === 0) return 0;
 
@@ -151,7 +156,7 @@ function createArchiveDigestStatsRuntime(deps) {
           continue;
         }
 
-        const digestPath = path.join(archiveDir, `${dateKey}.json`);
+        const digestPath = path.join(targetArchiveDir, `${dateKey}.json`);
         if (!fs.existsSync(digestPath)) continue;
         const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
         const deliveredDigestItems = resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate);

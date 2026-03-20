@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { resolveSignalBriefRuntimePaths } = require("../src/runtime/runtime-state-paths-runtime");
 
 const WEB_DIR = __dirname;
 const APP_ROOT = path.resolve(__dirname, "..");
@@ -56,15 +57,17 @@ function getArchiveLegacyDeprecationDeadlineUtc() {
 }
 
 function getSchedulerHeartbeatFile() {
-  const raw = String(process.env.SCHEDULER_HEARTBEAT_FILE || "").trim();
-  return raw ? path.resolve(raw) : path.join(__dirname, "../data/scheduler-heartbeat.json");
+  return resolveSignalBriefRuntimePaths({
+    appRoot: APP_ROOT,
+    env: process.env,
+  }).schedulerHeartbeatPath;
 }
 
 function getSchedulerControlFile() {
-  const raw = String(process.env.SCHEDULER_CONTROL_FILE || "").trim();
-  if (raw) return path.resolve(raw);
-  const heartbeatFile = getSchedulerHeartbeatFile();
-  return path.join(path.dirname(heartbeatFile), "scheduler-control.json");
+  return resolveSignalBriefRuntimePaths({
+    appRoot: APP_ROOT,
+    env: process.env,
+  }).schedulerControlPath;
 }
 
 function sanitizeAssetVersion(raw) {

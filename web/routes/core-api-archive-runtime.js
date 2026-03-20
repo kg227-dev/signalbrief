@@ -37,6 +37,12 @@ function buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, topicWeig
   };
 }
 
+function resolveArchiveDirFromDeps(deps) {
+  const explicit = String(deps?.archiveDir || "").trim();
+  if (explicit) return deps.path.resolve(explicit);
+  return deps.path.join(deps.APP_ROOT, "archive");
+}
+
 function ensureLegacyArchiveEnabled(ctx, deps, routeLabel) {
   const {
     req,
@@ -71,6 +77,7 @@ function handleLegacyArchiveIndex(ctx, deps) {
     path,
     fs,
     APP_ROOT,
+    archiveDir,
   } = deps;
 
   if (pathname !== "/api/archive" || req.method !== "GET") return false;
@@ -90,8 +97,8 @@ function handleLegacyArchiveIndex(ctx, deps) {
     return true;
   }
 
-  const archiveDir = path.join(APP_ROOT, "archive");
-  const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
+  const resolvedArchiveDir = resolveArchiveDirFromDeps({ path, APP_ROOT, archiveDir });
+  const allowedDates = resolveAllowedArchiveDatesForUser(user, resolvedArchiveDir, deps);
   const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
   const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
   if (allowedDateKeys.length === 0) {
@@ -111,7 +118,7 @@ function handleLegacyArchiveIndex(ctx, deps) {
           itemCount: Array.isArray(snapshot.items) ? snapshot.items.length : 0,
         }];
       }
-      const digestPath = path.join(archiveDir, `${dateKey}.json`);
+      const digestPath = path.join(resolvedArchiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) return [];
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
       const deliveredDigestItems = resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate);
@@ -145,6 +152,7 @@ function handleArchiveAllRoute(ctx, deps) {
     path,
     fs,
     APP_ROOT,
+    archiveDir,
   } = deps;
 
   if ((pathname !== "/api/archive/all" && pathname !== "/api/archive/all/") || req.method !== "GET") return false;
@@ -161,8 +169,8 @@ function handleArchiveAllRoute(ctx, deps) {
     return true;
   }
 
-  const archiveDir = path.join(APP_ROOT, "archive");
-  const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
+  const resolvedArchiveDir = resolveArchiveDirFromDeps({ path, APP_ROOT, archiveDir });
+  const allowedDates = resolveAllowedArchiveDatesForUser(user, resolvedArchiveDir, deps);
   const allowedDateKeys = sortArchiveDatesDescending(allowedDates);
   const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
   if (allowedDateKeys.length === 0) {
@@ -193,7 +201,7 @@ function handleArchiveAllRoute(ctx, deps) {
         });
         continue;
       }
-      const digestPath = path.join(archiveDir, `${dateKey}.json`);
+      const digestPath = path.join(resolvedArchiveDir, `${dateKey}.json`);
       if (!fs.existsSync(digestPath)) continue;
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
       const deliveredDigestItems = sortDigestItemsByScoreDescending(
@@ -239,6 +247,7 @@ function handleArchiveDateRoute(ctx, deps) {
     path,
     fs,
     APP_ROOT,
+    archiveDir,
   } = deps;
 
   if (!pathname.startsWith("/api/archive/") || req.method !== "GET") return false;
@@ -265,8 +274,8 @@ function handleArchiveDateRoute(ctx, deps) {
     return true;
   }
 
-  const archiveDir = path.join(APP_ROOT, "archive");
-  const allowedDates = resolveAllowedArchiveDatesForUser(user, archiveDir, deps);
+  const resolvedArchiveDir = resolveArchiveDirFromDeps({ path, APP_ROOT, archiveDir });
+  const allowedDates = resolveAllowedArchiveDatesForUser(user, resolvedArchiveDir, deps);
   if (!allowedDates.has(rawDate)) {
     recordLegacyArchiveUsage(req, "/api/archive/:date", "not_found", {
       date: rawDate,
@@ -276,7 +285,7 @@ function handleArchiveDateRoute(ctx, deps) {
     return true;
   }
 
-  const file = path.join(archiveDir, `${rawDate}.json`);
+  const file = path.join(resolvedArchiveDir, `${rawDate}.json`);
   const snapshot = loadDeliveredSnapshotForDate(user, rawDate, deps);
   if (!snapshot && !fs.existsSync(file)) {
     recordLegacyArchiveUsage(req, "/api/archive/:date", "file_missing", {

@@ -81,6 +81,7 @@ function buildAdminStatsPayload({
     parseEtNowParts,
     CONFIG,
     estimateSandboxCost,
+    getRuntimeStateDiagnostics,
   } = deps;
 
   const usersAll = allUsers();
@@ -195,6 +196,9 @@ function buildAdminStatsPayload({
     trailing7dCost,
     projected7dCost,
   });
+  const runtimeStateDiagnostics = typeof getRuntimeStateDiagnostics === "function"
+    ? getRuntimeStateDiagnostics()
+    : null;
   const health = buildHealthPayload({
     runs,
     deliveryWarnings,
@@ -203,6 +207,13 @@ function buildAdminStatsPayload({
     schedulerWorker,
     digestRun,
     ignoredBackfill,
+    runtimeState: runtimeStateDiagnostics ? {
+      ok: runtimeStateDiagnostics.ok,
+      status: runtimeStateDiagnostics.status,
+      roots: runtimeStateDiagnostics.roots,
+      mismatch_flags: runtimeStateDiagnostics.mismatch_flags,
+      latest_timestamps: runtimeStateDiagnostics.latest_timestamps,
+    } : null,
   });
 
   return {

@@ -8,7 +8,12 @@ function createArchivePersistenceRuntime(deps) {
     log,
     formatEtDateKey,
     parseSourceDomain,
+    archiveDir,
   } = deps;
+
+  function resolveArchiveDir() {
+    return archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
+  }
 
   function archiveIndexFile(archiveDir) {
     return path.join(archiveDir, "index.json");
@@ -67,12 +72,12 @@ function createArchivePersistenceRuntime(deps) {
       return;
     }
 
-    const archiveDir = path.join(APP_ROOT, "archive");
-    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir);
+    const targetArchiveDir = resolveArchiveDir();
+    if (!fs.existsSync(targetArchiveDir)) fs.mkdirSync(targetArchiveDir, { recursive: true });
     const key = formatEtDateKey(date);
-    const file = path.join(archiveDir, `${key}.json`);
+    const file = path.join(targetArchiveDir, `${key}.json`);
     if (fs.existsSync(file) && !overwrite) {
-      ensureArchiveIndexContains(archiveDir, key);
+      ensureArchiveIndexContains(targetArchiveDir, key);
       return;
     }
 
@@ -116,7 +121,7 @@ function createArchivePersistenceRuntime(deps) {
     };
 
     fs.writeFileSync(file, JSON.stringify(entry, null, 2));
-    ensureArchiveIndexContains(archiveDir, key);
+    ensureArchiveIndexContains(targetArchiveDir, key);
     log(`📁 Archived: ${key}${overwrite ? " (overwrite)" : ""}`);
   }
 

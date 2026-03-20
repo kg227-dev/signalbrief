@@ -93,14 +93,19 @@ const {
 } = require("../digest/domain/domain-learning-runtime");
 const { setLearnedDomainAdjustments } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
+const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
 
 const LOG_FILE = "/tmp/signalbrief.log";
-const COST_LOG = path.join(APP_ROOT, "data", "cost-log.json");
-const DIGEST_RUN_LOCK = path.join(APP_ROOT, "data", "digest-run.lock");
-const DIGEST_INCIDENT_LOG = path.join(APP_ROOT, "data", "digest-incident-log.jsonl");
+const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
+  appRoot: APP_ROOT,
+  env: process.env,
+});
+const COST_LOG = RUNTIME_PATHS.costLogPath;
+const DIGEST_RUN_LOCK = RUNTIME_PATHS.digestRunLockPath;
+const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 let configCache = null;
 let emailTemplateCache = null;
@@ -314,6 +319,7 @@ function getDigestArchiveRuntime() {
   if (!digestArchiveRuntimeCache) {
     digestArchiveRuntimeCache = createDigestArchiveRuntime({
       APP_ROOT,
+      archiveDir: RUNTIME_PATHS.archiveDir,
       fs,
       path,
       log,
@@ -332,6 +338,7 @@ function getDigestDeliveryRecordRuntime() {
   if (!digestDeliveryRecordRuntimeCache) {
     digestDeliveryRecordRuntimeCache = createDigestDeliveryRecordRuntime({
       APP_ROOT,
+      digestRecordsDir: RUNTIME_PATHS.digestRecordsDir,
       fs,
       path,
       log,

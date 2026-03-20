@@ -135,6 +135,14 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     const recent = deliveryRecords.loadRecentSentDigests("user-1", { limit: 3 });
     assert.strictEqual(recent.length, 1, "recent sent digests should collapse to one record per ET date");
     assert.strictEqual(recent[0].date_et, "2026-03-13");
+
+    const currentRecords = deliveryRecords.loadAllCurrentRecords({ status: "sent" });
+    assert.strictEqual(currentRecords.length, 2, "loadAllCurrentRecords should surface sent scheduled + manual records");
+
+    const recordsSummary = deliveryRecords.summarizeRecordsState();
+    assert.strictEqual(recordsSummary.file_count, 2);
+    assert.strictEqual(recordsSummary.current_record_count, 2);
+    assert.strictEqual(recordsSummary.latest_timestamp, "2026-03-13T12:30:00.000Z");
   } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });
   }

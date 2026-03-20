@@ -674,9 +674,12 @@ async function main() {
     );
   }
   if (imageDeployEnabled) {
-    const partialRegistryConfig = [registry, registryUser, registryPassword].filter(hasValue).length;
-    if (partialRegistryConfig > 0 && partialRegistryConfig < 3) {
-      fail("registry deploy requires registry, registry user, and DEPLOY_REGISTRY_PASSWORD together");
+    const registryCredentialCount = [registryUser, registryPassword].filter(hasValue).length;
+    if (registryCredentialCount === 1) {
+      fail("registry deploy requires DEPLOY_REGISTRY_USER and DEPLOY_REGISTRY_PASSWORD together");
+    }
+    if (registryCredentialCount === 2 && !hasValue(registry)) {
+      fail("registry deploy requires registry host when credentials are provided");
     }
   }
 

@@ -1208,10 +1208,10 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
   </div>
 
   <div class="section-title">Digest underperformance (last 7 days)</div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
+	  <div class="table-wrap">
+	    <table>
+	      <thead>
+	        <tr>
           <th>User</th>
           <th>Digests</th>
           <th>Avg quality</th>
@@ -1221,14 +1221,73 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           <th>Failure mode</th>
         </tr>
       </thead>
-      <tbody id="digestInsightsBody">
-        <tr><td colspan="7" class="empty">Loading…</td></tr>
-      </tbody>
-    </table>
-  </div>
+	      <tbody id="digestInsightsBody">
+	        <tr><td colspan="7" class="empty">Loading…</td></tr>
+	      </tbody>
+	    </table>
+	  </div>
 
-  <!-- Run log -->
-  <div class="section-head" id="runsSection">
+	  <div class="section-head" id="sourceRegistrySection">
+	    <div>
+	      <div class="section-title" style="margin-bottom:0;">Source registry</div>
+	      <div class="section-subcopy">Global source policy overrides. Hard blocks exclude a domain from all digests.</div>
+	    </div>
+	    <div class="table-toolbar-controls">
+	      <input
+	        id="sourceRegistrySearch"
+	        class="table-search"
+	        type="text"
+	        placeholder="Inspect a domain (for example: benzinga.com)"
+	        onkeydown="if(event.key==='Enter'){event.preventDefault();inspectSourceRegistryDomain();}"
+	      >
+	      <button class="table-action-link" type="button" onclick="inspectSourceRegistryDomain()">Inspect</button>
+	    </div>
+	  </div>
+	  <div class="card" id="sourceRegistryInspector" style="margin-bottom:20px;">
+	    <div class="empty">Loading source registry…</div>
+	  </div>
+
+	  <div class="section-title">Suggested source review (last 7 days)</div>
+	  <div class="table-wrap">
+	    <table>
+	      <thead>
+	        <tr>
+	          <th>Domain</th>
+	          <th>Effective</th>
+	          <th>Recent sends</th>
+	          <th>Weak-source items</th>
+	          <th>Users</th>
+	          <th>Top tags</th>
+	          <th>Reason</th>
+	        </tr>
+	      </thead>
+	      <tbody id="sourceRegistrySuggestionsBody">
+	        <tr><td colspan="7" class="empty">Loading…</td></tr>
+	      </tbody>
+	    </table>
+	  </div>
+
+	  <div class="section-title">Active source overrides</div>
+	  <div class="table-wrap">
+	    <table>
+	      <thead>
+	        <tr>
+	          <th>Domain</th>
+	          <th>Effective</th>
+	          <th>Hard block</th>
+	          <th>Override</th>
+	          <th>Updated</th>
+	          <th>Note</th>
+	        </tr>
+	      </thead>
+	      <tbody id="sourceRegistryOverridesBody">
+	        <tr><td colspan="6" class="empty">Loading…</td></tr>
+	      </tbody>
+	    </table>
+	  </div>
+
+	  <!-- Run log -->
+	  <div class="section-head" id="runsSection">
     <div>
       <div class="section-title" style="margin-bottom:0;">Recent runs (last 10)</div>
       <div class="section-subcopy">Each row is one digest run. Digest quality is a 0-100 brief score, not a match percentage.</div>
@@ -1621,6 +1680,310 @@ function renderDigestInsights(insights) {
       <td>${esc(failureModeLabel(row.dominant_failure_mode))}</td>
     </tr>`;
   }).join("");
+}
+function sourceTierTone(tier, hardBlock) {
+  if (hardBlock) return "var(--red)";
+  const normalized = String(tier || "").trim().toLowerCase();
+  if (normalized === "premium" || normalized === "strong") return "var(--green)";
+  if (normalized === "standard" || normalized === "blog") return "var(--yellow)";
+  if (normalized === "blocked" || normalized === "weak" || normalized === "suspect" || normalized === "corporate") return "var(--red)";
+  return "var(--text-secondary)";
+}
+function renderSourceTierPill(tier, hardBlock) {
+  const label = hardBlock ? "blocked" : (tier || "unknown");
+  const tone = sourceTierTone(tier, hardBlock);
+  const bg = hardBlock ? "#FEE2E2" : (tone === "var(--green)" ? "#DCFCE7" : (tone === "var(--yellow)" ? "#FEF3C7" : "#FEE2E2"));
+  return `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${bg};color:${tone};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(label)}</span>`;
+}
+function formatSourceOverrideSummary(entry) {
+  if (!entry) return "Default";
+  const parts = [];
+  if (entry.tier_override) parts.push(`tier ${entry.tier_override}`);
+  if (entry.authority_override != null && entry.authority_override !== "") parts.push(`authority ${Number(entry.authority_override).toFixed(2)}`);
+  if (entry.hard_block === true) parts.push("hard block");
+  return parts.length ? parts.join(" · ") : "Default";
+}
+function formatSourceMetricTags(tags) {
+  const rows = Array.isArray(tags) ? tags : [];
+  if (!rows.length) return "—";
+  return rows.slice(0, 3).map((row) => `${row.tag} (${row.count})`).join(", ");
+}
+function formatEtTimestamp(value) {
+  const ts = String(value || "").trim();
+  if (!ts) return "—";
+  try {
+    return new Date(ts).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return ts;
+  }
+}
+function renderSourceRegistrySuggestions(overview) {
+  const body = document.getElementById("sourceRegistrySuggestionsBody");
+  if (!body) return;
+  const rows = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">No recent source suggestions yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((row) => {
+    const effective = row.effective_policy || {};
+    return `<tr>
+      <td>
+        <button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button>
+      </td>
+      <td>${renderSourceTierPill(effective.source_tier, effective.hard_block)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">authority ${effective.source_authority != null ? Number(effective.source_authority).toFixed(2) : "—"}</div></td>
+      <td class="mono">${Math.max(0, Number(row.send_count || 0))}</td>
+      <td class="mono" style="color:${Number(row.weak_source_item_count || 0) > 0 ? "var(--red)" : "var(--text);"};">${Math.max(0, Number(row.weak_source_item_count || 0))}</td>
+      <td class="mono">${Math.max(0, Number(row.user_count || 0))}</td>
+      <td style="font-size:12px;color:var(--text-secondary);">${esc(formatSourceMetricTags(row.top_tags))}</td>
+      <td style="font-size:12px;color:var(--text-2);">${esc(row.suggested_reason || "Recent source activity")}</td>
+    </tr>`;
+  }).join("");
+}
+function renderSourceRegistryOverrides(overview) {
+  const body = document.getElementById("sourceRegistryOverridesBody");
+  if (!body) return;
+  const rows = Array.isArray(overview?.overrides) ? overview.overrides : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6" class="empty">No global source overrides yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((row) => {
+    const effective = row.effective_policy || {};
+    return `<tr>
+      <td><button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button></td>
+      <td>${renderSourceTierPill(effective.source_tier, effective.hard_block)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">authority ${effective.source_authority != null ? Number(effective.source_authority).toFixed(2) : "—"}</div></td>
+      <td>${row.hard_block === true ? `<span style="color:var(--red);font-weight:700;">Yes</span>` : "No"}</td>
+      <td style="font-size:12px;color:var(--text-2);">${esc(formatSourceOverrideSummary(row))}</td>
+      <td style="font-size:12px;color:var(--text-secondary);">${esc(formatEtTimestamp(row.updated_at))}</td>
+      <td style="font-size:12px;color:var(--text-2);">${esc(row.note || "—")}</td>
+    </tr>`;
+  }).join("");
+}
+function renderSourceRegistryInspector(detail, overview) {
+  const container = document.getElementById("sourceRegistryInspector");
+  if (!container) return;
+  const sourcePath = overview && overview.source_registry_path ? `Registry file: ${overview.source_registry_path}` : "";
+  if (!detail) {
+    container.innerHTML = `<div class="table-meta">${esc(sourcePath || "Search for a domain to inspect its effective policy and recent impact.")}</div>`;
+    return;
+  }
+  const policy = detail.effective_policy || {};
+  const adminOverride = detail.admin_override || {};
+  const recent = detail.recent_metrics || {};
+  const auditEntries = Array.isArray(detail.audit_entries) ? detail.audit_entries : [];
+  const sampleItems = Array.isArray(recent.sample_items) ? recent.sample_items : [];
+  const recentUsers = Array.isArray(recent.recent_users) ? recent.recent_users : [];
+  const topTags = Array.isArray(recent.top_tags) ? recent.top_tags : [];
+  container.innerHTML = `
+    <div class="table-toolbar" style="margin-bottom:16px;">
+      <div>
+        <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
+        <div class="subscriber-sub">${sourcePath ? esc(sourcePath) : "Global source policy registry"}</div>
+      </div>
+      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · recent sends ${Math.max(0, Number(recent.send_count || 0))}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.2fr .9fr;gap:18px;align-items:start;">
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+          ${renderSourceTierPill(policy.source_tier, policy.hard_block)}
+          <span class="mono" style="font-size:12px;color:var(--text-secondary);">effective authority ${policy.source_authority != null ? Number(policy.source_authority).toFixed(2) : "—"}</span>
+          <span class="mono" style="font-size:12px;color:var(--text-secondary);">baseline ${esc(policy.baseline_source_tier || "unknown")} ${policy.baseline_source_authority != null ? Number(policy.baseline_source_authority).toFixed(2) : "—"}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+          <div class="explain-block">
+            <div class="explain-label">Recent impact</div>
+            <div class="explain-copy">${Math.max(0, Number(recent.send_count || 0))} sends across ${Math.max(0, Number(recent.user_count || 0))} users and ${Math.max(0, Number(recent.digest_count || 0))} digests.</div>
+          </div>
+          <div class="explain-block">
+            <div class="explain-label">Weak-source exposure</div>
+            <div class="explain-copy">${Math.max(0, Number(recent.weak_source_item_count || 0))} weak-source item${Number(recent.weak_source_item_count || 0) === 1 ? "" : "s"} in the last 7 days.</div>
+          </div>
+          <div class="explain-block">
+            <div class="explain-label">Common tags</div>
+            <div class="explain-copy">${esc(formatSourceMetricTags(topTags))}</div>
+          </div>
+        </div>
+        <div>
+          <div class="card-label">Recent sample items</div>
+          ${sampleItems.length ? sampleItems.map((item) => `
+            <div style="padding:8px 0;border-top:1px solid var(--border-subtle);">
+              <div style="font-size:12px;font-weight:600;line-height:1.45;">${item.url ? `<a href="${esc(item.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${esc(item.headline || item.url)}</a>` : esc(item.headline || "Untitled item")}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")}</div>
+            </div>
+          `).join("") : `<div class="empty" style="padding:10px 0;">No recent sent items for this domain.</div>`}
+        </div>
+        <details ${auditEntries.length ? "" : "disabled"} style="border-top:1px solid var(--border-subtle);padding-top:10px;">
+          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Source policy audit</summary>
+          <div style="margin-top:8px;">
+            ${auditEntries.length ? auditEntries.map((entry) => `
+              <div style="padding:7px 0;border-top:1px solid var(--border-subtle);font-size:12px;line-height:1.45;">
+                <div style="font-weight:600;color:var(--text);">${esc(entry.action)} · ${esc(entry.actor || "unknown")}</div>
+                <div style="color:var(--text-secondary);">${esc(formatEtTimestamp(entry.at))}${entry.note ? ` · ${esc(entry.note)}` : ""}</div>
+              </div>
+            `).join("") : `<div class="empty" style="padding:8px 0;">No source policy changes recorded yet.</div>`}
+          </div>
+        </details>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:#FAFAFB;">
+        <div class="card-label">Edit override</div>
+        <div class="modal-field">
+          <label for="sourceRegistryDomainInput">Domain</label>
+          <input id="sourceRegistryDomainInput" class="modal-input" type="text" value="${esc(detail.domain || "")}" placeholder="benzinga.com">
+        </div>
+        <div class="modal-field">
+          <label for="sourceRegistryTierInput">Tier override</label>
+          <select id="sourceRegistryTierInput" class="table-filter" style="width:100%;">
+            <option value="">Default</option>
+            ${["premium","strong","standard","blog","corporate","weak","suspect","unknown"].map((tier) => `<option value="${tier}" ${adminOverride.tier_override === tier ? "selected" : ""}>${tier}</option>`).join("")}
+          </select>
+        </div>
+        <div class="modal-field">
+          <label for="sourceRegistryAuthorityInput">Authority override (0-1)</label>
+          <input id="sourceRegistryAuthorityInput" class="modal-input mono" type="number" min="0" max="1" step="0.01" value="${adminOverride.authority_override != null ? esc(Number(adminOverride.authority_override).toFixed(2)) : ""}" placeholder="0.22">
+        </div>
+        <div class="modal-field">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input id="sourceRegistryHardBlockInput" type="checkbox" ${adminOverride.hard_block === true ? "checked" : ""}>
+            Hard block from all digests
+          </label>
+        </div>
+        <div class="modal-field" style="margin-bottom:12px;">
+          <label for="sourceRegistryNoteInput">Note</label>
+          <textarea id="sourceRegistryNoteInput" class="modal-textarea" style="min-height:84px;" placeholder="Why are we overriding this source?">${esc(adminOverride.note || "")}</textarea>
+        </div>
+        <div id="sourceRegistryFormFeedback" class="modal-feedback" style="display:none;"></div>
+        <div class="modal-actions" style="margin-top:0;">
+          <button class="modal-btn" type="button" onclick="resetSourceRegistryDomain()">Reset to default</button>
+          <button class="modal-btn primary" type="button" onclick="saveSourceRegistryDomain()">Save override</button>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);">
+          Recent users: ${recentUsers.length ? esc(recentUsers.map((row) => `${row.user} (${row.count})`).join(", ")) : "none"}
+        </div>
+      </div>
+    </div>`;
+}
+function isEditingSourceRegistry() {
+  const active = document.activeElement;
+  const inspector = document.getElementById("sourceRegistryInspector");
+  return !!(active && inspector && inspector.contains(active));
+}
+async function loadSourceRegistryOverview(silent = true) {
+  const searchEl = document.getElementById("sourceRegistrySearch");
+  const query = searchEl ? searchEl.value.trim() : "";
+  const resp = await apiFetchJson(`/api/admin/source-registry?limit=20${query ? `&query=${encodeURIComponent(query)}` : ""}`, {}, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    if (!silent) showToast("err", data.error || "Failed to load source registry");
+    return null;
+  }
+  latestSourceRegistryOverview = data;
+  renderSourceRegistrySuggestions(data);
+  renderSourceRegistryOverrides(data);
+  return data;
+}
+async function inspectSourceRegistryDomain(domainValue, silent = false) {
+  const searchEl = document.getElementById("sourceRegistrySearch");
+  const rawDomain = String(domainValue || (searchEl ? searchEl.value : "") || "").trim();
+  if (!rawDomain) {
+    if (!silent) showToast("err", "Enter a domain first.");
+    return;
+  }
+  if (searchEl) searchEl.value = rawDomain;
+  const resp = await apiFetchJson(`/api/admin/source-registry/domain?domain=${encodeURIComponent(rawDomain)}`, {}, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    if (!silent) showToast("err", data.error || "Failed to inspect source domain");
+    renderSourceRegistryInspector(null, latestSourceRegistryOverview);
+    return;
+  }
+  selectedSourceRegistryDomain = String(data.domain || rawDomain).trim();
+  renderSourceRegistryInspector(data, latestSourceRegistryOverview);
+}
+function setSourceRegistryFeedback(type, message) {
+  const feedback = document.getElementById("sourceRegistryFormFeedback");
+  if (!feedback) return;
+  const text = String(message || "").trim();
+  if (!text) {
+    feedback.style.display = "none";
+    feedback.textContent = "";
+    feedback.className = "modal-feedback";
+    return;
+  }
+  feedback.style.display = "block";
+  feedback.textContent = text;
+  feedback.className = `modal-feedback ${type || ""}`.trim();
+}
+async function saveSourceRegistryDomain() {
+  const domain = String(document.getElementById("sourceRegistryDomainInput")?.value || "").trim();
+  const tierOverride = String(document.getElementById("sourceRegistryTierInput")?.value || "").trim();
+  const authorityOverride = String(document.getElementById("sourceRegistryAuthorityInput")?.value || "").trim();
+  const hardBlock = document.getElementById("sourceRegistryHardBlockInput")?.checked === true;
+  const note = String(document.getElementById("sourceRegistryNoteInput")?.value || "").trim();
+  if (!domain) {
+    setSourceRegistryFeedback("err", "Domain is required.");
+    return;
+  }
+  setSourceRegistryFeedback("", "");
+  const resp = await apiFetchJson("/api/admin/source-registry/domain", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      domain,
+      tier_override: tierOverride || null,
+      authority_override: authorityOverride === "" ? null : Number(authorityOverride),
+      hard_block: hardBlock,
+      note,
+    }),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    setSourceRegistryFeedback("err", data.error || "Failed to save source override.");
+    showToast("err", data.error || "Failed to save source override");
+    return;
+  }
+  setSourceRegistryFeedback("ok", "Source override saved.");
+  showToast("ok", `Saved source override for ${domain}`);
+  if (data.detail) {
+    selectedSourceRegistryDomain = String(data.detail.domain || domain).trim();
+    renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
+  }
+  await loadSourceRegistryOverview(true);
+  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+}
+async function resetSourceRegistryDomain() {
+  const domain = String(document.getElementById("sourceRegistryDomainInput")?.value || selectedSourceRegistryDomain || "").trim();
+  if (!domain) {
+    setSourceRegistryFeedback("err", "No source selected.");
+    return;
+  }
+  const accepted = await openConfirmModal("Reset source override", `Reset ${domain} back to default source policy?`, "Reset");
+  if (!accepted) return;
+  const resp = await apiFetchJson("/api/admin/source-registry/domain/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain }),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    setSourceRegistryFeedback("err", data.error || "Failed to reset source override.");
+    showToast("err", data.error || "Failed to reset source override");
+    return;
+  }
+  setSourceRegistryFeedback("ok", "Source override reset.");
+  showToast("ok", `Reset source override for ${domain}`);
+  if (data.detail) {
+    selectedSourceRegistryDomain = String(data.detail.domain || domain).trim();
+    renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
+  }
+  await loadSourceRegistryOverview(true);
+  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
 }
 function fmtDebugNumber(value, digits = 2) {
   const numeric = Number(value);
@@ -2053,6 +2416,7 @@ let latestRoster = [];
 let latestRuns = [];
 let latestHealth = null;
 let latestFailedDeliveries = [];
+let latestSourceRegistryOverview = null;
 let autoRefreshTimer = null;
 let loadInFlight = false;
 let resendAllInFlight = false;
@@ -2069,6 +2433,7 @@ const expandedScheduleDays = new Set();
 const rowActionStatusByEmail = new Map();
 const auditTimelineByEmail = new Map();
 const loadingAuditEmails = new Set();
+let selectedSourceRegistryDomain = "";
 let confirmResolve = null;
 let retryToastAt = 0;
 
@@ -3660,8 +4025,8 @@ async function load(silent = false) {
     document.getElementById("monthLabel").textContent =
       now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-    const statsResp = await apiFetchJson("/api/admin/stats", {}, 2);
-    const data = statsResp.data || {};
+	    const statsResp = await apiFetchJson("/api/admin/stats", {}, 2);
+	    const data = statsResp.data || {};
     if (!statsResp.ok || data.error) {
       if (data.error === "admin access only") { window.location.href = "/admin/login"; return; }
       if (!silent) {
@@ -3673,8 +4038,9 @@ async function load(silent = false) {
       return;
     }
 
-    const { summary, health, runs, per_user, roster, admin_messages, engagement, digest_insights } = data;
-    latestRuns = Array.isArray(runs) ? runs.slice() : [];
+	    const { summary, health, runs, per_user, roster, admin_messages, engagement, digest_insights } = data;
+	    const sourceRegistryOverview = await loadSourceRegistryOverview(true);
+	    latestRuns = Array.isArray(runs) ? runs.slice() : [];
     const qualitySummary = summary && summary.quality ? summary.quality : null;
     const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
     latestHealth = health || null;
@@ -3689,9 +4055,14 @@ async function load(silent = false) {
     renderSubscriberTable(roster || []);
     renderTestTargets(roster || []);
     renderTestDigestStatus({ state: "idle" });
-    renderAdminMessages(admin_messages || []);
-    renderDigestInsights(digest_insights || {});
-    renderExecutiveSummary(health || null);
+	    renderAdminMessages(admin_messages || []);
+	    renderDigestInsights(digest_insights || {});
+	    if (!selectedSourceRegistryDomain) {
+	      renderSourceRegistryInspector(null, sourceRegistryOverview || latestSourceRegistryOverview);
+	    } else if (!isEditingSourceRegistry()) {
+	      await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+	    }
+	    renderExecutiveSummary(health || null);
 
     if (summary.month_label) {
       document.getElementById("monthLabel").textContent = summary.month_label;

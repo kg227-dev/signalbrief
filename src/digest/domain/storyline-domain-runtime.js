@@ -7,6 +7,10 @@ const {
   topicsRelated,
 } = require("./topic-domain-runtime");
 const { buildFreshnessKey } = require("../runtime/repeat-freshness-runtime");
+const {
+  normalizeSourcePolicyDomain,
+  TIER_OVERRIDE_SCORES,
+} = require("../../runtime/source-policy-registry-runtime");
 
 const STANDARD_TOPIC_TOKENS = new Set([
   "healthcare",
@@ -314,24 +318,52 @@ function jaccard(aValues, bValues) {
 }
 
 function normalizeSourceDomain(raw) {
-  let d = String(raw || "").trim().toLowerCase().replace(/^www\./, "");
-  // Strip common non-content subdomains so ng.investing.com → investing.com
-  d = d.replace(/^(?:ng|m|amp|mobile|rss|feeds|api|cdn|static|images)\./i, "");
-  // Strip single-letter subdomains (e.g., t.co-style but for longer domains)
-  d = d.replace(/^[a-z]\./i, "");
-  return d;
+  return normalizeSourcePolicyDomain(raw);
 }
 
 // Learned domain authority adjustments (populated at runtime via setLearnedDomainAdjustments)
 let _learnedAdjustments = null;
+let _adminSourceRegistry = null;
 
 function setLearnedDomainAdjustments(adjustmentsMap) {
   _learnedAdjustments = adjustmentsMap instanceof Map ? adjustmentsMap : null;
 }
 
-function classifySourceTier(sourceDomainRaw, tag) {
+function setAdminSourceRegistry(registryMap) {
+  _adminSourceRegistry = registryMap instanceof Map ? registryMap : null;
+}
+
+function resolveAdminSourceRegistryEntry(sourceDomain) {
+  const normalizedDomain = normalizeSourceDomain(sourceDomain);
+  if (!_adminSourceRegistry || !normalizedDomain) return null;
+  for (const [domain, entry] of _adminSourceRegistry.entries()) {
+    const normalizedEntryDomain = normalizeSourceDomain(domain);
+    if (!normalizedEntryDomain) continue;
+    if (normalizedDomain === normalizedEntryDomain || normalizedDomain.endsWith(`.${normalizedEntryDomain}`)) {
+      return entry && typeof entry === "object" ? entry : null;
+    }
+  }
+  return null;
+}
+
+function classifySourceTierBaseline(sourceDomainRaw, tag) {
   const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
-  if (!sourceDomain) return { source_tier: "unknown", source_authority: 0.45, topic_fit: 0 };
+  if (!sourceDomain) {
+    return {
+      source_domain: "",
+      source_tier: "unknown",
+      source_authority: 0.45,
+      topic_fit: 0,
+      baseline_source_tier: "unknown",
+      baseline_source_authority: 0.45,
+      learned_adjustment: null,
+      topic_override_score: null,
+      topic_override_applied: false,
+      policy_source: "baseline",
+      hard_block: false,
+      admin_override: null,
+    };
+  }
 
   let baseTier = null;
   let baseScore = 0;
@@ -366,9 +398,11 @@ function classifySourceTier(sourceDomainRaw, tag) {
   }
 
   // Apply learned domain authority for unknown/suspect domains
+  let learnedAdjustment = null;
   if ((baseTier === "unknown" || baseTier === "suspect") && _learnedAdjustments && _learnedAdjustments.has(sourceDomain)) {
     const learned = _learnedAdjustments.get(sourceDomain);
     if (Number.isFinite(learned) && learned > 0) {
+      learnedAdjustment = learned;
       baseScore = learned;
       if (learned >= 0.45) baseTier = "learned-standard";
       else if (learned <= 0.18) baseTier = "learned-suspect";
@@ -377,15 +411,80 @@ function classifySourceTier(sourceDomainRaw, tag) {
 
   // Apply topic-domain fit overrides
   const fit = computeTopicDomainFit(sourceDomain, tag);
-  const finalScore = fit.overrideScore != null && fit.overrideScore > baseScore
+  const topicOverrideApplied = fit.overrideScore != null && fit.overrideScore > baseScore;
+  const finalScore = topicOverrideApplied
     ? fit.overrideScore
     : baseScore;
 
   return {
+    source_domain: sourceDomain,
     source_tier: baseTier,
     source_authority: finalScore,
     topic_fit: fit.topicFit,
+    baseline_source_tier: baseTier,
+    baseline_source_authority: finalScore,
+    learned_adjustment: learnedAdjustment,
+    topic_override_score: fit.overrideScore,
+    topic_override_applied: topicOverrideApplied,
+    policy_source: topicOverrideApplied
+      ? "topic_override"
+      : (learnedAdjustment != null ? "learned_adjustment" : "baseline"),
+    hard_block: false,
+    admin_override: null,
   };
+}
+
+function explainSourcePolicy(sourceDomainRaw, tag) {
+  const baseline = classifySourceTierBaseline(sourceDomainRaw, tag);
+  const sourceDomain = String(baseline?.source_domain || "").trim();
+  const adminEntry = resolveAdminSourceRegistryEntry(sourceDomain);
+  if (!adminEntry) return baseline;
+
+  const tierOverride = String(adminEntry?.tier_override || "").trim().toLowerCase() || null;
+  const authorityOverride = Number.isFinite(Number(adminEntry?.authority_override))
+    ? Number(adminEntry.authority_override)
+    : null;
+  const hardBlock = adminEntry?.hard_block === true;
+
+  let effectiveTier = baseline.source_tier;
+  let effectiveAuthority = baseline.source_authority;
+  let policySource = baseline.policy_source || "baseline";
+
+  if (tierOverride) {
+    effectiveTier = tierOverride;
+    if (authorityOverride == null && Object.prototype.hasOwnProperty.call(TIER_OVERRIDE_SCORES, tierOverride)) {
+      effectiveAuthority = TIER_OVERRIDE_SCORES[tierOverride];
+    }
+  }
+  if (authorityOverride != null) effectiveAuthority = authorityOverride;
+  if (hardBlock) {
+    effectiveTier = "blocked";
+    effectiveAuthority = 0;
+    policySource = "admin_hard_block";
+  } else {
+    policySource = "admin_override";
+  }
+
+  return {
+    ...baseline,
+    source_tier: effectiveTier,
+    source_authority: effectiveAuthority,
+    hard_block: hardBlock,
+    policy_source: policySource,
+    admin_override: {
+      domain: String(adminEntry?.domain || sourceDomain).trim() || null,
+      tier_override: tierOverride,
+      authority_override: authorityOverride,
+      hard_block: hardBlock,
+      note: String(adminEntry?.note || "").trim() || "",
+      updated_at: String(adminEntry?.updated_at || "").trim() || null,
+      updated_by: String(adminEntry?.updated_by || "").trim() || null,
+    },
+  };
+}
+
+function classifySourceTier(sourceDomainRaw, tag) {
+  return explainSourcePolicy(sourceDomainRaw, tag);
 }
 
 function computeTopicDomainFit(sourceDomain, tag) {
@@ -600,12 +699,19 @@ function annotateEditorialSignals(items = []) {
       storyline_hints: storylineHints,
       source_tier: sourceInfo.source_tier,
       source_authority: Number(sourceInfo.source_authority.toFixed(3)),
+      baseline_source_tier: sourceInfo.baseline_source_tier || sourceInfo.source_tier,
+      baseline_source_authority: Number(
+        Number(sourceInfo.baseline_source_authority != null ? sourceInfo.baseline_source_authority : sourceInfo.source_authority).toFixed(3)
+      ),
       source_type: sourceType,
+      source_policy_source: sourceInfo.policy_source || "baseline",
+      source_hard_block: sourceInfo.hard_block === true,
+      source_policy_note: String(sourceInfo?.admin_override?.note || "").trim() || null,
       topic_fit: Number((sourceInfo.topic_fit || 0).toFixed(3)),
       originality_signal: Number(originalitySignal.toFixed(3)),
       routine_item_score: Number(routineItemScore.toFixed(3)),
       strategic_value: Number(strategicValue.toFixed(3)),
-      hard_exclude: hardExclude,
+      hard_exclude: hardExclude || sourceInfo.hard_block === true,
       storyline_key: buildStorylineFingerprint({
         ...item,
         entity_keys: entityKeys,
@@ -882,6 +988,7 @@ module.exports = {
   buildRecentEntityHistory,
   buildStorylineCandidates,
   buildStorylineFingerprint,
+  classifySourceTierBaseline,
   classifySourceTier,
   classifySourceType,
   clusterStorylines,
@@ -889,8 +996,10 @@ module.exports = {
   computeStrategicValue,
   computeTopicDomainFit,
   detectLocalContentFlags,
+  explainSourcePolicy,
   extractEntityKeys,
   normalizeSourceDomain,
+  setAdminSourceRegistry,
   setLearnedDomainAdjustments,
   storylineSimilarity,
 };

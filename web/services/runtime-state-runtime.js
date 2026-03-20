@@ -162,6 +162,7 @@ function createRuntimeStateInspector(deps) {
         digestRunLockPath: runtimePaths.digestRunLockPath,
         digestOnDemandCooldownPath: runtimePaths.digestOnDemandCooldownPath,
         domainStatsPath: runtimePaths.domainStatsPath,
+        sourceRegistryPath: runtimePaths.sourceRegistryPath,
       },
       files,
       latest: {

@@ -93,6 +93,10 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.domainStatsPath || readEnvValue(env, "SIGNALBRIEF_DOMAIN_STATS_PATH"),
     path.join(dataDir, "domain-stats.json")
   );
+  const sourceRegistryPath = resolveOptionalPath(
+    options.sourceRegistryPath || readEnvValue(env, "SIGNALBRIEF_SOURCE_REGISTRY_PATH"),
+    path.join(dataDir, "source-registry.json")
+  );
 
   return {
     appRoot,
@@ -111,6 +115,7 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     digestRunLockPath,
     digestOnDemandCooldownPath,
     domainStatsPath,
+    sourceRegistryPath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };
@@ -163,6 +168,7 @@ function describeRuntimePathAlignment(runtimePaths) {
     archive: deriveComponentRoot(paths.archiveDir, dataRoot, { isDir: true }),
     digest_records: deriveComponentRoot(paths.digestRecordsDir, dataRoot, { isDir: true }),
     domain_stats: deriveComponentRoot(paths.domainStatsPath, dataRoot),
+    source_registry: deriveComponentRoot(paths.sourceRegistryPath, dataRoot),
     logs: logRoots.length === 1 ? logRoots[0] : null,
     scheduler: schedulerRoots.length === 1 ? schedulerRoots[0] : null,
   };
@@ -172,6 +178,7 @@ function describeRuntimePathAlignment(runtimePaths) {
   if (componentRoots.archive !== dataRoot) divergentComponents.push("archive");
   if (componentRoots.digest_records !== dataRoot) divergentComponents.push("digest_records");
   if (componentRoots.domain_stats !== dataRoot) divergentComponents.push("domain_stats");
+  if (componentRoots.source_registry !== dataRoot) divergentComponents.push("source_registry");
   if (logRoots.length !== 1 || logRoots[0] !== dataRoot) divergentComponents.push("logs");
   if (schedulerRoots.length !== 1 || schedulerRoots[0] !== dataRoot) divergentComponents.push("scheduler");
 
@@ -187,6 +194,7 @@ function describeRuntimePathAlignment(runtimePaths) {
       archive_outside_data_root: componentRoots.archive !== dataRoot,
       digest_records_outside_data_root: componentRoots.digest_records !== dataRoot,
       domain_stats_outside_data_root: componentRoots.domain_stats !== dataRoot,
+      source_registry_outside_data_root: componentRoots.source_registry !== dataRoot,
       multiple_log_roots: logRoots.length > 1,
       logs_outside_data_root: logRoots.some((root) => root !== dataRoot),
       multiple_scheduler_roots: schedulerRoots.length > 1,
@@ -215,6 +223,7 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "digestRunLockPath", path: paths.digestRunLockPath, kind: "file" },
     { key: "digestOnDemandCooldownPath", path: paths.digestOnDemandCooldownPath, kind: "file" },
     { key: "domainStatsPath", path: paths.domainStatsPath, kind: "file" },
+    { key: "sourceRegistryPath", path: paths.sourceRegistryPath, kind: "file" },
   ];
 }
 

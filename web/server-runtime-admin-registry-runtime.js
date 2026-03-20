@@ -4,6 +4,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
   const {
     json,
     isAdminAuthed,
+    getAdminActor,
     getClientIp,
     checkLoginRate,
     requireJsonBody,
@@ -50,12 +51,21 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadLatestDigestSnapshot,
     getRuntimeStateDiagnostics,
     buildRecentDigestsExport,
+    loadSourceRegistry,
+    buildSourceRegistryMap,
+    listSourceRegistryEntries,
+    getSourceRegistryEntry,
+    upsertSourceRegistryEntry,
+    resetSourceRegistryEntry,
+    setAdminSourceRegistry,
+    sourceRegistryPath,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
 
   return {
     json,
     isAdminAuthed,
+    getAdminActor,
     getClientIp,
     checkLoginRate,
     requireJsonBody,
@@ -103,6 +113,14 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadLatestDigestSnapshot,
     getRuntimeStateDiagnostics,
     buildRecentDigestsExport,
+    loadSourceRegistry,
+    buildSourceRegistryMap,
+    listSourceRegistryEntries,
+    getSourceRegistryEntry,
+    upsertSourceRegistryEntry,
+    resetSourceRegistryEntry,
+    setAdminSourceRegistry,
+    sourceRegistryPath,
   };
 }
 

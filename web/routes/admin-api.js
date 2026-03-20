@@ -5,6 +5,7 @@ const { handleAdminUserRoutes } = require("./admin-api-users-runtime");
 const { handleAdminMessageRoute } = require("./admin-api-message-runtime");
 const { handleAdminSandboxRoutes } = require("./admin-api-sandbox-runtime");
 const { handleAdminRuntimeStateRoutes } = require("./admin-api-runtime-state-runtime");
+const { handleAdminSourceRegistryRoutes } = require("./admin-api-source-registry-runtime");
 
 function createAdminApiRouteHandler(deps) {
   return async function handleAdminApiRoutes(ctx) {
@@ -18,6 +19,7 @@ function createAdminApiRouteHandler(deps) {
     }
 
     if (await handleAdminRuntimeStateRoutes(ctx, deps)) return true;
+    if (await handleAdminSourceRegistryRoutes(ctx, deps)) return true;
     if (await handleAdminUserRoutes(ctx, deps)) return true;
     if (await handleAdminBulkRoute(ctx, deps)) return true;
     if (await handleAdminMessageRoute(ctx, deps)) return true;

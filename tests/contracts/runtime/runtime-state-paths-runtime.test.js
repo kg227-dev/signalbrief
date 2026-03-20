@@ -41,6 +41,7 @@ const {
   assert.strictEqual(paths.sqlitePath, path.join(appRoot, "state", "users.sqlite"));
   assert.strictEqual(paths.archiveDir, path.join(appRoot, "archive-volume"));
   assert.strictEqual(paths.digestRecordsDir, path.join(appRoot, "runtime", "digest-records"));
+  assert.strictEqual(paths.sourceRegistryPath, path.join(appRoot, "runtime", "source-registry.json"));
 
   const aligned = describeRuntimePathAlignment(resolveSignalBriefRuntimePaths({
     appRoot,

@@ -91,9 +91,10 @@ const {
   accumulateDomainStats,
   computeLearnedAuthorityAdjustments,
 } = require("../digest/domain/domain-learning-runtime");
-const { setLearnedDomainAdjustments } = require("../domains/digest");
+const { setLearnedDomainAdjustments, setAdminSourceRegistry } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
+const { createSourceRegistryRuntime } = require("../runtime/source-policy-registry-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -107,6 +108,11 @@ const COST_LOG = RUNTIME_PATHS.costLogPath;
 const DIGEST_RUN_LOCK = RUNTIME_PATHS.digestRunLockPath;
 const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
+const sourceRegistryRuntime = createSourceRegistryRuntime({
+  fs,
+  path,
+  sourceRegistryPath: RUNTIME_PATHS.sourceRegistryPath,
+});
 let configCache = null;
 let emailTemplateCache = null;
 let digestFormattingRuntimeCache = null;
@@ -741,6 +747,11 @@ async function main() {
   });
   // Load learned domain authority adjustments from historical stats
   const domainStats = loadDomainStats();
+  const sourceRegistry = sourceRegistryRuntime.loadSourceRegistry();
+  setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistry));
+  if (sourceRegistry && sourceRegistry.domains && Object.keys(sourceRegistry.domains).length > 0) {
+    log(`[source-policy] ${Object.keys(sourceRegistry.domains).length} admin source override(s) applied`);
+  }
   const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
   if (learnedAdjustments.size > 0) {
     setLearnedDomainAdjustments(learnedAdjustments);

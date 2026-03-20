@@ -99,6 +99,8 @@ const {
   resolveSignalBriefRuntimePaths,
   describeRuntimePathAlignment,
 } = require("../src/runtime/runtime-state-paths-runtime");
+const { createSourceRegistryRuntime } = require("../src/runtime/source-policy-registry-runtime");
+const { setAdminSourceRegistry } = require("../src/domains/digest");
 
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
@@ -146,6 +148,12 @@ const DIGEST_INCIDENT_LOG = runtimePaths.digestIncidentLogPath;
 const COST_LOG_PATH = runtimePaths.costLogPath;
 const ARCHIVE_LEGACY_USAGE_LOG = runtimePaths.archiveLegacyUsageLogPath;
 const SCHEDULER_CONTROL_FILE = runtimePaths.schedulerControlPath;
+const sourceRegistryRuntime = createSourceRegistryRuntime({
+  fs,
+  path,
+  sourceRegistryPath: runtimePaths.sourceRegistryPath,
+});
+setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistryRuntime.loadSourceRegistry()));
 const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({
   fs,
   path,
@@ -316,6 +324,7 @@ const {
   allowExampleSignups,
   PROTECTED_FIELDS,
   isAdminAuthed,
+  getAdminActor,
   logAdminActionEvent,
   INDUSTRY_TOPICS,
   CAPABILITY_TOPICS,
@@ -388,6 +397,15 @@ const {
   WEB_DIR,
   getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
   buildRecentDigestsExport,
+  sourceRegistryPath: runtimePaths.sourceRegistryPath,
+  loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),
+  buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
+  listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),
+  getSourceRegistryEntry: (domain) => sourceRegistryRuntime.getSourceRegistryEntry(domain),
+  upsertSourceRegistryEntry: (input, meta) => sourceRegistryRuntime.upsertSourceRegistryEntry(input, meta),
+  resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
+  setAdminSourceRegistry,
+  getAdminActor,
 });
 const handleDomainRoute = createRouteBootstrapHandler({
   handleCoreApiRoute,

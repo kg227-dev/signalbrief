@@ -16,12 +16,15 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   buildStorylineCandidates,
   applyStrategicQualityGate,
+  classifySourceTierBaseline,
   classifySourceTier,
   classifySourceType,
   computeOriginalitySignal,
   computeTopicDomainFit,
   detectLocalContentFlags,
+  explainSourcePolicy,
   normalizeSourceDomain,
+  setAdminSourceRegistry,
 } = runtime;
 
 assert.strictEqual(typeof buildStorylineCandidates, "function");
@@ -232,6 +235,53 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(classifySourceTier("benzinga.com").source_tier, "weak");
   assert.strictEqual(classifySourceTier("fool.com").source_tier, "weak");
   assert.strictEqual(classifySourceTier("substack.com").source_tier, "weak");
+}
+
+// ── Admin registry overrides beat baseline / learned logic ──
+{
+  setAdminSourceRegistry(new Map([
+    ["benzinga.com", {
+      domain: "benzinga.com",
+      tier_override: "premium",
+      authority_override: 0.99,
+      hard_block: false,
+      note: "Reviewed manually",
+    }],
+  ]));
+  const baseline = classifySourceTierBaseline("benzinga.com");
+  const effective = explainSourcePolicy("benzinga.com");
+  assert.strictEqual(baseline.source_tier, "weak");
+  assert.strictEqual(effective.source_tier, "premium");
+  assert.strictEqual(effective.source_authority, 0.99);
+  assert.strictEqual(effective.policy_source, "admin_override");
+  setAdminSourceRegistry(null);
+}
+
+// ── Admin hard block marks domain as blocked + excluded ──
+{
+  setAdminSourceRegistry(new Map([
+    ["exampleblocked.com", {
+      domain: "exampleblocked.com",
+      tier_override: "weak",
+      authority_override: 0.1,
+      hard_block: true,
+      note: "Blocked globally",
+    }],
+  ]));
+  const blocked = classifySourceTier("exampleblocked.com");
+  assert.strictEqual(blocked.source_tier, "blocked");
+  assert.strictEqual(blocked.source_authority, 0);
+  assert.strictEqual(blocked.hard_block, true);
+  const annotated = runtime.annotateEditorialSignals([{
+    tag: "TECHNOLOGY",
+    headline: "Example blocked source story",
+    summary: "Blocked source content.",
+    source_domain: "exampleblocked.com",
+    baseScore: 7,
+  }]);
+  assert.strictEqual(annotated[0].hard_exclude, true);
+  assert.strictEqual(annotated[0].source_policy_source, "admin_hard_block");
+  setAdminSourceRegistry(null);
 }
 
 // ── Derivative flagging: cluster with top_tier + weak sources ──

@@ -1,5 +1,7 @@
 "use strict";
 
+const { resolveRowFailureMode } = require("./admin-digest-insights-runtime");
+
 function toEtDateKey(value = new Date()) {
   return new Date(value).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
@@ -40,11 +42,16 @@ function normalizeItem(item) {
     headline: String(item?.headline || "").trim() || null,
     url: String(item?.url || "").trim() || null,
     tag: String(item?.tag || "").trim() || null,
-    base_score: Number.isFinite(Number(item?.base_score)) ? Number(item.base_score) : null,
-    topic_match: Number.isFinite(Number(item?.topic_match)) ? Number(item.topic_match) : null,
-    relevance_score: Number.isFinite(Number(item?.relevance_score)) ? Number(item.relevance_score) : null,
+    base_score: Number.isFinite(Number(item?.base_score)) ? Number(item.base_score) : (Number.isFinite(Number(item?.baseScore)) ? Number(item.baseScore) : null),
+    topic_match: Number.isFinite(Number(item?.topic_match)) ? Number(item.topic_match) : (Number.isFinite(Number(item?.topicMatch)) ? Number(item.topicMatch) : null),
+    relevance_score: Number.isFinite(Number(item?.relevance_score)) ? Number(item.relevance_score) : (Number.isFinite(Number(item?.relevanceScore)) ? Number(item.relevanceScore) : null),
     source_domain: String(item?.source_domain || "").trim() || null,
     storyline_key: String(item?.storyline_key || "").trim() || null,
+    freshness_key: String(item?.freshness_key || "").trim() || null,
+    source_tier: String(item?.source_tier || "").trim() || null,
+    source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
+    routine_item_score: Number.isFinite(Number(item?.routine_item_score)) ? Number(item.routine_item_score) : null,
+    strategic_value: Number.isFinite(Number(item?.strategic_value)) ? Number(item.strategic_value) : null,
   };
 }
 
@@ -229,9 +236,25 @@ function createRecentDigestsExporter(deps) {
             : (Number.isFinite(Number(resolvedSnapshot?.version)) ? Number(resolvedSnapshot.version) : null),
           quality_score: resolvedQualityScore,
           quality_band: qualityBand,
+          requested_count: Number.isFinite(Number(resolvedSnapshot?.requested_count))
+            ? Number(resolvedSnapshot.requested_count)
+            : (Number.isFinite(Number(perUserRow?.requested_count)) ? Number(perUserRow.requested_count) : null),
           sent_at_utc: resolvedSnapshot?.sent_at || events.sent_at || null,
           sent_items: sentItems,
           sent_item_count: sentItems.length,
+          freshness_block_count: Math.max(0, Number(resolvedSnapshot?.freshness_block_count || perUserRow?.freshness_block_count || 0)),
+          semantic_repeat_block_count: Math.max(0, Number(resolvedSnapshot?.semantic_repeat_block_count || perUserRow?.semantic_repeat_block_count || 0)),
+          alternate_queries_used: Math.max(0, Number(resolvedSnapshot?.alternate_queries_used || perUserRow?.alternate_queries_used || 0)),
+          candidate_pool_before_dedup: Number.isFinite(Number(resolvedSnapshot?.candidate_pool_before_dedup))
+            ? Number(resolvedSnapshot.candidate_pool_before_dedup)
+            : (Number.isFinite(Number(perUserRow?.candidate_pool_before_dedup)) ? Number(perUserRow.candidate_pool_before_dedup) : null),
+          candidate_pool_after_dedup: Number.isFinite(Number(resolvedSnapshot?.candidate_pool_after_dedup))
+            ? Number(resolvedSnapshot.candidate_pool_after_dedup)
+            : (Number.isFinite(Number(perUserRow?.candidate_pool_after_dedup)) ? Number(perUserRow.candidate_pool_after_dedup) : null),
+          fallback_reason: String(resolvedSnapshot?.fallback_reason || perUserRow?.fallback_reason || "").trim() || null,
+          refill_count: Math.max(0, Number(resolvedSnapshot?.refill_count || perUserRow?.refill_count || 0)),
+          thin_pool: resolvedSnapshot?.thin_pool === true || perUserRow?.thin_pool === true,
+          dominant_failure_mode: String(resolvedSnapshot?.dominant_failure_mode || perUserRow?.dominant_failure_mode || "").trim() || null,
           channels: Array.from(events.channels).sort(),
           engagement: {
             opens: events.opens,
@@ -243,6 +266,7 @@ function createRecentDigestsExporter(deps) {
             scope: engagementScope,
           },
         });
+        rows[rows.length - 1].dominant_failure_mode = resolveRowFailureMode(rows[rows.length - 1]);
       }
     }
 

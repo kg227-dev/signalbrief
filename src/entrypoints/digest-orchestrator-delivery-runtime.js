@@ -80,6 +80,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       entity_keys: Array.isArray(item?.entity_keys) ? item.entity_keys.slice() : [],
       storyline_id: item?.storyline_id || null,
       storyline_key: item?.storyline_key || null,
+      freshness_key: item?.freshness_key || null,
       storyline_size: Number.isFinite(Number(item?.storyline_size)) ? Number(item.storyline_size) : null,
       supporting_sources: Array.isArray(item?.supporting_sources) ? item.supporting_sources.slice() : [],
       supporting_headlines: Array.isArray(item?.supporting_headlines) ? item.supporting_headlines.slice() : [],
@@ -131,10 +132,12 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       deliveryEventSource = targetChatId ? "on-demand" : "scheduled-job",
       claudeUsage,
       engagementEvents,
+      runDiagnostics,
     } = params;
 
     const deliveredUsers = [];
     const failedUsers = [];
+    const withheldUsers = [];
 
     for (let user of dueUsers) {
       const userId = String(user?.chatId || user?.email || "").trim();
@@ -166,7 +169,9 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
         const recentDigestRecords = typeof loadRecentSentDigests === "function"
           ? loadRecentSentDigests(userId, {
-            limit: Math.max(1, Number(CONFIG.digest.perUserEntityHistoryDigests || 3)),
+            limit: deliveryMode === "scheduled"
+              ? Math.max(5, Number(CONFIG.digest.scheduledFreshnessWindowDays || 5))
+              : Math.max(1, Number(CONFIG.digest.perUserEntityHistoryDigests || 3)),
           })
           : [];
         const autoLearning = applyAutoTopicLearning(user, {
@@ -199,9 +204,14 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           rankingPolicy,
           recentDigestRecords,
           nowIso: now.toISOString(),
+          deliveryMode,
+          runDiagnostics,
         });
         let userItems = ranked.userItems;
         const wasFiltered = ranked.wasFiltered;
+        const deliveryDiagnostics = ranked.diagnostics && typeof ranked.diagnostics === "object"
+          ? ranked.diagnostics
+          : {};
         const prefs = user.preferences || {};
 
         const depth = prefs.depth || "full";
@@ -226,6 +236,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           entity_keys: item.entity_keys,
           storyline_id: item.storyline_id,
           storyline_key: item.storyline_key,
+          freshness_key: item.freshness_key,
           storyline_size: item.storyline_size,
           source_domain: item.source_domain,
           source_tier: item.source_tier,
@@ -248,8 +259,70 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quick_scan: quickScan,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
+            requested_count: deliveryDiagnostics.requested_count,
+            freshness_block_count: deliveryDiagnostics.freshness_block_count,
+            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+            fallback_reason: deliveryDiagnostics.fallback_reason,
+            refill_count: deliveryDiagnostics.refill_count,
+            thin_pool: deliveryDiagnostics.thin_pool,
+            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
             items: selectedSnapshotItems,
           });
+        }
+
+        // --- quality floor guard: withhold delivery if quality is too low ---
+        const minDeliveryQualityScore = Number(CONFIG.digest?.minDeliveryQualityScore ?? 25);
+        if (userItems.length === 0 || digestQuality.score < minDeliveryQualityScore) {
+          const withholdReason = userItems.length === 0 ? "empty_items" : "quality_below_floor";
+          log(`  skip delivery for ${user.email || userId}: ${withholdReason} (score=${digestQuality.score}, min=${minDeliveryQualityScore})`);
+          if (typeof updateDigestDeliveryRecord === "function") {
+            updateDigestDeliveryRecord({
+              digest_id: userDigestId,
+              user_id: userId,
+              date_et: digestDateKey,
+              mode: deliveryMode,
+              version: deliveryRecordVersion,
+              run_id: runId,
+              source: deliveryEventSource,
+              trigger: deliveryMode,
+              status: "withheld",
+              withheld_reason: withholdReason,
+              quality_score: digestQuality.score,
+              quality_band: digestQuality.band,
+              requested_count: deliveryDiagnostics.requested_count,
+              freshness_block_count: deliveryDiagnostics.freshness_block_count,
+              semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+              alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+              candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+              candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+              fallback_reason: deliveryDiagnostics.fallback_reason,
+              refill_count: deliveryDiagnostics.refill_count,
+              thin_pool: deliveryDiagnostics.thin_pool,
+              dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+            });
+          }
+          withheldUsers.push({
+            userId,
+            email: user.email,
+            status: "withheld",
+            withheld_reason: withholdReason,
+            quality_score: digestQuality.score,
+            quality_band: digestQuality.band,
+            requested_count: deliveryDiagnostics.requested_count,
+            freshness_block_count: deliveryDiagnostics.freshness_block_count,
+            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+            fallback_reason: deliveryDiagnostics.fallback_reason,
+            refill_count: deliveryDiagnostics.refill_count,
+            thin_pool: deliveryDiagnostics.thin_pool,
+            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+          });
+          continue;
         }
 
         const userQuickScan = buildUserQuickScanRows(userItems);
@@ -274,6 +347,16 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quick_scan: quickScan,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
+            requested_count: deliveryDiagnostics.requested_count,
+            freshness_block_count: deliveryDiagnostics.freshness_block_count,
+            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+            fallback_reason: deliveryDiagnostics.fallback_reason,
+            refill_count: deliveryDiagnostics.refill_count,
+            thin_pool: deliveryDiagnostics.thin_pool,
+            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
             items: selectedSnapshotItems,
           });
         }
@@ -400,6 +483,15 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quick_scan: quickScan,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
+            freshness_block_count: deliveryDiagnostics.freshness_block_count,
+            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+            fallback_reason: deliveryDiagnostics.fallback_reason,
+            refill_count: deliveryDiagnostics.refill_count,
+            thin_pool: deliveryDiagnostics.thin_pool,
+            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
             items: selectedSnapshotItems,
           });
         }
@@ -414,6 +506,11 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             .map((item) => String(item?.storyline_key || "").trim())
             .filter(Boolean)
         )];
+        const currentFreshnessKeys = [...new Set(
+          userItems
+            .map((item) => String(item?.freshness_key || "").trim())
+            .filter(Boolean)
+        )];
         const priorUrlHistory = Array.isArray(user.recent_digest_url_history)
           ? user.recent_digest_url_history.slice()
           : [];
@@ -422,8 +519,13 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           digest_id: userDigestId,
           urls: currentUrlKeys,
           storyline_keys: currentStorylineKeys,
+          freshness_keys: currentFreshnessKeys,
         });
-        user.recent_digest_url_history = priorUrlHistory.slice(-Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)));
+        user.recent_digest_url_history = priorUrlHistory.slice(-Math.max(
+          Number(CONFIG.digest.scheduledFreshnessWindowDays || 5),
+          Number(CONFIG.digest.perUserFreshnessDigests || 3),
+          1
+        ));
         user.digests_received = (user.digests_received || 0) + 1;
         user.last_digest_at = now.toISOString();
         user.last_digest_items = selectedSnapshotItems.map((item) => ({ ...item }));
@@ -457,6 +559,16 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           digest_quality_band: String(digestQuality?.band || "") || null,
           digest_url: String(publicDigestUrl || ""),
           engagement_event_failures: engagementWriteFailures,
+          requested_count: deliveryDiagnostics.requested_count,
+          freshness_block_count: deliveryDiagnostics.freshness_block_count,
+          semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+          alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+          candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+          candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+          fallback_reason: deliveryDiagnostics.fallback_reason,
+          refill_count: deliveryDiagnostics.refill_count,
+          thin_pool: deliveryDiagnostics.thin_pool,
+          dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
         });
 
         const eventWriteSuffix = engagementWriteFailures > 0
@@ -490,6 +602,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     return {
       deliveredUsers,
       failedUsers,
+      withheldUsers,
     };
   }
 

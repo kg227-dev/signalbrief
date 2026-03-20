@@ -84,6 +84,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(ranked.wasFiltered, true);
   assert.strictEqual(ranked.userItems.length, 1);
   assert.strictEqual(ranked.userItems[0].tag, "AI×TECH");
+  assert.strictEqual(ranked.diagnostics.requested_count, 5);
   assert.ok(logs.some((line) => line.includes("[pre-sort]")));
   assert.ok(logs.some((line) => line.includes("[post-sort]")));
 
@@ -136,6 +137,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(emergencyScoreCalls, 2);
   assert.strictEqual(emergencyOut.wasFiltered, false);
   assert.strictEqual(emergencyOut.userItems.length, 1);
+  assert.strictEqual(emergencyOut.diagnostics.fallback_reason, "emergency_fallback");
 
   const repeatLogs = [];
   const freshnessRuntime = createDigestOrchestratorDeliveryRankingRuntime({
@@ -219,9 +221,12 @@ assertModuleExports(() => runtime, TARGET_REL);
     rankingPolicy: { minSignalScoreForFinal: 0 },
     recentDigestRecords: recentUserRecords,
     nowIso: "2026-03-20T11:00:00.000Z",
+    deliveryMode: "scheduled",
   });
 
   assert.strictEqual(freshnessOut.userItems.length, 1);
   assert.strictEqual(freshnessOut.userItems[0].headline, "PJM Approves New Transmission Buildout for Grid Reliability");
+  assert.strictEqual(freshnessOut.diagnostics.freshness_block_count, 2);
+  assert.strictEqual(freshnessOut.diagnostics.dominant_failure_mode, "thin_pool");
   assert.ok(repeatLogs.some((line) => line.includes("[freshness-semantic]")));
 })();

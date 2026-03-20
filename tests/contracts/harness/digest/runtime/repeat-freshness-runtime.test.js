@@ -12,6 +12,7 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
+  buildFreshnessKey,
   buildSemanticRepeatIndex,
   isSemanticRepeatItem,
   excludeSemanticRepeats,
@@ -35,10 +36,48 @@ assertModuleExports(() => runtime, TARGET_REL);
   const repeatIndex = buildSemanticRepeatIndex(recentItems);
 
   assert.strictEqual(
+    buildFreshnessKey({
+      tag: "SUSTAINABILITY",
+      entity_keys: ["california"],
+      storyline_hints: ["climate_reporting"],
+      headline: "California Sets August 2026 Deadline for First Corporate Climate Reports",
+    }),
+    buildFreshnessKey({
+      tag: "SUSTAINABILITY",
+      entity_keys: ["california"],
+      storyline_hints: ["climate_reporting"],
+      headline: "California Sets August 2026 Deadline for Corporate Climate Reports Under SB 253 and SB 261",
+    }),
+    "freshness keys should stay stable across same-story headline variants"
+  );
+
+  assert.notStrictEqual(
+    buildFreshnessKey({
+      tag: "SUSTAINABILITY",
+      entity_keys: ["california"],
+      storyline_hints: ["climate_reporting"],
+      headline: "California Sets August 2026 Deadline for Corporate Climate Reports Under SB 253 and SB 261",
+    }),
+    buildFreshnessKey({
+      tag: "SUSTAINABILITY",
+      entity_keys: ["pjm"],
+      storyline_hints: ["grid_reliability"],
+      headline: "PJM Approves New Transmission Buildout for Grid Reliability",
+    }),
+    "distinct stories should not collapse to the same freshness key"
+  );
+
+  assert.strictEqual(
     isSemanticRepeatItem({
       tag: "SUSTAINABILITY",
       headline: "California Sets August 2026 Deadline for Corporate Climate Reports Under SB 253 and SB 261",
       url: "https://www.esgtoday.com/california-sets-august-2026-deadline-for-corporate-climate-reports-under-sb-253-and-sb-261/",
+      freshness_key: buildFreshnessKey({
+        tag: "SUSTAINABILITY",
+        entity_keys: ["california"],
+        storyline_hints: ["climate_reporting"],
+        headline: "California Sets August 2026 Deadline for Corporate Climate Reports Under SB 253 and SB 261",
+      }),
     }, repeatIndex),
     true,
     "headline variants of the same climate-reporting story should be treated as repeats"

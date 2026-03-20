@@ -73,12 +73,27 @@ function createDigestDeliveryRecordRuntime(deps) {
       sending_at: String(input.sending_at || "").trim() || null,
       sent_at: String(input.sent_at || "").trim() || null,
       failed_at: String(input.failed_at || "").trim() || null,
+      withheld_reason: String(input.withheld_reason || "").trim() || null,
       error: String(input.error || "").trim() || null,
       channels: Array.isArray(input.channels) ? input.channels.slice() : [],
       date_str: String(input.date_str || "").trim() || null,
       quick_scan: String(input.quick_scan || "").trim() || null,
       quality_score: Number.isFinite(Number(input.quality_score)) ? Number(input.quality_score) : null,
       quality_band: String(input.quality_band || "").trim() || null,
+      requested_count: Math.max(0, Number(input.requested_count || 0)) || null,
+      freshness_block_count: Math.max(0, Number(input.freshness_block_count || 0)),
+      semantic_repeat_block_count: Math.max(0, Number(input.semantic_repeat_block_count || 0)),
+      alternate_queries_used: Math.max(0, Number(input.alternate_queries_used || 0)),
+      candidate_pool_before_dedup: Number.isFinite(Number(input.candidate_pool_before_dedup))
+        ? Number(input.candidate_pool_before_dedup)
+        : null,
+      candidate_pool_after_dedup: Number.isFinite(Number(input.candidate_pool_after_dedup))
+        ? Number(input.candidate_pool_after_dedup)
+        : null,
+      fallback_reason: String(input.fallback_reason || "").trim() || null,
+      refill_count: Math.max(0, Number(input.refill_count || 0)),
+      thin_pool: input.thin_pool === true,
+      dominant_failure_mode: String(input.dominant_failure_mode || "").trim() || null,
       items: Array.isArray(input.items) ? input.items.slice() : [],
     };
   }

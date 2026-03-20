@@ -73,6 +73,8 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(selectedOut.repeatPenalty, 0.5);
   assert.strictEqual(selectedOut.rankingPolicy.minBaseScoreForFinal, 6.5);
   assert.strictEqual(selectedOut.depthPolicy.defaultItemCount, 5);
+  assert.strictEqual(selectedOut.selectionDiagnostics.candidate_pool_before_dedup, 3);
+  assert.strictEqual(selectedOut.selectionDiagnostics.candidate_pool_after_dedup, 3);
   assert.ok(logs.some((line) => line.includes("Cross-day dedup removed")));
   assert.ok(logs.some((line) => line.includes("Freshness penalty active")));
   assert.strictEqual(incidents.length, 0);

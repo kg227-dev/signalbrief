@@ -55,7 +55,7 @@ const {
         metadata: {
           quality_score: 81.5,
           quality_band: "strong",
-          items: [{ index: 1, headline: "Fresh item", url: "https://example.com/fresh", tag: "AI" }],
+          items: [{ index: 1, headline: "Fresh item", url: "https://example.com/fresh", tag: "AI", freshness_key: "ai|fresh" }],
         },
       },
       {
@@ -78,7 +78,17 @@ const {
     loadDigestSnapshotByRunId: () => ({
       sent_at: "2026-03-20T11:01:20.000Z",
       version: 1,
-      items: [{ index: 1, headline: "Fresh item", url: "https://example.com/fresh", tag: "AI" }],
+      requested_count: 5,
+      freshness_block_count: 2,
+      semantic_repeat_block_count: 2,
+      alternate_queries_used: 3,
+      candidate_pool_before_dedup: 18,
+      candidate_pool_after_dedup: 7,
+      fallback_reason: "min_count_backfill",
+      refill_count: 2,
+      thin_pool: true,
+      dominant_failure_mode: "repeat",
+      items: [{ index: 1, headline: "Fresh item", url: "https://example.com/fresh", tag: "AI", freshness_key: "ai|fresh" }],
     }),
     loadLatestDigestSnapshot: () => null,
   });
@@ -91,6 +101,12 @@ const {
   assert.strictEqual(row.mode, "scheduled");
   assert.strictEqual(row.quality_score, 81.5);
   assert.strictEqual(row.sent_item_count, 1);
+  assert.strictEqual(row.requested_count, 5);
+  assert.strictEqual(row.freshness_block_count, 2);
+  assert.strictEqual(row.alternate_queries_used, 3);
+  assert.strictEqual(row.thin_pool, true);
+  assert.strictEqual(row.dominant_failure_mode, "repeat");
+  assert.strictEqual(row.sent_items[0].freshness_key, "ai|fresh");
   assert.deepStrictEqual(row.channels, ["email"]);
   assert.strictEqual(row.engagement.opens, 1);
   assert.strictEqual(row.engagement.clicks, 1);

@@ -6,6 +6,7 @@ const {
   normalizeTopicToken,
   topicsRelated,
 } = require("./topic-domain-runtime");
+const { buildFreshnessKey } = require("../runtime/repeat-freshness-runtime");
 
 const STANDARD_TOPIC_TOKENS = new Set([
   "healthcare",
@@ -544,10 +545,10 @@ function computeStrategicValue(item, sourceInfo, routineItemScore, contentFlags)
   if (flags.has("trial_readout")) bonus += 0.08;
   if (flags.has("regulatory")) bonus += 0.08;
   if (flags.has("m_and_a")) bonus += 0.08;
-  if (flags.has("guidance")) bonus += 0.04;
-  if (flags.has("earnings")) bonus += 0.03;
+  if (flags.has("guidance")) bonus -= 0.02;
+  if (flags.has("earnings")) bonus -= 0.02;
   if (flags.has("product_launch")) bonus += 0.03;
-  if (flags.has("generic_commentary")) bonus -= 0.14;
+  if (flags.has("generic_commentary")) bonus -= 0.20;
   if (flags.has("evergreen_trend")) bonus -= 0.12;
   if (flags.has("thin_listicle")) bonus -= 0.10;
   if (flags.has("conference_recap")) bonus -= 0.06;
@@ -609,6 +610,13 @@ function annotateEditorialSignals(items = []) {
         ...item,
         entity_keys: entityKeys,
         storyline_hints: storylineHints,
+      }),
+      freshness_key: buildFreshnessKey({
+        ...item,
+        tag: item?.tag,
+        entity_keys: entityKeys,
+        storyline_hints: storylineHints,
+        content_flags: contentFlags,
       }),
     };
   });
@@ -783,6 +791,12 @@ function buildStorylineCandidates(items = []) {
         entity_keys: cluster.entity_keys,
         storyline_hints: cluster.storyline_hints,
       }),
+      freshness_key: buildFreshnessKey({
+        ...(cluster.representative || {}),
+        entity_keys: cluster.entity_keys,
+        storyline_hints: cluster.storyline_hints,
+        content_flags: Array.isArray(cluster.representative?.content_flags) ? cluster.representative.content_flags : [],
+      }),
     };
   });
 }
@@ -792,7 +806,7 @@ function applyStrategicQualityGate(items = [], opts = {}) {
   if (!candidates.length) return [];
 
   const minStrategicValue = clamp(opts.minStrategicValue != null ? opts.minStrategicValue : 0.34, 0, 1);
-  const maxRoutineScore = clamp(opts.maxRoutineScore != null ? opts.maxRoutineScore : 0.74, 0, 1);
+  const maxRoutineScore = clamp(opts.maxRoutineScore != null ? opts.maxRoutineScore : 0.65, 0, 1);
   const minKeep = Math.max(1, Number(opts.minKeep || 3));
 
   const kept = candidates.filter((item) => (

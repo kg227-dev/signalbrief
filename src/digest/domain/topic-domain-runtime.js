@@ -326,9 +326,18 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const signals = computeTopicSignals(item, userTopics);
     const topicMatch = signals.topicMatch;
     const base = typeof item?.baseScore === "number" ? item.baseScore : 5.0;
-    const weight = matchWeightToTag(item?.tag, topicWeights);
-    const positivePreferenceBoost = clamp(weight / 5, 0, 1);
-    const negativePreferencePenalty = clamp(Math.abs(Math.min(weight, 0)) / 5, 0, 1);
+    const tagWeight = matchWeightToTag(item?.tag, topicWeights);
+    // Also check content_flags for negative weight matches (e.g. M&A items tagged as HEALTHCARE)
+    const FLAG_TO_WEIGHT_KEY = { "m_and_a": "M&A", "regulatory": "POLICY×REGULATORY" };
+    const contentFlags = Array.isArray(item?.content_flags) ? item.content_flags : [];
+    const flagNegWeights = contentFlags
+      .map((f) => matchWeightToTag(FLAG_TO_WEIGHT_KEY[f] || f, topicWeights))
+      .filter((w) => w < 0);
+    const effectiveWeight = flagNegWeights.length > 0
+      ? Math.min(tagWeight, ...flagNegWeights)
+      : tagWeight;
+    const positivePreferenceBoost = clamp(effectiveWeight / 5, 0, 1);
+    const negativePreferencePenalty = clamp(Math.abs(Math.min(effectiveWeight, 0)) / 5, 0, 1);
     const topicalRelevance = normalizeTopicRelevance(topicMatch);
     const customRelevance = signals.customKeywordMatch ? 1 : 0;
     const strategicImportance = clamp(
@@ -388,11 +397,11 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const rawScore = clamp(
       0.16 * topicalRelevance
       + 0.07 * customRelevance
-      + 0.26 * strategicImportance
+      + 0.21 * strategicImportance
       + 0.13 * novelty
       + 0.20 * sourceAuthority
       + 0.04 * multiSourceConfirmation
-      + 0.03 * recency
+      + 0.08 * recency
       + 0.05 * positivePreferenceBoost
       + 0.03 * originalitySignal
       + 0.03 * topicDomainFit
@@ -491,7 +500,10 @@ function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
   const alreadyCovered = base.some((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
   if (alreadyCovered) return base;
 
-  const fallbackCandidate = scored.find((item) => itemMatchesAnyCustomKeyword(item, customKeywords));
+  const fallbackCandidates = scored
+    .filter((item) => !item?.hard_exclude && itemMatchesAnyCustomKeyword(item, customKeywords))
+    .sort((a, b) => Number(b?.strategic_value || 0) - Number(a?.strategic_value || 0));
+  const fallbackCandidate = fallbackCandidates[0] || null;
   if (!fallbackCandidate) return base;
 
   const replaced = base.slice(0, Math.max(0, count - 1));

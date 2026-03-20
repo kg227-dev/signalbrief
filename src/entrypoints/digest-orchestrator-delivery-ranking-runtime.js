@@ -5,6 +5,84 @@ const {
   isSemanticRepeatItem,
 } = require("../digest/runtime/repeat-freshness-runtime");
 
+function isStrictFreshnessMode(mode) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  return normalized === "scheduled";
+}
+
+function isTopFitItem(item) {
+  const topicMatch = Number(item?.topicMatch || 0);
+  return topicMatch >= 7 || (Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword"));
+}
+
+function applyTopFitCoverageFloor(items, requestedCount, minimumTopFit = 3) {
+  const arr = Array.isArray(items) ? items : [];
+  const count = Math.max(1, Number(requestedCount || 5));
+  const floor = Math.min(count, Math.max(0, Number(minimumTopFit || 0)));
+  if (!arr.length || floor <= 0) return arr.slice();
+
+  const topFit = [];
+  const other = [];
+  for (const item of arr) {
+    if (isTopFitItem(item)) topFit.push(item);
+    else other.push(item);
+  }
+  if (topFit.length >= floor) {
+    const head = topFit.slice(0, floor);
+    const used = new Set(head.map((item) => `${item?.url || ""}::${item?.headline || ""}`));
+    const tail = [...topFit.slice(floor), ...other].filter((item) => {
+      const key = `${item?.url || ""}::${item?.headline || ""}`;
+      if (used.has(key)) return false;
+      used.add(key);
+      return true;
+    });
+    return [...head, ...tail];
+  }
+  return arr.slice();
+}
+
+function countWeakSourceItems(items = []) {
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const sourceAuthority = Number(item?.source_authority || 0);
+    const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
+    const routineScore = Number(item?.routine_item_score || 0);
+    return sourceAuthority < 0.55
+      || sourceTier === "corporate"
+      || sourceTier === "weak"
+      || sourceTier === "suspect"
+      || routineScore >= 0.6;
+  }).length;
+}
+
+function averageMetric(items = [], field) {
+  const values = (Array.isArray(items) ? items : [])
+    .map((item) => Number(item?.[field]))
+    .filter((value) => Number.isFinite(value));
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function deriveDominantFailureMode({
+  finalItems,
+  requestedCount,
+  freshnessBlockCount,
+  thinPool,
+}) {
+  const items = Array.isArray(finalItems) ? finalItems : [];
+  if (thinPool || items.length < Math.max(1, Number(requestedCount || 0))) return "thin_pool";
+  if (freshnessBlockCount > 0) return "repeat";
+
+  const weakSourceCount = countWeakSourceItems(items);
+  if (items.length > 0 && weakSourceCount >= Math.ceil(items.length / 2)) return "weak_source";
+
+  const avgTopicMatch = averageMetric(items, "topicMatch");
+  const topFitCount = items.filter(isTopFitItem).length;
+  const requiredTopFit = Math.min(3, Math.max(1, Number(requestedCount || 0)), items.length);
+  if ((requiredTopFit > 0 && topFitCount < requiredTopFit) || avgTopicMatch < 4.5) return "topic_fit";
+
+  return "unknown";
+}
+
 function createDigestOrchestratorDeliveryRankingRuntime(deps) {
   const {
     CONFIG,
@@ -66,6 +144,8 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       rankingPolicy,
       recentDigestRecords,
       nowIso,
+      deliveryMode,
+      runDiagnostics,
     } = params;
 
     const prefs = user.preferences || {};
@@ -118,30 +198,44 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       : userItems;
 
     const requestedCount = Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5);
+    const strictFreshness = isStrictFreshnessMode(deliveryMode);
+    const freshnessLookbackDigests = strictFreshness
+      ? Math.max(1, Number(CONFIG.digest.scheduledFreshnessWindowDays || 5))
+      : Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3));
     const perUserFreshnessMin = Math.max(1, Math.min(requestedCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
     const suppression = suppressRecentlySentForUser(userItems, user, {
-      maxDigests: Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3)),
+      maxDigests: freshnessLookbackDigests,
       minItems: perUserFreshnessMin,
     });
-    if (suppression.removed > 0) {
+    if (strictFreshness && suppression.removed > 0) {
       userItems = suppression.items;
       log(`  [freshness-user] ${user.email || user.chatId}: removed ${suppression.removed} recent repeat(s)`);
+    } else if (!strictFreshness && suppression.removed > 0) {
+      log(`  [freshness-soft] ${user.email || user.chatId}: would remove ${suppression.removed} recent repeat(s) in scheduled mode`);
     }
 
-    const semanticFreshness = filterFreshCandidates(userItems, {
-      globalRepeatIndex: repeatIndex,
-      userRepeatIndex: recentUserRepeatIndex,
+    const semanticPreviewBase = strictFreshness ? userItems : suppression.items;
+    const semanticFreshness = filterFreshCandidates(semanticPreviewBase, {
+      globalRepeatIndex: strictFreshness ? repeatIndex : null,
+      userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
     });
-    if (semanticFreshness.removedGlobal > 0 || semanticFreshness.removedUser > 0) {
+    if (strictFreshness && (semanticFreshness.removedGlobal > 0 || semanticFreshness.removedUser > 0)) {
       userItems = semanticFreshness.items;
       log(
         `  [freshness-semantic] ${user.email || user.chatId}: removed ${semanticFreshness.removedGlobal} global and ${semanticFreshness.removedUser} per-user storyline repeat(s)`
       );
+    } else if (!strictFreshness && (semanticFreshness.removedGlobal > 0 || semanticFreshness.removedUser > 0)) {
+      log(
+        `  [freshness-soft] ${user.email || user.chatId}: would remove ${semanticFreshness.removedGlobal} global and ${semanticFreshness.removedUser} per-user storyline repeat(s) in scheduled mode`
+      );
     }
 
     const minStrategicValue = Math.max(0, Math.min(1, Number(CONFIG.digest.minStrategicValue ?? rankingPolicy.minStrategicValue ?? 0.34)));
-    const maxRoutineScore = Math.max(0, Math.min(1, Number(CONFIG.digest.maxRoutineScore ?? rankingPolicy.maxRoutineScore ?? 0.74)));
+    const maxRoutineScore = Math.max(0, Math.min(1, Number(CONFIG.digest.maxRoutineScore ?? rankingPolicy.maxRoutineScore ?? 0.65)));
     const minSignalScoreForFinal = Number(CONFIG.digest.minSignalScoreForFinal ?? rankingPolicy.minSignalScoreForFinal ?? 5.0);
+    let qualityBackfillCount = 0;
+    let minCountBackfillCount = 0;
+    let emergencyFallbackCount = 0;
     const qualityEligible = userItems.filter((item) => (
       !item?.hard_exclude
       && Number(item?.strategic_value || 0) >= minStrategicValue
@@ -156,12 +250,13 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           .filter((item) => !item?.hard_exclude && !qualityUrls.has(item.url))
           , {
             currentUrls: qualityUrls,
-            globalRepeatIndex: repeatIndex,
-            userRepeatIndex: recentUserRepeatIndex,
+            globalRepeatIndex: strictFreshness ? repeatIndex : null,
+            userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
           }
         ).items.slice(0, requestedCount - qualityEligible.length);
         userItems = [...qualityEligible, ...backfill];
         if (backfill.length > 0) {
+          qualityBackfillCount = backfill.length;
           log(`  [quality-backfill] added ${backfill.length} item(s) to reach ${requestedCount}`);
         }
       } else {
@@ -175,6 +270,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       log(`  [post-sort] ${userItems.map((item) => `${item.tag}(${item.relevanceScore})`).join(", ")}`);
     }
 
+    userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
     userItems = reserveCustomKeywordSlot(userItems, requestedCount, customKeywords);
 
     // Minimum-count backfill: if we have fewer than requestedCount items,
@@ -197,12 +293,13 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           .sort((a, b) => b.relevanceScore - a.relevanceScore),
         {
           currentUrls,
-          globalRepeatIndex: repeatIndex,
-          userRepeatIndex: recentUserRepeatIndex,
+          globalRepeatIndex: strictFreshness ? repeatIndex : null,
+          userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
         }
       ).items.slice(0, requestedCount - userItems.length);
       if (poolCandidates.length > 0) {
         userItems = [...userItems, ...poolCandidates];
+        minCountBackfillCount = poolCandidates.length;
         log(`  [min-count-backfill] added ${poolCandidates.length} item(s) from enriched pool to reach ${userItems.length}/${requestedCount}`);
       }
     }
@@ -226,8 +323,8 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           .filter((item) => Number(item?.routine_item_score || 0) <= maxRoutineScore)
           .filter((item) => Number(item?.strategic_value || 0) >= (minStrategicValue * 0.9)),
         {
-          globalRepeatIndex: repeatIndex,
-          userRepeatIndex: recentUserRepeatIndex,
+          globalRepeatIndex: strictFreshness ? repeatIndex : null,
+          userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
         }
       ).items.slice(0, emergencyCount);
       const emergencyCapped = typeof applyEntityCoverageCap === "function"
@@ -238,6 +335,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       if (emergencyDeliverable.length > 0) {
         userItems = emergencyDeliverable;
         wasFiltered = false;
+        emergencyFallbackCount = emergencyDeliverable.length;
         log(`⚠️ Emergency fallback items used for ${user.email || user.chatId} (count=${emergencyDeliverable.length})`);
       }
     }
@@ -246,9 +344,48 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       throw new Error("No deliverable items after emergency fallback");
     }
 
+    userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
+
+    const freshnessBlockCount = Math.max(0, Number(suppression.removed || 0))
+      + Math.max(0, Number(semanticFreshness.removedGlobal || 0))
+      + Math.max(0, Number(semanticFreshness.removedUser || 0));
+    const semanticRepeatBlockCount = Math.max(0, Number(suppression.storyline_suppressed || 0))
+      + Math.max(0, Number(suppression.freshness_suppressed || 0))
+      + Math.max(0, Number(suppression.semantic_suppressed || 0))
+      + Math.max(0, Number(semanticFreshness.removedGlobal || 0))
+      + Math.max(0, Number(semanticFreshness.removedUser || 0));
+    const thinPool = userItems.length < requestedCount;
+    let fallbackReason = null;
+    if (qualityBackfillCount > 0) fallbackReason = "quality_backfill";
+    if (minCountBackfillCount > 0) fallbackReason = "min_count_backfill";
+    if (emergencyFallbackCount > 0) fallbackReason = "emergency_fallback";
+    if (!fallbackReason && thinPool) fallbackReason = "thin_pool";
+
     return {
       userItems,
       wasFiltered,
+      diagnostics: {
+        requested_count: requestedCount,
+        strict_freshness_applied: strictFreshness,
+        freshness_block_count: freshnessBlockCount,
+        semantic_repeat_block_count: semanticRepeatBlockCount,
+        alternate_queries_used: Math.max(0, Number(runDiagnostics?.alternate_queries_used || 0)),
+        candidate_pool_before_dedup: Number.isFinite(Number(runDiagnostics?.candidate_pool_before_dedup))
+          ? Number(runDiagnostics.candidate_pool_before_dedup)
+          : null,
+        candidate_pool_after_dedup: Number.isFinite(Number(runDiagnostics?.candidate_pool_after_dedup))
+          ? Number(runDiagnostics.candidate_pool_after_dedup)
+          : null,
+        fallback_reason: fallbackReason,
+        refill_count: qualityBackfillCount + minCountBackfillCount + emergencyFallbackCount,
+        thin_pool: thinPool,
+        dominant_failure_mode: deriveDominantFailureMode({
+          finalItems: userItems,
+          requestedCount,
+          freshnessBlockCount,
+          thinPool,
+        }),
+      },
     };
   }
 

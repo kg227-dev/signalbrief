@@ -103,6 +103,7 @@ function createArchivePersistenceRuntime(deps) {
         entity_keys: Array.isArray(i.entity_keys) ? i.entity_keys : [],
         storyline_id: i.storyline_id || null,
         storyline_key: i.storyline_key || null,
+        freshness_key: i.freshness_key || null,
         storyline_size: i.storyline_size != null ? i.storyline_size : null,
         supporting_sources: Array.isArray(i.supporting_sources) ? i.supporting_sources : [],
         supporting_headlines: Array.isArray(i.supporting_headlines) ? i.supporting_headlines : [],

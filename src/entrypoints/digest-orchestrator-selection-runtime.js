@@ -42,7 +42,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       targetCount: selectionTarget,
       minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || depthPolicy.defaultItemCount || 5)),
     });
-    const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 72);
+    const scheduledDefaultMaxAgeHours = runMode === "scheduled" ? 48 : 72;
+    const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || scheduledDefaultMaxAgeHours);
     const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;
     const freshItems = dedupRes.items.filter((item) => !ageFilter(item, maxArticleAgeHours));
     const staleRemoved = dedupRes.items.length - freshItems.length;
@@ -123,6 +124,12 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       repeatPenalty,
       rankingPolicy,
       depthPolicy,
+      selectionDiagnostics: {
+        candidate_pool_before_dedup: Array.isArray(allItems) ? allItems.length : 0,
+        candidate_pool_after_dedup: dedupedItems.length,
+        archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
+        stale_removed_count: Math.max(0, Number(staleRemoved || 0)),
+      },
     };
   }
 

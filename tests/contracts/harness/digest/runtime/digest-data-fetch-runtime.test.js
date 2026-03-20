@@ -67,6 +67,7 @@ async function testCustomFallbackFlowWithProviderPolicy() {
   assert.strictEqual(result.diagnostics.failed_calls, 1);
   assert.strictEqual(result.diagnostics.successful_calls, 1);
   assert.strictEqual(result.diagnostics.status_counts[503], 1);
+  assert.strictEqual(result.diagnostics.attempts_executed, 2);
   assert.deepStrictEqual(callOpts[0].retryStatusCodes, [429, 503]);
   assert.ok(callOpts.every((opts) => opts.timeoutMs === 4321));
 }

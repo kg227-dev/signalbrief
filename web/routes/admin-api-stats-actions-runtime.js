@@ -26,6 +26,7 @@ const {
   buildSummaryPayload,
   buildHealthPayload,
 } = require("./admin-api-stats-payload-runtime");
+const { buildDigestInsights } = require("../services/admin-digest-insights-runtime");
 
 function resolveSchedulerHeartbeatLoader({
   getCachedOrRefreshSchedulerHeartbeat,
@@ -82,6 +83,7 @@ function buildAdminStatsPayload({
     CONFIG,
     estimateSandboxCost,
     getRuntimeStateDiagnostics,
+    buildRecentDigestsExport,
   } = deps;
 
   const usersAll = allUsers();
@@ -199,6 +201,10 @@ function buildAdminStatsPayload({
   const runtimeStateDiagnostics = typeof getRuntimeStateDiagnostics === "function"
     ? getRuntimeStateDiagnostics()
     : null;
+  const recentDigests = typeof buildRecentDigestsExport === "function"
+    ? buildRecentDigestsExport({ days: 7 })
+    : { rows: [] };
+  const digestInsights = buildDigestInsights(recentDigests.rows, { days: 7 });
   const health = buildHealthPayload({
     runs,
     deliveryWarnings,
@@ -225,6 +231,7 @@ function buildAdminStatsPayload({
     engagement,
     referrals,
     admin_messages: adminMessages,
+    digest_insights: digestInsights,
   };
 }
 

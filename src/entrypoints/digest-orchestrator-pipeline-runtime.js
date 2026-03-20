@@ -34,7 +34,7 @@ function createDigestOrchestratorPipelineRuntime(deps) {
     const storylineCandidates = buildStorylineCandidates(enrichedItems);
     const filtered = applyStrategicQualityGate(storylineCandidates, {
       minStrategicValue: 0.34,
-      maxRoutineScore: 0.74,
+      maxRoutineScore: 0.65,
       minKeep: Math.min(
         Math.max(2, Number(selectionTarget || 3)),
         Math.max(3, storylineCandidates.length)

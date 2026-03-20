@@ -42,6 +42,7 @@ function sortedKeys(obj) {
       "allItems",
       "customFetchCalls",
       "customTags",
+      "fetchDiagnostics",
       "selectionTarget",
       "standardFetchCalls",
       "standardFetchCallsPlanned",
@@ -87,6 +88,7 @@ function sortedKeys(obj) {
       "repeatIndex",
       "repeatPenalty",
       "selected",
+      "selectionDiagnostics",
     ],
     "selection stage output shape must remain parity-stable"
   );
@@ -146,7 +148,7 @@ function sortedKeys(obj) {
   });
   assert.deepStrictEqual(
     sortedKeys(deliveryOut),
-    ["userItems", "wasFiltered"],
+    ["diagnostics", "userItems", "wasFiltered"],
     "delivery ranking stage output shape must remain parity-stable"
   );
 })();

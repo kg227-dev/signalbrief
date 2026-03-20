@@ -1207,6 +1207,26 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     </table>
   </div>
 
+  <div class="section-title">Digest underperformance (last 7 days)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Digests</th>
+          <th>Avg quality</th>
+          <th>Avg items</th>
+          <th>Repeat blocks</th>
+          <th>Refills</th>
+          <th>Failure mode</th>
+        </tr>
+      </thead>
+      <tbody id="digestInsightsBody">
+        <tr><td colspan="7" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- Run log -->
   <div class="section-head" id="runsSection">
     <div>
@@ -1528,6 +1548,41 @@ function renderRunDigestLink(run) {
   if (!href) return `<span style="color:var(--text-secondary);">—</span>`;
   return `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">view digest →</a>`;
 }
+function failureModeLabel(mode) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === "repeat") return "Repeat";
+  if (normalized === "thin_pool") return "Thin pool";
+  if (normalized === "weak_source") return "Weak source";
+  if (normalized === "topic_fit") return "Topic fit";
+  return "Unknown";
+}
+function renderDigestInsights(insights) {
+  const body = document.getElementById("digestInsightsBody");
+  if (!body) return;
+  const users = Array.isArray(insights?.users) ? insights.users : [];
+  if (!users.length) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">No recent digest insight data yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = users.map((row) => {
+    const email = String(row.user_email || row.recipient || "").trim();
+    const userHref = email ? `/admin/user?email=${encodeURIComponent(email)}` : "";
+    const userLabel = email || row.recipient || row.user_id || "Unknown user";
+    const quality = Number(row.avg_quality);
+    const qualityTone = Number.isFinite(quality)
+      ? (quality >= 85 ? "#059669" : (quality >= 70 ? "#D97706" : "#DC2626"))
+      : "var(--text-secondary)";
+    return `<tr>
+      <td>${userHref ? `<a href="${userHref}" style="color:var(--accent);text-decoration:none;">${esc(userLabel)}</a>` : esc(userLabel)}</td>
+      <td>${Math.max(0, Number(row.digests || 0))}</td>
+      <td><span class="mono" style="color:${qualityTone};">${Number.isFinite(quality) ? quality.toFixed(1) : "—"}</span></td>
+      <td class="mono">${Number.isFinite(Number(row.avg_item_count)) ? Number(row.avg_item_count).toFixed(1) : "—"}</td>
+      <td class="mono">${Math.max(0, Number(row.repeat_blocks || 0))}</td>
+      <td class="mono">${Math.max(0, Number(row.refill_count || 0))}</td>
+      <td>${esc(failureModeLabel(row.dominant_failure_mode))}</td>
+    </tr>`;
+  }).join("");
+}
 function fmtDebugNumber(value, digits = 2) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "—";
@@ -1650,6 +1705,20 @@ function renderRunDebugPanel(run) {
   }).join("");
 
   const qualityPills = renderDigestQualityComponents(row?.quality_components);
+  const diagnosticPills = renderDebugPills([
+    Number.isFinite(Number(row?.freshness_block_count)) && Number(row.freshness_block_count) > 0
+      ? { label: "repeat blocks", value: String(Number(row.freshness_block_count)) }
+      : null,
+    Number.isFinite(Number(row?.refill_count)) && Number(row.refill_count) > 0
+      ? { label: "refills", value: String(Number(row.refill_count)) }
+      : null,
+    Number.isFinite(Number(row?.alternate_queries_used)) && Number(row.alternate_queries_used) > 0
+      ? { label: "alt queries", value: String(Number(row.alternate_queries_used)) }
+      : null,
+    row?.thin_pool === true ? { label: "pool", value: "thin" } : null,
+    row?.fallback_reason ? { label: "fallback", value: row.fallback_reason } : null,
+    row?.dominant_failure_mode ? { label: "issue", value: row.dominant_failure_mode } : null,
+  ]);
   const technicalSummary = renderDebugPills([
     ...entities.map((entity) => ({ label: "entity", value: entity })),
     ...storylineIds.map((storylineId) => ({ label: "story", value: storylineId })),
@@ -1661,6 +1730,7 @@ function renderRunDebugPanel(run) {
       ${summaryLine ? `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#F8FAFC;font-size:12px;font-weight:600;color:var(--text);line-height:1.5;">${esc(summaryLine)}</div>` : ""}
       ${metaLine ? `<div style="font-size:11px;color:var(--text-secondary);line-height:1.45;">${metaLine}</div>` : ""}
       ${qualityPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${qualityPills}</div>` : ""}
+      ${diagnosticPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${diagnosticPills}</div>` : ""}
       ${itemsHtml || `<div style="font-size:11px;color:var(--text-secondary);">No item-level debug captured for this row.</div>`}
       ${hiddenItemCount > 0 ? `<div style="font-size:11px;color:var(--text-secondary);">+${hiddenItemCount} more signal${hiddenItemCount === 1 ? "" : "s"} in this delivery</div>` : ""}
       ${technicalSummary ? `<details><summary style="cursor:pointer;color:var(--text-secondary);font-size:11px;font-weight:500;">technical debug</summary><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">${technicalSummary}</div></details>` : ""}
@@ -3564,7 +3634,7 @@ async function load(silent = false) {
       return;
     }
 
-    const { summary, health, runs, per_user, roster, admin_messages, engagement } = data;
+    const { summary, health, runs, per_user, roster, admin_messages, engagement, digest_insights } = data;
     latestRuns = Array.isArray(runs) ? runs.slice() : [];
     const qualitySummary = summary && summary.quality ? summary.quality : null;
     const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
@@ -3581,6 +3651,7 @@ async function load(silent = false) {
     renderTestTargets(roster || []);
     renderTestDigestStatus({ state: "idle" });
     renderAdminMessages(admin_messages || []);
+    renderDigestInsights(digest_insights || {});
     renderExecutiveSummary(health || null);
 
     if (summary.month_label) {

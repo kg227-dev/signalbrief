@@ -50,7 +50,17 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
       sent_at: "2026-03-13T11:05:00.000Z",
       date_str: "Friday, March 13, 2026",
       quick_scan: "Pfizer pivots",
-      items: [{ index: 1, headline: "Pfizer pivots", entity_keys: ["pfizer"], storyline_key: "pfizer|pipeline" }],
+      requested_count: 5,
+      freshness_block_count: 2,
+      semantic_repeat_block_count: 2,
+      alternate_queries_used: 3,
+      candidate_pool_before_dedup: 18,
+      candidate_pool_after_dedup: 7,
+      fallback_reason: "min_count_backfill",
+      refill_count: 2,
+      thin_pool: true,
+      dominant_failure_mode: "repeat",
+      items: [{ index: 1, headline: "Pfizer pivots", entity_keys: ["pfizer"], storyline_key: "pfizer|pipeline", freshness_key: "pfizer|pipeline" }],
     });
     assert.strictEqual(selectedUpdate.ok, true);
 
@@ -121,6 +131,10 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     assert.ok(scheduledByRun);
     assert.strictEqual(scheduledByRun.mode, "scheduled");
     assert.strictEqual(scheduledByRun.items[0].headline, "Pfizer pivots");
+    assert.strictEqual(scheduledByRun.items[0].freshness_key, "pfizer|pipeline");
+    assert.strictEqual(scheduledByRun.requested_count, 5);
+    assert.strictEqual(scheduledByRun.freshness_block_count, 2);
+    assert.strictEqual(scheduledByRun.dominant_failure_mode, "repeat");
     assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-13", "scheduled"), true);
     assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-14", "scheduled"), false);
 

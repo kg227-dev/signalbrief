@@ -94,6 +94,7 @@ function handleUserByEmailRoute({ ctx, deps }) {
     getRecentAutoAdjustmentsForUser,
     countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
+    buildRecentDigestsExport,
   } = deps;
 
   if (!isAdminAuthed(req)) {
@@ -125,11 +126,22 @@ function handleUserByEmailRoute({ ctx, deps }) {
   const archiveDigestCount = Number.isFinite(archiveDigestCountRaw)
     ? Math.max(0, archiveDigestCountRaw)
     : Math.max(0, Number(adminUser?.digests_received || 0));
+  const recentDigests = typeof buildRecentDigestsExport === "function"
+    ? buildRecentDigestsExport({ days: 7 })
+    : { rows: [] };
+  const recentDigestRows = (Array.isArray(recentDigests?.rows) ? recentDigests.rows : [])
+    .filter((row) => (
+      String(row?.user_id || "").trim() === String(adminUser.chatId || "").trim()
+      || String(row?.recipient || "").trim().toLowerCase() === lookup
+      || String(row?.user_email || "").trim().toLowerCase() === lookup
+    ))
+    .slice(0, 14);
   json(res, {
     ...adminUser,
     archive_digest_count: archiveDigestCount,
     auto_adjustments_recent: getRecentAutoAdjustmentsForUser(adminUser, autoLimit),
     latest_digest_record: latestDigestRecord,
+    recent_digests: recentDigestRows,
   });
   return true;
 }

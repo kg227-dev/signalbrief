@@ -18,6 +18,8 @@ const requiredSnippets = [
   "function renderRunDigestQuality(run)",
   "function renderRunDigestLink(run)",
   "function renderRunDebugPanel(run)",
+  'id="digestInsightsBody"',
+  "function renderDigestInsights(insights)",
 ];
 
 for (const snippet of requiredSnippets) {

@@ -170,6 +170,15 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 .digest-delivery-meta {
   display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px;
 }
+.digest-outcome-row {
+  display:flex; flex-direction:column; gap:8px; padding:12px 14px;
+  background:#F9FAFB; border:1px solid var(--border); border-radius:10px;
+}
+.digest-outcome-head {
+  display:flex; justify-content:space-between; gap:12px; align-items:flex-start;
+}
+.digest-outcome-title { font-size:13px; font-weight:700; color:var(--text); }
+.digest-outcome-sub { font-size:12px; color:var(--text-secondary); line-height:1.4; }
 
 /* Action bar */
 .action-bar {
@@ -358,6 +367,13 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="card-heading">Most recent digest items</div>
       <div id="lastDigestMeta" class="digest-delivery-meta"></div>
       <div id="lastDigestList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <div class="form-card" id="digestTimelineCard" style="display:none;">
+      <div class="card-title">Digest outcomes</div>
+      <div class="card-heading">Last 7 days</div>
+      <div id="digestTimelineMeta" class="digest-delivery-meta"></div>
+      <div id="digestTimelineList" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
     <!-- Admin actions -->
@@ -777,6 +793,56 @@ function buildLastDigestPanel(user) {
   }).join('');
 }
 
+function failureModeLabel(mode) {
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (normalized === 'repeat') return 'Repeat';
+  if (normalized === 'thin_pool') return 'Thin pool';
+  if (normalized === 'weak_source') return 'Weak source';
+  if (normalized === 'topic_fit') return 'Topic fit';
+  return 'Unknown';
+}
+
+function buildDigestTimelinePanel(user) {
+  const rows = Array.isArray(user?.recent_digests) ? user.recent_digests : [];
+  if (!rows.length) return;
+  document.getElementById('digestTimelineCard').style.display = '';
+  document.getElementById('digestTimelineMeta').innerHTML = `<span class="debug-pill">${rows.length} recent digest${rows.length === 1 ? '' : 's'}</span>`;
+  document.getElementById('digestTimelineList').innerHTML = rows.map((row) => {
+    const quality = Number(row.quality_score);
+    const qualityTone = Number.isFinite(quality)
+      ? (quality >= 85 ? 'var(--green)' : (quality >= 70 ? 'var(--yellow)' : 'var(--red)'))
+      : 'var(--text-secondary)';
+    const pills = [];
+    if (row.mode) pills.push(`<span class="debug-pill">mode ${esc(row.mode)}</span>`);
+    if (Number.isFinite(Number(row.sent_item_count))) pills.push(`<span class="debug-pill">items ${Number(row.sent_item_count)}</span>`);
+    if (Math.max(0, Number(row.freshness_block_count || 0)) > 0) pills.push(`<span class="debug-pill">repeat blocks ${Math.max(0, Number(row.freshness_block_count || 0))}</span>`);
+    if (Math.max(0, Number(row.refill_count || 0)) > 0) pills.push(`<span class="debug-pill">refills ${Math.max(0, Number(row.refill_count || 0))}</span>`);
+    if (Math.max(0, Number(row.alternate_queries_used || 0)) > 0) pills.push(`<span class="debug-pill">alt queries ${Math.max(0, Number(row.alternate_queries_used || 0))}</span>`);
+    if (row.thin_pool === true) pills.push(`<span class="debug-pill">thin pool</span>`);
+    if (row.fallback_reason) pills.push(`<span class="debug-pill">fallback ${esc(row.fallback_reason)}</span>`);
+    const itemPreview = (Array.isArray(row.sent_items) ? row.sent_items : [])
+      .slice(0, 2)
+      .map((item) => esc(String(item?.headline || '').slice(0, 92)))
+      .filter(Boolean)
+      .join(' · ');
+    const digestHref = row.date_et ? `/digest/${encodeURIComponent(row.date_et)}${row.run_id ? `?run=${encodeURIComponent(row.run_id)}` : ''}` : '';
+    return `
+      <div class="digest-outcome-row">
+        <div class="digest-outcome-head">
+          <div>
+            <div class="digest-outcome-title">${esc(String(row.date_et || 'Unknown date'))} · ${esc(failureModeLabel(row.dominant_failure_mode))}</div>
+            <div class="digest-outcome-sub">${esc(formatEtDateTime(row.run_at_utc || row.sent_at_utc || ''))}</div>
+          </div>
+          <div style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:${qualityTone};">${Number.isFinite(quality) ? quality.toFixed(1) : '—'}</div>
+        </div>
+        ${pills.length ? `<div class="digest-item-debug">${pills.join('')}</div>` : ''}
+        ${itemPreview ? `<div class="digest-outcome-sub">${itemPreview}</div>` : ''}
+        ${digestHref ? `<div><a href="${digestHref}" target="_blank" class="digest-item-link">Open digest ↗</a></div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
 async function logout() {
   await fetch('/api/admin/logout', { method: 'POST' });
   window.location.href = '/admin/login';
@@ -833,6 +899,7 @@ async function init() {
     buildWeightsPanel(user);
     buildAutoLearningPanel(user);
     buildLastDigestPanel(user);
+    buildDigestTimelinePanel(user);
 
     // Account fields
     document.getElementById('name').value = user.name || '';

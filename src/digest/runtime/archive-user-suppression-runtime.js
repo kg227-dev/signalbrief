@@ -47,6 +47,21 @@ function createArchiveUserSuppressionRuntime(deps) {
     return keys;
   }
 
+  function getUserRecentFreshnessKeys(user, opts = {}) {
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+    const keys = new Set();
+    const history = Array.isArray(user?.recent_digest_url_history)
+      ? user.recent_digest_url_history.slice(-maxDigests)
+      : [];
+    for (const row of history) {
+      const freshnessKeys = Array.isArray(row?.freshness_keys) ? row.freshness_keys : [];
+      for (const key of freshnessKeys) {
+        if (key) keys.add(key);
+      }
+    }
+    return keys;
+  }
+
   function getUserRecentRepeatSeedItems(user, opts = {}) {
     const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
     const history = Array.isArray(user?.recent_digest_url_history)
@@ -63,6 +78,10 @@ function createArchiveUserSuppressionRuntime(deps) {
       for (const storylineKey of storylineKeys) {
         seedItems.push({ storyline_key: storylineKey });
       }
+      const freshnessKeys = Array.isArray(row?.freshness_keys) ? row.freshness_keys : [];
+      for (const freshnessKey of freshnessKeys) {
+        seedItems.push({ freshness_key: freshnessKey });
+      }
     }
 
     if (seedItems.length === 0 && Array.isArray(user?.last_digest_items)) {
@@ -76,14 +95,16 @@ function createArchiveUserSuppressionRuntime(deps) {
     const arr = Array.isArray(items) ? items : [];
     const recentUrlKeys = getUserRecentDigestUrlKeys(user, opts);
     const recentStorylineKeys = getUserRecentStorylineKeys(user, opts);
+    const recentFreshnessKeys = getUserRecentFreshnessKeys(user, opts);
     const recentRepeatIndex = buildSemanticRepeatIndex(getUserRecentRepeatSeedItems(user, opts));
-    if (!recentUrlKeys.size && !recentStorylineKeys.size && recentRepeatIndex.recent.length === 0) {
-      return { items: arr, removed: 0, recent_keys: 0, backfilled: 0, storyline_suppressed: 0, semantic_suppressed: 0 };
+    if (!recentUrlKeys.size && !recentStorylineKeys.size && !recentFreshnessKeys.size && recentRepeatIndex.recent.length === 0) {
+      return { items: arr, removed: 0, recent_keys: 0, backfilled: 0, storyline_suppressed: 0, freshness_suppressed: 0, semantic_suppressed: 0 };
     }
 
     const kept = [];
     let removed = 0;
     let storylineSuppressed = 0;
+    let freshnessSuppressed = 0;
     let semanticSuppressed = 0;
     for (const item of arr) {
       const urlKey = normalizeUrlForDedup(item?.url);
@@ -97,6 +118,12 @@ function createArchiveUserSuppressionRuntime(deps) {
         storylineSuppressed++;
         continue;
       }
+      const freshnessKey = String(item?.freshness_key || "").trim();
+      if (freshnessKey && recentFreshnessKeys.has(freshnessKey)) {
+        removed += 1;
+        freshnessSuppressed++;
+        continue;
+      }
       if (isSemanticRepeatItem(item, recentRepeatIndex)) {
         removed += 1;
         semanticSuppressed++;
@@ -108,9 +135,10 @@ function createArchiveUserSuppressionRuntime(deps) {
     return {
       items: kept,
       removed,
-      recent_keys: recentUrlKeys.size + recentStorylineKeys.size + recentRepeatIndex.repeatKeys.size,
+      recent_keys: recentUrlKeys.size + recentStorylineKeys.size + recentFreshnessKeys.size + recentRepeatIndex.repeatKeys.size,
       backfilled: 0,
       storyline_suppressed: storylineSuppressed,
+      freshness_suppressed: freshnessSuppressed,
       semantic_suppressed: semanticSuppressed,
     };
   }
@@ -118,6 +146,7 @@ function createArchiveUserSuppressionRuntime(deps) {
   return {
     getUserRecentDigestUrlKeys,
     getUserRecentStorylineKeys,
+    getUserRecentFreshnessKeys,
     getUserRecentRepeatSeedItems,
     suppressRecentlySentForUser,
   };

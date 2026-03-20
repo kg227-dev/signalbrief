@@ -64,6 +64,7 @@ function createArchiveHistoryRuntime(deps) {
       urlKeys: repeatIndex.urlKeys,
       headlineKeys: repeatIndex.headlineKeys,
       storylineKeys: repeatIndex.storylineKeys,
+      freshnessKeys: repeatIndex.freshnessKeys,
       repeatKeys: repeatIndex.repeatKeys,
       recent: repeatIndex.recent,
     };

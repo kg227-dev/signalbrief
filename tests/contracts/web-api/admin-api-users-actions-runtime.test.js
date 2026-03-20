@@ -25,6 +25,9 @@ if (!source.includes("latest_digest_record: latestDigestRecord")) {
 if (!source.includes("archive_digest_count: archiveDigestCount")) {
   throw new Error("user-by-email handler should expose the canonical archive digest count");
 }
+if (!source.includes("recent_digests: recentDigestRows")) {
+  throw new Error("user-by-email handler should expose recent digest outcomes for admin review");
+}
 
 function buildCtx(body) {
   return {

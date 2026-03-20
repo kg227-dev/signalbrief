@@ -133,6 +133,13 @@ function mergePerplexityDiagnostics(base, extra) {
   };
 }
 
+function countAlternateQueriesUsed(results) {
+  return (Array.isArray(results) ? results : []).reduce((sum, result) => {
+    const attemptsExecuted = Number(result?.diagnostics?.attempts_executed || 0);
+    return sum + Math.max(0, attemptsExecuted - 1);
+  }, 0);
+}
+
 function createDigestOrchestratorFetchRuntime(deps) {
   const {
     CONFIG,
@@ -172,6 +179,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const standardItems = standardResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
     let allItems = standardItems.slice();
     let providerDiagnostics = summarizePerplexityDiagnostics(standardResults);
+    let alternateQueriesUsed = countAlternateQueriesUsed(standardResults);
     logger(`Fetched ${allItems.length} raw items`);
 
     const allStandardEmpty = standardFetchCallsPlanned > 0
@@ -203,6 +211,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       const customResults = await Promise.all(customFetchTargets.map(fetchTopic));
       customFetchCalls = customResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
       const customItems = customResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
+      alternateQueriesUsed += countAlternateQueriesUsed(customResults);
       providerDiagnostics = mergePerplexityDiagnostics(
         providerDiagnostics,
         summarizePerplexityDiagnostics(customResults)
@@ -262,6 +271,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
       standardFetchCallsPlanned,
       standardFetchCalls,
       customFetchCalls,
+      fetchDiagnostics: {
+        alternate_queries_used: alternateQueriesUsed,
+      },
     };
   }
 

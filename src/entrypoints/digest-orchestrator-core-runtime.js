@@ -691,6 +691,7 @@ async function main() {
     standardFetchCallsPlanned,
     standardFetchCalls,
     customFetchCalls,
+    fetchDiagnostics,
   } = await fetchRuntime.orchestrateFetch({
     dueUsers,
     targetChatId,
@@ -715,6 +716,7 @@ async function main() {
     repeatPenalty,
     rankingPolicy,
     depthPolicy,
+    selectionDiagnostics,
   } = await selectionRuntime.selectForEnrichment({
     allItems,
     selectionTarget,
@@ -820,6 +822,11 @@ async function main() {
       deliveryEventSource,
       claudeUsage,
       engagementEvents,
+      runDiagnostics: {
+        alternate_queries_used: Number(fetchDiagnostics?.alternate_queries_used || 0),
+        candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
+        candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
+      },
     });
     deliveredUsers = deliveryResult.deliveredUsers;
     failedUsers = deliveryResult.failedUsers;

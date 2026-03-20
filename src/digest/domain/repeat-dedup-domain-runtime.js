@@ -16,6 +16,8 @@ function createRepeatIndex(items = []) {
   return {
     urlKeys: new Set(recentItems.map((item) => normalizeUrlForDedup(item?.url)).filter(Boolean)),
     headlineKeys: new Set(recentItems.map((item) => headlineFingerprint(item?.headline)).filter(Boolean)),
+    storylineKeys: new Set(recentItems.map((item) => String(item?.storyline_key || "").trim()).filter(Boolean)),
+    freshnessKeys: new Set(recentItems.map((item) => String(item?.freshness_key || "").trim()).filter(Boolean)),
   };
 }
 
@@ -27,9 +29,20 @@ function isRepeatedItem(item, repeatIndex) {
   const headlineKeys = repeatIndex.headlineKeys instanceof Set
     ? repeatIndex.headlineKeys
     : new Set(Array.isArray(repeatIndex.headlineKeys) ? repeatIndex.headlineKeys : []);
+  const storylineKeys = repeatIndex.storylineKeys instanceof Set
+    ? repeatIndex.storylineKeys
+    : new Set(Array.isArray(repeatIndex.storylineKeys) ? repeatIndex.storylineKeys : []);
+  const freshnessKeys = repeatIndex.freshnessKeys instanceof Set
+    ? repeatIndex.freshnessKeys
+    : new Set(Array.isArray(repeatIndex.freshnessKeys) ? repeatIndex.freshnessKeys : []);
   const urlKey = normalizeUrlForDedup(item?.url);
   const headKey = headlineFingerprint(item?.headline);
-  return (urlKey && urlKeys.has(urlKey)) || (headKey && headlineKeys.has(headKey));
+  const storyKey = String(item?.storyline_key || "").trim();
+  const freshnessKey = String(item?.freshness_key || "").trim();
+  return (urlKey && urlKeys.has(urlKey))
+    || (headKey && headlineKeys.has(headKey))
+    || (storyKey && storylineKeys.has(storyKey))
+    || (freshnessKey && freshnessKeys.has(freshnessKey));
 }
 
 function dedupItemsAgainstRepeatIndex(items, repeatIndex, opts = {}) {
@@ -52,18 +65,10 @@ function dedupItemsAgainstRepeatIndex(items, repeatIndex, opts = {}) {
     }
   }
 
-  let backfilled = 0;
-  if (kept.length < minBackfillItems && removed.length > 0) {
-    const addTarget = Math.min(targetCount, minBackfillItems);
-    const add = removed.slice(0, addTarget - kept.length);
-    kept.push(...add);
-    backfilled = add.length;
-  }
-
   return {
     items: kept,
     removed: removed.length,
-    backfilled,
+    backfilled: 0,
   };
 }
 

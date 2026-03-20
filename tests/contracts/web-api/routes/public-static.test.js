@@ -50,6 +50,7 @@ fs.mkdirSync(webDir, { recursive: true });
 fs.mkdirSync(archiveDir, { recursive: true });
 fs.writeFileSync(path.join(webDir, "index.html"), "<script src=\"index.js?v=__ASSET_VERSION__\"></script>");
 fs.writeFileSync(path.join(webDir, "settings.html"), "<script src=\"settings-runtime.js?v=__ASSET_VERSION__\"></script>");
+fs.writeFileSync(path.join(webDir, "admin-source-registry.html"), "<html>source registry</html>");
 
 const deps = {
   path,
@@ -81,6 +82,14 @@ const deps = {
 {
   const handler = createPublicStaticRouteHandler(deps);
   const { handled, res } = invoke(handler, { method: "GET", pathname: "/admin" });
+  assert.strictEqual(handled, "");
+  assert.strictEqual(res.statusCode, 302);
+  assert.ok(String(res.headers.Location || "").startsWith("/admin/login?next="));
+}
+
+{
+  const handler = createPublicStaticRouteHandler(deps);
+  const { handled, res } = invoke(handler, { method: "GET", pathname: "/admin/source-registry" });
   assert.strictEqual(handled, "");
   assert.strictEqual(res.statusCode, 302);
   assert.ok(String(res.headers.Location || "").startsWith("/admin/login?next="));

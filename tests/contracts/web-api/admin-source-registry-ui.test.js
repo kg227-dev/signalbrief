@@ -3,12 +3,12 @@
 const path = require("path");
 const fs = require("fs");
 
-const TARGET_REL = "web/admin.html";
-const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
-const source = fs.readFileSync(TARGET_PATH, "utf8");
+const PAGE_REL = "web/admin-source-registry.html";
+const PAGE_PATH = path.join(process.cwd(), PAGE_REL);
+const pageSource = fs.readFileSync(PAGE_PATH, "utf8");
 
-const requiredSnippets = [
-  "Source registry",
+const requiredPageSnippets = [
+  "Source Registry",
   'id="sourceRegistryInspector"',
   'id="sourceRegistrySuggestionsBody"',
   'id="sourceRegistryOverridesBody"',
@@ -18,10 +18,19 @@ const requiredSnippets = [
   "async function inspectSourceRegistryDomain(domainValue, silent = false)",
   "async function saveSourceRegistryDomain()",
   "async function resetSourceRegistryDomain()",
+  "/api/admin/source-registry",
+  "/admin/sandbox",
 ];
 
-for (const snippet of requiredSnippets) {
-  if (!source.includes(snippet)) {
-    throw new Error(`admin source registry UI is missing required snippet: ${snippet}`);
+for (const snippet of requiredPageSnippets) {
+  if (!pageSource.includes(snippet)) {
+    throw new Error(`admin source registry page is missing required snippet: ${snippet}`);
+  }
+}
+
+const adminSource = fs.readFileSync(path.join(process.cwd(), "web/admin.html"), "utf8");
+for (const snippet of ["/admin/sandbox", "/admin/source-registry"]) {
+  if (!adminSource.includes(snippet)) {
+    throw new Error(`admin page nav is missing required snippet: ${snippet}`);
   }
 }

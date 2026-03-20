@@ -77,9 +77,11 @@ withEnv({
 }, () => {
   adminAuthRuntime.resetAdminAuthState();
   const readReq = buildReq({ url: "/api/admin/stats", method: "GET" });
+  const htmlReq = buildReq({ url: "/admin/source-registry", method: "GET" });
   const writeReq = buildReq({ url: "/api/admin/stats", method: "POST" });
   const remoteReq = buildReq({ url: "/api/admin/stats", method: "GET", remoteAddress: "10.0.0.9" });
   assert.strictEqual(policy.isAdminAuthed(readReq), true, "local bypass should allow read-only local admin route");
+  assert.strictEqual(policy.isAdminAuthed(htmlReq), true, "local bypass should allow source registry html route");
   assert.strictEqual(policy.getAdminActor(readReq), "local-bypass");
   assert.strictEqual(policy.isAdminAuthed(writeReq), false, "local bypass should not allow write method");
   assert.strictEqual(policy.isAdminAuthed(remoteReq), false, "local bypass should reject non-local source IP");

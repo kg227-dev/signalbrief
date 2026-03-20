@@ -947,6 +947,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     <div class="header-top">
       <h1><span class="brand">SignalBrief</span> Admin</h1>
       <a href="/admin/sandbox" class="badge" style="text-decoration:none;cursor:pointer;">Sandbox</a>
+      <a href="/admin/source-registry" class="badge" style="text-decoration:none;cursor:pointer;">Source Registry</a>
       <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
@@ -1223,65 +1224,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
       </thead>
 	      <tbody id="digestInsightsBody">
 	        <tr><td colspan="7" class="empty">Loading…</td></tr>
-	      </tbody>
-	    </table>
-	  </div>
-
-	  <div class="section-head" id="sourceRegistrySection">
-	    <div>
-	      <div class="section-title" style="margin-bottom:0;">Source registry</div>
-	      <div class="section-subcopy">Global source policy overrides. Hard blocks exclude a domain from all digests.</div>
-	    </div>
-	    <div class="table-toolbar-controls">
-	      <input
-	        id="sourceRegistrySearch"
-	        class="table-search"
-	        type="text"
-	        placeholder="Inspect a domain (for example: benzinga.com)"
-	        onkeydown="if(event.key==='Enter'){event.preventDefault();inspectSourceRegistryDomain();}"
-	      >
-	      <button class="table-action-link" type="button" onclick="inspectSourceRegistryDomain()">Inspect</button>
-	    </div>
-	  </div>
-	  <div class="card" id="sourceRegistryInspector" style="margin-bottom:20px;">
-	    <div class="empty">Loading source registry…</div>
-	  </div>
-
-	  <div class="section-title">Suggested source review (last 7 days)</div>
-	  <div class="table-wrap">
-	    <table>
-	      <thead>
-	        <tr>
-	          <th>Domain</th>
-	          <th>Effective</th>
-	          <th>Recent sends</th>
-	          <th>Weak-source items</th>
-	          <th>Users</th>
-	          <th>Top tags</th>
-	          <th>Reason</th>
-	        </tr>
-	      </thead>
-	      <tbody id="sourceRegistrySuggestionsBody">
-	        <tr><td colspan="7" class="empty">Loading…</td></tr>
-	      </tbody>
-	    </table>
-	  </div>
-
-	  <div class="section-title">Active source overrides</div>
-	  <div class="table-wrap">
-	    <table>
-	      <thead>
-	        <tr>
-	          <th>Domain</th>
-	          <th>Effective</th>
-	          <th>Hard block</th>
-	          <th>Override</th>
-	          <th>Updated</th>
-	          <th>Note</th>
-	        </tr>
-	      </thead>
-	      <tbody id="sourceRegistryOverridesBody">
-	        <tr><td colspan="6" class="empty">Loading…</td></tr>
 	      </tbody>
 	    </table>
 	  </div>
@@ -4039,7 +3981,6 @@ async function load(silent = false) {
     }
 
 	    const { summary, health, runs, per_user, roster, admin_messages, engagement, digest_insights } = data;
-	    const sourceRegistryOverview = await loadSourceRegistryOverview(true);
 	    latestRuns = Array.isArray(runs) ? runs.slice() : [];
     const qualitySummary = summary && summary.quality ? summary.quality : null;
     const feedbackSummary = summary && summary.feedback ? summary.feedback : null;
@@ -4054,14 +3995,9 @@ async function load(silent = false) {
     renderFailedDeliveries(roster || [], latestRuns);
     renderSubscriberTable(roster || []);
     renderTestTargets(roster || []);
-    renderTestDigestStatus({ state: "idle" });
+	    renderTestDigestStatus({ state: "idle" });
 	    renderAdminMessages(admin_messages || []);
 	    renderDigestInsights(digest_insights || {});
-	    if (!selectedSourceRegistryDomain) {
-	      renderSourceRegistryInspector(null, sourceRegistryOverview || latestSourceRegistryOverview);
-	    } else if (!isEditingSourceRegistry()) {
-	      await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
-	    }
 	    renderExecutiveSummary(health || null);
 
     if (summary.month_label) {

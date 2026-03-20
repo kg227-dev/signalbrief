@@ -9,6 +9,7 @@ const LOCAL_BYPASS_HTML_ROUTES = new Set([
   "/admin.html",
   "/admin/user",
   "/admin/sandbox",
+  "/admin/source-registry",
 ]);
 const LOCAL_BYPASS_API_ROUTES = new Set([
   "/api/admin/check",

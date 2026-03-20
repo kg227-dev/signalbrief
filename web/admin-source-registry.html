@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Source Registry — SignalBrief</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #edeae4; --card: #FFFFFF; --text: #1a1a1a; --text-secondary: #6b6560;
+  --text-2: #3d3833; --text-light: #9a9490;
+  --accent: #3b5fc0; --accent-hover: #2d4ea0; --accent-light: #e8edf8;
+  --border: rgba(0,0,0,0.06); --border-subtle: rgba(0,0,0,0.04); --radius: 12px;
+  --green: #16A34A; --yellow: #D97706; --red: #DC2626;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+body.dark {
+  --bg:#12110f; --card:#1b1916; --text:#F7F3EE; --text-secondary:#c5beb6;
+  --text-2:#ece7e1; --text-light:#9f968d; --accent:#93b0e8; --accent-hover:#b5c7ee;
+  --accent-light:#243554; --border:rgba(255,255,255,0.08); --border-subtle:rgba(255,255,255,0.05);
+  --green:#6EE7A0; --yellow:#FBBF24; --red:#FCA5A5;
+}
+.container { max-width:1560px; margin:0 auto; padding:40px 24px 80px; }
+.header { margin-bottom:32px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+.header-top { display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
+.header h1 { font-size:30px; font-weight:700; letter-spacing:-0.5px; font-family:'Playfair Display',serif; }
+.header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:4px 10px; border-radius:999px; text-decoration:none; }
+.header .nav-link {
+  display:inline-flex; align-items:center; justify-content:center; min-height:34px;
+  padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card);
+  color:var(--accent); text-decoration:none; font-size:12px; font-weight:700;
+}
+.header .nav-link.current { background:var(--accent-light); border-color:transparent; }
+.header .signout-btn {
+  min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border);
+  background:var(--card); color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer;
+}
+.header p { font-size:14px; color:var(--text-secondary); }
+.layout-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; margin-bottom:28px; align-items:start; }
+.card, .table-wrap {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:0 1px 3px rgba(0,0,0,0.04);
+}
+.card { padding:22px 24px; }
+.section-head, .table-toolbar {
+  display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.section-title {
+  font-size:13px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+  color:var(--text-secondary); margin-bottom:8px;
+}
+.section-subcopy, .table-meta, .empty {
+  font-size:12px; color:var(--text-secondary); line-height:1.5;
+}
+.table-toolbar-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.table-search, .table-filter, .modal-input, .modal-textarea {
+  border:1.5px solid var(--border); border-radius:10px; background:#fff; color:var(--text-2);
+  font-size:12px; font-family:inherit;
+}
+body.dark .table-search, body.dark .table-filter, body.dark .modal-input, body.dark .modal-textarea { background:var(--card); color:var(--text); }
+.table-search, .modal-input { padding:10px 12px; }
+.table-search { width:min(360px, 80vw); }
+.table-filter { padding:9px 12px; }
+.modal-textarea { width:100%; min-height:84px; padding:10px 12px; resize:vertical; }
+.table-search:focus, .table-filter:focus, .modal-input:focus, .modal-textarea:focus { outline:none; border-color:var(--accent); }
+.table-action-link, .modal-btn {
+  display:inline-flex; align-items:center; justify-content:center; min-height:36px;
+  padding:0 14px; border-radius:10px; border:1.5px solid var(--border); background:#fff;
+  color:var(--accent); font:inherit; font-size:12px; font-weight:600; cursor:pointer; text-decoration:none;
+}
+body.dark .table-action-link, body.dark .modal-btn { background:var(--card); }
+.table-action-link:hover, .modal-btn:hover, .nav-link:hover, .signout-btn:hover { background:var(--accent-light); }
+.modal-btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+.modal-btn.primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+.modal-field { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+.modal-field label { font-size:12px; font-weight:600; color:var(--text-2); }
+.modal-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.modal-feedback {
+  display:none; margin-bottom:12px; border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:12px;
+}
+.modal-feedback.ok { display:block; background:#ECFDF5; color:#166534; border-color:#BBF7D0; }
+.modal-feedback.err { display:block; background:#FEF2F2; color:#991B1B; border-color:#FECACA; }
+table { width:100%; border-collapse:collapse; }
+thead th {
+  font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary);
+  padding:12px 16px; background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border); text-align:left; white-space:nowrap;
+}
+tbody td {
+  font-size:13px; padding:13px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text); vertical-align:top;
+}
+tbody tr:last-child td { border-bottom:none; }
+tbody tr:hover td { background:rgba(0,0,0,0.015); }
+.mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.subscriber-main { font-size:16px; font-weight:700; line-height:1.25; }
+.subscriber-sub { margin-top:4px; font-size:12px; color:var(--text-secondary); line-height:1.4; word-break:break-word; }
+.explain-block {
+  border:1px solid var(--border-subtle); border-radius:10px; background:#FAFAFB; padding:12px;
+}
+body.dark .explain-block { background:rgba(255,255,255,0.03); }
+.explain-label {
+  font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:6px;
+}
+.explain-copy { font-size:12px; color:var(--text-2); line-height:1.5; }
+.toast-wrap {
+  position:fixed; right:20px; bottom:20px; z-index:1000; display:flex; flex-direction:column; gap:10px; max-width:min(360px, calc(100vw - 32px));
+}
+.toast {
+  background:var(--card); color:var(--text-2); border:1px solid var(--border);
+  border-radius:12px; padding:12px 14px; box-shadow:0 10px 24px rgba(0,0,0,0.12); font-size:13px; line-height:1.45;
+}
+.toast.ok { background:#ECFDF5; color:#166534; border-color:#BBF7D0; }
+.toast.err { background:#FEF2F2; color:#991B1B; border-color:#FECACA; }
+.toast.warn { background:#FFFBEB; color:#92400E; border-color:#FDE68A; }
+.modal-backdrop {
+  position:fixed; inset:0; background:rgba(0,0,0,0.32); display:none; align-items:center; justify-content:center; z-index:1100; padding:24px;
+}
+.modal-card {
+  width:min(520px, 100%); background:var(--card); border:1px solid var(--border); border-radius:20px; padding:20px;
+  box-shadow:0 24px 60px rgba(0,0,0,0.18);
+}
+.modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px; }
+.modal-kicker { font-size:11px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-secondary); }
+.modal-title { font-size:20px; font-weight:700; letter-spacing:-0.02em; color:var(--text); }
+.modal-help { font-size:14px; color:var(--text-secondary); line-height:1.6; }
+.modal-close {
+  width:34px; height:34px; border-radius:999px; border:1px solid var(--border); background:#fff; color:var(--text-secondary);
+  font-size:20px; line-height:1; cursor:pointer;
+}
+body.dark .modal-close { background:var(--card); }
+#darkToggle {
+  position:fixed; top:20px; right:20px; z-index:999; width:42px; height:42px; border-radius:50%;
+  border:1px solid var(--border); background:var(--card); cursor:pointer; font-size:18px;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.06);
+}
+#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+@media (max-width: 980px) {
+  .layout-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
+<div class="container">
+  <div class="header">
+    <div class="header-top">
+      <h1>Source Registry</h1>
+      <span class="badge">Internal</span>
+      <a href="/admin" class="nav-link">Admin</a>
+      <a href="/admin/sandbox" class="nav-link">Sandbox</a>
+      <a href="/admin/source-registry" class="nav-link current">Source Registry</a>
+      <button onclick="logout()" class="signout-btn">Sign out</button>
+    </div>
+    <p>Global source policy overrides. Hard blocks exclude a domain from all digests. <span id="lastRefreshed">not refreshed yet</span></p>
+  </div>
+
+  <div class="layout-grid">
+    <div class="card">
+      <div class="section-head">
+        <div>
+          <div class="section-title" style="margin-bottom:0;">Inspect source</div>
+          <div class="section-subcopy">Search a domain to see effective policy, recent impact, sample sends, and audit history.</div>
+        </div>
+        <div class="table-toolbar-controls">
+          <input
+            id="sourceRegistrySearch"
+            class="table-search"
+            type="text"
+            placeholder="Inspect a domain (for example: benzinga.com)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();inspectSourceRegistryDomain();}"
+          >
+          <button class="table-action-link" type="button" onclick="inspectSourceRegistryDomain()">Inspect</button>
+        </div>
+      </div>
+      <div id="sourceRegistryInspector">
+        <div class="empty">Loading source registry…</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">How to use this</div>
+      <div class="section-subcopy" style="margin-bottom:14px;">This page is the global control panel for source quality. Changes apply to future digests only.</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+        <div class="explain-block">
+          <div class="explain-label">Inspect</div>
+          <div class="explain-copy">Search any domain to see its baseline classification, active override, recent sends, weak-source exposure, and recent sample items.</div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">Override</div>
+          <div class="explain-copy">Set a tier override, authority override, or a hard block. Hard blocks exclude a domain from all digests.</div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">Review suggestions</div>
+          <div class="explain-copy">Use the suggested-source table to find domains showing up in weak digests or hitting users with low-quality source exposure.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Suggested source review (last 7 days)</div>
+  <div class="table-wrap" style="margin-bottom:28px;">
+    <table>
+      <thead>
+        <tr>
+          <th>Domain</th>
+          <th>Effective</th>
+          <th>Recent sends</th>
+          <th>Weak-source items</th>
+          <th>Users</th>
+          <th>Top tags</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody id="sourceRegistrySuggestionsBody">
+        <tr><td colspan="7" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Active source overrides</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Domain</th>
+          <th>Effective</th>
+          <th>Hard block</th>
+          <th>Override</th>
+          <th>Updated</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody id="sourceRegistryOverridesBody">
+        <tr><td colspan="6" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal-backdrop" onclick="if (event.target === this) closeConfirmModal(false);">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Confirm action</div>
+        <div class="modal-title" id="confirmModalTitle">Are you sure?</div>
+      </div>
+      <button class="modal-close" onclick="closeConfirmModal(false)" aria-label="Close">×</button>
+    </div>
+    <div class="modal-help" id="confirmModalBody"></div>
+    <div class="modal-actions" style="margin-top:18px;">
+      <button class="modal-btn" onclick="closeConfirmModal(false)">Cancel</button>
+      <button id="confirmModalAcceptBtn" class="modal-btn primary" onclick="closeConfirmModal(true)">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+
+<script>
+var _darkToggle = document.getElementById("darkToggle");
+function setDarkMode(isDark) {
+  document.body.classList.toggle("dark", isDark);
+  if (_darkToggle) _darkToggle.textContent = isDark ? "\u2600\uFE0F" : "\uD83C\uDF19";
+  localStorage.setItem("sb-dark", isDark ? "1" : "0");
+}
+if (_darkToggle) _darkToggle.addEventListener("click", function() {
+  setDarkMode(!document.body.classList.contains("dark"));
+});
+if (localStorage.getItem("sb-dark") === "1") setDarkMode(true);
+
+function esc(s) {
+  if (!s) return "";
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function showToast(type, message, ttlMs = 3600) {
+  const wrap = document.getElementById("toastWrap");
+  if (!wrap || !message) return;
+  const toast = document.createElement("div");
+  toast.className = `toast ${type || ""}`.trim();
+  toast.textContent = String(message);
+  wrap.appendChild(toast);
+  setTimeout(() => {
+    if (toast.parentNode) toast.parentNode.removeChild(toast);
+  }, ttlMs);
+}
+function sourceTierTone(tier, hardBlock) {
+  if (hardBlock) return "var(--red)";
+  const normalized = String(tier || "").trim().toLowerCase();
+  if (normalized === "premium" || normalized === "strong") return "var(--green)";
+  if (normalized === "standard" || normalized === "blog") return "var(--yellow)";
+  if (normalized === "blocked" || normalized === "weak" || normalized === "suspect" || normalized === "corporate") return "var(--red)";
+  return "var(--text-secondary)";
+}
+function renderSourceTierPill(tier, hardBlock) {
+  const label = hardBlock ? "blocked" : (tier || "unknown");
+  const tone = sourceTierTone(tier, hardBlock);
+  const bg = hardBlock ? "#FEE2E2" : (tone === "var(--green)" ? "#DCFCE7" : (tone === "var(--yellow)" ? "#FEF3C7" : "#FEE2E2"));
+  return `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${bg};color:${tone};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(label)}</span>`;
+}
+function formatSourceOverrideSummary(entry) {
+  if (!entry) return "Default";
+  const parts = [];
+  if (entry.tier_override) parts.push(`tier ${entry.tier_override}`);
+  if (entry.authority_override != null && entry.authority_override !== "") parts.push(`authority ${Number(entry.authority_override).toFixed(2)}`);
+  if (entry.hard_block === true) parts.push("hard block");
+  return parts.length ? parts.join(" · ") : "Default";
+}
+function formatSourceMetricTags(tags) {
+  const rows = Array.isArray(tags) ? tags : [];
+  if (!rows.length) return "—";
+  return rows.slice(0, 3).map((row) => `${row.tag} (${row.count})`).join(", ");
+}
+function formatEtTimestamp(value) {
+  const ts = String(value || "").trim();
+  if (!ts) return "—";
+  try {
+    return new Date(ts).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return ts;
+  }
+}
+function setLastRefreshed(dateObj) {
+  const el = document.getElementById("lastRefreshed");
+  if (!el) return;
+  if (!dateObj) {
+    el.textContent = "refresh failed";
+    return;
+  }
+  el.textContent = "last refreshed " + dateObj.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+function setSelectedDomain(domain) {
+  selectedSourceRegistryDomain = String(domain || "").trim();
+  const url = new URL(window.location.href);
+  if (selectedSourceRegistryDomain) url.searchParams.set("domain", selectedSourceRegistryDomain);
+  else url.searchParams.delete("domain");
+  history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+function isEditingSourceRegistry() {
+  const active = document.activeElement;
+  const inspector = document.getElementById("sourceRegistryInspector");
+  return !!(active && inspector && inspector.contains(active));
+}
+function renderSourceRegistrySuggestions(overview) {
+  const body = document.getElementById("sourceRegistrySuggestionsBody");
+  if (!body) return;
+  const rows = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">No recent source suggestions yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((row) => {
+    const effective = row.effective_policy || {};
+    return `<tr>
+      <td><button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button></td>
+      <td>${renderSourceTierPill(effective.source_tier, effective.hard_block)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">authority ${effective.source_authority != null ? Number(effective.source_authority).toFixed(2) : "—"}</div></td>
+      <td class="mono">${Math.max(0, Number(row.send_count || 0))}</td>
+      <td class="mono" style="color:${Number(row.weak_source_item_count || 0) > 0 ? "var(--red)" : "var(--text)"};">${Math.max(0, Number(row.weak_source_item_count || 0))}</td>
+      <td class="mono">${Math.max(0, Number(row.user_count || 0))}</td>
+      <td style="font-size:12px;color:var(--text-secondary);">${esc(formatSourceMetricTags(row.top_tags))}</td>
+      <td style="font-size:12px;color:var(--text-2);">${esc(row.suggested_reason || "Recent source activity")}</td>
+    </tr>`;
+  }).join("");
+}
+function renderSourceRegistryOverrides(overview) {
+  const body = document.getElementById("sourceRegistryOverridesBody");
+  if (!body) return;
+  const rows = Array.isArray(overview?.overrides) ? overview.overrides : [];
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6" class="empty">No global source overrides yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map((row) => {
+    const effective = row.effective_policy || {};
+    return `<tr>
+      <td><button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button></td>
+      <td>${renderSourceTierPill(effective.source_tier, effective.hard_block)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">authority ${effective.source_authority != null ? Number(effective.source_authority).toFixed(2) : "—"}</div></td>
+      <td>${row.hard_block === true ? `<span style="color:var(--red);font-weight:700;">Yes</span>` : "No"}</td>
+      <td style="font-size:12px;color:var(--text-2);">${esc(formatSourceOverrideSummary(row))}</td>
+      <td style="font-size:12px;color:var(--text-secondary);">${esc(formatEtTimestamp(row.updated_at))}</td>
+      <td style="font-size:12px;color:var(--text-2);">${esc(row.note || "—")}</td>
+    </tr>`;
+  }).join("");
+}
+function renderSourceRegistryInspector(detail, overview) {
+  const container = document.getElementById("sourceRegistryInspector");
+  if (!container) return;
+  const sourcePath = overview && overview.source_registry_path ? `Registry file: ${overview.source_registry_path}` : "";
+  if (!detail) {
+    container.innerHTML = `<div class="table-meta">${esc(sourcePath || "Search for a domain to inspect its effective policy and recent impact.")}</div>`;
+    return;
+  }
+  const policy = detail.effective_policy || {};
+  const adminOverride = detail.admin_override || {};
+  const recent = detail.recent_metrics || {};
+  const auditEntries = Array.isArray(detail.audit_entries) ? detail.audit_entries : [];
+  const sampleItems = Array.isArray(recent.sample_items) ? recent.sample_items : [];
+  const recentUsers = Array.isArray(recent.recent_users) ? recent.recent_users : [];
+  const topTags = Array.isArray(recent.top_tags) ? recent.top_tags : [];
+  container.innerHTML = `
+    <div class="table-toolbar" style="margin-bottom:16px;">
+      <div>
+        <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
+        <div class="subscriber-sub">${sourcePath ? esc(sourcePath) : "Global source policy registry"}</div>
+      </div>
+      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · recent sends ${Math.max(0, Number(recent.send_count || 0))}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.2fr .9fr;gap:18px;align-items:start;">
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+          ${renderSourceTierPill(policy.source_tier, policy.hard_block)}
+          <span class="mono" style="font-size:12px;color:var(--text-secondary);">effective authority ${policy.source_authority != null ? Number(policy.source_authority).toFixed(2) : "—"}</span>
+          <span class="mono" style="font-size:12px;color:var(--text-secondary);">baseline ${esc(policy.baseline_source_tier || "unknown")} ${policy.baseline_source_authority != null ? Number(policy.baseline_source_authority).toFixed(2) : "—"}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+          <div class="explain-block">
+            <div class="explain-label">Recent impact</div>
+            <div class="explain-copy">${Math.max(0, Number(recent.send_count || 0))} sends across ${Math.max(0, Number(recent.user_count || 0))} users and ${Math.max(0, Number(recent.digest_count || 0))} digests.</div>
+          </div>
+          <div class="explain-block">
+            <div class="explain-label">Weak-source exposure</div>
+            <div class="explain-copy">${Math.max(0, Number(recent.weak_source_item_count || 0))} weak-source item${Number(recent.weak_source_item_count || 0) === 1 ? "" : "s"} in the last 7 days.</div>
+          </div>
+          <div class="explain-block">
+            <div class="explain-label">Common tags</div>
+            <div class="explain-copy">${esc(formatSourceMetricTags(topTags))}</div>
+          </div>
+        </div>
+        <div>
+          <div class="section-title" style="font-size:11px;margin-bottom:6px;">Recent sample items</div>
+          ${sampleItems.length ? sampleItems.map((item) => `
+            <div style="padding:8px 0;border-top:1px solid var(--border-subtle);">
+              <div style="font-size:12px;font-weight:600;line-height:1.45;">${item.url ? `<a href="${esc(item.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${esc(item.headline || item.url)}</a>` : esc(item.headline || "Untitled item")}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")}</div>
+            </div>
+          `).join("") : `<div class="empty" style="padding:10px 0;">No recent sent items for this domain.</div>`}
+        </div>
+        <details ${auditEntries.length ? "" : "disabled"} style="border-top:1px solid var(--border-subtle);padding-top:10px;">
+          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Source policy audit</summary>
+          <div style="margin-top:8px;">
+            ${auditEntries.length ? auditEntries.map((entry) => `
+              <div style="padding:7px 0;border-top:1px solid var(--border-subtle);font-size:12px;line-height:1.45;">
+                <div style="font-weight:600;color:var(--text);">${esc(entry.action)} · ${esc(entry.actor || "unknown")}</div>
+                <div style="color:var(--text-secondary);">${esc(formatEtTimestamp(entry.at))}${entry.note ? ` · ${esc(entry.note)}` : ""}</div>
+              </div>
+            `).join("") : `<div class="empty" style="padding:8px 0;">No source policy changes recorded yet.</div>`}
+          </div>
+        </details>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:#FAFAFB;">
+        <div class="section-title" style="font-size:11px;margin-bottom:10px;">Edit override</div>
+        <div class="modal-field">
+          <label for="sourceRegistryDomainInput">Domain</label>
+          <input id="sourceRegistryDomainInput" class="modal-input" type="text" value="${esc(detail.domain || "")}" placeholder="benzinga.com">
+        </div>
+        <div class="modal-field">
+          <label for="sourceRegistryTierInput">Tier override</label>
+          <select id="sourceRegistryTierInput" class="table-filter" style="width:100%;">
+            <option value="">Default</option>
+            ${["premium","strong","standard","blog","corporate","weak","suspect","unknown"].map((tier) => `<option value="${tier}" ${adminOverride.tier_override === tier ? "selected" : ""}>${tier}</option>`).join("")}
+          </select>
+        </div>
+        <div class="modal-field">
+          <label for="sourceRegistryAuthorityInput">Authority override (0-1)</label>
+          <input id="sourceRegistryAuthorityInput" class="modal-input mono" type="number" min="0" max="1" step="0.01" value="${adminOverride.authority_override != null ? esc(Number(adminOverride.authority_override).toFixed(2)) : ""}" placeholder="0.22">
+        </div>
+        <div class="modal-field">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input id="sourceRegistryHardBlockInput" type="checkbox" ${adminOverride.hard_block === true ? "checked" : ""}>
+            Hard block from all digests
+          </label>
+        </div>
+        <div class="modal-field" style="margin-bottom:12px;">
+          <label for="sourceRegistryNoteInput">Note</label>
+          <textarea id="sourceRegistryNoteInput" class="modal-textarea" placeholder="Why are we overriding this source?">${esc(adminOverride.note || "")}</textarea>
+        </div>
+        <div id="sourceRegistryFormFeedback" class="modal-feedback"></div>
+        <div class="modal-actions">
+          <button class="modal-btn" type="button" onclick="resetSourceRegistryDomain()">Reset to default</button>
+          <button class="modal-btn primary" type="button" onclick="saveSourceRegistryDomain()">Save override</button>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);">
+          Recent users: ${recentUsers.length ? esc(recentUsers.map((row) => `${row.user} (${row.count})`).join(", ")) : "none"}
+        </div>
+      </div>
+    </div>`;
+}
+function setSourceRegistryFeedback(type, message) {
+  const feedback = document.getElementById("sourceRegistryFormFeedback");
+  if (!feedback) return;
+  const text = String(message || "").trim();
+  if (!text) {
+    feedback.style.display = "none";
+    feedback.textContent = "";
+    feedback.className = "modal-feedback";
+    return;
+  }
+  feedback.style.display = "block";
+  feedback.textContent = text;
+  feedback.className = `modal-feedback ${type || ""}`.trim();
+}
+let latestSourceRegistryOverview = null;
+let selectedSourceRegistryDomain = "";
+let loadInFlight = false;
+let autoRefreshTimer = null;
+let confirmResolve = null;
+let retryToastAt = 0;
+const AUTO_REFRESH_MS = 30000;
+
+async function parseApiJson(res) {
+  const raw = await res.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const short = raw.trim().slice(0, 180);
+    const isHtml = /<html|<!doctype/i.test(short);
+    return { error: isHtml ? `Unexpected server response (HTTP ${res.status})` : short || `Request failed (HTTP ${res.status})` };
+  }
+}
+function isTransientStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+async function apiFetchJson(url, options = {}, maxRetries = 2) {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    attempt += 1;
+    try {
+      const res = await fetch(url, options);
+      const data = await parseApiJson(res);
+      if (res.ok || !isTransientStatus(res.status) || attempt > maxRetries) {
+        return { ok: res.ok, status: res.status, data, attempts: attempt };
+      }
+      if (Date.now() - retryToastAt > 12000) {
+        showToast("warn", "Transient API issue. Retrying…", 2200);
+        retryToastAt = Date.now();
+      }
+      await sleep(220 * Math.pow(2, attempt - 1));
+    } catch (e) {
+      if (attempt > maxRetries) {
+        return { ok: false, status: 0, data: { error: e.message || "Network error" }, attempts: attempt };
+      }
+      if (Date.now() - retryToastAt > 12000) {
+        showToast("warn", "Network hiccup. Retrying…", 2200);
+        retryToastAt = Date.now();
+      }
+      await sleep(220 * Math.pow(2, attempt - 1));
+    }
+  }
+  return { ok: false, status: 0, data: { error: "Request failed" }, attempts: maxRetries + 1 };
+}
+async function openConfirmModal(title, message, acceptLabel = "Confirm") {
+  const modal = document.getElementById("confirmModal");
+  document.getElementById("confirmModalTitle").textContent = title || "Confirm action";
+  document.getElementById("confirmModalBody").textContent = message || "";
+  document.getElementById("confirmModalAcceptBtn").textContent = acceptLabel;
+  modal.style.display = "flex";
+  return new Promise((resolve) => { confirmResolve = resolve; });
+}
+function closeConfirmModal(accepted) {
+  const modal = document.getElementById("confirmModal");
+  if (modal) modal.style.display = "none";
+  if (confirmResolve) {
+    confirmResolve(!!accepted);
+    confirmResolve = null;
+  }
+}
+async function loadSourceRegistryOverview(silent = true) {
+  const searchEl = document.getElementById("sourceRegistrySearch");
+  const query = searchEl ? searchEl.value.trim() : "";
+  const resp = await apiFetchJson(`/api/admin/source-registry?limit=20${query ? `&query=${encodeURIComponent(query)}` : ""}`, {}, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    if (!silent) showToast("err", data.error || "Failed to load source registry");
+    return null;
+  }
+  latestSourceRegistryOverview = data;
+  renderSourceRegistrySuggestions(data);
+  renderSourceRegistryOverrides(data);
+  return data;
+}
+async function inspectSourceRegistryDomain(domainValue, silent = false) {
+  const searchEl = document.getElementById("sourceRegistrySearch");
+  const rawDomain = String(domainValue || (searchEl ? searchEl.value : "") || "").trim();
+  if (!rawDomain) {
+    if (!silent) showToast("err", "Enter a domain first.");
+    return;
+  }
+  if (searchEl) searchEl.value = rawDomain;
+  const resp = await apiFetchJson(`/api/admin/source-registry/domain?domain=${encodeURIComponent(rawDomain)}`, {}, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    if (!silent) showToast("err", data.error || "Failed to inspect source domain");
+    renderSourceRegistryInspector(null, latestSourceRegistryOverview);
+    return;
+  }
+  setSelectedDomain(String(data.domain || rawDomain).trim());
+  renderSourceRegistryInspector(data, latestSourceRegistryOverview);
+}
+async function saveSourceRegistryDomain() {
+  const domain = String(document.getElementById("sourceRegistryDomainInput")?.value || "").trim();
+  const tierOverride = String(document.getElementById("sourceRegistryTierInput")?.value || "").trim();
+  const authorityOverride = String(document.getElementById("sourceRegistryAuthorityInput")?.value || "").trim();
+  const hardBlock = document.getElementById("sourceRegistryHardBlockInput")?.checked === true;
+  const note = String(document.getElementById("sourceRegistryNoteInput")?.value || "").trim();
+  if (!domain) {
+    setSourceRegistryFeedback("err", "Domain is required.");
+    return;
+  }
+  setSourceRegistryFeedback("", "");
+  const resp = await apiFetchJson("/api/admin/source-registry/domain", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      domain,
+      tier_override: tierOverride || null,
+      authority_override: authorityOverride === "" ? null : Number(authorityOverride),
+      hard_block: hardBlock,
+      note,
+    }),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    setSourceRegistryFeedback("err", data.error || "Failed to save source override.");
+    showToast("err", data.error || "Failed to save source override");
+    return;
+  }
+  setSourceRegistryFeedback("ok", "Source override saved.");
+  showToast("ok", `Saved source override for ${domain}`);
+  if (data.detail) {
+    setSelectedDomain(String(data.detail.domain || domain).trim());
+    renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
+  }
+  await loadSourceRegistryOverview(true);
+  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+}
+async function resetSourceRegistryDomain() {
+  const domain = String(document.getElementById("sourceRegistryDomainInput")?.value || selectedSourceRegistryDomain || "").trim();
+  if (!domain) {
+    setSourceRegistryFeedback("err", "No source selected.");
+    return;
+  }
+  const accepted = await openConfirmModal("Reset source override", `Reset ${domain} back to default source policy?`, "Reset");
+  if (!accepted) return;
+  const resp = await apiFetchJson("/api/admin/source-registry/domain/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain }),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    setSourceRegistryFeedback("err", data.error || "Failed to reset source override.");
+    showToast("err", data.error || "Failed to reset source override");
+    return;
+  }
+  setSourceRegistryFeedback("ok", "Source override reset.");
+  showToast("ok", `Reset source override for ${domain}`);
+  if (data.detail) {
+    setSelectedDomain(String(data.detail.domain || domain).trim());
+    renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
+  }
+  await loadSourceRegistryOverview(true);
+  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+}
+async function logout() {
+  await fetch("/api/admin/logout", { method: "POST" });
+  window.location.href = "/admin/login";
+}
+async function load(silent = false) {
+  if (loadInFlight) return;
+  loadInFlight = true;
+  try {
+    const authResp = await apiFetchJson("/api/admin/check", {}, 1);
+    if (!authResp.ok || !(authResp.data && authResp.data.authenticated)) {
+      window.location.href = "/admin/login";
+      return;
+    }
+    const overview = await loadSourceRegistryOverview(silent);
+    if (!overview) {
+      setLastRefreshed(null);
+      return;
+    }
+    if (!selectedSourceRegistryDomain) {
+      renderSourceRegistryInspector(null, overview || latestSourceRegistryOverview);
+    } else if (!isEditingSourceRegistry()) {
+      await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+    }
+    setLastRefreshed(new Date());
+  } finally {
+    loadInFlight = false;
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) load(true);
+});
+window.addEventListener("focus", () => load(true));
+(function init() {
+  const initialDomain = new URLSearchParams(window.location.search).get("domain") || "";
+  setSelectedDomain(initialDomain);
+  const searchEl = document.getElementById("sourceRegistrySearch");
+  if (searchEl && initialDomain) searchEl.value = initialDomain;
+  load(false);
+  autoRefreshTimer = window.setInterval(() => {
+    if (!document.hidden) load(true);
+  }, AUTO_REFRESH_MS);
+})();
+</script>
+</body>
+</html>

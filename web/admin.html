@@ -1561,7 +1561,7 @@ function renderRepeatDetails(details) {
   if (!rows.length) return "";
   const body = rows.map((detail) => {
     const label = esc(String(detail.label || "Unknown repeat"));
-    const dates = Array.isArray(detail.dates_et) ? detail.dates_et.filter(Boolean) : [];
+    const dates = Array.isArray(detail.dates_display) ? detail.dates_display.filter(Boolean) : (Array.isArray(detail.dates_et) ? detail.dates_et.filter(Boolean) : []);
     const datesLabel = dates.length ? dates.join(", ") : "unknown dates";
     const occurrences = Math.max(0, Number(detail.occurrences || 0));
     const href = String(detail.url || "").trim();

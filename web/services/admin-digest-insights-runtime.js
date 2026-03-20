@@ -95,6 +95,18 @@ function rowSortKey(row = {}) {
   return String(row?.run_at_utc || row?.sent_at_utc || row?.date_et || "");
 }
 
+function summarizeDateCounts(values = []) {
+  const counts = new Map();
+  for (const value of (Array.isArray(values) ? values : [])) {
+    const dateKey = String(value || "").trim();
+    if (!dateKey) continue;
+    counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([dateKey, count]) => (
+    count > 1 ? `${dateKey} (${count}x)` : dateKey
+  ));
+}
+
 function createRepeatGroup(item, token, row) {
   return {
     key: token?.key || "",
@@ -146,6 +158,11 @@ function annotateHistoricalRepeatEvidence(rows = []) {
                 .map((occurrence) => String(occurrence?.date_et || "").trim())
                 .filter(Boolean)
             )),
+            prior_dates_display: summarizeDateCounts(
+              matchedGroup.occurrences
+                .map((occurrence) => String(occurrence?.date_et || "").trim())
+                .filter(Boolean)
+            ),
             current_date_et: String(row?.date_et || "").trim() || null,
           });
         }
@@ -182,6 +199,11 @@ function annotateHistoricalRepeatEvidence(rows = []) {
             .map((occurrence) => String(occurrence?.date_et || "").trim())
             .filter(Boolean)
         )),
+        dates_display: summarizeDateCounts(
+          group.occurrences
+            .map((occurrence) => String(occurrence?.date_et || "").trim())
+            .filter(Boolean)
+        ),
       }))
       .sort((left, right) => Number(right.occurrences || 0) - Number(left.occurrences || 0));
 

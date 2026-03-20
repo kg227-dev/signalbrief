@@ -63,6 +63,7 @@ const {
   assert.strictEqual(repeatRows[1].repeat_evidence_count, 1);
   assert.strictEqual(resolveRowFailureMode(repeatRows[1]), "repeat");
   assert.strictEqual(repeatRows[1].repeat_details.length, 1);
+  assert.deepStrictEqual(repeatRows[1].repeat_details[0].prior_dates_display, ["2026-03-19"]);
 
   const insights = buildDigestInsights([
     {
@@ -112,6 +113,7 @@ const {
   assert.strictEqual(insights.users[0].repeat_evidence_count, 4);
   assert.strictEqual(insights.users[0].refill_count, 2);
   assert.strictEqual(insights.users[0].repeat_details.length, 1);
+  assert.deepStrictEqual(insights.users[0].repeat_details[0].dates_display, ["2026-03-18", "2026-03-20"]);
 })();
 
 process.stdout.write("[admin-digest-insights-runtime] all assertions passed\n");

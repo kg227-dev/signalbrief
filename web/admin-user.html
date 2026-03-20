@@ -807,7 +807,9 @@ function buildRepeatEvidencePanel(details) {
   if (!rows.length) return '';
   const body = rows.map((detail) => {
     const label = esc(String(detail.label || 'Unknown repeat'));
-    const dates = Array.isArray(detail.prior_dates_et) ? detail.prior_dates_et.filter(Boolean).join(', ') : '';
+    const dates = Array.isArray(detail.prior_dates_display)
+      ? detail.prior_dates_display.filter(Boolean).join(', ')
+      : (Array.isArray(detail.prior_dates_et) ? detail.prior_dates_et.filter(Boolean).join(', ') : '');
     const href = String(detail.url || '').trim();
     const title = href
       ? `<a href="${esc(href)}" target="_blank" class="digest-item-link">${label}</a>`

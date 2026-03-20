@@ -95,9 +95,62 @@ async function testTransportErrorDiagnostics() {
   assert.strictEqual(result.diagnostics.failed_calls, 1);
 }
 
+async function testStandardTopicsUseFallbackQueriesForThinPools() {
+  let calls = 0;
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    httpsPostWithRetry: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          status: 200,
+          body: {
+            citations: ["https://example.com/one"],
+            choices: [{
+              message: {
+                content: JSON.stringify([
+                  { headline: "Standard story one", summary: "Summary", url: "https://example.com/one" },
+                ]),
+              },
+            }],
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          citations: ["https://example.com/two"],
+          choices: [{
+            message: {
+              content: JSON.stringify([
+                { headline: "Standard story two", summary: "Summary", url: "https://example.com/two" },
+              ]),
+            },
+          }],
+        },
+      };
+    },
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "AI×TECH",
+    queries: ["q1", "q2"],
+  });
+
+  assert.strictEqual(calls, 2);
+  assert.strictEqual(result.apiCalls, 2);
+  assert.strictEqual(result.items.length, 2);
+}
+
 (async () => {
   await testCustomFallbackFlowWithProviderPolicy();
   await testTransportErrorDiagnostics();
+  await testStandardTopicsUseFallbackQueriesForThinPools();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

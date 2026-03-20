@@ -70,7 +70,7 @@ function collectUniqueItems(items, seenHeadline, seenUrl, out, normalizeUrlForDe
 
 function shouldStopAttempts(topic, collected) {
   if (collected.length >= 3) return true;
-  if (!topic?.isCustom && collected.length >= 1) return true;
+  if (!topic?.isCustom && collected.length >= 2) return true;
   if (topic?.isCustom && collected.length >= 2) return true;
   return false;
 }

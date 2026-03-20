@@ -6,6 +6,9 @@ const {
   assertNodeSyntaxFile,
   assertModuleExports,
 } = require("../../../test-support/module-contract-helper.js");
+const {
+  buildSemanticRepeatIndex,
+} = require(path.join(process.cwd(), "src/digest/runtime/repeat-freshness-runtime.js"));
 
 const TARGET_REL = "src/entrypoints/digest-orchestrator-delivery-ranking-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
@@ -133,4 +136,92 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(emergencyScoreCalls, 2);
   assert.strictEqual(emergencyOut.wasFiltered, false);
   assert.strictEqual(emergencyOut.userItems.length, 1);
+
+  const repeatLogs = [];
+  const freshnessRuntime = createDigestOrchestratorDeliveryRankingRuntime({
+    CONFIG: {
+      digest: {
+        perUserFreshnessMinItems: 3,
+        perUserFreshnessDigests: 3,
+        perUserEntityHistoryDigests: 3,
+        maxSignalsPerEntity: 1,
+      },
+    },
+    log: (line) => repeatLogs.push(String(line || "")),
+    filterItemsByTopics: (items) => ({
+      items,
+      customKeywords: [],
+      specialistMode: false,
+      wasFiltered: true,
+    }),
+    applyTopicRelevanceScores: (items) => items.map((item, idx) => ({ ...item, relevanceScore: 10 - idx })),
+    buildRecentEntityHistory: () => ({ entityCounts: {}, storylineKeys: new Set() }),
+    suppressRecentlySentForUser: (items) => ({ items, removed: 0, backfilled: 0 }),
+    isRecentRepeatItem: (item, repeatIndex) => {
+      return buildSemanticRepeatIndex([item]).repeatKeys.size > 0
+        && repeatIndex?.repeatKeys instanceof Set
+        && [...repeatIndex.repeatKeys].some((key) => buildSemanticRepeatIndex([item]).repeatKeys.has(key));
+    },
+    parseSourceDomain: () => "example.com",
+    applyEntityCoverageCap: (items) => items,
+    reserveCustomKeywordSlot: (items) => items,
+  });
+
+  const recentUserRecords = [{
+    items: [{
+      tag: "SUSTAINABILITY",
+      headline: "California Sets August 2026 Deadline for First Corporate Climate Reports",
+      url: "https://www.esgtoday.com/california-sets-august-2026-deadline-for-first-corporate-climate-reports/",
+    }],
+  }];
+  const globalRepeatIndex = buildSemanticRepeatIndex([{
+    tag: "TECHNOLOGY",
+    headline: "Why the 2026 Hardware Crisis Will Accelerate Adoption of Modern Private Cloud - Broadcom",
+    url: "https://news.broadcom.com/cloud/2026-hardware-crisis-modern-private-cloud-adoption",
+  }]);
+
+  const freshnessOut = freshnessRuntime.rankAndSuppressUserItems({
+    user: {
+      email: "freshness@example.com",
+      topics: ["SUSTAINABILITY", "TECHNOLOGY"],
+      preferences: { items_per_digest: 3 },
+      topic_weights: {},
+    },
+    enriched: [
+      {
+        tag: "SUSTAINABILITY",
+        headline: "California Sets August 2026 Deadline for Corporate Climate Reports Under SB 253 and SB 261",
+        url: "https://www.esgtoday.com/california-sets-august-2026-deadline-for-corporate-climate-reports-under-sb-253-and-sb-261/",
+        strategic_value: 0.9,
+        routine_item_score: 0.1,
+      },
+      {
+        tag: "TECHNOLOGY",
+        headline: "Why the 2026 Hardware Crisis Will Accelerate Adoption of Modern Private Cloud - Broadcom",
+        url: "https://news.broadcom.com/cloud/2026-hardware-crisis-modern-private-cloud-adoption",
+        strategic_value: 0.9,
+        routine_item_score: 0.1,
+      },
+      {
+        tag: "ENERGY",
+        headline: "PJM Approves New Transmission Buildout for Grid Reliability",
+        url: "https://example.com/pjm-grid-reliability",
+        strategic_value: 0.9,
+        routine_item_score: 0.1,
+      },
+    ],
+    repeatIndex: {
+      days: 3,
+      ...globalRepeatIndex,
+    },
+    repeatPenalty: 0.5,
+    depthPolicy: { minFilteredItems: 3, defaultItemCount: 3 },
+    rankingPolicy: { minSignalScoreForFinal: 0 },
+    recentDigestRecords: recentUserRecords,
+    nowIso: "2026-03-20T11:00:00.000Z",
+  });
+
+  assert.strictEqual(freshnessOut.userItems.length, 1);
+  assert.strictEqual(freshnessOut.userItems[0].headline, "PJM Approves New Transmission Buildout for Grid Reliability");
+  assert.ok(repeatLogs.some((line) => line.includes("[freshness-semantic]")));
 })();

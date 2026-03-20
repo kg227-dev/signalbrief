@@ -3,6 +3,7 @@
 const { createArchiveHistoryRuntime } = require("./archive-history-runtime");
 const { createArchiveUserSuppressionRuntime } = require("./archive-user-suppression-runtime");
 const { createArchivePersistenceRuntime } = require("./archive-persistence-runtime");
+const { isSemanticRepeatItem } = require("./repeat-freshness-runtime");
 
 function createDigestArchiveRuntime(deps) {
   const {
@@ -52,7 +53,7 @@ function createDigestArchiveRuntime(deps) {
   } = archivePersistenceRuntime;
 
   function isRecentRepeatItem(item, repeatIndex) {
-    return isRepeatedItem(item, repeatIndex);
+    return isSemanticRepeatItem(item, repeatIndex) || isRepeatedItem(item, repeatIndex);
   }
 
   return {

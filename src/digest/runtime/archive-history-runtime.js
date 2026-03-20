@@ -1,13 +1,16 @@
 "use strict";
 
+const {
+  buildSemanticRepeatIndex,
+  excludeSemanticRepeats,
+} = require("./repeat-freshness-runtime");
+
 function createArchiveHistoryRuntime(deps) {
   const {
     APP_ROOT,
     fs,
     path,
     log,
-    createRepeatIndex,
-    dedupItemsAgainstRepeatIndex,
     archiveDir,
   } = deps;
 
@@ -36,35 +39,33 @@ function createArchiveHistoryRuntime(deps) {
 
   function dedupAgainstRecentArchives(items, opts = {}) {
     const dedupDays = Math.max(1, Number(opts.days || 3));
-    const target = Math.max(1, Number(opts.targetCount || 7));
-    const minBackfillItems = Math.max(1, Number(opts.minBackfillItems || 3));
     const recentItems = loadRecentArchiveItems(dedupDays);
     if (!recentItems.length) {
       return { items: items || [], removed: 0, archive_days_used: 0, backfilled: 0 };
     }
 
-    const repeatIndex = createRepeatIndex(recentItems);
-    const deduped = dedupItemsAgainstRepeatIndex(items || [], repeatIndex, {
-      targetCount: target,
-      minBackfillItems,
-    });
+    const repeatIndex = buildSemanticRepeatIndex(recentItems);
+    const deduped = excludeSemanticRepeats(items || [], repeatIndex);
 
     return {
       items: deduped.items,
-      removed: deduped.removed,
+      removed: deduped.removed.length,
       archive_days_used: dedupDays,
-      backfilled: deduped.backfilled,
+      backfilled: 0,
     };
   }
 
   function buildRecentRepeatIndex(days = 3) {
     const lookbackDays = Math.max(1, Number(days || 3));
     const recentItems = loadRecentArchiveItems(lookbackDays);
-    const repeatIndex = createRepeatIndex(recentItems);
+    const repeatIndex = buildSemanticRepeatIndex(recentItems);
     return {
       days: lookbackDays,
       urlKeys: repeatIndex.urlKeys,
       headlineKeys: repeatIndex.headlineKeys,
+      storylineKeys: repeatIndex.storylineKeys,
+      repeatKeys: repeatIndex.repeatKeys,
+      recent: repeatIndex.recent,
     };
   }
 

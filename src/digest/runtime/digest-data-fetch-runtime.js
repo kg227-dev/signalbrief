@@ -81,7 +81,7 @@ function createDigestDataFetchRuntime(deps) {
     const retrievedAt = new Date().toISOString();
     log(`Fetching: ${topic.tag}`);
     const queries = getTopicQueries(topic);
-    const maxAttempts = topic?.isCustom ? Math.min(3, queries.length) : 1;
+    const maxAttempts = Math.min(3, queries.length);
     const collected = [];
     const seenUrl = new Set();
     const seenHeadline = new Set();

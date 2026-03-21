@@ -367,6 +367,28 @@ function setSelectedDomain(domain) {
   else url.searchParams.delete("domain");
   history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
+function getSourceRegistryOverviewSearchInput() {
+  return document.getElementById("sourceRegistryOverviewSearch")
+    || document.getElementById("sourceRegistryTableSearch")
+    || document.getElementById("sourceRegistrySuggestionsSearch");
+}
+function setSourceRegistryOverviewQuery(query) {
+  sourceRegistryOverviewQuery = String(query || "").trim();
+  const searchEl = getSourceRegistryOverviewSearchInput();
+  if (searchEl && searchEl.value !== sourceRegistryOverviewQuery) {
+    searchEl.value = sourceRegistryOverviewQuery;
+  }
+  const url = new URL(window.location.href);
+  if (sourceRegistryOverviewQuery) url.searchParams.set("query", sourceRegistryOverviewQuery);
+  else url.searchParams.delete("query");
+  history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+function getSourceRegistryOverviewQuery() {
+  const searchEl = getSourceRegistryOverviewSearchInput();
+  const nextQuery = searchEl ? String(searchEl.value || "").trim() : sourceRegistryOverviewQuery;
+  if (nextQuery !== sourceRegistryOverviewQuery) setSourceRegistryOverviewQuery(nextQuery);
+  return sourceRegistryOverviewQuery;
+}
 function isEditingSourceRegistry() {
   const active = document.activeElement;
   const inspector = document.getElementById("sourceRegistryInspector");
@@ -596,6 +618,7 @@ function setSourceRegistryFeedback(type, message) {
 }
 let latestSourceRegistryOverview = null;
 let selectedSourceRegistryDomain = "";
+let sourceRegistryOverviewQuery = "";
 let loadInFlight = false;
 let _allSuggestions = [];
 let _allOverrides = [];
@@ -663,8 +686,7 @@ function closeConfirmModal(accepted) {
   }
 }
 async function loadSourceRegistryOverview(silent = true) {
-  const searchEl = document.getElementById("sourceRegistrySearch");
-  const query = searchEl ? searchEl.value.trim() : "";
+  const query = getSourceRegistryOverviewQuery();
   const resp = await apiFetchJson(`/api/admin/source-registry?limit=20${query ? `&query=${encodeURIComponent(query)}` : ""}`, {}, 1);
   const data = resp.data || {};
   if (!resp.ok || data.error) {
@@ -792,8 +814,11 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", () => load(true));
 (function init() {
-  const initialDomain = new URLSearchParams(window.location.search).get("domain") || "";
+  const params = new URLSearchParams(window.location.search);
+  const initialDomain = params.get("domain") || "";
+  const initialQuery = params.get("query") || "";
   setSelectedDomain(initialDomain);
+  setSourceRegistryOverviewQuery(initialQuery);
   const searchEl = document.getElementById("sourceRegistrySearch");
   if (searchEl && initialDomain) searchEl.value = initialDomain;
   load(false);

@@ -1668,6 +1668,28 @@ function formatEtTimestamp(value) {
     return ts;
   }
 }
+function getSourceRegistryOverviewSearchInput() {
+  return document.getElementById("sourceRegistryOverviewSearch")
+    || document.getElementById("sourceRegistryTableSearch")
+    || document.getElementById("sourceRegistrySuggestionsSearch");
+}
+function setSourceRegistryOverviewQuery(query) {
+  sourceRegistryOverviewQuery = String(query || "").trim();
+  const searchEl = getSourceRegistryOverviewSearchInput();
+  if (searchEl && searchEl.value !== sourceRegistryOverviewQuery) {
+    searchEl.value = sourceRegistryOverviewQuery;
+  }
+  const url = new URL(window.location.href);
+  if (sourceRegistryOverviewQuery) url.searchParams.set("query", sourceRegistryOverviewQuery);
+  else url.searchParams.delete("query");
+  history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+function getSourceRegistryOverviewQuery() {
+  const searchEl = getSourceRegistryOverviewSearchInput();
+  const nextQuery = searchEl ? String(searchEl.value || "").trim() : sourceRegistryOverviewQuery;
+  if (nextQuery !== sourceRegistryOverviewQuery) setSourceRegistryOverviewQuery(nextQuery);
+  return sourceRegistryOverviewQuery;
+}
 function renderSourceRegistrySuggestions(overview) {
   const body = document.getElementById("sourceRegistrySuggestionsBody");
   if (!body) return;
@@ -1820,8 +1842,7 @@ function isEditingSourceRegistry() {
   return !!(active && inspector && inspector.contains(active));
 }
 async function loadSourceRegistryOverview(silent = true) {
-  const searchEl = document.getElementById("sourceRegistrySearch");
-  const query = searchEl ? searchEl.value.trim() : "";
+  const query = getSourceRegistryOverviewQuery();
   const resp = await apiFetchJson(`/api/admin/source-registry?limit=20${query ? `&query=${encodeURIComponent(query)}` : ""}`, {}, 1);
   const data = resp.data || {};
   if (!resp.ok || data.error) {
@@ -2379,6 +2400,7 @@ const rowActionStatusByEmail = new Map();
 const auditTimelineByEmail = new Map();
 const loadingAuditEmails = new Set();
 let selectedSourceRegistryDomain = "";
+let sourceRegistryOverviewQuery = "";
 let confirmResolve = null;
 let retryToastAt = 0;
 

@@ -33,7 +33,7 @@
   ]
 }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg: #edeae4;
@@ -53,7 +53,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'DM Sans', -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -98,12 +98,12 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
 /* ── Hero ── */
 .hero {
   text-align: center;
-  padding: 120px 0 80px;
+  padding: 120px 0 48px;
   max-width: 800px;
   margin: 0 auto;
 }
 .hero h1 {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Instrument Serif', Georgia, serif;
   font-size: clamp(54px, 5.5vw, 80px);
   font-weight: 400;
   letter-spacing: -1px;
@@ -112,7 +112,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   opacity: 0; animation: fadeUp 0.8s ease 0.1s forwards;
 }
 .hero .tagline {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Instrument Serif', Georgia, serif;
   font-style: italic;
   color: var(--text-secondary);
   font-size: clamp(18px, 2vw, 24px);
@@ -132,7 +132,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   display: inline-block;
   background: var(--accent);
   color: #fff;
-  font-family: 'Inter', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 16px;
   font-weight: 600;
   padding: 16px 44px;
@@ -192,7 +192,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   border-bottom: 1px solid var(--border);
 }
 .dp-brand {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Instrument Serif', Georgia, serif;
   font-size: 20px;
   font-weight: 400;
   color: var(--text);
@@ -288,7 +288,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   margin-left: auto;
 }
 .dp-title {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Instrument Serif', Georgia, serif;
   font-size: clamp(18px, 1.6vw, 22px);
   font-weight: 700;
   color: var(--text);
@@ -323,7 +323,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   transform: translateY(0);
 }
 .signup-section h2 {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Instrument Serif', Georgia, serif;
   font-size: clamp(28px, 3vw, 40px);
   font-weight: 400;
   letter-spacing: -0.5px;
@@ -403,6 +403,23 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
 .footer a { color: var(--text-secondary); text-decoration: none; opacity: 0.4; font-size: 11px; }
 .footer a:hover { opacity: 0.7; }
 
+/* ── Topic strip ── */
+.topic-strip {
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  margin-top: 28px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease 0.7s forwards;
+}
+
+/* ── Lead item accent ── */
+.dp-item:first-child {
+  border-left: 3px solid var(--accent);
+  padding-left: 16px;
+  margin-left: -19px;
+}
+
 /* ── Animations ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
@@ -447,6 +464,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
     <p class="tagline">Your daily signal across AI, strategy, and business</p>
     <p class="description">AI-curated briefings for strategy professionals. Five minutes every morning across the verticals that matter.</p>
     <a href="/signup" class="hero-cta">Get started &mdash; it's free</a>
+    <p class="topic-strip">AI &middot; Strategy &middot; Healthcare &middot; Finance &middot; Private Equity &middot; Policy</p>
   </section>
 
   <!-- ── Digest Preview Card ── -->
@@ -481,7 +499,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
           <div class="dp-item-meta">
             <span class="dp-item-num">1</span>
             <span class="dp-tag dp-tag-pe">PE&times;M&amp;A</span>
-            <span class="dp-score" style="color:#fff;background:#16A34A;">9.1</span>
+            <span class="dp-score" style="color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;">9.1</span>
           </div>
           <div class="dp-title">KKR Acquires Cotiviti in $11B Healthcare IT Leveraged Buyout</div>
           <div class="dp-lede"><strong>The largest healthcare IT LBO of 2026 resets comparable multiples across the sector.</strong> Any PE-backed health tech asset in late-stage diligence needs to recalibrate its comps deck now.</div>
@@ -492,7 +510,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
           <div class="dp-item-meta">
             <span class="dp-item-num">2</span>
             <span class="dp-tag dp-tag-ai">AI&times;TECH</span>
-            <span class="dp-score" style="color:#fff;background:#22C55E;">8.4</span>
+            <span class="dp-score" style="color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;">8.4</span>
           </div>
           <div class="dp-title">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</div>
           <div class="dp-lede"><strong>Compliance buyers now have a credible AI alternative to building in-house.</strong> Enterprise procurement cycles just compressed.</div>
@@ -503,7 +521,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
           <div class="dp-item-meta">
             <span class="dp-item-num">3</span>
             <span class="dp-tag dp-tag-policy">POLICY&times;REGULATORY</span>
-            <span class="dp-score" style="color:#111827;background:#EAB308;">6.8</span>
+            <span class="dp-score" style="color:#A16207;background:#FEFCE8;border:1px solid #FDE68A;">6.8</span>
           </div>
           <div class="dp-title">FTC Signals Closer Scrutiny on AI-Adjacent M&amp;A</div>
           <div class="dp-lede"><strong>Any deal with an AI component now requires a regulatory narrative built into the thesis from day one.</strong></div>

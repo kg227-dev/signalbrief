@@ -70,7 +70,6 @@ async function flushMicrotasks() {
     "sourceRegistrySuggestionsBody",
     "suggestionsCount",
     "suggestionsSearch",
-    "sourceRegistryOverridesBody",
     "lastRefreshed",
     "toastWrap",
     "confirmModal",
@@ -125,6 +124,27 @@ async function flushMicrotasks() {
         return jsonResponse({ authenticated: true });
       }
       if (href.startsWith("/api/admin/source-registry/domain?")) {
+        const requestedDomain = new URL(href, "https://example.com").searchParams.get("domain");
+        if (requestedDomain === "news.broadcom.com") {
+          return jsonResponse({
+            domain: "news.broadcom.com",
+            effective_policy: {},
+            admin_override: {},
+            recent_metrics: {
+              sample_items: [],
+              recent_users: [],
+              top_tags: [],
+            },
+            audit_entries: [
+              {
+                action: "source_policy_upsert",
+                actor: "admin@example.com",
+                at: "2026-03-20T14:00:00.000Z",
+                note: "Official corporate newsroom",
+              },
+            ],
+          });
+        }
         return jsonResponse({
           domain: "benzinga.com",
           effective_policy: {},
@@ -268,31 +288,78 @@ async function flushMicrotasks() {
         },
       },
     ],
+    overrides: [
+      {
+        domain: "news.broadcom.com",
+        note: "Official corporate newsroom",
+        updated_at: "2026-03-20T14:00:00.000Z",
+        updated_by: "admin@example.com",
+        effective_policy: {
+          source_type: "corporate_pr",
+          source_tier: "corporate",
+          source_policy: "limited",
+          review_status: "reviewed",
+          topic_fit_map: {
+            technology: "high",
+          },
+          policy_effects: {
+            lead_eligible: false,
+            exposure_cap: 1,
+            requires_corroboration: false,
+            score_multiplier: 0.88,
+          },
+        },
+        recent_metrics: {
+          send_count: 2,
+          weak_source_item_count: 0,
+          top_tags: [{ tag: "TECHNOLOGY", count: 2 }],
+        },
+      },
+    ],
   });
 
   assert.deepStrictEqual(
     extractRenderedDomains(elements.get("sourceRegistrySuggestionsBody").innerHTML),
-    ["pharmavoice.com", "youtube.com", "businessinsider.com"],
-    "suggestions should default to tracked sends descending"
+    ["pharmavoice.com", "youtube.com", "news.broadcom.com", "businessinsider.com"],
+    "governance rows should default to tracked sends descending"
   );
   assert.strictEqual(
     elements.get("suggestionsCount").textContent,
-    "3 sources",
+    "4 sources",
     "suggestions count should reflect the rendered row count"
+  );
+  assert.ok(
+    elements.get("sourceRegistrySuggestionsBody").innerHTML.includes("Audit history"),
+    "rows with overrides should render an inline audit control"
   );
 
   context.toggleSuggestionsSort("domain");
   assert.deepStrictEqual(
     extractRenderedDomains(elements.get("sourceRegistrySuggestionsBody").innerHTML),
-    ["businessinsider.com", "pharmavoice.com", "youtube.com"],
+    ["businessinsider.com", "news.broadcom.com", "pharmavoice.com", "youtube.com"],
     "toggling a new column should use that column's default sort direction"
   );
 
   context.toggleSuggestionsSort("domain");
   assert.deepStrictEqual(
     extractRenderedDomains(elements.get("sourceRegistrySuggestionsBody").innerHTML),
-    ["youtube.com", "pharmavoice.com", "businessinsider.com"],
+    ["youtube.com", "pharmavoice.com", "news.broadcom.com", "businessinsider.com"],
     "toggling the same column again should reverse the sort direction"
+  );
+
+  const auditPanelId = "sourceRegistryAudit-news-broadcom-com";
+  elements.set(auditPanelId, createElement(auditPanelId));
+  fetchCalls.length = 0;
+  await context.toggleSourceAudit("news.broadcom.com");
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/domain?domain=news.broadcom.com"),
+    "expanding inline audit should fetch the domain detail once"
+  );
+  assert.ok(
+    elements.get(auditPanelId).innerHTML.includes("Official corporate newsroom"),
+    "inline audit should render the fetched audit note"
   );
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

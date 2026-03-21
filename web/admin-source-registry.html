@@ -207,11 +207,11 @@ body.dark .modal-close { background:var(--card); }
 
   <div class="table-toolbar" style="margin-bottom:10px;">
     <div>
-      <div class="section-title" style="margin-bottom:0;">Suggested source review (all tracked history)</div>
+      <div class="section-title" style="margin-bottom:0;">Source governance (all tracked history)</div>
       <div id="suggestionsCount" class="table-meta" style="margin-top:3px;"></div>
     </div>
     <div class="table-toolbar-controls">
-      <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain or reason…" oninput="filterSuggestions()">
+      <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, reason, or note…" oninput="filterSuggestions()">
       <button class="table-action-link" type="button" onclick="exportSuggestionsCSV()">Export CSV</button>
     </div>
   </div>
@@ -222,34 +222,6 @@ body.dark .modal-close { background:var(--card); }
       </thead>
       <tbody id="sourceRegistrySuggestionsBody">
         <tr><td colspan="7" class="empty">Loading…</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="table-toolbar" style="margin-bottom:10px;">
-    <div>
-      <div class="section-title" style="margin-bottom:0;">Active source overrides</div>
-      <div id="overridesCount" class="table-meta" style="margin-top:3px;"></div>
-    </div>
-    <div class="table-toolbar-controls">
-      <input id="overridesSearch" class="table-search" type="text" placeholder="Search domain or note…" oninput="filterOverrides()">
-      <button class="table-action-link" type="button" onclick="exportOverridesCSV()">Export CSV</button>
-    </div>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Domain</th>
-          <th>Policy</th>
-          <th>Classification</th>
-          <th>Review</th>
-          <th>Updated</th>
-          <th>Note</th>
-        </tr>
-      </thead>
-      <tbody id="sourceRegistryOverridesBody">
-        <tr><td colspan="6" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -339,17 +311,6 @@ function renderReviewPill(reviewStatus) {
   const tone = normalized === "reviewed" ? "var(--green)" : (normalized === "monitor" ? "var(--yellow)" : "var(--red)");
   const bg = normalized === "reviewed" ? "#DCFCE7" : (normalized === "monitor" ? "#FEF3C7" : "#FEE2E2");
   return `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${bg};color:${tone};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(normalized || "unreviewed")}</span>`;
-}
-function formatSourceOverrideSummary(entry) {
-  if (!entry) return "Default";
-  const parts = [];
-  if (entry.source_type) parts.push(titleizeSourceValue(entry.source_type));
-  if (entry.policy) parts.push(entry.policy);
-  if (entry.review_status) parts.push(entry.review_status);
-  if (entry.tier_override) parts.push(`tier ${entry.tier_override}`);
-  if (entry.authority_override != null && entry.authority_override !== "") parts.push(`adv authority ${Number(entry.authority_override).toFixed(2)}`);
-  if (entry.hard_block === true || entry.policy === "blocked") parts.push("blocked");
-  return parts.length ? parts.join(" · ") : "Default";
 }
 function formatSourceMetricTags(tags) {
   const rows = Array.isArray(tags) ? tags : [];
@@ -471,6 +432,54 @@ function getTopicFitSortScore(topicFit) {
   }
   return score;
 }
+function getGovernanceReasonText(row) {
+  const overrideNote = String(row?.admin_override?.note || row?.note || "").trim();
+  if (overrideNote) return overrideNote;
+  return String(row?.suggested_reason || "Tracked source activity");
+}
+function buildGovernanceRows(overview) {
+  const suggestions = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
+  const overrides = Array.isArray(overview?.overrides) ? overview.overrides : [];
+  const rowsByDomain = new Map();
+
+  suggestions.forEach((row) => {
+    const domain = String(row?.domain || "").trim();
+    if (!domain) return;
+    rowsByDomain.set(domain, {
+      ...row,
+      domain,
+      admin_override: row?.admin_override || null,
+    });
+  });
+
+  overrides.forEach((override) => {
+    const domain = String(override?.domain || "").trim();
+    if (!domain) return;
+    const existing = rowsByDomain.get(domain) || {};
+    const recent = override?.recent_metrics || {};
+    rowsByDomain.set(domain, {
+      ...existing,
+      domain,
+      send_count: existing.send_count != null ? existing.send_count : Math.max(0, Number(recent.send_count || 0)),
+      weak_source_item_count: existing.weak_source_item_count != null
+        ? existing.weak_source_item_count
+        : Math.max(0, Number(recent.weak_source_item_count || 0)),
+      poor_digest_item_count: existing.poor_digest_item_count != null
+        ? existing.poor_digest_item_count
+        : Math.max(0, Number(recent.poor_digest_item_count || 0)),
+      top_tags: Array.isArray(existing.top_tags) && existing.top_tags.length
+        ? existing.top_tags
+        : (Array.isArray(recent.top_tags) ? recent.top_tags : []),
+      effective_policy: override?.effective_policy || existing.effective_policy || {},
+      admin_override: override,
+      suggested_reason: existing.suggested_reason || "Active source override",
+      updated_at: String(override?.updated_at || existing.updated_at || "").trim() || null,
+      updated_by: String(override?.updated_by || existing.updated_by || "").trim() || "",
+    });
+  });
+
+  return Array.from(rowsByDomain.values());
+}
 function getSuggestionSortValue(row, key) {
   const effective = row?.effective_policy || {};
   switch (key) {
@@ -487,7 +496,7 @@ function getSuggestionSortValue(row, key) {
     case "topic_fit":
       return getTopicFitSortScore(effective?.topic_fit_map);
     case "reason":
-      return String(row?.suggested_reason || "").toLowerCase();
+      return getGovernanceReasonText(row).toLowerCase();
     default:
       return String(row?.domain || "").toLowerCase();
   }
@@ -534,6 +543,65 @@ function toggleSuggestionsSort(key) {
   }
   filterSuggestions();
 }
+function getSourceAuditElementId(domain) {
+  const normalized = String(domain || "").trim().toLowerCase();
+  const slug = normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `sourceRegistryAudit-${slug || "domain"}`;
+}
+function renderSourceAuditEntries(entries) {
+  const rows = Array.isArray(entries) ? entries : [];
+  if (!rows.length) return `<div class="table-meta">No source policy changes recorded yet.</div>`;
+  return rows.map((entry) => `
+    <div style="padding-top:6px;border-top:1px solid var(--border-subtle);margin-top:6px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text);">${esc(entry.action || "source_policy")} · ${esc(entry.actor || "unknown")}</div>
+      <div style="font-size:11px;color:var(--text-secondary);">${esc(formatEtTimestamp(entry.at))}${entry.note ? ` · ${esc(entry.note)}` : ""}</div>
+    </div>
+  `).join("");
+}
+async function toggleSourceAudit(domain) {
+  const normalizedDomain = String(domain || "").trim();
+  if (!normalizedDomain) return;
+  const panel = document.getElementById(getSourceAuditElementId(normalizedDomain));
+  if (!panel) return;
+  if (panel.__open === true) {
+    panel.__open = false;
+    panel.style.display = "none";
+    return;
+  }
+  panel.__open = true;
+  panel.style.display = "block";
+  if (sourceAuditCache[normalizedDomain]) {
+    panel.innerHTML = renderSourceAuditEntries(sourceAuditCache[normalizedDomain]);
+    return;
+  }
+  panel.innerHTML = `<div class="table-meta">Loading audit history…</div>`;
+  const resp = await apiFetchJson(`/api/admin/source-registry/domain?domain=${encodeURIComponent(normalizedDomain)}`, {}, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    panel.innerHTML = `<div class="table-meta" style="color:var(--red);">Failed to load audit history.</div>`;
+    return;
+  }
+  const auditEntries = Array.isArray(data.audit_entries) ? data.audit_entries : [];
+  sourceAuditCache[normalizedDomain] = auditEntries;
+  panel.innerHTML = renderSourceAuditEntries(auditEntries);
+}
+function renderSuggestionReasonCell(row) {
+  const override = row?.admin_override || null;
+  const reason = getGovernanceReasonText(row);
+  const overrideMeta = override
+    ? `Override active${override.updated_at ? ` · ${formatEtTimestamp(override.updated_at)}` : ""}${override.updated_by ? ` · ${override.updated_by}` : ""}`
+    : "";
+  const surfacedReason = override && row?.suggested_reason
+    ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">Surfaced because: ${esc(row.suggested_reason)}</div>`
+    : "";
+  const auditControl = override
+    ? `<div style="margin-top:8px;">
+        <button type="button" class="table-action-link" style="min-height:28px;padding:0 10px;" onclick="toggleSourceAudit('${esc(row.domain)}')">Audit history</button>
+        <div id="${getSourceAuditElementId(row.domain)}" style="display:none;margin-top:8px;font-size:11px;color:var(--text-secondary);"></div>
+      </div>`
+    : "";
+  return `<td style="font-size:12px;color:var(--text-2);">${esc(reason)}${overrideMeta ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(overrideMeta)}</div>` : ""}${surfacedReason}${auditControl}</td>`;
+}
 function renderSuggestionRow(row) {
   const effective = row.effective_policy || {};
   return `<tr>
@@ -543,27 +611,12 @@ function renderSuggestionRow(row) {
     <td class="mono">${Math.max(0, Number(row.send_count || 0))}</td>
     <td>${renderReviewPill(effective.review_status)}<div style="margin-top:4px;font-size:11px;color:${Number(row.weak_source_item_count || 0) > 0 ? "var(--red)" : "var(--text-secondary)"};">weak exposure ${Math.max(0, Number(row.weak_source_item_count || 0))}</div></td>
     <td style="font-size:12px;color:var(--text-secondary);">${esc(formatTopicFitSummary(effective.topic_fit_map))}</td>
-    <td style="font-size:12px;color:var(--text-2);">${esc(row.suggested_reason || "Tracked source activity")}</td>
-  </tr>`;
-}
-function renderOverrideRow(row) {
-  const effective = row.effective_policy || {};
-  return `<tr>
-    <td><button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button></td>
-    <td>${renderPolicyPill(effective.source_policy)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatRankingEffectSummary(effective.policy_effects))}</div></td>
-    <td style="font-size:12px;color:var(--text-2);">${esc(formatSourceClassificationSummary(effective))}<div style="margin-top:4px;">${renderSourceTierPill(effective.source_tier, effective.hard_block)}</div></td>
-    <td>${renderReviewPill(effective.review_status)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatSourceOverrideSummary(row))}</div></td>
-    <td style="font-size:12px;color:var(--text-secondary);">${esc(formatEtTimestamp(row.updated_at))}</td>
-    <td style="font-size:12px;color:var(--text-2);">${esc(row.note || "—")}</td>
+    ${renderSuggestionReasonCell(row)}
   </tr>`;
 }
 function renderSourceRegistrySuggestions(overview) {
-  _allSuggestions = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
+  _allSuggestions = buildGovernanceRows(overview);
   filterSuggestions();
-}
-function renderSourceRegistryOverrides(overview) {
-  _allOverrides = Array.isArray(overview?.overrides) ? overview.overrides : [];
-  filterOverrides();
 }
 function filterSuggestions() {
   const body = document.getElementById("sourceRegistrySuggestionsBody");
@@ -572,34 +625,19 @@ function filterSuggestions() {
   renderSuggestionsHeaderRow();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
+    getGovernanceReasonText(r).toLowerCase().includes(q) ||
     (r.suggested_reason || "").toLowerCase().includes(q) ||
+    (r.admin_override?.note || "").toLowerCase().includes(q) ||
     (formatSourceMetricTags(r.top_tags) || "").toLowerCase().includes(q)
   ) : _allSuggestions;
   const sortedRows = rows.slice().sort(compareSuggestionRows);
   if (!body) return;
   body.innerHTML = sortedRows.length
     ? sortedRows.map(renderSuggestionRow).join("")
-    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No recent source suggestions yet."}</td></tr>`;
+    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No tracked or overridden sources yet."}</td></tr>`;
   if (countEl) countEl.textContent = q
     ? `${sortedRows.length} of ${_allSuggestions.length} sources`
     : `${_allSuggestions.length} source${_allSuggestions.length !== 1 ? "s" : ""}`;
-}
-function filterOverrides() {
-  const body = document.getElementById("sourceRegistryOverridesBody");
-  const countEl = document.getElementById("overridesCount");
-  const q = (document.getElementById("overridesSearch")?.value || "").toLowerCase().trim();
-  const rows = q ? _allOverrides.filter(r =>
-    (r.domain || "").toLowerCase().includes(q) ||
-    (r.note || "").toLowerCase().includes(q) ||
-    (r.tier_override || "").toLowerCase().includes(q)
-  ) : _allOverrides;
-  if (!body) return;
-  body.innerHTML = rows.length
-    ? rows.map(renderOverrideRow).join("")
-    : `<tr><td colspan="6" class="empty">${q ? `No matches for "${esc(q)}".` : "No global source overrides yet."}</td></tr>`;
-  if (countEl) countEl.textContent = q
-    ? `${rows.length} of ${_allOverrides.length} overrides`
-    : `${_allOverrides.length} override${_allOverrides.length !== 1 ? "s" : ""}`;
 }
 function downloadCSV(csvContent, filename) {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -631,33 +669,22 @@ function exportSuggestionsCSV() {
   const q = (document.getElementById("suggestionsSearch")?.value || "").toLowerCase().trim();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
+    getGovernanceReasonText(r).toLowerCase().includes(q) ||
     (r.suggested_reason || "").toLowerCase().includes(q)
   ) : _allSuggestions;
-  const header = ["Domain","Source Type","Policy","Review Status","Legacy Tier","Authority","Recent Sends","Weak Exposure","Topic Fit","Reason"];
+  const header = ["Domain","Source Type","Policy","Review Status","Legacy Tier","Authority","Tracked Sends","Weak Exposure","Topic Fit","Reason","Suggested Reason","Override Updated","Override By"];
   const csv = [header, ...rows.map(r => {
     const e = r.effective_policy || {};
     return [r.domain||"", e.source_type||"", e.source_policy||"", e.review_status||"", e.source_tier||"",
       e.source_authority!=null?Number(e.source_authority).toFixed(2):"",
       Math.max(0,Number(r.send_count||0)), Math.max(0,Number(r.weak_source_item_count||0)),
       formatTopicFitSummary(e.topic_fit_map),
-      r.suggested_reason||"Tracked source activity"];
+      getGovernanceReasonText(r),
+      r.suggested_reason||"Tracked source activity",
+      formatEtTimestamp(r.admin_override?.updated_at || r.updated_at),
+      r.admin_override?.updated_by || r.updated_by || ""];
   })].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  downloadCSV(csv, "source-registry-suggestions.csv");
-}
-function exportOverridesCSV() {
-  const q = (document.getElementById("overridesSearch")?.value || "").toLowerCase().trim();
-  const rows = q ? _allOverrides.filter(r =>
-    (r.domain || "").toLowerCase().includes(q) ||
-    (r.note || "").toLowerCase().includes(q)
-  ) : _allOverrides;
-  const header = ["Domain","Policy","Source Type","Review","Legacy Tier","Authority Override","Topic Fit","Updated","Note"];
-  const csv = [header, ...rows.map(r => {
-    const e = r.effective_policy || {};
-    return [r.domain||"", e.source_policy||"", e.source_type||"", e.review_status||"", e.source_tier||"",
-      r.authority_override!=null?Number(r.authority_override).toFixed(2):"",
-      formatTopicFitSummary(r.topic_fit), formatEtTimestamp(r.updated_at), r.note||""];
-  })].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  downloadCSV(csv, "source-registry-overrides.csv");
+  downloadCSV(csv, "source-governance.csv");
 }
 function renderSourceRegistryInspector(detail, overview) {
   const container = document.getElementById("sourceRegistryInspector");
@@ -825,9 +852,9 @@ let selectedSourceRegistryDomain = "";
 let sourceRegistryOverviewQuery = "";
 let loadInFlight = false;
 let _allSuggestions = [];
-let _allOverrides = [];
 let suggestionsSortKey = "tracked_sends";
 let suggestionsSortDirection = "desc";
+const sourceAuditCache = Object.create(null);
 let autoRefreshTimer = null;
 let confirmResolve = null;
 let retryToastAt = 0;
@@ -901,7 +928,6 @@ async function loadSourceRegistryOverview(silent = true) {
   }
   latestSourceRegistryOverview = data;
   renderSourceRegistrySuggestions(data);
-  renderSourceRegistryOverrides(data);
   return data;
 }
 async function inspectSourceRegistryDomain(domainValue, silent = false) {
@@ -958,6 +984,7 @@ async function saveSourceRegistryDomain() {
   }
   setSourceRegistryFeedback("ok", "Source governance saved.");
   showToast("ok", `Saved source governance for ${domain}`);
+  delete sourceAuditCache[domain];
   if (data.detail) {
     setSelectedDomain(String(data.detail.domain || domain).trim());
     renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
@@ -986,6 +1013,7 @@ async function resetSourceRegistryDomain() {
   }
   setSourceRegistryFeedback("ok", "Source governance reset.");
   showToast("ok", `Reset source governance for ${domain}`);
+  delete sourceAuditCache[domain];
   if (data.detail) {
     setSelectedDomain(String(data.detail.domain || domain).trim());
     renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);

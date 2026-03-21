@@ -9,15 +9,15 @@ const pageSource = fs.readFileSync(PAGE_PATH, "utf8");
 
 const requiredPageSnippets = [
   "Source Governance",
-  "Suggested source review (all tracked history)",
+  "Source governance (all tracked history)",
   'id="sourceRegistryInspector"',
   'id="sourceRegistrySuggestionsHeaderRow"',
   'id="sourceRegistrySuggestionsBody"',
-  'id="sourceRegistryOverridesBody"',
+  "function buildGovernanceRows(overview)",
   "function renderSourceRegistrySuggestions(overview)",
-  "function renderSourceRegistryOverrides(overview)",
   "function renderSourceRegistryInspector(detail, overview)",
   "function toggleSuggestionsSort(key)",
+  "async function toggleSourceAudit(domain)",
   "function parseTopicFitText(rawValue)",
   "function setSourceRegistryOverviewQuery(query)",
   "async function inspectSourceRegistryDomain(domainValue, silent = false)",

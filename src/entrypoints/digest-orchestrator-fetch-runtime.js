@@ -166,8 +166,14 @@ function summarizePreferredRetrievalDiagnostics(results) {
     broad_pass_item_count: 0,
     final_selected_preferred_count: 0,
     preferred_displaced_weak_count: 0,
+    search_result_domains: [],
+    preferred_search_result_domains: [],
+    preferred_search_result_hit_count: 0,
+    preferred_search_results_without_preferred_item_count: 0,
   };
   const seenDomains = new Set();
+  const seenSearchDomains = new Set();
+  const seenPreferredSearchDomains = new Set();
   for (const result of (Array.isArray(results) ? results : [])) {
     const diagnostics = result?.diagnostics;
     if (!diagnostics || typeof diagnostics !== "object") continue;
@@ -177,9 +183,23 @@ function summarizePreferredRetrievalDiagnostics(results) {
       seenDomains.add(normalized);
       summary.preferred_domains_used.push(normalized);
     }
+    for (const domain of (Array.isArray(diagnostics.search_result_domains) ? diagnostics.search_result_domains : [])) {
+      const normalized = String(domain || "").trim();
+      if (!normalized || seenSearchDomains.has(normalized)) continue;
+      seenSearchDomains.add(normalized);
+      summary.search_result_domains.push(normalized);
+    }
+    for (const domain of (Array.isArray(diagnostics.preferred_search_result_domains) ? diagnostics.preferred_search_result_domains : [])) {
+      const normalized = String(domain || "").trim();
+      if (!normalized || seenPreferredSearchDomains.has(normalized)) continue;
+      seenPreferredSearchDomains.add(normalized);
+      summary.preferred_search_result_domains.push(normalized);
+    }
     summary.preferred_fallback_triggered = summary.preferred_fallback_triggered || diagnostics.preferred_fallback_triggered === true;
     summary.preferred_pass_item_count += Number(diagnostics.preferred_pass_item_count || 0);
     summary.broad_pass_item_count += Number(diagnostics.broad_pass_item_count || 0);
+    summary.preferred_search_result_hit_count += Number(diagnostics.preferred_search_result_hit_count || 0);
+    summary.preferred_search_results_without_preferred_item_count += diagnostics.preferred_search_results_without_preferred_item === true ? 1 : 0;
   }
   return summary;
 }
@@ -294,6 +314,18 @@ function createDigestOrchestratorFetchRuntime(deps) {
         broad_pass_item_count: Number(preferredRetrievalDiagnostics.broad_pass_item_count || 0) + Number(customPreferredDiagnostics.broad_pass_item_count || 0),
         final_selected_preferred_count: 0,
         preferred_displaced_weak_count: 0,
+        search_result_domains: uniqueValues([
+          ...(preferredRetrievalDiagnostics.search_result_domains || []),
+          ...(customPreferredDiagnostics.search_result_domains || []),
+        ]),
+        preferred_search_result_domains: uniqueValues([
+          ...(preferredRetrievalDiagnostics.preferred_search_result_domains || []),
+          ...(customPreferredDiagnostics.preferred_search_result_domains || []),
+        ]),
+        preferred_search_result_hit_count: Number(preferredRetrievalDiagnostics.preferred_search_result_hit_count || 0)
+          + Number(customPreferredDiagnostics.preferred_search_result_hit_count || 0),
+        preferred_search_results_without_preferred_item_count: Number(preferredRetrievalDiagnostics.preferred_search_results_without_preferred_item_count || 0)
+          + Number(customPreferredDiagnostics.preferred_search_results_without_preferred_item_count || 0),
       };
       logger(`Fetched ${customItems.length} custom topic item(s)`);
 
@@ -358,6 +390,10 @@ function createDigestOrchestratorFetchRuntime(deps) {
         broad_pass_item_count: Number(preferredRetrievalDiagnostics.broad_pass_item_count || 0),
         final_selected_preferred_count: 0,
         preferred_displaced_weak_count: 0,
+        search_result_domains: preferredRetrievalDiagnostics.search_result_domains || [],
+        preferred_search_result_domains: preferredRetrievalDiagnostics.preferred_search_result_domains || [],
+        preferred_search_result_hit_count: Number(preferredRetrievalDiagnostics.preferred_search_result_hit_count || 0),
+        preferred_search_results_without_preferred_item_count: Number(preferredRetrievalDiagnostics.preferred_search_results_without_preferred_item_count || 0),
       },
     };
   }

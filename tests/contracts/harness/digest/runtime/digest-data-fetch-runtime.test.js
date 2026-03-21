@@ -167,6 +167,10 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
           status: 200,
           body: {
             citations: ["https://preferred.example/story"],
+            search_results: [
+              { title: "Preferred source result", url: "https://reuters.com/technology/ai-infra" },
+              { title: "Other result", url: "https://theinformation.com/articles/ai-infra" },
+            ],
             choices: [{
               message: {
                 content: JSON.stringify([
@@ -186,6 +190,10 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
         status: 200,
         body: {
           citations: ["https://broad.example/story"],
+          search_results: [
+            { title: "Preferred result still available", url: "https://reuters.com/technology/ai-infra-2" },
+            { title: "Broad result", url: "https://broad.example/story" },
+          ],
           choices: [{
             message: {
               content: JSON.stringify([
@@ -219,8 +227,14 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
   assert.strictEqual(result.diagnostics.preferred_fallback_triggered, true);
   assert.strictEqual(result.diagnostics.preferred_pass_item_count, 1);
   assert.strictEqual(result.diagnostics.broad_pass_item_count, 1);
+  assert.deepStrictEqual(result.diagnostics.preferred_search_result_domains, ["reuters.com", "theinformation.com"]);
+  assert.strictEqual(result.diagnostics.preferred_search_result_hit_count, 2);
+  assert.strictEqual(result.diagnostics.preferred_search_results_without_preferred_item, false);
   assert.strictEqual(result.items[0].retrieval_pass, "preferred");
+  assert.strictEqual(result.items[0].preferred_source_available_in_search, true);
+  assert.deepStrictEqual(result.items[0].retrieval_preferred_search_domains, ["reuters.com", "theinformation.com"]);
   assert.strictEqual(result.items[1].retrieval_pass, "broad");
+  assert.deepStrictEqual(result.items[1].retrieval_preferred_search_domains, ["reuters.com"]);
 }
 
 (async () => {

@@ -150,6 +150,9 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(classifySourceType("totally-random.com"), "unclassified");
   assert.strictEqual(classifySourceTier("corporate.target.com").source_type, "corporate_pr");
   assert.strictEqual(classifySourceTier("corporate.target.com").source_policy, "limited");
+  assert.strictEqual(classifySourceType("signals.substack.com"), "platform_user_generated");
+  assert.strictEqual(classifySourceTier("signals.substack.com").source_policy, "review");
+  assert.strictEqual(classifySourceType("publication.medium.com"), "platform_user_generated");
 }
 
 // ── Originality signal: reported media > aggregator with generic headline ──

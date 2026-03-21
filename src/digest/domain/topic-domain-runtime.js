@@ -382,6 +382,8 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const sourcePolicy = String(item?.source_policy || "allowed").trim().toLowerCase() || "allowed";
     const sourceReviewStatus = String(item?.source_review_status || "").trim().toLowerCase() || "reviewed";
     const preferredSourceStrength = clamp(Number(item?.preferred_source_strength || 0), 0, 1);
+    const sourceType = String(item?.source_type || "").trim().toLowerCase();
+    const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
     const sourcePolicyEffects = item?.source_policy_effects && typeof item.source_policy_effects === "object"
       ? item.source_policy_effects
       : {};
@@ -398,6 +400,19 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const preferredSourceBoost = (sourcePolicy === "allowed" || sourcePolicy === "preferred")
       && String(item?.topic_fit_band || "").trim().toLowerCase() !== "low"
       ? preferredSourceStrength
+      : 0;
+    const preferredSourceAvailablePenalty = item?.preferred_source_available_in_search === true
+      && preferredSourceStrength <= 0
+      && (
+        sourcePolicy === "limited"
+        || sourcePolicy === "review"
+        || sourceType === "aggregator_republisher"
+        || sourceType === "corporate_pr"
+        || sourceType === "platform_user_generated"
+        || sourceTier === "weak"
+        || sourceTier === "suspect"
+      )
+      ? 0.06
       : 0;
 
     // Per-user source preference adjustments
@@ -429,7 +444,8 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       + specialistBoost
       - (0.06 * negativePreferencePenalty)
       - sourcePolicyPenalty
-      - sourceReviewPenalty,
+      - sourceReviewPenalty
+      - preferredSourceAvailablePenalty,
       0,
       1
     );
@@ -481,6 +497,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
         source_policy_penalty: Number(sourcePolicyPenalty.toFixed(3)),
         source_review_penalty: Number(sourceReviewPenalty.toFixed(3)),
         preferred_source_boost: Number(preferredSourceBoost.toFixed(3)),
+        preferred_source_available_penalty: Number(preferredSourceAvailablePenalty.toFixed(3)),
         multi_source_confirmation: Number(multiSourceConfirmation.toFixed(3)),
         originality_signal: Number(originalitySignal.toFixed(3)),
         topic_domain_fit: Number(topicDomainFit.toFixed(3)),

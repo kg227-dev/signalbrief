@@ -43,6 +43,10 @@ assertModuleExports(() => runtime, TARGET_REL);
             preferred_fallback_triggered: false,
             preferred_pass_item_count: 1,
             broad_pass_item_count: 0,
+            search_result_domains: ["sec.gov"],
+            preferred_search_result_domains: ["sec.gov"],
+            preferred_search_result_hit_count: 1,
+            preferred_search_results_without_preferred_item: false,
           },
         };
       }
@@ -55,6 +59,10 @@ assertModuleExports(() => runtime, TARGET_REL);
           preferred_fallback_triggered: topic.tag === "STRATEGY",
           preferred_pass_item_count: 1,
           broad_pass_item_count: topic.tag === "STRATEGY" ? 1 : 0,
+          search_result_domains: topic.tag === "AI×TECH" ? ["theinformation.com", "reuters.com"] : ["wsj.com", "reuters.com"],
+          preferred_search_result_domains: topic.tag === "AI×TECH" ? ["theinformation.com"] : ["wsj.com"],
+          preferred_search_result_hit_count: 1,
+          preferred_search_results_without_preferred_item: topic.tag === "STRATEGY",
         },
       };
     },
@@ -119,6 +127,12 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(fetched.fetchDiagnostics.preferred_fallback_triggered, true);
   assert.strictEqual(fetched.fetchDiagnostics.preferred_pass_item_count, 3);
   assert.strictEqual(fetched.fetchDiagnostics.broad_pass_item_count, 1);
+  assert.deepStrictEqual(
+    fetched.fetchDiagnostics.preferred_search_result_domains,
+    ["theinformation.com", "wsj.com", "sec.gov"]
+  );
+  assert.strictEqual(fetched.fetchDiagnostics.preferred_search_result_hit_count, 3);
+  assert.strictEqual(fetched.fetchDiagnostics.preferred_search_results_without_preferred_item_count, 1);
   assert.strictEqual(incidents.length, 0);
 
   const emptyIncidents = [];

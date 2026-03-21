@@ -6,6 +6,9 @@ const {
   normalizeTopicToken,
   topicsRelated,
 } = require("./topic-domain-runtime");
+const {
+  parseSourceIdentity,
+} = require("./source-domain-runtime");
 const { buildFreshnessKey } = require("../runtime/repeat-freshness-runtime");
 const {
   SOURCE_POLICY_RANKING_EFFECTS,
@@ -170,6 +173,7 @@ const AGGREGATOR_DOMAINS = new Set([
 ]);
 const PLATFORM_ROOT_DOMAINS = new Set([
   "youtube.com",
+  "youtu.be",
   "medium.com",
   "substack.com",
 ]);
@@ -381,6 +385,15 @@ function isCorporateAnnouncementDomain(sourceDomain) {
   return CORPORATE_SUBDOMAIN_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+function isPlatformDomain(sourceDomainRaw) {
+  const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
+  if (!sourceDomain) return false;
+  return sourceDomain === "youtu.be"
+    || matchesDomain(sourceDomain, "youtube.com")
+    || matchesDomain(sourceDomain, "medium.com")
+    || matchesDomain(sourceDomain, "substack.com");
+}
+
 function classifySourceType(sourceDomainRaw, baselineTier = null) {
   const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
   if (!sourceDomain) return "unclassified";
@@ -393,12 +406,12 @@ function classifySourceType(sourceDomainRaw, baselineTier = null) {
       }
     }
     if (!resolvedTier && isCorporateAnnouncementDomain(sourceDomain)) resolvedTier = "corporate";
-    if (!resolvedTier && sourceDomain.endsWith(".medium.com")) resolvedTier = "weak";
+    if (!resolvedTier && isPlatformDomain(sourceDomain)) resolvedTier = "weak";
     if (!resolvedTier && (sourceDomain.includes("blog.") || sourceDomain.includes(".blog"))) resolvedTier = "blog";
   }
   if (PRIMARY_OFFICIAL_DOMAINS.has(sourceDomain) || sourceDomain.endsWith(".gov")) return "primary_official";
   if (CORPORATE_PR_DOMAINS.has(sourceDomain) || isCorporateAnnouncementDomain(sourceDomain)) return "corporate_pr";
-  if (PLATFORM_ROOT_DOMAINS.has(sourceDomain) || sourceDomain.endsWith(".medium.com")) return "platform_user_generated";
+  if (isPlatformDomain(sourceDomain)) return "platform_user_generated";
   if (AGGREGATOR_DOMAINS.has(sourceDomain)) return "aggregator_republisher";
   if (ANALYSIS_BLOG_DOMAINS.has(sourceDomain) || sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) return "analysis_blog";
   if (TRADE_SPECIALIST_DOMAINS.has(sourceDomain)) return "trade_specialist";
@@ -627,6 +640,10 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
       baseTier = "weak";
       baseScore = 0.28;
       matchedRuleDomain = "medium.com";
+    } else if (sourceDomain.endsWith(".substack.com")) {
+      baseTier = "weak";
+      baseScore = 0.22;
+      matchedRuleDomain = "substack.com";
     } else if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) {
       baseTier = "blog";
       baseScore = 0.48;
@@ -1047,6 +1064,10 @@ function annotateEditorialSignals(items = []) {
     const localFlags = detectLocalContentFlags(item);
     const contentFlags = uniqSorted([...promptFlags, ...localFlags]);
     const sourceInfo = classifySourceTier(item?.source_domain || item?.source, item?.tag);
+    const sourceIdentity = parseSourceIdentity({
+      ...item,
+      source_domain: sourceInfo.source_domain || item?.source_domain || null,
+    });
     const preferredSourceMatch = resolvePreferredSourceMatch(sourceInfo.source_domain || item?.source_domain || item?.source, item?.tag);
     const originalitySignal = computeOriginalitySignal(item, sourceInfo);
     const storylineHints = buildStorylineHints(item, contentFlags, promptHints);
@@ -1074,6 +1095,10 @@ function annotateEditorialSignals(items = []) {
       source_policy_effects: sourceInfo.policy_effects || buildPolicyEffects(sourceInfo.source_policy, sourceInfo.source_type),
       source_hard_block: sourceInfo.hard_block === true,
       source_policy_note: String(sourceInfo?.admin_override?.note || "").trim() || null,
+      source_platform: sourceIdentity.source_platform || null,
+      source_identity_key: sourceIdentity.source_identity_key || sourceInfo.source_domain || item?.source_domain || "unknown",
+      source_identity_scope: sourceIdentity.source_identity_scope || "domain",
+      source_identity_label: sourceIdentity.source_identity_label || sourceInfo.source_domain || item?.source_domain || "unknown",
       topic_fit: Number((sourceInfo.topic_fit || 0).toFixed(3)),
       topic_fit_band: sourceInfo.topic_fit_band || null,
       topic_fit_map: sourceInfo.topic_fit_map || {},
@@ -1084,6 +1109,14 @@ function annotateEditorialSignals(items = []) {
       preferred_source_topics: Array.isArray(preferredSourceMatch.topics) ? preferredSourceMatch.topics : [],
       preferred_source_strength: Number(Number(preferredSourceMatch.strength || 0).toFixed(3)),
       preferred_source_domain: preferredSourceMatch.matched_domain || null,
+      retrieval_search_result_domains: Array.isArray(item?.retrieval_search_result_domains)
+        ? item.retrieval_search_result_domains.slice(0, 10)
+        : [],
+      retrieval_preferred_search_domains: Array.isArray(item?.retrieval_preferred_search_domains)
+        ? item.retrieval_preferred_search_domains.slice(0, 10)
+        : [],
+      preferred_source_available_in_search: item?.preferred_source_available_in_search === true
+        && String(preferredSourceMatch.match || "none") === "none",
       originality_signal: Number(originalitySignal.toFixed(3)),
       routine_item_score: Number(routineItemScore.toFixed(3)),
       strategic_value: Number(strategicValue.toFixed(3)),
@@ -1163,6 +1196,7 @@ function chooseRepresentative(items, opts = {}) {
       + Number(left?.originality_signal || 0.5) * 0.10
       + Number(left?.preferred_source_strength || 0) * 0.08
       + Number(left?.topic_fit || 0) * 0.05
+      - (left?.preferred_source_available_in_search && isWeakClusterCandidate(left) ? 0.08 : 0)
       - (ignoreSuppression ? 0 : Number(left?.preferred_close_substitute_penalty || 0) * 0.4)
     );
     const rightScore = (
@@ -1173,6 +1207,7 @@ function chooseRepresentative(items, opts = {}) {
       + Number(right?.originality_signal || 0.5) * 0.10
       + Number(right?.preferred_source_strength || 0) * 0.08
       + Number(right?.topic_fit || 0) * 0.05
+      - (right?.preferred_source_available_in_search && isWeakClusterCandidate(right) ? 0.08 : 0)
       - (ignoreSuppression ? 0 : Number(right?.preferred_close_substitute_penalty || 0) * 0.4)
     );
     return rightScore - leftScore;

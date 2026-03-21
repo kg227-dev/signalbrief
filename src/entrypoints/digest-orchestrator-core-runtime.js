@@ -853,6 +853,9 @@ async function main() {
       runDiagnostics: {
         alternate_queries_used: Number(fetchDiagnostics?.alternate_queries_used || 0),
         preferred_domains_used: Array.isArray(fetchDiagnostics?.preferred_domains_used) ? fetchDiagnostics.preferred_domains_used.slice(0, 20) : [],
+        preferred_search_result_domains: Array.isArray(fetchDiagnostics?.preferred_search_result_domains) ? fetchDiagnostics.preferred_search_result_domains.slice(0, 20) : [],
+        preferred_search_result_hit_count: Number(fetchDiagnostics?.preferred_search_result_hit_count || 0),
+        preferred_search_results_without_preferred_item_count: Number(fetchDiagnostics?.preferred_search_results_without_preferred_item_count || 0),
         preferred_fallback_triggered: fetchDiagnostics?.preferred_fallback_triggered === true,
         preferred_pass_item_count: Number(fetchDiagnostics?.preferred_pass_item_count || 0),
         broad_pass_item_count: Number(fetchDiagnostics?.broad_pass_item_count || 0),

@@ -1,5 +1,6 @@
 "use strict";
 
+const { normalizeSourcePolicyDomain } = require("../../runtime/source-policy-registry-runtime");
 const { getTopicQueries, buildSearchRequest } = require("./digest-data-fetch-request-runtime");
 const {
   enrichWithCitationUrls,
@@ -67,6 +68,45 @@ function incrementStatusCount(statusCounts, statusCode) {
   statusCounts[code] = (statusCounts[code] || 0) + 1;
 }
 
+function matchesDomain(sourceDomain, candidateDomain) {
+  const source = normalizeSourcePolicyDomain(sourceDomain);
+  const candidate = normalizeSourcePolicyDomain(candidateDomain);
+  if (!source || !candidate) return false;
+  return source === candidate || source.endsWith(`.${candidate}`);
+}
+
+function collectSearchResultEvidence(searchResults, preferredDomains = []) {
+  const domains = [];
+  const preferredHits = [];
+  const seenDomains = new Set();
+  const seenPreferred = new Set();
+  for (const result of (Array.isArray(searchResults) ? searchResults : [])) {
+    let normalized = "";
+    try {
+      normalized = normalizeSourcePolicyDomain(new URL(String(result?.url || "")).hostname);
+    } catch {
+      normalized = "";
+    }
+    if (!normalized) continue;
+    if (!seenDomains.has(normalized)) {
+      seenDomains.add(normalized);
+      domains.push(normalized);
+    }
+    const matchingPreferred = (Array.isArray(preferredDomains) ? preferredDomains : []).find((candidate) => matchesDomain(normalized, candidate));
+    if (matchingPreferred) {
+      const preferredNormalized = normalizeSourcePolicyDomain(matchingPreferred);
+      if (preferredNormalized && !seenPreferred.has(preferredNormalized)) {
+        seenPreferred.add(preferredNormalized);
+        preferredHits.push(preferredNormalized);
+      }
+    }
+  }
+  return {
+    search_result_domains: domains,
+    preferred_search_result_domains: preferredHits,
+  };
+}
+
 function createPassDiagnostics(maxAttempts) {
   return {
     attempts_planned: maxAttempts,
@@ -77,6 +117,9 @@ function createPassDiagnostics(maxAttempts) {
     status_counts: {},
     degraded: false,
     last_error: null,
+    search_result_domains: [],
+    preferred_search_result_domains: [],
+    preferred_search_result_hit_count: 0,
   };
 }
 
@@ -88,6 +131,15 @@ function mergePassDiagnostics(target, extra) {
   target.transport_errors += Number(extra?.transport_errors || 0);
   target.degraded = target.degraded || extra?.degraded === true;
   target.last_error = extra?.last_error || target.last_error || null;
+  target.search_result_domains = Array.from(new Set([
+    ...(Array.isArray(target.search_result_domains) ? target.search_result_domains : []),
+    ...(Array.isArray(extra?.search_result_domains) ? extra.search_result_domains : []),
+  ]));
+  target.preferred_search_result_domains = Array.from(new Set([
+    ...(Array.isArray(target.preferred_search_result_domains) ? target.preferred_search_result_domains : []),
+    ...(Array.isArray(extra?.preferred_search_result_domains) ? extra.preferred_search_result_domains : []),
+  ]));
+  target.preferred_search_result_hit_count += Number(extra?.preferred_search_result_hit_count || 0);
   for (const [code, count] of Object.entries(extra?.status_counts || {})) {
     target.status_counts[code] = (target.status_counts[code] || 0) + Number(count || 0);
   }
@@ -123,6 +175,7 @@ function createDigestDataFetchRuntime(deps) {
     collected,
     passName,
     searchDomainFilter,
+    preferredEvidenceDomains,
   }) {
     const maxAttempts = Math.min(3, queries.length);
     const diagnostics = createPassDiagnostics(maxAttempts);
@@ -176,6 +229,22 @@ function createDigestDataFetchRuntime(deps) {
       diagnostics.successful_calls += 1;
 
       const citations = res.body?.citations || [];
+      const searchResults = Array.isArray(res.body?.search_results) ? res.body.search_results : [];
+      const searchEvidence = collectSearchResultEvidence(
+        searchResults,
+        Array.isArray(preferredEvidenceDomains) ? preferredEvidenceDomains : searchDomainFilter
+      );
+      diagnostics.search_result_domains = Array.from(new Set([
+        ...diagnostics.search_result_domains,
+        ...searchEvidence.search_result_domains,
+      ]));
+      diagnostics.preferred_search_result_domains = Array.from(new Set([
+        ...diagnostics.preferred_search_result_domains,
+        ...searchEvidence.preferred_search_result_domains,
+      ]));
+      if (searchEvidence.preferred_search_result_domains.length > 0) {
+        diagnostics.preferred_search_result_hit_count += 1;
+      }
 
       try {
         const content = res.body?.choices?.[0]?.message?.content || "[]";
@@ -194,6 +263,10 @@ function createDigestDataFetchRuntime(deps) {
             ...item,
             retrieved_at: retrievedAt,
             retrieval_pass: passName,
+            retrieval_search_result_domains: searchEvidence.search_result_domains.slice(0, 10),
+            retrieval_preferred_search_domains: searchEvidence.preferred_search_result_domains.slice(0, 10),
+            preferred_source_available_in_search: searchEvidence.preferred_search_result_domains.length > 0
+              && !searchEvidence.preferred_search_result_domains.some((candidate) => matchesDomain(item?.source || item?.url, candidate)),
           }));
         collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup);
       } catch (err) {
@@ -247,6 +320,10 @@ function createDigestDataFetchRuntime(deps) {
       broad_pass_item_count: 0,
       final_selected_preferred_count: 0,
       preferred_displaced_weak_count: 0,
+      search_result_domains: [],
+      preferred_search_result_domains: [],
+      preferred_search_result_hit_count: 0,
+      preferred_search_results_without_preferred_item: false,
     };
 
     if (!queries.length) {
@@ -265,6 +342,7 @@ function createDigestDataFetchRuntime(deps) {
         collected,
         passName: "preferred",
         searchDomainFilter: preferredDomains,
+        preferredEvidenceDomains: preferredDomains,
       });
       apiCalls += preferredPass.apiCalls;
       mergePassDiagnostics(diagnostics, preferredPass.diagnostics);
@@ -288,11 +366,17 @@ function createDigestDataFetchRuntime(deps) {
         collected,
         passName: "broad",
         searchDomainFilter: [],
+        preferredEvidenceDomains: preferredDomains,
       });
       apiCalls += broadPass.apiCalls;
       mergePassDiagnostics(diagnostics, broadPass.diagnostics);
       diagnostics.broad_pass_item_count = Math.max(0, collected.length - beforeBroadCount);
     }
+    const finalHasPreferredItem = collected.some((item) =>
+      (Array.isArray(item?.retrieval_preferred_search_domains) ? item.retrieval_preferred_search_domains : [])
+        .some((candidate) => matchesDomain(item?.source || item?.url, candidate))
+    );
+    diagnostics.preferred_search_results_without_preferred_item = diagnostics.preferred_search_result_domains.length > 0 && !finalHasPreferredItem;
 
     return {
       items: collected.slice(0, 3),

@@ -19,4 +19,5 @@ Key archived materials:
 - week5 and week6 rollout runbooks and closeout docs
 - stabilization and infrastructure decision memos
 - earlier phase-0 and roadmap-implementation notes
+- March 21 source-quality follow-up memo after preferred-source v1/v2 rollout
 - companion schema file: `engagement-event-schema.v1.json`

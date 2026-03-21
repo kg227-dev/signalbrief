@@ -1,6 +1,6 @@
 # Documentation Index
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: March 21, 2026*
 
 Use this file as the router for the repository's live and archived docs.
 
@@ -42,4 +42,5 @@ Use this file as the router for the repository's live and archived docs.
 
 - [Archive Policy](./archive/README.md)
 - [March 2026 Planning Archive](./archive/planning/2026-03/README.md)
+- [Source Quality Follow-Ups (2026-03-21)](./archive/planning/2026-03/source-quality-follow-ups-2026-03-21.md)
 - [March 2026 Marketing Archive](./archive/marketing/2026-03/README.md)

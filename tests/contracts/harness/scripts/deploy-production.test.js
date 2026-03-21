@@ -29,6 +29,7 @@ assertSourceIncludesFile(TARGET_PATH, [
   "store canary chat IDs require --store-backend canary",
   "expected store_backend=",
   "expected store_sqlite_path=",
+  "--force-recreate",
   "production deploy requires a CI-built image or an explicit emergency fallback",
   "app image inferred from git remote",
   "registry deploy requires DEPLOY_REGISTRY_USER and DEPLOY_REGISTRY_PASSWORD together",

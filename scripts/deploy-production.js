@@ -441,6 +441,7 @@ function buildImageDeployRemoteSteps({
 }) {
   const composeServices = buildComposeServiceArgs(services);
   const composeEnvPrefix = buildComposeEnvPrefix(deployEnvValues);
+  const requiresForceRecreate = Object.keys(deployEnvValues || {}).some((key) => key !== "SIGNALBRIEF_APP_IMAGE");
   const verifyCommand = buildVerifyRuntimeCommand({
     expectedStoreBackend,
     expectedSqlitePath,
@@ -451,7 +452,7 @@ function buildImageDeployRemoteSteps({
     "echo '[deploy-prod] remote: compose pull'",
     `${composeEnvPrefix}docker compose pull ${composeServices}`.trim(),
     "echo '[deploy-prod] remote: compose up'",
-    `${composeEnvPrefix}docker compose up -d --no-build ${composeServices}`.trim(),
+    `${composeEnvPrefix}docker compose up -d --no-build${requiresForceRecreate ? " --force-recreate" : ""} ${composeServices}`.trim(),
   ];
   if (!skipRemoteVerify) {
     steps.push(
@@ -483,6 +484,8 @@ function buildArchiveDeployRemoteSteps({
 }) {
   const composeArgs = ["docker", "compose", "up", "-d"];
   if (!skipBuild) composeArgs.push("--build");
+  const requiresForceRecreate = Object.keys(deployEnvValues || {}).some((key) => key !== "SIGNALBRIEF_APP_IMAGE");
+  if (requiresForceRecreate) composeArgs.push("--force-recreate");
   composeArgs.push(...services);
   const composeEnvPrefix = buildComposeEnvPrefix(deployEnvValues);
   const verifyCommand = buildVerifyRuntimeCommand({

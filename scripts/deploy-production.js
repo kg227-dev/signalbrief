@@ -1204,7 +1204,9 @@ async function main() {
         fail("app image was not published to registry in time", detail);
       }
     } else {
-      allowAnonymousRegistryPull = availability?.probe?.authMode === "anonymous";
+      allowAnonymousRegistryPull = !hasValue(registryUser)
+        && !hasValue(registryPassword)
+        && availability?.probe?.available === true;
       if (allowAnonymousRegistryPull && hasValue(registry)) {
         log(`image availability: public anonymous pull confirmed for ${registry}; remote cached auth will be cleared before pull`);
       }

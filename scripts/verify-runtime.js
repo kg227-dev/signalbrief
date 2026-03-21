@@ -13,6 +13,19 @@ const HEALTH_RETRY_DELAY_MS = Math.max(250, Number(process.env.SCHEDULER_HEALTH_
 const FAIL_LOG_TAIL_LINES = Math.max(20, Number(process.env.VERIFY_FAIL_LOG_TAIL_LINES || 120));
 const CANARY_CMD = process.env.DIGEST_CANARY_CMD || "node src/entrypoints/digest.js --dry-run";
 const SKIP_CANARY = process.argv.includes("--skip-canary");
+const EXPECTED_STORE_BACKEND = resolveCliOption("--expected-store-backend")
+  || process.env.EXPECTED_STORE_BACKEND
+  || "";
+const EXPECTED_SQLITE_PATH = resolveCliOption("--expected-sqlite-path")
+  || process.env.EXPECTED_SQLITE_PATH
+  || "";
+
+function resolveCliOption(name) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return "";
+  const next = String(process.argv[index + 1] || "").trim();
+  return next && !next.startsWith("--") ? next : "";
+}
 
 function log(message) {
   process.stdout.write(`[verify-runtime] ${message}\n`);
@@ -270,6 +283,30 @@ async function main() {
         collectFailureDiagnostics(),
       ].join("\n")
     );
+  }
+  if (EXPECTED_STORE_BACKEND) {
+    const actualStoreBackend = String(healthResponse.data?.runtime_state?.store_backend || "").trim();
+    if (actualStoreBackend !== EXPECTED_STORE_BACKEND) {
+      fail(
+        `expected store backend ${EXPECTED_STORE_BACKEND}, got ${actualStoreBackend || "missing"}`,
+        [
+          JSON.stringify(healthResponse.data, null, 2),
+          collectFailureDiagnostics(),
+        ].join("\n")
+      );
+    }
+  }
+  if (EXPECTED_SQLITE_PATH && ["sqlite", "canary"].includes(String(EXPECTED_STORE_BACKEND || "").trim().toLowerCase())) {
+    const actualSqlitePath = String(healthResponse.data?.runtime_state?.store_sqlite_path || "").trim();
+    if (actualSqlitePath !== EXPECTED_SQLITE_PATH) {
+      fail(
+        `expected sqlite path ${EXPECTED_SQLITE_PATH}, got ${actualSqlitePath || "missing"}`,
+        [
+          JSON.stringify(healthResponse.data, null, 2),
+          collectFailureDiagnostics(),
+        ].join("\n")
+      );
+    }
   }
   log(`scheduler summary: ${healthResponse.data?.scheduler?.summary || "ok"}`);
 

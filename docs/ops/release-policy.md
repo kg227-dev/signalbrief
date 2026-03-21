@@ -37,6 +37,7 @@ Promotion gate behavior in tooling:
 - `ops:deploy:staging` now writes a staging verification artifact to `artifacts/releases/latest-staging-deploy.json` when public verification passes.
 - `ops:deploy:prod` now blocks unless that artifact exists, is fresh, and matches the exact SHA being promoted.
 - `ops:deploy:prod` now defaults to the CI-built image for that SHA; source-build deploys are emergency-only via `npm run ops:deploy:prod:emergency-source` or `--emergency-source-build`.
+- `ops:deploy:prod` can now assert `runtime_state.store_backend` and `runtime_state.store_sqlite_path` during verification when store-cutover flags are supplied.
 - Default freshness window is 24h (`DEPLOY_STAGING_ARTIFACT_MAX_AGE_MINUTES` or `--staging-artifact-max-age-minutes` to override).
 
 ## Hotfix Path

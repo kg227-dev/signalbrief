@@ -385,20 +385,66 @@ function buildComposeServiceArgs(services) {
   return (Array.isArray(services) ? services : []).map((service) => shellQuote(service)).join(" ");
 }
 
-function buildComposeEnvPrefix(appImage) {
-  const image = String(appImage || "").trim();
-  if (!image) return "";
-  return `SIGNALBRIEF_APP_IMAGE=${shellQuote(image)} `;
+function buildComposeEnvPrefix(envValues = {}) {
+  const parts = [];
+  const entries = envValues && typeof envValues === "object"
+    ? Object.entries(envValues)
+    : [];
+  for (const [key, rawValue] of entries) {
+    const value = String(rawValue || "").trim();
+    if (!value) continue;
+    parts.push(`${key}=${shellQuote(value)}`);
+  }
+  if (!parts.length) return "";
+  return `${parts.join(" ")} `;
+}
+
+function buildDeployEnvValues(options = {}) {
+  const envValues = {};
+  if (hasValue(options.appImage)) envValues.SIGNALBRIEF_APP_IMAGE = String(options.appImage || "").trim();
+  if (hasValue(options.storeBackend)) envValues.SIGNALBRIEF_STORE_BACKEND = String(options.storeBackend || "").trim();
+  if (hasValue(options.sqlitePath)) envValues.SIGNALBRIEF_SQLITE_PATH = String(options.sqlitePath || "").trim();
+  if (hasValue(options.storeCanaryChatIds)) {
+    envValues.SIGNALBRIEF_STORE_CANARY_CHAT_IDS = String(options.storeCanaryChatIds || "").trim();
+  }
+  if (hasValue(options.storeCanaryMirrorWrites)) {
+    envValues.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES = String(options.storeCanaryMirrorWrites || "").trim();
+  }
+  return envValues;
+}
+
+function buildVerifyRuntimeCommand({
+  expectedStoreBackend,
+  expectedSqlitePath,
+} = {}) {
+  const args = ["--skip-canary"];
+  if (hasValue(expectedStoreBackend)) {
+    args.push("--expected-store-backend", String(expectedStoreBackend || "").trim());
+  }
+  if (hasValue(expectedSqlitePath)) {
+    args.push("--expected-sqlite-path", String(expectedSqlitePath || "").trim());
+  }
+  const quotedArgs = args.map((arg) => shellQuote(arg)).join(" ");
+  return {
+    npm: `npm run -s ops:verify-runtime:quick -- ${quotedArgs}`,
+    node: `node scripts/verify-runtime.js ${quotedArgs}`,
+  };
 }
 
 function buildImageDeployRemoteSteps({
   remoteDir,
   services,
   skipRemoteVerify,
-  appImage,
+  deployEnvValues,
+  expectedStoreBackend,
+  expectedSqlitePath,
 }) {
   const composeServices = buildComposeServiceArgs(services);
-  const composeEnvPrefix = buildComposeEnvPrefix(appImage);
+  const composeEnvPrefix = buildComposeEnvPrefix(deployEnvValues);
+  const verifyCommand = buildVerifyRuntimeCommand({
+    expectedStoreBackend,
+    expectedSqlitePath,
+  });
   const steps = [
     "set -euo pipefail",
     `cd ${shellQuote(remoteDir)}`,
@@ -411,9 +457,9 @@ function buildImageDeployRemoteSteps({
     steps.push(
       "echo '[deploy-prod] remote: runtime verify'",
       "if command -v npm >/dev/null 2>&1; then "
-      + "npm run -s ops:verify-runtime:quick; "
+      + `${verifyCommand.npm}; `
       + "elif command -v node >/dev/null 2>&1; then "
-      + "node scripts/verify-runtime.js --skip-canary; "
+      + `${verifyCommand.node}; `
       + "else "
       + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
       + "fi"
@@ -431,10 +477,18 @@ function buildArchiveDeployRemoteSteps({
   skipBuild,
   skipRemoteVerify,
   sha,
+  deployEnvValues,
+  expectedStoreBackend,
+  expectedSqlitePath,
 }) {
   const composeArgs = ["docker", "compose", "up", "-d"];
   if (!skipBuild) composeArgs.push("--build");
   composeArgs.push(...services);
+  const composeEnvPrefix = buildComposeEnvPrefix(deployEnvValues);
+  const verifyCommand = buildVerifyRuntimeCommand({
+    expectedStoreBackend,
+    expectedSqlitePath,
+  });
 
   // Build separately with --no-cache so Docker doesn't serve stale source files
   // from a cached COPY layer. The deps stage (npm ci) is still fast because
@@ -447,17 +501,19 @@ function buildArchiveDeployRemoteSteps({
     "echo '[deploy-prod] remote: extract archive'",
     `tar -xzf ${shellQuote(remoteArchivePath)}`,
     "echo '[deploy-prod] remote: compose build'",
-    skipBuild ? "echo '[deploy-prod] remote: build skipped'" : `docker compose build --no-cache --build-arg ${shellQuote(`DEPLOY_SHA=${sha}`)} ${buildNoCacheArgs}`,
+    skipBuild
+      ? "echo '[deploy-prod] remote: build skipped'"
+      : `${composeEnvPrefix}docker compose build --no-cache --build-arg ${shellQuote(`DEPLOY_SHA=${sha}`)} ${buildNoCacheArgs}`.trim(),
     "echo '[deploy-prod] remote: compose up'",
-    composeArgs.filter((arg) => arg !== "--build").map((arg) => shellQuote(arg)).join(" "),
+    `${composeEnvPrefix}${composeArgs.filter((arg) => arg !== "--build").map((arg) => shellQuote(arg)).join(" ")}`.trim(),
   ];
   if (!skipRemoteVerify) {
     steps.push(
       "echo '[deploy-prod] remote: runtime verify'",
       "if command -v npm >/dev/null 2>&1; then "
-      + "npm run -s ops:verify-runtime:quick; "
+      + `${verifyCommand.npm}; `
       + "elif command -v node >/dev/null 2>&1; then "
-      + "node scripts/verify-runtime.js --skip-canary; "
+      + `${verifyCommand.node}; `
       + "else "
       + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
       + "fi"
@@ -489,11 +545,13 @@ function remoteDockerLogin({ sshKey, sshTarget, registry, user, password }) {
   });
 }
 
-async function verifyPublicEndpoints(publicBaseUrl) {
+async function verifyPublicEndpoints(publicBaseUrl, options = {}) {
   const base = String(publicBaseUrl || "").replace(/\/+$/, "");
   if (!base) fail("public URL is required for verification");
   const attempts = PUBLIC_VERIFY_ATTEMPTS;
   const delayMs = PUBLIC_VERIFY_DELAY_MS;
+  const expectedStoreBackend = String(options.expectedStoreBackend || "").trim();
+  const expectedSqlitePath = String(options.expectedSqlitePath || "").trim();
 
   try {
     log(`public verify: ${base}/`);
@@ -552,6 +610,26 @@ async function verifyPublicEndpoints(publicBaseUrl) {
           `scheduler payload: ${JSON.stringify(parsed, null, 2)}`
         );
       }
+      if (expectedStoreBackend) {
+        const actualStoreBackend = String(parsed?.runtime_state?.store_backend || "").trim();
+        if (actualStoreBackend !== expectedStoreBackend) {
+          throw createVerifyError(
+            `expected store_backend=${expectedStoreBackend}, got ${actualStoreBackend || "missing"}`,
+            response,
+            `scheduler payload: ${JSON.stringify(parsed, null, 2)}`
+          );
+        }
+      }
+      if (expectedSqlitePath && ["sqlite", "canary"].includes(expectedStoreBackend)) {
+        const actualSqlitePath = String(parsed?.runtime_state?.store_sqlite_path || "").trim();
+        if (actualSqlitePath !== expectedSqlitePath) {
+          throw createVerifyError(
+            `expected store_sqlite_path=${expectedSqlitePath}, got ${actualSqlitePath || "missing"}`,
+            response,
+            `scheduler payload: ${JSON.stringify(parsed, null, 2)}`
+          );
+        }
+      }
       return response;
     });
   } catch (error) {
@@ -577,6 +655,10 @@ async function main() {
         "  --public-url <https://public-host>",
         "  --app-image <registry/image:tag>",
         "  --deploy-sha <commit-sha>",
+        "  --store-backend <file|canary|sqlite>",
+        "  --sqlite-path </app/data/signalbrief.sqlite>",
+        "  --store-canary-chat-ids \"chat-1,chat-2\"",
+        "  --store-canary-mirror-writes <0|1>",
         "  --registry <registry-host>",
         "  --registry-user <registry-user>",
         "  --archive-sha <commit-sha> (legacy alias for --deploy-sha)",
@@ -611,6 +693,18 @@ async function main() {
   const registryUser = readOption(options, "registry-user", "registry_user") || process.env.DEPLOY_REGISTRY_USER || "";
   const registryPassword = process.env.DEPLOY_REGISTRY_PASSWORD || "";
   const deploySha = readOption(options, "deploy-sha", "deploy_sha", "archive-sha", "archive_sha");
+  const storeBackend = readOption(options, "store-backend", "store_backend")
+    || process.env.DEPLOY_STORE_BACKEND
+    || "";
+  let sqlitePath = readOption(options, "sqlite-path", "sqlite_path")
+    || process.env.DEPLOY_SQLITE_PATH
+    || "";
+  const storeCanaryChatIds = readOption(options, "store-canary-chat-ids", "store_canary_chat_ids")
+    || process.env.DEPLOY_STORE_CANARY_CHAT_IDS
+    || "";
+  const storeCanaryMirrorWrites = readOption(options, "store-canary-mirror-writes", "store_canary_mirror_writes")
+    || process.env.DEPLOY_STORE_CANARY_MIRROR_WRITES
+    || "";
   const targetEnv = (readOption(options, "target-env", "target_env") || process.env.DEPLOY_TARGET_ENV || "production")
     .toLowerCase()
     .trim();
@@ -637,6 +731,7 @@ async function main() {
     || parseBoolean(process.env.DEPLOY_ALLOW_OUTSIDE_WINDOW);
   const emergencySourceBuild = flags.has("emergency-source-build")
     || parseBoolean(process.env.DEPLOY_EMERGENCY_SOURCE_BUILD);
+  const normalizedStoreBackend = String(storeBackend || "").trim().toLowerCase();
 
   if (deploySha) verifyGitCommit(deploySha);
   const sha = getGitShortSha(deploySha || "HEAD");
@@ -655,7 +750,17 @@ async function main() {
   if (!hasValue(registry) && hasValue(appImage)) {
     registry = inferRegistryFromImage(appImage);
   }
+  if (!hasValue(sqlitePath) && ["sqlite", "canary"].includes(normalizedStoreBackend)) {
+    sqlitePath = "/app/data/signalbrief.sqlite";
+  }
   const imageDeployEnabled = hasValue(appImage);
+  const deployEnvValues = buildDeployEnvValues({
+    appImage,
+    storeBackend: normalizedStoreBackend,
+    sqlitePath,
+    storeCanaryChatIds,
+    storeCanaryMirrorWrites,
+  });
 
   if (imageDeployEnabled && emergencySourceBuild) {
     fail("--emergency-source-build cannot be combined with --app-image");
@@ -681,6 +786,21 @@ async function main() {
     if (registryCredentialCount === 2 && !hasValue(registry)) {
       fail("registry deploy requires registry host when credentials are provided");
     }
+  }
+  if (normalizedStoreBackend && !["file", "canary", "sqlite"].includes(normalizedStoreBackend)) {
+    fail(`invalid store backend: ${storeBackend}`);
+  }
+  if (normalizedStoreBackend === "canary" && !hasValue(storeCanaryChatIds)) {
+    fail("canary store deploy requires --store-canary-chat-ids");
+  }
+  if (normalizedStoreBackend !== "canary" && hasValue(storeCanaryChatIds)) {
+    fail("store canary chat IDs require --store-backend canary");
+  }
+  if (hasValue(storeCanaryMirrorWrites) && !["0", "1"].includes(String(storeCanaryMirrorWrites).trim())) {
+    fail("store canary mirror writes must be 0 or 1");
+  }
+  if (normalizedStoreBackend !== "canary" && hasValue(storeCanaryMirrorWrites)) {
+    fail("store canary mirror writes require --store-backend canary");
   }
 
   if (targetEnv === "production") {
@@ -753,7 +873,9 @@ async function main() {
       remoteDir,
       services,
       skipRemoteVerify,
-      appImage,
+      deployEnvValues,
+      expectedStoreBackend: normalizedStoreBackend,
+      expectedSqlitePath: sqlitePath,
     });
   } else {
     log("deploy mode=emergency_source_build");
@@ -782,6 +904,9 @@ async function main() {
       skipBuild,
       skipRemoteVerify,
       sha,
+      deployEnvValues,
+      expectedStoreBackend: normalizedStoreBackend,
+      expectedSqlitePath: sqlitePath,
     });
   }
 
@@ -799,7 +924,10 @@ async function main() {
   ], { label: "remote deploy" });
 
   if (!skipPublicVerify) {
-    await verifyPublicEndpoints(publicUrl);
+    await verifyPublicEndpoints(publicUrl, {
+      expectedStoreBackend: normalizedStoreBackend,
+      expectedSqlitePath: sqlitePath,
+    });
   } else {
     log("public verification skipped by flag");
   }

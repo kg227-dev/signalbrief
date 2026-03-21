@@ -192,6 +192,8 @@ function createRuntimeStateInspector(deps) {
         ? "runtime state paths aligned"
         : `divergent runtime roots: ${divergent.join(", ") || "unknown"}`,
       divergent_components: divergent,
+      store_backend: String(diagnostics?.store?.backend || "").trim() || null,
+      store_sqlite_path: String(diagnostics?.store?.sqlite_path || "").trim() || null,
       mismatch_flags: diagnostics?.mismatch_flags || {},
       component_roots: diagnostics?.roots?.component_roots || {},
     };

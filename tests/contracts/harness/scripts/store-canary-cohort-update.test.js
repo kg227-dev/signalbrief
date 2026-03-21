@@ -40,6 +40,7 @@ const resolved = resolveCanaryCohortUpdateOptions([
 ], {}, rootDir);
 assert.deepStrictEqual(resolved.cohortChatIds, ["111", "222", "333"]);
 assert.strictEqual(resolved.stagingUrl, "https://staging.example.com");
+assert.strictEqual(resolved.sqlitePath, path.join(rootDir, "data", "signalbrief.sqlite"));
 assert.strictEqual(resolved.maxCanarySize, 4);
 assert.strictEqual(resolved.skipLocalCi, true);
 assert.strictEqual(resolved.artifactDir, artifactDir);
@@ -112,7 +113,9 @@ assert.ok(failedCi.checks.some((entry) => entry.name === "critical-tests" && ent
     });
     assert.strictEqual(success.pass, true);
     assert.strictEqual(success.export.SIGNALBRIEF_STORE_BACKEND, "canary");
+    assert.strictEqual(success.export.SIGNALBRIEF_SQLITE_PATH, path.join(process.cwd(), "data", "signalbrief.sqlite"));
     assert.strictEqual(success.export.SIGNALBRIEF_STORE_CANARY_CHAT_IDS, "a,b");
+    assert.strictEqual(success.export.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES, "1");
     assert.ok(fs.existsSync(success.artifact_path));
 
     const failed = await runCanaryCohortUpdate({

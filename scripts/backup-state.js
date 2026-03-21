@@ -53,6 +53,8 @@ function printHelp() {
       "  --keep <n>                       Keep newest n backups (default: 14)",
       "  --allow-missing                  Skip missing state directories",
       "  --dry-run                        Build manifest, skip tar output",
+      "  Manifest output records canonical SQLite assets when present:",
+      "    signalbrief.sqlite, signalbrief.sqlite-wal, signalbrief.sqlite-shm",
       "  --help                           Show help",
     ].join("\n")
   );
@@ -214,6 +216,9 @@ function buildManifest({ stateDirs }) {
     const dirFiles = listFilesRecursive(dir.absPath, dir.label);
     files.push(...dirFiles);
   }
+  const sqlitePrimaryAssets = files
+    .map((file) => file.path)
+    .filter((filePath) => /(^|\/)signalbrief\.sqlite(?:-wal|-shm)?$/i.test(filePath));
   const totalBytes = files.reduce((sum, row) => sum + Number(row.size || 0), 0);
   return {
     version: 1,
@@ -222,6 +227,9 @@ function buildManifest({ stateDirs }) {
     root: ROOT,
     commit_sha: getCommitSha(),
     state_dirs: stateDirs.map((row) => row.label),
+    canonical_state_assets: {
+      sqlite_primary: sqlitePrimaryAssets,
+    },
     file_count: files.length,
     total_bytes: totalBytes,
     files,

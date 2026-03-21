@@ -42,6 +42,11 @@ function resolveCanaryCohortUpdateOptions(argv, env = process.env, baseDir = ROO
   const { options, flags } = parseArgs(argv);
   const stagingUrl = readOption(options, "staging-url", "staging_url")
     || String(env.DEPLOY_STAGING_PUBLIC_URL || "").trim();
+  const sqlitePath = resolvePath(
+    readOption(options, "sqlite-path", "sqlite_path") || String(env.SIGNALBRIEF_SQLITE_PATH || ""),
+    path.join(baseDir, "data", "signalbrief.sqlite"),
+    baseDir
+  );
   const artifactDir = resolvePath(
     readOption(options, "artifact-dir", "artifact_dir") || String(env.SIGNALBRIEF_RELEASE_ARTIFACT_DIR || ""),
     DEFAULT_ARTIFACT_DIR,
@@ -54,6 +59,7 @@ function resolveCanaryCohortUpdateOptions(argv, env = process.env, baseDir = ROO
 
   return {
     stagingUrl,
+    sqlitePath,
     cohortChatIds,
     artifactDir,
     artifactName: readOption(options, "artifact-name", "artifact_name"),
@@ -213,6 +219,7 @@ async function runCanaryCohortUpdate(rawOptions, deps = {}) {
   const options = {
     ...rawOptions,
     stagingUrl: String(rawOptions.stagingUrl || "").trim(),
+    sqlitePath: path.resolve(String(rawOptions.sqlitePath || path.join(ROOT, "data", "signalbrief.sqlite"))),
     cohortChatIds: parseCanaryChatIds(rawOptions.cohortChatIds || []),
     artifactDir: path.resolve(String(rawOptions.artifactDir || DEFAULT_ARTIFACT_DIR)),
     artifactName: String(rawOptions.artifactName || "").trim(),
@@ -236,6 +243,7 @@ async function runCanaryCohortUpdate(rawOptions, deps = {}) {
     workflow: "canary_cohort_update",
     options: {
       staging_url: options.stagingUrl,
+      sqlite_path: options.sqlitePath,
       cohort_chat_ids: options.cohortChatIds,
       max_canary_size: options.maxCanarySize,
       skip_local_ci: options.skipLocalCi,
@@ -247,7 +255,9 @@ async function runCanaryCohortUpdate(rawOptions, deps = {}) {
     pass,
     export: {
       SIGNALBRIEF_STORE_BACKEND: "canary",
+      SIGNALBRIEF_SQLITE_PATH: options.sqlitePath,
       SIGNALBRIEF_STORE_CANARY_CHAT_IDS: options.cohortChatIds.join(","),
+      SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES: "1",
     },
   };
   const artifactPath = writeArtifact(options, report);
@@ -268,6 +278,7 @@ function printHelp() {
       "Options:",
       "  --cohort-chat-ids \"id1,id2\"      Required cohort list",
       "  --staging-url <https://...>        Required staging URL",
+      "  --sqlite-path <file>               SQLite file path (default: ./data/signalbrief.sqlite)",
       "  --max-canary-size <n>              Max allowed cohort size (default: 3)",
       "  --artifact-dir <dir>               Artifact output dir (default: ./artifacts/releases)",
       "  --artifact-name <file.json>        Explicit artifact name",
@@ -291,7 +302,9 @@ async function main() {
       + `staging_green=${report.staging.staging_green} cohort_size=${report.options.cohort_chat_ids.length}`
     );
     log(`export SIGNALBRIEF_STORE_BACKEND=${report.export.SIGNALBRIEF_STORE_BACKEND}`);
+    log(`export SIGNALBRIEF_SQLITE_PATH=${report.export.SIGNALBRIEF_SQLITE_PATH}`);
     log(`export SIGNALBRIEF_STORE_CANARY_CHAT_IDS=${report.export.SIGNALBRIEF_STORE_CANARY_CHAT_IDS}`);
+    log(`export SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES=${report.export.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES}`);
     log(`artifact=${report.artifact_path}`);
     if (!report.pass) process.exit(1);
   } catch (error) {

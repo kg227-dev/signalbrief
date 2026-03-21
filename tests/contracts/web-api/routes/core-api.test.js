@@ -176,6 +176,29 @@ async function invoke(handler, { method, pathname, search = "" }) {
   }
 
   {
+    const handler = createCoreApiRouteHandler(baseDeps({
+      getRuntimeStateHealth: () => ({
+        ok: true,
+        status: "ok",
+        reason: "runtime state paths aligned",
+        store_backend: "sqlite",
+        store_sqlite_path: "/app/data/signalbrief.sqlite",
+        mismatch_flags: {},
+        component_roots: {},
+      }),
+    }));
+    const { handled, res } = await invoke(handler, {
+      method: "GET",
+      pathname: "/api/health/scheduler",
+    });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(res.statusCode, 200);
+    const payload = JSON.parse(res.body);
+    assert.strictEqual(payload.runtime_state.store_backend, "sqlite");
+    assert.strictEqual(payload.runtime_state.store_sqlite_path, "/app/data/signalbrief.sqlite");
+  }
+
+  {
     const handler = createCoreApiRouteHandler(baseDeps());
     const { handled, res } = await invoke(handler, {
       method: "GET",

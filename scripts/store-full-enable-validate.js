@@ -244,6 +244,7 @@ function runFullEnableValidate(rawOptions) {
     pass,
     export: {
       SIGNALBRIEF_STORE_BACKEND: "sqlite",
+      SIGNALBRIEF_SQLITE_PATH: options.sqlitePath,
       SIGNALBRIEF_STORE_ROLLBACK_BACKEND: "file",
     },
     warnings: warnings.filter(Boolean),
@@ -292,6 +293,7 @@ function main() {
       + `rollback_switch_validated=${report.checks.rollback_switch_validated}`
     );
     log(`export SIGNALBRIEF_STORE_BACKEND=${report.export.SIGNALBRIEF_STORE_BACKEND}`);
+    log(`export SIGNALBRIEF_SQLITE_PATH=${report.export.SIGNALBRIEF_SQLITE_PATH}`);
     log(`export SIGNALBRIEF_STORE_ROLLBACK_BACKEND=${report.export.SIGNALBRIEF_STORE_ROLLBACK_BACKEND}`);
     log(`artifact=${report.artifact_path}`);
     if (!report.pass) process.exit(1);

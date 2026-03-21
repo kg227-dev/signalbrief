@@ -447,21 +447,97 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   margin-bottom: 14px;
 }
 .features-about p:last-child { margin-bottom: 0; }
-.features-verticals {
+.topics-section {
+  margin-top: 28px;
+}
+.topics-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  margin-top: 20px;
+}
+.topics-group-label:first-child {
+  margin-top: 0;
+}
+.topics-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 20px;
 }
-.vertical-chip {
+.topic-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.02);
+  color: var(--text-body);
+  cursor: default;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+body.dark .topic-pill {
+  background: rgba(255,255,255,0.03);
+}
+.topic-pill.selected {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: rgba(59,95,192,0.2);
+  font-weight: 600;
+}
+.topic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.topic-pill.selected .topic-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.topics-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: rgba(0,0,0,0.018);
+  border: 1px dashed rgba(0,0,0,0.1);
+  border-radius: 12px;
+}
+body.dark .topics-custom-row {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.08);
+}
+.topics-custom-prefix {
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  padding: 5px 14px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.topics-custom-tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
   border-radius: 100px;
   background: var(--accent-light);
   color: var(--accent);
-  border: 1px solid rgba(59,95,192,0.12);
+  border: 1px solid rgba(59,95,192,0.18);
+}
+.topics-custom-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 @media (max-width: 720px) {
   .features-grid { grid-template-columns: 1fr; }
@@ -605,7 +681,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
     <h1>SignalBrief</h1>
     <p class="tagline">Your daily signal across AI, strategy, and business</p>
     <p class="description">AI-curated briefings for strategy professionals. Five minutes every morning across the verticals that matter.</p>
-    <a href="/signup" class="hero-cta">Get started &mdash; it's free</a>
+    <a href="/signup" class="hero-cta">Get started, it's free</a>
   </section>
 
   <!-- ── Digest Preview Card ── -->
@@ -679,7 +755,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true">&#x1F4E1;</div>
         <h3>Curated from hundreds of sources</h3>
-        <p>Each morning, SignalBrief's AI scans hundreds of business, strategy, and policy publications — from major financial outlets to niche healthcare and private equity sources — and selects only the signals that matter to your work.</p>
+        <p>Each morning, SignalBrief's AI scans hundreds of business, strategy, and policy publications, from major financial outlets to niche healthcare and private equity sources, and selects only the signals that matter to your work.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true">&#x1F3AF;</div>
@@ -689,20 +765,44 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true">&#x26A1;</div>
         <h3>Ready in five minutes</h3>
-        <p>No noise, no infinite scroll. SignalBrief delivers a concise briefing you can read in under five minutes — each item includes a summary and a "why it matters" note connecting the news to strategic implications for your work.</p>
+        <p>No noise, no infinite scroll. SignalBrief delivers a concise briefing you can read in under five minutes. Each item includes a summary and a "why it matters" note connecting the news to strategic implications for your work.</p>
       </div>
     </div>
     <div class="features-about">
       <h2>The AI news digest for strategy, finance, and healthcare professionals</h2>
-      <p>SignalBrief is a daily AI-curated news digest built for professionals who need to stay current across multiple sectors without spending hours reading. Our AI reads thousands of headlines every morning and filters them down to the signals most relevant to business strategy, M&amp;A, healthcare policy, private equity, and technology — delivered to your inbox before the workday starts.</p>
+      <p>SignalBrief is a daily AI-curated news digest built for professionals who need to stay current across multiple sectors without spending hours reading. Our AI reads thousands of headlines every morning and filters them to the signals most relevant to your work, delivered to your inbox before the workday starts.</p>
       <p>Unlike general news aggregators or broad newsletters, SignalBrief is designed for strategy work. Each briefing is personalized by vertical and role, so a private equity analyst sees different signals than a healthcare executive or a management consultant. Every item includes a concise summary and a strategic "why it matters" note so you arrive at every meeting with context, not just headlines.</p>
-      <div class="features-verticals" aria-label="Covered verticals">
-        <span class="vertical-chip">AI &amp; Technology</span>
-        <span class="vertical-chip">Healthcare</span>
-        <span class="vertical-chip">Private Equity &amp; M&amp;A</span>
-        <span class="vertical-chip">Finance</span>
-        <span class="vertical-chip">Regulatory Policy</span>
-        <span class="vertical-chip">Strategy</span>
+
+      <div class="topics-section" aria-label="Covered verticals and capabilities">
+        <div class="topics-group-label">Industries</div>
+        <div class="topics-grid">
+          <div class="topic-pill selected"><span class="topic-dot"></span>Healthcare</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Financial Services</div>
+          <div class="topic-pill selected"><span class="topic-dot"></span>Private Equity &amp; M&amp;A</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Energy</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Consumer &amp; Retail</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Life Sciences</div>
+          <div class="topic-pill selected"><span class="topic-dot"></span>Technology</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Industrials</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Real Estate</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Public Sector</div>
+        </div>
+        <div class="topics-group-label">Capabilities</div>
+        <div class="topics-grid">
+          <div class="topic-pill selected"><span class="topic-dot"></span>AI &amp; Technology</div>
+          <div class="topic-pill selected"><span class="topic-dot"></span>Strategy</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Policy &amp; Regulatory</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Sustainability &amp; ESG</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Digital Transformation</div>
+          <div class="topic-pill selected"><span class="topic-dot"></span>M&amp;A Advisory</div>
+          <div class="topic-pill"><span class="topic-dot"></span>Talent &amp; Workforce</div>
+        </div>
+        <div class="topics-custom-row">
+          <span class="topics-custom-prefix">+ Custom</span>
+          <span class="topics-custom-tag">GLP-1</span>
+          <span class="topics-custom-tag">DOGE</span>
+          <span class="topics-custom-note">You can also add your own keywords: a drug class, a company you follow, a policy area, or a client sector.</span>
+        </div>
       </div>
     </div>
   </section>

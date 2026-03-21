@@ -1,6 +1,30 @@
 "use strict";
 
+const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
+
 const MAX_ARTICLE_AGE_HOURS = 72;
+const TITLE_TOKEN_MIN_LENGTH = 4;
+const TITLE_STOP_WORDS = new Set([
+  "about",
+  "amid",
+  "after",
+  "also",
+  "been",
+  "from",
+  "into",
+  "more",
+  "most",
+  "over",
+  "says",
+  "that",
+  "than",
+  "their",
+  "them",
+  "they",
+  "this",
+  "will",
+  "with",
+]);
 
 function articleAgeTooOld(item, maxAgeHours) {
   const limit = Number.isFinite(maxAgeHours) ? maxAgeHours : MAX_ARTICLE_AGE_HOURS;
@@ -24,33 +48,140 @@ function parsePerplexityItems(content) {
   return JSON.parse(cleaned);
 }
 
-function findCitationForHostname(citations, hostname) {
-  return citations.find((candidate) => {
-    try {
-      return new URL(candidate).hostname === hostname;
-    } catch {
-      return false;
-    }
-  });
+function normalizeUrlMatchKey(value, stripSearch = false) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (stripSearch) parsed.search = "";
+    return normalizeCanonicalUrl(parsed.toString());
+  } catch {
+    return normalizeCanonicalUrl(raw);
+  }
 }
 
-function enrichWithCitationUrls(items, citations, topicTag, log) {
+function toEvidenceRecord(url, title = "") {
+  const rawUrl = String(url || "").trim();
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    return {
+      url: parsed.toString(),
+      hostname: parsed.hostname,
+      fullKey: normalizeUrlMatchKey(parsed.toString(), false),
+      pathKey: normalizeUrlMatchKey(parsed.toString(), true),
+      title: String(title || "").trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildEvidenceRecords(citations, searchResults) {
+  const records = [];
+  const seen = new Map();
+
+  for (const citation of (Array.isArray(citations) ? citations : [])) {
+    const record = toEvidenceRecord(citation);
+    const dedupeKey = record?.pathKey || record?.fullKey;
+    if (!record || seen.has(dedupeKey)) continue;
+    seen.set(dedupeKey, record);
+    records.push(record);
+  }
+
+  for (const result of (Array.isArray(searchResults) ? searchResults : [])) {
+    const record = toEvidenceRecord(result?.url, result?.title);
+    if (!record) continue;
+    const dedupeKey = record.pathKey || record.fullKey;
+    if (seen.has(dedupeKey)) {
+      const existing = seen.get(dedupeKey);
+      if (existing && !existing.title && record.title) existing.title = record.title;
+      continue;
+    }
+    seen.set(dedupeKey, record);
+    records.push(record);
+  }
+
+  return records;
+}
+
+function tokenizeHeadline(value) {
+  return Array.from(new Set(
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= TITLE_TOKEN_MIN_LENGTH && !TITLE_STOP_WORDS.has(token))
+  ));
+}
+
+function scoreTitleMatch(headline, title) {
+  const headlineTokens = tokenizeHeadline(headline);
+  if (headlineTokens.length === 0) return 0;
+  const titleTokens = new Set(tokenizeHeadline(title));
+  return headlineTokens.reduce((score, token) => score + (titleTokens.has(token) ? 1 : 0), 0);
+}
+
+function selectSameHostEvidence(item, evidenceRecords) {
+  if (!Array.isArray(evidenceRecords) || evidenceRecords.length === 0) return null;
+  if (evidenceRecords.length === 1) return evidenceRecords[0];
+
+  const scored = evidenceRecords
+    .map((record) => ({
+      record,
+      score: scoreTitleMatch(item?.headline, record?.title),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (scored.length === 0) return null;
+  if (scored.length > 1 && scored[0].score === scored[1].score) return null;
+  return scored[0].record;
+}
+
+function resolveEvidenceBackedUrl(item, evidenceRecords) {
+  const itemUrl = new URL(String(item?.url || ""));
+  const exactFullKey = normalizeUrlMatchKey(itemUrl.toString(), false);
+  const exactPathKey = normalizeUrlMatchKey(itemUrl.toString(), true);
+
+  const exactMatch = evidenceRecords.find((record) => (
+    (record.fullKey && record.fullKey === exactFullKey)
+    || (record.pathKey && record.pathKey === exactPathKey)
+  ));
+  if (exactMatch) return exactMatch.url;
+
+  const sameHostEvidence = evidenceRecords.filter((record) => record.hostname === itemUrl.hostname);
+  const selected = selectSameHostEvidence(item, sameHostEvidence);
+  return selected?.url || "";
+}
+
+function enrichWithCitationUrls(items, citations, searchResults, topicTag, log) {
   if (!Array.isArray(items)) return [];
+  const evidenceRecords = buildEvidenceRecords(citations, searchResults);
   return items.map((item) => {
     if (!item?.url || item.url === "#") return { ...item, tag: topicTag };
     try {
-      const itemUrl = new URL(item.url);
-      if (itemUrl.pathname === "/" || itemUrl.pathname === "") {
-        const match = findCitationForHostname(citations, itemUrl.hostname);
-        if (match) return { ...item, url: match, tag: topicTag };
+      if (evidenceRecords.length === 0) return { ...item, tag: topicTag };
+      const resolvedUrl = resolveEvidenceBackedUrl(item, evidenceRecords);
+      if (resolvedUrl) {
+        if (resolvedUrl !== item.url && typeof log === "function") {
+          log(`ℹ️ Replaced unsupported ${topicTag} URL with evidence-backed URL: ${item.url} -> ${resolvedUrl}`);
+        }
+        return { ...item, url: resolvedUrl, tag: topicTag };
       }
     } catch (err) {
       if (typeof log === "function") {
         log(`⚠️ Invalid item URL for ${topicTag}: ${err.message}`);
       }
+      return null;
     }
-    return { ...item, tag: topicTag };
-  });
+    if (typeof log === "function") {
+      log(`⚠️ Dropping ${topicTag} item with unsupported evidence URL: ${item.url}`);
+    }
+    return null;
+  }).filter(Boolean);
 }
 
 function collectUniqueItems(items, seenHeadline, seenUrl, out, normalizeUrlForDedup) {

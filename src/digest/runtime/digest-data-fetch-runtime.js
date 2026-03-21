@@ -267,7 +267,7 @@ function createDigestDataFetchRuntime(deps) {
           continue;
         }
 
-        const normalized = enrichWithCitationUrls(parsed, citations, topic.tag, log)
+        const normalized = enrichWithCitationUrls(parsed, citations, searchResults, topic.tag, log)
           .map((item) => ({
             ...item,
             retrieved_at: retrievedAt,

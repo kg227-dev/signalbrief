@@ -241,11 +241,89 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
   assert.deepStrictEqual(result.items[1].retrieval_preferred_search_domains, ["reuters.com"]);
 }
 
+async function testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl() {
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    httpsPostWithRetry: async () => ({
+      status: 200,
+      body: {
+        citations: ["https://www.wsj.com/articles/actual-blackstone-deal-4912d9ee"],
+        choices: [{
+          message: {
+            content: JSON.stringify([
+              {
+                headline: "Blackstone exits energy portfolio in $15 billion deal",
+                summary: "Summary",
+                source: "wsj.com",
+                url: "https://www.wsj.com/articles/blackstone-exits-energy-portfolio-15-billion-deal-3f8d2a1c",
+              },
+            ]),
+          },
+        }],
+      },
+    }),
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "PE×M&A",
+    queries: ["q1"],
+  });
+
+  assert.strictEqual(result.items.length, 1);
+  assert.strictEqual(result.items[0].url, "https://www.wsj.com/articles/actual-blackstone-deal-4912d9ee");
+}
+
+async function testFetchDropsAmbiguousSameHostMismatch() {
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    httpsPostWithRetry: async () => ({
+      status: 200,
+      body: {
+        citations: [
+          "https://www.wsj.com/articles/first-energy-deal-11111111",
+          "https://www.wsj.com/articles/second-energy-deal-22222222",
+        ],
+        choices: [{
+          message: {
+            content: JSON.stringify([
+              {
+                headline: "Blackstone exits energy portfolio in $15 billion deal",
+                summary: "Summary",
+                source: "wsj.com",
+                url: "https://www.wsj.com/articles/blackstone-exits-energy-portfolio-15-billion-deal-3f8d2a1c",
+              },
+            ]),
+          },
+        }],
+      },
+    }),
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "PE×M&A",
+    queries: ["q1"],
+  });
+
+  assert.strictEqual(result.items.length, 0);
+}
+
 (async () => {
   await testCustomFallbackFlowWithProviderPolicy();
   await testTransportErrorDiagnostics();
   await testStandardTopicsUseFallbackQueriesForThinPools();
   await testPreferredDomainPassUsesSearchFilterAndBroadFallback();
+  await testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl();
+  await testFetchDropsAmbiguousSameHostMismatch();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

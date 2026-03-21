@@ -22,6 +22,20 @@ const {
 const ROOT = path.resolve(__dirname, "..");
 const PUBLIC_VERIFY_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_ATTEMPTS, 8, 1);
 const PUBLIC_VERIFY_DELAY_MS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_DELAY_MS, 2500, 250);
+const IMAGE_WAIT_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_ATTEMPTS, 40, 1);
+const IMAGE_WAIT_DELAY_MS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_DELAY_MS, 15000, 250);
+const IMAGE_WAIT_TIMEOUT_MS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_TIMEOUT_MS, 10000, 1000);
+const IMAGE_WAIT_AUTO_FALLBACK = parseBoolean(
+  Object.prototype.hasOwnProperty.call(process.env, "DEPLOY_IMAGE_WAIT_AUTO_FALLBACK")
+    ? process.env.DEPLOY_IMAGE_WAIT_AUTO_FALLBACK
+    : "1"
+);
+const REGISTRY_MANIFEST_ACCEPT = [
+  "application/vnd.oci.image.index.v1+json",
+  "application/vnd.oci.image.manifest.v1+json",
+  "application/vnd.docker.distribution.manifest.list.v2+json",
+  "application/vnd.docker.distribution.manifest.v2+json",
+].join(", ");
 
 function log(message) {
   process.stdout.write(`[deploy-prod] ${message}\n`);
@@ -173,7 +187,12 @@ async function eventually(label, attempts, delayMs, fn) {
   throw lastError || new Error(`${label} failed`);
 }
 
-function fetchUrl(url, { timeoutMs = 8000, maxRedirects = 4 } = {}) {
+function requestUrl(url, {
+  method = "GET",
+  timeoutMs = 8000,
+  maxRedirects = 4,
+  headers = {},
+} = {}) {
   return new Promise((resolve, reject) => {
     let parsed;
     try {
@@ -184,11 +203,11 @@ function fetchUrl(url, { timeoutMs = 8000, maxRedirects = 4 } = {}) {
     }
     const transport = parsed.protocol === "https:" ? https : http;
     const req = transport.request(parsed, {
-      method: "GET",
+      method,
       timeout: timeoutMs,
       headers: {
-        Accept: "text/html,application/json;q=0.9,*/*;q=0.8",
         "User-Agent": "signalbrief-deploy-prod/1.0",
+        ...headers,
       },
     }, (res) => {
       const status = Number(res.statusCode || 0);
@@ -215,6 +234,182 @@ function fetchUrl(url, { timeoutMs = 8000, maxRedirects = 4 } = {}) {
     req.on("error", reject);
     req.end();
   });
+}
+
+function fetchUrl(url, { timeoutMs = 8000, maxRedirects = 4 } = {}) {
+  return requestUrl(url, {
+    method: "GET",
+    timeoutMs,
+    maxRedirects,
+    headers: {
+      Accept: "text/html,application/json;q=0.9,*/*;q=0.8",
+    },
+  });
+}
+
+function parseImageReference(appImage) {
+  const raw = String(appImage || "").trim();
+  if (!raw) return null;
+  const firstSlash = raw.indexOf("/");
+  if (firstSlash <= 0) return null;
+  const registry = raw.slice(0, firstSlash);
+  const remainder = raw.slice(firstSlash + 1);
+  const digestIdx = remainder.indexOf("@");
+  if (digestIdx >= 0) {
+    return {
+      registry,
+      repository: remainder.slice(0, digestIdx),
+      reference: remainder.slice(digestIdx + 1),
+    };
+  }
+  const lastColon = remainder.lastIndexOf(":");
+  if (lastColon <= 0) return null;
+  return {
+    registry,
+    repository: remainder.slice(0, lastColon),
+    reference: remainder.slice(lastColon + 1),
+  };
+}
+
+function parseBearerChallenge(headerValue) {
+  const raw = String(headerValue || "").trim();
+  if (!raw.toLowerCase().startsWith("bearer ")) return null;
+  const attrs = {};
+  const re = /([a-z_]+)="([^"]*)"/gi;
+  let match;
+  while ((match = re.exec(raw)) !== null) {
+    attrs[String(match[1] || "").toLowerCase()] = String(match[2] || "");
+  }
+  if (!attrs.realm) return null;
+  return attrs;
+}
+
+function buildBasicAuthHeader(user, password) {
+  if (!hasValue(user) || !hasValue(password)) return "";
+  return `Basic ${Buffer.from(`${user}:${password}`, "utf8").toString("base64")}`;
+}
+
+async function fetchRegistryBearerToken(challenge, { registryUser, registryPassword, timeoutMs }) {
+  const realm = String(challenge?.realm || "").trim();
+  if (!realm) throw new Error("registry auth realm missing");
+  const tokenUrl = new URL(realm);
+  if (challenge?.service) tokenUrl.searchParams.set("service", String(challenge.service));
+  if (challenge?.scope) tokenUrl.searchParams.set("scope", String(challenge.scope));
+  const authHeader = buildBasicAuthHeader(registryUser, registryPassword);
+  const response = await requestUrl(tokenUrl.toString(), {
+    method: "GET",
+    timeoutMs,
+    headers: {
+      Accept: "application/json",
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
+  });
+  if (response.status >= 400) {
+    throw createVerifyError(`registry token request returned ${response.status}`, response);
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(response.body || "{}");
+  } catch {
+    throw createVerifyError("registry token response was not JSON", response);
+  }
+  const token = String(parsed?.token || parsed?.access_token || "").trim();
+  if (!token) throw createVerifyError("registry token missing", response);
+  return token;
+}
+
+async function probeImageAvailability(appImage, {
+  registryUser,
+  registryPassword,
+  timeoutMs = IMAGE_WAIT_TIMEOUT_MS,
+} = {}) {
+  const parsed = parseImageReference(appImage);
+  if (!parsed?.registry || !parsed?.repository || !parsed?.reference) {
+    throw new Error(`invalid image ref: ${appImage}`);
+  }
+  const manifestUrl = `https://${parsed.registry}/v2/${parsed.repository}/manifests/${parsed.reference}`;
+  let authorization = "";
+
+  for (let authRound = 0; authRound < 2; authRound += 1) {
+    const response = await requestUrl(manifestUrl, {
+      method: "GET",
+      timeoutMs,
+      maxRedirects: 0,
+      headers: {
+        Accept: REGISTRY_MANIFEST_ACCEPT,
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+    });
+
+    if (response.status === 200) {
+      return { available: true, response };
+    }
+    if (response.status === 404) {
+      return { available: false, response, reason: "manifest_not_found" };
+    }
+    if (response.status === 401 && !authorization) {
+      const challenge = parseBearerChallenge(
+        response.headers?.["www-authenticate"] || response.headers?.["WWW-Authenticate"]
+      );
+      if (!challenge) {
+        return { available: false, response, reason: "auth_challenge_missing" };
+      }
+      const token = await fetchRegistryBearerToken(challenge, {
+        registryUser,
+        registryPassword,
+        timeoutMs,
+      });
+      authorization = `Bearer ${token}`;
+      continue;
+    }
+    throw createVerifyError(`registry manifest probe returned ${response.status}`, response);
+  }
+
+  return {
+    available: false,
+    reason: "auth_failed",
+  };
+}
+
+async function waitForImageAvailability(appImage, {
+  attempts = IMAGE_WAIT_ATTEMPTS,
+  delayMs = IMAGE_WAIT_DELAY_MS,
+  timeoutMs = IMAGE_WAIT_TIMEOUT_MS,
+  registryUser,
+  registryPassword,
+} = {}) {
+  let lastProbe = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const probe = await probeImageAvailability(appImage, {
+        registryUser,
+        registryPassword,
+        timeoutMs,
+      });
+      lastProbe = probe;
+      if (probe.available) {
+        log(`image availability: ready (${appImage})`);
+        return { ok: true, probe };
+      }
+      if (attempt < attempts) {
+        const status = Number(probe?.response?.status || 0);
+        log(`image availability: ${appImage} not ready yet (attempt ${attempt}/${attempts}, status=${status || "n/a"}, reason=${probe?.reason || "pending"}); retrying in ${delayMs}ms`);
+        await sleep(delayMs);
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        log(`image availability: probe failed for ${appImage} (attempt ${attempt}/${attempts}, error=${String(error?.message || error)}); retrying in ${delayMs}ms`);
+        await sleep(delayMs);
+      }
+    }
+  }
+  return {
+    ok: false,
+    probe: lastProbe,
+    error: lastError,
+  };
 }
 
 function getGitShortSha(ref = "HEAD") {
@@ -671,6 +866,10 @@ async function main() {
         "  --staging-artifact-max-age-minutes <n>",
         "  --release-windows-et <spec>",
         "  --release-window-tolerance-minutes <n>",
+        "  --image-wait-attempts <n>",
+        "  --image-wait-delay-ms <ms>",
+        "  --image-wait-timeout-ms <ms>",
+        "  --no-image-wait-fallback",
         "  --emergency-source-build",
         "  --hotfix",
         "  --skip-staging-gate",
@@ -734,6 +933,32 @@ async function main() {
     || parseBoolean(process.env.DEPLOY_ALLOW_OUTSIDE_WINDOW);
   const emergencySourceBuild = flags.has("emergency-source-build")
     || parseBoolean(process.env.DEPLOY_EMERGENCY_SOURCE_BUILD);
+  const imageWaitAttempts = parsePositiveInt(
+    readOption(options, "image-wait-attempts", "image_wait_attempts")
+    || process.env.DEPLOY_IMAGE_WAIT_ATTEMPTS,
+    IMAGE_WAIT_ATTEMPTS
+  );
+  const imageWaitDelayMs = parsePositiveInt(
+    readOption(options, "image-wait-delay-ms", "image_wait_delay_ms")
+    || process.env.DEPLOY_IMAGE_WAIT_DELAY_MS,
+    IMAGE_WAIT_DELAY_MS,
+    250
+  );
+  const imageWaitTimeoutMs = parsePositiveInt(
+    readOption(options, "image-wait-timeout-ms", "image_wait_timeout_ms")
+    || process.env.DEPLOY_IMAGE_WAIT_TIMEOUT_MS,
+    IMAGE_WAIT_TIMEOUT_MS,
+    1000
+  );
+  const imageWaitAutoFallback = !flags.has("no-image-wait-fallback") && parseBoolean(
+    Object.prototype.hasOwnProperty.call(options, "image-wait-auto-fallback")
+      ? options["image-wait-auto-fallback"]
+      : (Object.prototype.hasOwnProperty.call(options, "image_wait_auto_fallback")
+        ? options.image_wait_auto_fallback
+        : (Object.prototype.hasOwnProperty.call(process.env, "DEPLOY_IMAGE_WAIT_AUTO_FALLBACK")
+          ? process.env.DEPLOY_IMAGE_WAIT_AUTO_FALLBACK
+          : String(IMAGE_WAIT_AUTO_FALLBACK ? "1" : "0")))
+  );
   const normalizedStoreBackend = String(storeBackend || "").trim().toLowerCase();
 
   if (deploySha) verifyGitCommit(deploySha);
@@ -756,22 +981,16 @@ async function main() {
   if (!hasValue(sqlitePath) && ["sqlite", "canary"].includes(normalizedStoreBackend)) {
     sqlitePath = "/app/data/signalbrief.sqlite";
   }
-  const imageDeployEnabled = hasValue(appImage);
-  const deployEnvValues = buildDeployEnvValues({
-    appImage,
-    storeBackend: normalizedStoreBackend,
-    sqlitePath,
-    storeCanaryChatIds,
-    storeCanaryMirrorWrites,
-  });
+  let imageDeployEnabled = hasValue(appImage);
+  let useEmergencySourceBuild = emergencySourceBuild;
 
-  if (imageDeployEnabled && emergencySourceBuild) {
+  if (imageDeployEnabled && useEmergencySourceBuild) {
     fail("--emergency-source-build cannot be combined with --app-image");
   }
   if (!imageDeployEnabled && (hasValue(registry) || hasValue(registryUser) || hasValue(registryPassword))) {
     fail("registry credentials require --app-image deploy mode");
   }
-  if (targetEnv === "production" && !imageDeployEnabled && !emergencySourceBuild) {
+  if (targetEnv === "production" && !imageDeployEnabled && !useEmergencySourceBuild) {
     fail(
       "production deploy requires a CI-built image or an explicit emergency fallback",
       [
@@ -862,6 +1081,42 @@ async function main() {
   }
 
   log(`commit=${sha}`);
+  if (imageDeployEnabled) {
+    const availability = await waitForImageAvailability(appImage, {
+      attempts: imageWaitAttempts,
+      delayMs: imageWaitDelayMs,
+      timeoutMs: imageWaitTimeoutMs,
+      registryUser,
+      registryPassword,
+    });
+    if (!availability.ok) {
+      const detail = availability.error
+        ? verifyErrorDetail(availability.error)
+        : [
+          `image=${appImage}`,
+          `attempts=${imageWaitAttempts}`,
+          `delay_ms=${imageWaitDelayMs}`,
+          `reason=${availability?.probe?.reason || "manifest_not_found"}`,
+          ...responseDebugLines(availability?.probe?.response),
+        ].filter(Boolean).join("\n");
+      if (imageWaitAutoFallback) {
+        log(`image availability timed out; falling back to emergency_source_build for ${appImage}`);
+        imageDeployEnabled = false;
+        useEmergencySourceBuild = true;
+        appImage = "";
+      } else {
+        fail("app image was not published to registry in time", detail);
+      }
+    }
+  }
+
+  const deployEnvValues = buildDeployEnvValues({
+    appImage,
+    storeBackend: normalizedStoreBackend,
+    sqlitePath,
+    storeCanaryChatIds,
+    storeCanaryMirrorWrites,
+  });
   let remoteSteps = [];
   if (imageDeployEnabled) {
     log(`deploy mode=image (app_image=${appImage})`);
@@ -882,9 +1137,10 @@ async function main() {
     });
   } else {
     log("deploy mode=emergency_source_build");
-    if (deploySha) {
-      log(`pack source commit=${deploySha}`);
-      packageCommitArchive(archivePath, deploySha);
+    const archiveCommitSha = deploySha || (targetEnv === "production" ? fullSha : "");
+    if (archiveCommitSha) {
+      log(`pack source commit=${archiveCommitSha}`);
+      packageCommitArchive(archivePath, archiveCommitSha);
     } else {
       packageWorkingTreeArchive(archivePath);
     }

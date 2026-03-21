@@ -263,6 +263,26 @@ assert.ok(corporateTier.source_authority < 0.5);
   setAdminSourceRegistry(null);
 }
 
+// ── Null authority override should not zero out governance-derived authority ──
+{
+  setAdminSourceRegistry(new Map([
+    ["pharmavoice.com", {
+      domain: "pharmavoice.com",
+      source_type: "trade_specialist",
+      policy: "preferred",
+      review_status: "reviewed",
+      authority_override: null,
+      note: "Governance-only override",
+    }],
+  ]));
+  const effective = explainSourcePolicy("pharmavoice.com", "HEALTHCARE");
+  assert.strictEqual(effective.source_type, "trade_specialist");
+  assert.strictEqual(effective.source_policy, "preferred");
+  assert.ok(effective.source_authority > 0.7, `expected governance-derived authority > 0.7, got ${effective.source_authority}`);
+  assert.strictEqual(effective.admin_override.authority_override, null);
+  setAdminSourceRegistry(null);
+}
+
 // ── Root-domain governance inherits to subdomains, with most-specific match winning ──
 {
   setAdminSourceRegistry(new Map([

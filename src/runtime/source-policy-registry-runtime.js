@@ -94,6 +94,7 @@ const ALLOWED_ORIGINALITY_PROFILES = new Set(ORIGINALITY_PROFILE_VALUES);
 const ALLOWED_TOPIC_FIT_BANDS = new Set(TOPIC_FIT_BAND_VALUES);
 
 function clampAuthority(value) {
+  if (value == null || value === "") return null;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   return Math.max(0, Math.min(1, numeric));

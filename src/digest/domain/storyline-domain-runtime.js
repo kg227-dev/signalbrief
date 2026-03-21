@@ -706,9 +706,11 @@ function explainSourcePolicy(sourceDomainRaw, tag) {
   const adminEntry = adminMatch.entry;
   const matchedDomain = String(adminMatch.matched_domain || "").trim() || null;
   const tierOverride = String(adminEntry?.tier_override || "").trim().toLowerCase() || null;
-  const authorityOverride = Number.isFinite(Number(adminEntry?.authority_override))
-    ? Number(adminEntry.authority_override)
-    : null;
+  const authorityOverride = adminEntry?.authority_override === "" || adminEntry?.authority_override == null
+    ? null
+    : (Number.isFinite(Number(adminEntry.authority_override))
+      ? Number(adminEntry.authority_override)
+      : null);
   const hardBlock = adminEntry?.hard_block === true;
   const legacySourceType = tierOverride ? classifySourceType(sourceDomain, tierOverride) : null;
   const legacyPolicy = tierOverride ? derivePolicyFromBaseline(tierOverride, legacySourceType) : null;

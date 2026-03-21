@@ -21,7 +21,7 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .header { margin-bottom:40px; padding-bottom:24px; border-bottom:1px solid var(--border); }
 .header-top { display:flex; align-items:center; gap:12px; margin-bottom:6px; flex-wrap:wrap; }
 .header h1 { font-size:30px; font-weight:700; letter-spacing:-0.5px; font-family:'Playfair Display',serif; }
-.header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:4px 10px; border-radius:999px; text-decoration:none; }
+.header .header-brand { font-family:'Playfair Display',serif; font-size:30px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
 .header .nav-link { display:inline-flex; align-items:center; justify-content:center; min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--accent); text-decoration:none; font-size:12px; font-weight:700; }
 .header .nav-link.current { background:var(--accent-light); border-color:transparent; }
 .header .signout-btn { min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; }
@@ -946,8 +946,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
 
   <div class="header">
     <div class="header-top">
-      <h1>Admin</h1>
-      <span class="badge">Internal</span>
+      <span class="header-brand">SignalBrief</span>
       <a href="/admin" class="nav-link current">Admin</a>
       <a href="/admin/sandbox" class="nav-link">Sandbox</a>
       <a href="/admin/source-registry" class="nav-link">Source Registry</a>

@@ -3,125 +3,124 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
 <title>Welcome to SignalBrief</title>
 </head>
-<body style="margin:0;padding:0;background:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1A1A1A;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#FAFAFA;padding:40px 16px;">
-  <tr><td align="center">
-    <table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;width:100%;">
+<body style="margin:0;padding:0;background-color:#F3F4F6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827;">
+<div style="padding:28px 12px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:720px;margin:0 auto;border-radius:14px;overflow:hidden;border:1px solid #ECEFF3;box-shadow:0 6px 18px rgba(15,23,42,0.05);">
 
-      <!-- Header -->
-      <tr><td style="background:#fff;border-radius:12px 12px 0 0;padding:28px 40px 20px;border-bottom:1px solid #E5E7EB;">
-        <div style="font-size:22px;font-weight:700;color:#1A1A1A;letter-spacing:-0.3px;">☀️ SignalBrief</div>
-        <div style="font-size:13px;font-style:italic;color:#9CA3AF;margin-top:2px;">Your daily signal across AI, strategy, and business</div>
-      </td></tr>
+    <!-- Header -->
+    <tr><td style="background:#fff;border-radius:14px 14px 0 0;padding:30px 28px 24px;border-bottom:1px solid #EAECEF;">
+      <div style="font-size:25px;font-weight:400;color:#0F172A;letter-spacing:-0.4px;font-family:'Playfair Display',Georgia,serif;">☀️ SignalBrief</div>
+      <div style="font-size:14px;color:#4B5563;margin-top:6px;">Your daily signal across AI, strategy, and business</div>
+    </td></tr>
 
-      <!-- Hero -->
-      <tr><td style="background:#fff;padding:36px 40px 28px;">
-        <h1 style="font-size:28px;font-weight:700;color:#111827;margin:0 0 12px;letter-spacing:-0.5px;">You're all set, {{NAME}}. 🎉</h1>
-        <p style="font-size:15px;color:#4B5563;line-height:1.7;margin:0;">
-          Your first SignalBrief arrives tomorrow at <strong style="color:#111827;">{{DELIVERY_TIME_LABEL}}</strong>. A curated briefing across your chosen topics, with a "why it matters" layer written at senior consultant level.
-        </p>
-      </td></tr>
+    <!-- Hero -->
+    <tr><td style="background:#fff;padding:36px 28px 28px;">
+      <h1 style="font-size:28px;font-weight:700;color:#111827;margin:0 0 12px;letter-spacing:-0.5px;font-family:'Playfair Display',Georgia,serif;">You're all set, {{NAME}}. 🎉</h1>
+      <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+        Your first SignalBrief arrives tomorrow at <strong style="color:#111827;">{{DELIVERY_TIME_LABEL}}</strong>. A curated briefing across your chosen topics, with a "why it matters" layer written at senior consultant level.
+      </p>
+    </td></tr>
 
-      <!-- Divider -->
-      <tr><td style="background:#fff;padding:0 40px;"><div style="height:1px;background:#E5E7EB;"></div></td></tr>
+    <!-- Divider -->
+    <tr><td style="background:#fff;padding:0 28px;"><div style="height:1px;background:#EAECEF;"></div></td></tr>
 
-      <!-- Your Setup -->
-      <tr><td style="background:#fff;padding:28px 40px 24px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:20px;">Your brief is configured</div>
+    <!-- Your Setup -->
+    <tr><td style="background:#fff;padding:28px 28px 24px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#2563EB;margin-bottom:20px;">Your brief is configured</div>
 
-        <!-- Topics -->
-        <div style="margin-bottom:24px;">
-          <div style="font-size:12px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Topics — {{TOPIC_COUNT}} selected</div>
-          <div style="line-height:2.0;">{{TOPICS_HTML}}</div>
-        </div>
+      <!-- Topics -->
+      <div style="margin-bottom:24px;">
+        <div style="font-size:12px;font-weight:600;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Topics — {{TOPIC_COUNT}} selected</div>
+        <div style="line-height:2.0;">{{TOPICS_HTML}}</div>
+      </div>
 
-        <!-- Preferences -->
-        <table cellpadding="0" cellspacing="0" style="width:100%;border-top:1px solid #F3F4F6;">
-          <tr>
-            <td style="padding:13px 0;border-bottom:1px solid #F3F4F6;width:38%;font-size:13px;color:#9CA3AF;font-weight:500;">Delivery</td>
-            <td style="padding:13px 0;border-bottom:1px solid #F3F4F6;font-size:13px;font-weight:600;color:#111827;">{{DELIVERY_TIME_LABEL}} &nbsp;&middot;&nbsp; {{DELIVERY_DAYS_LABEL}}</td>
-          </tr>
-          <tr>
-            <td style="padding:13px 0;border-bottom:1px solid #F3F4F6;font-size:13px;color:#9CA3AF;font-weight:500;">Depth</td>
-            <td style="padding:13px 0;border-bottom:1px solid #F3F4F6;font-size:13px;font-weight:600;color:#111827;">{{DEPTH_LABEL}}</td>
-          </tr>
-          <tr>
-            <td style="padding:13px 0;font-size:13px;color:#9CA3AF;font-weight:500;">Items per brief</td>
-            <td style="padding:13px 0;font-size:13px;font-weight:600;color:#111827;">{{ITEMS_COUNT}}</td>
-          </tr>
-        </table>
-      </td></tr>
+      <!-- Preferences -->
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-top:1px solid #EAECEF;">
+        <tr>
+          <td style="padding:13px 0;border-bottom:1px solid #EAECEF;width:38%;font-size:13px;color:#6B7280;font-weight:500;">Delivery</td>
+          <td style="padding:13px 0;border-bottom:1px solid #EAECEF;font-size:13px;font-weight:600;color:#111827;">{{DELIVERY_TIME_LABEL}} &nbsp;&middot;&nbsp; {{DELIVERY_DAYS_LABEL}}</td>
+        </tr>
+        <tr>
+          <td style="padding:13px 0;border-bottom:1px solid #EAECEF;font-size:13px;color:#6B7280;font-weight:500;">Depth</td>
+          <td style="padding:13px 0;border-bottom:1px solid #EAECEF;font-size:13px;font-weight:600;color:#111827;">{{DEPTH_LABEL}}</td>
+        </tr>
+        <tr>
+          <td style="padding:13px 0;font-size:13px;color:#6B7280;font-weight:500;">Items per brief</td>
+          <td style="padding:13px 0;font-size:13px;font-weight:600;color:#111827;">{{ITEMS_COUNT}}</td>
+        </tr>
+      </table>
+    </td></tr>
 
-      <!-- Divider -->
-      <tr><td style="background:#fff;padding:0 40px;"><div style="height:1px;background:#E5E7EB;"></div></td></tr>
+    <!-- Divider -->
+    <tr><td style="background:#fff;padding:0 28px;"><div style="height:1px;background:#EAECEF;"></div></td></tr>
 
-      <!-- CTA -->
-      <tr><td style="background:#fff;padding:28px 40px;text-align:center;">
-        <a href="{{SETTINGS_URL}}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 40px;border-radius:100px;letter-spacing:-0.2px;">Manage preferences &rarr;</a>
-        <div style="margin-top:10px;font-size:12px;color:#9CA3AF;">Change topics, timing, depth, or items per brief anytime</div>
-      </td></tr>
+    <!-- CTA -->
+    <tr><td style="background:#fff;padding:28px 28px;text-align:center;">
+      <a href="{{SETTINGS_URL}}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:999px;letter-spacing:-0.2px;">Manage preferences &rarr;</a>
+      <div style="margin-top:10px;font-size:12px;color:#6B7280;">Change topics, timing, depth, or items per brief anytime</div>
+    </td></tr>
 
-      <!-- Divider -->
-      <tr><td style="background:#fff;padding:0 40px;"><div style="height:1px;background:#E5E7EB;"></div></td></tr>
+    <!-- Divider -->
+    <tr><td style="background:#fff;padding:0 28px;"><div style="height:1px;background:#EAECEF;"></div></td></tr>
 
-      <!-- Tips -->
-      <tr><td style="background:#fff;padding:28px 40px 36px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:16px;">A few things to know</div>
-        <table cellpadding="0" cellspacing="0" width="100%">
-          <tr>
-            <td style="padding:9px 0;vertical-align:top;width:32px;font-size:18px;">💾</td>
-            <td style="padding:9px 0;vertical-align:top;">
-              <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Save items</div>
-              <div style="font-size:13px;color:#6B7280;">Reply <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">save 1</code> or <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">save 1, 3</code> to a Telegram message to bookmark for later.</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:9px 0;vertical-align:top;font-size:18px;">📊</td>
-            <td style="padding:9px 0;vertical-align:top;">
-              <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Tune your topics</div>
-              <div style="font-size:13px;color:#6B7280;">Reply <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">more PE</code> or <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">less healthcare</code> to shift the mix over time.</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:9px 0;vertical-align:top;font-size:18px;">📲</td>
-            <td style="padding:9px 0;vertical-align:top;">
-              <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Add Telegram</div>
-              <div style="font-size:13px;color:#6B7280;">Get your digest in Telegram too. Open <a href="https://t.me/signalbrief29bot" style="color:#2563EB;text-decoration:none;">@signalbrief29bot</a> and send: <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">/start {{USER_EMAIL}}</code></div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:9px 0;vertical-align:top;font-size:18px;">⚡</td>
-            <td style="padding:9px 0;vertical-align:top;">
-              <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">On-demand digest</div>
-              <div style="font-size:13px;color:#6B7280;">Send <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">/digest</code> to @signalbrief29bot anytime for an on-demand pull.</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:9px 0;vertical-align:top;font-size:18px;">📁</td>
-            <td style="padding:9px 0;vertical-align:top;">
-              <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Browse past issues</div>
-              <div style="font-size:13px;color:#6B7280;">Every digest you receive is saved at <a href="{{ARCHIVE_URL}}" style="color:#2563EB;text-decoration:none;">your personal archive</a>.</div>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
+    <!-- Tips -->
+    <tr><td style="background:#fff;padding:28px 28px 36px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#2563EB;margin-bottom:16px;">A few things to know</div>
+      <table cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="padding:9px 0;vertical-align:top;width:32px;font-size:18px;">💾</td>
+          <td style="padding:9px 0;vertical-align:top;">
+            <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Save items</div>
+            <div style="font-size:13px;color:#374151;">Reply <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">save 1</code> or <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">save 1, 3</code> to a Telegram message to bookmark for later.</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;vertical-align:top;font-size:18px;">📊</td>
+          <td style="padding:9px 0;vertical-align:top;">
+            <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Tune your topics</div>
+            <div style="font-size:13px;color:#374151;">Reply <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">more PE</code> or <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">less healthcare</code> to shift the mix over time.</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;vertical-align:top;font-size:18px;">📲</td>
+          <td style="padding:9px 0;vertical-align:top;">
+            <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Add Telegram</div>
+            <div style="font-size:13px;color:#374151;">Get your digest in Telegram too. Open <a href="https://t.me/signalbrief29bot" style="color:#2563EB;text-decoration:none;">@signalbrief29bot</a> and send: <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">/start {{USER_EMAIL}}</code></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;vertical-align:top;font-size:18px;">⚡</td>
+          <td style="padding:9px 0;vertical-align:top;">
+            <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">On-demand digest</div>
+            <div style="font-size:13px;color:#374151;">Send <code style="background:#F3F4F6;padding:1px 6px;border-radius:3px;font-size:12px;">/digest</code> to @signalbrief29bot anytime for an on-demand pull.</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;vertical-align:top;font-size:18px;">📁</td>
+          <td style="padding:9px 0;vertical-align:top;">
+            <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:2px;">Browse past issues</div>
+            <div style="font-size:13px;color:#374151;">Every digest you receive is saved at <a href="{{ARCHIVE_URL}}" style="color:#2563EB;text-decoration:none;">your personal archive</a>.</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
 
-      <!-- Footer -->
-      <tr><td style="background:#F9FAFB;border-radius:0 0 12px 12px;padding:20px 40px;border-top:1px solid #E5E7EB;text-align:center;">
-        <div style="font-size:12px;color:#9CA3AF;line-height:1.8;">
-          <a href="{{ARCHIVE_URL}}" style="color:#6B7280;text-decoration:none;">Past digests</a>
-          &nbsp;&middot;&nbsp;
-          <a href="{{SETTINGS_URL}}" style="color:#6B7280;text-decoration:none;">Update preferences</a>
-          &nbsp;&middot;&nbsp;
-          <a href="{{SETTINGS_URL}}#unsub" style="color:#6B7280;text-decoration:none;">Unsubscribe</a>
-        </div>
-        <div style="font-size:11px;color:#D1D5DB;margin-top:6px;">SignalBrief &middot; Daily intelligence for strategy professionals</div>
-      </td></tr>
+    <!-- Footer -->
+    <tr><td style="background:#FFFFFF;border-radius:0 0 14px 14px;padding:20px 28px 24px;border-top:1px solid #EAECEF;text-align:center;">
+      <div style="font-size:12px;color:#6B7280;line-height:1.8;">
+        <a href="{{ARCHIVE_URL}}" style="color:#6B7280;text-decoration:none;font-weight:500;">Past digests</a>
+        <span style="color:#D1D5DB;margin:0 8px;">&middot;</span>
+        <a href="{{SETTINGS_URL}}" style="color:#6B7280;text-decoration:none;font-weight:500;">Update preferences</a>
+        <span style="color:#D1D5DB;margin:0 8px;">&middot;</span>
+        <a href="{{SETTINGS_URL}}#unsub" style="color:#DC2626;text-decoration:none;font-weight:600;">Unsubscribe</a>
+      </div>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">SignalBrief &middot; Daily intelligence for strategy professionals</div>
+    </td></tr>
 
-    </table>
-  </td></tr>
-</table>
+  </table>
+</div>
 </body>
 </html>

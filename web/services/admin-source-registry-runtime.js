@@ -159,7 +159,7 @@ function summarizeSuggestedReason(metric, effectivePolicy) {
   }
   if (Number(metric?.weak_source_item_count || 0) >= 3) return "Frequent weak-source exposure";
   if (Number(metric?.poor_digest_item_count || 0) >= 3) return "Common in weak digests";
-  return "Recent source activity";
+  return "Tracked source activity";
 }
 
 function buildOverviewRows(metricsMap, registryDomains, query, limit) {
@@ -231,13 +231,14 @@ function buildSourceRegistryOverview({
 }) {
   const registry = refreshEffectiveRegistry(loadSourceRegistry, buildSourceRegistryMap, setAdminSourceRegistry);
   const recent = typeof buildRecentDigestsExport === "function"
-    ? buildRecentDigestsExport({ days: 7 })
+    ? buildRecentDigestsExport({ all_time: true })
     : { rows: [] };
   const metricsMap = buildRecentDomainMetrics(recent.rows);
   const { suggestions, overrides } = buildOverviewRows(metricsMap, registry.domains || {}, query, Math.max(1, Number(limit || 20)));
   return {
     generated_at: new Date().toISOString(),
-    days: 7,
+    history_scope: recent?.window?.all_time === true ? "all_time" : "windowed",
+    days: recent?.window?.days ?? null,
     query: String(query || "").trim() || null,
     source_registry_path: null,
     override_count: Object.keys(registry.domains || {}).length,
@@ -260,7 +261,7 @@ function buildSourceRegistryDomainDetail({
   if (!normalizedDomain) return null;
   const registry = refreshEffectiveRegistry(loadSourceRegistry, buildSourceRegistryMap, setAdminSourceRegistry);
   const recent = typeof buildRecentDigestsExport === "function"
-    ? buildRecentDigestsExport({ days: 7 })
+    ? buildRecentDigestsExport({ all_time: true })
     : { rows: [] };
   const metricsMap = buildRecentDomainMetrics(recent.rows);
   const effectivePolicy = explainSourcePolicy(normalizedDomain);
@@ -279,7 +280,8 @@ function buildSourceRegistryDomainDetail({
   };
   return {
     generated_at: new Date().toISOString(),
-    days: 7,
+    history_scope: recent?.window?.all_time === true ? "all_time" : "windowed",
+    days: recent?.window?.days ?? null,
     domain: normalizedDomain,
     effective_policy: effectivePolicy,
     admin_override: effectivePolicy?.admin_override || null,

@@ -185,4 +185,47 @@ const {
   assert.strictEqual(newerRow.repeat_details.length, 1);
 })();
 
+(() => {
+  const now = new Date("2026-03-20T15:00:00.000Z");
+  const buildRecentDigestsExport = createRecentDigestsExporter({
+    loadCostRunsNewest: () => [{
+      date: "2026-03-20",
+      run_id: "scheduled:2026-03-20T11-01-00-000Z",
+      run_at: "2026-03-20T11:01:00.000Z",
+      run_at_et: "Mar 20, 7:01 AM",
+      on_demand: false,
+      per_user: [{
+        id: "history@example.com",
+        digest_id: "2026-03-20:chat-3",
+      }],
+    }, {
+      date: "2025-11-01",
+      run_id: "scheduled:2025-11-01T11-01-00-000Z",
+      run_at: "2025-11-01T11:01:00.000Z",
+      run_at_et: "Nov 1, 7:01 AM",
+      on_demand: false,
+      per_user: [{
+        id: "history@example.com",
+        digest_id: "2025-11-01:chat-3",
+      }],
+    }],
+    allUsers: () => [{ chatId: "chat-3", email: "history@example.com" }],
+    loadEngagementEvents: () => [],
+    loadDigestSnapshotByRunId: (_userId, dateEt) => ({
+      sent_at: `${dateEt}T11:01:20.000Z`,
+      version: 1,
+      items: [{ index: 1, headline: `Item ${dateEt}`, url: `https://example.com/${dateEt}`, tag: "AI" }],
+    }),
+    loadLatestDigestSnapshot: () => null,
+  });
+
+  const payload = buildRecentDigestsExport({ all_time: true, now });
+  assert.strictEqual(payload.window.all_time, true);
+  assert.strictEqual(payload.window.days, null);
+  assert.strictEqual(payload.window.start_date_et, "2025-11-01");
+  assert.strictEqual(payload.row_count, 2);
+  assert.strictEqual(payload.rows[0].date_et, "2026-03-20");
+  assert.strictEqual(payload.rows[1].date_et, "2025-11-01");
+})();
+
 process.stdout.write("[admin-recent-digests-export-runtime] all assertions passed\n");

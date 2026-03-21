@@ -152,7 +152,7 @@ body.dark .modal-close { background:var(--card); }
       <button onclick="logout()" class="signout-btn">Sign out</button>
       <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
-    <p>Policy-based source governance for digest ranking. Classification stays descriptive; policy controls exposure and ranking behavior. <span id="lastRefreshed">not refreshed yet</span></p>
+    <p>Policy-based source governance for digest ranking. Classification stays descriptive; policy controls exposure and ranking behavior across tracked digest history. <span id="lastRefreshed">not refreshed yet</span></p>
   </div>
 
   <div class="layout-grid">
@@ -160,7 +160,7 @@ body.dark .modal-close { background:var(--card); }
       <div class="section-head">
         <div>
           <div class="section-title" style="margin-bottom:0;">Inspect source governance</div>
-          <div class="section-subcopy">Search a domain to see identity, classification, policy, topic fit, ranking effects, recent impact, and audit history.</div>
+          <div class="section-subcopy">Search a domain to see identity, classification, policy, topic fit, ranking effects, tracked impact, and audit history.</div>
         </div>
         <div class="table-toolbar-controls">
           <input
@@ -200,7 +200,7 @@ body.dark .modal-close { background:var(--card); }
 
   <div class="table-toolbar" style="margin-bottom:10px;">
     <div>
-      <div class="section-title" style="margin-bottom:0;">Suggested source review (last 7 days)</div>
+      <div class="section-title" style="margin-bottom:0;">Suggested source review (all tracked history)</div>
       <div id="suggestionsCount" class="table-meta" style="margin-top:3px;"></div>
     </div>
     <div class="table-toolbar-controls">
@@ -215,7 +215,7 @@ body.dark .modal-close { background:var(--card); }
           <th>Domain</th>
           <th>Classification</th>
           <th>Policy</th>
-          <th>Recent sends</th>
+          <th>Tracked sends</th>
           <th>Review state</th>
           <th>Topic fit</th>
           <th>Reason</th>
@@ -450,7 +450,7 @@ function renderSuggestionRow(row) {
     <td class="mono">${Math.max(0, Number(row.send_count || 0))}</td>
     <td>${renderReviewPill(effective.review_status)}<div style="margin-top:4px;font-size:11px;color:${Number(row.weak_source_item_count || 0) > 0 ? "var(--red)" : "var(--text-secondary)"};">weak exposure ${Math.max(0, Number(row.weak_source_item_count || 0))}</div></td>
     <td style="font-size:12px;color:var(--text-secondary);">${esc(formatTopicFitSummary(effective.topic_fit_map))}</td>
-    <td style="font-size:12px;color:var(--text-2);">${esc(row.suggested_reason || "Recent source activity")}</td>
+    <td style="font-size:12px;color:var(--text-2);">${esc(row.suggested_reason || "Tracked source activity")}</td>
   </tr>`;
 }
 function renderOverrideRow(row) {
@@ -545,7 +545,7 @@ function exportSuggestionsCSV() {
       e.source_authority!=null?Number(e.source_authority).toFixed(2):"",
       Math.max(0,Number(r.send_count||0)), Math.max(0,Number(r.weak_source_item_count||0)),
       formatTopicFitSummary(e.topic_fit_map),
-      r.suggested_reason||"Recent source activity"];
+      r.suggested_reason||"Tracked source activity"];
   })].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   downloadCSV(csv, "source-registry-suggestions.csv");
 }
@@ -588,7 +588,7 @@ function renderSourceRegistryInspector(detail, overview) {
         <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
         <div class="subscriber-sub">${sourcePath ? esc(sourcePath) : "Global source governance registry"}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
       </div>
-      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · recent sends ${Math.max(0, Number(recent.send_count || 0))}</div>
+      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · tracked sends ${Math.max(0, Number(recent.send_count || 0))}</div>
     </div>
     <div style="display:grid;grid-template-columns:1.2fr .9fr;gap:18px;align-items:start;">
       <div style="display:flex;flex-direction:column;gap:14px;">
@@ -617,22 +617,22 @@ function renderSourceRegistryInspector(detail, overview) {
             <div class="explain-copy">${esc(titleizeSourceValue(policy.originality_profile || "unknown"))}</div>
           </div>
           <div class="explain-block">
-            <div class="explain-label">Recent impact</div>
+            <div class="explain-label">Tracked impact</div>
             <div class="explain-copy">${Math.max(0, Number(recent.send_count || 0))} sends across ${Math.max(0, Number(recent.user_count || 0))} users and ${Math.max(0, Number(recent.digest_count || 0))} digests.</div>
           </div>
           <div class="explain-block">
-            <div class="explain-label">Recent exposure</div>
-            <div class="explain-copy">${Math.max(0, Number(recent.weak_source_item_count || 0))} constrained-source item${Number(recent.weak_source_item_count || 0) === 1 ? "" : "s"} in the last 7 days. Common topics: ${esc(formatSourceMetricTags(topTags))}</div>
+            <div class="explain-label">Tracked exposure</div>
+            <div class="explain-copy">${Math.max(0, Number(recent.weak_source_item_count || 0))} constrained-source item${Number(recent.weak_source_item_count || 0) === 1 ? "" : "s"} in tracked history. Common topics: ${esc(formatSourceMetricTags(topTags))}</div>
           </div>
         </div>
         <div>
-          <div class="section-title" style="font-size:11px;margin-bottom:6px;">Recent sample items</div>
+          <div class="section-title" style="font-size:11px;margin-bottom:6px;">Latest sample items</div>
           ${sampleItems.length ? sampleItems.map((item) => `
             <div style="padding:8px 0;border-top:1px solid var(--border-subtle);">
               <div style="font-size:12px;font-weight:600;line-height:1.45;">${item.url ? `<a href="${esc(item.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${esc(item.headline || item.url)}</a>` : esc(item.headline || "Untitled item")}</div>
               <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")} · ${esc(titleizeSourceValue(item.source_policy || "policy pending"))}</div>
             </div>
-          `).join("") : `<div class="empty" style="padding:10px 0;">No recent sent items for this domain.</div>`}
+          `).join("") : `<div class="empty" style="padding:10px 0;">No tracked sent items for this domain.</div>`}
         </div>
         <details ${auditEntries.length ? "" : "disabled"} style="border-top:1px solid var(--border-subtle);padding-top:10px;">
           <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Source policy audit</summary>

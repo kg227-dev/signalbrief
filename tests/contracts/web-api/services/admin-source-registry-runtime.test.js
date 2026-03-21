@@ -23,6 +23,7 @@ const {
 } = runtime;
 
 (() => {
+  const recentDigestsCalls = [];
   const rows = [
     {
       user_email: "alpha@example.com",
@@ -101,21 +102,29 @@ const {
     loadSourceRegistry: () => registry,
     buildSourceRegistryMap: (value) => new Map(Object.entries(value.domains || {})),
     setAdminSourceRegistry,
-    buildRecentDigestsExport: () => ({ rows }),
+    buildRecentDigestsExport: (options) => {
+      recentDigestsCalls.push(options);
+      return { rows, window: { all_time: true, days: null } };
+    },
     query: "benzinga",
     limit: 10,
   });
   assert.strictEqual(overview.override_count, 1);
+  assert.strictEqual(overview.history_scope, "all_time");
   assert.strictEqual(overview.suggestions.length, 1);
   assert.strictEqual(overview.suggestions[0].domain, "benzinga.com");
   assert.strictEqual(overview.suggestions[0].effective_policy.hard_block, true);
+  assert.deepStrictEqual(recentDigestsCalls[0], { all_time: true });
 
   const detail = buildSourceRegistryDomainDetail({
     domain: "benzinga.com",
     loadSourceRegistry: () => registry,
     buildSourceRegistryMap: (value) => new Map(Object.entries(value.domains || {})),
     setAdminSourceRegistry,
-    buildRecentDigestsExport: () => ({ rows }),
+    buildRecentDigestsExport: (options) => {
+      recentDigestsCalls.push(options);
+      return { rows, window: { all_time: true, days: null } };
+    },
     readJsonLineLog: () => [{
       at: "2026-03-20T12:00:00.000Z",
       actor: "admin@example.com",
@@ -127,9 +136,11 @@ const {
   });
   assert.ok(detail);
   assert.strictEqual(detail.domain, "benzinga.com");
+  assert.strictEqual(detail.history_scope, "all_time");
   assert.strictEqual(detail.effective_policy.hard_block, true);
   assert.strictEqual(detail.recent_metrics.send_count, 2);
   assert.strictEqual(detail.audit_entries.length, 1);
+  assert.deepStrictEqual(recentDigestsCalls[1], { all_time: true });
   setAdminSourceRegistry(null);
 })();
 

@@ -28,6 +28,30 @@ function resolveWindow(days, now = new Date()) {
   };
 }
 
+function computeAllTimeWindow(runs, now = new Date()) {
+  const runDates = (Array.isArray(runs) ? runs : [])
+    .map((run) => String(run?.date || "").trim())
+    .filter(Boolean)
+    .sort();
+  const endDateEt = toEtDateKey(now);
+  return {
+    all_time: true,
+    days: null,
+    startDateEt: runDates[0] || null,
+    endDateEt,
+  };
+}
+
+function estimateEventLookbackDays(runs, now = new Date()) {
+  const allTimeWindow = computeAllTimeWindow(runs, now);
+  const startDateEt = String(allTimeWindow.startDateEt || "").trim();
+  if (!startDateEt) return 3650;
+  const startMs = Date.parse(`${startDateEt}T12:00:00.000Z`);
+  if (!Number.isFinite(startMs)) return 3650;
+  const diffDays = Math.ceil((now.getTime() - startMs) / (24 * 60 * 60 * 1000));
+  return Math.max(14, diffDays + 7);
+}
+
 function normalizeMode(perUserRow, run) {
   const explicit = String(perUserRow?.delivery_mode || "").trim().toLowerCase();
   if (explicit) return explicit;
@@ -174,13 +198,19 @@ function createRecentDigestsExporter(deps) {
   } = deps;
 
   return function buildRecentDigestsExport(options = {}) {
-    const window = resolveWindow(options.days, options.now || new Date());
     const runs = typeof loadCostRunsNewest === "function" ? loadCostRunsNewest() : [];
+    const now = options.now || new Date();
+    const allTime = options.all_time === true || String(options.days || "").trim().toLowerCase() === "all";
+    const window = allTime
+      ? computeAllTimeWindow(runs, now)
+      : resolveWindow(options.days, now);
     const users = typeof allUsers === "function" ? allUsers() : [];
     const eventIndex = buildEventIndex(
       typeof loadEngagementEvents === "function"
         ? loadEngagementEvents({
-          max_age_days: Math.max(window.days + 2, 14),
+          max_age_days: allTime
+            ? estimateEventLookbackDays(runs, now)
+            : Math.max(window.days + 2, 14),
           dedupe: false,
           capture_parse_error_lines: false,
         })
@@ -191,7 +221,9 @@ function createRecentDigestsExporter(deps) {
     const rows = [];
     for (const run of (Array.isArray(runs) ? runs : [])) {
       const dateEt = String(run?.date || "").trim();
-      if (!dateEt || dateEt < window.startDateEt || dateEt > window.endDateEt) continue;
+      if (!dateEt) continue;
+      if (window.startDateEt && dateEt < window.startDateEt) continue;
+      if (window.endDateEt && dateEt > window.endDateEt) continue;
 
       for (const perUserRow of (Array.isArray(run?.per_user) ? run.per_user : [])) {
         const digestId = String(perUserRow?.digest_id || "").trim();
@@ -286,6 +318,7 @@ function createRecentDigestsExporter(deps) {
     return {
       generated_at: new Date().toISOString(),
       window: {
+        all_time: window.all_time === true,
         days: window.days,
         start_date_et: window.startDateEt,
         end_date_et: window.endDateEt,

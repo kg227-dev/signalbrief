@@ -9,6 +9,7 @@ const pageSource = fs.readFileSync(PAGE_PATH, "utf8");
 
 const requiredPageSnippets = [
   "Source Governance",
+  "Suggested source review (all tracked history)",
   'id="sourceRegistryInspector"',
   'id="sourceRegistrySuggestionsBody"',
   'id="sourceRegistryOverridesBody"',

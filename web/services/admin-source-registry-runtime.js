@@ -146,6 +146,44 @@ function buildSourceAuditEntries({ readJsonLineLog, adminActionLog, domain, limi
     .slice(0, limit);
 }
 
+function summarizePreferredSourceRegistry({ loadPreferredSourceRegistry, preferredSourcesPath }) {
+  const registry = typeof loadPreferredSourceRegistry === "function"
+    ? loadPreferredSourceRegistry()
+    : {};
+  const globalReported = Array.isArray(registry?.global?.reported) ? registry.global.reported : [];
+  const globalOfficial = Array.isArray(registry?.global?.official) ? registry.global.official : [];
+  const topics = Object.entries(registry?.topics && typeof registry.topics === "object" ? registry.topics : {})
+    .map(([topic, entry]) => {
+      const reported = Array.isArray(entry?.reported) ? entry.reported : [];
+      const official = Array.isArray(entry?.official) ? entry.official : [];
+      return {
+        topic,
+        reported,
+        official,
+        reported_count: reported.length,
+        official_count: official.length,
+      };
+    })
+    .sort((left, right) => left.topic.localeCompare(right.topic));
+  const uniqueDomains = new Set([
+    ...globalReported,
+    ...globalOfficial,
+    ...topics.flatMap((entry) => [...entry.reported, ...entry.official]),
+  ]);
+  return {
+    path: String(preferredSourcesPath || "").trim() || null,
+    version: Number(registry?.version || 1),
+    global: {
+      reported: globalReported,
+      official: globalOfficial,
+    },
+    topic_count: topics.length,
+    total_unique_domains: uniqueDomains.size,
+    topics,
+    raw_json: JSON.stringify(registry || {}, null, 2),
+  };
+}
+
 function summarizeSuggestedReason(metric, effectivePolicy) {
   if (effectivePolicy?.hard_block === true) return "Hard-blocked";
   if (effectivePolicy?.review_status === "unreviewed" && Number(metric?.send_count || 0) >= 2) {
@@ -223,9 +261,11 @@ function buildOverviewRows(metricsMap, registryDomains, query, limit) {
 
 function buildSourceRegistryOverview({
   loadSourceRegistry,
+  loadPreferredSourceRegistry,
   buildSourceRegistryMap,
   setAdminSourceRegistry,
   buildRecentDigestsExport,
+  preferredSourcesPath,
   query,
   limit = 20,
 }) {
@@ -241,6 +281,10 @@ function buildSourceRegistryOverview({
     days: recent?.window?.days ?? null,
     query: String(query || "").trim() || null,
     source_registry_path: null,
+    preferred_sources: summarizePreferredSourceRegistry({
+      loadPreferredSourceRegistry,
+      preferredSourcesPath,
+    }),
     override_count: Object.keys(registry.domains || {}).length,
     suggestion_count: suggestions.length,
     overrides,
@@ -298,6 +342,7 @@ function buildSourceRegistryDomainDetail({
 
 module.exports = {
   buildRecentDomainMetrics,
+  summarizePreferredSourceRegistry,
   buildSourceRegistryDomainDetail,
   buildSourceRegistryOverview,
   buildSourceAuditEntries,

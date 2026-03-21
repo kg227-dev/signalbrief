@@ -10,10 +10,13 @@ const pageSource = fs.readFileSync(PAGE_PATH, "utf8");
 const requiredPageSnippets = [
   "Source Governance",
   "Source governance (all tracked history)",
+  "Preferred source config",
+  'id="preferredSourcesPanelBody"',
   'id="sourceRegistryInspector"',
   'id="sourceRegistrySuggestionsHeaderRow"',
   'id="sourceRegistrySuggestionsBody"',
   "function buildGovernanceRows(overview)",
+  "function renderPreferredSourcesConfig(overview)",
   "function renderSourceRegistrySuggestions(overview)",
   "function renderSourceRegistryInspector(detail, overview)",
   "function toggleSuggestionsSort(key)",

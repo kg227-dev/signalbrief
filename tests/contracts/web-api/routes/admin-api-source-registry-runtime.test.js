@@ -53,12 +53,18 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     isAdminAuthed: () => true,
     requireJsonBody: async () => body,
     loadSourceRegistry: () => ({ version: 1, updated_at: null, domains: {} }),
+    loadPreferredSourceRegistry: () => ({
+      version: 1,
+      global: { reported: ["reuters.com"], official: ["sec.gov"] },
+      topics: {},
+    }),
     buildSourceRegistryMap: (registry) => new Map(Object.entries(registry.domains || {})),
     setAdminSourceRegistry: () => {},
     buildRecentDigestsExport: () => ({ rows: [] }),
     readJsonLineLog: () => [],
     ADMIN_ACTION_LOG: "/tmp/admin-action-log.json",
     sourceRegistryPath: "/tmp/source-registry.json",
+    preferredSourcesPath: "/tmp/preferred-sources.json",
     upsertSourceRegistryEntry: () => ({
       registry: {
         version: 1,
@@ -102,6 +108,7 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.ok(handled);
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.source_registry_path, "/tmp/source-registry.json");
+    assert.strictEqual(payload.preferred_sources.path, "/tmp/preferred-sources.json");
   }
 
   {

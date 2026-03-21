@@ -100,6 +100,7 @@ const {
   describeRuntimePathAlignment,
 } = require("../src/runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../src/runtime/source-policy-registry-runtime");
+const { createPreferredSourceRegistryRuntime } = require("../src/runtime/preferred-source-registry-runtime");
 const { setAdminSourceRegistry } = require("../src/domains/digest");
 
 const webStore = createStore();
@@ -152,6 +153,10 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,
   sourceRegistryPath: runtimePaths.sourceRegistryPath,
+});
+const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
+  fs,
+  preferredSourcesPath: runtimePaths.preferredSourcesPath,
 });
 setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistryRuntime.loadSourceRegistry()));
 const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({
@@ -398,7 +403,9 @@ const {
   getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
   buildRecentDigestsExport,
   sourceRegistryPath: runtimePaths.sourceRegistryPath,
+  preferredSourcesPath: runtimePaths.preferredSourcesPath,
   loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),
+  loadPreferredSourceRegistry: () => preferredSourceRegistryRuntime.loadPreferredSourceRegistry(),
   buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
   listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),
   getSourceRegistryEntry: (domain) => sourceRegistryRuntime.getSourceRegistryEntry(domain),

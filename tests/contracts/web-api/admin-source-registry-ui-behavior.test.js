@@ -66,6 +66,7 @@ async function flushMicrotasks() {
     "darkToggle",
     "sourceRegistrySearch",
     "sourceRegistryInspector",
+    "preferredSourcesPanelBody",
     "sourceRegistrySuggestionsHeaderRow",
     "sourceRegistrySuggestionsBody",
     "suggestionsCount",
@@ -159,6 +160,36 @@ async function flushMicrotasks() {
       }
       if (href.startsWith("/api/admin/source-registry?")) {
         return jsonResponse({
+          preferred_sources: {
+            path: "/app/data/preferred-sources.json",
+            version: 1,
+            total_unique_domains: 4,
+            topic_count: 1,
+            global: {
+              reported: ["reuters.com"],
+              official: ["sec.gov"],
+            },
+            topics: [
+              {
+                topic: "healthcare",
+                reported: ["statnews.com"],
+                official: ["fda.gov"],
+              },
+            ],
+            raw_json: JSON.stringify({
+              version: 1,
+              global: {
+                reported: ["reuters.com"],
+                official: ["sec.gov"],
+              },
+              topics: {
+                healthcare: {
+                  reported: ["statnews.com"],
+                  official: ["fda.gov"],
+                },
+              },
+            }, null, 2),
+          },
           suggestions: [],
           overrides: [],
         });
@@ -221,6 +252,14 @@ async function flushMicrotasks() {
   assert.ok(
     !overviewCall.includes("query=benzinga.com"),
     "overview reload should not reuse the inspect-domain value as a table filter"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/data/preferred-sources.json"),
+    "preferred sources config should render on the source governance page"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("statnews.com"),
+    "preferred sources panel should render topic-specific domains"
   );
 
   context.renderSourceRegistrySuggestions({

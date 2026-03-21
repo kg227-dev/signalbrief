@@ -16,6 +16,8 @@ Scope:
 - production runtime currently reports `SIGNALBRIEF_STORE_BACKEND=file`
 - deploy/runtime verification can now assert expected store backend and SQLite path
 - `docker-compose.yml` accepts runtime store env overrides for `file`, `canary`, and `sqlite`
+- production deploy now persists store mode overrides in `/opt/signalbrief/app/.deploy-runtime-store.env`
+  so later deploys keep the active `canary` or `sqlite` backend until an operator explicitly changes it
 - the canonical SQLite path for this rollout is `/app/data/signalbrief.sqlite`
 - backup manifests now record canonical SQLite assets:
   - `signalbrief.sqlite`
@@ -88,6 +90,12 @@ npm run ops:deploy:prod:store:canary -- \
   --allow-outside-window
 ```
 
+Durability note:
+- the deploy script now writes the chosen store settings into
+  `/opt/signalbrief/app/.deploy-runtime-store.env`
+- future production deploys source that file automatically before `docker compose`
+- this prevents a normal image deploy from silently reverting the canary to `file`
+
 Canary acceptance window: 24 hours.
 
 Required evidence during the window:
@@ -134,6 +142,9 @@ npm run ops:deploy:prod:store:sqlite -- \
   --skip-staging-gate \
   --allow-outside-window
 ```
+
+The same persisted runtime override file is updated during this step, replacing the canary
+settings with explicit `sqlite` settings so future deploys stay on SQLite.
 
 Post-deploy required checks:
 - `GET /` returns `200`
@@ -191,6 +202,7 @@ npm run ops:deploy:prod -- \
 - [x] Compose/runtime config accepts `file`, `canary`, and `sqlite` store overrides
 - [x] Backup manifests record canonical SQLite asset files
 - [x] Canary/full-enable helper artifacts export explicit backend and SQLite path values
+- [x] Production deploy persists store overrides across future deploys
 - [ ] Canary cohort selected
 - [ ] 24-hour canary completed with zero-tolerance parity guard
 - [ ] Full production cutover to `sqlite`

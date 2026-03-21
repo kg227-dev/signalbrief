@@ -594,6 +594,69 @@ function buildComposeEnvPrefix(envValues = {}) {
   return `${parts.join(" ")} `;
 }
 
+const STORE_RUNTIME_OVERRIDE_FILENAME = ".deploy-runtime-store.env";
+const STORE_RUNTIME_OVERRIDE_KEYS = [
+  "SIGNALBRIEF_STORE_BACKEND",
+  "SIGNALBRIEF_SQLITE_PATH",
+  "SIGNALBRIEF_STORE_CANARY_CHAT_IDS",
+  "SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES",
+];
+
+function buildPersistentStoreEnvValues(options = {}) {
+  const normalizedStoreBackend = String(options.storeBackend || "").trim().toLowerCase();
+  const hasStoreBackend = hasValue(options.storeBackend);
+  const hasSqlitePath = hasValue(options.sqlitePath);
+  const hasCanaryChatIds = hasValue(options.storeCanaryChatIds);
+  const hasCanaryMirrorWrites = hasValue(options.storeCanaryMirrorWrites);
+
+  if (!hasStoreBackend && !hasSqlitePath && !hasCanaryChatIds && !hasCanaryMirrorWrites) {
+    return null;
+  }
+
+  const envValues = {};
+  if (hasStoreBackend) envValues.SIGNALBRIEF_STORE_BACKEND = String(options.storeBackend || "").trim();
+  if (hasSqlitePath) envValues.SIGNALBRIEF_SQLITE_PATH = String(options.sqlitePath || "").trim();
+  if (normalizedStoreBackend === "canary") {
+    if (hasCanaryChatIds) {
+      envValues.SIGNALBRIEF_STORE_CANARY_CHAT_IDS = String(options.storeCanaryChatIds || "").trim();
+    }
+    envValues.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES = hasCanaryMirrorWrites
+      ? String(options.storeCanaryMirrorWrites || "").trim()
+      : "1";
+  }
+  return envValues;
+}
+
+function buildPersistentStoreEnvFileContent(envValues = {}) {
+  const lines = [
+    "# managed by scripts/deploy-production.js",
+    "# store runtime overrides persist across deploys until explicitly changed",
+  ];
+  for (const key of STORE_RUNTIME_OVERRIDE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(envValues, key)) continue;
+    const value = String(envValues[key] || "").trim();
+    if (!value) continue;
+    lines.push(`${key}=${shellQuote(value)}`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
+function buildPersistStoreRuntimeOverridesStep(envValues = {}) {
+  const content = buildPersistentStoreEnvFileContent(envValues);
+  return [
+    "echo '[deploy-prod] remote: persist store runtime overrides'",
+    `cat > ${shellQuote(STORE_RUNTIME_OVERRIDE_FILENAME)} <<'EOF'\n${content}EOF`,
+  ].join("\n");
+}
+
+function buildLoadStoreRuntimeOverridesStep() {
+  return [
+    "echo '[deploy-prod] remote: load store runtime overrides'",
+    `set -a; [ -f ${shellQuote(STORE_RUNTIME_OVERRIDE_FILENAME)} ] && . ${shellQuote(`./${STORE_RUNTIME_OVERRIDE_FILENAME}`)}; set +a`,
+  ].join("\n");
+}
+
 function buildDeployEnvValues(options = {}) {
   const envValues = {};
   if (hasValue(options.appImage)) envValues.SIGNALBRIEF_APP_IMAGE = String(options.appImage || "").trim();
@@ -631,6 +694,7 @@ function buildImageDeployRemoteSteps({
   services,
   skipRemoteVerify,
   deployEnvValues,
+  persistentStoreEnvValues,
   expectedStoreBackend,
   expectedSqlitePath,
 }) {
@@ -644,11 +708,17 @@ function buildImageDeployRemoteSteps({
   const steps = [
     "set -euo pipefail",
     `cd ${shellQuote(remoteDir)}`,
+  ];
+  if (persistentStoreEnvValues && Object.keys(persistentStoreEnvValues).length > 0) {
+    steps.push(buildPersistStoreRuntimeOverridesStep(persistentStoreEnvValues));
+  }
+  steps.push(
+    buildLoadStoreRuntimeOverridesStep(),
     "echo '[deploy-prod] remote: compose pull'",
     `${composeEnvPrefix}docker compose pull ${composeServices}`.trim(),
     "echo '[deploy-prod] remote: compose up'",
     `${composeEnvPrefix}docker compose up -d --no-build${requiresForceRecreate ? " --force-recreate" : ""} ${composeServices}`.trim(),
-  ];
+  );
   if (!skipRemoteVerify) {
     steps.push(
       "echo '[deploy-prod] remote: runtime verify'",
@@ -674,6 +744,7 @@ function buildArchiveDeployRemoteSteps({
   skipRemoteVerify,
   sha,
   deployEnvValues,
+  persistentStoreEnvValues,
   expectedStoreBackend,
   expectedSqlitePath,
 }) {
@@ -698,13 +769,19 @@ function buildArchiveDeployRemoteSteps({
     `cd ${shellQuote(remoteDir)}`,
     "echo '[deploy-prod] remote: extract archive'",
     `tar -xzf ${shellQuote(remoteArchivePath)}`,
+  ];
+  if (persistentStoreEnvValues && Object.keys(persistentStoreEnvValues).length > 0) {
+    steps.push(buildPersistStoreRuntimeOverridesStep(persistentStoreEnvValues));
+  }
+  steps.push(
+    buildLoadStoreRuntimeOverridesStep(),
     "echo '[deploy-prod] remote: compose build'",
     skipBuild
       ? "echo '[deploy-prod] remote: build skipped'"
       : `${composeEnvPrefix}docker compose build --no-cache --build-arg ${shellQuote(`DEPLOY_SHA=${sha}`)} ${buildNoCacheArgs}`.trim(),
     "echo '[deploy-prod] remote: compose up'",
     `${composeEnvPrefix}${composeArgs.filter((arg) => arg !== "--build").map((arg) => shellQuote(arg)).join(" ")}`.trim(),
-  ];
+  );
   if (!skipRemoteVerify) {
     steps.push(
       "echo '[deploy-prod] remote: runtime verify'",
@@ -1024,6 +1101,12 @@ async function main() {
   if (normalizedStoreBackend !== "canary" && hasValue(storeCanaryMirrorWrites)) {
     fail("store canary mirror writes require --store-backend canary");
   }
+  const persistentStoreEnvValues = buildPersistentStoreEnvValues({
+    storeBackend: normalizedStoreBackend,
+    sqlitePath,
+    storeCanaryChatIds,
+    storeCanaryMirrorWrites,
+  });
 
   if (targetEnv === "production") {
     const stagingGateResult = evaluateStagingPromotionGate({
@@ -1132,6 +1215,7 @@ async function main() {
       services,
       skipRemoteVerify,
       deployEnvValues,
+      persistentStoreEnvValues,
       expectedStoreBackend: normalizedStoreBackend,
       expectedSqlitePath: sqlitePath,
     });
@@ -1164,6 +1248,7 @@ async function main() {
       skipRemoteVerify,
       sha,
       deployEnvValues,
+      persistentStoreEnvValues,
       expectedStoreBackend: normalizedStoreBackend,
       expectedSqlitePath: sqlitePath,
     });
@@ -1179,7 +1264,7 @@ async function main() {
     "-o",
     "ConnectTimeout=30",
     sshTarget,
-    remoteSteps.join("; "),
+    remoteSteps.join("\n"),
   ], { label: "remote deploy" });
 
   if (!skipPublicVerify) {

@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalBrief — Your Daily Signal</title>
-<meta name="description" content="SignalBrief is a daily AI-curated business news digest for strategy professionals across healthcare, finance, private equity, technology, and policy.">
+<title>SignalBrief — Daily AI Briefings for Strategy &amp; Finance Professionals</title>
+<meta name="description" content="SignalBrief is a daily AI-curated news digest for strategy professionals. Five minutes every morning covering AI, healthcare, private equity, finance, and policy — ranked by relevance to your work.">
 <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">
 <link rel="canonical" href="https://getsignalbrief.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SignalBrief">
 <meta property="og:title" content="SignalBrief — Daily AI-Curated Briefings for Strategy Professionals">
-<meta property="og:description" content="Get a personalized morning digest across AI, strategy, healthcare, finance, private equity, and policy in under 5 minutes.">
+<meta property="og:description" content="AI-curated daily briefings for strategy professionals. Covers AI, healthcare, private equity, finance, and policy — ranked by relevance and delivered in under 5 minutes.">
 <meta property="og:url" content="https://getsignalbrief.com/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="SignalBrief — Daily AI-Curated Briefings">
@@ -22,13 +22,77 @@
     {
       "@type": "Organization",
       "name": "SignalBrief",
-      "url": "https://getsignalbrief.com"
+      "url": "https://getsignalbrief.com",
+      "description": "SignalBrief publishes daily AI-curated briefings for strategy and finance professionals across healthcare, private equity, technology, and policy."
     },
     {
       "@type": "WebSite",
       "name": "SignalBrief",
       "url": "https://getsignalbrief.com/",
-      "description": "Daily AI-curated business and strategy digest for professionals."
+      "description": "Daily AI-curated news digest for strategy professionals.",
+      "potentialAction": {
+        "@type": "SubscribeAction",
+        "target": "https://getsignalbrief.com/signup"
+      }
+    },
+    {
+      "@type": "Service",
+      "name": "SignalBrief Daily Briefing",
+      "description": "An AI-curated daily newsletter that scans hundreds of business, strategy, and policy sources each morning and delivers a concise ranked briefing to strategy professionals across AI, healthcare, private equity, finance, and regulatory policy.",
+      "provider": {
+        "@type": "Organization",
+        "name": "SignalBrief",
+        "url": "https://getsignalbrief.com"
+      },
+      "serviceType": "Newsletter",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "Strategy professionals, management consultants, private equity analysts, healthcare executives, corporate development teams"
+      },
+      "url": "https://getsignalbrief.com",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free daily briefing"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is SignalBrief?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SignalBrief is a daily AI-curated news digest for strategy professionals. Each morning our AI scans hundreds of business, finance, and policy sources and delivers a concise briefing ranked by strategic relevance — covering AI and technology, healthcare, private equity and M&A, finance, and regulatory policy."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Who is SignalBrief for?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SignalBrief is built for strategy and finance professionals who need to stay current across multiple sectors — consultants, private equity analysts, corporate development teams, healthcare executives, and investors who need intelligence without the noise."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does SignalBrief work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SignalBrief's AI reads thousands of headlines every morning and scores each item for strategic relevance. You receive a personalized briefing with the most important signals first, each with a summary and a 'why it matters' note connecting the news to strategic implications."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is SignalBrief free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes — SignalBrief is free to sign up. Create a free account, choose your verticals, and start receiving your daily personalized briefing."
+          }
+        }
+      ]
     }
   ]
 }
@@ -309,6 +373,101 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   line-height: 1.6;
 }
 
+/* ── How It Works ── */
+.features-section {
+  padding: 0 0 80px;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.features-section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.features-heading {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(26px, 2.8vw, 36px);
+  font-weight: 400;
+  letter-spacing: -0.4px;
+  text-align: center;
+  margin-bottom: 48px;
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 48px;
+}
+.feature-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  box-shadow: var(--shadow-sm);
+}
+.feature-icon {
+  font-size: 26px;
+  margin-bottom: 14px;
+  line-height: 1;
+}
+.feature-card h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  letter-spacing: -0.1px;
+  line-height: 1.3;
+}
+.feature-card p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-body);
+}
+.features-about {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 36px 40px;
+  box-shadow: var(--shadow-sm);
+  max-width: 880px;
+  margin: 0 auto;
+}
+.features-about h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 700;
+  margin-bottom: 16px;
+  letter-spacing: -0.3px;
+  line-height: 1.3;
+}
+.features-about p {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text-body);
+  margin-bottom: 14px;
+}
+.features-about p:last-child { margin-bottom: 0; }
+.features-verticals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+.vertical-chip {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 5px 14px;
+  border-radius: 100px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid rgba(59,95,192,0.12);
+}
+@media (max-width: 720px) {
+  .features-grid { grid-template-columns: 1fr; }
+  .features-about { padding: 24px 20px; }
+}
+
 /* ── Email Capture ── */
 .signup-section {
   padding: 0 0 120px;
@@ -513,6 +672,41 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
     </div>
   </section>
 
+  <!-- ── How It Works ── -->
+  <section class="features-section" id="how-it-works" aria-label="How SignalBrief works">
+    <h2 class="features-heading">Intelligence built for strategy professionals</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" aria-hidden="true">&#x1F4E1;</div>
+        <h3>Curated from hundreds of sources</h3>
+        <p>Each morning, SignalBrief's AI scans hundreds of business, strategy, and policy publications — from major financial outlets to niche healthcare and private equity sources — and selects only the signals that matter to your work.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" aria-hidden="true">&#x1F3AF;</div>
+        <h3>Ranked by strategic relevance</h3>
+        <p>Every item is scored for how much it matters to strategy and finance professionals. Breaking M&amp;A, regulatory moves, AI deployments, and market shifts are ranked so the most important signals reach you first.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" aria-hidden="true">&#x26A1;</div>
+        <h3>Ready in five minutes</h3>
+        <p>No noise, no infinite scroll. SignalBrief delivers a concise briefing you can read in under five minutes — each item includes a summary and a "why it matters" note connecting the news to strategic implications for your work.</p>
+      </div>
+    </div>
+    <div class="features-about">
+      <h2>The AI news digest for strategy, finance, and healthcare professionals</h2>
+      <p>SignalBrief is a daily AI-curated news digest built for professionals who need to stay current across multiple sectors without spending hours reading. Our AI reads thousands of headlines every morning and filters them down to the signals most relevant to business strategy, M&amp;A, healthcare policy, private equity, and technology — delivered to your inbox before the workday starts.</p>
+      <p>Unlike general news aggregators or broad newsletters, SignalBrief is designed for strategy work. Each briefing is personalized by vertical and role, so a private equity analyst sees different signals than a healthcare executive or a management consultant. Every item includes a concise summary and a strategic "why it matters" note so you arrive at every meeting with context, not just headlines.</p>
+      <div class="features-verticals" aria-label="Covered verticals">
+        <span class="vertical-chip">AI &amp; Technology</span>
+        <span class="vertical-chip">Healthcare</span>
+        <span class="vertical-chip">Private Equity &amp; M&amp;A</span>
+        <span class="vertical-chip">Finance</span>
+        <span class="vertical-chip">Regulatory Policy</span>
+        <span class="vertical-chip">Strategy</span>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Email Capture ── -->
   <section class="signup-section" id="signup">
     <h2>Get your daily signal</h2>
@@ -551,7 +745,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
 
 /* Scroll reveal */
 (function() {
-  var targets = document.querySelectorAll('.digest-card, .signup-section');
+  var targets = document.querySelectorAll('.digest-card, .features-section, .signup-section');
   if (!('IntersectionObserver' in window)) {
     targets.forEach(function(el) { el.classList.add('visible'); });
     return;

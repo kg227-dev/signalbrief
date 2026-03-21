@@ -189,6 +189,7 @@ function testPublicRegistryAddsBaseUrl() {
   assert.strictEqual(publicDeps.findUserByToken, deps.findUserByToken);
   assert.strictEqual(publicDeps.loadLatestDigestSnapshot, deps.loadLatestDigestSnapshot);
   assert.strictEqual(publicDeps.loadDigestSnapshotByRunId, deps.loadDigestSnapshotByRunId);
+  assert.strictEqual(publicDeps.getBaseUrl, deps.getBaseUrl);
 }
 
 testSharedHandlersRegistry();

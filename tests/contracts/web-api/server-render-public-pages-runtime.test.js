@@ -35,6 +35,16 @@ const html = renderPublicDigestPage({
   ],
 });
 
+const personalizedHtml = renderPublicDigestPage({
+  dateKey: "2026-03-13",
+  dateLabel: "Friday, March 13, 2026",
+  quickScan: "One · Two",
+  items: [],
+  refToken: "a".repeat(64),
+  baseUrl: "https://getsignalbrief.com/",
+  isPersonalized: true,
+});
+
 assert.ok(html.includes('class="scan-heading"'), "expected quick scan heading to render");
 assert.ok(html.includes('class="scan-list"'), "expected quick scan list to render");
 assert.ok(html.includes(">One<"), "expected first quick scan point to render");
@@ -46,3 +56,10 @@ assert.ok(html.includes('class="score-pill score-pill-compact"'), "expected quic
 assert.ok(html.includes(">7.6<"), "expected current relevanceScore to render");
 assert.ok(html.includes(">4.2<"), "expected legacy relevance_score to render");
 assert.ok(html.includes('class="item-meta-left"'), "expected item metadata layout to include score badge region");
+assert.ok(html.includes('<meta name="robots" content="index,follow'), "expected public digest page to be indexable");
+assert.ok(html.includes('<link rel="canonical" href="http://localhost:3003/digest/2026-03-13">'), "expected canonical digest URL");
+assert.ok(html.includes('"@type": "CollectionPage"'), "expected structured data block");
+assert.ok(html.includes('mailto:?subject=SignalBrief%20Digest&body=http%3A%2F%2Flocalhost%3A3003%2Fdigest%2F2026-03-13'), "expected share URL to use canonical digest URL");
+assert.ok(personalizedHtml.includes('<meta name="robots" content="noindex,nofollow,noarchive">'), "expected personalized digest page to be noindex");
+assert.ok(personalizedHtml.includes('<link rel="canonical" href="https://getsignalbrief.com/digest/2026-03-13">'), "expected personalized page to canonicalize to the public digest URL");
+assert.ok(personalizedHtml.includes('mailto:?subject=SignalBrief%20Digest&body=https%3A%2F%2Fgetsignalbrief.com%2Fdigest%2F2026-03-13'), "expected personalized share URL to stay canonical and tokenless");

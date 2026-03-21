@@ -7,6 +7,27 @@ function createRenderPublicPages(deps) {
     formatPublicDigestDateLabel,
   } = deps;
 
+  function truncateText(value, maxLength) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  }
+
+  function escapeJsonString(value) {
+    return JSON.stringify(String(value || ""));
+  }
+
+  function normalizeBaseUrl(rawBaseUrl) {
+    try {
+      const parsed = new URL(String(rawBaseUrl || "http://localhost:3003"));
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.toString().replace(/\/+$/, "");
+    } catch {
+      return "http://localhost:3003";
+    }
+  }
+
   function normalizeQuickScan(rawQuickScan) {
     return String(rawQuickScan || "")
       .replace(/&amp;nbsp;/gi, " ")
@@ -91,15 +112,17 @@ function createRenderPublicPages(deps) {
     items,
     refToken = "",
     baseUrl = "http://localhost:3003",
+    isPersonalized = false,
   }) {
     const referralToken = normalizeReferralToken(refToken);
-    const shareUrl = referralToken
-      ? `${baseUrl}/digest/${dateKey}?ref=${encodeURIComponent(referralToken)}`
-      : `${baseUrl}/digest/${dateKey}`;
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+    const canonicalUrl = `${normalizedBaseUrl}/digest/${dateKey}`;
+    const shareUrl = canonicalUrl;
     const signupUrl = referralToken
-      ? `${baseUrl}/?ref=${encodeURIComponent(referralToken)}`
-      : `${baseUrl}/`;
-    const safeDateLabel = escapeHtml(dateLabel || formatPublicDigestDateLabel(dateKey));
+      ? `${normalizedBaseUrl}/?ref=${encodeURIComponent(referralToken)}`
+      : `${normalizedBaseUrl}/`;
+    const rawDateLabel = String(dateLabel || formatPublicDigestDateLabel(dateKey) || "");
+    const safeDateLabel = escapeHtml(rawDateLabel);
     const safeItems = Array.isArray(items) ? items : [];
     const scoreByHeadline = new Map();
     safeItems.forEach((item) => {
@@ -109,6 +132,16 @@ function createRenderPublicPages(deps) {
       scoreByHeadline.set(headlineKey, score);
     });
     const quickScanPoints = extractQuickScanPoints(normalizeQuickScan(quickScan));
+    const digestDescription = truncateText(
+      quickScanPoints.length > 0
+        ? `${rawDateLabel}: ${quickScanPoints.join(" · ")}`
+        : `SignalBrief public digest for ${rawDateLabel}.`,
+      155
+    );
+    const safeDigestDescription = escapeHtml(digestDescription);
+    const robotsContent = isPersonalized
+      ? "noindex,nofollow,noarchive"
+      : "index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1";
     const quickScanHtml = quickScanPoints
       .map((point) => {
         const pointScore = scoreByHeadline.get(normalizeHeadlineLookup(point));
@@ -152,7 +185,31 @@ function createRenderPublicPages(deps) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SignalBrief - ${safeDateLabel}</title>
-  <meta name="description" content="SignalBrief public digest for ${safeDateLabel}.">
+  <meta name="description" content="${safeDigestDescription}">
+  <meta name="robots" content="${robotsContent}">
+  <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="SignalBrief">
+  <meta property="og:title" content="SignalBrief - ${safeDateLabel}">
+  <meta property="og:description" content="${safeDigestDescription}">
+  <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="SignalBrief - ${safeDateLabel}">
+  <meta name="twitter:description" content="${safeDigestDescription}">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": ${escapeJsonString(`SignalBrief - ${safeDateLabel}`)},
+      "description": ${escapeJsonString(digestDescription)},
+      "url": ${escapeJsonString(canonicalUrl)},
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "SignalBrief",
+        "url": ${escapeJsonString(normalizedBaseUrl)}
+      }
+    }
+  </script>
   <style>
     :root {
       --bg: #f7f8fc;
@@ -235,6 +292,7 @@ function createRenderPublicPages(deps) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SignalBrief - Digest Not Found</title>
+  <meta name="robots" content="noindex,nofollow,noarchive">
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; color: #0f172a; }
     main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }

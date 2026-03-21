@@ -3,7 +3,8 @@ const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/d
 const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
 const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/sandbox", "/admin/source-registry"]);
 const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/sandbox", "/admin/source-registry"]);
-const NO_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/index.js", "/signup", "/signup.html"]);
+const SHORT_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/signup", "/signup.html"]);
+const NO_CACHE_STATIC_ROUTES = new Set(["/index.js"]);
 const INDEX_ASSET_VERSION_TOKEN = "__ASSET_VERSION__";
 
 const STATIC_ROUTE_FILES = new Map([
@@ -20,7 +21,6 @@ const STATIC_ROUTE_FILES = new Map([
   ["/admin/sandbox", "sandbox.html"],
   ["/admin/source-registry", "admin-source-registry.html"],
   ["/robots.txt", "robots.txt"],
-  ["/sitemap.xml", "sitemap.xml"],
   ["/style.css", "style.css"],
   ["/preferences-topic-runtime.js", "preferences-topic-runtime.js"],
   ["/preferences-schedule-runtime.js", "preferences-schedule-runtime.js"],
@@ -50,6 +50,68 @@ const STATIC_ROUTE_FILES = new Map([
 function writeMissingDigest(res, dateKey, renderPublicDigestMissingPage) {
   res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
   return res.end(renderPublicDigestMissingPage(dateKey));
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function normalizePublicBaseUrl(rawBaseUrl) {
+  try {
+    const parsed = new URL(String(rawBaseUrl || "https://getsignalbrief.com"));
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return "https://getsignalbrief.com";
+  }
+}
+
+function buildSitemapXml({ baseUrl, archiveFiles }) {
+  const normalizedBaseUrl = normalizePublicBaseUrl(baseUrl);
+  const digestEntries = (Array.isArray(archiveFiles) ? archiveFiles : [])
+    .map((fileName) => String(fileName || "").replace(/\.json$/i, ""))
+    .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey))
+    .map((dateKey) => ({
+      loc: `${normalizedBaseUrl}/digest/${dateKey}`,
+      lastmod: dateKey,
+      changefreq: "daily",
+      priority: "0.7",
+    }));
+
+  const entries = [
+    {
+      loc: `${normalizedBaseUrl}/`,
+      changefreq: "daily",
+      priority: "1.0",
+    },
+    {
+      loc: `${normalizedBaseUrl}/signup`,
+      changefreq: "weekly",
+      priority: "0.8",
+    },
+    ...digestEntries,
+  ];
+
+  const urlRows = entries.map((entry) => {
+    const parts = [
+      `    <loc>${escapeXml(entry.loc)}</loc>`,
+      entry.lastmod ? `    <lastmod>${escapeXml(entry.lastmod)}</lastmod>` : "",
+      entry.changefreq ? `    <changefreq>${escapeXml(entry.changefreq)}</changefreq>` : "",
+      entry.priority ? `    <priority>${escapeXml(entry.priority)}</priority>` : "",
+    ].filter(Boolean);
+    return `  <url>\n${parts.join("\n")}\n  </url>`;
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    `${urlRows}\n` +
+    `</urlset>\n`;
 }
 
 function normalizeSnapshotItems(rawItems) {
@@ -139,6 +201,7 @@ function serveDigestPage(ctx, deps) {
       quickScan: personalizedSnapshot.quickScan,
       items: personalizedSnapshot.items,
       refToken,
+      isPersonalized: true,
     });
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
@@ -160,6 +223,7 @@ function serveDigestPage(ctx, deps) {
       quickScan: parsed?.quickScan || "",
       items: sortDigestItemsByScoreDescending(Array.isArray(parsed?.items) ? parsed.items : []),
       refToken,
+      isPersonalized: false,
     });
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
@@ -170,6 +234,25 @@ function serveDigestPage(ctx, deps) {
     res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(renderPublicDigestMissingPage(dateKey));
   }
+}
+
+function serveSitemap(ctx, deps) {
+  const { req, res, pathname } = ctx;
+  const {
+    path, APP_ROOT, archiveDir, readArchiveFiles, getBaseUrl,
+  } = deps;
+  if (req.method !== "GET" || pathname !== "/sitemap.xml") return false;
+
+  const resolvedArchiveDir = archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
+  const xml = buildSitemapXml({
+    baseUrl: typeof getBaseUrl === "function" ? getBaseUrl() : "https://getsignalbrief.com",
+    archiveFiles: readArchiveFiles(resolvedArchiveDir),
+  });
+  res.writeHead(200, {
+    "Content-Type": "application/xml; charset=utf-8",
+    "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+  });
+  return res.end(xml);
 }
 
 function enforceAdminHtmlAuth(ctx, deps) {
@@ -188,6 +271,8 @@ function serveStaticFile(res, pathname, deps) {
   const headers = {};
   if (NO_STORE_STATIC_ROUTES.has(pathname)) {
     headers["Cache-Control"] = "no-store";
+  } else if (SHORT_CACHE_STATIC_ROUTES.has(pathname)) {
+    headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=86400";
   } else if (NO_CACHE_STATIC_ROUTES.has(pathname)) {
     headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate";
   }
@@ -222,6 +307,9 @@ function createPublicStaticRouteHandler(deps) {
 
     const digestHandled = serveDigestPage(ctx, localDeps);
     if (digestHandled !== false) return digestHandled;
+
+    const sitemapHandled = serveSitemap(ctx, localDeps);
+    if (sitemapHandled !== false) return sitemapHandled;
 
     const adminRedirected = enforceAdminHtmlAuth(ctx, localDeps);
     if (adminRedirected !== false) return adminRedirected;

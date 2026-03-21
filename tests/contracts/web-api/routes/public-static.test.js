@@ -49,6 +49,7 @@ const archiveDir = path.join(appRoot, "archive");
 fs.mkdirSync(webDir, { recursive: true });
 fs.mkdirSync(archiveDir, { recursive: true });
 fs.writeFileSync(path.join(webDir, "index.html"), "<script src=\"index.js?v=__ASSET_VERSION__\"></script>");
+fs.writeFileSync(path.join(webDir, "signup.html"), "<script src=\"signup-flow.js?v=__ASSET_VERSION__\"></script>");
 fs.writeFileSync(path.join(webDir, "settings.html"), "<script src=\"settings-runtime.js?v=__ASSET_VERSION__\"></script>");
 fs.writeFileSync(path.join(webDir, "admin-source-registry.html"), "<html>source registry</html>");
 
@@ -63,6 +64,7 @@ const deps = {
   renderPublicDigestMissingPage: (dateKey) => `<html>missing:${dateKey || "none"}</html>`,
   formatPublicDigestDateLabel: (dateKey) => dateKey,
   renderPublicDigestPage: () => "<html>digest</html>",
+  getBaseUrl: () => "https://getsignalbrief.com",
   isAdminAuthed: () => false,
   assetVersion: "abc123",
   serveFile: (res, targetPath, headers = null) => {
@@ -113,8 +115,45 @@ const deps = {
 
 {
   const handler = createPublicStaticRouteHandler(deps);
+  const { handled, res } = invoke(handler, { method: "GET", pathname: "/" });
+  assert.strictEqual(handled, true);
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
+}
+
+{
+  const handler = createPublicStaticRouteHandler(deps);
+  const { handled, res } = invoke(handler, { method: "GET", pathname: "/signup" });
+  assert.strictEqual(handled, true);
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
+}
+
+{
+  const handler = createPublicStaticRouteHandler(deps);
   const { handled } = invoke(handler, { method: "GET", pathname: "/not-found" });
   assert.strictEqual(handled, false);
+}
+
+{
+  fs.writeFileSync(path.join(archiveDir, "2026-03-15.json"), JSON.stringify({
+    dateStr: "Sunday, March 15, 2026",
+    quickScan: "Archive quick scan",
+    items: [{ headline: "Archive item" }],
+  }, null, 2));
+  const handler = createPublicStaticRouteHandler({
+    ...deps,
+    readArchiveFiles: () => ["2026-03-15.json", "2026-03-14.json"],
+  });
+  const { handled, res } = invoke(handler, { method: "GET", pathname: "/sitemap.xml" });
+  assert.strictEqual(typeof handled, "string");
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Content-Type"], "application/xml; charset=utf-8");
+  assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
+  assert.ok(res.body.includes("<loc>https://getsignalbrief.com/</loc>"));
+  assert.ok(res.body.includes("<loc>https://getsignalbrief.com/signup</loc>"));
+  assert.ok(res.body.includes("<loc>https://getsignalbrief.com/digest/2026-03-15</loc>"));
+  assert.ok(res.body.includes("<lastmod>2026-03-14</lastmod>"));
 }
 
 {

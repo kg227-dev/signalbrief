@@ -32,6 +32,7 @@ function createPublicRouteDependencies(deps) {
     loadDigestSnapshotByRunId,
     renderPublicDigestMissingPage,
     formatPublicDigestDateLabel,
+    getBaseUrl,
     renderPublicDigestPage: (payload) => renderPublicDigestPageTemplate({
       ...payload,
       baseUrl: getBaseUrl(),

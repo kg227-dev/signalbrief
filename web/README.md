@@ -78,7 +78,7 @@
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `routes/public-static.js` | Serves all HTML pages and static assets. Handles `GET /digest/:date` (public digest page rendering), enforces admin HTML auth redirects (302 → `/admin/login`), injects `__ASSET_VERSION__` into `index.html`/`settings.html`/`signup.html`, and maps all static routes to files in `web/`. | HTML pages, JS/CSS/txt/xml file responses | `../../src/digest/runtime/digest-item-ordering-runtime`, `./server-render-runtime` (via deps), `node:fs`, `node:path` |
+| `routes/public-static.js` | Serves all HTML pages and static assets. Handles `GET /digest/:date` (public digest page rendering), generates `GET /sitemap.xml` from the live archive index, enforces admin HTML auth redirects (302 → `/admin/login`), injects `__ASSET_VERSION__` into `index.html`/`settings.html`/`signup.html`, and maps all other static routes to files in `web/`. | HTML pages, JS/CSS/txt/xml file responses | `../../src/digest/runtime/digest-item-ordering-runtime`, `./server-render-runtime` (via deps), `node:fs`, `node:path` |
 
 ---
 
@@ -171,7 +171,6 @@ All files in this section are served as static assets and execute in the browser
 | `sandbox.html` | Admin sandbox page. Allows estimating and running sandbox digest pipelines (`POST /api/admin/sandbox/estimate`, `POST /api/admin/sandbox/run`). | Sandbox UI HTML | `style.css` |
 | `style.css` | Global stylesheet. Covers layout, typography, topic chips, progress indicators, admin tables, dark-mode variables, and responsive breakpoints. | CSS served at `/style.css` | None |
 | `robots.txt` | Crawler policy. Disallows `/admin`, `/api/`, `/settings`, `/archive`. Points to sitemap. | `text/plain` served at `/robots.txt` | None |
-| `sitemap.xml` | XML sitemap for the public landing page and digest routes. | `application/xml` served at `/sitemap.xml` | None |
 
 ---
 

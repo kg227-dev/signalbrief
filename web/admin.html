@@ -19,10 +19,13 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .container { max-width:1560px; margin:0 auto; padding:40px 24px 80px; }
 
 .header { margin-bottom:40px; padding-bottom:24px; border-bottom:1px solid var(--border); }
-.header-top { display:flex; align-items:baseline; gap:12px; margin-bottom:6px; }
-.header h1 { font-size:28px; font-weight:700; letter-spacing:-0.4px; }
-.header h1 .brand { font-family:'Playfair Display',serif; }
-.header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; }
+.header-top { display:flex; align-items:center; gap:12px; margin-bottom:6px; flex-wrap:wrap; }
+.header h1 { font-size:30px; font-weight:700; letter-spacing:-0.5px; font-family:'Playfair Display',serif; }
+.header .header-brand { font-family:'Playfair Display',serif; font-size:30px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
+.header .nav-link { display:inline-flex; align-items:center; justify-content:center; min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--accent); text-decoration:none; font-size:12px; font-weight:700; }
+.header .nav-link.current { background:var(--accent-light); border-color:transparent; }
+.header .signout-btn { min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; }
+.header .nav-link:hover, .header .signout-btn:hover { background:var(--accent-light); }
 .header p { font-size:14px; color:var(--text-secondary); }
 .stale-badge {
   display:none;
@@ -47,8 +50,15 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
   color:var(--text-secondary); margin-bottom:10px;
 }
 .cards-kpi {
-  grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns:repeat(3, 1fr);
   margin-bottom:0;
+}
+.cards-kpi-4 {
+  grid-template-columns:repeat(4, 1fr);
+  margin-bottom:0;
+}
+@media (max-width:700px) {
+  .cards-kpi, .cards-kpi-4 { grid-template-columns:1fr; }
 }
 .cards-window {
   grid-template-columns:repeat(2, minmax(0, 1fr));
@@ -668,8 +678,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   line-height:1.4;
 }
 .ceo-health-panel {
-  flex:1 1 560px;
-  min-width:320px;
   border:1.5px solid rgba(0,0,0,0.10);
   border-radius:10px;
   background:linear-gradient(180deg, #f5f3ef 0%, #faf9f6 100%);
@@ -928,27 +936,25 @@ body.dark .failed-delivery-row { background:var(--card); }
 body.dark .failed-delivery-error { color:#fca5a5; }
 body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-color:rgba(180,83,9,0.3); }
 #darkToggle {
-  position:fixed; top:20px; right:20px; z-index:999;
-  width:42px; height:42px; border-radius:50%;
+  min-height:34px; width:42px; border-radius:999px;
   border:1px solid var(--border); background:var(--card);
-  cursor:pointer; font-size:18px;
-  display:flex; align-items:center; justify-content:center;
-  transition:all 0.2s ease;
-  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  cursor:pointer; font-size:16px;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+#darkToggle:hover { background:var(--accent-light); }
 </style>
 </head>
 <body>
-<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
 <div class="container">
 
   <div class="header">
     <div class="header-top">
-      <h1><span class="brand">SignalBrief</span> Admin</h1>
-      <a href="/admin/sandbox" class="badge" style="text-decoration:none;cursor:pointer;">Sandbox</a>
-      <a href="/admin/source-registry" class="badge" style="text-decoration:none;cursor:pointer;">Source Registry</a>
-      <button onclick="logout()" class="btn-secondary" style="font-size:12px;border-radius:6px;padding:4px 14px;color:var(--text-secondary);">Sign out</button>
+      <span class="header-brand">SignalBrief</span>
+      <a href="/admin" class="nav-link current">Admin</a>
+      <a href="/admin/sandbox" class="nav-link">Sandbox</a>
+      <a href="/admin/source-registry" class="nav-link">Source Registry</a>
+      <button onclick="logout()" class="signout-btn">Sign out</button>
+      <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
   </div>
@@ -1012,7 +1018,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     </div>
     <div>
       <div class="kpi-row-title">Engagement</div>
-      <div class="cards cards-kpi">
+      <div class="cards cards-kpi-4">
         <div class="card">
           <div class="card-label">7-day open rate</div>
           <div class="card-value" id="engagementOpenRate">—</div>
@@ -1038,92 +1044,89 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
   </div>
 
   <!-- System health bar -->
-  <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;margin-bottom:36px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-    <div id="ceoHealthPanel" class="ceo-health-panel">
-      <div class="ceo-health-head">
-        <div class="health-metric-label" style="margin-bottom:0;">CEO system status</div>
-        <span id="ceoStatusPill" class="ceo-status-pill neutral">Checking…</span>
-      </div>
-      <div id="ceoStatusHeadline" class="ceo-health-headline">Loading runtime health…</div>
-      <div id="ceoStatusReason" class="ceo-health-reason">—</div>
-      <div class="ceo-health-grid">
-        <div class="ceo-health-cell">
-          <div class="health-metric-label">Can deliver next run</div>
-          <div class="health-metric-value" id="ceoCanDeliver">—</div>
+  <div id="healthBar" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:36px;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+    <!-- Top half: CEO status (full width) -->
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border);">
+      <div id="ceoHealthPanel" class="ceo-health-panel">
+        <div class="ceo-health-head">
+          <div class="health-metric-label" style="margin-bottom:0;">CEO system status</div>
+          <span id="ceoStatusPill" class="ceo-status-pill neutral">Checking…</span>
         </div>
-        <div class="ceo-health-cell">
-          <div class="health-metric-label">Recovery queue</div>
-          <div class="health-metric-value" id="ceoUsersAtRisk">—</div>
+        <div id="ceoStatusHeadline" class="ceo-health-headline">Loading runtime health…</div>
+        <div id="ceoStatusReason" class="ceo-health-reason">—</div>
+        <div class="ceo-health-grid">
+          <div class="ceo-health-cell">
+            <div class="health-metric-label">Can deliver next run</div>
+            <div class="health-metric-value" id="ceoCanDeliver">—</div>
+          </div>
+          <div class="ceo-health-cell">
+            <div class="health-metric-label">Recovery queue</div>
+            <div class="health-metric-value" id="ceoUsersAtRisk">—</div>
+          </div>
+          <div class="ceo-health-cell">
+            <div class="health-metric-label">Latest scheduled run</div>
+            <div class="health-metric-value" id="ceoLastSuccess">—</div>
+          </div>
+          <div class="ceo-health-cell">
+            <div class="health-metric-label">Next scheduled run (ET)</div>
+            <div class="health-metric-value" id="ceoNextExpected">—</div>
+          </div>
         </div>
-        <div class="ceo-health-cell">
-          <div class="health-metric-label">Latest scheduled run</div>
-          <div class="health-metric-value" id="ceoLastSuccess">—</div>
-        </div>
-        <div class="ceo-health-cell">
-          <div class="health-metric-label">Next scheduled run (ET)</div>
-          <div class="health-metric-value" id="ceoNextExpected">—</div>
+        <div id="ceoActionNow" class="ceo-action-now">No action required yet.</div>
+        <div class="health-metric-label" style="margin-top:10px;">CEO command set</div>
+        <div id="ceoCommandList" class="ceo-command-list">
+          <button type="button" class="ceo-command-btn" onclick="runCeoCommand('refresh_health', this)">Refresh health data</button>
+          <button type="button" class="ceo-command-btn" id="checkSchedulerBtn" onclick="runCeoCommand('check_scheduler', this)">Check scheduler now</button>
+          <button type="button" class="ceo-command-btn" id="testDigestBtn" onclick="runCeoCommand('send_test_digest', this)">Send test digest</button>
+          <button type="button" class="ceo-command-btn" id="runFullDigestBtn" onclick="runCeoCommand('run_full_digest', this)">Run full digest now</button>
         </div>
       </div>
-      <div id="ceoActionNow" class="ceo-action-now">No action required yet.</div>
-      <div class="health-metric-label" style="margin-top:10px;">CEO command set</div>
-      <div id="ceoCommandList" class="ceo-command-list">
-        <button type="button" class="ceo-command-btn" onclick="runCeoCommand('refresh_health', this)">Refresh health data</button>
-        <button type="button" class="ceo-command-btn" id="checkSchedulerBtn" onclick="runCeoCommand('check_scheduler', this)">Check scheduler now</button>
-        <button type="button" class="ceo-command-btn" id="testDigestBtn" onclick="runCeoCommand('send_test_digest', this)">Send test digest</button>
-        <button type="button" class="ceo-command-btn" id="runFullDigestBtn" onclick="runCeoCommand('run_full_digest', this)">Run full digest now</button>
+    </div>
+    <!-- Bottom half: stats row -->
+    <div style="padding:14px 24px;display:flex;align-items:flex-start;gap:28px;flex-wrap:wrap;">
+      <div class="health-metric">
+        <div class="health-metric-label">Server uptime</div>
+        <div class="health-metric-value" id="healthUptime">—</div>
       </div>
-    </div>
-    <div class="health-metric">
-      <div class="health-metric-label">Server uptime</div>
-      <div class="health-metric-value" id="healthUptime">—</div>
-    </div>
-    <div class="health-metric">
-      <div class="health-metric-label">Last run</div>
-      <div class="health-metric-value" id="healthLastRun">—</div>
-    </div>
-    <div class="health-metric">
-      <div class="health-metric-label">Last run cost</div>
-      <div class="health-metric-value" id="healthLastCost">—</div>
-    </div>
-    <div class="health-metric" id="healthDqs" style="display:none;min-width:260px;">
-      <div class="health-metric-label">Digest quality (14d)</div>
-      <div class="health-metric-value" id="healthDqsVal">—</div>
-      <div class="health-metric-sub" id="healthDqsSub">—</div>
-    </div>
-    <div class="health-metric" id="healthFeedback" style="display:none;min-width:280px;">
-      <div class="health-metric-label">Digest satisfaction (14d)</div>
-      <div class="health-metric-value" id="healthFeedbackVal">—</div>
-      <div class="health-metric-sub" id="healthFeedbackSub">—</div>
-    </div>
-    <!-- Delivery health — populated by JS -->
-    <div class="health-metric" id="healthDelivery" style="display:none;">
-      <div class="health-metric-label">Delivery health</div>
-      <div class="health-metric-value" id="healthDeliveryVal">—</div>
-    </div>
-    <div class="health-metric" id="healthReliability" style="display:none;min-width:280px;">
-      <div class="health-metric-label">Delivery reliability (7d)</div>
-      <div class="health-metric-value" id="healthReliabilityVal">—</div>
-      <div class="health-metric-sub" id="healthReliabilitySub">—</div>
-    </div>
-    <div class="health-metric" id="healthDigestRunner" style="display:none;min-width:220px;">
-      <div class="health-metric-label">Digest runner</div>
-      <div class="health-metric-value" id="healthDigestRunnerVal">—</div>
-      <div class="health-metric-sub" id="healthDigestRunnerSub">—</div>
-    </div>
-    <div class="health-metric" id="healthScheduler" style="display:none;min-width:260px;">
-      <div class="health-metric-label">Scheduler worker</div>
-      <div class="health-metric-value" id="healthSchedulerVal">—</div>
-      <div class="health-metric-sub" id="healthSchedulerSub">—</div>
-    </div>
-    <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:260px;">
-      <div class="test-target-wrap">
-        <div class="test-target-label">Test target</div>
-        <select id="testDigestTarget" class="test-target-select" aria-label="Test digest target">
-          <option value="">Loading targets…</option>
-        </select>
+      <div class="health-metric">
+        <div class="health-metric-label">Last run cost</div>
+        <div class="health-metric-value" id="healthLastCost">—</div>
       </div>
-      <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
-      <div id="opsActionMsg" class="ops-action-msg"></div>
+      <div class="health-metric" id="healthDqs" style="display:none;">
+        <div class="health-metric-label">Digest quality (14d)</div>
+        <div class="health-metric-value" id="healthDqsVal">—</div>
+        <div class="health-metric-sub" id="healthDqsSub">—</div>
+      </div>
+      <div class="health-metric" id="healthFeedback" style="display:none;">
+        <div class="health-metric-label">Digest satisfaction (14d)</div>
+        <div class="health-metric-value" id="healthFeedbackVal">—</div>
+        <div class="health-metric-sub" id="healthFeedbackSub">—</div>
+      </div>
+      <div class="health-metric" id="healthReliability" style="display:none;">
+        <div class="health-metric-label">Delivery reliability (7d)</div>
+        <div class="health-metric-value" id="healthReliabilityVal">—</div>
+        <div class="health-metric-sub" id="healthReliabilitySub">—</div>
+      </div>
+      <div class="health-metric" id="healthDigestRunner" style="display:none;">
+        <div class="health-metric-label">Digest runner</div>
+        <div class="health-metric-value" id="healthDigestRunnerVal">—</div>
+        <div class="health-metric-sub" id="healthDigestRunnerSub">—</div>
+      </div>
+      <div class="health-metric" id="healthScheduler" style="display:none;">
+        <div class="health-metric-label">Scheduler worker</div>
+        <div class="health-metric-value" id="healthSchedulerVal">—</div>
+        <div class="health-metric-sub" id="healthSchedulerSub">—</div>
+      </div>
+      <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+        <div class="test-target-wrap">
+          <div class="test-target-label">Test target</div>
+          <select id="testDigestTarget" class="test-target-select" aria-label="Test digest target">
+            <option value="">Loading targets…</option>
+          </select>
+        </div>
+        <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
+        <div id="opsActionMsg" class="ops-action-msg"></div>
+      </div>
     </div>
   </div>
 
@@ -1208,7 +1211,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     </table>
   </div>
 
-  <div class="section-title">Digest underperformance (last 7 days)</div>
+  <div class="section-title">Digest quality (last 7 days)</div>
 	  <div class="table-wrap">
 	    <table>
 	      <thead>
@@ -4007,7 +4010,6 @@ async function load(silent = false) {
     // Health bar
     if (health) {
       document.getElementById("healthUptime").textContent   = health.server_uptime  || "—";
-      document.getElementById("healthLastRun").textContent  = health.last_run_at    || "No runs yet";
       document.getElementById("healthLastCost").textContent = health.last_run_cost  || "—";
 
       const dqsDiv = document.getElementById("healthDqs");
@@ -4047,18 +4049,6 @@ async function load(silent = false) {
           feedbackVal.innerHTML = `<span style="color:${tone};">${avg.toFixed(1)}</span> avg`;
           feedbackSub.textContent = `${responses} reactions · ${positiveRate.toFixed(1)}% positive · ${trend} · 🔥${great} 👍${fine} 👎${meh}`;
         }
-      }
-
-      // Delivery health indicator
-      const warnings = health.users_delivery_warning || [];
-      const delivDiv = document.getElementById("healthDelivery");
-      const delivVal = document.getElementById("healthDeliveryVal");
-      delivDiv.style.display = "";
-      if (warnings.length === 0) {
-        delivVal.innerHTML = `<span style="color:var(--green);">✅ All on schedule</span>`;
-      } else {
-        const names = warnings.map(w => `${esc(w.name || w.email)} (${w.days_missed}d)`).join(", ");
-        delivVal.innerHTML = `<a href="#rosterSection" style="color:var(--yellow);font-weight:700;text-decoration:none;" title="${names}">⚠️ ${warnings.length} user${warnings.length > 1 ? "s" : ""} missed 2+ days</a>`;
       }
 
       const reliabilityDiv = document.getElementById("healthReliability");

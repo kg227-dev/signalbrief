@@ -19,11 +19,13 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 
 /* Header */
 .header { max-width:1560px; margin:0 auto; padding:28px 24px 16px; border-bottom:1px solid var(--border); margin-bottom:0; }
-.header-top { display:flex; align-items:center; gap:12px; }
-.header h1 { font-size:28px; font-weight:700; letter-spacing:-0.4px; }
-.header .badge { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--accent); background:var(--accent-light); padding:2px 8px; border-radius:4px; text-decoration:none; }
-.header .back-link { font-size:13px; color:var(--text-secondary); text-decoration:none; margin-left:auto; }
-.header .back-link:hover { color:var(--accent); }
+.header-top { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.header h1 { font-size:30px; font-weight:700; letter-spacing:-0.5px; font-family:'Playfair Display',serif; }
+.header .header-brand { font-family:'Playfair Display',serif; font-size:30px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
+.header .nav-link { display:inline-flex; align-items:center; justify-content:center; min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:#fff; color:var(--accent); text-decoration:none; font-size:12px; font-weight:700; }
+.header .nav-link.current { background:var(--accent-light); border-color:transparent; }
+.header .signout-btn { min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:#fff; color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; }
+.header .nav-link:hover, .header .signout-btn:hover { background:var(--accent-light); }
 
 /* Layout */
 .sandbox-layout { display:flex; max-width:1560px; margin:0 auto; min-height:calc(100vh - 80px); }
@@ -93,7 +95,10 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .rerun-hint { font-size:11px; color:var(--text-light); margin-top:4px; text-align:center; display:none; }
 
 /* Right panel — output */
-.empty-state { display:flex; align-items:center; justify-content:center; height:300px; text-align:center; color:var(--text-light); font-size:14px; }
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:300px; text-align:center; gap:10px; border:1.5px dashed var(--border); border-radius:var(--radius); background:rgba(0,0,0,0.015); margin-top:8px; }
+.empty-state-icon { font-size:28px; opacity:0.35; }
+.empty-state-text { font-size:14px; color:var(--text-secondary); font-weight:500; }
+.empty-state-sub { font-size:12px; color:var(--text-light); }
 
 /* Tabs */
 .tab-row { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); }
@@ -204,15 +209,12 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 
 /* Dark toggle */
 #darkToggle {
-  position:fixed; top:20px; right:20px; z-index:999;
-  width:42px; height:42px; border-radius:50%;
-  border:1px solid var(--border); background:var(--card);
-  cursor:pointer; font-size:18px;
-  display:flex; align-items:center; justify-content:center;
-  transition:all 0.2s ease;
-  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  min-height:34px; width:42px; border-radius:999px;
+  border:1px solid var(--border); background:#fff;
+  cursor:pointer; font-size:16px;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+#darkToggle:hover { background:var(--accent-light); }
 
 /* Dark mode */
 body.dark {
@@ -246,13 +248,16 @@ body.dark .left-panel { border-right-color:var(--border); }
 </style>
 </head>
 <body>
-<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
   <div class="header">
     <div class="header-top">
-      <h1 style="font-family:'Playfair Display',serif;">Digest Sandbox</h1>
-      <span class="badge">Internal</span>
-      <a href="/admin" class="back-link">&larr; Back to Admin</a>
+      <span class="header-brand">SignalBrief</span>
+      <a href="/admin" class="nav-link">Admin</a>
+      <a href="/admin/sandbox" class="nav-link current">Sandbox</a>
+      <a href="/admin/source-registry" class="nav-link">Source Registry</a>
+      <button onclick="logout()" class="signout-btn">Sign out</button>
+      <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-top:6px;">Preview digest output for any topic profile before sending to real users.</p>
   </div>
 
   <div class="sandbox-layout">
@@ -426,7 +431,9 @@ body.dark .left-panel { border-right-color:var(--border); }
       </div>
 
       <div id="emptyState" class="empty-state">
-        Configure preferences and click Generate to preview a digest.
+        <div class="empty-state-icon">✦</div>
+        <div class="empty-state-text">Configure preferences and click Generate Digest</div>
+        <div class="empty-state-sub">A digest preview will appear here</div>
       </div>
 
       <div id="outputArea" style="display:none;">
@@ -983,6 +990,11 @@ function esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt
   selectedTopics = [...document.querySelectorAll(".topic-chip.selected:not(.custom-kw)")].map(c => c.dataset.topic);
   onPrefsChanged();
 })();
+
+async function logout() {
+  await fetch('/api/admin/logout', { method: 'POST' });
+  window.location.href = '/admin/login';
+}
 </script>
 </body>
 </html>

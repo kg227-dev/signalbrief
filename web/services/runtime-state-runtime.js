@@ -123,6 +123,10 @@ function createRuntimeStateInspector(deps) {
     const storeSnapshot = store && typeof store.getStateSnapshot === "function"
       ? store.getStateSnapshot()
       : {};
+    const effectiveStoreBackend = String(storeSnapshot.backend || storeSnapshot.mode || "").trim() || null;
+    const storeInitialized = storeSnapshot.initialized === true
+      || storeSnapshot.file?.initialized === true
+      || storeSnapshot.sqlite?.initialized === true;
     const latestCostRun = buildLatestCostRun(loadCostRunsNewest);
     const latestEngagementEvent = buildLatestEngagementEvent(loadEngagementEvents);
     const deliveryRecords = buildDeliveryRecordSummary(digestDeliveryRecordRuntime);
@@ -141,10 +145,10 @@ function createRuntimeStateInspector(deps) {
           : (cachedGitSha = resolveGitSha({ childProcess, cwd: runtimePaths.appRoot })),
       },
       store: {
-        backend: String(storeSnapshot.backend || "").trim() || null,
+        backend: effectiveStoreBackend,
         data_dir: String(storeSnapshot.dataDir || runtimePaths.dataDir).trim(),
         sqlite_path: String(storeSnapshot.sqlitePath || runtimePaths.sqlitePath).trim() || null,
-        initialized: storeSnapshot.initialized === true,
+        initialized: storeInitialized,
       },
       paths: {
         dataDir: runtimePaths.dataDir,

@@ -1528,7 +1528,7 @@ function renderRunDigestQuality(run) {
   }
   const score = Number(rawScore);
   if (!Number.isFinite(score)) return `<span style="color:var(--text-secondary);">—</span>`;
-  const tone = score >= 85 ? "#059669" : (score >= 75 ? "#D97706" : "#DC2626");
+  const tone = score >= 85 ? "#059669" : (score >= 70 ? "#D97706" : "#DC2626");
   const label = score >= 85 ? "Strong" : (score >= 70 ? "Decent" : "Weak");
   const samples = Number(run?.digest_quality_samples || 0);
   const baseLabel = "Digest quality is a 0-100 score for the whole brief, not a match percentage.";

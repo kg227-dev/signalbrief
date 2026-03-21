@@ -14,6 +14,7 @@ const {
   TIER_OVERRIDE_SCORES,
   TOPIC_FIT_BAND_SCORES,
 } = require("../../runtime/source-policy-registry-runtime");
+const { matchPreferredSourceDomain } = require("../../runtime/preferred-source-registry-runtime");
 
 const STANDARD_TOPIC_TOKENS = new Set([
   "healthcare",
@@ -533,6 +534,7 @@ function buildPolicyEffects(policy, sourceType) {
 // Learned domain authority adjustments (populated at runtime via setLearnedDomainAdjustments)
 let _learnedAdjustments = null;
 let _adminSourceRegistry = null;
+let _preferredSourceRegistry = null;
 
 function setLearnedDomainAdjustments(adjustmentsMap) {
   _learnedAdjustments = adjustmentsMap instanceof Map ? adjustmentsMap : null;
@@ -540,6 +542,10 @@ function setLearnedDomainAdjustments(adjustmentsMap) {
 
 function setAdminSourceRegistry(registryMap) {
   _adminSourceRegistry = registryMap instanceof Map ? registryMap : null;
+}
+
+function setPreferredSourceRegistry(registry) {
+  _preferredSourceRegistry = registry && typeof registry === "object" ? registry : null;
 }
 
 function resolveAdminSourceRegistryEntry(sourceDomain) {
@@ -695,6 +701,19 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
     inherits_from_domain: null,
     admin_override: null,
   };
+}
+
+function resolvePreferredSourceMatch(sourceDomain, tag) {
+  if (!_preferredSourceRegistry) {
+    return {
+      match: "none",
+      kind: null,
+      topics: [],
+      strength: 0,
+      matched_domain: null,
+    };
+  }
+  return matchPreferredSourceDomain(_preferredSourceRegistry, sourceDomain, tag);
 }
 
 function explainSourcePolicy(sourceDomainRaw, tag) {
@@ -1028,6 +1047,7 @@ function annotateEditorialSignals(items = []) {
     const localFlags = detectLocalContentFlags(item);
     const contentFlags = uniqSorted([...promptFlags, ...localFlags]);
     const sourceInfo = classifySourceTier(item?.source_domain || item?.source, item?.tag);
+    const preferredSourceMatch = resolvePreferredSourceMatch(sourceInfo.source_domain || item?.source_domain || item?.source, item?.tag);
     const originalitySignal = computeOriginalitySignal(item, sourceInfo);
     const storylineHints = buildStorylineHints(item, contentFlags, promptHints);
     const entityKeys = extractEntityKeys(item);
@@ -1059,10 +1079,19 @@ function annotateEditorialSignals(items = []) {
       topic_fit_map: sourceInfo.topic_fit_map || {},
       source_family_domain: sourceInfo.source_family_domain || item?.source_domain || item?.source || null,
       source_inherits_from_domain: sourceInfo.inherits_from_domain || null,
+      preferred_source_match: preferredSourceMatch.match || "none",
+      preferred_source_kind: preferredSourceMatch.kind || null,
+      preferred_source_topics: Array.isArray(preferredSourceMatch.topics) ? preferredSourceMatch.topics : [],
+      preferred_source_strength: Number(Number(preferredSourceMatch.strength || 0).toFixed(3)),
+      preferred_source_domain: preferredSourceMatch.matched_domain || null,
       originality_signal: Number(originalitySignal.toFixed(3)),
       routine_item_score: Number(routineItemScore.toFixed(3)),
       strategic_value: Number(strategicValue.toFixed(3)),
       hard_exclude: hardExclude || sourceInfo.hard_block === true,
+      retrieval_pass: String(item?.retrieval_pass || "").trim() || null,
+      suppressed_by_preferred_source: false,
+      preferred_close_substitute_penalty: 0,
+      won_by_preferred_substitute: false,
       storyline_key: buildStorylineFingerprint({
         ...item,
         entity_keys: entityKeys,
@@ -1123,7 +1152,8 @@ function storylineSimilarity(leftItem, rightItem) {
   return weightedScore;
 }
 
-function chooseRepresentative(items) {
+function chooseRepresentative(items, opts = {}) {
+  const ignoreSuppression = opts.ignorePreferredSuppression === true;
   const ranked = (Array.isArray(items) ? items : []).slice().sort((left, right) => {
     const leftScore = (
       Number(left?.strategic_value || 0) * 0.40
@@ -1131,6 +1161,9 @@ function chooseRepresentative(items) {
       + clamp(Number(left?.baseScore || 0) / 10, 0, 1) * 0.16
       + (1 - Number(left?.routine_item_score || 0)) * 0.10
       + Number(left?.originality_signal || 0.5) * 0.10
+      + Number(left?.preferred_source_strength || 0) * 0.08
+      + Number(left?.topic_fit || 0) * 0.05
+      - (ignoreSuppression ? 0 : Number(left?.preferred_close_substitute_penalty || 0) * 0.4)
     );
     const rightScore = (
       Number(right?.strategic_value || 0) * 0.40
@@ -1138,10 +1171,83 @@ function chooseRepresentative(items) {
       + clamp(Number(right?.baseScore || 0) / 10, 0, 1) * 0.16
       + (1 - Number(right?.routine_item_score || 0)) * 0.10
       + Number(right?.originality_signal || 0.5) * 0.10
+      + Number(right?.preferred_source_strength || 0) * 0.08
+      + Number(right?.topic_fit || 0) * 0.05
+      - (ignoreSuppression ? 0 : Number(right?.preferred_close_substitute_penalty || 0) * 0.4)
     );
     return rightScore - leftScore;
   });
   return ranked[0] || null;
+}
+
+function isGovernanceEligiblePreferredItem(item) {
+  const sourcePolicy = String(item?.source_policy || "").trim().toLowerCase();
+  return sourcePolicy === "allowed" || sourcePolicy === "preferred";
+}
+
+function isWeakClusterCandidate(item) {
+  const sourcePolicy = String(item?.source_policy || "").trim().toLowerCase();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
+  return sourcePolicy === "limited"
+    || sourcePolicy === "review"
+    || sourceType === "aggregator_republisher"
+    || sourceType === "corporate_pr"
+    || sourceType === "platform_user_generated"
+    || sourceTier === "weak"
+    || sourceTier === "suspect";
+}
+
+function isStrongPreferredClusterCandidate(item) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const preferredStrength = Number(item?.preferred_source_strength || 0);
+  return isGovernanceEligiblePreferredItem(item) && (
+    preferredStrength >= 0.38
+    || sourceType === "primary_official"
+    || (sourceType === "reported_media" && String(item?.source_policy || "").trim().toLowerCase() === "preferred")
+  );
+}
+
+function canTradeSpecialistOutperformPreferred(candidate, preferredCandidate) {
+  if (String(candidate?.source_type || "").trim().toLowerCase() !== "trade_specialist") return false;
+  if (!isGovernanceEligiblePreferredItem(candidate)) return false;
+  const candidateTopicFit = Number(candidate?.topic_fit || 0);
+  const preferredTopicFit = Number(preferredCandidate?.topic_fit || 0);
+  const candidateAuthority = Number(candidate?.source_authority || 0);
+  const preferredAuthority = Number(preferredCandidate?.source_authority || 0);
+  return candidateTopicFit >= (preferredTopicFit + 0.18)
+    && candidateAuthority >= (preferredAuthority - 0.08);
+}
+
+function applyPreferredCloseSubstituteSuppression(cluster) {
+  if (!cluster || !Array.isArray(cluster.items) || cluster.items.length < 2) return;
+  const preferredCandidates = cluster.items.filter((item) => isStrongPreferredClusterCandidate(item));
+  if (preferredCandidates.length === 0) return;
+
+  for (const item of cluster.items) {
+    item.preferred_close_substitute_penalty = 0;
+    item.suppressed_by_preferred_source = false;
+    item.preferred_substitute_domain = null;
+  }
+
+  for (const weakItem of cluster.items) {
+    if (!isWeakClusterCandidate(weakItem)) continue;
+    let bestPreferred = null;
+    let bestSimilarity = 0;
+    for (const preferredCandidate of preferredCandidates) {
+      if (preferredCandidate === weakItem) continue;
+      const similarity = storylineSimilarity(weakItem, preferredCandidate);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestPreferred = preferredCandidate;
+      }
+    }
+    if (!bestPreferred || bestSimilarity < 0.62) continue;
+    if (canTradeSpecialistOutperformPreferred(weakItem, bestPreferred)) continue;
+    weakItem.preferred_close_substitute_penalty = 0.2;
+    weakItem.suppressed_by_preferred_source = true;
+    weakItem.preferred_substitute_domain = String(bestPreferred?.source_domain || bestPreferred?.source || "").trim() || null;
+  }
 }
 
 function clusterStorylines(items = []) {
@@ -1174,6 +1280,9 @@ function clusterStorylines(items = []) {
   }
 
   return clusters.map((cluster, index) => {
+    flagClusterDerivatives(cluster);
+    const baselineRepresentative = chooseRepresentative(cluster.items, { ignorePreferredSuppression: true });
+    applyPreferredCloseSubstituteSuppression(cluster);
     const representative = chooseRepresentative(cluster.items);
     const sources = uniqSorted(cluster.items.map((item) => String(item?.source_domain || item?.source || "").trim()).filter(Boolean));
     const confidence = cluster.similarities.length
@@ -1197,6 +1306,11 @@ function clusterStorylines(items = []) {
       storyline_hints: uniqSorted(cluster.items.flatMap((item) => item?.storyline_hints || [])),
       cluster_confidence: Number(clamp(confidence, 0, 1).toFixed(3)),
       strategic_value: Number(clamp(Math.max(...cluster.items.map((item) => Number(item?.strategic_value || 0))), 0, 1).toFixed(3)),
+      preferred_displaced_weak: baselineRepresentative
+        && representative
+        && baselineRepresentative !== representative
+        && isWeakClusterCandidate(baselineRepresentative)
+        && isStrongPreferredClusterCandidate(representative),
       items: cluster.items,
     };
   });
@@ -1236,7 +1350,6 @@ function flagClusterDerivatives(cluster) {
 
 function buildStorylineCandidates(items = []) {
   return clusterStorylines(items).map((cluster) => {
-    flagClusterDerivatives(cluster);
     const avgAuthority = computeSupportingSourcesAvgAuthority(cluster.supporting_sources);
     return {
       ...(cluster.representative || {}),
@@ -1250,6 +1363,7 @@ function buildStorylineCandidates(items = []) {
       storyline_hints: cluster.storyline_hints,
       cluster_confidence: cluster.cluster_confidence,
       storyline_strategic_value: cluster.strategic_value,
+      won_by_preferred_substitute: cluster.preferred_displaced_weak === true,
       storyline_key: buildStorylineFingerprint({
         entity_keys: cluster.entity_keys,
         storyline_hints: cluster.storyline_hints,
@@ -1359,5 +1473,6 @@ module.exports = {
   normalizeSourceDomain,
   setAdminSourceRegistry,
   setLearnedDomainAdjustments,
+  setPreferredSourceRegistry,
   storylineSimilarity,
 };

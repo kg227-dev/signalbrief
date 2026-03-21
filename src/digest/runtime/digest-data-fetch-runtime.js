@@ -67,48 +67,71 @@ function incrementStatusCount(statusCounts, statusCode) {
   statusCounts[code] = (statusCounts[code] || 0) + 1;
 }
 
+function createPassDiagnostics(maxAttempts) {
+  return {
+    attempts_planned: maxAttempts,
+    attempts_executed: 0,
+    successful_calls: 0,
+    failed_calls: 0,
+    transport_errors: 0,
+    status_counts: {},
+    degraded: false,
+    last_error: null,
+  };
+}
+
+function mergePassDiagnostics(target, extra) {
+  target.attempts_planned += Number(extra?.attempts_planned || 0);
+  target.attempts_executed += Number(extra?.attempts_executed || 0);
+  target.successful_calls += Number(extra?.successful_calls || 0);
+  target.failed_calls += Number(extra?.failed_calls || 0);
+  target.transport_errors += Number(extra?.transport_errors || 0);
+  target.degraded = target.degraded || extra?.degraded === true;
+  target.last_error = extra?.last_error || target.last_error || null;
+  for (const [code, count] of Object.entries(extra?.status_counts || {})) {
+    target.status_counts[code] = (target.status_counts[code] || 0) + Number(count || 0);
+  }
+  return target;
+}
+
+function buildPreferredPromptBias(preferredDomains) {
+  const domains = Array.isArray(preferredDomains) ? preferredDomains.filter(Boolean) : [];
+  if (domains.length === 0) return "";
+  return "Prefer direct reporting or official primary documents from the provided preferred domains when they are close substitutes.";
+}
+
 function createDigestDataFetchRuntime(deps) {
   const {
     CONFIG,
     log,
     httpsPostWithRetry,
     normalizeUrlForDedup,
+    isFetchedItemEligible,
   } = deps;
+  const itemEligibilityFn = typeof isFetchedItemEligible === "function"
+    ? isFetchedItemEligible
+    : () => true;
 
-  async function fetchTopicNews(topic, opts = {}) {
-    const searchModel = opts.searchModel || "sonar";
-    const providerPolicy = resolvePerplexityResilience(CONFIG?.digest);
-    const retrievedAt = new Date().toISOString();
-    log(`Fetching: ${topic.tag}`);
-    const queries = getTopicQueries(topic);
+  async function runFetchPass({
+    topic,
+    queries,
+    searchModel,
+    providerPolicy,
+    retrievedAt,
+    seenHeadline,
+    seenUrl,
+    collected,
+    passName,
+    searchDomainFilter,
+  }) {
     const maxAttempts = Math.min(3, queries.length);
-    const collected = [];
-    const seenUrl = new Set();
-    const seenHeadline = new Set();
+    const diagnostics = createPassDiagnostics(maxAttempts);
     let apiCalls = 0;
-    const diagnostics = {
-      provider: "perplexity",
-      timeout_ms: providerPolicy.timeoutMs,
-      retries: providerPolicy.retries,
-      retry_status_codes: providerPolicy.retryStatusCodes.slice(),
-      attempts_planned: maxAttempts,
-      attempts_executed: 0,
-      successful_calls: 0,
-      failed_calls: 0,
-      transport_errors: 0,
-      status_counts: {},
-      degraded: false,
-      last_error: null,
-    };
-
-    if (!queries.length) {
-      return { items: [], apiCalls: 0, diagnostics };
-    }
 
     for (let idx = 0; idx < maxAttempts; idx++) {
       const query = queries[idx];
       diagnostics.attempts_executed += 1;
-      if (idx > 0) log(`↳ ${topic.tag} fallback query ${idx + 1}/${maxAttempts}`);
+      if (idx > 0) log(`↳ ${topic.tag} ${passName} fallback query ${idx + 1}/${maxAttempts}`);
 
       let res;
       try {
@@ -119,7 +142,10 @@ function createDigestDataFetchRuntime(deps) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${CONFIG.keys.perplexity}`,
           },
-          buildSearchRequest(topic.tag, query, searchModel),
+          buildSearchRequest(topic.tag, query, searchModel, {
+            searchDomainFilter,
+            promptBias: buildPreferredPromptBias(searchDomainFilter),
+          }),
           {
             retries: providerPolicy.retries,
             retryDelayMs: providerPolicy.retryDelayMs,
@@ -134,7 +160,7 @@ function createDigestDataFetchRuntime(deps) {
         diagnostics.transport_errors += 1;
         diagnostics.degraded = true;
         diagnostics.last_error = message;
-        log(`⚠️ Perplexity ${topic.tag} query failed (${idx + 1}/${maxAttempts}): ${message}`);
+        log(`⚠️ Perplexity ${topic.tag} ${passName} query failed (${idx + 1}/${maxAttempts}): ${message}`);
         continue;
       }
 
@@ -144,7 +170,7 @@ function createDigestDataFetchRuntime(deps) {
         diagnostics.degraded = true;
         diagnostics.last_error = String(errDetail).slice(0, 180);
         incrementStatusCount(diagnostics.status_counts, res.status);
-        log(`⚠️ Perplexity ${topic.tag} request returned ${res.status}: ${String(errDetail).slice(0, 180)}`);
+        log(`⚠️ Perplexity ${topic.tag} ${passName} request returned ${res.status}: ${String(errDetail).slice(0, 180)}`);
         continue;
       }
       diagnostics.successful_calls += 1;
@@ -155,22 +181,117 @@ function createDigestDataFetchRuntime(deps) {
         const content = res.body?.choices?.[0]?.message?.content || "[]";
         if (!res.body?.choices?.[0]?.message?.content) {
           const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || "no choices content";
-          log(`⚠️ Perplexity returned empty payload for ${topic.tag}: ${String(errDetail).slice(0, 180)}`);
+          log(`⚠️ Perplexity returned empty payload for ${topic.tag} ${passName}: ${String(errDetail).slice(0, 180)}`);
         }
         const parsed = parsePerplexityItems(content);
         if (!Array.isArray(parsed)) {
-          log(`⚠️ Perplexity payload for ${topic.tag} was not an array`);
+          log(`⚠️ Perplexity payload for ${topic.tag} ${passName} was not an array`);
           continue;
         }
 
         const normalized = enrichWithCitationUrls(parsed, citations, topic.tag, log)
-          .map((item) => ({ ...item, retrieved_at: retrievedAt }));
+          .map((item) => ({
+            ...item,
+            retrieved_at: retrievedAt,
+            retrieval_pass: passName,
+          }));
         collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup);
       } catch (err) {
-        log(`Parse error for ${topic.tag}: ${err.message}`);
+        log(`Parse error for ${topic.tag} ${passName}: ${err.message}`);
       }
 
       if (shouldStopAttempts(topic, collected)) break;
+    }
+
+    return {
+      apiCalls,
+      diagnostics,
+    };
+  }
+
+  async function fetchTopicNews(topic, opts = {}) {
+    const searchModel = opts.searchModel || "sonar";
+    const providerPolicy = resolvePerplexityResilience(CONFIG?.digest);
+    const retrievedAt = new Date().toISOString();
+    log(`Fetching: ${topic.tag}`);
+    const queries = getTopicQueries(topic);
+    const collected = [];
+    const seenUrl = new Set();
+    const seenHeadline = new Set();
+    let apiCalls = 0;
+    const retrievalPlan = opts.retrievalPlan && typeof opts.retrievalPlan === "object"
+      ? opts.retrievalPlan
+      : {};
+    const preferredDomains = Array.isArray(retrievalPlan.preferred_domains)
+      ? retrievalPlan.preferred_domains.map((domain) => String(domain || "").trim()).filter(Boolean)
+      : [];
+    const preferredEnabled = preferredDomains.length > 0;
+    const thinThreshold = Math.max(1, Number(retrievalPlan.thin_item_threshold || 2));
+    const diagnostics = {
+      provider: "perplexity",
+      retrieval_mode: preferredEnabled ? "preferred_allowlist_then_broad" : "broad_only",
+      timeout_ms: providerPolicy.timeoutMs,
+      retries: providerPolicy.retries,
+      retry_status_codes: providerPolicy.retryStatusCodes.slice(),
+      attempts_planned: 0,
+      attempts_executed: 0,
+      successful_calls: 0,
+      failed_calls: 0,
+      transport_errors: 0,
+      status_counts: {},
+      degraded: false,
+      last_error: null,
+      preferred_domains_used: preferredDomains.slice(),
+      preferred_fallback_triggered: false,
+      preferred_pass_item_count: 0,
+      broad_pass_item_count: 0,
+      final_selected_preferred_count: 0,
+      preferred_displaced_weak_count: 0,
+    };
+
+    if (!queries.length) {
+      return { items: [], apiCalls: 0, diagnostics };
+    }
+
+    if (preferredEnabled) {
+      const preferredPass = await runFetchPass({
+        topic,
+        queries,
+        searchModel,
+        providerPolicy,
+        retrievedAt,
+        seenHeadline,
+        seenUrl,
+        collected,
+        passName: "preferred",
+        searchDomainFilter: preferredDomains,
+      });
+      apiCalls += preferredPass.apiCalls;
+      mergePassDiagnostics(diagnostics, preferredPass.diagnostics);
+      diagnostics.preferred_pass_item_count = collected.length;
+    }
+
+    const eligibleCountAfterPreferred = collected.filter((item) => itemEligibilityFn(item) !== false).length;
+    const needsBroadFallback = !preferredEnabled || eligibleCountAfterPreferred < thinThreshold;
+    if (preferredEnabled && needsBroadFallback) diagnostics.preferred_fallback_triggered = true;
+
+    if (needsBroadFallback) {
+      const beforeBroadCount = collected.length;
+      const broadPass = await runFetchPass({
+        topic,
+        queries,
+        searchModel,
+        providerPolicy,
+        retrievedAt,
+        seenHeadline,
+        seenUrl,
+        collected,
+        passName: "broad",
+        searchDomainFilter: [],
+      });
+      apiCalls += broadPass.apiCalls;
+      mergePassDiagnostics(diagnostics, broadPass.diagnostics);
+      diagnostics.broad_pass_item_count = Math.max(0, collected.length - beforeBroadCount);
     }
 
     return {

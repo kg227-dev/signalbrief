@@ -416,6 +416,12 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         freshness_block_count: freshnessBlockCount,
         semantic_repeat_block_count: semanticRepeatBlockCount,
         alternate_queries_used: Math.max(0, Number(runDiagnostics?.alternate_queries_used || 0)),
+        preferred_domains_used: Array.isArray(runDiagnostics?.preferred_domains_used) ? runDiagnostics.preferred_domains_used.slice(0, 20) : [],
+        preferred_fallback_triggered: runDiagnostics?.preferred_fallback_triggered === true,
+        preferred_pass_item_count: Math.max(0, Number(runDiagnostics?.preferred_pass_item_count || 0)),
+        broad_pass_item_count: Math.max(0, Number(runDiagnostics?.broad_pass_item_count || 0)),
+        final_selected_preferred_count: Math.max(0, Number(runDiagnostics?.final_selected_preferred_count || 0)),
+        preferred_displaced_weak_count: Math.max(0, Number(runDiagnostics?.preferred_displaced_weak_count || 0)),
         candidate_pool_before_dedup: Number.isFinite(Number(runDiagnostics?.candidate_pool_before_dedup))
           ? Number(runDiagnostics.candidate_pool_before_dedup)
           : null,

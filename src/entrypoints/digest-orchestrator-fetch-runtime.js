@@ -86,6 +86,24 @@ function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
   });
 }
 
+function flattenDueUserTopics(dueUsers = []) {
+  const topics = [];
+  for (const user of (Array.isArray(dueUsers) ? dueUsers : [])) {
+    for (const topic of (Array.isArray(user?.topics) ? user.topics : [])) {
+      topics.push(topic);
+    }
+  }
+  return topics;
+}
+
+function uniqueValues(values = []) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
+}
+
 function mergeStatusCounts(target, source) {
   const out = target && typeof target === "object" ? target : {};
   if (!source || typeof source !== "object") return out;
@@ -140,12 +158,39 @@ function countAlternateQueriesUsed(results) {
   }, 0);
 }
 
+function summarizePreferredRetrievalDiagnostics(results) {
+  const summary = {
+    preferred_domains_used: [],
+    preferred_fallback_triggered: false,
+    preferred_pass_item_count: 0,
+    broad_pass_item_count: 0,
+    final_selected_preferred_count: 0,
+    preferred_displaced_weak_count: 0,
+  };
+  const seenDomains = new Set();
+  for (const result of (Array.isArray(results) ? results : [])) {
+    const diagnostics = result?.diagnostics;
+    if (!diagnostics || typeof diagnostics !== "object") continue;
+    for (const domain of (Array.isArray(diagnostics.preferred_domains_used) ? diagnostics.preferred_domains_used : [])) {
+      const normalized = String(domain || "").trim();
+      if (!normalized || seenDomains.has(normalized)) continue;
+      seenDomains.add(normalized);
+      summary.preferred_domains_used.push(normalized);
+    }
+    summary.preferred_fallback_triggered = summary.preferred_fallback_triggered || diagnostics.preferred_fallback_triggered === true;
+    summary.preferred_pass_item_count += Number(diagnostics.preferred_pass_item_count || 0);
+    summary.broad_pass_item_count += Number(diagnostics.broad_pass_item_count || 0);
+  }
+  return summary;
+}
+
 function createDigestOrchestratorFetchRuntime(deps) {
   const {
     CONFIG,
     log,
     normalizeTopicToken,
     fetchTopicNews,
+    buildPreferredDomainShortlist,
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard,
     emitDigestIncident,
@@ -155,6 +200,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
     ? normalizeTopicToken
     : (value) => String(value || "").toLowerCase().trim();
   const fetchTopic = typeof fetchTopicNews === "function" ? fetchTopicNews : async () => ({ items: [], apiCalls: 0 });
+  const buildPreferredShortlist = typeof buildPreferredDomainShortlist === "function"
+    ? buildPreferredDomainShortlist
+    : () => ({ domains: [], topic_keys: [], official_friendly: false });
   const buildRescueItems = typeof buildCustomRescueItemsFromStandard === "function"
     ? buildCustomRescueItemsFromStandard
     : () => [];
@@ -166,6 +214,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const digestConfig = CONFIG?.digest || {};
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 7));
     const tagPriority = buildTagPriority(dueUsers, topicNormalizer);
+    const dueUserTopics = flattenDueUserTopics(dueUsers);
     const topicsToFetch = resolveTopicsToFetch({
       configTopics: CONFIG?.topics,
       dueUsers,
@@ -173,13 +222,31 @@ function createDigestOrchestratorFetchRuntime(deps) {
       log: logger,
     });
 
+    async function fetchWithPreferredPlan(topic) {
+      const shortlist = buildPreferredShortlist({
+        topicTag: topic?.tag,
+        dueUserTopics,
+        queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
+        maxDomains: 20,
+      });
+      return fetchTopic(topic, {
+        retrievalPlan: {
+          preferred_domains: Array.isArray(shortlist?.domains) ? shortlist.domains : [],
+          thin_item_threshold: 2,
+          official_friendly: shortlist?.official_friendly === true,
+          topic_keys: Array.isArray(shortlist?.topic_keys) ? shortlist.topic_keys : [],
+        },
+      });
+    }
+
     const standardFetchCallsPlanned = topicsToFetch.length;
-    const standardResults = await Promise.all(topicsToFetch.map(fetchTopic));
+    const standardResults = await Promise.all(topicsToFetch.map(fetchWithPreferredPlan));
     const standardFetchCalls = standardResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
     const standardItems = standardResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
     let allItems = standardItems.slice();
     let providerDiagnostics = summarizePerplexityDiagnostics(standardResults);
     let alternateQueriesUsed = countAlternateQueriesUsed(standardResults);
+    let preferredRetrievalDiagnostics = summarizePreferredRetrievalDiagnostics(standardResults);
     logger(`Fetched ${allItems.length} raw items`);
 
     const allStandardEmpty = standardFetchCallsPlanned > 0
@@ -208,7 +275,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
 
     if (customFetchTargets.length > 0) {
       logger(`Fetching ${customFetchTargets.length} custom topic(s): ${customFetchTargets.map((target) => target.tag).join(", ")}`);
-      const customResults = await Promise.all(customFetchTargets.map(fetchTopic));
+      const customResults = await Promise.all(customFetchTargets.map(fetchWithPreferredPlan));
       customFetchCalls = customResults.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
       const customItems = customResults.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
       alternateQueriesUsed += countAlternateQueriesUsed(customResults);
@@ -216,6 +283,18 @@ function createDigestOrchestratorFetchRuntime(deps) {
         providerDiagnostics,
         summarizePerplexityDiagnostics(customResults)
       );
+      const customPreferredDiagnostics = summarizePreferredRetrievalDiagnostics(customResults);
+      preferredRetrievalDiagnostics = {
+        preferred_domains_used: uniqueValues([
+          ...(preferredRetrievalDiagnostics.preferred_domains_used || []),
+          ...(customPreferredDiagnostics.preferred_domains_used || []),
+        ]),
+        preferred_fallback_triggered: preferredRetrievalDiagnostics.preferred_fallback_triggered || customPreferredDiagnostics.preferred_fallback_triggered,
+        preferred_pass_item_count: Number(preferredRetrievalDiagnostics.preferred_pass_item_count || 0) + Number(customPreferredDiagnostics.preferred_pass_item_count || 0),
+        broad_pass_item_count: Number(preferredRetrievalDiagnostics.broad_pass_item_count || 0) + Number(customPreferredDiagnostics.broad_pass_item_count || 0),
+        final_selected_preferred_count: 0,
+        preferred_displaced_weak_count: 0,
+      };
       logger(`Fetched ${customItems.length} custom topic item(s)`);
 
       // Prepend so custom items are visible to selection before broad pool balancing.
@@ -273,6 +352,12 @@ function createDigestOrchestratorFetchRuntime(deps) {
       customFetchCalls,
       fetchDiagnostics: {
         alternate_queries_used: alternateQueriesUsed,
+        preferred_domains_used: preferredRetrievalDiagnostics.preferred_domains_used || [],
+        preferred_fallback_triggered: preferredRetrievalDiagnostics.preferred_fallback_triggered === true,
+        preferred_pass_item_count: Number(preferredRetrievalDiagnostics.preferred_pass_item_count || 0),
+        broad_pass_item_count: Number(preferredRetrievalDiagnostics.broad_pass_item_count || 0),
+        final_selected_preferred_count: 0,
+        preferred_displaced_weak_count: 0,
       },
     };
   }

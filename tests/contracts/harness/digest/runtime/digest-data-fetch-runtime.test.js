@@ -148,10 +148,86 @@ async function testStandardTopicsUseFallbackQueriesForThinPools() {
   assert.strictEqual(result.items.length, 2);
 }
 
+async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
+  const payloads = [];
+  let calls = 0;
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    isFetchedItemEligible: (item) => item?.source !== "blocked.example",
+    httpsPostWithRetry: async (_host, _path, _headers, payload) => {
+      payloads.push(payload);
+      calls += 1;
+      if (calls === 1) {
+        return {
+          status: 200,
+          body: {
+            citations: ["https://preferred.example/story"],
+            choices: [{
+              message: {
+                content: JSON.stringify([
+                  {
+                    headline: "Preferred source story",
+                    summary: "Summary",
+                    source: "blocked.example",
+                    url: "https://preferred.example/story",
+                  },
+                ]),
+              },
+            }],
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          citations: ["https://broad.example/story"],
+          choices: [{
+            message: {
+              content: JSON.stringify([
+                {
+                  headline: "Broad source story",
+                  summary: "Summary",
+                  source: "reuters.com",
+                  url: "https://broad.example/story",
+                },
+              ]),
+            },
+          }],
+        },
+      };
+    },
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "TECHNOLOGY",
+    queries: ["q1"],
+  }, {
+    retrievalPlan: {
+      preferred_domains: ["theinformation.com", "reuters.com"],
+      thin_item_threshold: 2,
+    },
+  });
+
+  assert.strictEqual(calls, 2);
+  assert.deepStrictEqual(payloads[0].search_domain_filter, ["theinformation.com", "reuters.com"]);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(payloads[1], "search_domain_filter"), false);
+  assert.strictEqual(result.diagnostics.preferred_fallback_triggered, true);
+  assert.strictEqual(result.diagnostics.preferred_pass_item_count, 1);
+  assert.strictEqual(result.diagnostics.broad_pass_item_count, 1);
+  assert.strictEqual(result.items[0].retrieval_pass, "preferred");
+  assert.strictEqual(result.items[1].retrieval_pass, "broad");
+}
+
 (async () => {
   await testCustomFallbackFlowWithProviderPolicy();
   await testTransportErrorDiagnostics();
   await testStandardTopicsUseFallbackQueriesForThinPools();
+  await testPreferredDomainPassUsesSearchFilterAndBroadFallback();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

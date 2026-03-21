@@ -5,8 +5,12 @@ function getTopicQueries(topic) {
   return topic.queries.map((query) => String(query || "").trim()).filter(Boolean);
 }
 
-function buildSearchRequest(topicTag, query, model) {
-  return {
+function buildSearchRequest(topicTag, query, model, options = {}) {
+  const searchDomainFilter = Array.isArray(options.searchDomainFilter)
+    ? options.searchDomainFilter.map((domain) => String(domain || "").trim()).filter(Boolean)
+    : [];
+  const promptBias = String(options.promptBias || "").trim();
+  const request = {
     model,
     messages: [
       {
@@ -21,11 +25,13 @@ No markdown. No explanation. JSON array only.`,
       {
         role: "user",
         content: `Find the 3 most important news items from the last 48 hours about: ${query}
-IMPORTANT: Use the direct article URLs from your search citations. Do not use homepage URLs.`,
+IMPORTANT: Use the direct article URLs from your search citations. Do not use homepage URLs.${promptBias ? ` ${promptBias}` : ""}`,
       },
     ],
     max_tokens: 1000,
   };
+  if (searchDomainFilter.length > 0) request.search_domain_filter = searchDomainFilter;
+  return request;
 }
 
 module.exports = {

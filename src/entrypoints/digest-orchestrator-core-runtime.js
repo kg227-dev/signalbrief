@@ -43,6 +43,7 @@ const {
   buildCustomTopicQueries,
   customKeywordMatches,
   filterItemsByTopics,
+  annotateEditorialSignals,
   applyTopicRelevanceScores,
   applyDigestDepth,
   reserveCustomKeywordSlot,
@@ -91,10 +92,14 @@ const {
   accumulateDomainStats,
   computeLearnedAuthorityAdjustments,
 } = require("../digest/domain/domain-learning-runtime");
-const { setLearnedDomainAdjustments, setAdminSourceRegistry } = require("../domains/digest");
+const { setLearnedDomainAdjustments, setAdminSourceRegistry, setPreferredSourceRegistry } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../runtime/source-policy-registry-runtime");
+const {
+  createPreferredSourceRegistryRuntime,
+  buildPreferredDomainShortlist,
+} = require("../runtime/preferred-source-registry-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -112,6 +117,10 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,
   sourceRegistryPath: RUNTIME_PATHS.sourceRegistryPath,
+});
+const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
+  fs,
+  preferredSourcesPath: RUNTIME_PATHS.preferredSourcesPath,
 });
 let configCache = null;
 let emailTemplateCache = null;
@@ -316,6 +325,10 @@ function getDigestDataRuntime() {
       log,
       httpsPostWithRetry,
       normalizeUrlForDedup,
+      isFetchedItemEligible: (item) => {
+        const annotated = annotateEditorialSignals([item]);
+        return annotated.length > 0 && annotated[0].hard_exclude !== true;
+      },
     });
   }
   return digestDataRuntimeCache;
@@ -680,11 +693,25 @@ async function main() {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
   const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
+  const domainStats = loadDomainStats();
+  const sourceRegistry = sourceRegistryRuntime.loadSourceRegistry();
+  setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistry));
+  if (sourceRegistry && sourceRegistry.domains && Object.keys(sourceRegistry.domains).length > 0) {
+    log(`[source-policy] ${Object.keys(sourceRegistry.domains).length} admin source override(s) applied`);
+  }
+  const preferredSourceRegistry = preferredSourceRegistryRuntime.loadPreferredSourceRegistry();
+  setPreferredSourceRegistry(preferredSourceRegistry);
+  const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
+  if (learnedAdjustments.size > 0) {
+    setLearnedDomainAdjustments(learnedAdjustments);
+    log(`[domain-learning] ${learnedAdjustments.size} learned domain adjustment(s) applied`);
+  }
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG,
     log,
     normalizeTopicToken,
     fetchTopicNews,
+    buildPreferredDomainShortlist: (options) => buildPreferredDomainShortlist(preferredSourceRegistry, options),
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard,
     emitDigestIncident,
@@ -745,20 +772,10 @@ async function main() {
     runMode,
     dueUsersCount: dueUsers.length,
   });
-  // Load learned domain authority adjustments from historical stats
-  const domainStats = loadDomainStats();
-  const sourceRegistry = sourceRegistryRuntime.loadSourceRegistry();
-  setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistry));
-  if (sourceRegistry && sourceRegistry.domains && Object.keys(sourceRegistry.domains).length > 0) {
-    log(`[source-policy] ${Object.keys(sourceRegistry.domains).length} admin source override(s) applied`);
-  }
-  const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
-  if (learnedAdjustments.size > 0) {
-    setLearnedDomainAdjustments(learnedAdjustments);
-    log(`[domain-learning] ${learnedAdjustments.size} learned domain adjustment(s) applied`);
-  }
 
   const storylinePool = prepareStorylinePool(enriched, selectionTarget);
+  fetchDiagnostics.final_selected_preferred_count = storylinePool.filter((item) => String(item?.preferred_source_match || "none") !== "none").length;
+  fetchDiagnostics.preferred_displaced_weak_count = storylinePool.filter((item) => item?.won_by_preferred_substitute === true).length;
   log(`Storyline pool ready: ${storylinePool.length}/${enriched.length} candidate(s) retained after quality gate`);
 
   // Archive once per run (shared, date-keyed) before per-user filtering.
@@ -835,6 +852,12 @@ async function main() {
       engagementEvents,
       runDiagnostics: {
         alternate_queries_used: Number(fetchDiagnostics?.alternate_queries_used || 0),
+        preferred_domains_used: Array.isArray(fetchDiagnostics?.preferred_domains_used) ? fetchDiagnostics.preferred_domains_used.slice(0, 20) : [],
+        preferred_fallback_triggered: fetchDiagnostics?.preferred_fallback_triggered === true,
+        preferred_pass_item_count: Number(fetchDiagnostics?.preferred_pass_item_count || 0),
+        broad_pass_item_count: Number(fetchDiagnostics?.broad_pass_item_count || 0),
+        final_selected_preferred_count: Number(fetchDiagnostics?.final_selected_preferred_count || 0),
+        preferred_displaced_weak_count: Number(fetchDiagnostics?.preferred_displaced_weak_count || 0),
         candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
         candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
       },
@@ -852,6 +875,7 @@ async function main() {
     }
     // Clear learned adjustments after run to avoid stale state
     setLearnedDomainAdjustments(null);
+    setPreferredSourceRegistry(null);
   } finally {
     recordRunCost({
       now,

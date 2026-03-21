@@ -381,6 +381,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const topicDomainFit = clamp(Number(item?.topic_fit || 0), 0, 1);
     const sourcePolicy = String(item?.source_policy || "allowed").trim().toLowerCase() || "allowed";
     const sourceReviewStatus = String(item?.source_review_status || "").trim().toLowerCase() || "reviewed";
+    const preferredSourceStrength = clamp(Number(item?.preferred_source_strength || 0), 0, 1);
     const sourcePolicyEffects = item?.source_policy_effects && typeof item.source_policy_effects === "object"
       ? item.source_policy_effects
       : {};
@@ -394,6 +395,10 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const sourceNeedsCorroboration = sourcePolicyEffects?.requires_corroboration === true;
     const sourcePolicyPenalty = sourceNeedsCorroboration && multiSourceConfirmation < 0.42 ? 0.08 : 0;
     const sourceReviewPenalty = sourceReviewStatus === "unreviewed" ? 0.03 : 0;
+    const preferredSourceBoost = (sourcePolicy === "allowed" || sourcePolicy === "preferred")
+      && String(item?.topic_fit_band || "").trim().toLowerCase() !== "low"
+      ? preferredSourceStrength
+      : 0;
 
     // Per-user source preference adjustments
     const itemDomain = String(item?.source_domain || "").trim().toLowerCase().replace(/^www\./, "");
@@ -420,6 +425,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       + 0.05 * positivePreferenceBoost
       + 0.03 * originalitySignal
       + 0.03 * topicDomainFit
+      + 0.04 * preferredSourceBoost
       + specialistBoost
       - (0.06 * negativePreferencePenalty)
       - sourcePolicyPenalty
@@ -449,6 +455,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     if (sourceTrusted) whyShown.push("source_trusted");
     if (sourcePolicy === "preferred") whyShown.push("source_preferred");
     if (sourcePolicy === "review") whyShown.push("source_review");
+    if (preferredSourceBoost > 0.2) whyShown.push("preferred_source_match");
 
     const sourceDomain = item?.source_domain
       || (sourceDomainForItem ? sourceDomainForItem(item) : null)
@@ -473,6 +480,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
         source_policy_multiplier: Number(sourcePolicyMultiplier.toFixed(3)),
         source_policy_penalty: Number(sourcePolicyPenalty.toFixed(3)),
         source_review_penalty: Number(sourceReviewPenalty.toFixed(3)),
+        preferred_source_boost: Number(preferredSourceBoost.toFixed(3)),
         multi_source_confirmation: Number(multiSourceConfirmation.toFixed(3)),
         originality_signal: Number(originalitySignal.toFixed(3)),
         topic_domain_fit: Number(topicDomainFit.toFixed(3)),

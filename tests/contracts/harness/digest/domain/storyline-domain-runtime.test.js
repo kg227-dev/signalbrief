@@ -25,6 +25,7 @@ const {
   explainSourcePolicy,
   normalizeSourceDomain,
   setAdminSourceRegistry,
+  setPreferredSourceRegistry,
 } = runtime;
 
 assert.strictEqual(typeof buildStorylineCandidates, "function");
@@ -206,6 +207,70 @@ assert.ok(corporateTier.source_authority < 0.5);
     // Not clustered: reuters authority should be higher
     assert.ok(reutersCandidate.source_authority > suspectCandidate.source_authority);
   }
+}
+
+// ── Preferred source annotations + close-substitute suppression ──
+{
+  setPreferredSourceRegistry({
+    version: 1,
+    global: {
+      reported: ["reuters.com"],
+      official: ["sec.gov"],
+    },
+    topics: {
+      technology: {
+        reported: ["theinformation.com"],
+        official: [],
+      },
+    },
+    aliases: {},
+  });
+  setAdminSourceRegistry(new Map([
+    ["theinformation.com", {
+      domain: "theinformation.com",
+      source_type: "reported_media",
+      policy: "allowed",
+      review_status: "reviewed",
+      authority_override: 0.42,
+      note: "Preferred technology reporting",
+    }],
+  ]));
+
+  const candidates = buildStorylineCandidates([
+    {
+      tag: "TECHNOLOGY",
+      headline: "AI infrastructure boom pushes cloud spending higher",
+      summary: "Enterprise AI demand is reshaping hyperscaler capex plans.",
+      source_domain: "financialcontent.com",
+      baseScore: 9.6,
+      strategic_value: 0.94,
+    },
+    {
+      tag: "TECHNOLOGY",
+      headline: "AI infrastructure boom pushes cloud spending higher",
+      summary: "Enterprises are forcing a new wave of hyperscaler AI capex.",
+      source_domain: "theinformation.com",
+      baseScore: 6.0,
+      strategic_value: 0.32,
+    },
+  ]);
+  assert.strictEqual(candidates.length, 1);
+  assert.strictEqual(candidates[0].source_domain, "theinformation.com");
+  assert.strictEqual(candidates[0].preferred_source_match, "topic_reported");
+  assert.strictEqual(candidates[0].won_by_preferred_substitute, true);
+
+  const annotated = runtime.annotateEditorialSignals([{
+    tag: "POLICY×REGULATORY",
+    headline: "SEC proposes new disclosure rule for private funds",
+    summary: "The proposal would widen quarterly reporting requirements.",
+    source_domain: "www.sec.gov",
+    baseScore: 7,
+  }]);
+  assert.strictEqual(annotated[0].preferred_source_match, "global_official");
+  assert.strictEqual(annotated[0].preferred_source_kind, "official");
+
+  setAdminSourceRegistry(null);
+  setPreferredSourceRegistry(null);
 }
 
 // ── Topic-domain fit function directly ──

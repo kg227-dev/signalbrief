@@ -146,10 +146,18 @@ function buildSourceAuditEntries({ readJsonLineLog, adminActionLog, domain, limi
     .slice(0, limit);
 }
 
-function summarizePreferredSourceRegistry({ loadPreferredSourceRegistry, preferredSourcesPath }) {
-  const registry = typeof loadPreferredSourceRegistry === "function"
+function summarizePreferredSourceRegistry({
+  loadPreferredSourceRegistry,
+  inspectPreferredSourceRegistry,
+  preferredSourcesPath,
+  bundledPreferredSourcesPath,
+}) {
+  const snapshot = typeof inspectPreferredSourceRegistry === "function"
+    ? inspectPreferredSourceRegistry()
+    : null;
+  const registry = snapshot?.registry || (typeof loadPreferredSourceRegistry === "function"
     ? loadPreferredSourceRegistry()
-    : {};
+    : {});
   const globalReported = Array.isArray(registry?.global?.reported) ? registry.global.reported : [];
   const globalOfficial = Array.isArray(registry?.global?.official) ? registry.global.official : [];
   const topics = Object.entries(registry?.topics && typeof registry.topics === "object" ? registry.topics : {})
@@ -171,7 +179,11 @@ function summarizePreferredSourceRegistry({ loadPreferredSourceRegistry, preferr
     ...topics.flatMap((entry) => [...entry.reported, ...entry.official]),
   ]);
   return {
-    path: String(preferredSourcesPath || "").trim() || null,
+    path: String(snapshot?.active_path || preferredSourcesPath || "").trim() || null,
+    runtime_path: String(snapshot?.runtime_path || preferredSourcesPath || "").trim() || null,
+    bundled_path: String(snapshot?.bundled_path || bundledPreferredSourcesPath || "").trim() || null,
+    source_mode: String(snapshot?.source_mode || "runtime").trim() || "runtime",
+    used_fallback: snapshot?.used_fallback === true,
     version: Number(registry?.version || 1),
     global: {
       reported: globalReported,
@@ -262,10 +274,12 @@ function buildOverviewRows(metricsMap, registryDomains, query, limit) {
 function buildSourceRegistryOverview({
   loadSourceRegistry,
   loadPreferredSourceRegistry,
+  inspectPreferredSourceRegistry,
   buildSourceRegistryMap,
   setAdminSourceRegistry,
   buildRecentDigestsExport,
   preferredSourcesPath,
+  bundledPreferredSourcesPath,
   query,
   limit = 20,
 }) {
@@ -283,7 +297,9 @@ function buildSourceRegistryOverview({
     source_registry_path: null,
     preferred_sources: summarizePreferredSourceRegistry({
       loadPreferredSourceRegistry,
+      inspectPreferredSourceRegistry,
       preferredSourcesPath,
+      bundledPreferredSourcesPath,
     }),
     override_count: Object.keys(registry.domains || {}).length,
     suggestion_count: suggestions.length,

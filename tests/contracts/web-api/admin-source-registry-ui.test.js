@@ -11,6 +11,7 @@ const requiredPageSnippets = [
   "Source Governance",
   "Source governance (all tracked history)",
   "Preferred source config",
+  "Runtime file wins when present; bundled seed is the fallback.",
   'id="preferredSourcesPanelBody"',
   'id="sourceRegistryInspector"',
   'id="sourceRegistrySuggestionsHeaderRow"',

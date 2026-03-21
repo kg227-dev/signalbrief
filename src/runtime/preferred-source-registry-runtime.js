@@ -1,5 +1,7 @@
 "use strict";
 
+const path = require("path");
+
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const {
@@ -168,6 +170,42 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     publishers,
     aliases,
   };
+}
+
+function countPreferredRegistryDomains(registry) {
+  const sanitized = sanitizePreferredSourceRegistry(registry);
+  const uniqueDomains = new Set([
+    ...(sanitized?.global?.reported || []),
+    ...(sanitized?.global?.official || []),
+    ...Object.values(sanitized?.topics || {}).flatMap((entry) => [
+      ...(entry?.reported || []),
+      ...(entry?.official || []),
+    ]),
+  ]);
+  return uniqueDomains.size;
+}
+
+function countPreferredRegistryPublishers(registry) {
+  const sanitized = sanitizePreferredSourceRegistry(registry);
+  const uniquePublishers = new Set([
+    ...(sanitized?.publishers?.global?.reported || []),
+    ...(sanitized?.publishers?.global?.official || []),
+    ...Object.values(sanitized?.publishers?.topics || {}).flatMap((entry) => [
+      ...(entry?.reported || []),
+      ...(entry?.official || []),
+    ]),
+  ]);
+  return uniquePublishers.size;
+}
+
+function isPreferredRegistryEmpty(registry) {
+  const sanitized = sanitizePreferredSourceRegistry(registry);
+  const topicCount = Object.keys(sanitized?.topics || {}).length;
+  const publisherTopicCount = Object.keys(sanitized?.publishers?.topics || {}).length;
+  return countPreferredRegistryDomains(sanitized) === 0
+    && countPreferredRegistryPublishers(sanitized) === 0
+    && topicCount === 0
+    && publisherTopicCount === 0;
 }
 
 function resolveRelevantTopicKeys(registry, topicTag, dueUserTopics = []) {
@@ -439,23 +477,67 @@ function matchPreferredSourceDomain(registryRaw, sourceDomain, topicTag, options
 
 function createPreferredSourceRegistryRuntime(options = {}) {
   const fs = options.fs || require("fs");
+  const bundledPreferredSourcesPath = String(options.bundledPreferredSourcesPath || "").trim() || path.resolve(
+    options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
+    "config",
+    "preferred-sources.json"
+  );
   const preferredSourcesPath = String(options.preferredSourcesPath || "").trim() || resolveSignalBriefRuntimePaths({
     appRoot: options.appRoot,
     env: options.env,
     nodeEnv: options.nodeEnv,
   }).preferredSourcesPath;
 
-  function loadPreferredSourceRegistry() {
+  function readSanitizedRegistry(filePath) {
     try {
-      const raw = fs.readFileSync(preferredSourcesPath, "utf8");
+      const raw = fs.readFileSync(filePath, "utf8");
       return sanitizePreferredSourceRegistry(JSON.parse(raw));
     } catch {
-      return sanitizePreferredSourceRegistry({});
+      return null;
     }
+  }
+
+  function inspectPreferredSourceRegistry() {
+    const runtimeRegistry = readSanitizedRegistry(preferredSourcesPath);
+    if (runtimeRegistry && !isPreferredRegistryEmpty(runtimeRegistry)) {
+      return {
+        registry: runtimeRegistry,
+        source_mode: "runtime",
+        active_path: preferredSourcesPath,
+        runtime_path: preferredSourcesPath,
+        bundled_path: bundledPreferredSourcesPath,
+        used_fallback: false,
+      };
+    }
+    const bundledRegistry = readSanitizedRegistry(bundledPreferredSourcesPath);
+    if (bundledRegistry && !isPreferredRegistryEmpty(bundledRegistry)) {
+      return {
+        registry: bundledRegistry,
+        source_mode: "bundled_fallback",
+        active_path: bundledPreferredSourcesPath,
+        runtime_path: preferredSourcesPath,
+        bundled_path: bundledPreferredSourcesPath,
+        used_fallback: true,
+      };
+    }
+    return {
+      registry: sanitizePreferredSourceRegistry({}),
+      source_mode: "empty",
+      active_path: preferredSourcesPath,
+      runtime_path: preferredSourcesPath,
+      bundled_path: bundledPreferredSourcesPath,
+      used_fallback: runtimeRegistry == null,
+    };
+  }
+
+  function loadPreferredSourceRegistry() {
+    return inspectPreferredSourceRegistry().registry;
   }
 
   return {
     preferredSourcesPath,
+    bundledPreferredSourcesPath,
+    inspectPreferredSourceRegistry,
     loadPreferredSourceRegistry,
   };
 }

@@ -161,7 +161,11 @@ async function flushMicrotasks() {
       if (href.startsWith("/api/admin/source-registry?")) {
         return jsonResponse({
           preferred_sources: {
-            path: "/app/data/preferred-sources.json",
+            path: "/app/config/preferred-sources.json",
+            runtime_path: "/app/data/preferred-sources.json",
+            bundled_path: "/app/config/preferred-sources.json",
+            source_mode: "bundled_fallback",
+            used_fallback: true,
             version: 1,
             total_unique_domains: 4,
             topic_count: 1,
@@ -254,12 +258,16 @@ async function flushMicrotasks() {
     "overview reload should not reuse the inspect-domain value as a table filter"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/data/preferred-sources.json"),
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
     "preferred sources config should render on the source governance page"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("statnews.com"),
     "preferred sources panel should render topic-specific domains"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("bundled fallback"),
+    "preferred sources panel should explain when bundled fallback is active"
   );
 
   context.renderSourceRegistrySuggestions({

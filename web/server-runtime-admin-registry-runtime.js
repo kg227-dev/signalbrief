@@ -53,6 +53,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     buildRecentDigestsExport,
     loadSourceRegistry,
     loadPreferredSourceRegistry,
+    inspectPreferredSourceRegistry,
     buildSourceRegistryMap,
     listSourceRegistryEntries,
     getSourceRegistryEntry,
@@ -61,6 +62,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     setAdminSourceRegistry,
     sourceRegistryPath,
     preferredSourcesPath,
+    bundledPreferredSourcesPath,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
 
@@ -117,6 +119,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     buildRecentDigestsExport,
     loadSourceRegistry,
     loadPreferredSourceRegistry,
+    inspectPreferredSourceRegistry,
     buildSourceRegistryMap,
     listSourceRegistryEntries,
     getSourceRegistryEntry,
@@ -125,6 +128,7 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     setAdminSourceRegistry,
     sourceRegistryPath,
     preferredSourcesPath,
+    bundledPreferredSourcesPath,
   };
 }
 

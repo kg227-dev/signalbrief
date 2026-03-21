@@ -57,6 +57,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     requireJsonBody,
     loadSourceRegistry,
     loadPreferredSourceRegistry,
+    inspectPreferredSourceRegistry,
     buildSourceRegistryMap,
     setAdminSourceRegistry,
     buildRecentDigestsExport,
@@ -64,6 +65,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     ADMIN_ACTION_LOG,
     sourceRegistryPath,
     preferredSourcesPath,
+    bundledPreferredSourcesPath,
     upsertSourceRegistryEntry,
     resetSourceRegistryEntry,
     logAdminActionEvent,
@@ -74,10 +76,12 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     const payload = buildSourceRegistryOverview({
       loadSourceRegistry,
       loadPreferredSourceRegistry,
+      inspectPreferredSourceRegistry,
       buildSourceRegistryMap,
       setAdminSourceRegistry,
       buildRecentDigestsExport,
       preferredSourcesPath,
+      bundledPreferredSourcesPath,
       query: url.searchParams.get("query") || "",
       limit: parseLimitParam(url),
     });

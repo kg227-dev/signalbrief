@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "global": {
+    "reported": [
+      "reuters.com",
+      "bloomberg.com",
+      "ft.com",
+      "wsj.com",
+      "axios.com"
+    ],
+    "official": [
+      "sec.gov",
+      "federalregister.gov",
+      "regulations.gov",
+      "eur-lex.europa.eu",
+      "ec.europa.eu"
+    ]
+  },
+  "topics": {
+    "healthcare": {
+      "reported": [
+        "statnews.com",
+        "endpointsnews.com",
+        "medtechdive.com"
+      ],
+      "official": [
+        "fda.gov",
+        "cms.gov"
+      ]
+    },
+    "life sciences": {
+      "reported": [
+        "fiercebiotech.com",
+        "fiercepharma.com",
+        "medtechdive.com",
+        "statnews.com",
+        "endpointsnews.com"
+      ],
+      "official": [
+        "fda.gov",
+        "ema.europa.eu"
+      ]
+    },
+    "financial services": {
+      "reported": [
+        "americanbanker.com"
+      ],
+      "official": [
+        "federalreserve.gov",
+        "sec.gov"
+      ]
+    },
+    "pe m a": {
+      "reported": [
+        "pehub.com",
+        "mergermarket.com",
+        "pitchbook.com"
+      ],
+      "official": []
+    },
+    "energy": {
+      "reported": [
+        "utilitydive.com",
+        "canarymedia.com"
+      ],
+      "official": [
+        "eia.gov",
+        "iea.org",
+        "ferc.gov",
+        "energy.gov"
+      ]
+    },
+    "consumer": {
+      "reported": [
+        "retaildive.com",
+        "modernretail.co"
+      ],
+      "official": []
+    },
+    "technology": {
+      "reported": [
+        "theinformation.com",
+        "techcrunch.com",
+        "theverge.com",
+        "ciodive.com",
+        "semianalysis.com"
+      ],
+      "official": []
+    },
+    "industrials": {
+      "reported": [
+        "industryweek.com",
+        "supplychaindive.com"
+      ],
+      "official": []
+    },
+    "real estate": {
+      "reported": [
+        "costar.com",
+        "bisnow.com"
+      ],
+      "official": []
+    },
+    "public sector": {
+      "reported": [
+        "govexec.com",
+        "federalnewsnetwork.com",
+        "route-fifty.com"
+      ],
+      "official": [
+        "federalregister.gov",
+        "regulations.gov",
+        "govinfo.gov"
+      ]
+    },
+    "ai tech": {
+      "reported": [
+        "theinformation.com",
+        "semianalysis.com",
+        "techcrunch.com",
+        "theverge.com"
+      ],
+      "official": []
+    },
+    "strategy": {
+      "reported": [
+        "economist.com"
+      ],
+      "official": []
+    },
+    "policy regulatory": {
+      "reported": [],
+      "official": [
+        "federalregister.gov",
+        "regulations.gov",
+        "sec.gov",
+        "fda.gov",
+        "cms.gov",
+        "eur-lex.europa.eu",
+        "ec.europa.eu"
+      ]
+    },
+    "sustainability": {
+      "reported": [
+        "esgtoday.com",
+        "trellis.net",
+        "responsible-investor.com"
+      ],
+      "official": [
+        "sec.gov",
+        "epa.gov",
+        "ec.europa.eu"
+      ]
+    },
+    "digital": {
+      "reported": [
+        "ciodive.com",
+        "cio.com",
+        "theinformation.com",
+        "techcrunch.com"
+      ],
+      "official": []
+    },
+    "m a advisory": {
+      "reported": [
+        "mergermarket.com",
+        "pehub.com",
+        "pitchbook.com"
+      ],
+      "official": []
+    },
+    "talent": {
+      "reported": [
+        "shrm.org",
+        "hrdive.com"
+      ],
+      "official": [
+        "bls.gov"
+      ]
+    }
+  },
+  "publishers": {
+    "global": {
+      "reported": [],
+      "official": []
+    },
+    "topics": {}
+  },
+  "aliases": {
+    "consumer retail": "consumer",
+    "private equity m a": "pe m a",
+    "ai technology": "ai tech",
+    "policy regulatory": "policy regulatory",
+    "digital transformation": "digital",
+    "sustainability esg": "sustainability",
+    "talent workforce": "talent"
+  }
+}

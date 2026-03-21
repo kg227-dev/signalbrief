@@ -4,6 +4,78 @@ const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtim
 
 const DEFAULT_REGISTRY_VERSION = 1;
 const MAX_NOTE_LENGTH = 400;
+const SOURCE_TYPE_VALUES = Object.freeze([
+  "primary_official",
+  "reported_media",
+  "trade_specialist",
+  "corporate_pr",
+  "analysis_blog",
+  "aggregator_republisher",
+  "platform_user_generated",
+  "unclassified",
+]);
+const SOURCE_POLICY_VALUES = Object.freeze([
+  "preferred",
+  "allowed",
+  "limited",
+  "review",
+  "blocked",
+]);
+const REVIEW_STATUS_VALUES = Object.freeze([
+  "reviewed",
+  "monitor",
+  "unreviewed",
+]);
+const ORIGINALITY_PROFILE_VALUES = Object.freeze([
+  "primary",
+  "original_reporting",
+  "derived_synthesis",
+  "rewrite_aggregator",
+  "press_release_repost",
+  "unknown",
+]);
+const TOPIC_FIT_BAND_VALUES = Object.freeze([
+  "low",
+  "medium",
+  "high",
+]);
+const TOPIC_FIT_BAND_SCORES = Object.freeze({
+  low: 0.25,
+  medium: 0.65,
+  high: 1,
+});
+const SOURCE_POLICY_RANKING_EFFECTS = Object.freeze({
+  preferred: Object.freeze({
+    lead_eligible: true,
+    exposure_cap: null,
+    requires_corroboration: false,
+    score_multiplier: 1.04,
+  }),
+  allowed: Object.freeze({
+    lead_eligible: true,
+    exposure_cap: null,
+    requires_corroboration: false,
+    score_multiplier: 1,
+  }),
+  limited: Object.freeze({
+    lead_eligible: false,
+    exposure_cap: 1,
+    requires_corroboration: true,
+    score_multiplier: 0.88,
+  }),
+  review: Object.freeze({
+    lead_eligible: false,
+    exposure_cap: 1,
+    requires_corroboration: true,
+    score_multiplier: 0.76,
+  }),
+  blocked: Object.freeze({
+    lead_eligible: false,
+    exposure_cap: 0,
+    requires_corroboration: true,
+    score_multiplier: 0,
+  }),
+});
 const TIER_OVERRIDE_SCORES = Object.freeze({
   premium: 0.95,
   strong: 0.8,
@@ -15,6 +87,11 @@ const TIER_OVERRIDE_SCORES = Object.freeze({
   unknown: 0.3,
 });
 const ALLOWED_TIER_OVERRIDES = new Set(Object.keys(TIER_OVERRIDE_SCORES));
+const ALLOWED_SOURCE_TYPES = new Set(SOURCE_TYPE_VALUES);
+const ALLOWED_SOURCE_POLICIES = new Set(SOURCE_POLICY_VALUES);
+const ALLOWED_REVIEW_STATUSES = new Set(REVIEW_STATUS_VALUES);
+const ALLOWED_ORIGINALITY_PROFILES = new Set(ORIGINALITY_PROFILE_VALUES);
+const ALLOWED_TOPIC_FIT_BANDS = new Set(TOPIC_FIT_BAND_VALUES);
 
 function clampAuthority(value) {
   const numeric = Number(value);
@@ -40,18 +117,69 @@ function sanitizeTierOverride(rawValue) {
   return ALLOWED_TIER_OVERRIDES.has(normalized) ? normalized : null;
 }
 
+function normalizeSourceTopicToken(rawValue) {
+  return String(rawValue || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function sanitizeEnumValue(rawValue, allowedValues) {
+  const normalized = String(rawValue || "").trim().toLowerCase();
+  return allowedValues.has(normalized) ? normalized : null;
+}
+
+function sanitizeSourceType(rawValue) {
+  return sanitizeEnumValue(rawValue, ALLOWED_SOURCE_TYPES);
+}
+
+function sanitizeSourcePolicy(rawValue) {
+  return sanitizeEnumValue(rawValue, ALLOWED_SOURCE_POLICIES);
+}
+
+function sanitizeReviewStatus(rawValue) {
+  return sanitizeEnumValue(rawValue, ALLOWED_REVIEW_STATUSES);
+}
+
+function sanitizeOriginalityProfile(rawValue) {
+  return sanitizeEnumValue(rawValue, ALLOWED_ORIGINALITY_PROFILES);
+}
+
+function sanitizeTopicFitMap(rawValue) {
+  const input = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) ? rawValue : {};
+  const topicFit = {};
+  for (const [rawTopic, rawBand] of Object.entries(input)) {
+    const topic = normalizeSourceTopicToken(rawTopic);
+    const band = sanitizeEnumValue(rawBand, ALLOWED_TOPIC_FIT_BANDS);
+    if (!topic || !band) continue;
+    topicFit[topic] = band;
+  }
+  return topicFit;
+}
+
 function sanitizeRegistryEntry(domain, rawEntry, meta = {}) {
   const normalizedDomain = normalizeSourcePolicyDomain(domain || rawEntry?.domain);
   if (!normalizedDomain) return null;
   const entry = rawEntry && typeof rawEntry === "object" ? rawEntry : {};
   const tierOverride = sanitizeTierOverride(entry.tier_override);
   const authorityOverride = clampAuthority(entry.authority_override);
-  const hardBlock = entry.hard_block === true;
+  const sourceType = sanitizeSourceType(entry.source_type);
+  const policy = sanitizeSourcePolicy(entry.policy);
+  const reviewStatus = sanitizeReviewStatus(entry.review_status);
+  const originalityProfile = sanitizeOriginalityProfile(entry.originality_profile);
+  const topicFit = sanitizeTopicFitMap(entry.topic_fit);
+  const hardBlock = entry.hard_block === true || policy === "blocked";
   const note = String(entry.note || "").trim().slice(0, MAX_NOTE_LENGTH);
   const updatedAt = String(meta.updated_at || entry.updated_at || "").trim() || null;
   const updatedBy = String(meta.updated_by || entry.updated_by || "").trim() || null;
   return {
     domain: normalizedDomain,
+    source_type: sourceType,
+    policy: hardBlock ? "blocked" : policy,
+    review_status: reviewStatus,
+    topic_fit: topicFit,
+    originality_profile: originalityProfile,
     tier_override: tierOverride,
     authority_override: authorityOverride,
     hard_block: hardBlock,
@@ -190,14 +318,32 @@ function createSourceRegistryRuntime(options = {}) {
 }
 
 module.exports = {
+  ALLOWED_ORIGINALITY_PROFILES,
+  ALLOWED_REVIEW_STATUSES,
+  ALLOWED_SOURCE_POLICIES,
+  ALLOWED_SOURCE_TYPES,
+  ALLOWED_TOPIC_FIT_BANDS,
   ALLOWED_TIER_OVERRIDES,
   DEFAULT_REGISTRY_VERSION,
   MAX_NOTE_LENGTH,
+  ORIGINALITY_PROFILE_VALUES,
+  REVIEW_STATUS_VALUES,
+  SOURCE_POLICY_RANKING_EFFECTS,
+  SOURCE_POLICY_VALUES,
+  SOURCE_TYPE_VALUES,
   TIER_OVERRIDE_SCORES,
+  TOPIC_FIT_BAND_SCORES,
+  TOPIC_FIT_BAND_VALUES,
   clampAuthority,
   createSourceRegistryRuntime,
   normalizeSourcePolicyDomain,
+  normalizeSourceTopicToken,
   sanitizeRegistry,
   sanitizeRegistryEntry,
+  sanitizeOriginalityProfile,
+  sanitizeReviewStatus,
+  sanitizeSourcePolicy,
+  sanitizeSourceType,
   sanitizeTierOverride,
+  sanitizeTopicFitMap,
 };

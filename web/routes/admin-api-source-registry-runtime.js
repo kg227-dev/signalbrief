@@ -6,8 +6,13 @@ const {
 } = require("../services/admin-source-registry-runtime");
 const {
   normalizeSourcePolicyDomain,
-  sanitizeTierOverride,
   clampAuthority,
+  sanitizeOriginalityProfile,
+  sanitizeReviewStatus,
+  sanitizeSourcePolicy,
+  sanitizeSourceType,
+  sanitizeTierOverride,
+  sanitizeTopicFitMap,
 } = require("../../src/runtime/source-policy-registry-runtime");
 
 function parseLimitParam(url) {
@@ -18,14 +23,24 @@ function parseLimitParam(url) {
 
 function sanitizeBody(body = {}) {
   const domain = normalizeSourcePolicyDomain(body?.domain);
+  const sourceType = sanitizeSourceType(body?.source_type);
+  const policy = sanitizeSourcePolicy(body?.policy);
+  const reviewStatus = sanitizeReviewStatus(body?.review_status);
+  const originalityProfile = sanitizeOriginalityProfile(body?.originality_profile);
+  const topicFit = sanitizeTopicFitMap(body?.topic_fit);
   const tierOverride = sanitizeTierOverride(body?.tier_override);
   const authorityOverride = body?.authority_override === "" || body?.authority_override == null
     ? null
     : clampAuthority(body.authority_override);
-  const hardBlock = body?.hard_block === true;
+  const hardBlock = body?.hard_block === true || policy === "blocked";
   const note = String(body?.note || "").trim();
   return {
     domain,
+    source_type: sourceType,
+    policy: hardBlock ? "blocked" : policy,
+    review_status: reviewStatus,
+    topic_fit: topicFit,
+    originality_profile: originalityProfile,
     tier_override: tierOverride,
     authority_override: authorityOverride,
     hard_block: hardBlock,

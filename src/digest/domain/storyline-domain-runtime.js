@@ -8,8 +8,11 @@ const {
 } = require("./topic-domain-runtime");
 const { buildFreshnessKey } = require("../runtime/repeat-freshness-runtime");
 const {
+  SOURCE_POLICY_RANKING_EFFECTS,
   normalizeSourcePolicyDomain,
+  normalizeSourceTopicToken,
   TIER_OVERRIDE_SCORES,
+  TOPIC_FIT_BAND_SCORES,
 } = require("../../runtime/source-policy-registry-runtime");
 
 const STANDARD_TOPIC_TOKENS = new Set([
@@ -132,6 +135,47 @@ const SOURCE_TIER_RULES = Object.freeze({
     ],
   },
 });
+const PRIMARY_OFFICIAL_DOMAINS = new Set([
+  "sec.gov", "fda.gov", "cms.gov", "treasury.gov", "federalreserve.gov",
+  "whitehouse.gov", "congress.gov", "irs.gov",
+]);
+const CORPORATE_PR_DOMAINS = new Set([
+  "businesswire.com", "prnewswire.com", "globenewswire.com",
+  "accesswire.com", "newswire.com", "pfizer.com",
+]);
+const TRADE_SPECIALIST_DOMAINS = new Set([
+  "spglobal.com", "gartner.com",
+  "esgtoday.com", "esgdive.com",
+  "pharmexec.com", "biospace.com",
+  "fiercebiotech.com", "fiercehealthcare.com", "modernhealthcare.com",
+  "healthaffairs.org", "statnews.com",
+  "utilitydive.com", "energydive.com",
+  "ciodive.com", "supplychaindive.com", "retaildive.com", "hrdive.com",
+  "biopharmadive.com", "healthcaredive.com", "cybersecuritydive.com", "cfodive.com",
+  "fiercepharma.com", "fierceelectronics.com", "fiercewireless.com",
+  "morningstar.com", "barrons.com",
+  "therecord.media", "darkreading.com",
+  "beckershospitalreview.com", "medpagetoday.com",
+  "insurancejournal.com", "healthleadersmedia.com",
+]);
+const ANALYSIS_BLOG_DOMAINS = new Set([
+  "hbr.org", "mckinsey.com", "bcg.com", "bain.com",
+  "bottomline.com", "conference-board.org", "inc.com", "fastcompany.com",
+]);
+const AGGREGATOR_DOMAINS = new Set([
+  "investing.com", "barchart.com", "benzinga.com",
+  "financialcontent.com", "seekingalpha.com", "fool.com",
+  "stockstotrade.com", "mexc.com",
+]);
+const PLATFORM_ROOT_DOMAINS = new Set([
+  "youtube.com",
+  "medium.com",
+  "substack.com",
+]);
+const CORPORATE_SUBDOMAIN_PATTERNS = [
+  /^(?:corporate|investor|investors|investorrelations|ir|press|newsroom|media|about|company)\./i,
+  /\.(?:corporate|investor|investors|investorrelations|ir|press|newsroom|media)\./i,
+];
 
 // Legitimate .net domains that should NOT be flagged as suspect
 const KNOWN_LEGIT_NET = new Set([
@@ -199,28 +243,6 @@ const TOPIC_AUTHORITY_OVERRIDES = Object.freeze({
   "bcg.com": { "strategy": 0.88 },
   "bain.com": { "strategy": 0.85, "pe m a": 0.85 },
   "hbr.org": { "strategy": 0.88 },
-});
-
-// Source type classification for originality detection
-const SOURCE_TYPE_MAP = Object.freeze({
-  primary: [
-    "sec.gov", "fda.gov", "cms.gov", "treasury.gov", "federalreserve.gov",
-    "whitehouse.gov", "congress.gov", "irs.gov",
-  ],
-  wire: [
-    "businesswire.com", "prnewswire.com", "globenewswire.com",
-    "accesswire.com", "newswire.com",
-  ],
-  top_tier: [
-    "reuters.com", "bloomberg.com", "ft.com", "wsj.com",
-    "nytimes.com", "economist.com", "apnews.com",
-    "washingtonpost.com", "bbc.com", "theguardian.com",
-  ],
-  aggregator: [
-    "investing.com", "barchart.com", "benzinga.com",
-    "financialcontent.com", "seekingalpha.com", "fool.com",
-    "stockstotrade.com", "mexc.com",
-  ],
 });
 
 // Headline patterns indicating derivative/low-originality content
@@ -321,6 +343,193 @@ function normalizeSourceDomain(raw) {
   return normalizeSourcePolicyDomain(raw);
 }
 
+function matchesDomain(sourceDomain, candidateDomain) {
+  const source = normalizeSourceDomain(sourceDomain);
+  const candidate = normalizeSourceDomain(candidateDomain);
+  if (!source || !candidate) return false;
+  return source === candidate || source.endsWith(`.${candidate}`);
+}
+
+function resolveTopicAuthorityOverrides(sourceDomain) {
+  const normalized = normalizeSourceDomain(sourceDomain);
+  if (!normalized) return null;
+  let bestDomain = null;
+  let bestOverrides = null;
+  for (const [domain, overrides] of Object.entries(TOPIC_AUTHORITY_OVERRIDES)) {
+    if (!matchesDomain(normalized, domain)) continue;
+    if (!bestDomain || domain.length > bestDomain.length) {
+      bestDomain = domain;
+      bestOverrides = overrides;
+    }
+  }
+  return bestOverrides;
+}
+
+function buildBaselineTopicFitMap(sourceDomain) {
+  const overrides = resolveTopicAuthorityOverrides(sourceDomain);
+  const topicFitMap = {};
+  for (const topic of Object.keys(overrides || {})) {
+    topicFitMap[normalizeSourceTopicToken(topic)] = "high";
+  }
+  return topicFitMap;
+}
+
+function isCorporateAnnouncementDomain(sourceDomain) {
+  const normalized = normalizeSourceDomain(sourceDomain);
+  if (!normalized) return false;
+  return CORPORATE_SUBDOMAIN_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function classifySourceType(sourceDomainRaw, baselineTier = null) {
+  const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
+  if (!sourceDomain) return "unclassified";
+  let resolvedTier = baselineTier;
+  if (!resolvedTier) {
+    for (const [sourceTier, rule] of Object.entries(SOURCE_TIER_RULES)) {
+      if (rule.domains.some((domain) => matchesDomain(sourceDomain, domain))) {
+        resolvedTier = sourceTier;
+        break;
+      }
+    }
+    if (!resolvedTier && isCorporateAnnouncementDomain(sourceDomain)) resolvedTier = "corporate";
+    if (!resolvedTier && sourceDomain.endsWith(".medium.com")) resolvedTier = "weak";
+    if (!resolvedTier && (sourceDomain.includes("blog.") || sourceDomain.includes(".blog"))) resolvedTier = "blog";
+  }
+  if (PRIMARY_OFFICIAL_DOMAINS.has(sourceDomain) || sourceDomain.endsWith(".gov")) return "primary_official";
+  if (CORPORATE_PR_DOMAINS.has(sourceDomain) || isCorporateAnnouncementDomain(sourceDomain)) return "corporate_pr";
+  if (PLATFORM_ROOT_DOMAINS.has(sourceDomain) || sourceDomain.endsWith(".medium.com")) return "platform_user_generated";
+  if (AGGREGATOR_DOMAINS.has(sourceDomain)) return "aggregator_republisher";
+  if (ANALYSIS_BLOG_DOMAINS.has(sourceDomain) || sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) return "analysis_blog";
+  if (TRADE_SPECIALIST_DOMAINS.has(sourceDomain)) return "trade_specialist";
+  if (resolvedTier === "premium" || resolvedTier === "strong" || resolvedTier === "standard") return "reported_media";
+  if (resolvedTier === "blog") return "analysis_blog";
+  if (resolvedTier === "corporate") return "corporate_pr";
+  if (resolvedTier === "weak") return "aggregator_republisher";
+  return "unclassified";
+}
+
+function derivePolicyFromBaseline(baseTier, sourceType) {
+  if (baseTier === "blocked") return "blocked";
+  if (baseTier === "weak") return sourceType === "platform_user_generated" ? "review" : "limited";
+  if (baseTier === "corporate") return "limited";
+  if (baseTier === "blog") return "allowed";
+  if (baseTier === "suspect" || baseTier === "unknown") return "review";
+  if (sourceType === "primary_official") return "preferred";
+  if (sourceType === "reported_media" || sourceType === "trade_specialist") {
+    return (baseTier === "premium" || baseTier === "strong") ? "preferred" : "allowed";
+  }
+  if (sourceType === "analysis_blog") {
+    return (baseTier === "premium" || baseTier === "strong" || baseTier === "standard") ? "allowed" : "limited";
+  }
+  if (sourceType === "platform_user_generated") return "review";
+  if (sourceType === "corporate_pr") return "limited";
+  if (sourceType === "aggregator_republisher") return baseTier === "suspect" ? "review" : "limited";
+  if (String(baseTier || "").startsWith("learned-")) return baseTier === "learned-standard" ? "allowed" : "review";
+  return "allowed";
+}
+
+function deriveReviewStatusFromBaseline(baseTier, sourceType) {
+  if (baseTier === "unknown" || baseTier === "suspect") return "unreviewed";
+  if (String(baseTier || "").startsWith("learned-")) return "monitor";
+  if (sourceType === "platform_user_generated") return "monitor";
+  return "reviewed";
+}
+
+function deriveOriginalityProfile(sourceType) {
+  if (sourceType === "primary_official") return "primary";
+  if (sourceType === "reported_media" || sourceType === "trade_specialist") return "original_reporting";
+  if (sourceType === "analysis_blog") return "derived_synthesis";
+  if (sourceType === "corporate_pr") return "press_release_repost";
+  if (sourceType === "aggregator_republisher") return "rewrite_aggregator";
+  return "unknown";
+}
+
+function deriveTierFromGovernance(baselineTier, sourceType, policy) {
+  if (policy === "blocked") return "blocked";
+  if (sourceType === "primary_official") return "premium";
+  if (sourceType === "reported_media") {
+    return policy === "preferred"
+      ? (baselineTier === "premium" ? "premium" : "strong")
+      : "standard";
+  }
+  if (sourceType === "trade_specialist") {
+    return policy === "preferred" ? "strong" : "standard";
+  }
+  if (sourceType === "analysis_blog") return "blog";
+  if (sourceType === "corporate_pr") return "corporate";
+  if (sourceType === "platform_user_generated") return policy === "review" ? "unknown" : "weak";
+  if (sourceType === "aggregator_republisher") return policy === "review" ? "suspect" : "weak";
+  if (policy === "review") return "unknown";
+  return baselineTier || "unknown";
+}
+
+const TYPE_AUTHORITY_RANGES = Object.freeze({
+  primary_official: Object.freeze([0.85, 0.99]),
+  reported_media: Object.freeze([0.58, 0.96]),
+  trade_specialist: Object.freeze([0.58, 0.92]),
+  analysis_blog: Object.freeze([0.42, 0.74]),
+  corporate_pr: Object.freeze([0.32, 0.56]),
+  aggregator_republisher: Object.freeze([0.16, 0.45]),
+  platform_user_generated: Object.freeze([0.18, 0.5]),
+  unclassified: Object.freeze([0.28, 0.62]),
+});
+
+const POLICY_AUTHORITY_RANGES = Object.freeze({
+  preferred: Object.freeze([0.72, 0.99]),
+  allowed: Object.freeze([0.46, 0.84]),
+  limited: Object.freeze([0.28, 0.58]),
+  review: Object.freeze([0.32, 0.5]),
+  blocked: Object.freeze([0, 0]),
+});
+
+function deriveAuthorityFromGovernance({
+  baseAuthority,
+  sourceType,
+  policy,
+  reviewStatus,
+  topicFitBand,
+  originalityProfile,
+  preserveLowBase = false,
+}) {
+  if (policy === "blocked") return 0;
+  const numericBase = Number.isFinite(Number(baseAuthority))
+    ? Number(baseAuthority)
+    : (policy === "preferred" ? 0.85 : policy === "allowed" ? 0.62 : policy === "limited" ? 0.42 : 0.4);
+  const [typeMin, typeMax] = TYPE_AUTHORITY_RANGES[sourceType] || TYPE_AUTHORITY_RANGES.unclassified;
+  const [policyMin, policyMax] = POLICY_AUTHORITY_RANGES[policy] || POLICY_AUTHORITY_RANGES.allowed;
+  const floor = Math.min(Math.max(typeMin, policyMin), Math.min(typeMax, policyMax));
+  const ceiling = Math.max(floor, Math.min(typeMax, policyMax));
+  let score = clamp(numericBase, floor, ceiling);
+  if (topicFitBand === "high") score += 0.05;
+  if (topicFitBand === "medium") score += 0.02;
+  if (topicFitBand === "low") score -= 0.08;
+  if (originalityProfile === "rewrite_aggregator") score -= 0.04;
+  if (!preserveLowBase && reviewStatus === "unreviewed" && policy === "review") score = clamp(score, 0.38, 0.48);
+  if (!preserveLowBase && reviewStatus === "monitor" && policy === "review") score = clamp(score, 0.34, 0.5);
+  if (preserveLowBase) score = Math.min(score, numericBase);
+  return clamp(score, 0, 1);
+}
+
+function buildPolicyEffects(policy, sourceType) {
+  const base = SOURCE_POLICY_RANKING_EFFECTS[policy] || SOURCE_POLICY_RANKING_EFFECTS.allowed;
+  const requiresCorroboration = policy === "limited"
+    ? sourceType !== "corporate_pr"
+    : base.requires_corroboration;
+  const leadEligible = policy === "allowed"
+    ? sourceType !== "analysis_blog"
+    : base.lead_eligible;
+  const exposureCap = policy === "limited" && sourceType === "corporate_pr"
+    ? 1
+    : base.exposure_cap;
+  return {
+    policy,
+    lead_eligible: leadEligible,
+    exposure_cap: exposureCap,
+    requires_corroboration: requiresCorroboration,
+    score_multiplier: Number(base.score_multiplier.toFixed(3)),
+  };
+}
+
 // Learned domain authority adjustments (populated at runtime via setLearnedDomainAdjustments)
 let _learnedAdjustments = null;
 let _adminSourceRegistry = null;
@@ -336,52 +545,86 @@ function setAdminSourceRegistry(registryMap) {
 function resolveAdminSourceRegistryEntry(sourceDomain) {
   const normalizedDomain = normalizeSourceDomain(sourceDomain);
   if (!_adminSourceRegistry || !normalizedDomain) return null;
+  let bestMatch = null;
   for (const [domain, entry] of _adminSourceRegistry.entries()) {
     const normalizedEntryDomain = normalizeSourceDomain(domain);
     if (!normalizedEntryDomain) continue;
-    if (normalizedDomain === normalizedEntryDomain || normalizedDomain.endsWith(`.${normalizedEntryDomain}`)) {
-      return entry && typeof entry === "object" ? entry : null;
+    if (!matchesDomain(normalizedDomain, normalizedEntryDomain)) continue;
+    if (!bestMatch || normalizedEntryDomain.length > bestMatch.matched_domain.length) {
+      bestMatch = {
+        matched_domain: normalizedEntryDomain,
+        entry: entry && typeof entry === "object" ? entry : null,
+      };
     }
   }
-  return null;
+  return bestMatch;
 }
 
 function classifySourceTierBaseline(sourceDomainRaw, tag) {
   const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
   if (!sourceDomain) {
+    const sourceType = "unclassified";
+    const policy = "review";
+    const reviewStatus = "unreviewed";
+    const originalityProfile = "unknown";
+    const policyEffects = buildPolicyEffects(policy, sourceType);
     return {
       source_domain: "",
+      source_type: sourceType,
+      source_policy: policy,
+      review_status: reviewStatus,
+      originality_profile: originalityProfile,
       source_tier: "unknown",
-      source_authority: 0.45,
+      source_authority: deriveAuthorityFromGovernance({
+        baseAuthority: 0.42,
+        sourceType,
+        policy,
+        reviewStatus,
+        topicFitBand: null,
+        originalityProfile,
+      }),
       topic_fit: 0,
+      topic_fit_band: null,
+      topic_fit_map: {},
       baseline_source_tier: "unknown",
-      baseline_source_authority: 0.45,
+      baseline_source_authority: 0.42,
       learned_adjustment: null,
       topic_override_score: null,
       topic_override_applied: false,
       policy_source: "baseline",
+      policy_effects: policyEffects,
       hard_block: false,
+      inherits_from_domain: null,
       admin_override: null,
     };
   }
 
   let baseTier = null;
   let baseScore = 0;
+  let matchedRuleDomain = null;
   for (const [sourceTier, rule] of Object.entries(SOURCE_TIER_RULES)) {
-    if (rule.domains.some((domain) => sourceDomain === domain || sourceDomain.endsWith(`.${domain}`))) {
+    const matchedDomain = rule.domains.find((domain) => matchesDomain(sourceDomain, domain));
+    if (matchedDomain) {
       baseTier = sourceTier;
       baseScore = rule.score;
+      matchedRuleDomain = matchedDomain;
       break;
     }
   }
 
   if (!baseTier) {
-    if (sourceDomain.endsWith(".medium.com")) {
+    if (isCorporateAnnouncementDomain(sourceDomain)) {
+      baseTier = "corporate";
+      baseScore = 0.42;
+      matchedRuleDomain = sourceDomain;
+    } else if (sourceDomain.endsWith(".medium.com")) {
       baseTier = "weak";
       baseScore = 0.28;
+      matchedRuleDomain = "medium.com";
     } else if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog")) {
       baseTier = "blog";
       baseScore = 0.48;
+      matchedRuleDomain = sourceDomain;
     }
   }
 
@@ -393,7 +636,7 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
       baseScore = 0.15;
     } else {
       baseTier = "unknown";
-      baseScore = 0.30;
+      baseScore = 0.42;
     }
   }
 
@@ -411,16 +654,33 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
 
   // Apply topic-domain fit overrides
   const fit = computeTopicDomainFit(sourceDomain, tag);
+  const sourceType = classifySourceType(sourceDomain, baseTier);
+  const policy = derivePolicyFromBaseline(baseTier, sourceType);
+  const reviewStatus = deriveReviewStatusFromBaseline(baseTier, sourceType);
+  const originalityProfile = deriveOriginalityProfile(sourceType);
   const topicOverrideApplied = fit.overrideScore != null && fit.overrideScore > baseScore;
-  const finalScore = topicOverrideApplied
-    ? fit.overrideScore
-    : baseScore;
+  const finalScore = deriveAuthorityFromGovernance({
+    baseAuthority: topicOverrideApplied ? fit.overrideScore : baseScore,
+    sourceType,
+    policy,
+    reviewStatus,
+    topicFitBand: fit.band || null,
+    originalityProfile,
+    preserveLowBase: baseTier === "suspect" || baseTier === "learned-suspect",
+  });
+  const policyEffects = buildPolicyEffects(policy, sourceType);
 
   return {
     source_domain: sourceDomain,
+    source_type: sourceType,
+    source_policy: policy,
+    review_status: reviewStatus,
+    originality_profile: originalityProfile,
     source_tier: baseTier,
     source_authority: finalScore,
     topic_fit: fit.topicFit,
+    topic_fit_band: fit.band || null,
+    topic_fit_map: buildBaselineTopicFitMap(sourceDomain),
     baseline_source_tier: baseTier,
     baseline_source_authority: finalScore,
     learned_adjustment: learnedAdjustment,
@@ -429,7 +689,10 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
     policy_source: topicOverrideApplied
       ? "topic_override"
       : (learnedAdjustment != null ? "learned_adjustment" : "baseline"),
+    policy_effects: policyEffects,
     hard_block: false,
+    source_family_domain: matchedRuleDomain || sourceDomain,
+    inherits_from_domain: null,
     admin_override: null,
   };
 }
@@ -437,24 +700,47 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
 function explainSourcePolicy(sourceDomainRaw, tag) {
   const baseline = classifySourceTierBaseline(sourceDomainRaw, tag);
   const sourceDomain = String(baseline?.source_domain || "").trim();
-  const adminEntry = resolveAdminSourceRegistryEntry(sourceDomain);
-  if (!adminEntry) return baseline;
+  const adminMatch = resolveAdminSourceRegistryEntry(sourceDomain);
+  if (!adminMatch || !adminMatch.entry) return baseline;
 
+  const adminEntry = adminMatch.entry;
+  const matchedDomain = String(adminMatch.matched_domain || "").trim() || null;
   const tierOverride = String(adminEntry?.tier_override || "").trim().toLowerCase() || null;
   const authorityOverride = Number.isFinite(Number(adminEntry?.authority_override))
     ? Number(adminEntry.authority_override)
     : null;
   const hardBlock = adminEntry?.hard_block === true;
+  const legacySourceType = tierOverride ? classifySourceType(sourceDomain, tierOverride) : null;
+  const legacyPolicy = tierOverride ? derivePolicyFromBaseline(tierOverride, legacySourceType) : null;
+  const legacyReviewStatus = tierOverride ? deriveReviewStatusFromBaseline(tierOverride, legacySourceType) : null;
+  const legacyOriginalityProfile = legacySourceType ? deriveOriginalityProfile(legacySourceType) : null;
+  const effectiveSourceType = String(adminEntry?.source_type || "").trim() || legacySourceType || baseline.source_type;
+  const effectivePolicy = hardBlock
+    ? "blocked"
+    : (String(adminEntry?.policy || "").trim() || legacyPolicy || baseline.source_policy);
+  const effectiveReviewStatus = String(adminEntry?.review_status || "").trim() || legacyReviewStatus || baseline.review_status;
+  const effectiveOriginalityProfile = String(adminEntry?.originality_profile || "").trim()
+    || legacyOriginalityProfile
+    || baseline.originality_profile;
+  const fit = computeTopicDomainFit(sourceDomain, tag, adminEntry?.topic_fit || null);
 
-  let effectiveTier = baseline.source_tier;
+  let effectiveTier = tierOverride || baseline.source_tier;
   let effectiveAuthority = baseline.source_authority;
   let policySource = baseline.policy_source || "baseline";
 
-  if (tierOverride) {
-    effectiveTier = tierOverride;
-    if (authorityOverride == null && Object.prototype.hasOwnProperty.call(TIER_OVERRIDE_SCORES, tierOverride)) {
-      effectiveAuthority = TIER_OVERRIDE_SCORES[tierOverride];
-    }
+  if (authorityOverride == null) {
+    effectiveTier = tierOverride || deriveTierFromGovernance(baseline.source_tier, effectiveSourceType, effectivePolicy);
+    effectiveAuthority = deriveAuthorityFromGovernance({
+      baseAuthority: tierOverride && Object.prototype.hasOwnProperty.call(TIER_OVERRIDE_SCORES, tierOverride)
+        ? TIER_OVERRIDE_SCORES[tierOverride]
+        : baseline.source_authority,
+      sourceType: effectiveSourceType,
+      policy: effectivePolicy,
+      reviewStatus: effectiveReviewStatus,
+      topicFitBand: fit.band || baseline.topic_fit_band || null,
+      originalityProfile: effectiveOriginalityProfile,
+      preserveLowBase: tierOverride === "suspect" || tierOverride === "learned-suspect" || (!tierOverride && baseline.source_tier === "suspect"),
+    });
   }
   if (authorityOverride != null) effectiveAuthority = authorityOverride;
   if (hardBlock) {
@@ -462,17 +748,41 @@ function explainSourcePolicy(sourceDomainRaw, tag) {
     effectiveAuthority = 0;
     policySource = "admin_hard_block";
   } else {
-    policySource = "admin_override";
+    policySource = matchedDomain && matchedDomain !== sourceDomain
+      ? "admin_inherited_override"
+      : "admin_override";
   }
+
+  const effectiveTopicFitMap = {
+    ...(baseline.topic_fit_map || {}),
+    ...((adminEntry?.topic_fit && typeof adminEntry.topic_fit === "object") ? adminEntry.topic_fit : {}),
+  };
+  const policyEffects = buildPolicyEffects(effectivePolicy, effectiveSourceType);
 
   return {
     ...baseline,
+    source_type: effectiveSourceType,
+    source_policy: effectivePolicy,
+    review_status: effectiveReviewStatus,
+    originality_profile: effectiveOriginalityProfile,
     source_tier: effectiveTier,
     source_authority: effectiveAuthority,
+    topic_fit: fit.topicFit != null ? fit.topicFit : baseline.topic_fit,
+    topic_fit_band: fit.band || baseline.topic_fit_band || null,
+    topic_fit_map: effectiveTopicFitMap,
+    policy_effects: policyEffects,
     hard_block: hardBlock,
     policy_source: policySource,
+    source_family_domain: baseline.source_family_domain || sourceDomain,
+    inherits_from_domain: matchedDomain && matchedDomain !== sourceDomain ? matchedDomain : null,
     admin_override: {
-      domain: String(adminEntry?.domain || sourceDomain).trim() || null,
+      domain: String(adminEntry?.domain || matchedDomain || sourceDomain).trim() || null,
+      match_domain: matchedDomain,
+      source_type: String(adminEntry?.source_type || "").trim() || null,
+      policy: String(adminEntry?.policy || "").trim() || null,
+      review_status: String(adminEntry?.review_status || "").trim() || null,
+      topic_fit: (adminEntry?.topic_fit && typeof adminEntry.topic_fit === "object") ? adminEntry.topic_fit : {},
+      originality_profile: String(adminEntry?.originality_profile || "").trim() || null,
       tier_override: tierOverride,
       authority_override: authorityOverride,
       hard_block: hardBlock,
@@ -487,50 +797,83 @@ function classifySourceTier(sourceDomainRaw, tag) {
   return explainSourcePolicy(sourceDomainRaw, tag);
 }
 
-function computeTopicDomainFit(sourceDomain, tag) {
-  if (!tag || !sourceDomain) return { overrideScore: null, topicFit: 0 };
+function computeTopicDomainFit(sourceDomain, tag, adminTopicFit = null) {
+  if (!tag || !sourceDomain) return { overrideScore: null, topicFit: 0, band: null, matchedTopic: null };
   const tagToken = normalizeTopicToken(tag);
-  const overrides = TOPIC_AUTHORITY_OVERRIDES[sourceDomain];
-  if (!overrides) return { overrideScore: null, topicFit: 0 };
+  const topicFitMap = adminTopicFit && typeof adminTopicFit === "object" ? adminTopicFit : null;
+  if (topicFitMap) {
+    const exactBand = topicFitMap[tagToken];
+    if (exactBand) {
+      return {
+        overrideScore: null,
+        topicFit: TOPIC_FIT_BAND_SCORES[exactBand] || 0,
+        band: exactBand,
+        matchedTopic: tagToken,
+      };
+    }
+    for (const [overrideTag, overrideBand] of Object.entries(topicFitMap)) {
+      if (topicsRelated(tagToken, overrideTag)) {
+        return {
+          overrideScore: null,
+          topicFit: Math.max(0.4, (TOPIC_FIT_BAND_SCORES[overrideBand] || 0.65) * 0.75),
+          band: overrideBand === "high" ? "medium" : overrideBand,
+          matchedTopic: overrideTag,
+        };
+      }
+    }
+  }
+  const overrides = resolveTopicAuthorityOverrides(sourceDomain);
+  if (!overrides) return { overrideScore: null, topicFit: 0, band: null, matchedTopic: null };
 
   // Direct match
   if (overrides[tagToken] != null) {
-    return { overrideScore: overrides[tagToken], topicFit: 1.0 };
+    return { overrideScore: overrides[tagToken], topicFit: 1.0, band: "high", matchedTopic: tagToken };
   }
 
   // Related topic match
   for (const [overrideTag, overrideVal] of Object.entries(overrides)) {
     if (topicsRelated(tagToken, overrideTag)) {
-      return { overrideScore: overrideVal, topicFit: 0.7 };
+      return { overrideScore: overrideVal, topicFit: 0.7, band: "medium", matchedTopic: overrideTag };
     }
   }
 
-  return { overrideScore: null, topicFit: 0 };
+  return { overrideScore: null, topicFit: 0, band: null, matchedTopic: null };
 }
 
-function classifySourceType(sourceDomainRaw) {
-  const sourceDomain = normalizeSourceDomain(sourceDomainRaw);
-  if (!sourceDomain) return "unknown";
-
-  for (const [sourceType, domains] of Object.entries(SOURCE_TYPE_MAP)) {
-    if (domains.some((d) => sourceDomain === d || sourceDomain.endsWith(`.${d}`))) {
-      return sourceType;
-    }
+function isWeakSourceItem(item = {}) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase()
+    || classifySourceType(item?.source_domain || item?.source, String(item?.source_tier || "").trim().toLowerCase());
+  const policy = String(item?.source_policy || "").trim().toLowerCase()
+    || derivePolicyFromBaseline(String(item?.source_tier || "").trim().toLowerCase(), sourceType);
+  const authority = Number(item?.source_authority || 0);
+  const routineScore = Number(item?.routine_item_score || 0);
+  const corroborated = Number(item?.cross_source_count || 0) >= 2
+    || Number(item?.supporting_sources_avg_authority || 0) >= 0.7;
+  if (policy === "blocked" || item?.source_hard_block === true) return true;
+  if (routineScore >= 0.72) return true;
+  if (sourceType === "corporate_pr") {
+    return routineScore >= 0.6 || authority < 0.28;
   }
-  if (sourceDomain.includes("blog.") || sourceDomain.includes(".blog") || sourceDomain.endsWith(".medium.com")) {
-    return "blog";
+  if (policy === "limited") {
+    return !corroborated && authority < 0.46;
   }
-  return "unknown";
+  if (policy === "review") {
+    return !corroborated && authority < 0.4;
+  }
+  return authority < 0.2;
 }
 
 function computeOriginalitySignal(item, sourceInfo) {
-  const sourceType = sourceInfo?.source_type || "unknown";
+  const sourceType = sourceInfo?.source_type || "unclassified";
+  const originalityProfile = sourceInfo?.originality_profile || deriveOriginalityProfile(sourceType);
   let score = 1.0;
 
-  // Source type penalties
-  if (sourceType === "wire") score = 0.5;
-  else if (sourceType === "aggregator") score = 0.35;
-  else if (sourceType === "blog" || sourceInfo?.source_tier === "suspect") score = 0.4;
+  if (originalityProfile === "primary") score = 1.0;
+  else if (originalityProfile === "original_reporting") score = 0.9;
+  else if (originalityProfile === "derived_synthesis") score = 0.62;
+  else if (originalityProfile === "press_release_repost") score = 0.52;
+  else if (originalityProfile === "rewrite_aggregator") score = 0.35;
+  else if (sourceType === "platform_user_generated") score = 0.45;
 
   // Derivative headline detection
   const headline = String(item?.headline || "");
@@ -543,7 +886,7 @@ function computeOriginalitySignal(item, sourceInfo) {
 
   // Press release rewrite detection: headline looks like a press release
   // but source is not the company itself and not a wire service
-  if (sourceType !== "wire" && sourceType !== "primary" && sourceInfo?.source_tier !== "corporate") {
+  if (sourceType !== "corporate_pr" && sourceType !== "primary_official") {
     for (const pattern of PRESS_RELEASE_REWRITE_PATTERNS) {
       if (pattern.test(headline)) {
         score -= 0.1;
@@ -683,9 +1026,7 @@ function annotateEditorialSignals(items = []) {
     const localFlags = detectLocalContentFlags(item);
     const contentFlags = uniqSorted([...promptFlags, ...localFlags]);
     const sourceInfo = classifySourceTier(item?.source_domain || item?.source, item?.tag);
-    const sourceType = classifySourceType(item?.source_domain || item?.source);
-    const extendedSourceInfo = { ...sourceInfo, source_type: sourceType };
-    const originalitySignal = computeOriginalitySignal(item, extendedSourceInfo);
+    const originalitySignal = computeOriginalitySignal(item, sourceInfo);
     const storylineHints = buildStorylineHints(item, contentFlags, promptHints);
     const entityKeys = extractEntityKeys(item);
     const routineItemScore = computeRoutineItemScore(contentFlags, sourceInfo);
@@ -703,11 +1044,19 @@ function annotateEditorialSignals(items = []) {
       baseline_source_authority: Number(
         Number(sourceInfo.baseline_source_authority != null ? sourceInfo.baseline_source_authority : sourceInfo.source_authority).toFixed(3)
       ),
-      source_type: sourceType,
+      source_type: sourceInfo.source_type,
+      source_policy: sourceInfo.source_policy,
+      source_review_status: sourceInfo.review_status,
+      originality_profile: sourceInfo.originality_profile,
       source_policy_source: sourceInfo.policy_source || "baseline",
+      source_policy_effects: sourceInfo.policy_effects || buildPolicyEffects(sourceInfo.source_policy, sourceInfo.source_type),
       source_hard_block: sourceInfo.hard_block === true,
       source_policy_note: String(sourceInfo?.admin_override?.note || "").trim() || null,
       topic_fit: Number((sourceInfo.topic_fit || 0).toFixed(3)),
+      topic_fit_band: sourceInfo.topic_fit_band || null,
+      topic_fit_map: sourceInfo.topic_fit_map || {},
+      source_family_domain: sourceInfo.source_family_domain || item?.source_domain || item?.source || null,
+      source_inherits_from_domain: sourceInfo.inherits_from_domain || null,
       originality_signal: Number(originalitySignal.toFixed(3)),
       routine_item_score: Number(routineItemScore.toFixed(3)),
       strategic_value: Number(strategicValue.toFixed(3)),
@@ -863,14 +1212,20 @@ function computeSupportingSourcesAvgAuthority(supportingSources) {
 
 function flagClusterDerivatives(cluster) {
   if (!cluster || !Array.isArray(cluster.items) || cluster.items.length < 2) return;
-  const primaryTypes = new Set(["primary", "top_tier"]);
-  const hasPrimary = cluster.items.some((item) => primaryTypes.has(item.source_type));
+  const originatingTypes = new Set(["primary_official", "reported_media", "trade_specialist"]);
+  const hasPrimary = cluster.items.some((item) => originatingTypes.has(item.source_type));
   if (!hasPrimary) return;
   for (const item of cluster.items) {
-    if (primaryTypes.has(item.source_type)) continue;
-    const sourceType = item.source_type || "unknown";
-    if (sourceType === "wire" || sourceType === "aggregator" || sourceType === "blog"
-      || item.source_tier === "suspect" || item.source_tier === "weak") {
+    if (originatingTypes.has(item.source_type)) continue;
+    const sourceType = item.source_type || "unclassified";
+    if (sourceType === "corporate_pr"
+      || sourceType === "aggregator_republisher"
+      || sourceType === "analysis_blog"
+      || sourceType === "platform_user_generated"
+      || item.source_policy === "limited"
+      || item.source_policy === "review"
+      || item.source_tier === "suspect"
+      || item.source_tier === "weak") {
       item.derivative_of_primary = true;
       item.originality_signal = clamp(Number(item.originality_signal || 0.5) - 0.15, 0, 1);
     }
@@ -998,6 +1353,7 @@ module.exports = {
   detectLocalContentFlags,
   explainSourcePolicy,
   extractEntityKeys,
+  isWeakSourceItem,
   normalizeSourceDomain,
   setAdminSourceRegistry,
   setLearnedDomainAdjustments,

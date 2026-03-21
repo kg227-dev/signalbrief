@@ -1,5 +1,9 @@
 "use strict";
 
+const {
+  isWeakSourceItem,
+} = require("../../src/digest/domain/storyline-domain-runtime");
+
 const FAILURE_MODES = new Set([
   "repeat",
   "thin_pool",
@@ -22,16 +26,7 @@ function average(values = []) {
 }
 
 function countWeakSourceItems(items = []) {
-  return (Array.isArray(items) ? items : []).filter((item) => {
-    const sourceAuthority = Number(item?.source_authority || 0);
-    const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
-    const routineScore = Number(item?.routine_item_score || 0);
-    return sourceAuthority < 0.55
-      || sourceTier === "corporate"
-      || sourceTier === "weak"
-      || sourceTier === "suspect"
-      || routineScore >= 0.6;
-  }).length;
+  return (Array.isArray(items) ? items : []).filter((item) => isWeakSourceItem(item)).length;
 }
 
 function countTopFitItems(items = []) {

@@ -4,6 +4,9 @@ const {
   buildSemanticRepeatIndex,
   isSemanticRepeatItem,
 } = require("../digest/runtime/repeat-freshness-runtime");
+const {
+  isWeakSourceItem,
+} = require("../digest/domain/storyline-domain-runtime");
 
 function isStrictFreshnessMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
@@ -42,16 +45,57 @@ function applyTopFitCoverageFloor(items, requestedCount, minimumTopFit = 3) {
 }
 
 function countWeakSourceItems(items = []) {
-  return (Array.isArray(items) ? items : []).filter((item) => {
-    const sourceAuthority = Number(item?.source_authority || 0);
-    const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
-    const routineScore = Number(item?.routine_item_score || 0);
-    return sourceAuthority < 0.55
-      || sourceTier === "corporate"
-      || sourceTier === "weak"
-      || sourceTier === "suspect"
-      || routineScore >= 0.6;
-  }).length;
+  return (Array.isArray(items) ? items : []).filter((item) => isWeakSourceItem(item)).length;
+}
+
+function itemNeedsCorroboration(item) {
+  return item?.source_policy_effects?.requires_corroboration === true;
+}
+
+function itemIsCorroborated(item) {
+  return Number(item?.cross_source_count || 0) >= 2
+    || Number(item?.supporting_sources_avg_authority || 0) >= 0.7;
+}
+
+function applySourcePolicyCaps(items = [], requestedCount = 5) {
+  const ranked = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!ranked.length) return [];
+  const unrestricted = [];
+  const limited = [];
+  const review = [];
+  const deferred = [];
+
+  for (const item of ranked) {
+    const policy = String(item?.source_policy || "").trim().toLowerCase();
+    if (policy === "blocked" || item?.source_hard_block === true) continue;
+    if ((policy === "limited" || policy === "review") && itemNeedsCorroboration(item) && !itemIsCorroborated(item)) {
+      deferred.push(item);
+      continue;
+    }
+    if (policy === "review") review.push(item);
+    else if (policy === "limited") limited.push(item);
+    else unrestricted.push(item);
+  }
+
+  const limitedCap = Math.min(Math.max(1, Math.floor(Number(requestedCount || 5) / 2)), 2);
+  const reviewCap = 1;
+  const chosen = [
+    ...unrestricted,
+    ...limited.slice(0, limitedCap),
+    ...review.slice(0, reviewCap),
+  ];
+  const fill = [...limited.slice(limitedCap), ...review.slice(reviewCap), ...deferred];
+  for (const item of fill) {
+    if (chosen.length >= Math.max(1, Number(requestedCount || 5))) break;
+    chosen.push(item);
+  }
+
+  const leadIndex = chosen.findIndex((item) => item?.source_policy_effects?.lead_eligible !== false);
+  if (leadIndex > 0) {
+    const [lead] = chosen.splice(leadIndex, 1);
+    chosen.unshift(lead);
+  }
+  return chosen;
 }
 
 function averageMetric(items = [], field) {
@@ -272,6 +316,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
 
     userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
     userItems = reserveCustomKeywordSlot(userItems, requestedCount, customKeywords);
+    userItems = applySourcePolicyCaps(userItems, requestedCount);
 
     // Minimum-count backfill: if we have fewer than requestedCount items,
     // pull additional items from the full enriched pool (re-scored) to reach the minimum.
@@ -345,6 +390,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     }
 
     userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
+    userItems = applySourcePolicyCaps(userItems, requestedCount);
 
     const freshnessBlockCount = Math.max(0, Number(suppression.removed || 0))
       + Math.max(0, Number(semanticFreshness.removedGlobal || 0))

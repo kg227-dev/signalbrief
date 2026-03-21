@@ -7,7 +7,7 @@
  * Validates that source scoring changes are live in the current runtime:
  * - cloudcomputing-news.net  → demoted (suspect tier, score ~0.15)
  * - ciodive.com              → promoted (strong tier, score ~0.80)
- * - lawrenceevans.com        → dropped (suspect, .com but seo-pattern)
+ * - lawrenceevans.com        → unreviewed review-state (not auto-weak)
  * - benzinga.com             → weak tier (score ~0.22)
  * - reuters.com              → premium tier (score ~0.95)
  *
@@ -50,11 +50,12 @@ const cases = [
   {
     domain: "lawrenceevans.com",
     tag: "STRATEGY",
-    // Not a suspect domain by heuristic (no hyphens, .com TLD) — drops via
-    // content quality (strategic_value << 0.34 gate), not source tier
+    // Not a suspect domain by heuristic (no hyphens, .com TLD) — remains
+    // unreviewed/review-state and drops via content quality gate.
     expectedTier: "unknown",
-    maxAuthority: 0.35,
-    label: "lawrenceevans.com → unknown tier, authority ≤ 0.35 (drops via content quality gate)",
+    minAuthority: 0.38,
+    maxAuthority: 0.45,
+    label: "lawrenceevans.com → unknown tier, authority in review-state band",
   },
   {
     domain: "benzinga.com",
@@ -162,9 +163,10 @@ assert(ccn?.source_tier === "suspect", "cloudcomputing-news.net annotated as sus
 assert(ccn?.source_authority <= 0.20, `cloudcomputing-news.net authority ≤ 0.20`, `auth=${ccn?.source_authority}`);
 assert(cio?.source_tier === "strong", "ciodive.com annotated as strong", `tier=${cio?.source_tier}`);
 assert(cio?.source_authority >= 0.75, "ciodive.com authority ≥ 0.75", `auth=${cio?.source_authority}`);
-// lawrenceevans.com: not suspect by heuristic (.com, no hyphens) but drops via
-// strategic_value quality gate (< 0.34 minimum). Verify that mechanism instead.
+// lawrenceevans.com: not suspect by heuristic (.com, no hyphens) but remains
+// review-state and drops via strategic_value quality gate (< 0.34 minimum).
 assert(law?.source_tier === "unknown", "lawrenceevans.com annotated as unknown tier", `tier=${law?.source_tier}`);
+assert(law?.source_policy === "review", "lawrenceevans.com policy is review", `policy=${law?.source_policy}`);
 const QUALITY_GATE = 0.34;
 assert(
   law?.strategic_value < QUALITY_GATE,

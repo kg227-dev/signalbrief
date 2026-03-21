@@ -2,19 +2,9 @@
 
 const {
   explainSourcePolicy,
+  isWeakSourceItem,
   normalizeSourceDomain,
 } = require("../../src/digest/domain/storyline-domain-runtime");
-
-function isWeakSourceItem(item = {}) {
-  const sourceAuthority = Number(item?.source_authority || 0);
-  const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
-  const routineScore = Number(item?.routine_item_score || 0);
-  return sourceAuthority < 0.55
-    || sourceTier === "corporate"
-    || sourceTier === "weak"
-    || sourceTier === "suspect"
-    || routineScore >= 0.6;
-}
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -63,6 +53,9 @@ function pushSample(entry, row, item) {
     tag: String(item?.tag || "").trim() || null,
     source_tier: String(item?.source_tier || "").trim() || null,
     source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
+    source_type: String(item?.source_type || "").trim() || null,
+    source_policy: String(item?.source_policy || "").trim() || null,
+    source_review_status: String(item?.source_review_status || "").trim() || null,
   });
 }
 
@@ -155,11 +148,17 @@ function buildSourceAuditEntries({ readJsonLineLog, adminActionLog, domain, limi
 
 function summarizeSuggestedReason(metric, effectivePolicy) {
   if (effectivePolicy?.hard_block === true) return "Hard-blocked";
+  if (effectivePolicy?.review_status === "unreviewed" && Number(metric?.send_count || 0) >= 2) {
+    return "Unreviewed source with digest exposure";
+  }
+  if (effectivePolicy?.source_policy === "review" && Number(metric?.weak_source_item_count || 0) >= 2) {
+    return "Review-policy source showing weak exposure";
+  }
+  if (effectivePolicy?.source_policy === "limited" && Number(metric?.poor_digest_item_count || 0) >= 2) {
+    return "Limited-policy source common in weak digests";
+  }
   if (Number(metric?.weak_source_item_count || 0) >= 3) return "Frequent weak-source exposure";
   if (Number(metric?.poor_digest_item_count || 0) >= 3) return "Common in weak digests";
-  if ((effectivePolicy?.source_tier === "unknown" || effectivePolicy?.source_tier === "suspect") && Number(metric?.send_count || 0) >= 2) {
-    return "High-volume unreviewed source";
-  }
   return "Recent source activity";
 }
 
@@ -179,6 +178,9 @@ function buildOverviewRows(metricsMap, registryDomains, query, limit) {
       row.domain,
       row.suggested_reason,
       row.effective_policy?.source_tier,
+      row.effective_policy?.source_type,
+      row.effective_policy?.source_policy,
+      row.effective_policy?.review_status,
       row.admin_override?.note,
       ...(Array.isArray(row.top_tags) ? row.top_tags.map((tag) => tag.tag) : []),
     ], query))
@@ -202,8 +204,12 @@ function buildOverviewRows(metricsMap, registryDomains, query, limit) {
     .filter((row) => matchesQuery([
       row.domain,
       row.tier_override,
+      row.source_type,
+      row.policy,
+      row.review_status,
       row.note,
       row.effective_policy?.source_tier,
+      row.effective_policy?.source_policy,
     ], query))
     .sort((left, right) => {
       if ((left.hard_block === true) !== (right.hard_block === true)) return left.hard_block === true ? -1 : 1;
@@ -257,6 +263,7 @@ function buildSourceRegistryDomainDetail({
     ? buildRecentDigestsExport({ days: 7 })
     : { rows: [] };
   const metricsMap = buildRecentDomainMetrics(recent.rows);
+  const effectivePolicy = explainSourcePolicy(normalizedDomain);
   const recentMetrics = metricsMap.get(normalizedDomain) || {
     domain: normalizedDomain,
     send_count: 0,
@@ -274,8 +281,9 @@ function buildSourceRegistryDomainDetail({
     generated_at: new Date().toISOString(),
     days: 7,
     domain: normalizedDomain,
-    effective_policy: explainSourcePolicy(normalizedDomain),
-    admin_override: registry.domains?.[normalizedDomain] || null,
+    effective_policy: effectivePolicy,
+    admin_override: effectivePolicy?.admin_override || null,
+    direct_override: registry.domains?.[normalizedDomain] || null,
     recent_metrics: recentMetrics,
     audit_entries: buildSourceAuditEntries({
       readJsonLineLog,

@@ -96,13 +96,17 @@ assert.ok(corporateTier.source_authority < 0.5);
   const suspect = classifySourceTier("cloudcomputing-news.net");
   assert.strictEqual(suspect.source_tier, "suspect", "cloudcomputing-news.net should be suspect (SEO compound name + .net)");
   assert.ok(suspect.source_authority <= 0.15, `suspect authority should be <= 0.15, got ${suspect.source_authority}`);
+  assert.strictEqual(suspect.source_policy, "review");
+  assert.strictEqual(suspect.review_status, "unreviewed");
 }
 
-// ── Unknown baseline lowered to 0.30 ──
+// ── Unknown baseline shifts to unreviewed review-state ──
 {
   const unknown = classifySourceTier("examplepublication.com");
   assert.strictEqual(unknown.source_tier, "unknown", `expected unknown, got ${unknown.source_tier}`);
-  assert.strictEqual(unknown.source_authority, 0.30, "unknown baseline should be 0.30");
+  assert.strictEqual(unknown.source_authority, 0.42, "unknown baseline should use review-state authority");
+  assert.strictEqual(unknown.source_policy, "review");
+  assert.strictEqual(unknown.review_status, "unreviewed");
 }
 
 // ── Topic-domain fit: statnews strong for healthcare, base for tech ──
@@ -136,28 +140,30 @@ assert.ok(corporateTier.source_authority < 0.5);
 
 // ── Source type classification ──
 {
-  assert.strictEqual(classifySourceType("reuters.com"), "top_tier");
-  assert.strictEqual(classifySourceType("businesswire.com"), "wire");
-  assert.strictEqual(classifySourceType("sec.gov"), "primary");
-  assert.strictEqual(classifySourceType("investing.com"), "aggregator");
-  assert.strictEqual(classifySourceType("ng.investing.com"), "aggregator", "subdomain should normalize for source type");
-  assert.strictEqual(classifySourceType("random-blog.blog"), "blog");
-  assert.strictEqual(classifySourceType("totally-random.com"), "unknown");
+  assert.strictEqual(classifySourceType("reuters.com"), "reported_media");
+  assert.strictEqual(classifySourceType("businesswire.com"), "corporate_pr");
+  assert.strictEqual(classifySourceType("sec.gov"), "primary_official");
+  assert.strictEqual(classifySourceType("investing.com"), "aggregator_republisher");
+  assert.strictEqual(classifySourceType("ng.investing.com"), "aggregator_republisher", "subdomain should normalize for source type");
+  assert.strictEqual(classifySourceType("random-blog.blog"), "analysis_blog");
+  assert.strictEqual(classifySourceType("totally-random.com"), "unclassified");
+  assert.strictEqual(classifySourceTier("corporate.target.com").source_type, "corporate_pr");
+  assert.strictEqual(classifySourceTier("corporate.target.com").source_policy, "limited");
 }
 
-// ── Originality signal: top-tier > aggregator with generic headline ──
+// ── Originality signal: reported media > aggregator with generic headline ──
 {
   const reutersItem = { headline: "FDA Approves New Cancer Treatment for Rare Lymphoma" };
-  const reutersInfo = { source_type: "top_tier", source_tier: "premium" };
+  const reutersInfo = { source_type: "reported_media", source_tier: "premium", originality_profile: "original_reporting" };
   const reutersOriginality = computeOriginalitySignal(reutersItem, reutersInfo);
 
   const aggregatorItem = { headline: "AI demand pushes companies to invest billions in cloud infrastructure" };
-  const aggregatorInfo = { source_type: "aggregator", source_tier: "weak" };
+  const aggregatorInfo = { source_type: "aggregator_republisher", source_tier: "weak", originality_profile: "rewrite_aggregator" };
   const aggregatorOriginality = computeOriginalitySignal(aggregatorItem, aggregatorInfo);
 
   assert.ok(reutersOriginality > aggregatorOriginality,
     `reuters originality (${reutersOriginality}) should beat aggregator (${aggregatorOriginality})`);
-  assert.ok(reutersOriginality >= 0.9, "top-tier with non-derivative headline should score >= 0.9");
+  assert.ok(reutersOriginality >= 0.85, "reported media with non-derivative headline should score >= 0.85");
   assert.ok(aggregatorOriginality <= 0.25, "aggregator with derivative headline should score <= 0.25");
 }
 
@@ -220,7 +226,7 @@ assert.ok(corporateTier.source_authority < 0.5);
 {
   const gn = classifySourceTier("globenewswire.com");
   assert.strictEqual(gn.source_tier, "corporate");
-  assert.strictEqual(classifySourceType("globenewswire.com"), "wire");
+  assert.strictEqual(classifySourceType("globenewswire.com"), "corporate_pr");
 }
 
 // ── Premium tier additions ──
@@ -254,6 +260,37 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(effective.source_tier, "premium");
   assert.strictEqual(effective.source_authority, 0.99);
   assert.strictEqual(effective.policy_source, "admin_override");
+  setAdminSourceRegistry(null);
+}
+
+// ── Root-domain governance inherits to subdomains, with most-specific match winning ──
+{
+  setAdminSourceRegistry(new Map([
+    ["target.com", {
+      domain: "target.com",
+      source_type: "corporate_pr",
+      policy: "limited",
+      review_status: "reviewed",
+      note: "Root family policy",
+    }],
+    ["research.target.com", {
+      domain: "research.target.com",
+      source_type: "reported_media",
+      policy: "allowed",
+      review_status: "reviewed",
+      note: "Research newsroom override",
+    }],
+  ]));
+  const inherited = explainSourcePolicy("corporate.target.com");
+  assert.strictEqual(inherited.source_type, "corporate_pr");
+  assert.strictEqual(inherited.source_policy, "limited");
+  assert.strictEqual(inherited.inherits_from_domain, "target.com");
+
+  const specific = explainSourcePolicy("research.target.com");
+  assert.strictEqual(specific.source_type, "reported_media");
+  assert.strictEqual(specific.source_policy, "allowed");
+  assert.strictEqual(specific.inherits_from_domain, null);
+  assert.strictEqual(specific.admin_override.match_domain, "research.target.com");
   setAdminSourceRegistry(null);
 }
 

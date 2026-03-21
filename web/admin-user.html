@@ -839,6 +839,11 @@ function buildDigestTimelinePanel(user) {
     if (Math.max(0, Number(row.historical_repeat_count || 0)) > 0) pills.push(`<span class="debug-pill">repeat sent ${Math.max(0, Number(row.historical_repeat_count || 0))}</span>`);
     if (Math.max(0, Number(row.refill_count || 0)) > 0) pills.push(`<span class="debug-pill">refills ${Math.max(0, Number(row.refill_count || 0))}</span>`);
     if (Math.max(0, Number(row.alternate_queries_used || 0)) > 0) pills.push(`<span class="debug-pill">alt queries ${Math.max(0, Number(row.alternate_queries_used || 0))}</span>`);
+    if (Math.max(0, Number(row.preferred_displaced_weak_count || 0)) > 0) pills.push(`<span class="debug-pill">preferred wins ${Math.max(0, Number(row.preferred_displaced_weak_count || 0))}</span>`);
+    if (Math.max(0, Number(row.derivative_suppressed_count || 0)) > 0) pills.push(`<span class="debug-pill">derivatives ${Math.max(0, Number(row.derivative_suppressed_count || 0))}</span>`);
+    if (Math.max(0, Number(row.specialist_trade_beat_preferred_count || 0)) > 0) pills.push(`<span class="debug-pill">specialist wins ${Math.max(0, Number(row.specialist_trade_beat_preferred_count || 0))}</span>`);
+    if (Math.max(0, Number(row.broader_retrieval_found_better_count || 0)) > 0) pills.push(`<span class="debug-pill">broad rescued ${Math.max(0, Number(row.broader_retrieval_found_better_count || 0))}</span>`);
+    if (Math.max(0, Number(row.coverage_gap_preferred_missing_count || 0)) > 0) pills.push(`<span class="debug-pill">preferred missing ${Math.max(0, Number(row.coverage_gap_preferred_missing_count || 0))}</span>`);
     if (row.thin_pool === true) pills.push(`<span class="debug-pill">thin pool</span>`);
     if (row.fallback_reason) pills.push(`<span class="debug-pill">fallback ${esc(row.fallback_reason)}</span>`);
     const itemPreview = (Array.isArray(row.sent_items) ? row.sent_items : [])

@@ -280,6 +280,17 @@ function createRecentDigestsExporter(deps) {
           freshness_block_count: Math.max(0, Number(resolvedSnapshot?.freshness_block_count || perUserRow?.freshness_block_count || 0)),
           semantic_repeat_block_count: Math.max(0, Number(resolvedSnapshot?.semantic_repeat_block_count || perUserRow?.semantic_repeat_block_count || 0)),
           alternate_queries_used: Math.max(0, Number(resolvedSnapshot?.alternate_queries_used || perUserRow?.alternate_queries_used || 0)),
+          preferred_domains_count: Math.max(0, Number(resolvedSnapshot?.preferred_domains_count || perUserRow?.preferred_domains_count || 0)),
+          preferred_candidate_count: Math.max(0, Number(resolvedSnapshot?.preferred_candidate_count || perUserRow?.preferred_candidate_count || 0)),
+          non_preferred_candidate_count: Math.max(0, Number(resolvedSnapshot?.non_preferred_candidate_count || perUserRow?.non_preferred_candidate_count || 0)),
+          final_selected_preferred_count: Math.max(0, Number(resolvedSnapshot?.final_selected_preferred_count || perUserRow?.final_selected_preferred_count || 0)),
+          preferred_displaced_weak_count: Math.max(0, Number(resolvedSnapshot?.preferred_displaced_weak_count || perUserRow?.preferred_displaced_weak_count || 0)),
+          derivative_suppressed_count: Math.max(0, Number(resolvedSnapshot?.derivative_suppressed_count || perUserRow?.derivative_suppressed_count || 0)),
+          specialist_trade_beat_preferred_count: Math.max(0, Number(resolvedSnapshot?.specialist_trade_beat_preferred_count || perUserRow?.specialist_trade_beat_preferred_count || 0)),
+          platform_identity_ambiguity_count: Math.max(0, Number(resolvedSnapshot?.platform_identity_ambiguity_count || perUserRow?.platform_identity_ambiguity_count || 0)),
+          broader_retrieval_found_better_count: Math.max(0, Number(resolvedSnapshot?.broader_retrieval_found_better_count || perUserRow?.broader_retrieval_found_better_count || 0)),
+          coverage_gap_preferred_missing_count: Math.max(0, Number(resolvedSnapshot?.coverage_gap_preferred_missing_count || perUserRow?.coverage_gap_preferred_missing_count || 0)),
+          coverage_gap_preferred_weaker_count: Math.max(0, Number(resolvedSnapshot?.coverage_gap_preferred_weaker_count || perUserRow?.coverage_gap_preferred_weaker_count || 0)),
           candidate_pool_before_dedup: Number.isFinite(Number(resolvedSnapshot?.candidate_pool_before_dedup))
             ? Number(resolvedSnapshot.candidate_pool_before_dedup)
             : (Number.isFinite(Number(perUserRow?.candidate_pool_before_dedup)) ? Number(perUserRow.candidate_pool_before_dedup) : null),

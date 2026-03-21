@@ -401,6 +401,10 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       && String(item?.topic_fit_band || "").trim().toLowerCase() !== "low"
       ? preferredSourceStrength
       : 0;
+    const preferredPublisherBoost = preferredSourceBoost > 0
+      && String(item?.preferred_source_match_scope || "").trim().toLowerCase() === "publisher"
+      ? 0.03
+      : 0;
     const preferredSourceAvailablePenalty = item?.preferred_source_available_in_search === true
       && preferredSourceStrength <= 0
       && (
@@ -414,6 +418,11 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       )
       ? 0.06
       : 0;
+    const derivativeContentPenalty = clamp(Number(item?.derivative_competitive_penalty || 0), 0, 0.4);
+    const platformAmbiguityPenalty = item?.source_identity_ambiguous === true ? 0.05 : 0;
+    const specialistTradeBestFitBoost = item?.specialist_trade_outperformed_preferred === true ? 0.07 : 0;
+    const officialPrimaryBoost = sourceType === "primary_official" && originalitySignal >= 0.8 ? 0.05 : 0;
+    const broadFallbackBestSourceBoost = item?.broader_retrieval_found_better === true ? 0.03 : 0;
 
     // Per-user source preference adjustments
     const itemDomain = String(item?.source_domain || "").trim().toLowerCase().replace(/^www\./, "");
@@ -441,11 +450,17 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
       + 0.03 * originalitySignal
       + 0.03 * topicDomainFit
       + 0.04 * preferredSourceBoost
+      + preferredPublisherBoost
+      + specialistTradeBestFitBoost
+      + officialPrimaryBoost
+      + broadFallbackBestSourceBoost
       + specialistBoost
       - (0.06 * negativePreferencePenalty)
       - sourcePolicyPenalty
       - sourceReviewPenalty
-      - preferredSourceAvailablePenalty,
+      - preferredSourceAvailablePenalty
+      - derivativeContentPenalty
+      - platformAmbiguityPenalty,
       0,
       1
     );
@@ -472,6 +487,12 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     if (sourcePolicy === "preferred") whyShown.push("source_preferred");
     if (sourcePolicy === "review") whyShown.push("source_review");
     if (preferredSourceBoost > 0.2) whyShown.push("preferred_source_match");
+    if (preferredPublisherBoost > 0) whyShown.push("preferred_publisher_match");
+    if (specialistTradeBestFitBoost > 0) whyShown.push("specialist_trade_best_fit");
+    if (officialPrimaryBoost > 0) whyShown.push("official_primary");
+    if (broadFallbackBestSourceBoost > 0) whyShown.push("broad_fallback_best_source");
+    if (derivativeContentPenalty > 0.1) whyShown.push("derivative_suppressed");
+    if (platformAmbiguityPenalty > 0) whyShown.push("platform_identity_ambiguous");
 
     const sourceDomain = item?.source_domain
       || (sourceDomainForItem ? sourceDomainForItem(item) : null)
@@ -497,7 +518,13 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
         source_policy_penalty: Number(sourcePolicyPenalty.toFixed(3)),
         source_review_penalty: Number(sourceReviewPenalty.toFixed(3)),
         preferred_source_boost: Number(preferredSourceBoost.toFixed(3)),
+        preferred_publisher_boost: Number(preferredPublisherBoost.toFixed(3)),
         preferred_source_available_penalty: Number(preferredSourceAvailablePenalty.toFixed(3)),
+        derivative_content_penalty: Number(derivativeContentPenalty.toFixed(3)),
+        platform_ambiguity_penalty: Number(platformAmbiguityPenalty.toFixed(3)),
+        specialist_trade_best_fit_boost: Number(specialistTradeBestFitBoost.toFixed(3)),
+        official_primary_boost: Number(officialPrimaryBoost.toFixed(3)),
+        broad_fallback_best_source_boost: Number(broadFallbackBestSourceBoost.toFixed(3)),
         multi_source_confirmation: Number(multiSourceConfirmation.toFixed(3)),
         originality_signal: Number(originalitySignal.toFixed(3)),
         topic_domain_fit: Number(topicDomainFit.toFixed(3)),

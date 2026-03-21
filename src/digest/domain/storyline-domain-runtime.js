@@ -344,6 +344,14 @@ function jaccard(aValues, bValues) {
   return intersection / union;
 }
 
+function appendUniqueCode(list, code) {
+  const normalized = String(code || "").trim();
+  if (!normalized) return Array.isArray(list) ? list : [];
+  const next = Array.isArray(list) ? list.slice() : [];
+  if (!next.includes(normalized)) next.push(normalized);
+  return next;
+}
+
 function normalizeSourceDomain(raw) {
   return normalizeSourcePolicyDomain(raw);
 }
@@ -720,17 +728,21 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
   };
 }
 
-function resolvePreferredSourceMatch(sourceDomain, tag) {
+function resolvePreferredSourceMatch(sourceDomain, tag, sourceIdentityKey = null) {
   if (!_preferredSourceRegistry) {
     return {
       match: "none",
       kind: null,
+      scope: "none",
       topics: [],
       strength: 0,
       matched_domain: null,
+      matched_identity: null,
     };
   }
-  return matchPreferredSourceDomain(_preferredSourceRegistry, sourceDomain, tag);
+  return matchPreferredSourceDomain(_preferredSourceRegistry, sourceDomain, tag, {
+    sourceIdentityKey,
+  });
 }
 
 function explainSourcePolicy(sourceDomainRaw, tag) {
@@ -1068,7 +1080,11 @@ function annotateEditorialSignals(items = []) {
       ...item,
       source_domain: sourceInfo.source_domain || item?.source_domain || null,
     });
-    const preferredSourceMatch = resolvePreferredSourceMatch(sourceInfo.source_domain || item?.source_domain || item?.source, item?.tag);
+    const preferredSourceMatch = resolvePreferredSourceMatch(
+      sourceInfo.source_domain || item?.source_domain || item?.source,
+      item?.tag,
+      sourceIdentity.source_identity_key
+    );
     const originalitySignal = computeOriginalitySignal(item, sourceInfo);
     const storylineHints = buildStorylineHints(item, contentFlags, promptHints);
     const entityKeys = extractEntityKeys(item);
@@ -1099,6 +1115,7 @@ function annotateEditorialSignals(items = []) {
       source_identity_key: sourceIdentity.source_identity_key || sourceInfo.source_domain || item?.source_domain || "unknown",
       source_identity_scope: sourceIdentity.source_identity_scope || "domain",
       source_identity_label: sourceIdentity.source_identity_label || sourceInfo.source_domain || item?.source_domain || "unknown",
+      source_identity_ambiguous: sourceIdentity.source_identity_ambiguous === true,
       topic_fit: Number((sourceInfo.topic_fit || 0).toFixed(3)),
       topic_fit_band: sourceInfo.topic_fit_band || null,
       topic_fit_map: sourceInfo.topic_fit_map || {},
@@ -1106,9 +1123,11 @@ function annotateEditorialSignals(items = []) {
       source_inherits_from_domain: sourceInfo.inherits_from_domain || null,
       preferred_source_match: preferredSourceMatch.match || "none",
       preferred_source_kind: preferredSourceMatch.kind || null,
+      preferred_source_match_scope: preferredSourceMatch.scope || "none",
       preferred_source_topics: Array.isArray(preferredSourceMatch.topics) ? preferredSourceMatch.topics : [],
       preferred_source_strength: Number(Number(preferredSourceMatch.strength || 0).toFixed(3)),
       preferred_source_domain: preferredSourceMatch.matched_domain || null,
+      preferred_source_identity_key: preferredSourceMatch.matched_identity || null,
       retrieval_search_result_domains: Array.isArray(item?.retrieval_search_result_domains)
         ? item.retrieval_search_result_domains.slice(0, 10)
         : [],
@@ -1123,7 +1142,18 @@ function annotateEditorialSignals(items = []) {
       hard_exclude: hardExclude || sourceInfo.hard_block === true,
       retrieval_pass: String(item?.retrieval_pass || "").trim() || null,
       suppressed_by_preferred_source: false,
+      suppressed_by_derivative_source: false,
       preferred_close_substitute_penalty: 0,
+      derivative_competitive_penalty: 0,
+      derivative_confidence: 0,
+      derivative_reason_codes: [],
+      derivative_parent_domain: null,
+      derivative_parent_identity_key: null,
+      suppression_reason_codes: [],
+      selection_reason_codes: [],
+      winner_selection_reason: null,
+      specialist_trade_outperformed_preferred: false,
+      coverage_gap_status: "no_preferred_signal",
       won_by_preferred_substitute: false,
       storyline_key: buildStorylineFingerprint({
         ...item,
@@ -1185,31 +1215,86 @@ function storylineSimilarity(leftItem, rightItem) {
   return weightedScore;
 }
 
+function hasPreferredSourceMatch(item) {
+  return String(item?.preferred_source_match || "").trim().toLowerCase() !== "none";
+}
+
+function isOriginClusterCandidate(item) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  if (!isGovernanceEligiblePreferredItem(item)) return false;
+  return sourceType === "primary_official"
+    || sourceType === "reported_media"
+    || sourceType === "trade_specialist";
+}
+
+function isDerivativeProneCandidate(item) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const originalityProfile = String(item?.originality_profile || "").trim().toLowerCase();
+  const sourcePolicy = String(item?.source_policy || "").trim().toLowerCase();
+  const sourceTier = String(item?.source_tier || "").trim().toLowerCase();
+  return sourceType === "analysis_blog"
+    || sourceType === "aggregator_republisher"
+    || sourceType === "corporate_pr"
+    || sourceType === "platform_user_generated"
+    || sourcePolicy === "limited"
+    || sourcePolicy === "review"
+    || sourceTier === "weak"
+    || sourceTier === "suspect"
+    || originalityProfile === "derived_synthesis"
+    || originalityProfile === "press_release_repost"
+    || originalityProfile === "rewrite_aggregator";
+}
+
+function computePreferredRepresentativeBoost(item) {
+  if (!isGovernanceEligiblePreferredItem(item)) return 0;
+  let boost = Number(item?.preferred_source_strength || 0);
+  if (String(item?.preferred_source_match_scope || "").trim().toLowerCase() === "publisher") boost += 0.08;
+  else if (String(item?.preferred_source_match_scope || "").trim().toLowerCase() === "domain") boost += 0.03;
+  return clamp(boost, 0, 1);
+}
+
+function computeRepresentativeScore(item, opts = {}) {
+  const ignoreCompetitivePenalties = opts.ignoreCompetitivePenalties === true;
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const preferredBoost = computePreferredRepresentativeBoost(item);
+  const primaryBonus = sourceType === "primary_official" ? 0.08 : 0;
+  const originBonus = isOriginClusterCandidate(item) ? 0.04 : 0;
+  const specialistFitBonus = sourceType === "trade_specialist"
+    ? clamp(Number(item?.topic_fit || 0), 0, 1) * 0.07
+    : 0;
+  const platformAmbiguityPenalty = item?.source_identity_ambiguous === true ? 0.05 : 0;
+  const availablePreferredPenalty = item?.preferred_source_available_in_search === true && isWeakClusterCandidate(item)
+    ? 0.08
+    : 0;
+  const competitivePenalty = ignoreCompetitivePenalties
+    ? 0
+    : (
+      Number(item?.preferred_close_substitute_penalty || 0) * 0.4
+      + Number(item?.derivative_competitive_penalty || 0) * 0.45
+    );
+
+  return (
+    Number(item?.strategic_value || 0) * 0.34
+    + Number(item?.source_authority || 0) * 0.22
+    + clamp(Number(item?.baseScore || 0) / 10, 0, 1) * 0.12
+    + (1 - Number(item?.routine_item_score || 0)) * 0.08
+    + Number(item?.originality_signal || 0.5) * 0.14
+    + Number(item?.topic_fit || 0) * 0.08
+    + preferredBoost * 0.09
+    + primaryBonus
+    + originBonus
+    + specialistFitBonus
+    - availablePreferredPenalty
+    - platformAmbiguityPenalty
+    - competitivePenalty
+  );
+}
+
 function chooseRepresentative(items, opts = {}) {
-  const ignoreSuppression = opts.ignorePreferredSuppression === true;
+  const ignoreCompetitivePenalties = opts.ignorePreferredSuppression === true || opts.ignoreCompetitivePenalties === true;
   const ranked = (Array.isArray(items) ? items : []).slice().sort((left, right) => {
-    const leftScore = (
-      Number(left?.strategic_value || 0) * 0.40
-      + Number(left?.source_authority || 0) * 0.24
-      + clamp(Number(left?.baseScore || 0) / 10, 0, 1) * 0.16
-      + (1 - Number(left?.routine_item_score || 0)) * 0.10
-      + Number(left?.originality_signal || 0.5) * 0.10
-      + Number(left?.preferred_source_strength || 0) * 0.08
-      + Number(left?.topic_fit || 0) * 0.05
-      - (left?.preferred_source_available_in_search && isWeakClusterCandidate(left) ? 0.08 : 0)
-      - (ignoreSuppression ? 0 : Number(left?.preferred_close_substitute_penalty || 0) * 0.4)
-    );
-    const rightScore = (
-      Number(right?.strategic_value || 0) * 0.40
-      + Number(right?.source_authority || 0) * 0.24
-      + clamp(Number(right?.baseScore || 0) / 10, 0, 1) * 0.16
-      + (1 - Number(right?.routine_item_score || 0)) * 0.10
-      + Number(right?.originality_signal || 0.5) * 0.10
-      + Number(right?.preferred_source_strength || 0) * 0.08
-      + Number(right?.topic_fit || 0) * 0.05
-      - (right?.preferred_source_available_in_search && isWeakClusterCandidate(right) ? 0.08 : 0)
-      - (ignoreSuppression ? 0 : Number(right?.preferred_close_substitute_penalty || 0) * 0.4)
-    );
+    const leftScore = computeRepresentativeScore(left, { ignoreCompetitivePenalties });
+    const rightScore = computeRepresentativeScore(right, { ignoreCompetitivePenalties });
     return rightScore - leftScore;
   });
   return ranked[0] || null;
@@ -1254,15 +1339,132 @@ function canTradeSpecialistOutperformPreferred(candidate, preferredCandidate) {
     && candidateAuthority >= (preferredAuthority - 0.08);
 }
 
+function findBestComparableOriginCandidate(item, originCandidates = []) {
+  let bestOrigin = null;
+  let bestSimilarity = 0;
+  for (const candidate of (Array.isArray(originCandidates) ? originCandidates : [])) {
+    if (!candidate || candidate === item) continue;
+    const similarity = storylineSimilarity(item, candidate);
+    if (similarity < 0.58) continue;
+    if (similarity > bestSimilarity) {
+      bestSimilarity = similarity;
+      bestOrigin = candidate;
+    }
+  }
+  return {
+    bestOrigin,
+    similarity: bestSimilarity,
+  };
+}
+
+function estimateDerivativeCompetition(item, originCandidate, similarity) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const originalityProfile = String(item?.originality_profile || "").trim().toLowerCase();
+  const reasonCodes = [];
+  let confidence = 0;
+
+  if (!originCandidate || !isDerivativeProneCandidate(item)) {
+    return {
+      confidence: 0,
+      penalty: 0,
+      reasonCodes,
+    };
+  }
+
+  if (sourceType === "aggregator_republisher" || sourceType === "corporate_pr" || sourceType === "platform_user_generated") {
+    confidence += 0.34;
+    reasonCodes.push("derivative_source_type");
+  } else if (sourceType === "analysis_blog") {
+    confidence += 0.18;
+    reasonCodes.push("derived_analysis");
+  }
+
+  if (originalityProfile === "rewrite_aggregator" || originalityProfile === "press_release_repost") {
+    confidence += 0.24;
+    reasonCodes.push("low_originality_profile");
+  } else if (originalityProfile === "derived_synthesis") {
+    confidence += 0.12;
+    reasonCodes.push("derived_synthesis_profile");
+  }
+
+  if (similarity >= 0.72) {
+    confidence += 0.22;
+    reasonCodes.push("close_story_overlap");
+  } else if (similarity >= 0.58) {
+    confidence += 0.12;
+    reasonCodes.push("story_overlap");
+  }
+
+  if (Number(originCandidate?.originality_signal || 0) >= Number(item?.originality_signal || 0) + 0.12) {
+    confidence += 0.12;
+    reasonCodes.push("weaker_than_original");
+  }
+
+  if (item?.preferred_source_available_in_search === true && !hasPreferredSourceMatch(item)) {
+    confidence += 0.08;
+    reasonCodes.push("preferred_search_evidence");
+  }
+
+  let penalty = 0;
+  if (confidence >= 0.62) penalty = 0.22;
+  else if (confidence >= 0.45) penalty = 0.15;
+  else if (confidence >= 0.32 && isWeakClusterCandidate(item)) penalty = 0.08;
+
+  return {
+    confidence: Number(clamp(confidence, 0, 1).toFixed(3)),
+    penalty: Number(clamp(penalty, 0, 0.4).toFixed(3)),
+    reasonCodes,
+  };
+}
+
 function applyPreferredCloseSubstituteSuppression(cluster) {
-  if (!cluster || !Array.isArray(cluster.items) || cluster.items.length < 2) return;
+  if (!cluster || !Array.isArray(cluster.items) || cluster.items.length < 2) {
+    return {
+      derivative_suppressed_count: 0,
+      preferred_suppressed_count: 0,
+      platform_identity_ambiguity_count: 0,
+      preferred_candidate_count: 0,
+      preferred_signal_present: false,
+    };
+  }
   const preferredCandidates = cluster.items.filter((item) => isStrongPreferredClusterCandidate(item));
-  if (preferredCandidates.length === 0) return;
+  const originCandidates = cluster.items.filter((item) => isOriginClusterCandidate(item));
+  const preferredSignalPresent = preferredCandidates.length > 0
+    || cluster.items.some((item) => item?.preferred_source_available_in_search === true);
 
   for (const item of cluster.items) {
     item.preferred_close_substitute_penalty = 0;
     item.suppressed_by_preferred_source = false;
     item.preferred_substitute_domain = null;
+    item.derivative_competitive_penalty = 0;
+    item.derivative_confidence = 0;
+    item.suppressed_by_derivative_source = false;
+    item.derivative_reason_codes = [];
+    item.derivative_parent_domain = null;
+    item.derivative_parent_identity_key = null;
+    item.suppression_reason_codes = [];
+    item.selection_reason_codes = Array.isArray(item.selection_reason_codes) ? item.selection_reason_codes : [];
+  }
+
+  const derivativeSuppressedItems = new Set();
+  const preferredSuppressedItems = new Set();
+
+  for (const item of cluster.items) {
+    const { bestOrigin, similarity } = findBestComparableOriginCandidate(item, originCandidates);
+    if (!bestOrigin || bestOrigin === item) continue;
+    const derivative = estimateDerivativeCompetition(item, bestOrigin, similarity);
+    if (derivative.penalty <= 0) continue;
+    item.derivative_competitive_penalty = derivative.penalty;
+    item.derivative_confidence = derivative.confidence;
+    item.derivative_reason_codes = derivative.reasonCodes.slice();
+    item.derivative_parent_domain = String(bestOrigin?.source_domain || bestOrigin?.source || "").trim() || null;
+    item.derivative_parent_identity_key = String(bestOrigin?.source_identity_key || "").trim() || item.derivative_parent_domain;
+    item.suppressed_by_derivative_source = true;
+    item.suppression_reason_codes = appendUniqueCode(item.suppression_reason_codes, "derivative_source_suppressed");
+    for (const reasonCode of derivative.reasonCodes) {
+      item.suppression_reason_codes = appendUniqueCode(item.suppression_reason_codes, reasonCode);
+    }
+    derivativeSuppressedItems.add(item);
   }
 
   for (const weakItem of cluster.items) {
@@ -1279,10 +1481,91 @@ function applyPreferredCloseSubstituteSuppression(cluster) {
     }
     if (!bestPreferred || bestSimilarity < 0.62) continue;
     if (canTradeSpecialistOutperformPreferred(weakItem, bestPreferred)) continue;
-    weakItem.preferred_close_substitute_penalty = 0.2;
+    weakItem.preferred_close_substitute_penalty = Number(Math.max(
+      weakItem.preferred_close_substitute_penalty || 0,
+      bestSimilarity >= 0.75 ? 0.24 : 0.18
+    ).toFixed(3));
     weakItem.suppressed_by_preferred_source = true;
     weakItem.preferred_substitute_domain = String(bestPreferred?.source_domain || bestPreferred?.source || "").trim() || null;
+    weakItem.suppression_reason_codes = appendUniqueCode(weakItem.suppression_reason_codes, "preferred_close_substitute");
+    weakItem.suppression_reason_codes = appendUniqueCode(
+      weakItem.suppression_reason_codes,
+      String(bestPreferred?.preferred_source_match_scope || "").trim().toLowerCase() === "publisher"
+        ? "preferred_publisher_available"
+        : "preferred_domain_available"
+    );
+    preferredSuppressedItems.add(weakItem);
   }
+
+  return {
+    derivative_suppressed_count: derivativeSuppressedItems.size,
+    preferred_suppressed_count: preferredSuppressedItems.size,
+    platform_identity_ambiguity_count: cluster.items.filter((item) => item?.source_identity_ambiguous === true).length,
+    preferred_candidate_count: preferredCandidates.length,
+    preferred_signal_present: preferredSignalPresent,
+  };
+}
+
+function annotateClusterOutcome(cluster, baselineRepresentative, representative, competitionStats = {}) {
+  if (!cluster || !representative) return {
+    coverage_gap_status: "no_preferred_signal",
+    specialist_trade_beat_preferred: false,
+    broader_retrieval_found_better: false,
+  };
+
+  const strongPreferredAlternatives = cluster.items.filter((item) => item !== representative && isStrongPreferredClusterCandidate(item));
+  const specialistTradeBeatPreferred = String(representative?.source_type || "").trim().toLowerCase() === "trade_specialist"
+    && strongPreferredAlternatives.some((candidate) => canTradeSpecialistOutperformPreferred(representative, candidate));
+  const hasPreferredSignal = competitionStats.preferred_signal_present === true;
+  const preferredWinner = isStrongPreferredClusterCandidate(representative) || String(representative?.source_type || "").trim().toLowerCase() === "primary_official";
+  const broaderRetrievalFoundBetter = String(representative?.retrieval_pass || "").trim().toLowerCase() === "broad"
+    && hasPreferredSignal
+    && !preferredWinner;
+
+  let coverageGapStatus = "no_preferred_signal";
+  if (preferredWinner) coverageGapStatus = "preferred_exists_and_should_win";
+  else if (specialistTradeBeatPreferred) coverageGapStatus = "preferred_exists_but_weaker";
+  else if (broaderRetrievalFoundBetter) coverageGapStatus = "preferred_missing";
+  else if (hasPreferredSignal) coverageGapStatus = "preferred_exists_but_weaker";
+
+  representative.coverage_gap_status = coverageGapStatus;
+  representative.specialist_trade_outperformed_preferred = specialistTradeBeatPreferred;
+
+  if (String(representative?.source_type || "").trim().toLowerCase() === "primary_official") {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "official_primary");
+  }
+  if (String(representative?.preferred_source_match_scope || "").trim().toLowerCase() === "publisher") {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "preferred_publisher_match");
+  } else if (hasPreferredSourceMatch(representative)) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "preferred_domain_match");
+  }
+  if (specialistTradeBeatPreferred) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "specialist_trade_best_fit");
+  }
+  if (competitionStats.derivative_suppressed_count > 0) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "best_source_representation");
+  }
+  if (baselineRepresentative && baselineRepresentative !== representative) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "displaced_weaker_substitute");
+  }
+  if (broaderRetrievalFoundBetter) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "broad_fallback_better_source");
+  }
+  if (Number(representative?.derivative_confidence || 0) >= 0.35) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "best_available_derivative");
+  } else if (Number(representative?.originality_signal || 0) >= 0.82) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "high_originality");
+  }
+  if (representative?.source_identity_ambiguous === true) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "platform_identity_ambiguous");
+  }
+
+  representative.winner_selection_reason = representative.selection_reason_codes[0] || "best_source_representation";
+  return {
+    coverage_gap_status: coverageGapStatus,
+    specialist_trade_beat_preferred: specialistTradeBeatPreferred,
+    broader_retrieval_found_better: broaderRetrievalFoundBetter,
+  };
 }
 
 function clusterStorylines(items = []) {
@@ -1315,10 +1598,10 @@ function clusterStorylines(items = []) {
   }
 
   return clusters.map((cluster, index) => {
-    flagClusterDerivatives(cluster);
-    const baselineRepresentative = chooseRepresentative(cluster.items, { ignorePreferredSuppression: true });
-    applyPreferredCloseSubstituteSuppression(cluster);
+    const competitionStats = applyPreferredCloseSubstituteSuppression(cluster);
+    const baselineRepresentative = chooseRepresentative(cluster.items, { ignoreCompetitivePenalties: true });
     const representative = chooseRepresentative(cluster.items);
+    const outcome = annotateClusterOutcome(cluster, baselineRepresentative, representative, competitionStats);
     const sources = uniqSorted(cluster.items.map((item) => String(item?.source_domain || item?.source || "").trim()).filter(Boolean));
     const confidence = cluster.similarities.length
       ? cluster.similarities.reduce((sum, value) => sum + value, 0) / cluster.similarities.length
@@ -1346,6 +1629,13 @@ function clusterStorylines(items = []) {
         && baselineRepresentative !== representative
         && isWeakClusterCandidate(baselineRepresentative)
         && isStrongPreferredClusterCandidate(representative),
+      derivative_suppressed_count: Number(competitionStats.derivative_suppressed_count || 0),
+      preferred_suppressed_count: Number(competitionStats.preferred_suppressed_count || 0),
+      preferred_candidate_count: Number(competitionStats.preferred_candidate_count || 0),
+      platform_identity_ambiguity_count: Number(competitionStats.platform_identity_ambiguity_count || 0),
+      coverage_gap_status: outcome.coverage_gap_status,
+      specialist_trade_beat_preferred: outcome.specialist_trade_beat_preferred === true,
+      broader_retrieval_found_better: outcome.broader_retrieval_found_better === true,
       items: cluster.items,
     };
   });
@@ -1359,28 +1649,6 @@ function computeSupportingSourcesAvgAuthority(supportingSources) {
     return sum + info.source_authority;
   }, 0);
   return total / sources.length;
-}
-
-function flagClusterDerivatives(cluster) {
-  if (!cluster || !Array.isArray(cluster.items) || cluster.items.length < 2) return;
-  const originatingTypes = new Set(["primary_official", "reported_media", "trade_specialist"]);
-  const hasPrimary = cluster.items.some((item) => originatingTypes.has(item.source_type));
-  if (!hasPrimary) return;
-  for (const item of cluster.items) {
-    if (originatingTypes.has(item.source_type)) continue;
-    const sourceType = item.source_type || "unclassified";
-    if (sourceType === "corporate_pr"
-      || sourceType === "aggregator_republisher"
-      || sourceType === "analysis_blog"
-      || sourceType === "platform_user_generated"
-      || item.source_policy === "limited"
-      || item.source_policy === "review"
-      || item.source_tier === "suspect"
-      || item.source_tier === "weak") {
-      item.derivative_of_primary = true;
-      item.originality_signal = clamp(Number(item.originality_signal || 0.5) - 0.15, 0, 1);
-    }
-  }
 }
 
 function buildStorylineCandidates(items = []) {
@@ -1399,6 +1667,14 @@ function buildStorylineCandidates(items = []) {
       cluster_confidence: cluster.cluster_confidence,
       storyline_strategic_value: cluster.strategic_value,
       won_by_preferred_substitute: cluster.preferred_displaced_weak === true,
+      cluster_derivative_suppressed_count: Number(cluster.derivative_suppressed_count || 0),
+      cluster_preferred_suppressed_count: Number(cluster.preferred_suppressed_count || 0),
+      cluster_preferred_candidate_count: Number(cluster.preferred_candidate_count || 0),
+      cluster_platform_identity_ambiguity_count: Number(cluster.platform_identity_ambiguity_count || 0),
+      coverage_gap_status: cluster.coverage_gap_status || cluster.representative?.coverage_gap_status || "no_preferred_signal",
+      specialist_trade_outperformed_preferred: cluster.specialist_trade_beat_preferred === true
+        || (cluster.representative?.specialist_trade_outperformed_preferred === true),
+      broader_retrieval_found_better: cluster.broader_retrieval_found_better === true,
       storyline_key: buildStorylineFingerprint({
         entity_keys: cluster.entity_keys,
         storyline_hints: cluster.storyline_hints,

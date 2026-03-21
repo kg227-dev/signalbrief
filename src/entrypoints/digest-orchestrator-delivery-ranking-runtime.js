@@ -423,8 +423,17 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         preferred_fallback_triggered: runDiagnostics?.preferred_fallback_triggered === true,
         preferred_pass_item_count: Math.max(0, Number(runDiagnostics?.preferred_pass_item_count || 0)),
         broad_pass_item_count: Math.max(0, Number(runDiagnostics?.broad_pass_item_count || 0)),
+        preferred_domains_count: Math.max(0, Number(runDiagnostics?.preferred_domains_count || 0)),
+        preferred_candidate_count: Math.max(0, Number(runDiagnostics?.preferred_candidate_count || 0)),
+        non_preferred_candidate_count: Math.max(0, Number(runDiagnostics?.non_preferred_candidate_count || 0)),
         final_selected_preferred_count: Math.max(0, Number(runDiagnostics?.final_selected_preferred_count || 0)),
         preferred_displaced_weak_count: Math.max(0, Number(runDiagnostics?.preferred_displaced_weak_count || 0)),
+        derivative_suppressed_count: Math.max(0, Number(runDiagnostics?.derivative_suppressed_count || 0)),
+        specialist_trade_beat_preferred_count: Math.max(0, Number(runDiagnostics?.specialist_trade_beat_preferred_count || 0)),
+        platform_identity_ambiguity_count: Math.max(0, Number(runDiagnostics?.platform_identity_ambiguity_count || 0)),
+        broader_retrieval_found_better_count: Math.max(0, Number(runDiagnostics?.broader_retrieval_found_better_count || 0)),
+        coverage_gap_preferred_missing_count: Math.max(0, Number(runDiagnostics?.coverage_gap_preferred_missing_count || 0)),
+        coverage_gap_preferred_weaker_count: Math.max(0, Number(runDiagnostics?.coverage_gap_preferred_weaker_count || 0)),
         candidate_pool_before_dedup: Number.isFinite(Number(runDiagnostics?.candidate_pool_before_dedup))
           ? Number(runDiagnostics.candidate_pool_before_dedup)
           : null,

@@ -776,6 +776,12 @@ async function main() {
   const storylinePool = prepareStorylinePool(enriched, selectionTarget);
   fetchDiagnostics.final_selected_preferred_count = storylinePool.filter((item) => String(item?.preferred_source_match || "none") !== "none").length;
   fetchDiagnostics.preferred_displaced_weak_count = storylinePool.filter((item) => item?.won_by_preferred_substitute === true).length;
+  fetchDiagnostics.derivative_suppressed_count = storylinePool.reduce((sum, item) => sum + Math.max(0, Number(item?.cluster_derivative_suppressed_count || 0)), 0);
+  fetchDiagnostics.specialist_trade_beat_preferred_count = storylinePool.filter((item) => item?.specialist_trade_outperformed_preferred === true).length;
+  fetchDiagnostics.platform_identity_ambiguity_count = storylinePool.reduce((sum, item) => sum + Math.max(0, Number(item?.cluster_platform_identity_ambiguity_count || 0)), 0);
+  fetchDiagnostics.broader_retrieval_found_better_count = storylinePool.filter((item) => item?.broader_retrieval_found_better === true).length;
+  fetchDiagnostics.coverage_gap_preferred_missing_count = storylinePool.filter((item) => String(item?.coverage_gap_status || "") === "preferred_missing").length;
+  fetchDiagnostics.coverage_gap_preferred_weaker_count = storylinePool.filter((item) => String(item?.coverage_gap_status || "") === "preferred_exists_but_weaker").length;
   log(`Storyline pool ready: ${storylinePool.length}/${enriched.length} candidate(s) retained after quality gate`);
 
   // Archive once per run (shared, date-keyed) before per-user filtering.
@@ -859,8 +865,17 @@ async function main() {
         preferred_fallback_triggered: fetchDiagnostics?.preferred_fallback_triggered === true,
         preferred_pass_item_count: Number(fetchDiagnostics?.preferred_pass_item_count || 0),
         broad_pass_item_count: Number(fetchDiagnostics?.broad_pass_item_count || 0),
+        preferred_domains_count: Number(fetchDiagnostics?.preferred_domains_count || 0),
+        preferred_candidate_count: Number(fetchDiagnostics?.preferred_candidate_count || 0),
+        non_preferred_candidate_count: Number(fetchDiagnostics?.non_preferred_candidate_count || 0),
         final_selected_preferred_count: Number(fetchDiagnostics?.final_selected_preferred_count || 0),
         preferred_displaced_weak_count: Number(fetchDiagnostics?.preferred_displaced_weak_count || 0),
+        derivative_suppressed_count: Number(fetchDiagnostics?.derivative_suppressed_count || 0),
+        specialist_trade_beat_preferred_count: Number(fetchDiagnostics?.specialist_trade_beat_preferred_count || 0),
+        platform_identity_ambiguity_count: Number(fetchDiagnostics?.platform_identity_ambiguity_count || 0),
+        broader_retrieval_found_better_count: Number(fetchDiagnostics?.broader_retrieval_found_better_count || 0),
+        coverage_gap_preferred_missing_count: Number(fetchDiagnostics?.coverage_gap_preferred_missing_count || 0),
+        coverage_gap_preferred_weaker_count: Number(fetchDiagnostics?.coverage_gap_preferred_weaker_count || 0),
         candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
         candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
       },

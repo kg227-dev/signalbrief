@@ -54,6 +54,10 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
       freshness_block_count: 2,
       semantic_repeat_block_count: 2,
       alternate_queries_used: 3,
+      preferred_domains_count: 4,
+      preferred_candidate_count: 3,
+      non_preferred_candidate_count: 2,
+      derivative_suppressed_count: 1,
       candidate_pool_before_dedup: 18,
       candidate_pool_after_dedup: 7,
       fallback_reason: "min_count_backfill",
@@ -134,6 +138,8 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     assert.strictEqual(scheduledByRun.items[0].freshness_key, "pfizer|pipeline");
     assert.strictEqual(scheduledByRun.requested_count, 5);
     assert.strictEqual(scheduledByRun.freshness_block_count, 2);
+    assert.strictEqual(scheduledByRun.preferred_domains_count, 4);
+    assert.strictEqual(scheduledByRun.derivative_suppressed_count, 1);
     assert.strictEqual(scheduledByRun.dominant_failure_mode, "repeat");
     assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-13", "scheduled"), true);
     assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-14", "scheduled"), false);

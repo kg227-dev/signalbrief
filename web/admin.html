@@ -2083,6 +2083,24 @@ function renderRunDebugPanel(run) {
     Number.isFinite(Number(row?.alternate_queries_used)) && Number(row.alternate_queries_used) > 0
       ? { label: "alt queries", value: String(Number(row.alternate_queries_used)) }
       : null,
+    Number.isFinite(Number(row?.preferred_domains_count)) && Number(row.preferred_domains_count) > 0
+      ? { label: "preferred domains", value: String(Number(row.preferred_domains_count)) }
+      : null,
+    Number.isFinite(Number(row?.preferred_displaced_weak_count)) && Number(row.preferred_displaced_weak_count) > 0
+      ? { label: "preferred wins", value: String(Number(row.preferred_displaced_weak_count)) }
+      : null,
+    Number.isFinite(Number(row?.derivative_suppressed_count)) && Number(row.derivative_suppressed_count) > 0
+      ? { label: "derivatives suppressed", value: String(Number(row.derivative_suppressed_count)) }
+      : null,
+    Number.isFinite(Number(row?.specialist_trade_beat_preferred_count)) && Number(row.specialist_trade_beat_preferred_count) > 0
+      ? { label: "specialist wins", value: String(Number(row.specialist_trade_beat_preferred_count)) }
+      : null,
+    Number.isFinite(Number(row?.broader_retrieval_found_better_count)) && Number(row.broader_retrieval_found_better_count) > 0
+      ? { label: "broad rescued", value: String(Number(row.broader_retrieval_found_better_count)) }
+      : null,
+    Number.isFinite(Number(row?.coverage_gap_preferred_missing_count)) && Number(row.coverage_gap_preferred_missing_count) > 0
+      ? { label: "preferred missing", value: String(Number(row.coverage_gap_preferred_missing_count)) }
+      : null,
     row?.thin_pool === true ? { label: "pool", value: "thin" } : null,
     row?.fallback_reason ? { label: "fallback", value: row.fallback_reason } : null,
     row?.dominant_failure_mode ? { label: "issue", value: row.dominant_failure_mode } : null,

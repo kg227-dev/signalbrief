@@ -152,6 +152,14 @@ function buildPreferredPromptBias(preferredDomains) {
   return "Prefer direct reporting or official primary documents from the provided preferred domains when they are close substitutes.";
 }
 
+function buildBroadFallbackPromptBias(retrievalPlan = {}) {
+  const officialFriendly = retrievalPlan?.official_friendly === true;
+  if (officialFriendly) {
+    return "If preferred-domain coverage is thin, return the best available official documents, specialist trade reporting, or original reporting. Avoid derivative rewrites or press release reposts when better direct sources exist.";
+  }
+  return "If preferred-domain coverage is thin, return the best available specialist trade or original reporting. Avoid derivative rewrites or press release reposts when better direct sources exist.";
+}
+
 function createDigestDataFetchRuntime(deps) {
   const {
     CONFIG,
@@ -176,6 +184,7 @@ function createDigestDataFetchRuntime(deps) {
     passName,
     searchDomainFilter,
     preferredEvidenceDomains,
+    promptBias,
   }) {
     const maxAttempts = Math.min(3, queries.length);
     const diagnostics = createPassDiagnostics(maxAttempts);
@@ -197,7 +206,7 @@ function createDigestDataFetchRuntime(deps) {
           },
           buildSearchRequest(topic.tag, query, searchModel, {
             searchDomainFilter,
-            promptBias: buildPreferredPromptBias(searchDomainFilter),
+            promptBias,
           }),
           {
             retries: providerPolicy.retries,
@@ -318,6 +327,9 @@ function createDigestDataFetchRuntime(deps) {
       preferred_fallback_triggered: false,
       preferred_pass_item_count: 0,
       broad_pass_item_count: 0,
+      preferred_domains_count: preferredDomains.length,
+      preferred_candidate_count: 0,
+      non_preferred_candidate_count: 0,
       final_selected_preferred_count: 0,
       preferred_displaced_weak_count: 0,
       search_result_domains: [],
@@ -343,6 +355,7 @@ function createDigestDataFetchRuntime(deps) {
         passName: "preferred",
         searchDomainFilter: preferredDomains,
         preferredEvidenceDomains: preferredDomains,
+        promptBias: buildPreferredPromptBias(preferredDomains),
       });
       apiCalls += preferredPass.apiCalls;
       mergePassDiagnostics(diagnostics, preferredPass.diagnostics);
@@ -367,6 +380,7 @@ function createDigestDataFetchRuntime(deps) {
         passName: "broad",
         searchDomainFilter: [],
         preferredEvidenceDomains: preferredDomains,
+        promptBias: buildBroadFallbackPromptBias(retrievalPlan),
       });
       apiCalls += broadPass.apiCalls;
       mergePassDiagnostics(diagnostics, broadPass.diagnostics);
@@ -376,6 +390,11 @@ function createDigestDataFetchRuntime(deps) {
       (Array.isArray(item?.retrieval_preferred_search_domains) ? item.retrieval_preferred_search_domains : [])
         .some((candidate) => matchesDomain(item?.source || item?.url, candidate))
     );
+    const preferredCandidateCount = collected.filter((item) => (
+      Array.isArray(preferredDomains) && preferredDomains.some((candidate) => matchesDomain(item?.source || item?.url, candidate))
+    )).length;
+    diagnostics.preferred_candidate_count = preferredCandidateCount;
+    diagnostics.non_preferred_candidate_count = Math.max(0, collected.length - preferredCandidateCount);
     diagnostics.preferred_search_results_without_preferred_item = diagnostics.preferred_search_result_domains.length > 0 && !finalHasPreferredItem;
 
     return {

@@ -14,6 +14,7 @@ const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 
 const {
+  annotateEditorialSignals,
   buildStorylineCandidates,
   applyStrategicQualityGate,
   classifySourceTierBaseline,
@@ -260,7 +261,7 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(candidates.length, 1);
   assert.strictEqual(candidates[0].source_domain, "theinformation.com");
   assert.strictEqual(candidates[0].preferred_source_match, "topic_reported");
-  assert.strictEqual(candidates[0].won_by_preferred_substitute, true);
+  assert.ok(Array.isArray(candidates[0].selection_reason_codes) && candidates[0].selection_reason_codes.includes("preferred_domain_match"));
 
   const annotated = runtime.annotateEditorialSignals([{
     tag: "POLICY×REGULATORY",
@@ -273,6 +274,109 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(annotated[0].preferred_source_kind, "official");
 
   setAdminSourceRegistry(null);
+  setPreferredSourceRegistry(null);
+}
+
+// ── Publisher-level preferred identity matches without bypassing governance ──
+{
+  setPreferredSourceRegistry({
+    version: 1,
+    global: { reported: [], official: [] },
+    topics: {
+      technology: { reported: [], official: [] },
+    },
+    publishers: {
+      global: { reported: [], official: [] },
+      topics: {
+        technology: {
+          reported: ["youtube:@insideboardroom"],
+          official: [],
+        },
+      },
+    },
+    aliases: {},
+  });
+
+  const annotated = annotateEditorialSignals([{
+    tag: "TECHNOLOGY",
+    headline: "Inside Boardroom breaks down AI infrastructure spending",
+    summary: "Channel coverage explains hyperscaler capex implications.",
+    url: "https://www.youtube.com/@InsideBoardroom/videos",
+    source_domain: "youtube.com",
+    baseScore: 6.5,
+  }]);
+  assert.strictEqual(annotated[0].preferred_source_match, "topic_reported");
+  assert.strictEqual(annotated[0].preferred_source_match_scope, "publisher");
+  assert.strictEqual(annotated[0].preferred_source_identity_key, "youtube:@insideboardroom");
+  assert.strictEqual(annotated[0].source_identity_ambiguous, false);
+  assert.strictEqual(annotated[0].source_policy, "review", "publisher preferred match must not rescue platform governance");
+  setPreferredSourceRegistry(null);
+}
+
+// ── Derivative wrappers lose to better story representations ──
+{
+  setPreferredSourceRegistry({
+    version: 1,
+    global: { reported: ["reuters.com"], official: [] },
+    topics: {},
+    aliases: {},
+  });
+  const candidates = buildStorylineCandidates([
+    {
+      tag: "TECHNOLOGY",
+      headline: "AI infrastructure boom pushes cloud spending higher",
+      summary: "Enterprise AI demand is driving a new hyperscaler capex cycle.",
+      source_domain: "financialcontent.com",
+      baseScore: 8.9,
+      strategic_value: 0.84,
+    },
+    {
+      tag: "TECHNOLOGY",
+      headline: "AI infrastructure boom pushes cloud spending higher",
+      summary: "Reuters reports hyperscalers are accelerating AI capex plans.",
+      source_domain: "reuters.com",
+      baseScore: 7.4,
+      strategic_value: 0.78,
+    },
+  ]);
+  assert.strictEqual(candidates.length, 1);
+  assert.strictEqual(candidates[0].source_domain, "reuters.com");
+  assert.ok(Number(candidates[0].cluster_derivative_suppressed_count || 0) >= 1);
+  assert.ok(Array.isArray(candidates[0].selection_reason_codes) && candidates[0].selection_reason_codes.includes("best_source_representation"));
+  setPreferredSourceRegistry(null);
+}
+
+// ── Specialist trade can beat a global preferred generalist on topic fit ──
+{
+  setPreferredSourceRegistry({
+    version: 1,
+    global: { reported: ["reuters.com"], official: [] },
+    topics: {},
+    aliases: {},
+  });
+  const candidates = buildStorylineCandidates([
+    {
+      tag: "HEALTHCARE",
+      headline: "FDA approves new obesity therapy for adults",
+      summary: "Reuters says the approval expands a fast-growing market.",
+      source_domain: "reuters.com",
+      baseScore: 7.4,
+      strategic_value: 0.74,
+    },
+    {
+      tag: "HEALTHCARE",
+      headline: "FDA approves new obesity therapy for adults",
+      summary: "STAT explains the clinical and market implications of the approval.",
+      source_domain: "statnews.com",
+      baseScore: 7.1,
+      strategic_value: 0.75,
+    },
+  ]);
+  assert.strictEqual(candidates.length, 1);
+  assert.strictEqual(candidates[0].source_domain, "statnews.com");
+  assert.strictEqual(candidates[0].specialist_trade_outperformed_preferred, true);
+  assert.strictEqual(candidates[0].coverage_gap_status, "preferred_exists_but_weaker");
+  assert.strictEqual(candidates[0].winner_selection_reason, "specialist_trade_best_fit");
   setPreferredSourceRegistry(null);
 }
 

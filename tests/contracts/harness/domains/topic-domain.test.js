@@ -37,6 +37,8 @@ const [preferredWinner, weakLoser, blockedPreferred] = applyTopicRelevanceScores
     source_policy_effects: { score_multiplier: 0.76, requires_corroboration: true },
     preferred_source_strength: 0,
     preferred_source_available_in_search: true,
+    derivative_competitive_penalty: 0.22,
+    source_identity_ambiguous: true,
     topic_fit: 0.1,
     topic_fit_band: "low",
     source_authority: 0.22,
@@ -65,5 +67,7 @@ assert.ok(preferredWinner.relevanceScore > weakLoser.relevanceScore);
 assert.ok(preferredWinner.score_breakdown.preferred_source_boost > 0);
 assert.strictEqual(weakLoser.score_breakdown.preferred_source_boost, 0);
 assert.ok(weakLoser.score_breakdown.preferred_source_available_penalty > 0);
+assert.ok(weakLoser.score_breakdown.derivative_content_penalty > 0);
+assert.ok(weakLoser.score_breakdown.platform_ambiguity_penalty > 0);
 assert.strictEqual(blockedPreferred.score_breakdown.preferred_source_boost, 0);
 assert.strictEqual(blockedPreferred.relevanceScore, 0);

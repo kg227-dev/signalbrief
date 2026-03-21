@@ -164,6 +164,9 @@ function summarizePreferredRetrievalDiagnostics(results) {
     preferred_fallback_triggered: false,
     preferred_pass_item_count: 0,
     broad_pass_item_count: 0,
+    preferred_domains_count: 0,
+    preferred_candidate_count: 0,
+    non_preferred_candidate_count: 0,
     final_selected_preferred_count: 0,
     preferred_displaced_weak_count: 0,
     search_result_domains: [],
@@ -198,6 +201,9 @@ function summarizePreferredRetrievalDiagnostics(results) {
     summary.preferred_fallback_triggered = summary.preferred_fallback_triggered || diagnostics.preferred_fallback_triggered === true;
     summary.preferred_pass_item_count += Number(diagnostics.preferred_pass_item_count || 0);
     summary.broad_pass_item_count += Number(diagnostics.broad_pass_item_count || 0);
+    summary.preferred_domains_count += Number(diagnostics.preferred_domains_count || 0);
+    summary.preferred_candidate_count += Number(diagnostics.preferred_candidate_count || 0);
+    summary.non_preferred_candidate_count += Number(diagnostics.non_preferred_candidate_count || 0);
     summary.preferred_search_result_hit_count += Number(diagnostics.preferred_search_result_hit_count || 0);
     summary.preferred_search_results_without_preferred_item_count += diagnostics.preferred_search_results_without_preferred_item === true ? 1 : 0;
   }
@@ -312,6 +318,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
         preferred_fallback_triggered: preferredRetrievalDiagnostics.preferred_fallback_triggered || customPreferredDiagnostics.preferred_fallback_triggered,
         preferred_pass_item_count: Number(preferredRetrievalDiagnostics.preferred_pass_item_count || 0) + Number(customPreferredDiagnostics.preferred_pass_item_count || 0),
         broad_pass_item_count: Number(preferredRetrievalDiagnostics.broad_pass_item_count || 0) + Number(customPreferredDiagnostics.broad_pass_item_count || 0),
+        preferred_domains_count: Number(preferredRetrievalDiagnostics.preferred_domains_count || 0) + Number(customPreferredDiagnostics.preferred_domains_count || 0),
+        preferred_candidate_count: Number(preferredRetrievalDiagnostics.preferred_candidate_count || 0) + Number(customPreferredDiagnostics.preferred_candidate_count || 0),
+        non_preferred_candidate_count: Number(preferredRetrievalDiagnostics.non_preferred_candidate_count || 0) + Number(customPreferredDiagnostics.non_preferred_candidate_count || 0),
         final_selected_preferred_count: 0,
         preferred_displaced_weak_count: 0,
         search_result_domains: uniqueValues([
@@ -388,6 +397,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
         preferred_fallback_triggered: preferredRetrievalDiagnostics.preferred_fallback_triggered === true,
         preferred_pass_item_count: Number(preferredRetrievalDiagnostics.preferred_pass_item_count || 0),
         broad_pass_item_count: Number(preferredRetrievalDiagnostics.broad_pass_item_count || 0),
+        preferred_domains_count: Number(preferredRetrievalDiagnostics.preferred_domains_count || 0),
+        preferred_candidate_count: Number(preferredRetrievalDiagnostics.preferred_candidate_count || 0),
+        non_preferred_candidate_count: Number(preferredRetrievalDiagnostics.non_preferred_candidate_count || 0),
         final_selected_preferred_count: 0,
         preferred_displaced_weak_count: 0,
         search_result_domains: preferredRetrievalDiagnostics.search_result_domains || [],

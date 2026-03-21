@@ -93,17 +93,56 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
       preferred_source_match: item?.preferred_source_match || null,
       preferred_source_kind: item?.preferred_source_kind || null,
+      preferred_source_match_scope: item?.preferred_source_match_scope || null,
+      preferred_source_identity_key: item?.preferred_source_identity_key || null,
       preferred_source_available_in_search: item?.preferred_source_available_in_search === true,
       retrieval_pass: item?.retrieval_pass || null,
       retrieval_search_result_domains: Array.isArray(item?.retrieval_search_result_domains) ? item.retrieval_search_result_domains.slice(0, 10) : [],
       retrieval_preferred_search_domains: Array.isArray(item?.retrieval_preferred_search_domains) ? item.retrieval_preferred_search_domains.slice(0, 10) : [],
       won_by_preferred_substitute: item?.won_by_preferred_substitute === true,
+      broader_retrieval_found_better: item?.broader_retrieval_found_better === true,
+      source_identity_ambiguous: item?.source_identity_ambiguous === true,
+      derivative_confidence: Number.isFinite(Number(item?.derivative_confidence)) ? Number(item.derivative_confidence) : null,
+      derivative_reason_codes: Array.isArray(item?.derivative_reason_codes) ? item.derivative_reason_codes.slice() : [],
+      derivative_parent_domain: item?.derivative_parent_domain || null,
+      derivative_parent_identity_key: item?.derivative_parent_identity_key || null,
+      suppression_reason_codes: Array.isArray(item?.suppression_reason_codes) ? item.suppression_reason_codes.slice() : [],
+      selection_reason_codes: Array.isArray(item?.selection_reason_codes) ? item.selection_reason_codes.slice() : [],
+      winner_selection_reason: item?.winner_selection_reason || null,
+      coverage_gap_status: item?.coverage_gap_status || null,
+      specialist_trade_outperformed_preferred: item?.specialist_trade_outperformed_preferred === true,
       strategic_value: Number.isFinite(Number(item?.strategic_value)) ? Number(item.strategic_value) : null,
       routine_item_score: Number.isFinite(Number(item?.routine_item_score)) ? Number(item.routine_item_score) : null,
       score_breakdown: item?.score_breakdown && typeof item.score_breakdown === "object"
         ? { ...item.score_breakdown }
         : null,
     }));
+  }
+
+  function buildDeliveryDiagnosticsFields(deliveryDiagnostics = {}) {
+    return {
+      requested_count: deliveryDiagnostics.requested_count,
+      freshness_block_count: deliveryDiagnostics.freshness_block_count,
+      semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
+      alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
+      preferred_domains_count: deliveryDiagnostics.preferred_domains_count,
+      preferred_candidate_count: deliveryDiagnostics.preferred_candidate_count,
+      non_preferred_candidate_count: deliveryDiagnostics.non_preferred_candidate_count,
+      final_selected_preferred_count: deliveryDiagnostics.final_selected_preferred_count,
+      preferred_displaced_weak_count: deliveryDiagnostics.preferred_displaced_weak_count,
+      derivative_suppressed_count: deliveryDiagnostics.derivative_suppressed_count,
+      specialist_trade_beat_preferred_count: deliveryDiagnostics.specialist_trade_beat_preferred_count,
+      platform_identity_ambiguity_count: deliveryDiagnostics.platform_identity_ambiguity_count,
+      broader_retrieval_found_better_count: deliveryDiagnostics.broader_retrieval_found_better_count,
+      coverage_gap_preferred_missing_count: deliveryDiagnostics.coverage_gap_preferred_missing_count,
+      coverage_gap_preferred_weaker_count: deliveryDiagnostics.coverage_gap_preferred_weaker_count,
+      candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
+      candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
+      fallback_reason: deliveryDiagnostics.fallback_reason,
+      refill_count: deliveryDiagnostics.refill_count,
+      thin_pool: deliveryDiagnostics.thin_pool,
+      dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+    };
   }
 
   function buildUserQuickScanRows(items) {
@@ -269,16 +308,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quick_scan: quickScan,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            requested_count: deliveryDiagnostics.requested_count,
-            freshness_block_count: deliveryDiagnostics.freshness_block_count,
-            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
-            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
-            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
-            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
-            fallback_reason: deliveryDiagnostics.fallback_reason,
-            refill_count: deliveryDiagnostics.refill_count,
-            thin_pool: deliveryDiagnostics.thin_pool,
-            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+            ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
           });
         }
@@ -302,16 +332,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               withheld_reason: withholdReason,
               quality_score: digestQuality.score,
               quality_band: digestQuality.band,
-              requested_count: deliveryDiagnostics.requested_count,
-              freshness_block_count: deliveryDiagnostics.freshness_block_count,
-              semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
-              alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
-              candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
-              candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
-              fallback_reason: deliveryDiagnostics.fallback_reason,
-              refill_count: deliveryDiagnostics.refill_count,
-              thin_pool: deliveryDiagnostics.thin_pool,
-              dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+              ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             });
           }
           withheldUsers.push({
@@ -321,16 +342,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             withheld_reason: withholdReason,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            requested_count: deliveryDiagnostics.requested_count,
-            freshness_block_count: deliveryDiagnostics.freshness_block_count,
-            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
-            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
-            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
-            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
-            fallback_reason: deliveryDiagnostics.fallback_reason,
-            refill_count: deliveryDiagnostics.refill_count,
-            thin_pool: deliveryDiagnostics.thin_pool,
-            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+            ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
           });
           continue;
         }
@@ -357,16 +369,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quick_scan: quickScan,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            requested_count: deliveryDiagnostics.requested_count,
-            freshness_block_count: deliveryDiagnostics.freshness_block_count,
-            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
-            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
-            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
-            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
-            fallback_reason: deliveryDiagnostics.fallback_reason,
-            refill_count: deliveryDiagnostics.refill_count,
-            thin_pool: deliveryDiagnostics.thin_pool,
-            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+            ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
           });
         }
@@ -493,15 +496,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quick_scan: quickScan,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            freshness_block_count: deliveryDiagnostics.freshness_block_count,
-            semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
-            alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
-            candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
-            candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
-            fallback_reason: deliveryDiagnostics.fallback_reason,
-            refill_count: deliveryDiagnostics.refill_count,
-            thin_pool: deliveryDiagnostics.thin_pool,
-            dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+            ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
           });
         }
@@ -569,16 +564,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           digest_quality_band: String(digestQuality?.band || "") || null,
           digest_url: String(publicDigestUrl || ""),
           engagement_event_failures: engagementWriteFailures,
-          requested_count: deliveryDiagnostics.requested_count,
-          freshness_block_count: deliveryDiagnostics.freshness_block_count,
-          semantic_repeat_block_count: deliveryDiagnostics.semantic_repeat_block_count,
-          alternate_queries_used: deliveryDiagnostics.alternate_queries_used,
-          candidate_pool_before_dedup: deliveryDiagnostics.candidate_pool_before_dedup,
-          candidate_pool_after_dedup: deliveryDiagnostics.candidate_pool_after_dedup,
-          fallback_reason: deliveryDiagnostics.fallback_reason,
-          refill_count: deliveryDiagnostics.refill_count,
-          thin_pool: deliveryDiagnostics.thin_pool,
-          dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+          ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
         });
 
         const eventWriteSuffix = engagementWriteFailures > 0
@@ -601,6 +587,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             error: err.message,
             date_str: dateStr,
             quick_scan: quickScan,
+            ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
           });
         }

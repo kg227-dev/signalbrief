@@ -44,6 +44,18 @@ fs.writeFileSync(preferredSourcesPath, JSON.stringify({
       official: ["federalregister.gov"],
     },
   },
+  publishers: {
+    global: {
+      reported: [],
+      official: [],
+    },
+    topics: {
+      technology: {
+        reported: ["youtube:@InsideBoardroom", "youtube:@insideboardroom"],
+        official: [],
+      },
+    },
+  },
   aliases: {
     "ai technology": "ai tech",
     "policy & regulatory": "policy regulatory",
@@ -81,5 +93,12 @@ assert.deepStrictEqual(
 const inheritedMatch = matchPreferredSourceDomain(registry, "alerts.news.example.com", "TECHNOLOGY");
 assert.strictEqual(inheritedMatch.match, "topic_reported");
 assert.strictEqual(inheritedMatch.matched_domain, "news.example.com");
+
+const publisherMatch = matchPreferredSourceDomain(registry, "youtube.com", "TECHNOLOGY", {
+  sourceIdentityKey: "youtube:@insideboardroom",
+});
+assert.strictEqual(publisherMatch.match, "topic_reported");
+assert.strictEqual(publisherMatch.scope, "publisher");
+assert.strictEqual(publisherMatch.matched_identity, "youtube:@insideboardroom");
 
 process.stdout.write("[preferred-source-registry-runtime] all assertions passed\n");

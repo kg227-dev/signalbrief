@@ -40,6 +40,7 @@ function buildDefaultSourceIdentity(sourceDomain) {
     source_identity_key: sourceDomain || "unknown",
     source_identity_scope: "domain",
     source_identity_label: sourceDomain || "unknown",
+    source_identity_ambiguous: false,
   };
 }
 
@@ -52,6 +53,7 @@ function parseYoutubeIdentity(parsedUrl) {
       source_identity_key: "youtube.com",
       source_identity_scope: "platform",
       source_identity_label: "youtube.com",
+      source_identity_ambiguous: true,
     };
   }
   const firstSegment = String(segments[0] || "").trim();
@@ -61,6 +63,7 @@ function parseYoutubeIdentity(parsedUrl) {
       source_identity_key: `youtube:${firstSegment.toLowerCase()}`,
       source_identity_scope: "platform_channel",
       source_identity_label: firstSegment,
+      source_identity_ambiguous: false,
     };
   }
   if (["channel", "c", "user"].includes(firstSegment) && segments[1]) {
@@ -69,6 +72,7 @@ function parseYoutubeIdentity(parsedUrl) {
       source_identity_key: `youtube:${firstSegment}/${String(segments[1]).toLowerCase()}`,
       source_identity_scope: "platform_channel",
       source_identity_label: `${firstSegment}/${segments[1]}`,
+      source_identity_ambiguous: false,
     };
   }
   return {
@@ -76,6 +80,7 @@ function parseYoutubeIdentity(parsedUrl) {
     source_identity_key: "youtube.com",
     source_identity_scope: "platform",
     source_identity_label: "youtube.com",
+    source_identity_ambiguous: true,
   };
 }
 
@@ -88,6 +93,7 @@ function parseSubstackIdentity(sourceDomain) {
     source_identity_key: `substack:${publication}`,
     source_identity_scope: "platform_publication",
     source_identity_label: publication,
+    source_identity_ambiguous: false,
   };
 }
 
@@ -100,6 +106,7 @@ function parseMediumIdentity(parsedUrl, sourceDomain) {
         source_identity_key: `medium:${publication}`,
         source_identity_scope: "platform_publication",
         source_identity_label: publication,
+        source_identity_ambiguous: false,
       };
     }
   }
@@ -114,6 +121,7 @@ function parseMediumIdentity(parsedUrl, sourceDomain) {
       source_identity_key: `medium:${handle}`,
       source_identity_scope: "platform_author",
       source_identity_label: segments[0],
+      source_identity_ambiguous: false,
     };
   }
   if (segments[0] === "publication" && segments[1]) {
@@ -122,6 +130,7 @@ function parseMediumIdentity(parsedUrl, sourceDomain) {
       source_identity_key: `medium:publication/${String(segments[1]).toLowerCase()}`,
       source_identity_scope: "platform_publication",
       source_identity_label: segments[1],
+      source_identity_ambiguous: false,
     };
   }
   return {
@@ -129,6 +138,7 @@ function parseMediumIdentity(parsedUrl, sourceDomain) {
     source_identity_key: "medium.com",
     source_identity_scope: "platform",
     source_identity_label: "medium.com",
+    source_identity_ambiguous: true,
   };
 }
 
@@ -167,6 +177,7 @@ function parseSourceIdentity(item, opts = {}) {
       source_identity_key: "substack.com",
       source_identity_scope: "platform",
       source_identity_label: "substack.com",
+      source_identity_ambiguous: true,
     };
   }
 

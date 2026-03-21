@@ -224,9 +224,13 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
   assert.strictEqual(calls, 2);
   assert.deepStrictEqual(payloads[0].search_domain_filter, ["theinformation.com", "reuters.com"]);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payloads[1], "search_domain_filter"), false);
+  assert.ok(payloads[1].messages[1].content.includes("Avoid derivative rewrites or press release reposts"));
   assert.strictEqual(result.diagnostics.preferred_fallback_triggered, true);
   assert.strictEqual(result.diagnostics.preferred_pass_item_count, 1);
   assert.strictEqual(result.diagnostics.broad_pass_item_count, 1);
+  assert.strictEqual(result.diagnostics.preferred_domains_count, 2);
+  assert.strictEqual(result.diagnostics.preferred_candidate_count, 1);
+  assert.strictEqual(result.diagnostics.non_preferred_candidate_count, 1);
   assert.deepStrictEqual(result.diagnostics.preferred_search_result_domains, ["reuters.com", "theinformation.com"]);
   assert.strictEqual(result.diagnostics.preferred_search_result_hit_count, 2);
   assert.strictEqual(result.diagnostics.preferred_search_results_without_preferred_item, false);

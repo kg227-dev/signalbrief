@@ -27,15 +27,26 @@ const youtubeIdentity = parseSourceIdentity({ url: "https://www.youtube.com/@Ins
 assert.strictEqual(youtubeIdentity.source_platform, "youtube");
 assert.strictEqual(youtubeIdentity.source_identity_key, "youtube:@insideboardroom");
 assert.strictEqual(youtubeIdentity.source_identity_scope, "platform_channel");
+assert.strictEqual(youtubeIdentity.source_identity_ambiguous, false);
+
+const ambiguousYoutubeIdentity = parseSourceIdentity({ url: "https://www.youtube.com/watch?v=abc123" });
+assert.strictEqual(ambiguousYoutubeIdentity.source_identity_scope, "platform");
+assert.strictEqual(ambiguousYoutubeIdentity.source_identity_ambiguous, true);
 
 const substackIdentity = parseSourceIdentity({ url: "https://signals.substack.com/p/briefing" });
 assert.strictEqual(substackIdentity.source_platform, "substack");
 assert.strictEqual(substackIdentity.source_identity_key, "substack:signals");
 assert.strictEqual(substackIdentity.source_identity_scope, "platform_publication");
+assert.strictEqual(substackIdentity.source_identity_ambiguous, false);
 
 const mediumIdentity = parseSourceIdentity({ url: "https://medium.com/@SignalWriter/analysis-piece" });
 assert.strictEqual(mediumIdentity.source_platform, "medium");
 assert.strictEqual(mediumIdentity.source_identity_key, "medium:@signalwriter");
 assert.strictEqual(mediumIdentity.source_identity_scope, "platform_author");
+assert.strictEqual(mediumIdentity.source_identity_ambiguous, false);
+
+const ambiguousMediumIdentity = parseSourceIdentity({ url: "https://medium.com/some-post-slug" });
+assert.strictEqual(ambiguousMediumIdentity.source_identity_scope, "platform");
+assert.strictEqual(ambiguousMediumIdentity.source_identity_ambiguous, true);
 
 process.stdout.write("[source-domain-runtime] all assertions passed\n");

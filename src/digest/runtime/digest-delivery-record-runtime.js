@@ -84,6 +84,17 @@ function createDigestDeliveryRecordRuntime(deps) {
       freshness_block_count: Math.max(0, Number(input.freshness_block_count || 0)),
       semantic_repeat_block_count: Math.max(0, Number(input.semantic_repeat_block_count || 0)),
       alternate_queries_used: Math.max(0, Number(input.alternate_queries_used || 0)),
+      preferred_domains_count: Math.max(0, Number(input.preferred_domains_count || 0)),
+      preferred_candidate_count: Math.max(0, Number(input.preferred_candidate_count || 0)),
+      non_preferred_candidate_count: Math.max(0, Number(input.non_preferred_candidate_count || 0)),
+      final_selected_preferred_count: Math.max(0, Number(input.final_selected_preferred_count || 0)),
+      preferred_displaced_weak_count: Math.max(0, Number(input.preferred_displaced_weak_count || 0)),
+      derivative_suppressed_count: Math.max(0, Number(input.derivative_suppressed_count || 0)),
+      specialist_trade_beat_preferred_count: Math.max(0, Number(input.specialist_trade_beat_preferred_count || 0)),
+      platform_identity_ambiguity_count: Math.max(0, Number(input.platform_identity_ambiguity_count || 0)),
+      broader_retrieval_found_better_count: Math.max(0, Number(input.broader_retrieval_found_better_count || 0)),
+      coverage_gap_preferred_missing_count: Math.max(0, Number(input.coverage_gap_preferred_missing_count || 0)),
+      coverage_gap_preferred_weaker_count: Math.max(0, Number(input.coverage_gap_preferred_weaker_count || 0)),
       candidate_pool_before_dedup: Number.isFinite(Number(input.candidate_pool_before_dedup))
         ? Number(input.candidate_pool_before_dedup)
         : null,

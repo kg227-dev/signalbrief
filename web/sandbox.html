@@ -95,7 +95,10 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .rerun-hint { font-size:11px; color:var(--text-light); margin-top:4px; text-align:center; display:none; }
 
 /* Right panel — output */
-.empty-state { display:flex; align-items:center; justify-content:center; height:300px; text-align:center; color:var(--text-light); font-size:14px; }
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:300px; text-align:center; gap:10px; border:1.5px dashed var(--border); border-radius:var(--radius); background:rgba(0,0,0,0.015); margin-top:8px; }
+.empty-state-icon { font-size:28px; opacity:0.35; }
+.empty-state-text { font-size:14px; color:var(--text-secondary); font-weight:500; }
+.empty-state-sub { font-size:12px; color:var(--text-light); }
 
 /* Tabs */
 .tab-row { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); }
@@ -206,15 +209,12 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 
 /* Dark toggle */
 #darkToggle {
-  position:fixed; top:20px; right:20px; z-index:999;
-  width:42px; height:42px; border-radius:50%;
-  border:1px solid var(--border); background:var(--card);
-  cursor:pointer; font-size:18px;
-  display:flex; align-items:center; justify-content:center;
-  transition:all 0.2s ease;
-  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  min-height:34px; width:42px; border-radius:999px;
+  border:1px solid var(--border); background:#fff;
+  cursor:pointer; font-size:16px;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+#darkToggle:hover { background:var(--accent-light); }
 
 /* Dark mode */
 body.dark {
@@ -248,7 +248,6 @@ body.dark .left-panel { border-right-color:var(--border); }
 </style>
 </head>
 <body>
-<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
   <div class="header">
     <div class="header-top">
       <span class="header-brand">SignalBrief</span>
@@ -256,7 +255,9 @@ body.dark .left-panel { border-right-color:var(--border); }
       <a href="/admin/sandbox" class="nav-link current">Sandbox</a>
       <a href="/admin/source-registry" class="nav-link">Source Registry</a>
       <button onclick="logout()" class="signout-btn">Sign out</button>
+      <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-top:6px;">Preview digest output for any topic profile before sending to real users.</p>
   </div>
 
   <div class="sandbox-layout">
@@ -430,7 +431,9 @@ body.dark .left-panel { border-right-color:var(--border); }
       </div>
 
       <div id="emptyState" class="empty-state">
-        Configure preferences and click Generate to preview a digest.
+        <div class="empty-state-icon">✦</div>
+        <div class="empty-state-text">Configure preferences and click Generate Digest</div>
+        <div class="empty-state-sub">A digest preview will appear here</div>
       </div>
 
       <div id="outputArea" style="display:none;">

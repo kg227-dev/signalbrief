@@ -50,8 +50,15 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
   color:var(--text-secondary); margin-bottom:10px;
 }
 .cards-kpi {
-  grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns:repeat(3, 1fr);
   margin-bottom:0;
+}
+.cards-kpi-4 {
+  grid-template-columns:repeat(4, 1fr);
+  margin-bottom:0;
+}
+@media (max-width:700px) {
+  .cards-kpi, .cards-kpi-4 { grid-template-columns:1fr; }
 }
 .cards-window {
   grid-template-columns:repeat(2, minmax(0, 1fr));
@@ -929,19 +936,15 @@ body.dark .failed-delivery-row { background:var(--card); }
 body.dark .failed-delivery-error { color:#fca5a5; }
 body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-color:rgba(180,83,9,0.3); }
 #darkToggle {
-  position:fixed; top:20px; right:20px; z-index:999;
-  width:42px; height:42px; border-radius:50%;
+  min-height:34px; width:42px; border-radius:999px;
   border:1px solid var(--border); background:var(--card);
-  cursor:pointer; font-size:18px;
-  display:flex; align-items:center; justify-content:center;
-  transition:all 0.2s ease;
-  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  cursor:pointer; font-size:16px;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+#darkToggle:hover { background:var(--accent-light); }
 </style>
 </head>
 <body>
-<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
 <div class="container">
 
   <div class="header">
@@ -951,6 +954,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
       <a href="/admin/sandbox" class="nav-link">Sandbox</a>
       <a href="/admin/source-registry" class="nav-link">Source Registry</a>
       <button onclick="logout()" class="signout-btn">Sign out</button>
+      <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
     <p>API cost tracking — <span id="monthLabel">—</span> · <span id="lastRefreshed">not refreshed yet</span><span id="staleBadge" class="stale-badge">stale data</span></p>
   </div>
@@ -1014,7 +1018,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     </div>
     <div>
       <div class="kpi-row-title">Engagement</div>
-      <div class="cards cards-kpi">
+      <div class="cards cards-kpi-4">
         <div class="card">
           <div class="card-label">7-day open rate</div>
           <div class="card-value" id="engagementOpenRate">—</div>

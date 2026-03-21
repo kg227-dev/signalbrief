@@ -131,18 +131,17 @@ body.dark .explain-block { background:rgba(255,255,255,0.03); }
 }
 body.dark .modal-close { background:var(--card); }
 #darkToggle {
-  position:fixed; top:20px; right:20px; z-index:999; width:42px; height:42px; border-radius:50%;
-  border:1px solid var(--border); background:var(--card); cursor:pointer; font-size:18px;
-  display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  min-height:34px; width:42px; border-radius:999px;
+  border:1px solid var(--border); background:var(--card); cursor:pointer; font-size:16px;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-#darkToggle:hover { transform:scale(1.06); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+#darkToggle:hover { background:var(--accent-light); }
 @media (max-width: 980px) {
   .layout-grid { grid-template-columns:1fr; }
 }
 </style>
 </head>
 <body>
-<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
 <div class="container">
   <div class="header">
     <div class="header-top">
@@ -151,6 +150,7 @@ body.dark .modal-close { background:var(--card); }
       <a href="/admin/sandbox" class="nav-link">Sandbox</a>
       <a href="/admin/source-registry" class="nav-link current">Source Registry</a>
       <button onclick="logout()" class="signout-btn">Sign out</button>
+      <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
     <p>Global source policy overrides. Hard blocks exclude a domain from all digests. <span id="lastRefreshed">not refreshed yet</span></p>
   </div>
@@ -351,7 +351,7 @@ function setLastRefreshed(dateObj) {
   const el = document.getElementById("lastRefreshed");
   if (!el) return;
   if (!dateObj) {
-    el.textContent = "refresh failed";
+    el.innerHTML = `<span style="color:var(--yellow);font-weight:600;">⚠ refresh failed</span>`;
     return;
   }
   el.textContent = "last refreshed " + dateObj.toLocaleTimeString("en-US", {

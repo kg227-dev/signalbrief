@@ -307,11 +307,15 @@ function createDigestDataFetchRuntime(deps) {
     const preferredDomains = Array.isArray(retrievalPlan.preferred_domains)
       ? retrievalPlan.preferred_domains.map((domain) => String(domain || "").trim()).filter(Boolean)
       : [];
-    const preferredEnabled = preferredDomains.length > 0;
+    const broadOnly = retrievalPlan.broad_only === true;
+    const allowBroadFallback = retrievalPlan.allow_broad_fallback !== false;
+    const preferredEnabled = preferredDomains.length > 0 && !broadOnly;
     const thinThreshold = Math.max(1, Number(retrievalPlan.thin_item_threshold || 2));
     const diagnostics = {
       provider: "perplexity",
-      retrieval_mode: preferredEnabled ? "preferred_allowlist_then_broad" : "broad_only",
+      retrieval_mode: preferredEnabled
+        ? (allowBroadFallback ? "preferred_allowlist_then_broad" : "preferred_allowlist_only")
+        : "broad_only",
       timeout_ms: providerPolicy.timeoutMs,
       retries: providerPolicy.retries,
       retry_status_codes: providerPolicy.retryStatusCodes.slice(),
@@ -363,7 +367,7 @@ function createDigestDataFetchRuntime(deps) {
     }
 
     const eligibleCountAfterPreferred = collected.filter((item) => itemEligibilityFn(item) !== false).length;
-    const needsBroadFallback = !preferredEnabled || eligibleCountAfterPreferred < thinThreshold;
+    const needsBroadFallback = broadOnly || (allowBroadFallback && (!preferredEnabled || eligibleCountAfterPreferred < thinThreshold));
     if (preferredEnabled && needsBroadFallback) diagnostics.preferred_fallback_triggered = true;
 
     if (needsBroadFallback) {

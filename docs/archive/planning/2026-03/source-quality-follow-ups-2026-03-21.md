@@ -221,6 +221,44 @@ Follow-up:
   - expected at runtime under `/app/data`
   - allowed to fall back to checked-in defaults
 
+### Add retrieval budget guardrails to cap search cost
+
+Goal:
+- cap Perplexity-heavy fetch expansion without lowering the digest quality floor
+
+Implementation:
+- add internal `CONFIG.digest.search_budget` defaults:
+  - scheduled: `soft_calls=24`, `hard_calls=36`
+  - on-demand: `soft_calls=6`, `hard_calls=9`
+  - custom-topic reserve: `3` calls max per run
+- move retrieval from per-topic retry loops to a phased run-level allocator:
+  - Phase 1: one initial query per standard topic
+  - Phase 2: one extra preferred retry only for thin, high-priority topics
+  - Phase 3: one broad fallback only for thin, high-priority topics while under the soft cap
+  - custom topics spend from a reserved call pool instead of competing with the full standard run
+- gate extra retries on marginal yield:
+  - only retry when a topic has fewer than `2` usable post-dedup candidates
+  - stop spending more on a topic after zero-yield retries indicate `repeat` or `topic_fit`
+  - stop additional retries after `2` consecutive zero-yield retry attempts
+- preserve quality behavior:
+  - do not relax source filters, repeat suppression, or quality thresholds to hit the cap
+  - if the budget runs out, prefer a smaller high-quality pool over weak padding
+  - keep existing withhold behavior when the final pool is still too weak
+- extend internal diagnostics and admin exports with:
+  - `search_budget_soft_calls`
+  - `search_budget_hard_calls`
+  - `search_budget_calls_used`
+  - `search_budget_exhausted`
+  - `broad_fallback_topics_used`
+  - `zero_yield_retry_count`
+  - `budget_stop_reason`
+
+Validation:
+- scheduled healthy runs should stay under the soft cap without shrinking normal digest depth
+- thin-pool runs should never exceed the hard cap and should surface the budget stop diagnostics
+- on-demand runs should stay within the smaller on-demand budget
+- broad fallback should be skipped for topics that already have enough usable preferred-pass coverage
+
 ## Suggested execution order
 
 1. identity-level governance overrides

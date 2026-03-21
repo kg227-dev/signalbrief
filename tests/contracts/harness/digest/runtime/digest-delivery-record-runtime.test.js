@@ -58,6 +58,13 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
       preferred_candidate_count: 3,
       non_preferred_candidate_count: 2,
       derivative_suppressed_count: 1,
+      search_budget_soft_calls: 24,
+      search_budget_hard_calls: 36,
+      search_budget_calls_used: 18,
+      search_budget_exhausted: true,
+      broad_fallback_topics_used: 4,
+      zero_yield_retry_count: 2,
+      budget_stop_reason: "soft_cap_reached",
       candidate_pool_before_dedup: 18,
       candidate_pool_after_dedup: 7,
       fallback_reason: "min_count_backfill",
@@ -140,6 +147,13 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     assert.strictEqual(scheduledByRun.freshness_block_count, 2);
     assert.strictEqual(scheduledByRun.preferred_domains_count, 4);
     assert.strictEqual(scheduledByRun.derivative_suppressed_count, 1);
+    assert.strictEqual(scheduledByRun.search_budget_soft_calls, 24);
+    assert.strictEqual(scheduledByRun.search_budget_hard_calls, 36);
+    assert.strictEqual(scheduledByRun.search_budget_calls_used, 18);
+    assert.strictEqual(scheduledByRun.search_budget_exhausted, true);
+    assert.strictEqual(scheduledByRun.broad_fallback_topics_used, 4);
+    assert.strictEqual(scheduledByRun.zero_yield_retry_count, 2);
+    assert.strictEqual(scheduledByRun.budget_stop_reason, "soft_cap_reached");
     assert.strictEqual(scheduledByRun.dominant_failure_mode, "repeat");
     assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-13", "scheduled"), true);
     assert.strictEqual(deliveryRecords.hasSentDigestRecord("user-1", "2026-03-14", "scheduled"), false);

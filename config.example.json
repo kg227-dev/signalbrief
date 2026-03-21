@@ -16,6 +16,17 @@
     "perUserFreshnessDigests": 3,
     "perUserFreshnessMinItems": 3,
     "maxCustomItemsPerRun": 3,
+    "search_budget": {
+      "scheduled": {
+        "soft_calls": 24,
+        "hard_calls": 36
+      },
+      "on_demand": {
+        "soft_calls": 6,
+        "hard_calls": 9
+      },
+      "custom_topic_reserve_calls": 3
+    },
     "minBaseScoreForFinal": 6.5,
     "lookbackHours": 48
   },

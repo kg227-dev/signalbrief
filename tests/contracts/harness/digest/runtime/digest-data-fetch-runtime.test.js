@@ -241,6 +241,99 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
   assert.deepStrictEqual(result.items[1].retrieval_preferred_search_domains, ["reuters.com"]);
 }
 
+async function testPreferredOnlyModeSkipsBroadFallback() {
+  let calls = 0;
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    isFetchedItemEligible: () => false,
+    httpsPostWithRetry: async (_host, _path, _headers, payload) => {
+      calls += 1;
+      assert.deepStrictEqual(payload.search_domain_filter, ["reuters.com"]);
+      return {
+        status: 200,
+        body: {
+          citations: ["https://preferred.example/story"],
+          search_results: [{ title: "Preferred result", url: "https://reuters.com/markets/story" }],
+          choices: [{
+            message: {
+              content: JSON.stringify([
+                { headline: "Preferred only story", summary: "Summary", source: "reuters.com", url: "https://preferred.example/story" },
+              ]),
+            },
+          }],
+        },
+      };
+    },
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "MARKETS",
+    queries: ["q1"],
+  }, {
+    retrievalPlan: {
+      preferred_domains: ["reuters.com"],
+      allow_broad_fallback: false,
+    },
+  });
+
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(result.diagnostics.retrieval_mode, "preferred_allowlist_only");
+  assert.strictEqual(result.diagnostics.preferred_fallback_triggered, false);
+  assert.strictEqual(result.diagnostics.broad_pass_item_count, 0);
+}
+
+async function testBroadOnlyModeSkipsSearchFilter() {
+  let calls = 0;
+  const payloads = [];
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    httpsPostWithRetry: async (_host, _path, _headers, payload) => {
+      payloads.push(payload);
+      calls += 1;
+      return {
+        status: 200,
+        body: {
+          citations: ["https://broad.example/story"],
+          search_results: [{ title: "Preferred result", url: "https://wsj.com/articles/story-1" }],
+          choices: [{
+            message: {
+              content: JSON.stringify([
+                { headline: "Broad only story", summary: "Summary", source: "wsj.com", url: "https://broad.example/story" },
+              ]),
+            },
+          }],
+        },
+      };
+    },
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "STRATEGY",
+    queries: ["q1"],
+  }, {
+    retrievalPlan: {
+      preferred_domains: ["wsj.com"],
+      broad_only: true,
+    },
+  });
+
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(payloads[0], "search_domain_filter"), false);
+  assert.strictEqual(result.diagnostics.retrieval_mode, "broad_only");
+  assert.strictEqual(result.diagnostics.broad_pass_item_count, 1);
+  assert.deepStrictEqual(result.diagnostics.preferred_search_result_domains, ["wsj.com"]);
+}
+
 async function testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl() {
   const fetchRuntime = createDigestDataFetchRuntime({
     CONFIG: {
@@ -322,6 +415,8 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
   await testTransportErrorDiagnostics();
   await testStandardTopicsUseFallbackQueriesForThinPools();
   await testPreferredDomainPassUsesSearchFilterAndBroadFallback();
+  await testPreferredOnlyModeSkipsBroadFallback();
+  await testBroadOnlyModeSkipsSearchFilter();
   await testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl();
   await testFetchDropsAmbiguousSameHostMismatch();
 })().catch((error) => {

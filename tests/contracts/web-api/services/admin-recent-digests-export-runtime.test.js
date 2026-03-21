@@ -96,6 +96,13 @@ const {
       freshness_block_count: 2,
       semantic_repeat_block_count: 2,
       alternate_queries_used: 3,
+      search_budget_soft_calls: 24,
+      search_budget_hard_calls: 36,
+      search_budget_calls_used: 22,
+      search_budget_exhausted: true,
+      broad_fallback_topics_used: 5,
+      zero_yield_retry_count: 2,
+      budget_stop_reason: "soft_cap_reached",
       candidate_pool_before_dedup: 18,
       candidate_pool_after_dedup: 7,
       fallback_reason: "min_count_backfill",
@@ -122,6 +129,13 @@ const {
   assert.strictEqual(row.requested_count, 5);
   assert.strictEqual(row.freshness_block_count, 2);
   assert.strictEqual(row.alternate_queries_used, 3);
+  assert.strictEqual(row.search_budget_soft_calls, 24);
+  assert.strictEqual(row.search_budget_hard_calls, 36);
+  assert.strictEqual(row.search_budget_calls_used, 22);
+  assert.strictEqual(row.search_budget_exhausted, true);
+  assert.strictEqual(row.broad_fallback_topics_used, 5);
+  assert.strictEqual(row.zero_yield_retry_count, 2);
+  assert.strictEqual(row.budget_stop_reason, "soft_cap_reached");
   assert.strictEqual(row.thin_pool, true);
   assert.strictEqual(row.dominant_failure_mode, "repeat");
   assert.strictEqual(row.sent_items[0].freshness_key, "ai|fresh");

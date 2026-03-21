@@ -95,6 +95,13 @@ function createDigestDeliveryRecordRuntime(deps) {
       broader_retrieval_found_better_count: Math.max(0, Number(input.broader_retrieval_found_better_count || 0)),
       coverage_gap_preferred_missing_count: Math.max(0, Number(input.coverage_gap_preferred_missing_count || 0)),
       coverage_gap_preferred_weaker_count: Math.max(0, Number(input.coverage_gap_preferred_weaker_count || 0)),
+      search_budget_soft_calls: Math.max(0, Number(input.search_budget_soft_calls || 0)),
+      search_budget_hard_calls: Math.max(0, Number(input.search_budget_hard_calls || 0)),
+      search_budget_calls_used: Math.max(0, Number(input.search_budget_calls_used || 0)),
+      search_budget_exhausted: input.search_budget_exhausted === true,
+      broad_fallback_topics_used: Math.max(0, Number(input.broad_fallback_topics_used || 0)),
+      zero_yield_retry_count: Math.max(0, Number(input.zero_yield_retry_count || 0)),
+      budget_stop_reason: String(input.budget_stop_reason || "").trim() || null,
       candidate_pool_before_dedup: Number.isFinite(Number(input.candidate_pool_before_dedup))
         ? Number(input.candidate_pool_before_dedup)
         : null,

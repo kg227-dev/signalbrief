@@ -715,6 +715,11 @@ async function main() {
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard,
     emitDigestIncident,
+    normalizeUrlForDedup,
+    isFetchedItemEligible: (item) => {
+      const annotated = annotateEditorialSignals([item]);
+      return annotated.length > 0 && annotated[0].hard_exclude !== true;
+    },
   });
   const {
     selectionTarget,
@@ -876,6 +881,13 @@ async function main() {
         broader_retrieval_found_better_count: Number(fetchDiagnostics?.broader_retrieval_found_better_count || 0),
         coverage_gap_preferred_missing_count: Number(fetchDiagnostics?.coverage_gap_preferred_missing_count || 0),
         coverage_gap_preferred_weaker_count: Number(fetchDiagnostics?.coverage_gap_preferred_weaker_count || 0),
+        search_budget_soft_calls: Number(fetchDiagnostics?.search_budget_soft_calls || 0),
+        search_budget_hard_calls: Number(fetchDiagnostics?.search_budget_hard_calls || 0),
+        search_budget_calls_used: Number(fetchDiagnostics?.search_budget_calls_used || 0),
+        search_budget_exhausted: fetchDiagnostics?.search_budget_exhausted === true,
+        broad_fallback_topics_used: Number(fetchDiagnostics?.broad_fallback_topics_used || 0),
+        zero_yield_retry_count: Number(fetchDiagnostics?.zero_yield_retry_count || 0),
+        budget_stop_reason: String(fetchDiagnostics?.budget_stop_reason || "").trim() || null,
         candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
         candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
       },

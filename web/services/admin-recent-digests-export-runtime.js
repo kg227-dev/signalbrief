@@ -291,6 +291,13 @@ function createRecentDigestsExporter(deps) {
           broader_retrieval_found_better_count: Math.max(0, Number(resolvedSnapshot?.broader_retrieval_found_better_count || perUserRow?.broader_retrieval_found_better_count || 0)),
           coverage_gap_preferred_missing_count: Math.max(0, Number(resolvedSnapshot?.coverage_gap_preferred_missing_count || perUserRow?.coverage_gap_preferred_missing_count || 0)),
           coverage_gap_preferred_weaker_count: Math.max(0, Number(resolvedSnapshot?.coverage_gap_preferred_weaker_count || perUserRow?.coverage_gap_preferred_weaker_count || 0)),
+          search_budget_soft_calls: Math.max(0, Number(resolvedSnapshot?.search_budget_soft_calls || perUserRow?.search_budget_soft_calls || 0)),
+          search_budget_hard_calls: Math.max(0, Number(resolvedSnapshot?.search_budget_hard_calls || perUserRow?.search_budget_hard_calls || 0)),
+          search_budget_calls_used: Math.max(0, Number(resolvedSnapshot?.search_budget_calls_used || perUserRow?.search_budget_calls_used || 0)),
+          search_budget_exhausted: resolvedSnapshot?.search_budget_exhausted === true || perUserRow?.search_budget_exhausted === true,
+          broad_fallback_topics_used: Math.max(0, Number(resolvedSnapshot?.broad_fallback_topics_used || perUserRow?.broad_fallback_topics_used || 0)),
+          zero_yield_retry_count: Math.max(0, Number(resolvedSnapshot?.zero_yield_retry_count || perUserRow?.zero_yield_retry_count || 0)),
+          budget_stop_reason: String(resolvedSnapshot?.budget_stop_reason || perUserRow?.budget_stop_reason || "").trim() || null,
           candidate_pool_before_dedup: Number.isFinite(Number(resolvedSnapshot?.candidate_pool_before_dedup))
             ? Number(resolvedSnapshot.candidate_pool_before_dedup)
             : (Number.isFinite(Number(perUserRow?.candidate_pool_before_dedup)) ? Number(perUserRow.candidate_pool_before_dedup) : null),

@@ -92,6 +92,28 @@ function validateConfigSchema(config) {
     if (digest.lookbackHours != null) {
       expectPositiveInteger(errors, "digest.lookbackHours", digest.lookbackHours, { min: 1, max: 168 });
     }
+    if (digest.search_budget != null && expectObject(errors, "digest.search_budget", digest.search_budget)) {
+      const searchBudget = digest.search_budget;
+      if (searchBudget.scheduled != null && expectObject(errors, "digest.search_budget.scheduled", searchBudget.scheduled)) {
+        if (searchBudget.scheduled.soft_calls != null) {
+          expectPositiveInteger(errors, "digest.search_budget.scheduled.soft_calls", searchBudget.scheduled.soft_calls, { min: 1, max: 200 });
+        }
+        if (searchBudget.scheduled.hard_calls != null) {
+          expectPositiveInteger(errors, "digest.search_budget.scheduled.hard_calls", searchBudget.scheduled.hard_calls, { min: 1, max: 200 });
+        }
+      }
+      if (searchBudget.on_demand != null && expectObject(errors, "digest.search_budget.on_demand", searchBudget.on_demand)) {
+        if (searchBudget.on_demand.soft_calls != null) {
+          expectPositiveInteger(errors, "digest.search_budget.on_demand.soft_calls", searchBudget.on_demand.soft_calls, { min: 1, max: 200 });
+        }
+        if (searchBudget.on_demand.hard_calls != null) {
+          expectPositiveInteger(errors, "digest.search_budget.on_demand.hard_calls", searchBudget.on_demand.hard_calls, { min: 1, max: 200 });
+        }
+      }
+      if (searchBudget.custom_topic_reserve_calls != null) {
+        expectPositiveInteger(errors, "digest.search_budget.custom_topic_reserve_calls", searchBudget.custom_topic_reserve_calls, { min: 0, max: 200 });
+      }
+    }
   }
 
   if (!Array.isArray(config.topics) || config.topics.length === 0) {

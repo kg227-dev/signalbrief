@@ -36,7 +36,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       if (topic.isCustom) {
         return {
           apiCalls: 2,
-          items: [{ headline: "custom", tag: topic.tag }],
+          items: [{ headline: "custom", tag: topic.tag, source: "sec.gov" }],
           diagnostics: {
             provider: "perplexity",
             preferred_domains_used: opts?.retrievalPlan?.preferred_domains || [],
@@ -52,17 +52,20 @@ assertModuleExports(() => runtime, TARGET_REL);
       }
       return {
         apiCalls: 1,
-        items: [{ headline: "standard", tag: topic.tag }],
+        items: [
+          { headline: `${topic.tag} standard one`, tag: topic.tag, source: topic.tag === "AI×TECH" ? "theinformation.com" : "wsj.com" },
+          { headline: `${topic.tag} standard two`, tag: topic.tag, source: topic.tag === "AI×TECH" ? "reuters.com" : "wsj.com" },
+        ],
         diagnostics: {
           provider: "perplexity",
           preferred_domains_used: opts?.retrievalPlan?.preferred_domains || [],
-          preferred_fallback_triggered: topic.tag === "STRATEGY",
-          preferred_pass_item_count: 1,
-          broad_pass_item_count: topic.tag === "STRATEGY" ? 1 : 0,
+          preferred_fallback_triggered: false,
+          preferred_pass_item_count: 2,
+          broad_pass_item_count: 0,
           search_result_domains: topic.tag === "AI×TECH" ? ["theinformation.com", "reuters.com"] : ["wsj.com", "reuters.com"],
           preferred_search_result_domains: topic.tag === "AI×TECH" ? ["theinformation.com"] : ["wsj.com"],
           preferred_search_result_hit_count: 1,
-          preferred_search_results_without_preferred_item: topic.tag === "STRATEGY",
+          preferred_search_results_without_preferred_item: false,
         },
       };
     },
@@ -124,16 +127,77 @@ assertModuleExports(() => runtime, TARGET_REL);
     fetched.fetchDiagnostics.preferred_domains_used,
     ["theinformation.com", "reuters.com", "wsj.com", "sec.gov"]
   );
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_fallback_triggered, true);
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_pass_item_count, 3);
-  assert.strictEqual(fetched.fetchDiagnostics.broad_pass_item_count, 1);
+  assert.strictEqual(fetched.fetchDiagnostics.preferred_fallback_triggered, false);
+  assert.strictEqual(fetched.fetchDiagnostics.preferred_pass_item_count, 5);
+  assert.strictEqual(fetched.fetchDiagnostics.broad_pass_item_count, 0);
   assert.deepStrictEqual(
     fetched.fetchDiagnostics.preferred_search_result_domains,
     ["theinformation.com", "wsj.com", "sec.gov"]
   );
   assert.strictEqual(fetched.fetchDiagnostics.preferred_search_result_hit_count, 3);
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_search_results_without_preferred_item_count, 1);
+  assert.strictEqual(fetched.fetchDiagnostics.preferred_search_results_without_preferred_item_count, 0);
+  assert.strictEqual(fetched.fetchDiagnostics.search_budget_soft_calls, 6);
+  assert.strictEqual(fetched.fetchDiagnostics.search_budget_hard_calls, 9);
+  assert.strictEqual(fetched.fetchDiagnostics.search_budget_calls_used, 3);
+  assert.strictEqual(fetched.fetchDiagnostics.search_budget_exhausted, false);
+  assert.strictEqual(fetched.fetchDiagnostics.broad_fallback_topics_used, 0);
+  assert.strictEqual(fetched.fetchDiagnostics.zero_yield_retry_count, 0);
+  assert.strictEqual(fetched.fetchDiagnostics.budget_stop_reason, null);
   assert.strictEqual(incidents.length, 0);
+
+  const budgetedFetchCalls = [];
+  const budgetRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [
+        { tag: "AI×TECH", queries: ["a1", "a2"] },
+        { tag: "STRATEGY", queries: ["b1", "b2"] },
+        { tag: "ENERGY", queries: ["c1", "c2"] },
+        { tag: "HEALTHCARE", queries: ["d1", "d2"] },
+      ],
+      digest: {
+        itemCount: 7,
+        search_budget: {
+          on_demand: {
+            soft_calls: 2,
+            hard_calls: 3,
+          },
+          custom_topic_reserve_calls: 0,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic) => {
+      budgetedFetchCalls.push(topic.tag);
+      return {
+        apiCalls: 1,
+        items: [{ headline: `${topic.tag} only item`, tag: topic.tag }],
+        diagnostics: {
+          provider: "perplexity",
+          successful_calls: 1,
+          failed_calls: 0,
+          transport_errors: 0,
+          status_counts: {},
+        },
+      };
+    },
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const budgetedResult = await budgetRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["AI×TECH", "STRATEGY"], preferences: {} }],
+    targetChatId: "123",
+    runMode: "targeted",
+  });
+  assert.strictEqual(budgetedResult.standardFetchCallsPlanned, 3);
+  assert.strictEqual(budgetedResult.standardFetchCalls, 3);
+  assert.deepStrictEqual(budgetedFetchCalls, ["AI×TECH", "STRATEGY", "ENERGY"]);
+  assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_calls_used, 3);
+  assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_exhausted, true);
+  assert.strictEqual(budgetedResult.fetchDiagnostics.budget_stop_reason, "hard_cap_reached");
+  assert.strictEqual(budgetedResult.fetchDiagnostics.alternate_queries_used, 0);
 
   const emptyIncidents = [];
   const emptyRuntime = createDigestOrchestratorFetchRuntime({
@@ -220,4 +284,66 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(degradedIncidents[0][2].degraded_topics, 1);
   assert.strictEqual(degradedIncidents[0][2].fetched_topics, 2);
   assert.strictEqual(degradedIncidents[0][2].failed_calls, 1);
+
+  const retryCalls = [];
+  const retryRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "STRATEGY", queries: ["q1", "q2", "q3"] }],
+      digest: {
+        itemCount: 7,
+        search_budget: {
+          scheduled: {
+            soft_calls: 4,
+            hard_calls: 4,
+          },
+          custom_topic_reserve_calls: 0,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      retryCalls.push({ tag: topic.tag, retrievalPlan: opts?.retrievalPlan || {} });
+      const broadOnly = opts?.retrievalPlan?.broad_only === true;
+      const allowBroadFallback = opts?.retrievalPlan?.allow_broad_fallback !== false;
+      if (broadOnly) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "strategy-broad", tag: topic.tag, source: "other.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      if (allowBroadFallback === false && topic.queries[0] === "q1") {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "strategy-one", tag: topic.tag, source: "wsj.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [{ headline: "strategy-one", tag: topic.tag, source: "wsj.com" }],
+        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+      };
+    },
+    buildPreferredDomainShortlist: () => ({ domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false }),
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+    normalizeUrlForDedup: (value) => String(value || "").trim().toLowerCase(),
+  });
+
+  const retryResult = await retryRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["STRATEGY"], preferences: {} }],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(retryResult.standardFetchCalls, 2);
+  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 1);
+  assert.strictEqual(retryResult.fetchDiagnostics.broad_fallback_topics_used, 0);
+  assert.strictEqual(retryResult.fetchDiagnostics.alternate_queries_used, 1);
+  assert.deepStrictEqual(
+    retryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
+    ["preferred", "preferred"]
+  );
 })();

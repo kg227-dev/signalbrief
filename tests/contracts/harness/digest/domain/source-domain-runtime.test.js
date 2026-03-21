@@ -22,6 +22,10 @@ assert.strictEqual(
   parseSourceDomain({ url: "https://youtu.be/abc123" }),
   "youtube.com"
 );
+assert.strictEqual(
+  parseSourceDomain({ source_domain: "Reuters.com" }),
+  "reuters.com"
+);
 
 const youtubeIdentity = parseSourceIdentity({ url: "https://www.youtube.com/@InsideBoardroom/videos" });
 assert.strictEqual(youtubeIdentity.source_platform, "youtube");

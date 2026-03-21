@@ -36,6 +36,14 @@ It is meant to preserve the short-term execution queue while the implementation 
 - better coverage-gap handling
 - richer preferred-source diagnostics and counters
 
+## Execution status
+
+- [x] Identity-level governance storage and lookup now exist in runtime resolution, with exact identity match winning before domain fallback
+- [x] Identity-aware source annotation now carries the winning identity override through editorial signals
+- [ ] Admin editing and inspect UX is still mostly domain-first
+- [ ] Diagnostics-driven curation queues are still pending
+- [ ] Story/event fingerprinting is still heuristic and should be strengthened
+
 ## Highest-leverage next steps
 
 ### 1. Add identity-level governance overrides

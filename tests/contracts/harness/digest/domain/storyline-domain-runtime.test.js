@@ -486,6 +486,79 @@ assert.ok(corporateTier.source_authority < 0.5);
   setAdminSourceRegistry(null);
 }
 
+// ── Identity-level governance overrides can outrank restrictive platform-domain defaults ──
+{
+  setAdminSourceRegistry({
+    domains: new Map([
+      ["youtube.com", {
+        domain: "youtube.com",
+        source_type: "platform_user_generated",
+        policy: "review",
+        review_status: "monitor",
+        note: "Platform default",
+      }],
+    ]),
+    identities: new Map([
+      ["youtube:@insideboardroom", {
+        identity_key: "youtube:@insideboardroom",
+        source_type: "reported_media",
+        policy: "allowed",
+        review_status: "reviewed",
+        note: "Reviewed channel override",
+      }],
+    ]),
+  });
+
+  const effective = explainSourcePolicy("youtube.com", "TECHNOLOGY", {
+    sourceIdentityKey: "youtube:@InsideBoardroom",
+  });
+  assert.strictEqual(effective.source_type, "reported_media");
+  assert.strictEqual(effective.source_policy, "allowed");
+  assert.strictEqual(effective.review_status, "reviewed");
+  assert.strictEqual(effective.policy_source, "admin_identity_override");
+  assert.strictEqual(effective.inherits_from_identity, "youtube:@insideboardroom");
+  assert.strictEqual(effective.admin_override.match_scope, "identity");
+  assert.strictEqual(effective.admin_override.match_identity_key, "youtube:@insideboardroom");
+
+  const annotated = annotateEditorialSignals([{
+    tag: "TECHNOLOGY",
+    headline: "Inside Boardroom breaks down hyperscaler AI capex",
+    summary: "Channel coverage of cloud infrastructure spending.",
+    url: "https://www.youtube.com/@InsideBoardroom/videos",
+    source: "YouTube",
+    baseScore: 7.5,
+  }]);
+  assert.strictEqual(annotated[0].source_policy, "allowed");
+  assert.strictEqual(annotated[0].source_policy_source, "admin_identity_override");
+  assert.strictEqual(annotated[0].source_inherits_from_identity, "youtube:@insideboardroom");
+  assert.strictEqual(annotated[0].source_identity_key, "youtube:@insideboardroom");
+  setAdminSourceRegistry(null);
+}
+
+// ── Domain fallback still applies when no identity-specific governance exists ──
+{
+  setAdminSourceRegistry({
+    domains: new Map([
+      ["youtube.com", {
+        domain: "youtube.com",
+        source_type: "platform_user_generated",
+        policy: "review",
+        review_status: "monitor",
+        note: "Platform default",
+      }],
+    ]),
+    identities: new Map(),
+  });
+  const fallback = explainSourcePolicy("youtube.com", "TECHNOLOGY", {
+    sourceIdentityKey: "youtube:@unknownchannel",
+  });
+  assert.strictEqual(fallback.source_policy, "review");
+  assert.strictEqual(fallback.review_status, "monitor");
+  assert.strictEqual(fallback.policy_source, "admin_override");
+  assert.strictEqual(fallback.inherits_from_identity, null);
+  setAdminSourceRegistry(null);
+}
+
 // ── Admin hard block marks domain as blocked + excluded ──
 {
   setAdminSourceRegistry(new Map([

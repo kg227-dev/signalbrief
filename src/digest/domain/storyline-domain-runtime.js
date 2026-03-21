@@ -11,6 +11,7 @@ const {
 } = require("./source-domain-runtime");
 const { buildFreshnessKey } = require("../runtime/repeat-freshness-runtime");
 const {
+  normalizeSourceIdentityKey,
   SOURCE_POLICY_RANKING_EFFECTS,
   normalizeSourcePolicyDomain,
   normalizeSourceTopicToken,
@@ -562,24 +563,51 @@ function setLearnedDomainAdjustments(adjustmentsMap) {
 }
 
 function setAdminSourceRegistry(registryMap) {
-  _adminSourceRegistry = registryMap instanceof Map ? registryMap : null;
+  if (registryMap instanceof Map) {
+    _adminSourceRegistry = {
+      domains: registryMap,
+      identities: new Map(),
+    };
+    return;
+  }
+  if (registryMap && typeof registryMap === "object") {
+    const domains = registryMap.domains instanceof Map ? registryMap.domains : new Map();
+    const identities = registryMap.identities instanceof Map ? registryMap.identities : new Map();
+    _adminSourceRegistry = { domains, identities };
+    return;
+  }
+  _adminSourceRegistry = null;
 }
 
 function setPreferredSourceRegistry(registry) {
   _preferredSourceRegistry = registry && typeof registry === "object" ? registry : null;
 }
 
-function resolveAdminSourceRegistryEntry(sourceDomain) {
+function resolveAdminSourceRegistryEntry(sourceDomain, sourceIdentityKey = null) {
   const normalizedDomain = normalizeSourceDomain(sourceDomain);
-  if (!_adminSourceRegistry || !normalizedDomain) return null;
+  const normalizedIdentityKey = normalizeSourceIdentityKey(sourceIdentityKey);
+  if (!_adminSourceRegistry || (!normalizedDomain && !normalizedIdentityKey)) return null;
+  const identityEntries = _adminSourceRegistry.identities instanceof Map ? _adminSourceRegistry.identities : new Map();
+  if (normalizedIdentityKey && identityEntries.has(normalizedIdentityKey)) {
+    return {
+      match_scope: "identity",
+      matched_identity_key: normalizedIdentityKey,
+      matched_domain: null,
+      entry: identityEntries.get(normalizedIdentityKey) || null,
+    };
+  }
+  if (!normalizedDomain) return null;
+  const domainEntries = _adminSourceRegistry.domains instanceof Map ? _adminSourceRegistry.domains : new Map();
   let bestMatch = null;
-  for (const [domain, entry] of _adminSourceRegistry.entries()) {
+  for (const [domain, entry] of domainEntries.entries()) {
     const normalizedEntryDomain = normalizeSourceDomain(domain);
     if (!normalizedEntryDomain) continue;
     if (!matchesDomain(normalizedDomain, normalizedEntryDomain)) continue;
     if (!bestMatch || normalizedEntryDomain.length > bestMatch.matched_domain.length) {
       bestMatch = {
+        match_scope: "domain",
         matched_domain: normalizedEntryDomain,
+        matched_identity_key: null,
         entry: entry && typeof entry === "object" ? entry : null,
       };
     }
@@ -745,14 +773,17 @@ function resolvePreferredSourceMatch(sourceDomain, tag, sourceIdentityKey = null
   });
 }
 
-function explainSourcePolicy(sourceDomainRaw, tag) {
+function explainSourcePolicy(sourceDomainRaw, tag, options = {}) {
   const baseline = classifySourceTierBaseline(sourceDomainRaw, tag);
   const sourceDomain = String(baseline?.source_domain || "").trim();
-  const adminMatch = resolveAdminSourceRegistryEntry(sourceDomain);
+  const sourceIdentityKey = normalizeSourceIdentityKey(options?.sourceIdentityKey);
+  const adminMatch = resolveAdminSourceRegistryEntry(sourceDomain, sourceIdentityKey);
   if (!adminMatch || !adminMatch.entry) return baseline;
 
   const adminEntry = adminMatch.entry;
+  const matchedScope = String(adminMatch.match_scope || "domain").trim() || "domain";
   const matchedDomain = String(adminMatch.matched_domain || "").trim() || null;
+  const matchedIdentityKey = String(adminMatch.matched_identity_key || "").trim() || null;
   const tierOverride = String(adminEntry?.tier_override || "").trim().toLowerCase() || null;
   const authorityOverride = adminEntry?.authority_override === "" || adminEntry?.authority_override == null
     ? null
@@ -797,6 +828,8 @@ function explainSourcePolicy(sourceDomainRaw, tag) {
     effectiveTier = "blocked";
     effectiveAuthority = 0;
     policySource = "admin_hard_block";
+  } else if (matchedScope === "identity") {
+    policySource = "admin_identity_override";
   } else {
     policySource = matchedDomain && matchedDomain !== sourceDomain
       ? "admin_inherited_override"
@@ -825,9 +858,13 @@ function explainSourcePolicy(sourceDomainRaw, tag) {
     policy_source: policySource,
     source_family_domain: baseline.source_family_domain || sourceDomain,
     inherits_from_domain: matchedDomain && matchedDomain !== sourceDomain ? matchedDomain : null,
+    inherits_from_identity: matchedScope === "identity" ? matchedIdentityKey : null,
     admin_override: {
       domain: String(adminEntry?.domain || matchedDomain || sourceDomain).trim() || null,
+      identity_key: String(adminEntry?.identity_key || matchedIdentityKey || "").trim() || null,
       match_domain: matchedDomain,
+      match_identity_key: matchedIdentityKey,
+      match_scope: matchedScope,
       source_type: String(adminEntry?.source_type || "").trim() || null,
       policy: String(adminEntry?.policy || "").trim() || null,
       review_status: String(adminEntry?.review_status || "").trim() || null,
@@ -843,8 +880,8 @@ function explainSourcePolicy(sourceDomainRaw, tag) {
   };
 }
 
-function classifySourceTier(sourceDomainRaw, tag) {
-  return explainSourcePolicy(sourceDomainRaw, tag);
+function classifySourceTier(sourceDomainRaw, tag, options = {}) {
+  return explainSourcePolicy(sourceDomainRaw, tag, options);
 }
 
 function computeTopicDomainFit(sourceDomain, tag, adminTopicFit = null) {
@@ -1075,11 +1112,14 @@ function annotateEditorialSignals(items = []) {
     const promptHints = normalizePromptHints(item?.storyline_hints);
     const localFlags = detectLocalContentFlags(item);
     const contentFlags = uniqSorted([...promptFlags, ...localFlags]);
-    const sourceInfo = classifySourceTier(item?.source_domain || item?.source, item?.tag);
     const sourceIdentity = parseSourceIdentity({
       ...item,
-      source_domain: sourceInfo.source_domain || item?.source_domain || null,
     });
+    const sourceInfo = classifySourceTier(
+      sourceIdentity.source_domain || item?.source_domain || item?.source,
+      item?.tag,
+      { sourceIdentityKey: sourceIdentity.source_identity_key }
+    );
     const preferredSourceMatch = resolvePreferredSourceMatch(
       sourceInfo.source_domain || item?.source_domain || item?.source,
       item?.tag,
@@ -1121,6 +1161,7 @@ function annotateEditorialSignals(items = []) {
       topic_fit_map: sourceInfo.topic_fit_map || {},
       source_family_domain: sourceInfo.source_family_domain || item?.source_domain || item?.source || null,
       source_inherits_from_domain: sourceInfo.inherits_from_domain || null,
+      source_inherits_from_identity: sourceInfo.inherits_from_identity || null,
       preferred_source_match: preferredSourceMatch.match || "none",
       preferred_source_kind: preferredSourceMatch.kind || null,
       preferred_source_match_scope: preferredSourceMatch.scope || "none",

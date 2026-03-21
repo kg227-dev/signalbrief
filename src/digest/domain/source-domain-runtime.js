@@ -27,6 +27,9 @@ function parseSourceDomain(item, opts = {}) {
     if (normalized) return normalized;
   }
 
+  const normalizedSourceDomain = normalizeSourceHost(item?.source_domain);
+  if (normalizedSourceDomain) return normalizedSourceDomain;
+
   const rawSource = String(item?.source || "").trim().toLowerCase();
   if (!rawSource) return "unknown";
   const normalizedSource = normalizeSourceHost(rawSource.replace(/^https?:\/\//, "").split(/[\/\s]/)[0]);

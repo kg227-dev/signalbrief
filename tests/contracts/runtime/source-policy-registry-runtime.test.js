@@ -18,11 +18,14 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   clampAuthority,
   createSourceRegistryRuntime,
+  normalizeSourceIdentityKey,
 } = runtime;
 
 assert.strictEqual(clampAuthority(null), null);
 assert.strictEqual(clampAuthority(""), null);
 assert.strictEqual(clampAuthority(undefined), null);
+assert.strictEqual(normalizeSourceIdentityKey("youtube:@InsideBoardroom"), "youtube:@insideboardroom");
+assert.strictEqual(normalizeSourceIdentityKey("not-a-valid-key"), "");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-source-registry-"));
 const registryPath = path.join(tempDir, "source-registry.json");
@@ -39,5 +42,22 @@ registryRuntime.upsertSourceRegistryEntry({
 
 const saved = JSON.parse(fs.readFileSync(registryPath, "utf8"));
 assert.strictEqual(saved.domains["example.com"].authority_override, null);
+
+registryRuntime.upsertSourceRegistryEntry({
+  identity_key: "youtube:@InsideBoardroom",
+  source_type: "reported_media",
+  policy: "preferred",
+  review_status: "reviewed",
+  note: "Specific channel is approved",
+}, { updated_by: "test" });
+
+const savedWithIdentity = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+assert.ok(savedWithIdentity.identities, "registry should persist identities map");
+assert.strictEqual(savedWithIdentity.identities["youtube:@insideboardroom"].policy, "preferred");
+assert.strictEqual(
+  registryRuntime.getSourceRegistryIdentityEntry("youtube:@InsideBoardroom").identity_key,
+  "youtube:@insideboardroom"
+);
+assert.ok(registryRuntime.buildRegistryMap(registryRuntime.loadSourceRegistry()).identities instanceof Map);
 
 process.stdout.write("[source-policy-registry-runtime] all assertions passed\n");

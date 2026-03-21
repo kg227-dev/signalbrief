@@ -72,6 +72,13 @@ body.dark .table-search, body.dark .table-filter, body.dark .modal-input, body.d
   color:var(--accent); font:inherit; font-size:12px; font-weight:600; cursor:pointer; text-decoration:none;
 }
 body.dark .table-action-link, body.dark .modal-btn { background:var(--card); }
+.sort-btn {
+  display:inline-flex; align-items:center; gap:6px; padding:0; border:none; background:transparent;
+  color:inherit; font:inherit; font-size:inherit; font-weight:inherit; letter-spacing:inherit; text-transform:inherit; cursor:pointer;
+}
+.sort-btn:hover { color:var(--accent); }
+.sort-btn.active { color:var(--accent); }
+.sort-btn-indicator { font-size:10px; opacity:0.7; }
 .table-action-link:hover, .modal-btn:hover, .nav-link:hover, .signout-btn:hover { background:var(--accent-light); }
 .modal-btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
 .modal-btn.primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
@@ -211,15 +218,7 @@ body.dark .modal-close { background:var(--card); }
   <div class="table-wrap" style="margin-bottom:28px;">
     <table>
       <thead>
-        <tr>
-          <th>Domain</th>
-          <th>Classification</th>
-          <th>Policy</th>
-          <th>Tracked sends</th>
-          <th>Review state</th>
-          <th>Topic fit</th>
-          <th>Reason</th>
-        </tr>
+        <tr id="sourceRegistrySuggestionsHeaderRow"></tr>
       </thead>
       <tbody id="sourceRegistrySuggestionsBody">
         <tr><td colspan="7" class="empty">Loading…</td></tr>
@@ -379,6 +378,27 @@ function formatSourceClassificationSummary(policy) {
   const legacyTier = String(policy?.source_tier || "").trim() || "unknown";
   return `${sourceType} · legacy ${legacyTier}`;
 }
+const SUGGESTION_POLICY_SORT_ORDER = Object.freeze({
+  preferred: 0,
+  allowed: 1,
+  limited: 2,
+  review: 3,
+  blocked: 4,
+});
+const SUGGESTION_REVIEW_SORT_ORDER = Object.freeze({
+  reviewed: 0,
+  monitor: 1,
+  unreviewed: 2,
+});
+const SUGGESTION_SORT_DEFAULTS = Object.freeze({
+  domain: "asc",
+  classification: "asc",
+  policy: "asc",
+  tracked_sends: "desc",
+  review_state: "asc",
+  topic_fit: "desc",
+  reason: "asc",
+});
 function formatEtTimestamp(value) {
   const ts = String(value || "").trim();
   if (!ts) return "—";
@@ -441,6 +461,79 @@ function isEditingSourceRegistry() {
   const inspector = document.getElementById("sourceRegistryInspector");
   return !!(active && inspector && inspector.contains(active));
 }
+function getTopicFitSortScore(topicFit) {
+  const map = topicFit && typeof topicFit === "object" ? topicFit : {};
+  let score = 0;
+  for (const band of Object.values(map)) {
+    if (band === "high") score += 3;
+    else if (band === "medium") score += 2;
+    else if (band === "low") score += 1;
+  }
+  return score;
+}
+function getSuggestionSortValue(row, key) {
+  const effective = row?.effective_policy || {};
+  switch (key) {
+    case "domain":
+      return String(row?.domain || "").toLowerCase();
+    case "classification":
+      return String(formatSourceClassificationSummary(effective) || "").toLowerCase();
+    case "policy":
+      return Number(SUGGESTION_POLICY_SORT_ORDER[String(effective?.source_policy || "").trim().toLowerCase()] ?? 99);
+    case "tracked_sends":
+      return Math.max(0, Number(row?.send_count || 0));
+    case "review_state":
+      return Number(SUGGESTION_REVIEW_SORT_ORDER[String(effective?.review_status || "").trim().toLowerCase()] ?? 99);
+    case "topic_fit":
+      return getTopicFitSortScore(effective?.topic_fit_map);
+    case "reason":
+      return String(row?.suggested_reason || "").toLowerCase();
+    default:
+      return String(row?.domain || "").toLowerCase();
+  }
+}
+function compareSuggestionRows(left, right) {
+  const leftValue = getSuggestionSortValue(left, suggestionsSortKey);
+  const rightValue = getSuggestionSortValue(right, suggestionsSortKey);
+  let comparison = 0;
+  if (typeof leftValue === "number" && typeof rightValue === "number") {
+    comparison = leftValue - rightValue;
+  } else {
+    comparison = String(leftValue || "").localeCompare(String(rightValue || ""));
+  }
+  if (comparison === 0 && suggestionsSortKey !== "domain") {
+    comparison = String(left?.domain || "").localeCompare(String(right?.domain || ""));
+  }
+  return suggestionsSortDirection === "asc" ? comparison : -comparison;
+}
+function renderSuggestionsSortHeader(label, key) {
+  const active = suggestionsSortKey === key;
+  const indicator = active ? (suggestionsSortDirection === "asc" ? "↑" : "↓") : "↕";
+  return `<th aria-sort="${active ? (suggestionsSortDirection === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort-btn${active ? " active" : ""}" onclick="toggleSuggestionsSort('${key}')">${esc(label)}<span class="sort-btn-indicator">${indicator}</span></button></th>`;
+}
+function renderSuggestionsHeaderRow() {
+  const row = document.getElementById("sourceRegistrySuggestionsHeaderRow");
+  if (!row) return;
+  row.innerHTML = [
+    renderSuggestionsSortHeader("Domain", "domain"),
+    renderSuggestionsSortHeader("Classification", "classification"),
+    renderSuggestionsSortHeader("Policy", "policy"),
+    renderSuggestionsSortHeader("Tracked sends", "tracked_sends"),
+    renderSuggestionsSortHeader("Review state", "review_state"),
+    renderSuggestionsSortHeader("Topic fit", "topic_fit"),
+    renderSuggestionsSortHeader("Reason", "reason"),
+  ].join("");
+}
+function toggleSuggestionsSort(key) {
+  const normalizedKey = String(key || "").trim() || "tracked_sends";
+  if (suggestionsSortKey === normalizedKey) {
+    suggestionsSortDirection = suggestionsSortDirection === "asc" ? "desc" : "asc";
+  } else {
+    suggestionsSortKey = normalizedKey;
+    suggestionsSortDirection = SUGGESTION_SORT_DEFAULTS[normalizedKey] || "asc";
+  }
+  filterSuggestions();
+}
 function renderSuggestionRow(row) {
   const effective = row.effective_policy || {};
   return `<tr>
@@ -476,17 +569,19 @@ function filterSuggestions() {
   const body = document.getElementById("sourceRegistrySuggestionsBody");
   const countEl = document.getElementById("suggestionsCount");
   const q = (document.getElementById("suggestionsSearch")?.value || "").toLowerCase().trim();
+  renderSuggestionsHeaderRow();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
     (r.suggested_reason || "").toLowerCase().includes(q) ||
     (formatSourceMetricTags(r.top_tags) || "").toLowerCase().includes(q)
   ) : _allSuggestions;
+  const sortedRows = rows.slice().sort(compareSuggestionRows);
   if (!body) return;
-  body.innerHTML = rows.length
-    ? rows.map(renderSuggestionRow).join("")
+  body.innerHTML = sortedRows.length
+    ? sortedRows.map(renderSuggestionRow).join("")
     : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No recent source suggestions yet."}</td></tr>`;
   if (countEl) countEl.textContent = q
-    ? `${rows.length} of ${_allSuggestions.length} sources`
+    ? `${sortedRows.length} of ${_allSuggestions.length} sources`
     : `${_allSuggestions.length} source${_allSuggestions.length !== 1 ? "s" : ""}`;
 }
 function filterOverrides() {
@@ -731,6 +826,8 @@ let sourceRegistryOverviewQuery = "";
 let loadInFlight = false;
 let _allSuggestions = [];
 let _allOverrides = [];
+let suggestionsSortKey = "tracked_sends";
+let suggestionsSortDirection = "desc";
 let autoRefreshTimer = null;
 let confirmResolve = null;
 let retryToastAt = 0;
@@ -934,6 +1031,7 @@ window.addEventListener("focus", () => load(true));
   const initialQuery = params.get("query") || "";
   setSelectedDomain(initialDomain);
   setSourceRegistryOverviewQuery(initialQuery);
+  renderSuggestionsHeaderRow();
   const searchEl = document.getElementById("sourceRegistrySearch");
   if (searchEl && initialDomain) searchEl.value = initialDomain;
   load(false);

@@ -342,7 +342,11 @@ async function probeImageAvailability(appImage, {
     });
 
     if (response.status === 200) {
-      return { available: true, response };
+      return {
+        available: true,
+        response,
+        authMode: authorization ? "bearer" : "anonymous",
+      };
     }
     if (response.status === 404) {
       return { available: false, response, reason: "manifest_not_found" };
@@ -697,6 +701,8 @@ function buildImageDeployRemoteSteps({
   persistentStoreEnvValues,
   expectedStoreBackend,
   expectedSqlitePath,
+  registry,
+  clearRegistryAuthForAnonymousPull = false,
 }) {
   const composeServices = buildComposeServiceArgs(services);
   const composeEnvPrefix = buildComposeEnvPrefix(deployEnvValues);
@@ -711,6 +717,12 @@ function buildImageDeployRemoteSteps({
   ];
   if (persistentStoreEnvValues && Object.keys(persistentStoreEnvValues).length > 0) {
     steps.push(buildPersistStoreRuntimeOverridesStep(persistentStoreEnvValues));
+  }
+  if (clearRegistryAuthForAnonymousPull && hasValue(registry)) {
+    steps.push(
+      `echo '[deploy-prod] remote: clear cached ${String(registry || "").trim()} auth for anonymous pull'`,
+      `docker logout ${shellQuote(String(registry || "").trim())} >/dev/null 2>&1 || true`
+    );
   }
   steps.push(
     buildLoadStoreRuntimeOverridesStep(),
@@ -1060,6 +1072,7 @@ async function main() {
   }
   let imageDeployEnabled = hasValue(appImage);
   let useEmergencySourceBuild = emergencySourceBuild;
+  let allowAnonymousRegistryPull = false;
 
   if (imageDeployEnabled && useEmergencySourceBuild) {
     fail("--emergency-source-build cannot be combined with --app-image");
@@ -1190,6 +1203,11 @@ async function main() {
       } else {
         fail("app image was not published to registry in time", detail);
       }
+    } else {
+      allowAnonymousRegistryPull = availability?.probe?.authMode === "anonymous";
+      if (allowAnonymousRegistryPull && hasValue(registry)) {
+        log(`image availability: public anonymous pull confirmed for ${registry}; remote cached auth will be cleared before pull`);
+      }
     }
   }
 
@@ -1203,13 +1221,15 @@ async function main() {
   let remoteSteps = [];
   if (imageDeployEnabled) {
     log(`deploy mode=image (app_image=${appImage})`);
-    remoteDockerLogin({
-      sshKey,
-      sshTarget,
-      registry,
-      user: registryUser,
-      password: registryPassword,
-    });
+    if (!allowAnonymousRegistryPull) {
+      remoteDockerLogin({
+        sshKey,
+        sshTarget,
+        registry,
+        user: registryUser,
+        password: registryPassword,
+      });
+    }
     remoteSteps = buildImageDeployRemoteSteps({
       remoteDir,
       services,
@@ -1218,6 +1238,8 @@ async function main() {
       persistentStoreEnvValues,
       expectedStoreBackend: normalizedStoreBackend,
       expectedSqlitePath: sqlitePath,
+      registry,
+      clearRegistryAuthForAnonymousPull: allowAnonymousRegistryPull,
     });
   } else {
     log("deploy mode=emergency_source_build");

@@ -247,7 +247,6 @@ function createRenderPublicPages(deps) {
         <div class="item-link">
           ${freshnessHtml}${sourceLink}${sourceBadge ? ` ${sourceBadge}` : ""}${corrNote ? ` ${corrNote}` : ""}
         </div>
-        ${whyShownText ? `<p class="why-shown">Why included: ${whyShownText}</p>` : ""}
         ${feedbackRow}
       </article>
     `;

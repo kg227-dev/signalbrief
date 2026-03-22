@@ -113,7 +113,6 @@ function createDigestEmailItemsRuntime(deps) {
         ${bodyHtml}
         ${implHtml}
         ${watchHtml}
-        ${whyShownHtml}
         <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}${sourceBadgeHtml}${corrobHtml}${freshnessHtml}</span></div>
       </div>`;
   }

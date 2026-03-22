@@ -75,7 +75,6 @@ function formatTelegram(items, dateStr, state, opts = {}) {
     if (wim) lines.push(`_${wim}_`);
     if (item.url && item.url !== "#") lines.push(`→ [${item.source}](${item.url})`);
     else lines.push(`→ ${item.source}`);
-    if (whyShown) lines.push(`· why shown: ${whyShown}`);
     lines.push("");
   });
 

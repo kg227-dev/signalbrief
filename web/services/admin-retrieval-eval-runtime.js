@@ -29,19 +29,31 @@ function defaultProgressPayload(worklogPath) {
 function loadRetrievalEvalProgress(options = {}) {
   const fs = options.fs || require("fs");
   const appRoot = options.appRoot ? path.resolve(String(options.appRoot)) : process.cwd();
-  const worklogPath = options.worklogPath
+  const preferredWorklogPath = options.worklogPath
     ? path.resolve(String(options.worklogPath))
     : path.join(appRoot, "docs", "retrieval-eval-worklog.md");
+  const candidatePaths = [
+    preferredWorklogPath,
+    path.join(appRoot, "data", "retrieval-evals", "worklog.md"),
+  ];
   let text = "";
   let stat = null;
-  try {
-    text = fs.readFileSync(worklogPath, "utf8");
-    stat = fs.statSync(worklogPath);
-  } catch {
-    return defaultProgressPayload(path.relative(appRoot, worklogPath));
+  let resolvedPath = candidatePaths[0];
+  for (const candidatePath of candidatePaths) {
+    try {
+      text = fs.readFileSync(candidatePath, "utf8");
+      stat = fs.statSync(candidatePath);
+      resolvedPath = candidatePath;
+      break;
+    } catch {
+      continue;
+    }
+  }
+  if (!text) {
+    return defaultProgressPayload(path.relative(appRoot, preferredWorklogPath));
   }
 
-  const progress = defaultProgressPayload(path.relative(appRoot, worklogPath));
+  const progress = defaultProgressPayload(path.relative(appRoot, resolvedPath));
   const lines = String(text || "").split(/\r?\n/);
   const passes = [];
   const remainingProblems = [];

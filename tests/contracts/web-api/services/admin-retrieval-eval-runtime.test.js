@@ -86,6 +86,25 @@ const {
   assert.strictEqual(progress.next_steps[0], "Improve query shaping");
   assert.strictEqual(progress.important_runs[0], "retrieval-eval:2026-03-22T06-10-49-849Z");
 
+  files.delete(worklogPath);
+  const fallbackWorklogPath = path.join(appRoot, "data", "retrieval-evals", "worklog.md");
+  files.set(fallbackWorklogPath, [
+    "### Pass 1: Fallback progress",
+    "",
+    "Completed in this pass:",
+    "- synced prod data path",
+  ].join("\n"));
+  stats.set(fallbackWorklogPath, {
+    mtime: new Date("2026-03-22T06:30:00.000Z"),
+  });
+  const fallbackProgress = loadRetrievalEvalProgress({
+    fs: mockFs,
+    appRoot,
+  });
+  assert.strictEqual(fallbackProgress.available, true);
+  assert.strictEqual(fallbackProgress.worklog_path, "data/retrieval-evals/worklog.md");
+  assert.strictEqual(fallbackProgress.latest_pass.title, "Pass 1: Fallback progress");
+
   const adminRuntime = createAdminRetrievalEvalRuntime({
     fs: mockFs,
     appRoot,
@@ -97,7 +116,7 @@ const {
     },
   });
   const status = adminRuntime.loadStatus();
-  assert.strictEqual(status.progress.latest_pass.title, "Pass 5: One more broad-query step");
+  assert.strictEqual(status.progress.latest_pass.title, "Pass 1: Fallback progress");
   assert.strictEqual(status.latest_runs[0].run_id, "retrieval-eval:latest");
 
   process.stdout.write("[admin-retrieval-eval-runtime] all assertions passed\n");

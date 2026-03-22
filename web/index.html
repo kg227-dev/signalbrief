@@ -439,6 +439,13 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   box-shadow: var(--shadow-sm);
   max-width: 880px;
   margin: 0 auto;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.features-about.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 .features-about h2 {
   font-family: 'Playfair Display', Georgia, serif;
@@ -878,7 +885,7 @@ body.dark .topics-custom-row {
 
 /* Scroll reveal */
 (function() {
-  var targets = document.querySelectorAll('.digest-card, .features-section, .signup-section');
+  var targets = document.querySelectorAll('.digest-card, .features-section, .features-about, .signup-section');
   if (!('IntersectionObserver' in window)) {
     targets.forEach(function(el) { el.classList.add('visible'); });
     return;

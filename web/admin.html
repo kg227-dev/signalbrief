@@ -3323,7 +3323,7 @@ function renderSchedule(roster) {
       if (!allowedDays.includes(dayOfWeek)) continue;
       const [dh, dm] = (u.delivery_time_raw || "07:00").split(":").map(Number);
       const deliveryMinutes = dh * 60 + dm;
-      const deliveredToday = isToday && String(u.last_digest || "") === dateKey;
+      const deliveredToday = isToday && String(u.last_scheduled_digest || u.last_digest || "") === dateKey;
       const missedToday = isToday && !deliveredToday && deliveryMinutes <= nowMinutes;
       eventsByDate[dateKey].push({
         dateKey,
@@ -3335,7 +3335,7 @@ function renderSchedule(roster) {
         topics: u.topics,
         depth: u.depth,
         status: deliveredToday ? "sent" : (missedToday ? "missed" : "scheduled"),
-        delivered_count: Number(u.last_digest_item_count || 0),
+        delivered_count: Number(u.last_scheduled_digest_item_count || u.last_digest_item_count || 0),
         email: u.email,
         delivery_time_raw: u.delivery_time_raw || "07:00",
       });

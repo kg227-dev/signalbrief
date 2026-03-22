@@ -137,12 +137,16 @@ function buildAdminStatsPayload({
   });
   const perUser = buildPerUserCostRollup(runs);
 
+  const recentDigests = typeof buildRecentDigestsExport === "function"
+    ? buildRecentDigestsExport({ days: 7 })
+    : { rows: [] };
   const roster = buildAdminRoster({
     usersAll,
     countArchiveDigestsForUser,
     computeQualityTrend,
     formatDaysLabel,
     computeNextDeliveryEt,
+    recentDigestRows: recentDigests.rows,
   });
   const activeUsersCount = roster.filter((user) => user.status === "active").length;
   const activeTelegramUsersCount = roster.filter((user) => user.status === "active" && user.telegram).length;
@@ -201,9 +205,6 @@ function buildAdminStatsPayload({
   const runtimeStateDiagnostics = typeof getRuntimeStateDiagnostics === "function"
     ? getRuntimeStateDiagnostics()
     : null;
-  const recentDigests = typeof buildRecentDigestsExport === "function"
-    ? buildRecentDigestsExport({ days: 7 })
-    : { rows: [] };
   const digestInsights = buildDigestInsights(recentDigests.rows, { days: 7 });
   const health = buildHealthPayload({
     runs,

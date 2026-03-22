@@ -76,14 +76,85 @@ function buildTopicsList(topics) {
   return (topics || []).map((topic) => topic.replace(/^custom_/, "").replace(/_/g, " ")).join(", ") || "—";
 }
 
+function toComparableTs(value) {
+  const ts = Date.parse(String(value || "").trim());
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function normalizeRecentDigestRows(rows) {
+  return Array.isArray(rows) ? rows.filter((row) => row && typeof row === "object") : [];
+}
+
+function buildRecentDigestLookup(rows = []) {
+  const byAny = new Map();
+  const byScheduled = new Map();
+
+  function applyRow(map, key, row) {
+    const normalizedKey = String(key || "").trim().toLowerCase();
+    if (!normalizedKey) return;
+    const existing = map.get(normalizedKey);
+    const rowTs = Math.max(
+      toComparableTs(row?.run_at_utc),
+      toComparableTs(row?.sent_at_utc),
+      toComparableTs(row?.generated_at_utc)
+    );
+    const existingTs = existing
+      ? Math.max(
+        toComparableTs(existing?.run_at_utc),
+        toComparableTs(existing?.sent_at_utc),
+        toComparableTs(existing?.generated_at_utc)
+      )
+      : 0;
+    if (!existing || rowTs >= existingTs) map.set(normalizedKey, row);
+  }
+
+  for (const row of normalizeRecentDigestRows(rows)) {
+    const keys = new Set([
+      String(row?.user_id || "").trim().toLowerCase(),
+      String(row?.recipient || "").trim().toLowerCase(),
+      String(row?.user_email || "").trim().toLowerCase(),
+    ].filter(Boolean));
+    const mode = String(row?.mode || "").trim().toLowerCase();
+    for (const key of keys) {
+      applyRow(byAny, key, row);
+      if (mode === "scheduled") applyRow(byScheduled, key, row);
+    }
+  }
+
+  return { byAny, byScheduled };
+}
+
+function getRecentDigestRow(lookup, user) {
+  const keys = [
+    String(user?.chatId || "").trim().toLowerCase(),
+    String(user?.email || "").trim().toLowerCase(),
+  ].filter(Boolean);
+  for (const key of keys) {
+    const row = lookup.get(key);
+    if (row) return row;
+  }
+  return null;
+}
+
 function buildAdminRosterEntry({
   user,
   countArchiveDigestsForUser,
   computeQualityTrend,
   formatDaysLabel,
   computeNextDeliveryEt,
+  recentDigestLookup,
 }) {
   const prefs = user.preferences || {};
+  const anyRecentRow = recentDigestLookup?.byAny ? getRecentDigestRow(recentDigestLookup.byAny, user) : null;
+  const recentScheduledRow = recentDigestLookup?.byScheduled ? getRecentDigestRow(recentDigestLookup.byScheduled, user) : null;
+  const persistedLastDigestAt = String(user.last_digest_at || "").trim() || null;
+  const recentLastDigestAt = String(anyRecentRow?.run_at_utc || anyRecentRow?.sent_at_utc || "").trim() || null;
+  const useRecentDigestState = toComparableTs(recentLastDigestAt) > toComparableTs(persistedLastDigestAt);
+  const effectiveLastDigestAt = useRecentDigestState ? recentLastDigestAt : persistedLastDigestAt;
+  const effectiveLastDigestItems = useRecentDigestState
+    ? (Array.isArray(anyRecentRow?.sent_items) ? anyRecentRow.sent_items : [])
+    : (Array.isArray(user.last_digest_items) ? user.last_digest_items : []);
+  const recentScheduledAt = String(recentScheduledRow?.run_at_utc || recentScheduledRow?.sent_at_utc || "").trim() || null;
   const qualityTrend = computeQualityTrend(user.quality_history || []);
   const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
   const daysLabel = formatDaysLabel(allowedDays);
@@ -107,7 +178,8 @@ function buildAdminRosterEntry({
     digests: digestCount,
     archive_digest_count: digestCount,
     digests_legacy: Math.max(0, Number(user.digests_received || 0)),
-    last_digest: toETDate(user.last_digest_at),
+    last_digest: toETDate(effectiveLastDigestAt),
+    last_scheduled_digest: toETDate(recentScheduledAt),
     telegram: tgLinked,
     email_enabled: prefs.email_enabled !== false,
     telegram_enabled: !!(prefs.telegram_enabled && tgLinked),
@@ -117,9 +189,10 @@ function buildAdminRosterEntry({
     bookmarks: (user.bookmarks || []).length,
     adjustments: Object.keys(user.topic_weights || {}).length,
     topic_weights: user.topic_weights || {},
-    last_digest_preview: buildLastDigestPreview(user),
-    last_digest_item_count: Array.isArray(user.last_digest_items) ? user.last_digest_items.length : 0,
-    days_missed: user.status === "active" ? calcDaysMissed(user.last_digest_at, allowedDays) : 0,
+    last_digest_preview: buildLastDigestPreview({ last_digest_items: effectiveLastDigestItems }),
+    last_digest_item_count: effectiveLastDigestItems.length,
+    last_scheduled_digest_item_count: Array.isArray(recentScheduledRow?.sent_items) ? recentScheduledRow.sent_items.length : 0,
+    days_missed: user.status === "active" ? calcDaysMissed(effectiveLastDigestAt, allowedDays) : 0,
     delivery_time: formatDeliveryTimeLabel(prefs.delivery_time || "07:00"),
     delivery_time_raw: prefs.delivery_time || "07:00",
     days_of_week: allowedDays,
@@ -146,7 +219,9 @@ function buildAdminRoster({
   computeQualityTrend,
   formatDaysLabel,
   computeNextDeliveryEt,
+  recentDigestRows,
 }) {
+  const recentDigestLookup = buildRecentDigestLookup(recentDigestRows);
   return usersAll
     .map((user) => buildAdminRosterEntry({
       user,
@@ -154,6 +229,7 @@ function buildAdminRoster({
       computeQualityTrend,
       formatDaysLabel,
       computeNextDeliveryEt,
+      recentDigestLookup,
     }))
     .sort((a, b) => (b.digests - a.digests));
 }
@@ -167,4 +243,5 @@ function buildDeliveryWarnings(roster) {
 module.exports = {
   buildAdminRoster,
   buildDeliveryWarnings,
+  buildRecentDigestLookup,
 };

@@ -171,12 +171,8 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   padding: 0 40px;
   height: 56px;
   display: flex; align-items: center; justify-content: space-between;
-  opacity: 0; pointer-events: none;
-  transform: translateY(-8px);
-  transition: opacity 0.25s ease, transform 0.25s ease;
   box-shadow: var(--shadow-sm);
 }
-.sticky-nav.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .sticky-nav-brand {
   font-family: 'Playfair Display', Georgia, serif;
   font-size: 18px; font-weight: 400; color: var(--text);
@@ -935,16 +931,6 @@ body.dark .topics-custom-row {
   };
 })();
 
-/* Sticky nav */
-(function() {
-  var nav = document.getElementById('stickyNav');
-  var heroCta = document.querySelector('.hero-cta');
-  if (!nav || !heroCta || !('IntersectionObserver' in window)) return;
-  var obs = new IntersectionObserver(function(entries) {
-    nav.classList.toggle('visible', !entries[0].isIntersecting);
-  }, { threshold: 0 });
-  obs.observe(heroCta);
-})();
 
 /* Scroll reveal */
 (function() {

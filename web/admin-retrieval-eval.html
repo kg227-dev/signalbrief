@@ -36,6 +36,13 @@
     .panel h2, .panel h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
     .kpi { font-size: 28px; font-weight: 700; }
     .muted { color: var(--muted); font-size: 13px; }
+    .subhead { margin-top: 14px; margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+    .stack { display: grid; gap: 10px; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .chip { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--accent-light); color: var(--accent); font-size: 12px; font-weight: 700; }
+    .plain-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+    .plain-list li { color: var(--text-2); font-size: 13px; line-height: 1.45; }
+    .meta-line { font-size: 12px; color: var(--text-secondary); }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
     th { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
@@ -67,6 +74,16 @@
       <div class="panel"><h2>Active Run</h2><div id="activeRun" class="muted">Loading…</div></div>
       <div class="panel"><h2>Budget</h2><div id="budgetSummary" class="muted">Loading…</div></div>
       <div class="panel"><h2>Run Picker</h2><select id="runPicker"></select></div>
+    </section>
+    <section class="split">
+      <div class="panel">
+        <h2>Progress Log</h2>
+        <div id="progressLog" class="muted">Loading…</div>
+      </div>
+      <div class="panel">
+        <h2>Current Focus</h2>
+        <div id="progressFocus" class="muted">Loading…</div>
+      </div>
     </section>
     <section class="split">
       <div class="panel">
@@ -146,6 +163,55 @@
         + `</tbody></table>`;
     }
 
+    function renderPlainList(items, emptyLabel) {
+      if (!Array.isArray(items) || items.length === 0) return `<div class="muted">${esc(emptyLabel || "No items recorded.")}</div>`;
+      return `<ul class="plain-list">${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "Unknown";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(date);
+    }
+
+    function renderProgress(status) {
+      const progress = status?.progress || {};
+      if (progress.available !== true) {
+        document.getElementById("progressLog").innerHTML = `<div class="muted">No worklog progress found.</div>`;
+        document.getElementById("progressFocus").innerHTML = `<div class="muted">No current focus recorded.</div>`;
+        return;
+      }
+      const latestPass = progress.latest_pass || {};
+      const recentPasses = Array.isArray(progress.recent_passes) ? progress.recent_passes : [];
+      const importantRuns = Array.isArray(progress.important_runs) ? progress.important_runs : [];
+
+      document.getElementById("progressLog").innerHTML =
+        `<div class="stack">`
+        + `<div class="meta-line">Synced from ${esc(progress.worklog_path || "worklog")} · updated ${esc(formatDateTime(progress.updated_at))}</div>`
+        + `<div><div class="subhead">Latest Pass</div><div style="font-size:18px;font-weight:700;">${esc(latestPass.title || "No pass logged yet.")}</div></div>`
+        + `<div class="meta-line">${Number(progress.pass_count || 0)} pass${Number(progress.pass_count || 0) === 1 ? "" : "es"} recorded</div>`
+        + (recentPasses.length
+          ? `<div><div class="subhead">Recent Milestones</div><div class="chip-row">${recentPasses.map((entry) => `<span class="chip">${esc(entry.title || "")}</span>`).join("")}</div></div>`
+          : "")
+        + `<div><div class="subhead">Completed</div>${renderPlainList((latestPass.completed || []).slice(0, 8), "No completed items recorded.")}</div>`
+        + `<div><div class="subhead">Latest Findings</div>${renderPlainList((latestPass.findings || []).slice(0, 6), "No findings recorded.")}</div>`
+        + `</div>`;
+
+      document.getElementById("progressFocus").innerHTML =
+        `<div class="stack">`
+        + `<div><div class="subhead">Remaining Problems</div>${renderPlainList((progress.remaining_problems || []).slice(0, 8), "No open problems recorded.")}</div>`
+        + `<div><div class="subhead">Next Steps</div>${renderPlainList((progress.next_steps || []).slice(0, 8), "No next steps recorded.")}</div>`
+        + `<div><div class="subhead">Reference Runs</div>${importantRuns.length ? `<div class="chip-row">${importantRuns.map((runId) => `<span class="chip">${esc(runId)}</span>`).join("")}</div>` : `<div class="muted">No reference runs recorded.</div>`}</div>`
+        + `</div>`;
+    }
+
     async function loadStatus() {
       const status = await getJson("/api/admin/retrieval-eval/status");
       document.getElementById("activeRun").innerHTML = status.active_run
@@ -156,6 +222,7 @@
         `<div class="kpi">$${Number(budget.spent_usd || 0).toFixed(2)}</div>`
         + `<div class="muted">spent / $${Number(budget.cap_usd || 0).toFixed(2)} cap</div>`
         + `<div class="muted">$${Number(budget.remaining_usd || 0).toFixed(2)} remaining, $${Number(budget.reserve_usd || 0).toFixed(2)} reserve</div>`;
+      renderProgress(status);
     }
 
     function flattenPersonaRows(run) {

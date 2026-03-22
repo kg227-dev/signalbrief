@@ -167,6 +167,8 @@ const retrievalEvalStorageRuntime = createRetrievalEvalStorageRuntime({
 });
 const adminRetrievalEvalRuntime = createAdminRetrievalEvalRuntime({
   storage: retrievalEvalStorageRuntime,
+  fs,
+  appRoot: APP_ROOT,
 });
 setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistryRuntime.loadSourceRegistry()));
 const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({

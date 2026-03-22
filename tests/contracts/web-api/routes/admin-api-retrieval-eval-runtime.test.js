@@ -53,7 +53,11 @@ async function invoke(deps, { method, pathname, search = "" }) {
     isAdminAuthed: () => true,
     loadRetrievalEvalRuns: (limit) => [{ run_id: `run-limit-${limit}`, status: "completed" }],
     loadRetrievalEvalRun: (runId) => ({ run_id: runId, status: "completed", overall_summary: { overall_score: 82 } }),
-    loadRetrievalEvalStatus: () => ({ active_run: null, budget: { cap_usd: 25, spent_usd: 3.2 } }),
+    loadRetrievalEvalStatus: () => ({
+      active_run: null,
+      budget: { cap_usd: 25, spent_usd: 3.2 },
+      progress: { available: true, latest_pass: { title: "Pass 5" } },
+    }),
     ...deps,
   });
   return { handled, res };
@@ -90,6 +94,7 @@ async function invoke(deps, { method, pathname, search = "" }) {
     assert.ok(handled);
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.budget.spent_usd, 3.2);
+    assert.strictEqual(payload.progress.latest_pass.title, "Pass 5");
   }
 
   {

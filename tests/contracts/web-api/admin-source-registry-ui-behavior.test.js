@@ -67,6 +67,7 @@ async function flushMicrotasks() {
     "sourceRegistrySearch",
     "sourceRegistryInspector",
     "preferredSourcesPanelBody",
+    "curationQueuesPanelBody",
     "sourceRegistrySuggestionsHeaderRow",
     "sourceRegistrySuggestionsBody",
     "suggestionsCount",
@@ -196,6 +197,63 @@ async function flushMicrotasks() {
           },
           suggestions: [],
           overrides: [],
+          curation_queues: {
+            specialist_candidates: [
+              {
+                domain: "pharmavoice.com",
+                specialist_trade_win_count: 3,
+                tracked_sends: 5,
+                top_tags: [{ tag: "HEALTHCARE", count: 5 }],
+                effective_policy: {
+                  source_type: "trade_specialist",
+                  source_tier: "strong",
+                  source_policy: "preferred",
+                },
+                reason: "Repeatedly surfaced as a specialist best-fit winner over broader preferred coverage.",
+              },
+            ],
+            derivative_winners: [
+              {
+                domain: "benzinga.com",
+                derivative_winner_count: 2,
+                tracked_sends: 2,
+                top_tags: [{ tag: "TECHNOLOGY", count: 2 }],
+                effective_policy: {
+                  source_type: "aggregator_republisher",
+                  source_tier: "weak",
+                  source_policy: "review",
+                },
+                reason: "Won as the best available derivative-style representation; good candidate for tighter review or better-source expansion.",
+              },
+            ],
+            platform_ambiguity: [
+              {
+                domain: "youtube.com",
+                platform_identity_ambiguity_count: 4,
+                tracked_sends: 4,
+                top_tags: [{ tag: "TECHNOLOGY", count: 4 }],
+                effective_policy: {
+                  source_type: "platform_user_generated",
+                  source_tier: "unknown",
+                  source_policy: "review",
+                },
+                reason: "Platform-domain ambiguity still influenced selected items; identity-level review would improve precision.",
+              },
+            ],
+            topic_coverage_gaps: [
+              {
+                topic: "HEALTHCARE",
+                preferred_missing_count: 1,
+                preferred_weaker_count: 2,
+                broad_rescue_count: 1,
+                example_domains: [
+                  { domain: "pharmavoice.com", count: 2 },
+                  { domain: "statnews.com", count: 1 },
+                ],
+                last_seen_at: "2026-03-21T11:00:00.000Z",
+              },
+            ],
+          },
         });
       }
       return jsonResponse({ error: `unexpected fetch: ${href}` }, 404);
@@ -268,6 +326,18 @@ async function flushMicrotasks() {
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("bundled fallback"),
     "preferred sources panel should explain when bundled fallback is active"
+  );
+  assert.ok(
+    elements.get("curationQueuesPanelBody").innerHTML.includes("Specialist candidates"),
+    "curation queues should render the specialist queue"
+  );
+  assert.ok(
+    elements.get("curationQueuesPanelBody").innerHTML.includes("pharmavoice.com"),
+    "curation queues should render specialist candidate domains"
+  );
+  assert.ok(
+    elements.get("curationQueuesPanelBody").innerHTML.includes("HEALTHCARE"),
+    "curation queues should render topic coverage gaps"
   );
 
   context.renderSourceRegistrySuggestions({

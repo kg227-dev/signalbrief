@@ -32,6 +32,13 @@ function createMetricEntry(domain) {
     send_count: 0,
     weak_source_item_count: 0,
     poor_digest_item_count: 0,
+    preferred_win_count: 0,
+    specialist_trade_win_count: 0,
+    derivative_winner_count: 0,
+    platform_identity_ambiguity_count: 0,
+    broad_rescue_count: 0,
+    preferred_missing_winner_count: 0,
+    preferred_weaker_winner_count: 0,
     users: new Set(),
     digests: new Set(),
     tags: new Map(),
@@ -77,6 +84,13 @@ function finalizeMetricEntry(entry) {
     send_count: entry.send_count,
     weak_source_item_count: entry.weak_source_item_count,
     poor_digest_item_count: entry.poor_digest_item_count,
+    preferred_win_count: entry.preferred_win_count,
+    specialist_trade_win_count: entry.specialist_trade_win_count,
+    derivative_winner_count: entry.derivative_winner_count,
+    platform_identity_ambiguity_count: entry.platform_identity_ambiguity_count,
+    broad_rescue_count: entry.broad_rescue_count,
+    preferred_missing_winner_count: entry.preferred_missing_winner_count,
+    preferred_weaker_winner_count: entry.preferred_weaker_winner_count,
     user_count: entry.users.size,
     digest_count: entry.digests.size,
     avg_sent_authority: entry.authority_count > 0
@@ -108,6 +122,17 @@ function buildRecentDomainMetrics(rows = []) {
       if (digestKey) entry.digests.add(digestKey);
       if (isWeakSourceItem(item)) entry.weak_source_item_count += 1;
       if (poorDigest) entry.poor_digest_item_count += 1;
+      if (item?.won_by_preferred_substitute === true) entry.preferred_win_count += 1;
+      if (item?.specialist_trade_outperformed_preferred === true) entry.specialist_trade_win_count += 1;
+      if (item?.source_identity_ambiguous === true) entry.platform_identity_ambiguity_count += 1;
+      if (item?.broader_retrieval_found_better === true) entry.broad_rescue_count += 1;
+      if (String(item?.coverage_gap_status || "").trim() === "preferred_missing") entry.preferred_missing_winner_count += 1;
+      if (String(item?.coverage_gap_status || "").trim() === "preferred_weaker") entry.preferred_weaker_winner_count += 1;
+      const winnerSelectionReason = String(item?.winner_selection_reason || "").trim();
+      const selectionReasonCodes = Array.isArray(item?.selection_reason_codes) ? item.selection_reason_codes : [];
+      if (winnerSelectionReason === "best_available_derivative" || selectionReasonCodes.includes("best_available_derivative")) {
+        entry.derivative_winner_count += 1;
+      }
       if (Number.isFinite(Number(item?.source_authority))) {
         entry.authority_sum += Number(item.source_authority);
         entry.authority_count += 1;
@@ -121,6 +146,129 @@ function buildRecentDomainMetrics(rows = []) {
     }
   }
   return new Map(Array.from(metrics.entries()).map(([domain, entry]) => [domain, finalizeMetricEntry(entry)]));
+}
+
+function createTopicCoverageEntry(topic) {
+  return {
+    topic,
+    preferred_missing_count: 0,
+    preferred_weaker_count: 0,
+    broad_rescue_count: 0,
+    domains: new Map(),
+    last_seen_at: null,
+  };
+}
+
+function finalizeTopicCoverageEntry(entry) {
+  const exampleDomains = Array.from(entry.domains.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 5)
+    .map(([domain, count]) => ({ domain, count }));
+  return {
+    topic: entry.topic,
+    preferred_missing_count: entry.preferred_missing_count,
+    preferred_weaker_count: entry.preferred_weaker_count,
+    broad_rescue_count: entry.broad_rescue_count,
+    example_domains: exampleDomains,
+    last_seen_at: entry.last_seen_at,
+  };
+}
+
+function buildTopicCoverageQueues(rows = []) {
+  const topics = new Map();
+  for (const row of (Array.isArray(rows) ? rows : [])) {
+    const seenAt = String(row?.run_at_utc || row?.sent_at_utc || "").trim();
+    for (const item of (Array.isArray(row?.sent_items) ? row.sent_items : [])) {
+      const topic = String(item?.tag || "").trim();
+      if (!topic) continue;
+      const coverageGapStatus = String(item?.coverage_gap_status || "").trim();
+      const broadRescue = item?.broader_retrieval_found_better === true;
+      if (coverageGapStatus !== "preferred_missing" && coverageGapStatus !== "preferred_weaker" && !broadRescue) continue;
+      if (!topics.has(topic)) topics.set(topic, createTopicCoverageEntry(topic));
+      const entry = topics.get(topic);
+      if (coverageGapStatus === "preferred_missing") entry.preferred_missing_count += 1;
+      if (coverageGapStatus === "preferred_weaker") entry.preferred_weaker_count += 1;
+      if (broadRescue) entry.broad_rescue_count += 1;
+      const domain = normalizeSourceDomain(item?.source_domain);
+      if (domain) entry.domains.set(domain, (entry.domains.get(domain) || 0) + 1);
+      if (seenAt && (!entry.last_seen_at || seenAt > entry.last_seen_at)) entry.last_seen_at = seenAt;
+    }
+  }
+  return Array.from(topics.values())
+    .map(finalizeTopicCoverageEntry)
+    .sort((left, right) => {
+      const rightScore = Number(right.preferred_missing_count || 0) * 3
+        + Number(right.preferred_weaker_count || 0) * 2
+        + Number(right.broad_rescue_count || 0);
+      const leftScore = Number(left.preferred_missing_count || 0) * 3
+        + Number(left.preferred_weaker_count || 0) * 2
+        + Number(left.broad_rescue_count || 0);
+      return rightScore - leftScore
+        || String(right.last_seen_at || "").localeCompare(String(left.last_seen_at || ""))
+        || String(left.topic || "").localeCompare(String(right.topic || ""));
+    });
+}
+
+function buildCurationQueues(metricsMap, rows = [], limit = 8) {
+  const metrics = Array.from(metricsMap.values());
+  const specialistCandidates = metrics
+    .filter((metric) => Number(metric.specialist_trade_win_count || 0) > 0)
+    .map((metric) => {
+      const effectivePolicy = explainSourcePolicy(metric.domain);
+      return {
+        domain: metric.domain,
+        specialist_trade_win_count: Number(metric.specialist_trade_win_count || 0),
+        broad_rescue_count: Number(metric.broad_rescue_count || 0),
+        tracked_sends: Number(metric.send_count || 0),
+        top_tags: metric.top_tags || [],
+        effective_policy: effectivePolicy,
+        reason: "Repeatedly surfaced as a specialist best-fit winner over broader preferred coverage.",
+      };
+    })
+    .sort((left, right) => Number(right.specialist_trade_win_count || 0) - Number(left.specialist_trade_win_count || 0)
+      || Number(right.broad_rescue_count || 0) - Number(left.broad_rescue_count || 0)
+      || Number(right.tracked_sends || 0) - Number(left.tracked_sends || 0)
+      || String(left.domain || "").localeCompare(String(right.domain || "")))
+    .slice(0, limit);
+
+  const derivativeWinners = metrics
+    .filter((metric) => Number(metric.derivative_winner_count || 0) > 0)
+    .map((metric) => ({
+      domain: metric.domain,
+      derivative_winner_count: Number(metric.derivative_winner_count || 0),
+      tracked_sends: Number(metric.send_count || 0),
+      top_tags: metric.top_tags || [],
+      effective_policy: explainSourcePolicy(metric.domain),
+      reason: "Won as the best available derivative-style representation; good candidate for tighter review or better-source expansion.",
+    }))
+    .sort((left, right) => Number(right.derivative_winner_count || 0) - Number(left.derivative_winner_count || 0)
+      || Number(right.tracked_sends || 0) - Number(left.tracked_sends || 0)
+      || String(left.domain || "").localeCompare(String(right.domain || "")))
+    .slice(0, limit);
+
+  const platformAmbiguity = metrics
+    .filter((metric) => Number(metric.platform_identity_ambiguity_count || 0) > 0)
+    .map((metric) => ({
+      domain: metric.domain,
+      platform_identity_ambiguity_count: Number(metric.platform_identity_ambiguity_count || 0),
+      tracked_sends: Number(metric.send_count || 0),
+      top_tags: metric.top_tags || [],
+      effective_policy: explainSourcePolicy(metric.domain),
+      reason: "Platform-domain ambiguity still influenced selected items; identity-level review would improve precision.",
+    }))
+    .sort((left, right) => Number(right.platform_identity_ambiguity_count || 0) - Number(left.platform_identity_ambiguity_count || 0)
+      || Number(right.tracked_sends || 0) - Number(left.tracked_sends || 0)
+      || String(left.domain || "").localeCompare(String(right.domain || "")))
+    .slice(0, limit);
+
+  const topicCoverageGaps = buildTopicCoverageQueues(rows).slice(0, limit);
+
+  return {
+    specialist_candidates: specialistCandidates,
+    derivative_winners: derivativeWinners,
+    platform_ambiguity: platformAmbiguity,
+    topic_coverage_gaps: topicCoverageGaps,
+  };
 }
 
 function buildSourceAuditEntries({ readJsonLineLog, adminActionLog, domain, limit = 20 }) {
@@ -289,6 +437,7 @@ function buildSourceRegistryOverview({
     : { rows: [] };
   const metricsMap = buildRecentDomainMetrics(recent.rows);
   const { suggestions, overrides } = buildOverviewRows(metricsMap, registry.domains || {}, query, Math.max(1, Number(limit || 20)));
+  const curationQueues = buildCurationQueues(metricsMap, recent.rows, Math.max(4, Math.min(12, Number(limit || 20))));
   return {
     generated_at: new Date().toISOString(),
     history_scope: recent?.window?.all_time === true ? "all_time" : "windowed",
@@ -301,6 +450,7 @@ function buildSourceRegistryOverview({
       preferredSourcesPath,
       bundledPreferredSourcesPath,
     }),
+    curation_queues: curationQueues,
     override_count: Object.keys(registry.domains || {}).length,
     suggestion_count: suggestions.length,
     overrides,
@@ -358,6 +508,7 @@ function buildSourceRegistryDomainDetail({
 
 module.exports = {
   buildRecentDomainMetrics,
+  buildCurationQueues,
   summarizePreferredSourceRegistry,
   buildSourceRegistryDomainDetail,
   buildSourceRegistryOverview,

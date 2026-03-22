@@ -41,7 +41,7 @@ It is meant to preserve the short-term execution queue while the implementation 
 - [x] Identity-level governance storage and lookup now exist in runtime resolution, with exact identity match winning before domain fallback
 - [x] Identity-aware source annotation now carries the winning identity override through editorial signals
 - [ ] Admin editing and inspect UX is still mostly domain-first
-- [ ] Diagnostics-driven curation queues are still pending
+- [x] Diagnostics-driven curation queues now surface in the source governance admin page for specialist winners, derivative-style winners, platform ambiguity, and topic coverage gaps
 - [ ] Story/event fingerprinting is still heuristic and should be strengthened
 
 ## Highest-leverage next steps
@@ -75,9 +75,13 @@ Current state:
 Next change:
 - build admin-facing review queues from diagnostics such as:
   - specialist domains that repeatedly beat preferred globals
-  - high-volume derivative domains that often lose
+  - derivative-style winners that still survive because no stronger representation won
   - platform identities that remain ambiguous
   - topics where preferred retrieval often falls back
+
+Current implementation note:
+- the source governance page now exposes these queues directly from persisted digest diagnostics
+- loser-side derivative telemetry is still limited, so the current queue uses derivative-style winners rather than pretending we can observe all suppressed losers
 
 Why it matters:
 - makes preferred-source expansion evidence-based instead of list-based

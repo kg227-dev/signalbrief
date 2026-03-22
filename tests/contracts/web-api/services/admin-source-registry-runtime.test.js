@@ -38,6 +38,9 @@ const {
           source_tier: "weak",
           source_authority: 0.22,
           routine_item_score: 0.4,
+          winner_selection_reason: "best_available_derivative",
+          selection_reason_codes: ["best_available_derivative"],
+          coverage_gap_status: "preferred_missing",
           tag: "TECHNOLOGY",
           headline: "Benzinga item",
           url: "https://benzinga.com/story-1",
@@ -69,6 +72,48 @@ const {
           tag: "TECHNOLOGY",
           headline: "Reuters item",
           url: "https://reuters.com/story-1",
+        },
+      ],
+    },
+    {
+      user_email: "gamma@example.com",
+      recipient: "gamma@example.com",
+      digest_id: "2026-03-21:gamma",
+      run_at_utc: "2026-03-21T11:00:00.000Z",
+      quality_score: 84,
+      dominant_failure_mode: "unknown",
+      sent_items: [
+        {
+          source_domain: "pharmavoice.com",
+          source_tier: "strong",
+          source_authority: 0.81,
+          routine_item_score: 0.7,
+          specialist_trade_outperformed_preferred: true,
+          broader_retrieval_found_better: true,
+          coverage_gap_status: "preferred_weaker",
+          tag: "HEALTHCARE",
+          headline: "PharmaVoice item",
+          url: "https://pharmavoice.com/story-1",
+        },
+      ],
+    },
+    {
+      user_email: "delta@example.com",
+      recipient: "delta@example.com",
+      digest_id: "2026-03-21:delta",
+      run_at_utc: "2026-03-21T12:00:00.000Z",
+      quality_score: 76,
+      dominant_failure_mode: "unknown",
+      sent_items: [
+        {
+          source_domain: "youtube.com",
+          source_tier: "unknown",
+          source_authority: 0.3,
+          routine_item_score: 0.25,
+          source_identity_ambiguous: true,
+          tag: "TECHNOLOGY",
+          headline: "YouTube item",
+          url: "https://youtube.com/watch?v=abc123",
         },
       ],
     },
@@ -131,6 +176,17 @@ const {
   assert.strictEqual(overview.preferred_sources.path, "/tmp/preferred-sources.json");
   assert.strictEqual(overview.preferred_sources.topic_count, 1);
   assert.strictEqual(overview.preferred_sources.total_unique_domains, 4);
+  assert.strictEqual(overview.curation_queues.specialist_candidates[0].domain, "pharmavoice.com");
+  assert.strictEqual(overview.curation_queues.derivative_winners[0].domain, "benzinga.com");
+  assert.strictEqual(overview.curation_queues.platform_ambiguity[0].domain, "youtube.com");
+  assert.ok(
+    overview.curation_queues.topic_coverage_gaps.some((entry) => entry.topic === "HEALTHCARE" && entry.broad_rescue_count === 1),
+    "topic coverage queues should capture broader retrieval rescues"
+  );
+  assert.ok(
+    overview.curation_queues.topic_coverage_gaps.some((entry) => entry.topic === "TECHNOLOGY" && entry.preferred_missing_count === 1),
+    "topic coverage queues should capture preferred-missing cases"
+  );
   assert.deepStrictEqual(recentDigestsCalls[0], { all_time: true });
 
   const detail = buildSourceRegistryDomainDetail({

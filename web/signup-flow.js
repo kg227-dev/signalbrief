@@ -264,7 +264,7 @@
       return typeof Prefs.topicDisplayLabel === "function" ? Prefs.topicDisplayLabel(topic) : topic;
     }
 
-    function addGroup(label, topics) {
+    function addGroup(label, topics, chipClass) {
       var heading = document.createElement("div");
       heading.className = "topic-group-label";
       heading.textContent = label;
@@ -274,7 +274,7 @@
       wrap.className = "topic-grid";
       topics.forEach(function(topic) {
         var chip = document.createElement("div");
-        chip.className = "topic-chip";
+        chip.className = "topic-chip " + chipClass;
         chip.dataset.topic = topic;
         chip.innerHTML = '<span class="check"></span> ' + topicLabel(topic);
         chip.addEventListener("click", function() { toggleTopic(chip); });
@@ -283,8 +283,8 @@
       grid.appendChild(wrap);
     }
 
-    addGroup("Industries", industries);
-    addGroup("Capabilities", capabilities);
+    addGroup("Industries", industries, "topic-chip-industry");
+    addGroup("Capabilities", capabilities, "topic-chip-capability");
   }
 
   function toggleTopic(chip) {
@@ -295,7 +295,14 @@
       chip.classList.remove("selected");
       if (prefState) prefState.removeTopic(topic);
       // Remove custom chip entirely
-      if (isCustomTopic(topic)) chip.remove();
+      if (isCustomTopic(topic)) {
+        chip.remove();
+        var customGrid = byId("customChipsGrid");
+        var customSection = byId("customGroupSection");
+        if (customSection && customGrid && customGrid.children.length === 0) {
+          customSection.style.display = "none";
+        }
+      }
     } else {
       chip.classList.add("selected");
       if (prefState) prefState.addTopic(topic);
@@ -369,9 +376,12 @@
     chip.innerHTML = '<span class="check"></span> ' + label;
     chip.addEventListener("click", function() { toggleTopic(chip); });
 
-    // Insert before custom topic row
-    var grid = byId("topicGrid");
-    if (grid) grid.appendChild(chip);
+    // Insert into dedicated custom chips container
+    var customSection = byId("customGroupSection");
+    var customGrid = byId("customChipsGrid");
+    if (customSection) customSection.style.display = "block";
+    if (customGrid) customGrid.appendChild(chip);
+    else if (byId("topicGrid")) byId("topicGrid").appendChild(chip);
     if (prefState) prefState.addTopic(key);
 
     input.value = "";

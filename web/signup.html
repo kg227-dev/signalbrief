@@ -31,6 +31,11 @@
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.03);
   --radius: 12px;
   --radius-sm: 8px;
+  --purple: #6d28d9;
+  --purple-hover: #5b21b6;
+  --purple-light: rgba(109,40,217,0.08);
+  --orange: #c2770a;
+  --orange-light: rgba(194,119,10,0.09);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -54,6 +59,10 @@ body.dark {
   --accent-light: rgba(91,127,208,0.12);
   --border: rgba(255,255,255,0.06);
   --border-subtle: rgba(255,255,255,0.04);
+  --purple: #8b5cf6;
+  --purple-light: rgba(139,92,246,0.12);
+  --orange: #d97706;
+  --orange-light: rgba(217,119,6,0.12);
 }
 body.dark .input-field { background: var(--card); color: var(--text); }
 body.dark select.input-field { background-color: var(--card); }
@@ -241,7 +250,42 @@ select.input-field {
   user-select: none;
   background: var(--card);
 }
-.topic-chip:hover {
+/* Industry (blue) hover + selected */
+.topic-chip.topic-chip-industry:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.02);
+}
+.topic-chip.topic-chip-industry.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  color: var(--accent);
+}
+.topic-chip.topic-chip-industry.selected .check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Capability (purple) hover + selected */
+.topic-chip.topic-chip-capability:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+  transform: scale(1.02);
+}
+.topic-chip.topic-chip-capability.selected {
+  border-color: var(--purple);
+  background: var(--purple-light);
+  color: var(--purple);
+}
+.topic-chip.topic-chip-capability.selected .check {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: #fff;
+}
+
+/* Fallback for unclassed chips */
+.topic-chip:not(.topic-chip-industry):not(.topic-chip-capability):not(.topic-chip-custom):hover {
   border-color: var(--accent);
   color: var(--text);
   transform: scale(1.02);
@@ -260,18 +304,32 @@ select.input-field {
   flex-shrink: 0;
   font-size: 9px;
 }
-.topic-chip.selected .check {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
 .topic-chip.selected .check::after { content: '\2713'; }
 
-/* Custom topic chips */
-.topic-chip.topic-chip-custom { border-color: rgba(217,119,6,0.35); color: #92400E; background: #FFFBEB; }
-.topic-chip.topic-chip-custom:hover { border-color: #D97706; background: #FEF3C7; }
-.topic-chip.topic-chip-custom.selected { border-color: #D97706; background: #D97706; color: #fff; }
-.topic-chip.topic-chip-custom.selected .check { background: rgba(255,255,255,0.3); border-color: rgba(255,255,255,0.5); }
+/* Custom topic chips (orange) */
+.topic-chip.topic-chip-custom {
+  border-color: rgba(194,119,10,0.3);
+  color: var(--orange);
+  background: var(--orange-light);
+}
+.topic-chip.topic-chip-custom:hover {
+  border-color: var(--orange);
+  background: rgba(194,119,10,0.14);
+  transform: scale(1.02);
+}
+.topic-chip.topic-chip-custom.selected {
+  border-color: var(--orange);
+  background: var(--orange-light);
+  color: var(--orange);
+}
+.topic-chip.topic-chip-custom.selected .check {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+
+/* Custom group section */
+#customGroupSection { display: none; }
 
 .custom-topic-row {
   display: flex;
@@ -636,12 +694,16 @@ select.input-field {
     <h2>What signals matter to you?</h2>
     <p class="step-sub">Pick at least 2 topics across Industries and Capabilities.</p>
     <div id="topicGrid"></div>
+    <div id="customGroupSection">
+      <div class="topic-group-label" style="margin-top:16px;color:var(--orange)">Custom</div>
+      <div class="topic-grid" id="customChipsGrid"></div>
+    </div>
     <div class="custom-topic-row">
-      <input type="text" class="input-field" placeholder="Custom topic &mdash; e.g. GLP-1, DOGE" id="customTopic">
+      <input type="text" class="input-field" placeholder="Custom topic — e.g. Nvidia, DOGE" id="customTopic">
       <button type="button" class="add-btn" id="addCustomBtn">+ Add</button>
     </div>
     <div class="topic-feedback" id="topicFeedback"></div>
-    <div class="topic-hint">Ideas: a drug class, a company you track, a policy area, or a client sector.</div>
+    <div class="topic-hint">Ideas: a company you track, a policy area, a client sector, or any keyword relevant to your work.</div>
     <div class="step-error" id="error-1"></div>
     <div class="step-nav">
       <button class="continue-btn" id="next-1">Continue</button>

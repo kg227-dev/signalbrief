@@ -113,6 +113,10 @@
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.03);
   --shadow-elevated: 0 4px 16px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.08);
   --radius: 14px;
+  --purple: #6d28d9;
+  --purple-light: rgba(109,40,217,0.08);
+  --orange: #c2770a;
+  --orange-light: rgba(194,119,10,0.09);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -138,6 +142,10 @@ body.dark {
   --border: rgba(255,255,255,0.06);
   --border-subtle: rgba(255,255,255,0.04);
   --shadow-elevated: 0 4px 16px rgba(0,0,0,0.15), 0 12px 40px rgba(0,0,0,0.2);
+  --purple: #8b5cf6;
+  --purple-light: rgba(139,92,246,0.12);
+  --orange: #d97706;
+  --orange-light: rgba(217,119,6,0.12);
 }
 body.dark .dp-scan { background: #232019; }
 body.dark .dp-tag-pe { background: rgba(146,64,14,0.2); color: #d4a574; }
@@ -472,7 +480,7 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   padding: 7px 14px;
   border-radius: 100px;
   border: 1px solid var(--border);
@@ -485,11 +493,17 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
 body.dark .topic-pill {
   background: rgba(255,255,255,0.03);
 }
-.topic-pill.selected {
+/* Industry = blue */
+.topic-pill.industry.selected {
   background: var(--accent-light);
   color: var(--accent);
   border-color: rgba(59,95,192,0.2);
-  font-weight: 600;
+}
+/* Capability = purple */
+.topic-pill.capability.selected {
+  background: var(--purple-light);
+  color: var(--purple);
+  border-color: rgba(109,40,217,0.2);
 }
 .topic-dot {
   width: 8px;
@@ -499,9 +513,13 @@ body.dark .topic-pill {
   flex-shrink: 0;
   transition: all 0.15s ease;
 }
-.topic-pill.selected .topic-dot {
+.topic-pill.industry.selected .topic-dot {
   background: var(--accent);
   border-color: var(--accent);
+}
+.topic-pill.capability.selected .topic-dot {
+  background: var(--purple);
+  border-color: var(--purple);
 }
 .topics-custom-row {
   display: flex;
@@ -510,18 +528,18 @@ body.dark .topic-pill {
   flex-wrap: wrap;
   margin-top: 20px;
   padding: 14px 16px;
-  background: rgba(0,0,0,0.018);
-  border: 1px dashed rgba(0,0,0,0.1);
+  background: var(--orange-light);
+  border: 1px dashed rgba(194,119,10,0.2);
   border-radius: 12px;
 }
 body.dark .topics-custom-row {
-  background: rgba(255,255,255,0.02);
-  border-color: rgba(255,255,255,0.08);
+  background: var(--orange-light);
+  border-color: rgba(217,119,6,0.2);
 }
 .topics-custom-prefix {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--orange);
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -530,13 +548,14 @@ body.dark .topics-custom-row {
   font-weight: 600;
   padding: 4px 12px;
   border-radius: 100px;
-  background: var(--accent-light);
-  color: var(--accent);
-  border: 1px solid rgba(59,95,192,0.18);
+  background: rgba(194,119,10,0.12);
+  color: var(--orange);
+  border: 1px solid rgba(194,119,10,0.25);
 }
 .topics-custom-note {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--orange);
+  opacity: 0.8;
   font-style: italic;
 }
 @media (max-width: 720px) {
@@ -776,32 +795,33 @@ body.dark .topics-custom-row {
       <div class="topics-section" aria-label="Covered verticals and capabilities">
         <div class="topics-group-label">Industries</div>
         <div class="topics-grid">
-          <div class="topic-pill selected"><span class="topic-dot"></span>Healthcare</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Financial Services</div>
-          <div class="topic-pill selected"><span class="topic-dot"></span>Private Equity &amp; M&amp;A</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Energy</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Consumer &amp; Retail</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Life Sciences</div>
-          <div class="topic-pill selected"><span class="topic-dot"></span>Technology</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Industrials</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Real Estate</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Public Sector</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Healthcare</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Financial Services</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Private Equity &amp; M&amp;A</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Energy</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Consumer &amp; Retail</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Life Sciences</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Technology</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Industrials</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Real Estate</div>
+          <div class="topic-pill industry selected"><span class="topic-dot"></span>Public Sector</div>
         </div>
         <div class="topics-group-label">Capabilities</div>
         <div class="topics-grid">
-          <div class="topic-pill selected"><span class="topic-dot"></span>AI &amp; Technology</div>
-          <div class="topic-pill selected"><span class="topic-dot"></span>Strategy</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Policy &amp; Regulatory</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Sustainability &amp; ESG</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Digital Transformation</div>
-          <div class="topic-pill selected"><span class="topic-dot"></span>M&amp;A Advisory</div>
-          <div class="topic-pill"><span class="topic-dot"></span>Talent &amp; Workforce</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>AI &amp; Technology</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>Strategy</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>Policy &amp; Regulatory</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>Sustainability &amp; ESG</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>Digital Transformation</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>M&amp;A Advisory</div>
+          <div class="topic-pill capability selected"><span class="topic-dot"></span>Talent &amp; Workforce</div>
         </div>
         <div class="topics-custom-row">
           <span class="topics-custom-prefix">+ Custom</span>
-          <span class="topics-custom-tag">GLP-1</span>
+          <span class="topics-custom-tag">Nvidia</span>
           <span class="topics-custom-tag">DOGE</span>
-          <span class="topics-custom-note">You can also add your own keywords: a drug class, a company you follow, a policy area, or a client sector.</span>
+          <span class="topics-custom-tag">SpaceX</span>
+          <span class="topics-custom-note">Track any company, policy area, client sector, or keyword relevant to your work.</span>
         </div>
       </div>
     </div>

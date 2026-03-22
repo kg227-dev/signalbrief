@@ -189,6 +189,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       claudeUsage,
       engagementEvents,
       runDiagnostics,
+      repetitionNote,
     } = params;
 
     const deliveredUsers = [];
@@ -247,9 +248,12 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             .join(", ");
           log(`  [auto-learning] ${user.email || user.chatId}: ${changes} (events=${autoLearning.processed_events})`);
         }
-        const learningSummary = autoLearning.changed
+        const baseLearning = autoLearning.changed
           ? buildLearningSummary(autoLearning.adjustments, 2)
           : "";
+        const learningSummary = [baseLearning, String(repetitionNote || "").trim()]
+          .filter(Boolean)
+          .join(" · ");
 
         const ranked = rankingRuntime.rankAndSuppressUserItems({
           user,

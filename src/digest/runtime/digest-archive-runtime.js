@@ -40,6 +40,7 @@ function createDigestArchiveRuntime(deps) {
 
   const {
     loadRecentArchiveItems,
+    loadRecentArchiveByDate,
     dedupAgainstRecentArchives,
     buildRecentRepeatIndex,
   } = archiveHistoryRuntime;
@@ -59,6 +60,7 @@ function createDigestArchiveRuntime(deps) {
   return {
     parseSourceDomain,
     loadRecentArchiveItems,
+    loadRecentArchiveByDate,
     dedupAgainstRecentArchives,
     buildRecentRepeatIndex,
     isRecentRepeatItem,

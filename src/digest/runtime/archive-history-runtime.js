@@ -37,6 +37,26 @@ function createArchiveHistoryRuntime(deps) {
     return items;
   }
 
+  function loadRecentArchiveByDate(days = 7) {
+    const targetArchiveDir = resolveArchiveDir();
+    if (!fs.existsSync(targetArchiveDir)) return [];
+    const files = fs.readdirSync(targetArchiveDir).filter((f) => f.endsWith(".json")).sort();
+    if (!files.length) return [];
+
+    const recent = files.slice(-Math.max(1, Number(days || 7)));
+    const byDate = [];
+    for (const file of recent) {
+      const date = file.replace(/\.json$/, "");
+      try {
+        const parsed = JSON.parse(fs.readFileSync(path.join(targetArchiveDir, file), "utf8"));
+        byDate.push({ date, items: Array.isArray(parsed?.items) ? parsed.items : [] });
+      } catch (err) {
+        log(`⚠️ Failed to parse archive file ${file}: ${err.message}`);
+      }
+    }
+    return byDate;
+  }
+
   function dedupAgainstRecentArchives(items, opts = {}) {
     const dedupDays = Math.max(1, Number(opts.days || 3));
     const recentItems = loadRecentArchiveItems(dedupDays);
@@ -72,6 +92,7 @@ function createArchiveHistoryRuntime(deps) {
 
   return {
     loadRecentArchiveItems,
+    loadRecentArchiveByDate,
     dedupAgainstRecentArchives,
     buildRecentRepeatIndex,
   };

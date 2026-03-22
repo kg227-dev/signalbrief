@@ -3,6 +3,7 @@
 const digestPipeline = require("../../digest/application/digest-pipeline-seam-runtime");
 const digestPolicy = require("../../digest/domain/digest-policy-domain-runtime");
 const repeatDedup = require("../../digest/domain/repeat-dedup-domain-runtime");
+const repeatHistory = require("../../digest/domain/repeat-history-domain-runtime");
 const selection = require("../../digest/domain/selection-domain-runtime");
 const source = require("../../digest/domain/source-domain-runtime");
 const storyline = require("../../digest/domain/storyline-domain-runtime");
@@ -17,6 +18,7 @@ module.exports = {
   ...digestPipeline,
   ...digestPolicy,
   ...repeatDedup,
+  ...repeatHistory,
   ...selection,
   ...source,
   ...storyline,
@@ -29,6 +31,7 @@ module.exports = {
   digestPipeline,
   digestPolicy,
   repeatDedup,
+  repeatHistory,
   selection,
   source,
   storyline,

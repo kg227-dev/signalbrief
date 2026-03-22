@@ -38,6 +38,9 @@ const {
   createRepeatIndex,
   isRepeatedItem,
   dedupItemsAgainstRepeatIndex,
+  buildRepeatHistory,
+  filterItemsAgainstHistory,
+  buildRepetitionNote,
 } = require("../domains/digest");
 const {
   buildCustomTopicQueries,
@@ -463,6 +466,10 @@ function loadRecentArchiveItems(...args) {
   return getDigestArchiveRuntime().loadRecentArchiveItems(...args);
 }
 
+function loadRecentArchiveByDate(...args) {
+  return getDigestArchiveRuntime().loadRecentArchiveByDate(...args);
+}
+
 function dedupAgainstRecentArchives(...args) {
   return getDigestArchiveRuntime().dedupAgainstRecentArchives(...args);
 }
@@ -745,6 +752,10 @@ async function main() {
     buildRecentRepeatIndex,
     selectItems,
     loadRecentArchiveItems,
+    loadRecentArchiveByDate,
+    buildRepeatHistory,
+    filterItemsAgainstHistory,
+    buildRepetitionNote,
     emitDigestIncident,
     articleAgeTooOld,
   });
@@ -755,12 +766,14 @@ async function main() {
     rankingPolicy,
     depthPolicy,
     selectionDiagnostics,
+    repetitionNote,
   } = await selectionRuntime.selectForEnrichment({
     allItems,
     selectionTarget,
     customTags,
     tagPriority,
     runMode,
+    digestDateKey,
     dueUsersCount: dueUsers.length,
     standardFetchCallsPlanned,
   });
@@ -861,6 +874,7 @@ async function main() {
       deliveryEventSource,
       claudeUsage,
       engagementEvents,
+      repetitionNote,
       runDiagnostics: {
         alternate_queries_used: Number(fetchDiagnostics?.alternate_queries_used || 0),
         preferred_domains_used: Array.isArray(fetchDiagnostics?.preferred_domains_used) ? fetchDiagnostics.preferred_domains_used.slice(0, 20) : [],

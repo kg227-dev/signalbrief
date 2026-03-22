@@ -34,9 +34,9 @@
     {
       "tag": "HEALTHCARE",
       "queries": [
-        "health system strategy merger acquisition 2026",
-        "payer provider dynamics value-based care 2026",
-        "clinical AI healthcare deployment 2026"
+        "hospital system merger acquisition payer provider strategy last 48 hours",
+        "Medicare Advantage payer provider value-based care last 48 hours",
+        "clinical AI hospital operations FDA healthcare rollout last 48 hours"
       ]
     },
     {
@@ -58,9 +58,9 @@
     {
       "tag": "ENERGY",
       "queries": [
-        "energy transition grid infrastructure policy 2026",
-        "clean energy renewables utilities decarbonization 2026",
-        "oil gas commodities energy strategy 2026"
+        "utility grid transmission interconnection power demand policy last 48 hours",
+        "renewables battery storage utility strategy last 48 hours",
+        "oil gas LNG refinery energy markets last 48 hours"
       ]
     },
     {
@@ -74,9 +74,9 @@
     {
       "tag": "LIFE SCIENCES",
       "queries": [
-        "pharma pipeline FDA approval drug 2026",
-        "biotech clinical trials CMO 2026",
-        "drug pricing biopharma strategy 2026"
+        "FDA approval clinical trial pharma licensing biotech last 48 hours",
+        "biopharma M&A licensing deal trial readout last 48 hours",
+        "drug pricing obesity drug biotech manufacturing last 48 hours"
       ]
     },
     {
@@ -130,17 +130,17 @@
     {
       "tag": "POLICY×REGULATORY",
       "queries": [
-        "antitrust competition regulation trade policy 2026",
-        "sanctions compliance sector-specific regulation 2026",
-        "tariff trade policy economic impact 2026"
+        "FTC DOJ antitrust trade tariff regulation business last 48 hours",
+        "SEC EPA FTC proposed rule enforcement business last 48 hours",
+        "sanctions export controls trade compliance policy last 48 hours"
       ]
     },
     {
       "tag": "SUSTAINABILITY",
       "queries": [
-        "ESG climate risk reporting corporate 2026",
-        "carbon markets supply chain sustainability 2026",
-        "clean energy net zero corporate investment 2026"
+        "SEC climate disclosure CBAM carbon markets corporate sustainability last 48 hours",
+        "power demand grid decarbonization clean energy policy last 48 hours",
+        "supply chain sustainability reporting emissions corporate investment last 48 hours"
       ]
     },
     {

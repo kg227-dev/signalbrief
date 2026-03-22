@@ -94,6 +94,7 @@ function fillRate(itemCount, requestedCount) {
 }
 
 function describeScarcity({ itemCount = 0, requestedCount = 0, score = 0, selectionLift = 0 } = {}) {
+  if (Number(itemCount || 0) <= 0) return "fail_closed_no_relevant_candidates";
   const rate = fillRate(itemCount, requestedCount);
   if (rate < 100) {
     return Number(score || 0) >= SOURCE_EVAL_BANDS.decent ? "short_but_precise" : "short_and_thin";

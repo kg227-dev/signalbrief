@@ -11,10 +11,26 @@ const TARGET_REL = "src/entrypoints/digest-orchestrator-fetch-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
-const { createDigestOrchestratorFetchRuntime } = runtime;
+const { createDigestOrchestratorFetchRuntime, resolveCustomTopicSlugs } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
+  const uncappedCustomHeavy = resolveCustomTopicSlugs({
+    dueUsers: [
+      { topics: ["custom_nvidia"] },
+      { topics: ["custom_glp_1"] },
+      { topics: ["custom_agentic_ai"] },
+      { topics: ["custom_sec_rulemaking"] },
+      { topics: ["custom_cbam"] },
+      { topics: ["custom_rate_cuts"] },
+      { topics: ["custom_grid_infrastructure"] },
+      { topics: ["custom_semicap"] },
+    ],
+    maxCustomFetchPerRun: null,
+    log: () => {},
+  });
+  assert.strictEqual(uncappedCustomHeavy.length, 8);
+
   const fetchCalls = [];
   const shortlistCalls = [];
   const incidents = [];
@@ -391,4 +407,68 @@ assertModuleExports(() => runtime, TARGET_REL);
     if (previousConcurrencyEnv == null) delete process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
     else process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES = previousConcurrencyEnv;
   }
+
+  const customHeavyCalls = [];
+  const customHeavyRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "STRATEGY", queries: ["standard-q1", "standard-q2"] }],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          scheduled: {
+            soft_calls: 8,
+            hard_calls: 8,
+          },
+          custom_topic_reserve_calls: 2,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic) => {
+      customHeavyCalls.push({ tag: topic.tag, query: topic.queries[0] });
+      if (topic.isCustom && String(topic.queries[0]).includes("retry")) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: `${topic.tag} recovered`, tag: topic.tag, source: "reuters.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      if (topic.isCustom) {
+        return {
+          apiCalls: 1,
+          items: [],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
+        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+      };
+    },
+    buildPreferredDomainShortlist: () => ({ domains: [], topic_keys: [], official_friendly: false }),
+    buildCustomTopicQueries: (keyword) => [`${keyword} primary`, `${keyword} retry`],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const customHeavyResult = await customHeavyRuntime.orchestrateFetch({
+    dueUsers: [
+      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+      { topics: ["STRATEGY", "custom_glp_1"], preferences: {} },
+      { topics: ["STRATEGY", "custom_agentic_ai"], preferences: {} },
+      { topics: ["STRATEGY", "custom_cbam"], preferences: {} },
+    ],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.deepStrictEqual(
+    customHeavyCalls.map((row) => row.tag),
+    ["STRATEGY", "NVIDIA", "GLP 1", "AGENTIC AI", "CBAM", "NVIDIA"]
+  );
+  assert.strictEqual(customHeavyResult.customFetchCalls, 5);
+  assert.strictEqual(customHeavyResult.fetchDiagnostics.alternate_queries_used, 1);
+  assert.strictEqual(customHeavyResult.fetchDiagnostics.thin_topic_count >= 1, true);
+  assert.strictEqual(customHeavyResult.fetchDiagnostics.topic_diagnostics[1].tag, "NVIDIA");
 })();

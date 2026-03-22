@@ -198,6 +198,57 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_applied, true);
   assert.strictEqual(customPrecisionOut.diagnostics.short_digest_accepted, true);
 
+  const strictCustomRuntime = createDigestOrchestratorDeliveryRankingRuntime({
+    CONFIG: {
+      digest: {
+        perUserFreshnessMinItems: 2,
+        perUserFreshnessDigests: 3,
+        perUserEntityHistoryDigests: 3,
+        maxSignalsPerEntity: 3,
+      },
+    },
+    log: () => {},
+    filterItemsByTopics: () => ({
+      items: [
+        { tag: "AI×TECH", headline: "Anchor-topic AI item", strategic_value: 0.8, routine_item_score: 0.1, url: "https://example.com/ai" },
+      ],
+      standardTopicsLower: ["ai tech"],
+      customKeywords: ["doge"],
+      specialistMode: true,
+      wasFiltered: true,
+    }),
+    applyTopicRelevanceScores: (items) => items.map((item) => ({
+      ...item,
+      relevanceScore: 8.6,
+      why_shown: ["topic_match"],
+    })),
+    buildRecentEntityHistory: () => ({ entityCounts: {}, storylineKeys: new Set() }),
+    suppressRecentlySentForUser: (items) => ({ items, removed: 0, backfilled: 0 }),
+    isRecentRepeatItem: () => false,
+    parseSourceDomain: () => "example.com",
+    applyEntityCoverageCap: (items) => items,
+    reserveCustomKeywordSlot: (items) => items,
+  });
+
+  assert.throws(() => strictCustomRuntime.rankAndSuppressUserItems({
+    user: {
+      chatId: "strict-custom",
+      topics: ["AI×TECH", "custom_doge"],
+      preferences: { items_per_digest: 3 },
+      topic_weights: {},
+    },
+    enriched: [
+      { tag: "AI×TECH", headline: "Broad AI filler", relevanceScore: 8, strategic_value: 0.8, routine_item_score: 0.1, url: "https://example.com/filler" },
+    ],
+    repeatIndex: { days: 3, urlKeys: new Set(), headlineKeys: new Set() },
+    repeatPenalty: 0.2,
+    depthPolicy: { minFilteredItems: 2, defaultItemCount: 3 },
+    rankingPolicy: { minSignalScoreForFinal: 0 },
+    recentDigestRecords: [],
+    nowIso: "2026-03-13T11:00:00.000Z",
+    deliveryMode: "scheduled",
+  }), /No deliverable items after emergency fallback/);
+
   const repeatLogs = [];
   const freshnessRuntime = createDigestOrchestratorDeliveryRankingRuntime({
     CONFIG: {

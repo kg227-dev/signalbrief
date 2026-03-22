@@ -56,6 +56,56 @@ const CUSTOM_TOPIC_ALIASES = {
   medtech: ["medical device", "diagnostics", "surgical systems", "hospital technology"],
 };
 const CUSTOM_KEYWORD_ALIASES = CUSTOM_TOPIC_ALIASES;
+const CUSTOM_TOPIC_QUERY_PLANS = Object.freeze({
+  nvidia: Object.freeze([
+    "Nvidia Blackwell data center AI chip demand last 48 hours",
+    "Nvidia hyperscaler spending export controls China AI chips last 48 hours",
+    "NVDA enterprise deals OEM cloud partner news last 48 hours",
+    "Nvidia earnings margin guidance supply chain last 48 hours",
+  ]),
+  "glp 1": Object.freeze([
+    "GLP-1 obesity drug pricing coverage manufacturing last 48 hours",
+    "Novo Nordisk Eli Lilly GLP-1 approval trial deal last 48 hours",
+    "GLP-1 payer coverage employer benefits policy last 48 hours",
+    "obesity drug demand shortage formulary last 48 hours",
+  ]),
+  "agentic ai": Object.freeze([
+    "agentic AI enterprise rollout product launch last 48 hours",
+    "AI agents Microsoft OpenAI Salesforce Anthropic last 48 hours",
+    "agentic AI governance security enterprise news last 48 hours",
+    "enterprise AI agents pricing deployment partnership last 48 hours",
+  ]),
+  "sec rulemaking": Object.freeze([
+    "SEC rulemaking proposed rule enforcement disclosure last 48 hours",
+    "Securities and Exchange Commission rule proposal corporate reporting last 48 hours",
+    "SEC climate disclosure cyber disclosure rule last 48 hours",
+    "SEC enforcement rule proposal public company compliance last 48 hours",
+  ]),
+  cbam: Object.freeze([
+    "CBAM carbon border adjustment mechanism EU trade compliance last 48 hours",
+    "EU CBAM steel cement aluminum trade last 48 hours",
+    "CBAM supply chain carbon reporting corporate impact last 48 hours",
+    "carbon border tax EU import policy last 48 hours",
+  ]),
+  "rate cuts": Object.freeze([
+    "Federal Reserve rate cuts inflation Treasury markets last 48 hours",
+    "Fed rate decision Powell labor market inflation last 48 hours",
+    "rate cuts corporate borrowing M&A strategy last 48 hours",
+    "interest rate cuts bank lending credit markets last 48 hours",
+  ]),
+  "grid infrastructure": Object.freeze([
+    "grid infrastructure transmission interconnection utility data center power last 48 hours",
+    "transmission line permitting grid modernization utility investment last 48 hours",
+    "power demand transformer utility equipment grid last 48 hours",
+    "interconnection queue transmission project utility last 48 hours",
+  ]),
+  semicap: Object.freeze([
+    "semicap semiconductor equipment orders fab investment last 48 hours",
+    "ASML Applied Materials Lam Research semiconductor equipment last 48 hours",
+    "chip equipment export controls China fab last 48 hours",
+    "wafer fab equipment memory logic spending last 48 hours",
+  ]),
+});
 
 const CUSTOM_TOPIC_STOPWORDS = new Set(["the", "and", "for", "with", "from", "into", "over", "under", "news"]);
 const CUSTOM_TOKEN_ALIASES = {
@@ -610,12 +660,14 @@ function buildCustomTopicQueries(keywordRaw) {
   if (!keyword) return [];
   const normalized = normalizeTopicToken(keyword);
   const aliases = CUSTOM_KEYWORD_ALIASES[normalized] || [];
-  const base = [
-    `${keyword} business strategy developments last 48 hours`,
-    `${keyword} market impact regulation deals earnings last 48 hours`,
-    `${keyword} strategy and investment implications last 48 hours`,
-  ];
-  if (keyword.split(" ").length <= 2) {
+  const base = Array.isArray(CUSTOM_TOPIC_QUERY_PLANS[normalized])
+    ? CUSTOM_TOPIC_QUERY_PLANS[normalized].slice()
+    : [
+      `${keyword} business strategy developments last 48 hours`,
+      `${keyword} market impact regulation deals earnings last 48 hours`,
+      `${keyword} strategy and investment implications last 48 hours`,
+    ];
+  if (!Array.isArray(CUSTOM_TOPIC_QUERY_PLANS[normalized]) && keyword.split(" ").length <= 2) {
     base.unshift(`${keyword} company and sector news last 48 hours`);
   }
   const merged = [...base, ...aliases.map((a) => `${a} business and market developments last 48 hours`)];

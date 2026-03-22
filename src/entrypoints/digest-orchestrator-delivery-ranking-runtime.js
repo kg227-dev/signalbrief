@@ -80,10 +80,10 @@ function applyCustomPrecisionGate(items = [], enabled = false) {
   const customMatched = ranked.filter((item) => hasCustomKeywordSignal(item));
   if (customMatched.length === 0) {
     return {
-      items: ranked,
-      removed: 0,
+      items: [],
+      removed: ranked.length,
       matched: 0,
-      applied: false,
+      applied: true,
     };
   }
   return {

@@ -929,11 +929,11 @@ body.dark .topics-custom-row {
     }
   }
   try { if (localStorage.getItem('sbDark') === '1') apply(true); } catch(e) {}
-  if (toggle) toggle.addEventListener('click', function() {
+  if (toggle) toggle.onclick = function() {
     var isDark = !document.body.classList.contains('dark');
     apply(isDark);
     try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
-  });
+  };
 })();
 
 /* Sticky nav */

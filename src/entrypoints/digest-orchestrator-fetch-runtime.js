@@ -15,6 +15,9 @@ const DEFAULT_SEARCH_BUDGET = Object.freeze({
 });
 const DEFAULT_MAX_FETCH_CONCURRENCY = 4;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
+const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
+const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
+const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
 const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
   HEALTHCARE: Object.freeze([
     "hospital system merger acquisition payer provider strategy last 48 hours",
@@ -68,6 +71,7 @@ const TRACKED_DEEP_CUSTOM_SLUGS = new Set([
   "custom_sec_rulemaking",
   "custom_cbam",
   "custom_rate_cuts",
+  "custom_grid_infrastructure",
   "custom_semicap",
 ]);
 
@@ -261,10 +265,16 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
     ? Math.min(customTopicTotal, Math.max(0, Math.floor(hardCalls / 3)))
     : 0;
   const customDeepCoverageReserve = customHeavyRun
-    ? Math.min(8, customTopicTotal)
+    ? Math.min(Math.max(8, customTopicTotal * 2), Math.max(0, hardCalls - customTopicTotal - customRetryReserve))
+    : 0;
+  const customHeavyExtraDeepCalls = customHeavyRun
+    ? Math.min(
+      DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS,
+      Math.max(0, hardCalls - customTopicTotal - customRetryReserve - customDeepCoverageReserve)
+    )
     : 0;
   const reserveTarget = customHeavyRun
-    ? customTopicTotal + customRetryReserve + customDeepCoverageReserve
+    ? customTopicTotal + customRetryReserve + customDeepCoverageReserve + customHeavyExtraDeepCalls
     : Math.min(customTopicTotal, customReserveBase);
   const reserveCalls = Math.min(Math.max(0, reserveTarget), hardCalls);
   return {
@@ -274,6 +284,7 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
     custom_topic_reserve_calls: reserveCalls,
     custom_retry_reserve_calls: customRetryReserve,
     custom_deep_coverage_reserve_calls: customDeepCoverageReserve,
+    custom_heavy_extra_deep_calls: customHeavyExtraDeepCalls,
     custom_heavy_run: customHeavyRun,
     custom_user_count: customUserCount,
     due_user_count: totalDueUsers,
@@ -405,6 +416,22 @@ function sortRetryStates(states, isFetchedItemEligible) {
   });
 }
 
+function sortDeepCoverageRetryStates(states, isFetchedItemEligible) {
+  return sortTopicStates(states).sort((left, right) => {
+    const leftUsable = countUsableItems(left?.items, isFetchedItemEligible);
+    const rightUsable = countUsableItems(right?.items, isFetchedItemEligible);
+    if (leftUsable !== rightUsable) return leftUsable - rightUsable;
+    const leftPreferredHits = Number(left?.preferredSearchResultHitCount || 0);
+    const rightPreferredHits = Number(right?.preferredSearchResultHitCount || 0);
+    if (rightPreferredHits !== leftPreferredHits) return rightPreferredHits - leftPreferredHits;
+    const leftSearchDomainCount = Array.isArray(left?.searchResultDomains) ? left.searchResultDomains.length : 0;
+    const rightSearchDomainCount = Array.isArray(right?.searchResultDomains) ? right.searchResultDomains.length : 0;
+    if (rightSearchDomainCount !== leftSearchDomainCount) return rightSearchDomainCount - leftSearchDomainCount;
+    if (right.priority !== left.priority) return right.priority - left.priority;
+    return left.originalIndex - right.originalIndex;
+  });
+}
+
 function markBudgetStop(budgetTracker, reason) {
   if (!budgetTracker || !reason) return;
   if (!budgetTracker.stop_reason) budgetTracker.stop_reason = reason;
@@ -418,9 +445,10 @@ function canReceiveAdditionalRetry(state, isFetchedItemEligible) {
 }
 
 function hasBlockingProviderFailure(state) {
-  return Number(state?.provider?.failed_calls || 0) > 0
-    || Number(state?.provider?.transport_errors || 0) > 0
-    || countStatusCode(state, 429) > 0;
+  const failedCalls = Math.max(0, Number(state?.provider?.failed_calls || 0));
+  const rateLimitedCalls = Math.max(0, countStatusCode(state, 429));
+  return Number(state?.provider?.transport_errors || 0) > 0
+    || Math.max(0, failedCalls - rateLimitedCalls) > 0;
 }
 
 function shouldPreferBroadFallbackRetry(state, isFetchedItemEligible) {
@@ -595,20 +623,25 @@ function createDigestOrchestratorFetchRuntime(deps) {
     : () => true;
   const maxFetchConcurrency = resolveFetchConcurrency(CONFIG?.digest);
 
-  function resolveBatchConcurrency(batchName, jobCount) {
+  function resolveBatchConcurrency(batchName, jobCount, budgetTracker) {
     const batch = String(batchName || "").trim().toLowerCase();
     let limit = Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY));
     if (batch.startsWith("custom:")) limit = Math.min(limit, 2);
     if (batch === "standard:phase1" && Number(jobCount || 0) >= 10) limit = Math.min(limit, 3);
+    const backoffLevel = Math.max(0, Number(budgetTracker?.rate_limit_backoff_level || 0));
+    if (backoffLevel > 0) {
+      limit = Math.max(1, limit - backoffLevel);
+      if (batch.startsWith("custom:")) limit = 1;
+    }
     return Math.max(1, Math.min(limit, Number(jobCount || 0) || 1));
   }
 
-  async function runWithConcurrency(entries, worker, batchName) {
+  async function runWithConcurrency(entries, worker, batchName, budgetTracker) {
     const jobs = Array.isArray(entries) ? entries : [];
     if (jobs.length === 0) return [];
     const results = new Array(jobs.length);
     let cursor = 0;
-    const workerCount = resolveBatchConcurrency(batchName, jobs.length);
+    const workerCount = resolveBatchConcurrency(batchName, jobs.length, budgetTracker);
 
     async function consume() {
       while (cursor < jobs.length) {
@@ -627,10 +660,29 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const rateLimitCount = results.reduce((sum, entry) => {
       return sum + Number(entry?.result?.diagnostics?.status_counts?.[429] || 0);
     }, 0);
-    if (rateLimitCount <= 0) return;
-    const delayMs = Math.min(4_000, DEFAULT_RATE_LIMIT_COOLDOWN_MS * Math.max(1, rateLimitCount));
+    if (rateLimitCount <= 0) {
+      budgetTracker.rate_limit_backoff_level = Math.max(0, Number(budgetTracker?.rate_limit_backoff_level || 0) - 1);
+      return;
+    }
+    const retryAfterMs = results.reduce((maxDelay, entry) => {
+      return Math.max(maxDelay, Number(entry?.result?.diagnostics?.rate_limit_retry_after_ms || 0));
+    }, 0);
+    budgetTracker.rate_limit_backoff_level = Math.min(
+      DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX,
+      Math.max(0, Number(budgetTracker?.rate_limit_backoff_level || 0)) + 1
+    );
+    const adaptiveDelayMs = DEFAULT_RATE_LIMIT_COOLDOWN_MS
+      * Math.max(1, rateLimitCount)
+      * Math.max(1, Number(budgetTracker.rate_limit_backoff_level || 1));
+    const delayMs = Math.min(
+      DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS,
+      Math.max(retryAfterMs, adaptiveDelayMs)
+    );
     budgetTracker.rate_limit_cooldown_ms = Number(budgetTracker?.rate_limit_cooldown_ms || 0) + delayMs;
-    logger(`Fetch phase ${batchName}: cooling down ${delayMs}ms after ${rateLimitCount} rate-limit response(s)`);
+    logger(
+      `Fetch phase ${batchName}: cooling down ${delayMs}ms after ${rateLimitCount} rate-limit response(s)`
+      + ` (backoff level ${budgetTracker.rate_limit_backoff_level})`
+    );
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
@@ -667,7 +719,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
           },
         };
       }
-    }, batchName);
+    }, batchName, budgetTracker);
 
     const batchResults = invocations.map((entry, idx) => {
       const result = results[idx] || {};
@@ -811,6 +863,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       exhausted: false,
       stop_reason: null,
       rate_limit_cooldown_ms: 0,
+      rate_limit_backoff_level: 0,
     };
 
     const standardStates = sortTopicStates(topicsToFetch.map((topic, index) => {
@@ -921,24 +974,29 @@ function createDigestOrchestratorFetchRuntime(deps) {
     }
     customCallsUsed = countScheduledCalls(customStates);
     customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
-    const customPhase3Eligible = sortRetryStates(customStates.filter((state) => {
-      return Number(state.totalCallsScheduled || 0) > 0
-        && isTrackedDeepCoverageState(state)
-        && countUsableItems(state.items, itemEligibilityFn) <= 0
-        && state.broadFallbackUsed === true
-        && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
-        && !hasBlockingProviderFailure(state);
-    }), itemEligibilityFn);
-    const customPhase3States = customPhase3Eligible.slice(0, customReserveRemaining);
-    if (customPhase3Eligible.length > customPhase3States.length) {
-      markBudgetStop(budgetTracker, "custom_topic_reserve_exhausted");
-    }
-    if (customPhase3States.length > 0) {
-      await runScheduledBatch(customPhase3States, (state) => buildBroadInvocation(
+    let customDeepPhaseIndex = 3;
+    while (customReserveRemaining > 0) {
+      const customDeepEligible = sortDeepCoverageRetryStates(customStates.filter((state) => {
+        return Number(state.totalCallsScheduled || 0) > 0
+          && isTrackedDeepCoverageState(state)
+          && countUsableItems(state.items, itemEligibilityFn) <= 0
+          && state.broadFallbackUsed === true
+          && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
+          && !hasBlockingProviderFailure(state);
+      }), itemEligibilityFn);
+      const customDeepStates = customDeepEligible.slice(0, customReserveRemaining);
+      if (customDeepEligible.length > customDeepStates.length) {
+        markBudgetStop(budgetTracker, "custom_topic_reserve_exhausted");
+      }
+      if (customDeepStates.length <= 0) break;
+      await runScheduledBatch(customDeepStates, (state) => buildBroadInvocation(
         state,
         state.nextBroadQueryIndex,
         { countsAsRetry: true, broadFallback: true }
-      ), "custom:phase3", budgetTracker);
+      ), `custom:phase${customDeepPhaseIndex}`, budgetTracker);
+      customDeepPhaseIndex += 1;
+      customCallsUsed = countScheduledCalls(customStates);
+      customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
     }
 
     const standardDeepCoverageReserve = Math.min(
@@ -990,25 +1048,28 @@ function createDigestOrchestratorFetchRuntime(deps) {
       { countsAsRetry: true, broadFallback: true }
     ), "standard:phase3", budgetTracker);
 
-    const phase4Eligible = sortRetryStates(standardStates.filter((state) => {
-      return Number(state.totalCallsScheduled || 0) > 0
-        && isTrackedDeepCoverageState(state)
-        && countUsableItems(state.items, itemEligibilityFn) <= 0
-        && state.broadFallbackUsed === true
-        && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
-        && !hasBlockingProviderFailure(state);
-    }), itemEligibilityFn);
-    const phase4Slots = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
-    const phase4States = phase4Eligible.slice(0, phase4Slots);
-    if (phase4Eligible.length > phase4States.length) {
-      markBudgetStop(budgetTracker, "hard_cap_reached");
-    }
-    if (phase4States.length > 0) {
+    let standardDeepPhaseIndex = 4;
+    while (true) {
+      const phase4Eligible = sortRetryStates(standardStates.filter((state) => {
+        return Number(state.totalCallsScheduled || 0) > 0
+          && isTrackedDeepCoverageState(state)
+          && countUsableItems(state.items, itemEligibilityFn) <= 0
+          && state.broadFallbackUsed === true
+          && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
+          && !hasBlockingProviderFailure(state);
+      }), itemEligibilityFn);
+      const phase4Slots = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
+      const phase4States = phase4Eligible.slice(0, phase4Slots);
+      if (phase4Eligible.length > phase4States.length) {
+        markBudgetStop(budgetTracker, "hard_cap_reached");
+      }
+      if (phase4States.length <= 0) break;
       await runScheduledBatch(phase4States, (state) => buildBroadInvocation(
         state,
         state.nextBroadQueryIndex,
         { countsAsRetry: true, broadFallback: true }
-      ), "standard:phase4", budgetTracker);
+      ), `standard:phase${standardDeepPhaseIndex}`, budgetTracker);
+      standardDeepPhaseIndex += 1;
     }
 
     const standardFetchCallsPlanned = allowedPhase1States.length;

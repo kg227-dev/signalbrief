@@ -32,6 +32,20 @@ function shouldRetryStatusCode(status, retryStatusCodes) {
   return retryStatusCodes.includes(code);
 }
 
+function parseRetryAfterMs(rawValue, nowMs = Date.now()) {
+  if (rawValue == null) return 0;
+  const headerValue = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+  const text = String(headerValue || "").trim();
+  if (!text) return 0;
+  const seconds = Number(text);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.max(0, Math.round(seconds * 1000));
+  }
+  const retryAtMs = Date.parse(text);
+  if (!Number.isFinite(retryAtMs)) return 0;
+  return Math.max(0, retryAtMs - Number(nowMs || Date.now()));
+}
+
 function createDigestOrchestratorTransportRuntime(deps) {
   const {
     https,
@@ -60,9 +74,9 @@ function createDigestOrchestratorTransportRuntime(deps) {
           });
           res.on("end", () => {
             try {
-              resolve({ status: res.statusCode, body: JSON.parse(out) });
+              resolve({ status: res.statusCode, body: JSON.parse(out), headers: res.headers || {} });
             } catch {
-              resolve({ status: res.statusCode, body: out });
+              resolve({ status: res.statusCode, body: out, headers: res.headers || {} });
             }
           });
         }
@@ -100,7 +114,9 @@ function createDigestOrchestratorTransportRuntime(deps) {
         if (!retryableStatus || attempt >= retries) {
           return response;
         }
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+        const retryAfterMs = parseRetryAfterMs(response?.headers?.["retry-after"]);
+        const waitMs = Math.max(retryDelayMs * (attempt + 1), retryAfterMs);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
         continue;
       } catch (err) {
         lastErr = err;
@@ -123,4 +139,5 @@ function createDigestOrchestratorTransportRuntime(deps) {
 
 module.exports = {
   createDigestOrchestratorTransportRuntime,
+  parseRetryAfterMs,
 };

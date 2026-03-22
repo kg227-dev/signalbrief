@@ -509,7 +509,7 @@ assertModuleExports(() => runtime, TARGET_REL);
           diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
         };
       }
-      if (opts?.retrievalPlan?.broad_only === true && topic.queries[0] === "custom-q2") {
+      if (opts?.retrievalPlan?.broad_only === true && topic.queries[0] === "custom-q4") {
         return {
           apiCalls: 1,
           items: [{ headline: "custom recovered", tag: topic.tag, source: "reuters.com" }],
@@ -528,7 +528,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       }
       return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
     },
-    buildCustomTopicQueries: () => ["custom-q1", "custom-q2", "custom-q3"],
+    buildCustomTopicQueries: () => ["custom-q1", "custom-q2", "custom-q3", "custom-q4"],
     buildCustomRescueItemsFromStandard: () => [],
     emitDigestIncident: async () => {},
   });
@@ -541,10 +541,70 @@ assertModuleExports(() => runtime, TARGET_REL);
     targetChatId: null,
     runMode: "scheduled",
   });
-  assert.strictEqual(customDeepRetryResult.customFetchCalls, 3);
-  assert.strictEqual(customDeepRetryResult.fetchDiagnostics.deep_broad_retry_topics_used, 1);
+  assert.strictEqual(customDeepRetryResult.customFetchCalls, 5);
+  assert.strictEqual(customDeepRetryResult.fetchDiagnostics.deep_broad_retry_topics_used >= 1, true);
   assert.deepStrictEqual(
     customDeepRetryCalls.filter((row) => row.tag === "NVIDIA").map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
+    ["preferred", "broad", "broad", "broad", "broad"]
+  );
+
+  const rateLimitedDeepRetryCalls = [];
+  const rateLimitedDeepRetryRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "HEALTHCARE", queries: ["q1", "q2", "q3"] }],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          scheduled: {
+            soft_calls: 4,
+            hard_calls: 4,
+          },
+          custom_topic_reserve_calls: 0,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      rateLimitedDeepRetryCalls.push({ query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
+      const broadAttemptCount = rateLimitedDeepRetryCalls.filter((entry) => entry.retrievalPlan.broad_only === true).length;
+      if (opts?.retrievalPlan?.broad_only === true && broadAttemptCount === 1) {
+        return {
+          apiCalls: 1,
+          items: [],
+          diagnostics: { provider: "perplexity", successful_calls: 0, failed_calls: 1, transport_errors: 0, status_counts: { 429: 1 }, rate_limit_retry_after_ms: 0 },
+        };
+      }
+      if (opts?.retrievalPlan?.broad_only === true && broadAttemptCount === 2) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "healthcare recovered", tag: topic.tag, source: "statnews.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [],
+        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+      };
+    },
+    buildPreferredDomainShortlist: () => ({ domains: ["fda.gov"], topic_keys: ["healthcare"], official_friendly: true }),
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const rateLimitedDeepRetryResult = await rateLimitedDeepRetryRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["HEALTHCARE"], preferences: {} }],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(rateLimitedDeepRetryResult.standardFetchCalls, 3);
+  assert.strictEqual(rateLimitedDeepRetryResult.allItems.length, 1);
+  assert.strictEqual(rateLimitedDeepRetryResult.fetchDiagnostics.provider_429_count, 1);
+  assert.strictEqual(rateLimitedDeepRetryResult.fetchDiagnostics.rate_limit_cooldown_ms > 0, true);
+  assert.deepStrictEqual(
+    rateLimitedDeepRetryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
     ["preferred", "broad", "broad"]
   );
 
@@ -659,4 +719,81 @@ assertModuleExports(() => runtime, TARGET_REL);
     customHeavyResult.fetchDiagnostics.topic_diagnostics.some((entry) => entry.tag === "NVIDIA"),
     true
   );
+
+  const customHeavyDeepCalls = [];
+  const customHeavyDeepRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "STRATEGY", queries: ["standard-q1"] }],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          scheduled: {
+            soft_calls: 19,
+            hard_calls: 19,
+          },
+          custom_topic_reserve_calls: 2,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      customHeavyDeepCalls.push({
+        tag: topic.tag,
+        query: topic.queries[0],
+        retrievalPlan: opts?.retrievalPlan || {},
+      });
+      if (!topic.isCustom) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [],
+        diagnostics: {
+          provider: "perplexity",
+          successful_calls: 1,
+          failed_calls: 0,
+          transport_errors: 0,
+          status_counts: {},
+          search_result_domains: ["semianalysis.com", "reuters.com"],
+          preferred_search_result_domains: ["semianalysis.com"],
+          preferred_search_result_hit_count: topic.tag === "SEMICAP" ? 3 : 1,
+        },
+      };
+    },
+    buildPreferredDomainShortlist: ({ topicTag }) => {
+      if (String(topicTag).toUpperCase() === "AI×TECH") {
+        return { domains: ["semianalysis.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
+      }
+      return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
+    },
+    buildCustomTopicQueries: (keyword) => [
+      `${keyword} primary`,
+      `${keyword} retry one`,
+      `${keyword} retry two`,
+      `${keyword} retry three`,
+    ],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const customHeavyDeepResult = await customHeavyDeepRuntime.orchestrateFetch({
+    dueUsers: [
+      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+      { topics: ["STRATEGY", "custom_glp_1"], preferences: {} },
+      { topics: ["STRATEGY", "custom_agentic_ai"], preferences: {} },
+      { topics: ["STRATEGY", "custom_semicap"], preferences: {} },
+    ],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(customHeavyDeepResult.standardFetchCalls, 1);
+  assert.strictEqual(customHeavyDeepResult.customFetchCalls, 18);
+  const semicapDiagnostics = customHeavyDeepResult.fetchDiagnostics.topic_diagnostics.find((entry) => entry.tag === "SEMICAP");
+  assert.strictEqual(semicapDiagnostics.broad_call_count, 4);
+  assert.strictEqual(semicapDiagnostics.remaining_broad_queries, 0);
 })();

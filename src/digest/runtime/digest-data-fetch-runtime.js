@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeSourcePolicyDomain } = require("../../runtime/source-policy-registry-runtime");
+const { parseRetryAfterMs } = require("../../entrypoints/digest-orchestrator-transport-runtime");
 const { getTopicQueries, buildSearchRequest } = require("./digest-data-fetch-request-runtime");
 const {
   enrichWithCitationUrls,
@@ -117,6 +118,7 @@ function createPassDiagnostics(maxAttempts) {
     status_counts: {},
     degraded: false,
     last_error: null,
+    rate_limit_retry_after_ms: 0,
     search_result_domains: [],
     preferred_search_result_domains: [],
     preferred_search_result_hit_count: 0,
@@ -131,6 +133,10 @@ function mergePassDiagnostics(target, extra) {
   target.transport_errors += Number(extra?.transport_errors || 0);
   target.degraded = target.degraded || extra?.degraded === true;
   target.last_error = extra?.last_error || target.last_error || null;
+  target.rate_limit_retry_after_ms = Math.max(
+    Number(target.rate_limit_retry_after_ms || 0),
+    Number(extra?.rate_limit_retry_after_ms || 0)
+  );
   target.search_result_domains = Array.from(new Set([
     ...(Array.isArray(target.search_result_domains) ? target.search_result_domains : []),
     ...(Array.isArray(extra?.search_result_domains) ? extra.search_result_domains : []),
@@ -233,6 +239,10 @@ function createDigestDataFetchRuntime(deps) {
         diagnostics.degraded = true;
         diagnostics.last_error = String(errDetail).slice(0, 180);
         incrementStatusCount(diagnostics.status_counts, res.status);
+        diagnostics.rate_limit_retry_after_ms = Math.max(
+          Number(diagnostics.rate_limit_retry_after_ms || 0),
+          parseRetryAfterMs(res?.headers?.["retry-after"])
+        );
         log(`⚠️ Perplexity ${topic.tag} ${passName} request returned ${res.status}: ${String(errDetail).slice(0, 180)}`);
         continue;
       }

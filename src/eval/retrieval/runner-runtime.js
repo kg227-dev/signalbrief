@@ -455,6 +455,23 @@ function computeScenarioCost(result = {}) {
   };
 }
 
+function resolveEvalSelectionTarget({ scenarioId, dueUsers, baseSelectionTarget }) {
+  const base = Math.max(1, Number(baseSelectionTarget || 0));
+  const users = Array.isArray(dueUsers) ? dueUsers : [];
+  const uniqueCustomTopics = new Set();
+  for (const user of users) {
+    for (const topic of (Array.isArray(user?.topics) ? user.topics : [])) {
+      const topicText = String(topic || "").trim().toLowerCase();
+      if (topicText.startsWith("custom_")) uniqueCustomTopics.add(topicText);
+    }
+  }
+  const customOnlyScenario = String(scenarioId || "").startsWith("custom_")
+    && users.length > 0
+    && users.every((user) => (Array.isArray(user?.topics) ? user.topics : []).some((topic) => String(topic || "").toLowerCase().startsWith("custom_")));
+  if (!customOnlyScenario) return base;
+  return Math.max(base, Math.min(14, uniqueCustomTopics.size));
+}
+
 function buildGlobalSelection({
   services,
   scenarioId,
@@ -502,7 +519,11 @@ function buildGlobalSelection({
 
     try {
       const digestPolicies = createDigestPolicies(CONFIG.digest || {});
-      const selectionTarget = fetchResult.selectionTarget;
+      const selectionTarget = resolveEvalSelectionTarget({
+        scenarioId,
+        dueUsers,
+        baseSelectionTarget: fetchResult.selectionTarget,
+      });
       const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
       dedupRes = archiveRuntime.dedupAgainstRecentArchives(fetchResult.allItems, {
         days: crossDayDedupDays,
@@ -1158,6 +1179,7 @@ module.exports = {
   computePersonaRawBaseline,
   createEvalServices,
   ensureBudgetCanAfford,
+  resolveEvalSelectionTarget,
   runRetrievalEval,
   serializeItem,
 };

@@ -13,6 +13,7 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const { createDigestOrchestratorTransportRuntime } = runtime;
+const { parseRetryAfterMs } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
 function createHttpsStub(steps, callsOut, timeoutCallsOut = []) {
@@ -43,6 +44,7 @@ function createHttpsStub(steps, callsOut, timeoutCallsOut = []) {
         }
         const res = new EventEmitter();
         res.statusCode = step.statusCode || 200;
+        res.headers = step.headers || {};
         setImmediate(() => {
           onResponse(res);
           if (step.body != null) res.emit("data", step.body);
@@ -74,6 +76,7 @@ async function testTransportJsonAndRetry() {
   );
   assert.strictEqual(first.status, 200);
   assert.deepStrictEqual(first.body, { ok: true });
+  assert.deepStrictEqual(first.headers, {});
 
   const second = await transport.httpsPostWithRetry(
     "api.example.com",
@@ -91,7 +94,7 @@ async function testTransportStatusRetryAndTimeoutOverride() {
   const calls = [];
   const timeoutCalls = [];
   const https = createHttpsStub([
-    { type: "success", statusCode: 429, body: "{\"error\":\"rate limited\"}" },
+    { type: "success", statusCode: 429, body: "{\"error\":\"rate limited\"}", headers: { "retry-after": "0" } },
     { type: "success", statusCode: 503, body: "{\"error\":\"unavailable\"}" },
     { type: "success", statusCode: 200, body: "{\"ok\":true}" },
   ], calls, timeoutCalls);
@@ -115,6 +118,14 @@ async function testTransportStatusRetryAndTimeoutOverride() {
   assert.strictEqual(response.status, 200);
   assert.strictEqual(calls.length, 3, "status retry should reattempt while retries remain");
   assert.ok(timeoutCalls.every((value) => value === 4321), "timeout override should apply to each attempt");
+}
+
+function testParseRetryAfterMs() {
+  assert.strictEqual(parseRetryAfterMs("2"), 2000);
+  assert.strictEqual(parseRetryAfterMs(["3"]), 3000);
+  const nowMs = Date.parse("2026-03-22T06:00:00.000Z");
+  assert.strictEqual(parseRetryAfterMs("Sun, 22 Mar 2026 06:00:05 GMT", nowMs), 5000);
+  assert.strictEqual(parseRetryAfterMs("invalid", nowMs), 0);
 }
 
 async function testTransportStatusRetryStopsWhenNotConfigured() {
@@ -143,6 +154,7 @@ async function testTransportStatusRetryStopsWhenNotConfigured() {
   await testTransportJsonAndRetry();
   await testTransportStatusRetryAndTimeoutOverride();
   await testTransportStatusRetryStopsWhenNotConfigured();
+  testParseRetryAfterMs();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

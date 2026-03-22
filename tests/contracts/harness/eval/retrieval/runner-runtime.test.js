@@ -21,6 +21,7 @@ const {
   classifyTopicGapAudit,
   computeScenarioCost,
   computePersonaRawBaseline,
+  resolveEvalSelectionTarget,
   runRetrievalEval,
 } = runtime;
 const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "src/eval/retrieval/storage-runtime.js"));
@@ -166,6 +167,22 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
   });
   assert.strictEqual(unexhaustedGap.root_cause, "query_plan_not_exhausted");
   assert.strictEqual(unexhaustedGap.better_source_opportunity, "likely");
+
+  const expandedEvalSelectionTarget = resolveEvalSelectionTarget({
+    scenarioId: "custom_realistic",
+    baseSelectionTarget: 5,
+    dueUsers: [
+      { topics: ["STRATEGY", "custom_nvidia"] },
+      { topics: ["STRATEGY", "custom_glp_1"] },
+      { topics: ["STRATEGY", "custom_agentic_ai"] },
+      { topics: ["STRATEGY", "custom_sec_rulemaking"] },
+      { topics: ["STRATEGY", "custom_cbam"] },
+      { topics: ["STRATEGY", "custom_rate_cuts"] },
+      { topics: ["STRATEGY", "custom_grid_infrastructure"] },
+      { topics: ["STRATEGY", "custom_semicap"] },
+    ],
+  });
+  assert.strictEqual(expandedEvalSelectionTarget, 8);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-retrieval-eval-runner-"));
   const storage = createRetrievalEvalStorageRuntime({

@@ -197,6 +197,31 @@ Key findings:
 - the main problem with the page was legibility, not missing data
 - the right simplification is to foreground the source flow and hide the secondary rollups until needed
 
+### Pass 9: Meaningful live reruns, rate-limit backoff hardening, and deeper custom recall
+
+Completed in this pass:
+
+- hardened provider retry handling to respect `Retry-After` when Perplexity returns `429`
+- made adaptive rate-limit cooldown stateful across fetch batches instead of using one fixed delay
+- changed zero-yield `429` results so they do not block later broad retries by default
+- expanded the eval-only global selection target for all-custom realistic scenarios so the harness can judge multiple disjoint custom personas fairly
+- added more live runs under conservative provider settings:
+  - `SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES=1`
+  - `SIGNALBRIEF_PERPLEXITY_RETRIES=5`
+  - `SIGNALBRIEF_PERPLEXITY_RETRY_DELAY_MS=3000`
+- shifted two scheduled calls from standard anchor topics into deep custom retries for custom-heavy runs
+- changed deep custom retry ordering to prioritize stronger search-result evidence instead of pure first-seen order
+
+Key findings:
+
+- rate limiting is no longer the primary blocker in the latest custom reruns; the recent custom runs completed with `0` provider `429`s
+- the earlier custom-realistic sample really was too thin to be useful; newer reruns now show materially different keyword outcomes run to run
+- the extra deep custom reserve improved realistic custom completion from `3/8` to `4/8` in the follow-up run without reintroducing noisy fallback
+- remaining custom gaps now split more cleanly into:
+  - `provider_no_recent_coverage`
+  - `thin_but_precise`
+  - occasional `ranking_or_quality_gate`
+
 ## Important Run IDs
 
 ### Baselines
@@ -226,6 +251,16 @@ Key findings:
   - clean `standard_full` rerun after the extra broad-query step
 - `retrieval-eval:2026-03-22T06-10-49-849Z`
   - clean `custom_realistic` rerun after the extra broad-query step
+- `retrieval-eval:2026-03-22T15-53-38-565Z`
+  - first meaningful custom-realistic rerun after fixing the eval global-selection artifact
+- `retrieval-eval:2026-03-22T16-25-18-670Z`
+  - clean `standard_full` rerun with conservative provider throttling and zero `429`s
+- `retrieval-eval:2026-03-22T16-28-15-570Z`
+  - combined `custom_realistic` + `custom_adversarial` live rerun under tight provider throttling
+- `retrieval-eval:2026-03-22T16-32-38-797Z`
+  - custom-realistic repeat run showing phase-5 custom retries before the custom-budget patch
+- `retrieval-eval:2026-03-22T16-39-36-409Z`
+  - custom-realistic rerun after reallocating two anchor-topic calls into deep custom retries
 
 ## What Improved
 
@@ -305,33 +340,50 @@ Before early broad fallback + source hints:
   - `Nvidia`
   - `semicap`
 
-After one additional broad-query step:
+Meaningful custom reruns under tighter provider throttling:
 
-- run `retrieval-eval:2026-03-22T06-10-49-849Z`
-- raw candidates: `3`
-- cleaned candidates: `3`
-- personas completed precisely: `0/8`
-- all tracked broad custom keywords still failed closed
+- run `retrieval-eval:2026-03-22T15-53-38-565Z`
+  - raw candidates: `4`
+  - cleaned candidates: `4`
+  - personas completed precisely: `4/8`
+  - precise completions:
+    - `Nvidia`
+    - `GLP-1`
+    - `agentic AI`
+    - `SEC rulemaking`
+- run `retrieval-eval:2026-03-22T16-32-38-797Z`
+  - raw candidates: `10`
+  - cleaned candidates: `10`
+  - personas completed precisely: `3/8`
+  - precise completions:
+    - `GLP-1`
+    - `agentic AI`
+    - `grid infrastructure`
+- run `retrieval-eval:2026-03-22T16-39-36-409Z`
+  - raw candidates: `5`
+  - cleaned candidates: `5`
+  - personas completed precisely: `4/8`
+  - precise completions:
+    - `Nvidia`
+    - `GLP-1`
+    - `agentic AI`
+    - `SEC rulemaking`
 
 Interpretation:
 
-- the system is still preserving precision correctly:
-  - no noisy fallback returned
-  - stale rate stayed `0%`
-  - weak-source exposure stayed `0%`
-- the extra broad step is not enough for the targeted broad custom keywords:
-  - `Nvidia`
-  - `GLP-1`
-  - `agentic AI`
-  - `SEC rulemaking`
-  - `CBAM`
-  - `rate cuts`
-  - `semicap`
-- each of those keywords moved from:
-  - `broad_call_count: 1` and `remaining_broad_queries: 3`
-  - to `broad_call_count: 2` and `remaining_broad_queries: 2`
-- every one of those keywords still shows `better_source_opportunity: likely`
-- current evidence says the next blocker is still unused query depth / query design, not ranking pollution
+- the custom runs now contain enough live data to be meaningful; the earlier “mostly empty” sample is no longer representative
+- no noisy fallback returned in any of these reruns
+- stale rate stayed `0%`
+- provider `429` rate stayed `0%` in the latest custom reruns under the tighter throttle settings
+- the custom-budget shift helped real coverage:
+  - `Nvidia`: `0 final -> 1 final`
+  - `SEC rulemaking`: `0 final -> 1 final`
+  - `custom_realistic` completion improved from `3/8 -> 4/8` on the follow-up run
+- remaining weak custom terms are now clearer:
+  - `CBAM`: still looks like `provider_no_recent_coverage`
+  - `rate cuts`: still looks like `provider_no_recent_coverage`
+  - `semicap`: improved retry depth, but still inconsistent across runs
+  - `grid infrastructure`: improved retrieval, but can still become `ranking_or_quality_gate`
 
 ### Adversarial custom picture
 
@@ -363,9 +415,11 @@ Interpretation:
   - `HEALTHCARE`
   - `LIFE SCIENCES`
   - `POLICY×REGULATORY`
-- realistic broad custom keywords still stop with `2` unused broad queries left after the new pass
-- provider variability is real, but the latest clean reruns show we still have fixable retrieval-design headroom before blaming provider scarcity
-- 429 pressure remains a meaningful constraint on some custom runs, especially around `SEC rulemaking`, `rate cuts`, `grid infrastructure`, and `semicap`
+- realistic broad custom coverage is now materially better, but still volatile across reruns
+- provider variability is real, but the latest clean custom reruns show it is not the dominant failure mode when provider pressure is reduced
+- rate limiting still matters for broader matrix runs, but the latest custom scenario passes show that low-concurrency throttling and `Retry-After` handling are enough to avoid `429`s in smaller targeted runs
+- `CBAM` and `rate cuts` are the strongest current candidates for true low recent coverage rather than a simple query-budget issue
+- `grid infrastructure` and `semicap` still need more diagnosis because they oscillate between retrieval-limited success and later-stage exclusion
 
 ## Overall Plan Status
 
@@ -409,25 +463,27 @@ If this thread continues, the next highest-value retrieval-side steps are:
    - `HEALTHCARE`
    - `LIFE SCIENCES`
    - `POLICY×REGULATORY`
-   - `Nvidia`
-   - `GLP-1`
-   - `agentic AI`
-   - `SEC rulemaking`
    - `CBAM`
    - `rate cuts`
    - `semicap`
 2. Focus on query shaping before source-registry changes:
-   - narrower broad-query variants for ambiguous custom terms
+   - narrower broad-query variants for:
+     - `CBAM`
+     - `rate cuts`
+     - `semicap`
    - category-specific alternate phrasings for weak standard tags
    - continue separating:
      - query-design failures
      - provider-limited failures
      - true low-coverage / market-scarcity failures
-3. Keep the precision-first rule:
+3. Investigate the remaining later-stage custom drops:
+   - why `grid infrastructure` can retrieve a precise item and still miss final selection
+   - whether `semicap` is a true provider miss or still losing on query phrasing
+4. Keep the precision-first rule:
    - no reintroduction of broad anchor-topic fallback for custom-heavy personas
-4. Re-run the weak-category matrix after any retrieval-only change and compare against:
+5. Re-run the weak-category matrix after any retrieval-only change and compare against:
    - `retrieval-eval:2026-03-22T06-06-01-508Z`
-   - `retrieval-eval:2026-03-22T06-10-49-849Z`
-5. Keep the admin progress view current:
+   - `retrieval-eval:2026-03-22T16-39-36-409Z`
+6. Keep the admin progress view current:
    - update this markdown after each pass
    - sync the latest worklog and run artifacts into production data when fresh eval runs are promoted

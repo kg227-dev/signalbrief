@@ -923,11 +923,11 @@ select.input-field {
     }
   }
   try { if (localStorage.getItem('sbDark') === '1') apply(true); else if (toggle) toggle.innerHTML = moonSvg; } catch(e) {}
-  if (toggle) toggle.addEventListener('click', function() {
+  if (toggle) toggle.onclick = function() {
     var isDark = !document.body.classList.contains('dark');
     apply(isDark);
     try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
-  });
+  };
 })();
 
 /* Step progress label sync — hooks into signup-flow.js step transitions via MutationObserver */

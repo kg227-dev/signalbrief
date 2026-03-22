@@ -61,6 +61,7 @@ try {
   assert.strictEqual(quality.fill_rate, 40);
   assert.ok(quality.score > 0 && quality.score < 100);
   assert.strictEqual(fillRate(2, 5), 40);
+  assert.strictEqual(describeScarcity({ itemCount: 0, requestedCount: 5, score: 0 }), "fail_closed_no_relevant_candidates");
   assert.strictEqual(describeScarcity({ itemCount: 2, requestedCount: 5, score: 72 }), "short_but_precise");
   assert.strictEqual(describeScarcity({ itemCount: 5, requestedCount: 5, score: 72, selectionLift: -6 }), "full_but_diluted");
 

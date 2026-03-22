@@ -19,6 +19,7 @@ const {
   budgetGuardStatus,
   buildScenarioEstimate,
   computeScenarioCost,
+  computePersonaRawBaseline,
   runRetrievalEval,
 } = runtime;
 const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "src/eval/retrieval/storage-runtime.js"));
@@ -59,6 +60,30 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
   assert.strictEqual(scenarioCost.perplexityCost, 0.025);
   assert.strictEqual(scenarioCost.claudeCost, 0.0088);
   assert.strictEqual(scenarioCost.totalCost, 0.0338);
+
+  const baseline = computePersonaRawBaseline([
+    {
+      tag: "STRATEGY",
+      headline: "General corporate restructuring update",
+      summary: "Off-topic for the custom keyword.",
+      source_authority: 0.8,
+      published_date: "2026-03-21T06:00:00.000Z",
+    },
+    {
+      tag: "NVIDIA",
+      headline: "Nvidia Blackwell demand accelerates",
+      summary: "Direct custom-keyword coverage.",
+      source_authority: 0.8,
+      published_date: "2026-03-21T06:00:00.000Z",
+    },
+  ], {
+    topics: ["STRATEGY", "custom_nvidia"],
+    topic_weights: {},
+    preferences: { items_per_digest: 5 },
+  }, (item) => item?.source_domain || "");
+  assert.strictEqual(baseline.scored.length, 1);
+  assert.strictEqual(baseline.scored[0].tag, "NVIDIA");
+  assert.strictEqual(baseline.custom_keyword_count, 1);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-retrieval-eval-runner-"));
   const storage = createRetrievalEvalStorageRuntime({

@@ -75,3 +75,4 @@ assert.strictEqual(blockedPreferred.relevanceScore, 0);
 const nvidiaQueries = buildCustomTopicQueries("Nvidia");
 assert.ok(nvidiaQueries.every((query) => !String(query).includes("72 hours")));
 assert.ok(nvidiaQueries.some((query) => String(query).toLowerCase().includes("48 hours")));
+assert.ok(nvidiaQueries.some((query) => String(query).toLowerCase().includes("blackwell")));

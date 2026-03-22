@@ -32,6 +32,7 @@ const {
   setAdminSourceRegistry,
   setLearnedDomainAdjustments,
   setPreferredSourceRegistry,
+  splitUserTopics,
 } = require("../../domains/digest");
 const { createDigestOrchestratorDeliveryRankingRuntime } = require("../../entrypoints/digest-orchestrator-delivery-ranking-runtime");
 const { createDigestOrchestratorEnrichmentRuntime } = require("../../entrypoints/digest-orchestrator-enrichment-runtime");
@@ -455,11 +456,21 @@ function buildGlobalSelection({
 }
 
 function computePersonaRawBaseline(items, user, parseSourceDomain) {
-  const filtered = filterItemsByTopics(items, user.topics || [], {
+  const topics = Array.isArray(user?.topics) ? user.topics : [];
+  const { customKeywords } = splitUserTopics(topics);
+  const filteredResult = filterItemsByTopics(items, topics, {
     minItems: 1,
-    strictZeroFallback: false,
-  }).items;
-  const scored = applyTopicRelevanceScores(filtered, user.topics || [], user.topic_weights || {}, {
+    strictZeroFallback: customKeywords.length > 0 ? true : "specialist",
+  });
+  let filtered = filteredResult.items;
+  if (customKeywords.length > 0) {
+    filtered = filtered.filter((item) => {
+      const tagNormalized = normalizeTopicToken(item?.tag || "");
+      const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
+      return customKeywords.some((keyword) => customKeywordMatches(keyword, bodyText, tagNormalized));
+    });
+  }
+  const scored = applyTopicRelevanceScores(filtered, topics, user.topic_weights || {}, {
     specialistMode: false,
     repeatPenalty: 0,
     isRecentRepeat: () => false,
@@ -475,10 +486,22 @@ function computePersonaRawBaseline(items, user, parseSourceDomain) {
     filtered,
     scored,
     requestedCount,
+    custom_keyword_count: customKeywords.length,
+    filter_mode: filteredResult.mode,
     rawBaselineItems,
     candidatePoolQuality: computeSetQuality(scored, { requestedCount }),
     rawBaselineQuality: computeSetQuality(rawBaselineItems, { requestedCount }),
   };
+}
+
+function classifyPersonaCoverage(rawBaseline, finalItems, errorMessage) {
+  const candidateCount = Math.max(0, Number(rawBaseline?.scored?.length || 0));
+  const rawBaselineCount = Math.max(0, Number(rawBaseline?.rawBaselineItems?.length || 0));
+  const finalCount = Math.max(0, Number(finalItems?.length || 0));
+  if (finalCount > 0) return candidateCount < Math.max(1, Number(rawBaseline?.requestedCount || 0)) ? "retrieval_limited" : "covered";
+  if (candidateCount <= 0 || rawBaselineCount <= 0) return "retrieval_limited";
+  if (errorMessage) return "ranking_limited";
+  return "noisy_baseline_blocked";
 }
 
 function evaluatePersona({
@@ -535,6 +558,7 @@ function evaluatePersona({
       raw_baseline_quality: rawBaseline.rawBaselineQuality,
       final_selected_quality: finalQuality,
       selection_lift: selectionLift,
+      coverage_limiter: classifyPersonaCoverage(rawBaseline, finalItems, null),
       scarcity_profile: describeScarcity({
         itemCount: finalItems.length,
         requestedCount,
@@ -566,7 +590,12 @@ function evaluatePersona({
         requested_count: requestedCount,
       },
       selection_lift: Number((0 - rawBaseline.rawBaselineQuality.score).toFixed(2)),
-      scarcity_profile: "short_and_thin",
+      coverage_limiter: classifyPersonaCoverage(rawBaseline, [], message),
+      scarcity_profile: describeScarcity({
+        itemCount: 0,
+        requestedCount,
+        score: 0,
+      }),
       current_digest_quality: {
         score: 0,
         band: "poor",
@@ -603,9 +632,12 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const failedPersonaCount = personaResults.filter((row) => row?.status === "failed").length;
   const scarcityCounts = {};
   const reasonCounts = {};
+  const coverageLimiterCounts = {};
   for (const row of personaResults) {
     const scarcityKey = String(row?.scarcity_profile || "").trim() || "unknown";
     scarcityCounts[scarcityKey] = (scarcityCounts[scarcityKey] || 0) + 1;
+    const limiterKey = String(row?.coverage_limiter || "").trim() || "unknown";
+    coverageLimiterCounts[limiterKey] = (coverageLimiterCounts[limiterKey] || 0) + 1;
     for (const [reason, count] of Object.entries(row?.failure_reasons?.reason_counts || {})) {
       reasonCounts[reason] = (reasonCounts[reason] || 0) + Number(count || 0);
     }
@@ -621,11 +653,20 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     ? personaResults.reduce((sum, row) => sum + Number(row?.final_selected_quality?.fill_rate || 0), 0) / personaResults.length
     : 0;
   const topDomainShare = finalSourceSummary[0]?.top_domain_share || 0;
+  const provider429Rate = Number(globalResult?.fetchResult?.fetchDiagnostics?.provider_429_rate || 0);
+  const provider429Count = Number(globalResult?.fetchResult?.fetchDiagnostics?.provider_429_count || 0);
+  const retrievalLimitedCount = Number(coverageLimiterCounts.retrieval_limited || 0);
+  const rankingLimitedCount = Number(coverageLimiterCounts.ranking_limited || 0);
+  const staleRejectedCount = globalResult.rejected.filter((row) => row?.reason === "stale_age_filter").length;
+  const rawCandidateCount = Math.max(0, Number(globalResult?.fetchResult?.allItems?.length || 0));
+  const cleanedCandidateCount = Math.max(0, Number(globalResult?.cleanedAnnotated?.length || 0));
   if (avgFreshness < 75) recommendations.push("Freshness is slipping below the 24-48h target in final selections.");
   if (negativeLiftCount > 0) recommendations.push("Selection is reducing quality for some personas; inspect negative-lift cases.");
   if (topDomainShare > 50) recommendations.push("Source concentration is high in final selections; review source-cap behavior.");
-  if (failedPersonaCount > 0) recommendations.push("Some personas failed to produce deliverable items after fallback; inspect thin-pool and backfill behavior.");
+  if (failedPersonaCount > 0) recommendations.push("Some personas failed to produce deliverable items after fallback; inspect thin-pool and retrieval coverage.");
   if ((scarcityCounts.short_but_precise || 0) > 0) recommendations.push("Some digests are intentionally short but precise; treat fill-rate separately from quality.");
+  if (provider429Count > 0) recommendations.push("Provider rate limits are collapsing coverage for part of this scenario; inspect batching and query sequencing.");
+  if (retrievalLimitedCount > rankingLimitedCount && retrievalLimitedCount > 0) recommendations.push("Most failures are retrieval-limited rather than ranking-limited; prioritize candidate yield.");
   return {
     scenario_id: scenario.id,
     label: scenario.label,
@@ -652,9 +693,17 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     } : null,
     negative_lift_count: negativeLiftCount,
     scarcity_counts: scarcityCounts,
+    coverage_limiter_counts: coverageLimiterCounts,
     reason_counts: reasonCounts,
     raw_source_summary: rawSourceSummary,
     final_source_summary: finalSourceSummary,
+    provider_429_count: provider429Count,
+    provider_429_rate: provider429Rate,
+    degraded_topic_rate: Number(globalResult?.fetchResult?.fetchDiagnostics?.degraded_topic_rate || 0),
+    retrieval_limited_topic_count: Number(globalResult?.fetchResult?.fetchDiagnostics?.retrieval_limited_topic_count || 0),
+    thin_topic_count: Number(globalResult?.fetchResult?.fetchDiagnostics?.thin_topic_count || 0),
+    stale_rejection_rate: rawCandidateCount > 0 ? Number(((staleRejectedCount / rawCandidateCount) * 100).toFixed(2)) : 0,
+    candidate_collapse_rate: rawCandidateCount > 0 ? Number((((rawCandidateCount - cleanedCandidateCount) / rawCandidateCount) * 100).toFixed(2)) : 0,
     recommendations,
     average_final_score: Number(avgFinalScore.toFixed(2)),
     average_final_freshness: Number(avgFreshness.toFixed(2)),
@@ -817,6 +866,7 @@ async function runRetrievalEval(options = {}) {
           error: null,
           due_users_count: scenario.dueUsers.length,
           budget_cost_usd: scenarioCost.totalCost,
+          fetch_diagnostics: globalResult.fetchResult.fetchDiagnostics,
           raw_candidates: globalResult.fetchResult.allItems.map((item) => serializeItem(item)),
           cleaned_candidates: globalResult.cleanedAnnotated.map((item) => serializeItem(item)),
           global_selected_items: globalResult.enrichResult.enriched.map((item) => serializeItem(item)),
@@ -864,6 +914,7 @@ async function runRetrievalEval(options = {}) {
           error: message,
           due_users_count: scenario.dueUsers.length,
           budget_cost_usd: partialCost.totalCost,
+          fetch_diagnostics: partialResult?.fetchResult?.fetchDiagnostics || null,
           raw_candidates: (Array.isArray(partialResult?.fetchResult?.allItems) ? partialResult.fetchResult.allItems : []).map((item) => serializeItem(item)),
           cleaned_candidates: (Array.isArray(partialResult?.cleanedAnnotated) ? partialResult.cleanedAnnotated : []).map((item) => serializeItem(item)),
           global_selected_items: (Array.isArray(partialResult?.enrichResult?.enriched) ? partialResult.enrichResult.enriched : []).map((item) => serializeItem(item)),

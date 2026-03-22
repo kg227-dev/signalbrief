@@ -63,7 +63,6 @@
     <p>Read-only view of raw retrieval, final selection, source quality, freshness, and drop-off reasons.</p>
   </div>
   <main>
-  <main>
     <section class="grid">
       <div class="panel"><h2>Active Run</h2><div id="activeRun" class="muted">Loading…</div></div>
       <div class="panel"><h2>Budget</h2><div id="budgetSummary" class="muted">Loading…</div></div>
@@ -195,24 +194,32 @@
         + `<div><div class="muted">Scenarios</div><div class="kpi">${Number(overall.scenario_count || 0)}</div></div>`
         + `<div><div class="muted">Personas</div><div class="kpi">${Number(overall.persona_count || 0)}</div></div>`
         + `</div>`
+        + `<div class="muted" style="margin-top:10px;">Run status: ${esc(run.status || "unknown")} · budget spent $${Number(run.budget?.spent_usd || 0).toFixed(3)}</div>`
         + `<div class="muted" style="margin-top:10px;">Current DQS formula: ${esc(run.dqs_formula?.standard || "")}; headline-only: ${esc(run.dqs_formula?.headline_only || "")}</div>`;
       document.getElementById("recommendations").innerHTML = (run.recommendations || []).length
         ? `<ul>${run.recommendations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`
         : `<div class="muted">No recommendations recorded.</div>`;
       document.getElementById("scenarioSummary").innerHTML = renderRows(run.scenarios || [], [
         { label: "Scenario", key: "label" },
+        { label: "Raw/Cleaned", render: (row) => `${Number(row.summary?.raw_candidate_count || 0)}/${Number(row.summary?.cleaned_candidate_count || 0)}` },
+        { label: "Collapse", render: (row) => `${Number(row.summary?.candidate_collapse_rate || 0).toFixed(1)}%` },
+        { label: "429 rate", render: (row) => `${Number(row.summary?.provider_429_rate || 0).toFixed(1)}%` },
+        { label: "Stale", render: (row) => `${Number(row.summary?.stale_rejection_rate || 0).toFixed(1)}%` },
         { label: "Avg final", render: (row) => Number(row.summary?.average_final_score || 0).toFixed(1) },
         { label: "Avg freshness", render: (row) => Number(row.summary?.average_final_freshness || 0).toFixed(1) },
         { label: "Avg fill", render: (row) => `${Number(row.summary?.average_fill_rate || 0).toFixed(1)}%` },
         { label: "Neg lift", render: (row) => Number(row.summary?.negative_lift_count || 0) },
+        { label: "Coverage", render: (row) => Object.entries(row.summary?.coverage_limiter_counts || {}).map(([key, count]) => `${key}:${count}`).join("<br>") || '<span class="muted">n/a</span>' },
         { label: "Scarcity", render: (row) => Object.entries(row.summary?.scarcity_counts || {}).map(([key, count]) => `${key}:${count}`).join("<br>") || '<span class="muted">n/a</span>' },
       ]);
       document.getElementById("personaSummary").innerHTML = renderRows(flattenPersonaRows(run), [
         { label: "Persona", key: "persona_label" },
         { label: "Scenario", key: "scenario_label" },
+        { label: "Status", key: "status" },
         { label: "Final", render: (row) => `${Number(row.final_selected_quality?.score || 0).toFixed(1)} ${bandPill(row.final_selected_quality?.band)}` },
         { label: "Items", render: (row) => `${Number(row.final_selected_quality?.item_count || 0)}/${Number(row.requested_count || 0)}` },
         { label: "Fill", render: (row) => `${Number(row.final_selected_quality?.fill_rate || 0).toFixed(1)}%` },
+        { label: "Limiter", render: (row) => esc(row.coverage_limiter || "n/a") },
         { label: "Scarcity", render: (row) => esc(row.scarcity_profile || "n/a") },
         { label: "Lift", render: (row) => Number(row.selection_lift || 0).toFixed(1) },
         { label: "DQS", render: (row) => Number(row.current_digest_quality?.score || 0).toFixed(1) },
@@ -232,6 +239,10 @@
         global: scenario.global_selected_items?.length || 0,
         storyline: scenario.storyline_pool_items?.length || 0,
         rejected: scenario.global_rejections?.length || 0,
+        rate429: scenario.fetch_diagnostics?.provider_429_count || 0,
+        rate429Pct: scenario.fetch_diagnostics?.provider_429_rate || 0,
+        limitedTopics: scenario.fetch_diagnostics?.retrieval_limited_topic_count || 0,
+        thinTopics: scenario.fetch_diagnostics?.thin_topic_count || 0,
       })), [
         { label: "Scenario", key: "scenario" },
         { label: "Raw", key: "raw" },
@@ -239,6 +250,10 @@
         { label: "Global selected", key: "global" },
         { label: "Storyline pool", key: "storyline" },
         { label: "Rejected", key: "rejected" },
+        { label: "429 count", key: "rate429" },
+        { label: "429 rate", render: (row) => `${Number(row.rate429Pct || 0).toFixed(1)}%` },
+        { label: "Provider-limited topics", key: "limitedTopics" },
+        { label: "Thin topics", key: "thinTopics" },
       ]);
     }
 
@@ -247,5 +262,4 @@
     });
   </script>
 </body>
-</html>
 </html>

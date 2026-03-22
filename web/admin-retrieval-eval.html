@@ -200,6 +200,10 @@
             <div id="failureReasons"></div>
           </div>
           <div class="panel">
+            <h3>Final Gate Breakdown</h3>
+            <div id="finalGateBreakdown"></div>
+          </div>
+          <div class="panel">
             <h3>Topic Root Causes</h3>
             <div id="rootCauses"></div>
           </div>
@@ -393,6 +397,13 @@
         }
       }
       return Object.entries(counts).map(([signal, count]) => ({ signal, count })).sort((a, b) => b.count - a.count || a.signal.localeCompare(b.signal));
+    }
+
+    function summarizeFinalGateBreakdown(run) {
+      const counts = run.overall_summary?.final_gate_breakdown_counts || {};
+      return Object.entries(counts)
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a, b) => Number(b.count || 0) - Number(a.count || 0) || String(a.reason || "").localeCompare(String(b.reason || "")));
     }
 
     function collectGapAuditRows(run) {
@@ -640,6 +651,10 @@
         { label: "Reason", key: "reason" },
         { label: "Count", key: "count" },
       ]);
+      document.getElementById("finalGateBreakdown").innerHTML = renderRows(summarizeFinalGateBreakdown(run), [
+        { label: "Gate", key: "reason" },
+        { label: "Count", key: "count" },
+      ]);
       document.getElementById("rootCauses").innerHTML = renderRows(summarizeRootCauses(run), [
         { label: "Root cause", key: "root_cause" },
         { label: "Topics", key: "count" },
@@ -653,6 +668,7 @@
         { label: "Topic", key: "topic_label" },
         { label: "Raw", key: "raw_count" },
         { label: "Cleaned", key: "cleaned_count" },
+        { label: "Internal", key: "internal_final_count" },
         { label: "Final", key: "final_count" },
         { label: "Source", render: (row) => Number(row.source_score || 0).toFixed(1) },
         { label: "Lift", render: (row) => Number(row.selection_lift || 0).toFixed(1) },
@@ -660,6 +676,7 @@
         { label: "429", key: "provider_429_count" },
         { label: "Calls", render: (row) => `P:${Number(row.preferred_call_count || 0)} / B:${Number(row.broad_call_count || 0)} / left:${Number(row.remaining_broad_queries || 0)}` },
         { label: "Root cause", key: "root_cause" },
+        { label: "Gate", key: "failure_reason" },
         { label: "Better source", render: (row) => row.better_source_note ? `${esc(row.better_source_opportunity)}<br><span class="muted">${esc(row.better_source_note)}</span>` : esc(row.better_source_opportunity || "") },
       ]);
       document.getElementById("retrievalVsFinal").innerHTML = renderRows((run.scenarios || []).map((scenario) => ({

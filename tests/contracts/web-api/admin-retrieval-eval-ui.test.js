@@ -15,6 +15,7 @@ const requiredPageSnippets = [
   "What SignalBrief Kept",
   "Supporting Details",
   "Delivery KPIs",
+  "Final Gate Breakdown",
   "Grid Comparison",
   "Source-Family Audit",
   "Progress and Next Steps",

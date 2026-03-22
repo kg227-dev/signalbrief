@@ -198,6 +198,42 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
   assert.strictEqual(selectionCapGap.root_cause, "selection_custom_cap");
   assert.strictEqual(selectionCapGap.failure_reason, "selection_custom_cap");
 
+  const deliveryPolicyGap = classifyTopicGapAudit({
+    topicDiagnostic: {
+      tag: "TECHNOLOGY",
+      is_custom: false,
+      unique_item_count: 2,
+      preferred_domains: ["cio.com"],
+      preferred_call_count: 1,
+      broad_call_count: 1,
+      remaining_broad_queries: 2,
+      status_counts: {},
+      failed_calls: 0,
+      transport_errors: 0,
+      degraded: false,
+      preferred_search_result_hit_count: 1,
+      preferred_item_count: 1,
+    },
+    matchingPersonaResults: [{
+      requested_count: 5,
+      candidate_pool_count: 2,
+      internal_final_quality: { item_count: 2, score: 76 },
+      final_selected_quality: { item_count: 0, score: 0 },
+      selection_lift: -10,
+      delivery_policy_breakdown: {
+        delivery_policy_total_item_shortfall: 1,
+      },
+      ranking_gate_breakdown: {},
+      final_gate_breakdown: {
+        delivery_policy_total_item_shortfall: 1,
+      },
+      primary_final_gate_reason: "delivery_policy_total_item_shortfall",
+    }],
+    rejectionCounts: {},
+  });
+  assert.strictEqual(deliveryPolicyGap.root_cause, "delivery_policy_gate");
+  assert.strictEqual(deliveryPolicyGap.failure_reason, "delivery_policy_total_item_shortfall");
+
   const expandedEvalSelectionTarget = resolveEvalSelectionTarget({
     scenarioId: "custom_realistic",
     baseSelectionTarget: 5,

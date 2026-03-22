@@ -164,6 +164,14 @@ function snapshotStage(items = [], stage, reason) {
       headline: String(item?.headline || "").trim() || null,
       tag: String(item?.tag || "").trim() || null,
       source_domain: String(item?.source_domain || "").trim() || null,
+      topicMatch: Number.isFinite(Number(item?.topicMatch)) ? Number(item.topicMatch) : null,
+      relevanceScore: Number.isFinite(Number(item?.relevanceScore)) ? Number(item.relevanceScore) : null,
+      strategic_value: Number.isFinite(Number(item?.strategic_value)) ? Number(item.strategic_value) : null,
+      routine_item_score: Number.isFinite(Number(item?.routine_item_score)) ? Number(item.routine_item_score) : null,
+      source_policy: String(item?.source_policy || "").trim() || null,
+      source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
+      why_shown: Array.isArray(item?.why_shown) ? item.why_shown.slice() : [],
+      hard_exclude: item?.hard_exclude === true,
     })),
   };
 }
@@ -182,6 +190,14 @@ function appendStageTrace(trace, beforeItems, afterItems, stage, reason) {
       headline: String(item?.headline || "").trim() || null,
       tag: String(item?.tag || "").trim() || null,
       source_domain: String(item?.source_domain || "").trim() || null,
+      topicMatch: Number.isFinite(Number(item?.topicMatch)) ? Number(item.topicMatch) : null,
+      relevanceScore: Number.isFinite(Number(item?.relevanceScore)) ? Number(item.relevanceScore) : null,
+      strategic_value: Number.isFinite(Number(item?.strategic_value)) ? Number(item.strategic_value) : null,
+      routine_item_score: Number.isFinite(Number(item?.routine_item_score)) ? Number(item.routine_item_score) : null,
+      source_policy: String(item?.source_policy || "").trim() || null,
+      source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
+      why_shown: Array.isArray(item?.why_shown) ? item.why_shown.slice() : [],
+      hard_exclude: item?.hard_exclude === true,
     });
   }
 }
@@ -331,9 +347,11 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     });
     userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
     if (trace) trace.snapshots.push(snapshotStage(userItems, "relevance_ranked", "ranked"));
+    const beforeEntityCap = userItems.slice();
     userItems = typeof applyEntityCoverageCap === "function"
       ? applyEntityCoverageCap(userItems, Math.max(1, Number(CONFIG.digest.maxSignalsPerEntity || 1)))
       : userItems;
+    if (trace) appendStageTrace(trace, beforeEntityCap, userItems, "entity_cap", "removed_by_entity_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "entity_cap", "entity_cap_applied"));
 
     const requestedCount = Math.max(

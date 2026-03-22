@@ -53,6 +53,7 @@ const { createSourceRegistryRuntime } = require("../../runtime/source-policy-reg
 const { resolveSignalBriefRuntimePaths } = require("../../runtime/runtime-state-paths-runtime");
 const {
   DELIVERY_POLICY,
+  classifyDeliveryConfidence,
   deriveInternalThinnessLabel,
   listTrustedOnlyCustomKeywords,
   selectDeliveryItems,
@@ -127,6 +128,210 @@ function summarizeTrace(trace) {
   return {
     transitions,
     reason_counts: reasonCounts,
+  };
+}
+
+function incrementCount(map, key, amount = 1) {
+  const safeKey = String(key || "").trim() || "unknown";
+  map[safeKey] = (map[safeKey] || 0) + Number(amount || 0);
+}
+
+function combineCounts(...maps) {
+  const combined = {};
+  for (const map of maps) {
+    if (!map || typeof map !== "object") continue;
+    for (const [key, value] of Object.entries(map)) incrementCount(combined, key, value);
+  }
+  return combined;
+}
+
+function dominantCountKey(counts = {}, fallback = "unknown") {
+  let bestKey = fallback;
+  let bestValue = -1;
+  for (const [key, value] of Object.entries(counts || {})) {
+    const numeric = Number(value || 0);
+    if (numeric > bestValue) {
+      bestKey = key;
+      bestValue = numeric;
+    }
+  }
+  return bestKey;
+}
+
+function transitionHasCustomKeywordSignal(transition = {}) {
+  return Array.isArray(transition?.why_shown) && transition.why_shown.includes("custom_keyword");
+}
+
+function classifyTraceTransitionCategory(transition = {}) {
+  const reason = String(transition?.reason || "").trim();
+  if (
+    !reason
+    || reason === "filtered_by_topic"
+    || reason === "removed_by_recent_repeat"
+    || reason === "removed_by_semantic_repeat"
+  ) {
+    return null;
+  }
+  if (reason === "removed_by_source_policy_cap") return "source_quality_threshold";
+  if (reason === "removed_by_entity_cap" || reason === "selection_custom_cap") return "diversity_or_cap_logic";
+  if (reason === "removed_by_custom_precision") return "topic_relevance_threshold";
+  if (reason === "no_deliverable_items") return "other_final_selection_rule";
+  if (reason === "excluded_by_final_quality_threshold") {
+    const topicMatch = Number(transition?.topicMatch || 0);
+    const relevanceScore = Number(transition?.relevanceScore || 0);
+    const strategicValue = Number(transition?.strategic_value || 0);
+    const routineItemScore = Number(transition?.routine_item_score || 0);
+    const sourcePolicy = String(transition?.source_policy || "").trim().toLowerCase();
+    const sourceAuthority = Number(transition?.source_authority || 0);
+    if (topicMatch < DELIVERY_POLICY.thresholds.min_topic_match && !transitionHasCustomKeywordSignal(transition)) {
+      return "topic_relevance_threshold";
+    }
+    if (
+      relevanceScore < DELIVERY_POLICY.thresholds.min_relevance_score
+      || strategicValue < DELIVERY_POLICY.thresholds.min_strategic_value
+      || routineItemScore > DELIVERY_POLICY.thresholds.max_routine_item_score
+    ) {
+      return "score_threshold";
+    }
+    if (
+      sourcePolicy
+      && !DELIVERY_POLICY.allowed_lower_confidence_policies.includes(sourcePolicy)
+    ) {
+      return "source_quality_threshold";
+    }
+    if (
+      Number.isFinite(sourceAuthority)
+      && sourceAuthority > 0
+      && sourceAuthority < DELIVERY_POLICY.thresholds.min_lower_confidence_source_authority
+    ) {
+      return "source_quality_threshold";
+    }
+    if (transition?.hard_exclude === true) return "other_final_selection_rule";
+    return "other_final_selection_rule";
+  }
+  return null;
+}
+
+function buildRankingGateBreakdown(trace) {
+  const transitions = Array.isArray(trace?.transitions) ? trace.transitions : [];
+  const categoryCounts = {};
+  for (const transition of transitions) {
+    const category = classifyTraceTransitionCategory(transition);
+    if (!category) continue;
+    incrementCount(categoryCounts, category);
+  }
+  return categoryCounts;
+}
+
+function buildDeliveryPolicyCandidateReasonCounts(items = [], nowIso, customKeywords = []) {
+  const counts = {};
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const confidence = classifyDeliveryConfidence(item, {
+      nowIso,
+      customKeywords,
+    });
+    if (confidence.high_confidence || confidence.lower_confidence_eligible) continue;
+    const topicMatch = Number(item?.topicMatch || 0);
+    const relevanceScore = Number(item?.relevanceScore || 0);
+    const strategicValue = Number(item?.strategic_value || 0);
+    const routineItemScore = Number(item?.routine_item_score || 0);
+    const sourcePolicy = String(item?.source_policy || "").trim().toLowerCase();
+    const sourceAuthority = Number(item?.source_authority || 0);
+    if (topicMatch < DELIVERY_POLICY.thresholds.min_topic_match && !transitionHasCustomKeywordSignal(item)) {
+      incrementCount(counts, "topic_relevance_threshold");
+      continue;
+    }
+    if (
+      relevanceScore < DELIVERY_POLICY.thresholds.min_relevance_score
+      || strategicValue < DELIVERY_POLICY.thresholds.min_strategic_value
+      || routineItemScore > DELIVERY_POLICY.thresholds.max_routine_item_score
+    ) {
+      incrementCount(counts, "score_threshold");
+      continue;
+    }
+    if (
+      sourcePolicy
+      && !DELIVERY_POLICY.allowed_lower_confidence_policies.includes(sourcePolicy)
+    ) {
+      incrementCount(counts, "source_quality_threshold");
+      continue;
+    }
+    if (
+      Number.isFinite(sourceAuthority)
+      && sourceAuthority > 0
+      && sourceAuthority < DELIVERY_POLICY.thresholds.min_lower_confidence_source_authority
+    ) {
+      incrementCount(counts, "source_quality_threshold");
+      continue;
+    }
+    incrementCount(counts, "other_final_selection_rule");
+  }
+  return counts;
+}
+
+function buildDeliveryPolicyGateBreakdown({
+  deliveryPolicy = {},
+  requestedCount = DELIVERY_POLICY.target_item_count,
+  rankedItems = [],
+  customKeywords = [],
+  nowIso = new Date().toISOString(),
+} = {}) {
+  const outcome = String(deliveryPolicy?.delivery_outcome || "").trim();
+  if (outcome.startsWith("delivered")) return {};
+  const retry = deliveryPolicy?.retry && typeof deliveryPolicy.retry === "object" ? deliveryPolicy.retry : {};
+  const trustedOnlyKeywords = Array.isArray(deliveryPolicy?.trusted_only_custom_keywords)
+    ? deliveryPolicy.trusted_only_custom_keywords
+    : [];
+  const availableHigh = Math.max(0, Number(retry.high_confidence_available_count || 0));
+  const availableLower = Math.max(0, Number(retry.lower_confidence_available_count || 0));
+  const availableTotal = availableHigh + availableLower;
+  const counts = {};
+  if (trustedOnlyKeywords.length > 0 && availableHigh < Math.max(1, Number(requestedCount || 0))) {
+    incrementCount(counts, "delivery_policy_trusted_only_source_bar");
+    return counts;
+  }
+  if (availableTotal <= 0 && (Array.isArray(rankedItems) ? rankedItems.length : 0) > 0) {
+    const candidateReasonCounts = buildDeliveryPolicyCandidateReasonCounts(rankedItems, nowIso, customKeywords);
+    const dominantReason = dominantCountKey(candidateReasonCounts, "other_final_selection_rule");
+    if (dominantReason === "score_threshold") incrementCount(counts, "delivery_policy_score_threshold");
+    else if (dominantReason === "topic_relevance_threshold") incrementCount(counts, "delivery_policy_topic_relevance_threshold");
+    else if (dominantReason === "source_quality_threshold") incrementCount(counts, "delivery_policy_source_quality_threshold");
+    else incrementCount(counts, "delivery_policy_no_eligible_items");
+    return counts;
+  }
+  if (availableTotal < Math.max(1, Number(requestedCount || 0))) {
+    incrementCount(counts, "delivery_policy_total_item_shortfall");
+    return counts;
+  }
+  if (availableHigh < DELIVERY_POLICY.retry_attempt.min_high_confidence) {
+    incrementCount(counts, "delivery_policy_high_confidence_shortfall");
+    return counts;
+  }
+  if (retry.lower_confidence_cap_reached === true) {
+    incrementCount(counts, "delivery_policy_lower_confidence_cap");
+    return counts;
+  }
+  incrementCount(counts, "delivery_policy_gate");
+  return counts;
+}
+
+function buildPersonaGateBreakdown({ trace, deliveryPolicy, requestedCount, rankedItems, customKeywords, nowIso }) {
+  const rankingGateBreakdown = buildRankingGateBreakdown(trace);
+  const deliveryPolicyBreakdown = buildDeliveryPolicyGateBreakdown({
+    deliveryPolicy,
+    requestedCount,
+    rankedItems,
+    customKeywords,
+    nowIso,
+  });
+  const finalGateBreakdown = combineCounts(rankingGateBreakdown, deliveryPolicyBreakdown);
+  return {
+    ranking_gate_breakdown: rankingGateBreakdown,
+    delivery_policy_breakdown: deliveryPolicyBreakdown,
+    final_gate_breakdown: finalGateBreakdown,
+    primary_final_gate_reason: Object.keys(deliveryPolicyBreakdown).length > 0
+      ? dominantCountKey(deliveryPolicyBreakdown, "unknown")
+      : dominantCountKey(finalGateBreakdown, "unknown"),
   };
 }
 
@@ -205,6 +410,31 @@ function groupRejectedReasonsByTopic(rejected = []) {
   return grouped;
 }
 
+function aggregatePersonaGateBreakdown(personas = []) {
+  const rankingGateBreakdown = {};
+  const deliveryPolicyBreakdown = {};
+  const finalGateBreakdown = {};
+  for (const row of (Array.isArray(personas) ? personas : [])) {
+    for (const [key, value] of Object.entries(row?.ranking_gate_breakdown || {})) {
+      incrementCount(rankingGateBreakdown, key, value);
+    }
+    for (const [key, value] of Object.entries(row?.delivery_policy_breakdown || {})) {
+      incrementCount(deliveryPolicyBreakdown, key, value);
+    }
+    for (const [key, value] of Object.entries(row?.final_gate_breakdown || {})) {
+      incrementCount(finalGateBreakdown, key, value);
+    }
+  }
+  return {
+    ranking_gate_breakdown: rankingGateBreakdown,
+    delivery_policy_breakdown: deliveryPolicyBreakdown,
+    final_gate_breakdown: finalGateBreakdown,
+    primary_final_gate_reason: Object.keys(deliveryPolicyBreakdown).length > 0
+      ? dominantCountKey(deliveryPolicyBreakdown, "unknown")
+      : dominantCountKey(finalGateBreakdown, "unknown"),
+  };
+}
+
 function classifyTopicGapAudit({
   topicDiagnostic,
   matchingPersonaResults,
@@ -214,7 +444,9 @@ function classifyTopicGapAudit({
   const personas = Array.isArray(matchingPersonaResults) ? matchingPersonaResults : [];
   const rejections = rejectionCounts && typeof rejectionCounts === "object" ? rejectionCounts : {};
   const candidatePoolCount = personas.reduce((sum, row) => sum + Number(row?.candidate_pool_count || 0), 0);
+  const internalFinalCount = personas.reduce((sum, row) => sum + Number(row?.internal_final_quality?.item_count || 0), 0);
   const finalCount = personas.reduce((sum, row) => sum + Number(row?.final_selected_quality?.item_count || 0), 0);
+  const gateBreakdown = aggregatePersonaGateBreakdown(personas);
   const status429 = Number(topic?.status_counts?.[429] || 0);
   const staleRejected = Number(rejections.stale_age_filter || 0);
   const hasProviderFailure = status429 > 0
@@ -251,7 +483,10 @@ function classifyTopicGapAudit({
     rootCause = "provider_no_recent_coverage";
     failureReason = "zero_yield_broad";
   } else if (candidatePoolCount > 0 && finalCount <= 0) {
-    if (Number(rejections.selection_custom_cap || 0) > 0) {
+    if (internalFinalCount > 0 || Object.keys(gateBreakdown.delivery_policy_breakdown).length > 0) {
+      rootCause = "delivery_policy_gate";
+      failureReason = dominantCountKey(gateBreakdown.delivery_policy_breakdown, "delivery_policy_gate");
+    } else if (Number(rejections.selection_custom_cap || 0) > 0) {
       rootCause = "selection_custom_cap";
       failureReason = "selection_custom_cap";
     } else if (Number(rejections.storyline_quality_gate || 0) > 0) {
@@ -260,9 +495,21 @@ function classifyTopicGapAudit({
     } else if (Number(rejections.removed_by_source_policy_cap || 0) > 0) {
       rootCause = "source_policy_gate";
       failureReason = "source_policy_cap";
+    } else if (gateBreakdown.primary_final_gate_reason === "diversity_or_cap_logic") {
+      rootCause = "diversity_cap_gate";
+      failureReason = "diversity_or_cap_logic";
+    } else if (gateBreakdown.primary_final_gate_reason === "source_quality_threshold") {
+      rootCause = "source_quality_gate";
+      failureReason = "source_quality_threshold";
+    } else if (gateBreakdown.primary_final_gate_reason === "topic_relevance_threshold") {
+      rootCause = "topic_relevance_gate";
+      failureReason = "topic_relevance_threshold";
+    } else if (gateBreakdown.primary_final_gate_reason === "score_threshold") {
+      rootCause = "score_threshold_gate";
+      failureReason = "score_threshold";
     } else {
       rootCause = "ranking_or_quality_gate";
-      failureReason = "final_quality_gate";
+      failureReason = dominantCountKey(gateBreakdown.ranking_gate_breakdown, "other_final_selection_rule");
     }
   } else if (Number(topic?.unique_item_count || 0) > 0 && finalCount > 0 && finalCount < Math.max(1, personas[0]?.requested_count || 1)) {
     rootCause = "thin_but_precise";
@@ -295,6 +542,17 @@ function classifyTopicGapAudit({
   } else if (rootCause === "selection_custom_cap") {
     betterSourceOpportunity = "possible";
     betterSourceNote = "A candidate survived retrieval but lost to the scenario-level custom selection cap.";
+  } else if (rootCause === "delivery_policy_gate") {
+    betterSourceOpportunity = "possible";
+    if (failureReason === "delivery_policy_score_threshold") {
+      betterSourceNote = "Items survived retrieval, but the remaining candidates missed the delivery confidence floor on relevance, strategic value, or source quality.";
+    } else if (failureReason === "delivery_policy_total_item_shortfall") {
+      betterSourceNote = "Some acceptable items survived ranking, but there were not enough to satisfy the 5-item shipping contract.";
+    } else if (failureReason === "delivery_policy_trusted_only_source_bar") {
+      betterSourceNote = "Coverage existed, but the trusted-only topic policy rejected lower-trust candidates.";
+    } else {
+      betterSourceNote = "Reasonably good items survived ranking, but the 5-item shipping contract or confidence mix blocked delivery.";
+    }
   }
 
   const sourceScore = personas.length > 0
@@ -311,6 +569,7 @@ function classifyTopicGapAudit({
     raw_count: Number(topic?.unique_item_count || 0),
     cleaned_count: candidatePoolCount,
     final_count: finalCount,
+    internal_final_count: internalFinalCount,
     source_score: sourceScore,
     selection_lift: selectionLift,
     stale_rate: Number(topic?.unique_item_count || 0) > 0
@@ -324,6 +583,10 @@ function classifyTopicGapAudit({
     coverage_status: String(topic?.coverage_status || "").trim() || null,
     root_cause: rootCause,
     failure_reason: failureReason,
+    primary_final_gate_reason: gateBreakdown.primary_final_gate_reason,
+    final_gate_breakdown: gateBreakdown.final_gate_breakdown,
+    ranking_gate_breakdown: gateBreakdown.ranking_gate_breakdown,
+    delivery_policy_breakdown: gateBreakdown.delivery_policy_breakdown,
     better_source_opportunity: betterSourceOpportunity,
     better_source_note: betterSourceNote,
     preferred_domains: Array.isArray(topic?.preferred_domains) ? topic.preferred_domains.slice() : [],
@@ -928,6 +1191,17 @@ function evaluatePersona({
       user,
       previous_items: [],
     });
+    const gateBreakdown = buildPersonaGateBreakdown({
+      trace: ranking?.diagnostics?.item_trace,
+      deliveryPolicy,
+      requestedCount,
+      rankedItems: ranking.userItems,
+      customKeywords: (Array.isArray(user?.topics) ? user.topics : [])
+        .filter((topic) => String(topic || "").startsWith("custom_"))
+        .map((topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").trim())
+        .filter(Boolean),
+      nowIso,
+    });
     const selectionLift = Number((finalQuality.score - rawBaseline.rawBaselineQuality.score).toFixed(2));
     return {
       status: "completed",
@@ -962,6 +1236,7 @@ function evaluatePersona({
           high_confidence_available_count: deliveryPolicy.attempt_1.high_confidence_available_count,
           lower_confidence_available_count: deliveryPolicy.attempt_1.lower_confidence_available_count,
           delivery_eligible: deliveryPolicy.attempt_1.delivery_eligible,
+          lower_confidence_cap_reached: deliveryPolicy.attempt_1.lower_confidence_cap_reached === true,
         },
         retry: {
           high_confidence_count: deliveryPolicy.retry.high_confidence_count,
@@ -969,8 +1244,13 @@ function evaluatePersona({
           high_confidence_available_count: deliveryPolicy.retry.high_confidence_available_count,
           lower_confidence_available_count: deliveryPolicy.retry.lower_confidence_available_count,
           delivery_eligible: deliveryPolicy.retry.delivery_eligible,
+          lower_confidence_cap_reached: deliveryPolicy.retry.lower_confidence_cap_reached === true,
         },
       },
+      final_gate_breakdown: gateBreakdown.final_gate_breakdown,
+      ranking_gate_breakdown: gateBreakdown.ranking_gate_breakdown,
+      delivery_policy_breakdown: gateBreakdown.delivery_policy_breakdown,
+      primary_final_gate_reason: gateBreakdown.primary_final_gate_reason,
       candidate_pool_items: rawBaseline.scored.map((item) => serializeItem(item)),
       raw_baseline_items: rawBaseline.rawBaselineItems.map((item) => serializeItem(item)),
       final_items: finalItems.map((item) => serializeItem(item)),
@@ -981,6 +1261,45 @@ function evaluatePersona({
     };
   } catch (error) {
     const message = String(error?.message || error || "unknown persona failure");
+    const failedDeliveryPolicy = {
+      delivery_outcome: "withheld_after_retry",
+      internal_thinness_label: "product_underdelivery",
+      lower_confidence_used: false,
+      product_underdelivery: true,
+      trusted_only_custom_keywords: [],
+      attempt_1: {
+        high_confidence_count: 0,
+        lower_confidence_count: 0,
+        high_confidence_available_count: 0,
+        lower_confidence_available_count: 0,
+        delivery_eligible: false,
+        lower_confidence_cap_reached: false,
+      },
+      retry: {
+        high_confidence_count: 0,
+        lower_confidence_count: 0,
+        high_confidence_available_count: 0,
+        lower_confidence_available_count: 0,
+        delivery_eligible: false,
+        lower_confidence_cap_reached: false,
+      },
+    };
+    const failedGateBreakdown = buildPersonaGateBreakdown({
+      trace: {
+        transitions: [
+          {
+            stage: "ranking",
+            reason: "no_deliverable_items",
+            message,
+          },
+        ],
+      },
+      deliveryPolicy: failedDeliveryPolicy,
+      requestedCount,
+      rankedItems: [],
+      customKeywords: [],
+      nowIso: new Date().toISOString(),
+    });
     return {
       status: "failed",
       scenario_id: scenarioId,
@@ -1011,27 +1330,11 @@ function evaluatePersona({
         band: "poor",
         quality_label: "poor",
       },
-      delivery_policy: {
-        delivery_outcome: "withheld_after_retry",
-        internal_thinness_label: "product_underdelivery",
-        lower_confidence_used: false,
-        product_underdelivery: true,
-        trusted_only_custom_keywords: [],
-        attempt_1: {
-          high_confidence_count: 0,
-          lower_confidence_count: 0,
-          high_confidence_available_count: 0,
-          lower_confidence_available_count: 0,
-          delivery_eligible: false,
-        },
-        retry: {
-          high_confidence_count: 0,
-          lower_confidence_count: 0,
-          high_confidence_available_count: 0,
-          lower_confidence_available_count: 0,
-          delivery_eligible: false,
-        },
-      },
+      delivery_policy: failedDeliveryPolicy,
+      final_gate_breakdown: failedGateBreakdown.final_gate_breakdown,
+      ranking_gate_breakdown: failedGateBreakdown.ranking_gate_breakdown,
+      delivery_policy_breakdown: failedGateBreakdown.delivery_policy_breakdown,
+      primary_final_gate_reason: failedGateBreakdown.primary_final_gate_reason,
       candidate_pool_items: rawBaseline.scored.map((item) => serializeItem(item)),
       raw_baseline_items: rawBaseline.rawBaselineItems.map((item) => serializeItem(item)),
       final_items: [],
@@ -1078,6 +1381,7 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const reasonCounts = {};
   const coverageLimiterCounts = {};
   const topicRootCauseCounts = {};
+  const finalGateBreakdownCounts = {};
   for (const row of personaResults) {
     const scarcityKey = String(row?.scarcity_profile || "").trim() || "unknown";
     scarcityCounts[scarcityKey] = (scarcityCounts[scarcityKey] || 0) + 1;
@@ -1085,6 +1389,9 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     coverageLimiterCounts[limiterKey] = (coverageLimiterCounts[limiterKey] || 0) + 1;
     for (const [reason, count] of Object.entries(row?.failure_reasons?.reason_counts || {})) {
       reasonCounts[reason] = (reasonCounts[reason] || 0) + Number(count || 0);
+    }
+    if (Number(row?.candidate_pool_count || 0) > 0 && Number(row?.final_selected_quality?.item_count || 0) <= 0) {
+      incrementCount(finalGateBreakdownCounts, row?.primary_final_gate_reason || "unknown");
     }
   }
   for (const row of topicGapAudit) {
@@ -1117,6 +1424,8 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   if (provider429Count > 0) recommendations.push("Provider rate limits are collapsing coverage for part of this scenario; inspect batching and query sequencing.");
   if (retrievalLimitedCount > rankingLimitedCount && retrievalLimitedCount > 0) recommendations.push("Most failures are retrieval-limited rather than ranking-limited; prioritize candidate yield.");
   if (deliveredCount < personaResults.length) recommendations.push("The 5-item shipping contract is under-fulfilled for part of this scenario; separate healthy thinness from product underdelivery.");
+  if ((finalGateBreakdownCounts.delivery_policy_total_item_shortfall || 0) > 0) recommendations.push("Some topics are good enough to rank but still die at shipping because they cannot assemble 5 eligible items.");
+  if ((finalGateBreakdownCounts.score_threshold || 0) > 0) recommendations.push("Some topics are finding candidates that die on the final score/strategic thresholds; inspect whether those bars are now too tight for the 5-item promise.");
   if ((topicRootCauseCounts.preferred_only_query_design || 0) > 0) recommendations.push("Zero-yield preferred-domain topics are still missing broad fallback coverage; fix retry sequencing before adding more fallback.");
   if ((topicRootCauseCounts.query_plan_not_exhausted || 0) > 0) recommendations.push("Zero-yield topics still have unused alternate broad queries; one more broad pass is likely higher-leverage than looser fallback.");
   if ((topicRootCauseCounts.keyword_ambiguity_or_off_topic_query || 0) > 0) recommendations.push("Broad custom keywords are retrieving off-topic items; tighten keyword/source hints rather than padding.");
@@ -1147,6 +1456,7 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     negative_lift_count: negativeLiftCount,
     scarcity_counts: scarcityCounts,
     coverage_limiter_counts: coverageLimiterCounts,
+    final_gate_breakdown_counts: finalGateBreakdownCounts,
     reason_counts: reasonCounts,
     topic_root_cause_counts: topicRootCauseCounts,
     topic_gap_audit: topicGapAudit,
@@ -1179,6 +1489,7 @@ function buildOverallSummary(scenarios, personaResults) {
   const deliveryOutcomeCounts = {};
   const bucketKpis = {};
   const lowerConfidenceExposure = {};
+  const finalGateBreakdownCounts = {};
   for (const row of personaResults) {
     const outcome = String(row?.delivery_policy?.delivery_outcome || "withheld_after_retry").trim();
     deliveryOutcomeCounts[outcome] = (deliveryOutcomeCounts[outcome] || 0) + 1;
@@ -1198,6 +1509,9 @@ function buildOverallSummary(scenarios, personaResults) {
     if (row?.delivery_policy?.lower_confidence_used === true) {
       const exposureKey = String(row?.persona_id || "");
       lowerConfidenceExposure[exposureKey] = (lowerConfidenceExposure[exposureKey] || 0) + 1;
+    }
+    if (Number(row?.candidate_pool_count || 0) > 0 && Number(row?.final_selected_quality?.item_count || 0) <= 0) {
+      incrementCount(finalGateBreakdownCounts, row?.primary_final_gate_reason || "unknown");
     }
   }
   const deliveredCount = Object.entries(deliveryOutcomeCounts)
@@ -1219,6 +1533,7 @@ function buildOverallSummary(scenarios, personaResults) {
       ? Number(((Object.values(lowerConfidenceExposure).filter((count) => count > 1).length / personaResults.length) * 100).toFixed(2))
       : 0,
     delivery_outcome_counts: deliveryOutcomeCounts,
+    final_gate_breakdown_counts: finalGateBreakdownCounts,
     bucket_kpis: Object.fromEntries(Object.entries(bucketKpis).map(([bucket, stats]) => ([
       bucket,
       {

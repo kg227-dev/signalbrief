@@ -798,3 +798,129 @@ Current recommendation after the first live `5`-item-policy run:
 - next work should focus on one question:
   - how to improve trusted candidate yield enough to hit the `5`-item promise
 - if that cannot be done reliably with more Perplexity-only tuning, the next step should be a larger retrieval architecture change rather than more ranking changes
+
+## 2026-03-22 23:20 ET - core-category gating split under the 5-item contract
+
+What I changed in this pass:
+
+- refined retrieval-eval gate attribution so `delivery_policy_gate` is no longer drowned out by generic `other_final_selection_rule`
+- stopped counting topic-filter transitions as final-gate failures in eval summaries
+- updated topic/persona gate rollups to prefer concrete delivery-policy blockers when shipping is the thing that actually failed
+- kept the new delivery policy unchanged; this pass was diagnostic, not a standards-loosening change
+
+Validation completed:
+
+- `tests/contracts/harness/eval/retrieval/runner-runtime.test.js`
+- `tests/contracts/web-api/admin-retrieval-eval-ui.test.js`
+- `tests/contracts/entrypoints/digest-orchestrator-delivery-runtime.test.js`
+- `scripts/test-critical-paths.js`
+
+Focused live runs completed:
+
+- `retrieval-eval:2026-03-22T23-06-30-307Z`
+- `retrieval-eval:2026-03-22T23-14-46-928Z`
+
+Headline result:
+
+- the system is still at:
+  - `5_item_fulfillment_rate: 0%`
+  - `withheld_after_retry_rate: 100%`
+- but the failure picture is now cleaner:
+  - overall final-gate breakdown in the latest run:
+    - `delivery_policy_score_threshold: 12`
+    - `delivery_policy_total_item_shortfall: 11`
+    - `delivery_policy_source_quality_threshold: 2`
+
+Core standard-category diagnosis from `retrieval-eval:2026-03-22T23-14-46-928Z`:
+
+- `HEALTHCARE`
+  - `raw 0 / cleaned 3 / internal 1 / final 0`
+  - root cause: `query_plan_not_exhausted`
+  - shipping blocker on the matched persona: `delivery_policy_score_threshold`
+  - interpretation:
+    - retrieval still stopped early
+    - the one retained internal item was review-tier and below the delivery relevance/source floor
+- `TECHNOLOGY`
+  - `raw 3 / cleaned 7 / internal 3 / final 0`
+  - root cause: `delivery_policy_gate`
+  - shipping blocker: `delivery_policy_score_threshold`
+  - interpretation:
+    - this is not a pure no-recall miss
+    - items are being found, but too many are review-tier and below the delivery confidence floor
+- `ENERGY`
+  - `raw 1 / cleaned 4 / internal 2 / final 0`
+  - root cause: `delivery_policy_gate`
+  - shipping blocker: `delivery_policy_total_item_shortfall`
+  - interpretation:
+    - at least one strong item exists (`utilitydive.com`)
+    - the main miss is not “junk got through”; it is not enough trusted volume to make 5 items
+- `POLICY×REGULATORY`
+  - `raw 0 / cleaned 1 / internal 1 / final 0`
+  - root cause: `provider_no_recent_coverage`
+  - shipping blocker on the matched persona: effectively still a shortfall
+  - interpretation:
+    - broad queries were exhausted
+    - preferred/trusted domains appeared in search evidence, but did not convert into enough retained items
+- `LIFE SCIENCES`
+  - `raw 0 / cleaned 3 / internal 1 / final 0`
+  - root cause: `query_plan_not_exhausted`
+  - shipping blocker on the matched persona: `delivery_policy_score_threshold`
+  - interpretation:
+    - retrieval still has unused broad depth
+    - the current retained item is review-tier and below the delivery floor
+- `STRATEGY`
+  - `raw 3 / cleaned 5 / internal 2 / final 0`
+  - root cause: `delivery_policy_gate`
+  - shipping blocker: `delivery_policy_total_item_shortfall`
+  - interpretation:
+    - this bucket can produce one strong Reuters-grade item
+    - it still does not produce enough additional trusted items to satisfy a 5-item digest
+
+What this means:
+
+- the remaining product failure is **not** just “Perplexity found nothing”
+- on normal categories, three different failure modes now show up clearly:
+  - `query depth still left unused`
+    - `HEALTHCARE`
+    - `LIFE SCIENCES`
+  - `some good items exist, but not enough trusted quantity for 5`
+    - `ENERGY`
+    - `STRATEGY`
+  - `items exist, but they are too weak on source/relevance to count`
+    - `TECHNOLOGY`
+    - portions of `HEALTHCARE`
+    - portions of `LIFE SCIENCES`
+
+Preferred/trusted-first pressure test:
+
+- on `standard_full`, preferred-first is **not** the main blocker by itself
+- the clearer issue is:
+  - too many standard buckets still leave `1-2` broad queries unused
+  - once the system broadens, it often retrieves review-tier items that still do not meet the delivery floor
+- on `custom_realistic`, preferred-only design still shows up on anchor topics like `STRATEGY` / `HEALTHCARE`, but that is secondary to the bigger standard-bucket yield problem
+
+Minimum realistic path off `0%` fulfillment without reintroducing junk:
+
+1. exhaust one more broad query for standard weak buckets that still show unused depth
+   - start with `HEALTHCARE` and `LIFE SCIENCES`
+2. tighten topic-specific query shaping for `TECHNOLOGY`
+   - bias away from review-tier/cloud-report noise and toward stronger enterprise/official/trusted sources
+3. revisit only the delivery confidence floor that is currently filtering review-tier `4.0-4.1` relevance items
+   - do **not** loosen freshness
+   - do **not** allow weak sources
+   - do **not** reintroduce noisy fallback
+   - any relaxation should be narrow and measured against lower-confidence usage rate
+
+Current candid feasibility judgment:
+
+- a daily `5`-item promise looks **only feasible with substantial additional retrieval architecture work** if we keep the current trust bar
+- moderate tuning can likely move fulfillment above `0%`
+- moderate tuning alone does **not** yet look sufficient to make `5` reliable across standard categories every day
+
+Current focus after this pass:
+
+- decide whether to do one last narrow retrieval/gate adjustment for:
+  - `HEALTHCARE`
+  - `LIFE SCIENCES`
+  - `TECHNOLOGY`
+- or stop and treat the current result as the decision point that the 5-item promise is too ambitious for the present Perplexity-first architecture

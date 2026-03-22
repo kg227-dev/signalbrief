@@ -11,6 +11,9 @@ assertModuleExports(() => seam, TARGET_REL);
 if (typeof seam.selectDigestItems !== "function") {
   throw new Error("digest pipeline seam should export selectDigestItems");
 }
+if (typeof seam.selectDigestItemsDetailed !== "function") {
+  throw new Error("digest pipeline seam should export selectDigestItemsDetailed");
+}
 if (typeof seam.createDigestPolicies !== "function") {
   throw new Error("digest pipeline seam should export createDigestPolicies");
 }

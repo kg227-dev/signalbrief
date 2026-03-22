@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SignalBrief Admin - Retrieval Eval</title>
+  <style>
+    :root {
+      --bg: #f6f6f2;
+      --panel: #ffffff;
+      --line: #d9d6ca;
+      --text: #1f1e1a;
+      --muted: #6e6a5d;
+      --accent: #0b5c63;
+      --bad: #9f2f1f;
+      --good: #1f6b44;
+      --warn: #8a6116;
+    }
+    body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: var(--bg); color: var(--text); }
+    header { padding: 20px 24px; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, #f7f5ec, #ece8d7); }
+    nav { display: flex; gap: 14px; margin-bottom: 10px; font-size: 14px; }
+    nav a { color: var(--accent); text-decoration: none; }
+    main { padding: 20px 24px 40px; display: grid; gap: 18px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+    .panel h2, .panel h3 { margin: 0 0 10px; font-size: 18px; }
+    .kpi { font-size: 28px; font-weight: 700; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .pill.strong { background: #e2f2e8; color: var(--good); }
+    .pill.decent { background: #f7efd8; color: var(--warn); }
+    .pill.weak { background: #f8e3df; color: var(--bad); }
+    .split { display: grid; gap: 18px; grid-template-columns: 1.2fr 1fr; }
+    pre { white-space: pre-wrap; font-size: 12px; }
+    select { padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+    @media (max-width: 920px) { .split { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/admin">Admin</a>
+      <a href="/admin/sandbox">Sandbox</a>
+      <a href="/admin/source-registry">Source Registry</a>
+      <a href="/admin/retrieval-eval"><strong>Retrieval Eval</strong></a>
+    </nav>
+    <h1 style="margin:0;font-size:28px;">Retrieval Evaluation</h1>
+    <div class="muted" style="margin-top:6px;">Read-only view of raw retrieval, final selection, source quality, freshness, and drop-off reasons.</div>
+  </header>
+  <main>
+    <section class="grid">
+      <div class="panel"><h2>Active Run</h2><div id="activeRun" class="muted">Loading…</div></div>
+      <div class="panel"><h2>Budget</h2><div id="budgetSummary" class="muted">Loading…</div></div>
+      <div class="panel"><h2>Run Picker</h2><select id="runPicker"></select></div>
+    </section>
+    <section class="split">
+      <div class="panel">
+        <h2>Run Summary</h2>
+        <div id="runSummary" class="muted">Select a run.</div>
+      </div>
+      <div class="panel">
+        <h2>Recommendations</h2>
+        <div id="recommendations" class="muted">No run loaded.</div>
+      </div>
+    </section>
+    <section class="split">
+      <div class="panel">
+        <h2>Scenario Summary</h2>
+        <div id="scenarioSummary"></div>
+      </div>
+      <div class="panel">
+        <h2>Persona Summary</h2>
+        <div id="personaSummary"></div>
+      </div>
+    </section>
+    <section class="split">
+      <div class="panel">
+        <h2>Top Domains</h2>
+        <div id="topDomains"></div>
+      </div>
+      <div class="panel">
+        <h2>Failure Reasons</h2>
+        <div id="failureReasons"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Retrieval vs Final</h2>
+      <div id="retrievalVsFinal"></div>
+    </section>
+  </main>
+  <script>
+    async function getJson(url) {
+      const resp = await fetch(url, { credentials: "same-origin" });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Request failed");
+      return data;
+    }
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[char]));
+    }
+
+    function bandPill(value) {
+      const band = String(value || "weak").toLowerCase();
+      return `<span class="pill ${band}">${esc(band)}</span>`;
+    }
+
+    function renderRows(rows, columns) {
+      if (!Array.isArray(rows) || rows.length === 0) return `<div class="muted">No data.</div>`;
+      return `<table><thead><tr>${columns.map((col) => `<th>${esc(col.label)}</th>`).join("")}</tr></thead><tbody>`
+        + rows.map((row) => `<tr>${columns.map((col) => `<td>${col.render ? col.render(row) : esc(row[col.key] ?? "")}</td>`).join("")}</tr>`).join("")
+        + `</tbody></table>`;
+    }
+
+    async function loadStatus() {
+      const status = await getJson("/api/admin/retrieval-eval/status");
+      document.getElementById("activeRun").innerHTML = status.active_run
+        ? `${esc(status.active_run.run_id)}<br><span class="muted">${esc(status.active_run.status)}</span>`
+        : `<span class="muted">No active run.</span>`;
+      const budget = status.budget || {};
+      document.getElementById("budgetSummary").innerHTML =
+        `<div class="kpi">$${Number(budget.spent_usd || 0).toFixed(2)}</div>`
+        + `<div class="muted">spent / $${Number(budget.cap_usd || 0).toFixed(2)} cap</div>`
+        + `<div class="muted">$${Number(budget.remaining_usd || 0).toFixed(2)} remaining, $${Number(budget.reserve_usd || 0).toFixed(2)} reserve</div>`;
+    }
+
+    function flattenPersonaRows(run) {
+      return (run.scenarios || []).flatMap((scenario) => (scenario.persona_results || []).map((row) => ({
+        ...row,
+        scenario_label: scenario.label || scenario.id,
+      })));
+    }
+
+    function summarizeFailureReasons(run) {
+      const counts = {};
+      for (const scenario of (run.scenarios || [])) {
+        for (const [reason, count] of Object.entries(scenario.summary?.reason_counts || {})) {
+          counts[reason] = (counts[reason] || 0) + Number(count || 0);
+        }
+      }
+      return Object.entries(counts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
+    }
+
+    function summarizeDomains(run) {
+      const counts = {};
+      for (const scenario of (run.scenarios || [])) {
+        for (const row of (scenario.summary?.final_source_summary || [])) {
+          counts[row.domain] = (counts[row.domain] || 0) + Number(row.count || 0);
+        }
+      }
+      return Object.entries(counts).map(([domain, count]) => ({ domain, count })).sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain));
+    }
+
+    async function loadRuns() {
+      const payload = await getJson("/api/admin/retrieval-eval/runs");
+      const picker = document.getElementById("runPicker");
+      picker.innerHTML = (payload.runs || []).map((run) => `<option value="${esc(run.run_id)}">${esc(run.run_id)} · $${Number(run.budget_spent_usd || 0).toFixed(2)} · ${esc(run.status)}</option>`).join("");
+      if ((payload.runs || []).length > 0) {
+        picker.value = payload.runs[0].run_id;
+        await loadRun(payload.runs[0].run_id);
+      } else {
+        picker.innerHTML = `<option value="">No runs</option>`;
+      }
+      picker.onchange = () => loadRun(picker.value);
+    }
+
+    async function loadRun(runId) {
+      if (!runId) return;
+      const run = await getJson(`/api/admin/retrieval-eval/run?run_id=${encodeURIComponent(runId)}`);
+      const overall = run.overall_summary || {};
+      document.getElementById("runSummary").innerHTML =
+        `<div class="grid">`
+        + `<div><div class="muted">Overall score</div><div class="kpi">${Number(overall.overall_score || 0).toFixed(1)}</div></div>`
+        + `<div><div class="muted">Scenarios</div><div class="kpi">${Number(overall.scenario_count || 0)}</div></div>`
+        + `<div><div class="muted">Personas</div><div class="kpi">${Number(overall.persona_count || 0)}</div></div>`
+        + `</div>`
+        + `<div class="muted" style="margin-top:10px;">Current DQS formula: ${esc(run.dqs_formula?.standard || "")}; headline-only: ${esc(run.dqs_formula?.headline_only || "")}</div>`;
+      document.getElementById("recommendations").innerHTML = (run.recommendations || []).length
+        ? `<ul>${run.recommendations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`
+        : `<div class="muted">No recommendations recorded.</div>`;
+      document.getElementById("scenarioSummary").innerHTML = renderRows(run.scenarios || [], [
+        { label: "Scenario", key: "label" },
+        { label: "Avg final", render: (row) => Number(row.summary?.average_final_score || 0).toFixed(1) },
+        { label: "Avg freshness", render: (row) => Number(row.summary?.average_final_freshness || 0).toFixed(1) },
+        { label: "Neg lift", render: (row) => Number(row.summary?.negative_lift_count || 0) },
+      ]);
+      document.getElementById("personaSummary").innerHTML = renderRows(flattenPersonaRows(run), [
+        { label: "Persona", key: "persona_label" },
+        { label: "Scenario", key: "scenario_label" },
+        { label: "Final", render: (row) => `${Number(row.final_selected_quality?.score || 0).toFixed(1)} ${bandPill(row.final_selected_quality?.band)}` },
+        { label: "Lift", render: (row) => Number(row.selection_lift || 0).toFixed(1) },
+        { label: "DQS", render: (row) => Number(row.current_digest_quality?.score || 0).toFixed(1) },
+      ]);
+      document.getElementById("topDomains").innerHTML = renderRows(summarizeDomains(run).slice(0, 12), [
+        { label: "Domain", key: "domain" },
+        { label: "Final count", key: "count" },
+      ]);
+      document.getElementById("failureReasons").innerHTML = renderRows(summarizeFailureReasons(run).slice(0, 12), [
+        { label: "Reason", key: "reason" },
+        { label: "Count", key: "count" },
+      ]);
+      document.getElementById("retrievalVsFinal").innerHTML = renderRows((run.scenarios || []).map((scenario) => ({
+        scenario: scenario.label || scenario.id,
+        raw: scenario.raw_candidates?.length || 0,
+        cleaned: scenario.cleaned_candidates?.length || 0,
+        global: scenario.global_selected_items?.length || 0,
+        storyline: scenario.storyline_pool_items?.length || 0,
+        rejected: scenario.global_rejections?.length || 0,
+      })), [
+        { label: "Scenario", key: "scenario" },
+        { label: "Raw", key: "raw" },
+        { label: "Cleaned", key: "cleaned" },
+        { label: "Global selected", key: "global" },
+        { label: "Storyline pool", key: "storyline" },
+        { label: "Rejected", key: "rejected" },
+      ]);
+    }
+
+    Promise.all([loadStatus(), loadRuns()]).catch((error) => {
+      document.body.insertAdjacentHTML("beforeend", `<div style="padding:20px;color:#9f2f1f;">${esc(error.message || error)}</div>`);
+    });
+  </script>
+</body>
+</html>

@@ -101,7 +101,9 @@ const {
 } = require("../src/runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../src/runtime/source-policy-registry-runtime");
 const { createPreferredSourceRegistryRuntime } = require("../src/runtime/preferred-source-registry-runtime");
+const { createRetrievalEvalStorageRuntime } = require("../src/eval/retrieval/storage-runtime");
 const { setAdminSourceRegistry } = require("../src/domains/digest");
+const { createAdminRetrievalEvalRuntime } = require("./services/admin-retrieval-eval-runtime");
 
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
@@ -157,6 +159,14 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
 const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
   fs,
   preferredSourcesPath: runtimePaths.preferredSourcesPath,
+});
+const retrievalEvalStorageRuntime = createRetrievalEvalStorageRuntime({
+  fs,
+  path,
+  appRoot: APP_ROOT,
+});
+const adminRetrievalEvalRuntime = createAdminRetrievalEvalRuntime({
+  storage: retrievalEvalStorageRuntime,
 });
 setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistryRuntime.loadSourceRegistry()));
 const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({
@@ -416,6 +426,9 @@ const {
   resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
   resetSourceRegistryIdentityEntry: (identityKey, meta) => sourceRegistryRuntime.resetSourceRegistryIdentityEntry(identityKey, meta),
   setAdminSourceRegistry,
+  loadRetrievalEvalRuns: (limit) => adminRetrievalEvalRuntime.listRuns(limit),
+  loadRetrievalEvalRun: (runId) => adminRetrievalEvalRuntime.loadRun(runId),
+  loadRetrievalEvalStatus: () => adminRetrievalEvalRuntime.loadStatus(),
   getAdminActor,
 });
 const handleDomainRoute = createRouteBootstrapHandler({

@@ -65,6 +65,9 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     sourceRegistryPath,
     preferredSourcesPath,
     bundledPreferredSourcesPath,
+    loadRetrievalEvalRuns,
+    loadRetrievalEvalRun,
+    loadRetrievalEvalStatus,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
 
@@ -133,6 +136,9 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     sourceRegistryPath,
     preferredSourcesPath,
     bundledPreferredSourcesPath,
+    loadRetrievalEvalRuns,
+    loadRetrievalEvalRun,
+    loadRetrievalEvalStatus,
   };
 }
 

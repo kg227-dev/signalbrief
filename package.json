@@ -41,6 +41,7 @@
     "qa:harness": "node test-harness/run-tests.js --deterministic",
     "qa:benchmark": "node test-harness/run-tests.js",
     "qa:matrix": "node test-harness/run-matrix.js",
+    "eval:retrieval": "node src/entrypoints/retrieval-eval.js",
     "report:marketing-weekly": "node scripts/report-marketing-weekly.js",
     "validate:source-scoring": "node scripts/validate-source-scoring.js"
   },

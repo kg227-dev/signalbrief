@@ -44,8 +44,32 @@ function parsePerplexityItems(content) {
   const cleaned = String(content || "")
     .replace(/```json\n?/g, "")
     .replace(/```\n?/g, "")
+    .replace(/^json\s*/i, "")
     .trim();
-  return JSON.parse(cleaned);
+  const candidates = [cleaned];
+  const firstArray = cleaned.indexOf("[");
+  const lastArray = cleaned.lastIndexOf("]");
+  if (firstArray !== -1 && lastArray > firstArray) {
+    candidates.push(cleaned.slice(firstArray, lastArray + 1));
+  }
+  const firstObject = cleaned.indexOf("{");
+  const lastObject = cleaned.lastIndexOf("}");
+  if (firstObject !== -1 && lastObject > firstObject) {
+    candidates.push(cleaned.slice(firstObject, lastObject + 1));
+  }
+
+  let lastError = null;
+  for (const candidate of Array.from(new Set(candidates)).filter(Boolean)) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed?.items)) return parsed.items;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Unable to parse Perplexity items");
 }
 
 function normalizeUrlMatchKey(value, stripSearch = false) {

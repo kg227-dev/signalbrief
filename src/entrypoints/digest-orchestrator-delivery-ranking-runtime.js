@@ -106,6 +106,46 @@ function averageMetric(items = [], field) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function buildItemTraceKey(item = {}) {
+  const url = String(item?.url || "").trim();
+  const headline = String(item?.headline || "").trim();
+  if (url) return `url:${url}`;
+  if (headline) return `headline:${headline.toLowerCase()}`;
+  return `tag:${String(item?.tag || "").trim().toLowerCase()}`;
+}
+
+function snapshotStage(items = [], stage, reason) {
+  return {
+    stage,
+    reason,
+    items: (Array.isArray(items) ? items : []).map((item) => ({
+      key: buildItemTraceKey(item),
+      url: String(item?.url || "").trim() || null,
+      headline: String(item?.headline || "").trim() || null,
+      tag: String(item?.tag || "").trim() || null,
+      source_domain: String(item?.source_domain || "").trim() || null,
+    })),
+  };
+}
+
+function appendStageTrace(trace, beforeItems, afterItems, stage, reason) {
+  if (!trace || !Array.isArray(trace.transitions)) return;
+  const kept = new Set((Array.isArray(afterItems) ? afterItems : []).map((item) => buildItemTraceKey(item)));
+  for (const item of (Array.isArray(beforeItems) ? beforeItems : [])) {
+    const key = buildItemTraceKey(item);
+    if (kept.has(key)) continue;
+    trace.transitions.push({
+      key,
+      reason,
+      stage,
+      url: String(item?.url || "").trim() || null,
+      headline: String(item?.headline || "").trim() || null,
+      tag: String(item?.tag || "").trim() || null,
+      source_domain: String(item?.source_domain || "").trim() || null,
+    });
+  }
+}
+
 function deriveDominantFailureMode({
   finalItems,
   requestedCount,
@@ -190,22 +230,32 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       nowIso,
       deliveryMode,
       runDiagnostics,
+      captureDiagnostics,
     } = params;
 
     const prefs = user.preferences || {};
     const sourcePrefs = user.source_preferences || {};
     const blockedSources = new Set(Array.isArray(sourcePrefs.blocked_sources) ? sourcePrefs.blocked_sources : []);
     const trustedSources = new Set(Array.isArray(sourcePrefs.trusted_sources) ? sourcePrefs.trusted_sources : []);
+    const trace = captureDiagnostics === true
+      ? {
+        snapshots: [],
+        transitions: [],
+      }
+      : null;
     let wasFiltered = false;
     let userItems = enriched;
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "initial", "initial"));
     const filteredResult = filterItemsByTopics(enriched, user.topics || [], {
       minItems: depthPolicy.minFilteredItems,
       strictZeroFallback: "specialist",
     });
     const customKeywords = filteredResult.customKeywords || [];
     const specialistMode = Boolean(filteredResult.specialistMode);
+    if (trace) appendStageTrace(trace, userItems, filteredResult.items, "topic_filter", "filtered_by_topic");
     userItems = filteredResult.items;
     wasFiltered = filteredResult.wasFiltered;
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "topic_filter", "filtered_by_topic"));
     const recentHistory = typeof buildRecentEntityHistory === "function"
       ? buildRecentEntityHistory(
         recentDigestRecords,
@@ -237,9 +287,11 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       nowIso,
     });
     userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "relevance_ranked", "ranked"));
     userItems = typeof applyEntityCoverageCap === "function"
       ? applyEntityCoverageCap(userItems, Math.max(1, Number(CONFIG.digest.maxSignalsPerEntity || 1)))
       : userItems;
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "entity_cap", "entity_cap_applied"));
 
     const requestedCount = Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5);
     const strictFreshness = isStrictFreshnessMode(deliveryMode);
@@ -252,11 +304,13 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       minItems: perUserFreshnessMin,
     });
     if (strictFreshness && suppression.removed > 0) {
+      if (trace) appendStageTrace(trace, userItems, suppression.items, "freshness_repeat", "removed_by_recent_repeat");
       userItems = suppression.items;
       log(`  [freshness-user] ${user.email || user.chatId}: removed ${suppression.removed} recent repeat(s)`);
     } else if (!strictFreshness && suppression.removed > 0) {
       log(`  [freshness-soft] ${user.email || user.chatId}: would remove ${suppression.removed} recent repeat(s) in scheduled mode`);
     }
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "freshness_repeat", strictFreshness ? "removed_by_recent_repeat" : "freshness_soft_preview"));
 
     const semanticPreviewBase = strictFreshness ? userItems : suppression.items;
     const semanticFreshness = filterFreshCandidates(semanticPreviewBase, {
@@ -264,6 +318,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
     });
     if (strictFreshness && (semanticFreshness.removedGlobal > 0 || semanticFreshness.removedUser > 0)) {
+      if (trace) appendStageTrace(trace, userItems, semanticFreshness.items, "semantic_repeat", "removed_by_semantic_repeat");
       userItems = semanticFreshness.items;
       log(
         `  [freshness-semantic] ${user.email || user.chatId}: removed ${semanticFreshness.removedGlobal} global and ${semanticFreshness.removedUser} per-user storyline repeat(s)`
@@ -273,6 +328,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         `  [freshness-soft] ${user.email || user.chatId}: would remove ${semanticFreshness.removedGlobal} global and ${semanticFreshness.removedUser} per-user storyline repeat(s) in scheduled mode`
       );
     }
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "semantic_repeat", strictFreshness ? "removed_by_semantic_repeat" : "semantic_soft_preview"));
 
     const minStrategicValue = Math.max(0, Math.min(1, Number(CONFIG.digest.minStrategicValue ?? rankingPolicy.minStrategicValue ?? 0.34)));
     const maxRoutineScore = Math.max(0, Math.min(1, Number(CONFIG.digest.maxRoutineScore ?? rankingPolicy.maxRoutineScore ?? 0.65)));
@@ -287,6 +343,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       && Number(item?.relevanceScore || 0) >= minSignalScoreForFinal
     ));
     if (qualityEligible.length > 0) {
+      if (trace) appendStageTrace(trace, userItems, qualityEligible, "final_quality_gate", "excluded_by_final_quality_threshold");
       if (qualityEligible.length < requestedCount) {
         const qualityUrls = new Set(qualityEligible.map((i) => i.url));
         const backfill = filterFreshCandidates(
@@ -309,6 +366,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     } else {
       userItems = userItems.filter((item) => !item?.hard_exclude);
     }
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "final_quality_gate", "excluded_by_final_quality_threshold"));
 
     if (hasWeights) {
       log(`  [post-sort] ${userItems.map((item) => `${item.tag}(${item.relevanceScore})`).join(", ")}`);
@@ -316,7 +374,10 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
 
     userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
     userItems = reserveCustomKeywordSlot(userItems, requestedCount, customKeywords);
+    const beforeSourcePolicyCaps = userItems.slice();
     userItems = applySourcePolicyCaps(userItems, requestedCount);
+    if (trace) appendStageTrace(trace, beforeSourcePolicyCaps, userItems, "source_policy_caps", "removed_by_source_policy_cap");
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "source_policy_caps", "removed_by_source_policy_cap"));
 
     // Minimum-count backfill: if we have fewer than requestedCount items,
     // pull additional items from the full enriched pool (re-scored) to reach the minimum.
@@ -390,7 +451,10 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     }
 
     userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
+    const beforeFinalPolicyCaps = userItems.slice();
     userItems = applySourcePolicyCaps(userItems, requestedCount);
+    if (trace) appendStageTrace(trace, beforeFinalPolicyCaps, userItems, "final_source_policy_caps", "removed_by_source_policy_cap");
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "final_source_policy_caps", "removed_by_source_policy_cap"));
 
     const freshnessBlockCount = Math.max(0, Number(suppression.removed || 0))
       + Math.max(0, Number(semanticFreshness.removedGlobal || 0))
@@ -443,6 +507,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         fallback_reason: fallbackReason,
         refill_count: qualityBackfillCount + minCountBackfillCount + emergencyFallbackCount,
         thin_pool: thinPool,
+        item_trace: trace,
         dominant_failure_mode: deriveDominantFailureMode({
           finalItems: userItems,
           requestedCount,

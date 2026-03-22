@@ -96,6 +96,7 @@ function createArchivePersistenceRuntime(deps) {
         url: i.url,
         source: i.source,
         source_domain: i.source_domain || parseSourceDomain(i),
+        published_date: i.published_date || null,
         baseScore: i.baseScore != null ? i.baseScore : null,
         topicMatch: i.topicMatch != null ? i.topicMatch : null,
         relevanceScore: i.relevanceScore != null ? i.relevanceScore : null,

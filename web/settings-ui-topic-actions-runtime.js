@@ -71,12 +71,19 @@
       updateSelectedSummary();
     }
 
-    function renderChip(topic, selected) {
+    function renderChip(topic, selected, weight) {
       const chip = document.createElement("div");
       const custom = isCustomTopic(topic);
       chip.className = `chip${selected ? " selected" : ""}${custom ? " chip-custom" : ""}`;
       chip.dataset.topic = topic;
       chip.innerHTML = `<span class="chip-check">✓</span> ${topicDisplayLabel(topic)}`;
+
+      if (typeof weight === "number" && Math.abs(weight) >= 1) {
+        const badge = document.createElement("span");
+        badge.className = weight >= 1 ? "weight-badge weight-badge--up" : "weight-badge weight-badge--down";
+        badge.textContent = weight >= 1 ? "↑" : "↓";
+        chip.appendChild(badge);
+      }
 
       chip.addEventListener("click", () => {
         if (!prefState) return;
@@ -96,26 +103,27 @@
       return el;
     }
 
-    function renderChips(userTopics) {
+    function renderChips(userTopics, topicWeights) {
       const container = byId("topicGrid");
       if (!container || !prefState) return;
 
       const normalizedUserTopics = Array.isArray(userTopics) ? userTopics.map(String) : [];
+      const weights = (topicWeights && typeof topicWeights === "object" && !Array.isArray(topicWeights)) ? topicWeights : {};
       prefState.setTopics(normalizedUserTopics);
       container.innerHTML = "";
 
       container.appendChild(renderGroupLabel("Industries"));
       INDUSTRY_TOPICS.forEach((topic) => {
-        container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
+        container.appendChild(renderChip(topic, prefState.hasTopic(topic), weights[topic]));
       });
 
       container.appendChild(renderGroupLabel("Capabilities"));
       CAPABILITY_TOPICS.forEach((topic) => {
-        container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
+        container.appendChild(renderChip(topic, prefState.hasTopic(topic), weights[topic]));
       });
 
       prefState.getTopics().filter(isCustomTopic).forEach((topic) => {
-        container.appendChild(renderChip(topic, true));
+        container.appendChild(renderChip(topic, true, weights[topic]));
       });
 
       updateTopicNote();

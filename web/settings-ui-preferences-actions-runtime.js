@@ -114,7 +114,7 @@
     byId("email").value = user.email || "";
     byId("telegram").value = user.telegram ? `@${user.telegram}` : "";
 
-    renderChips(user.topics || []);
+    renderChips(user.topics || [], user.topic_weights || {});
 
     const prefs = user.preferences || {};
     initDepthSelector({ prefState, initialDepth: prefs.depth || "headline_plus_why" });

@@ -42,6 +42,45 @@ function dedupeCandidates(items, adapterFns) {
   });
 }
 
+function dedupeCandidatesDetailed(items, adapterFns) {
+  const seenHeadline = new Set();
+  const seenUrl = new Set();
+  const deduped = [];
+  const rejected = [];
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const headlineKey = String(adapterFns.headlineFingerprint(item) || "");
+    const urlKey = String(adapterFns.normalizeUrl(item?.url || "") || "");
+    if (!adapterFns.isCandidate(item, { headlineKey, urlKey })) {
+      rejected.push({
+        item,
+        reason: "selection_invalid_candidate",
+      });
+      continue;
+    }
+    if (headlineKey && seenHeadline.has(headlineKey)) {
+      rejected.push({
+        item,
+        reason: "selection_duplicate_headline",
+      });
+      continue;
+    }
+    if (urlKey && seenUrl.has(urlKey)) {
+      rejected.push({
+        item,
+        reason: "selection_duplicate_url",
+      });
+      continue;
+    }
+    if (headlineKey) seenHeadline.add(headlineKey);
+    if (urlKey) seenUrl.add(urlKey);
+    deduped.push(item);
+  }
+  return {
+    deduped,
+    rejected,
+  };
+}
+
 function createSelectionState() {
   return {
     tagCounts: Object.create(null),
@@ -78,6 +117,7 @@ function pickPoolIndex(pool, state, policy, adapterFns, underCaps, lastTag, allo
   let bestCount = Infinity;
   let bestDomainCount = Infinity;
   let bestPriority = -Infinity;
+  let bestOverexposed = 1;
 
   for (let i = 0; i < pool.length; i++) {
     const item = pool[i];
@@ -88,16 +128,19 @@ function pickPoolIndex(pool, state, policy, adapterFns, underCaps, lastTag, allo
     const count = state.tagCounts[tag] || 0;
     const domainCount = state.domainCounts[adapterFns.parseDomain(item)] || 0;
     const priority = Number(policy.tagPriority[adapterFns.normalizeTopic(tag)] || 0);
+    const overexposed = item.entity_overexposed === true ? 1 : 0;
     const betterScore = (
       count < bestCount
       || (count === bestCount && domainCount < bestDomainCount)
       || (count === bestCount && domainCount === bestDomainCount && priority > bestPriority)
+      || (count === bestCount && domainCount === bestDomainCount && priority === bestPriority && overexposed < bestOverexposed)
     );
 
     if (!betterScore) continue;
     bestCount = count;
     bestDomainCount = domainCount;
     bestPriority = priority;
+    bestOverexposed = overexposed;
     bestIdx = i;
   }
 
@@ -137,6 +180,76 @@ function selectItemsByPolicy(allItems, selectionPolicy = {}, adapters = {}) {
   return state.selected;
 }
 
+function buildSelectionItemKey(item, adapterFns) {
+  const urlKey = String(adapterFns.normalizeUrl(item?.url || "") || "");
+  const headlineKey = String(adapterFns.headlineFingerprint(item) || "");
+  if (urlKey) return `url:${urlKey}`;
+  if (headlineKey) return `headline:${headlineKey}`;
+  return `${String(item?.tag || "")}:${String(item?.headline || "")}`;
+}
+
+function summarizePoolRejectReason(item, policy, adapterFns, selectedState) {
+  const tag = String(item?.tag || "");
+  const normalizedTag = normalizeTag(tag);
+  const domain = adapterFns.parseDomain(item);
+  if (policy.customTags.size > 0 && policy.customTags.has(normalizedTag) && selectedState.customCount >= policy.maxCustomItems) {
+    return "selection_custom_cap";
+  }
+  if ((selectedState.tagCounts[tag] || 0) >= policy.perTagCap) {
+    return "selection_tag_cap";
+  }
+  if (Number.isFinite(policy.perSourceCap) && (selectedState.domainCounts[domain] || 0) >= policy.perSourceCap) {
+    return "selection_source_cap";
+  }
+  return "selection_not_selected";
+}
+
+function selectItemsByPolicyDetailed(allItems, selectionPolicy = {}, adapters = {}) {
+  const policy = createSelectionPolicy(selectionPolicy);
+  const adapterFns = resolveAdapters(adapters);
+  const sourceItems = Array.isArray(allItems) ? allItems : [];
+  const dedupedResult = dedupeCandidatesDetailed(sourceItems, adapterFns);
+  const pool = dedupedResult.deduped.slice();
+  const poolSnapshot = pool.slice();
+  const state = createSelectionState();
+  const underCaps = createUnderCapsFn(policy, adapterFns, state);
+
+  seedCustomTagSelection(pool, state, policy, underCaps, adapterFns);
+
+  while (state.selected.length < policy.maxItems && pool.length > 0) {
+    const lastTag = state.selected.length > 0 ? state.selected[state.selected.length - 1].tag : null;
+    const preferredIdx = pickPoolIndex(pool, state, policy, adapterFns, underCaps, lastTag, false);
+    const selectedIdx = preferredIdx === -1
+      ? pickPoolIndex(pool, state, policy, adapterFns, underCaps, lastTag, true)
+      : preferredIdx;
+    if (selectedIdx === -1) break;
+    addSelectedItem(pool.splice(selectedIdx, 1)[0], state, policy, adapterFns);
+  }
+
+  const selectedKeys = new Set(state.selected.map((item) => buildSelectionItemKey(item, adapterFns)));
+  const rejected = dedupedResult.rejected.map((row) => ({
+    ...row,
+    item_key: buildSelectionItemKey(row.item, adapterFns),
+  }));
+  for (const item of poolSnapshot) {
+    const itemKey = buildSelectionItemKey(item, adapterFns);
+    if (selectedKeys.has(itemKey)) continue;
+    rejected.push({
+      item,
+      item_key: itemKey,
+      reason: summarizePoolRejectReason(item, policy, adapterFns, state),
+    });
+  }
+
+  return {
+    selected: state.selected,
+    rejected,
+    pool: poolSnapshot,
+    policy,
+  };
+}
+
 module.exports = {
   selectItemsByPolicy,
+  selectItemsByPolicyDetailed,
 };

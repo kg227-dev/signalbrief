@@ -9,7 +9,7 @@ function createArchiveUserSuppressionRuntime(deps) {
   const { normalizeUrlForDedup } = deps;
 
   function getUserRecentDigestUrlKeys(user, opts = {}) {
-    const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 5));
     const keys = new Set();
     const history = Array.isArray(user?.recent_digest_url_history)
       ? user.recent_digest_url_history.slice(-maxDigests)
@@ -33,7 +33,7 @@ function createArchiveUserSuppressionRuntime(deps) {
   }
 
   function getUserRecentStorylineKeys(user, opts = {}) {
-    const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 5));
     const keys = new Set();
     const history = Array.isArray(user?.recent_digest_url_history)
       ? user.recent_digest_url_history.slice(-maxDigests)
@@ -48,7 +48,7 @@ function createArchiveUserSuppressionRuntime(deps) {
   }
 
   function getUserRecentFreshnessKeys(user, opts = {}) {
-    const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 5));
     const keys = new Set();
     const history = Array.isArray(user?.recent_digest_url_history)
       ? user.recent_digest_url_history.slice(-maxDigests)
@@ -63,7 +63,7 @@ function createArchiveUserSuppressionRuntime(deps) {
   }
 
   function getUserRecentRepeatSeedItems(user, opts = {}) {
-    const maxDigests = Math.max(1, Number(opts.maxDigests || 3));
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 5));
     const history = Array.isArray(user?.recent_digest_url_history)
       ? user.recent_digest_url_history.slice(-maxDigests)
       : [];
@@ -89,6 +89,33 @@ function createArchiveUserSuppressionRuntime(deps) {
     }
 
     return seedItems;
+  }
+
+  function buildEntityFrequencyMap(user, opts = {}) {
+    const maxDigests = Math.max(1, Number(opts.maxDigests || 5));
+    const history = Array.isArray(user?.recent_digest_url_history)
+      ? user.recent_digest_url_history.slice(-maxDigests)
+      : [];
+    const freq = new Map();
+    for (const row of history) {
+      const entityKeys = Array.isArray(row?.entity_keys) ? row.entity_keys : [];
+      for (const ek of entityKeys) {
+        if (ek) freq.set(ek, (freq.get(ek) || 0) + 1);
+      }
+    }
+    return freq;
+  }
+
+  function flagEntityOverexposure(items, entityFreq, threshold) {
+    const limit = Number.isFinite(Number(threshold)) ? Number(threshold) : 3;
+    return items.map((item) => {
+      const primaryEntity = Array.isArray(item?.entity_keys) ? item.entity_keys[0] : null;
+      const count = primaryEntity ? (entityFreq.get(primaryEntity) || 0) : 0;
+      if (count >= limit) {
+        return Object.assign({}, item, { entity_overexposed: true, entity_overexposure_count: count });
+      }
+      return item;
+    });
   }
 
   function suppressRecentlySentForUser(items, user, opts = {}) {
@@ -132,8 +159,11 @@ function createArchiveUserSuppressionRuntime(deps) {
       kept.push(item);
     }
 
+    const entityFreq = buildEntityFrequencyMap(user, opts);
+    const flagged = flagEntityOverexposure(kept, entityFreq, opts.entityOverexposureThreshold);
+
     return {
-      items: kept,
+      items: flagged,
       removed,
       recent_keys: recentUrlKeys.size + recentStorylineKeys.size + recentFreshnessKeys.size + recentRepeatIndex.repeatKeys.size,
       backfilled: 0,
@@ -148,6 +178,8 @@ function createArchiveUserSuppressionRuntime(deps) {
     getUserRecentStorylineKeys,
     getUserRecentFreshnessKeys,
     getUserRecentRepeatSeedItems,
+    buildEntityFrequencyMap,
+    flagEntityOverexposure,
     suppressRecentlySentForUser,
   };
 }

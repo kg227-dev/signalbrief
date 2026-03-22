@@ -95,6 +95,56 @@ function createRenderPublicPages(deps) {
     </span>`;
   }
 
+  const FLAG_LABELS = {
+    earnings: "Earnings", guidance: "Guidance", m_and_a: "Deal",
+    regulatory: "Regulatory", leadership: "Leadership", ipo: "IPO",
+  };
+
+  function renderSourceBadge(tier) {
+    if (tier === "premium") return `<span class="src-badge src-badge--premium">Primary</span>`;
+    if (tier === "strong") return `<span class="src-badge src-badge--strong">Verified</span>`;
+    if (tier === "corporate") return `<span class="src-badge src-badge--corp">Press release</span>`;
+    if (tier === "weak" || tier === "suspect") return `<span class="src-badge src-badge--weak">Use caution</span>`;
+    return "";
+  }
+
+  function renderCorroborationNote(crossSourceCount, supportingSources) {
+    const n = Number(crossSourceCount) || 0;
+    if (n < 2) return "";
+    const extra = n - 1;
+    const title = (Array.isArray(supportingSources) ? supportingSources : []).join(", ");
+    return `<span class="corr-note"${title ? ` title="${escapeHtml(title)}"` : ""}>+${extra} source${extra > 1 ? "s" : ""}</span>`;
+  }
+
+  function renderContentFlags(flags) {
+    const known = (Array.isArray(flags) ? flags : []).filter((f) => FLAG_LABELS[f]);
+    if (!known.length) return "";
+    return `<span class="content-flags">${known.map((f) => `<span class="flag-chip">${FLAG_LABELS[f]}</span>`).join("")}</span>`;
+  }
+
+  function renderFreshnessLabel(publishedDate, digestDateKey) {
+    if (!publishedDate) return "";
+    const pub = new Date(String(publishedDate));
+    if (isNaN(pub.getTime())) return "";
+    const digest = new Date(`${digestDateKey}T12:00:00Z`);
+    const diffDays = Math.round((digest.getTime() - pub.getTime()) / 86400000);
+    if (diffDays <= 0) return `<span class="freshness-label">Today</span>`;
+    if (diffDays === 1) return `<span class="freshness-label">Yesterday</span>`;
+    if (diffDays <= 3) return `<span class="freshness-label">${diffDays}d ago</span>`;
+    return `<span class="freshness-label freshness-label--stale">${diffDays}d ago</span>`;
+  }
+
+  function buildWhyShownText(item) {
+    if (Array.isArray(item.why_shown) && item.why_shown.length) {
+      return item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ");
+    }
+    const entities = (Array.isArray(item.entity_keys) ? item.entity_keys : [])
+      .slice(0, 2)
+      .map((k) => String(k).split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));
+    if (entities.length) return `${item.tag || "Signal"} · ${entities.join(", ")}`;
+    return item.tag || "";
+  }
+
   function normalizeHeadlineLookup(value) {
     return String(value || "")
       .toLowerCase()
@@ -151,6 +201,7 @@ function createRenderPublicPages(deps) {
         </li>`;
       })
       .join("");
+    const safeRefToken = escapeHtml(String(refToken || ""));
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");
       const headline = escapeHtml(item?.headline || "Untitled item");
@@ -159,22 +210,45 @@ function createRenderPublicPages(deps) {
       const source = escapeHtml(item?.source || "source");
       const href = sanitizePublicUrl(item?.url);
       const scoreHtml = renderScorePill(readItemScore(item));
+      const sourceBadge = renderSourceBadge(item?.source_tier);
+      const corrNote = renderCorroborationNote(item?.cross_source_count, item?.supporting_sources);
+      const flagsHtml = renderContentFlags(item?.content_flags);
+      const freshnessHtml = isPersonalized ? renderFreshnessLabel(item?.published_date, dateKey) : "";
+      const whyShownText = isPersonalized ? escapeHtml(buildWhyShownText(item)) : "";
       const sourceLink = href
-        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">Read more -> ${source}</a>`
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">Read more → ${source}</a>`
         : `<span>${source}</span>`;
+      const feedbackRow = isPersonalized && safeRefToken
+        ? `<div class="feedback-row" data-item="${idx}" data-digest="${escapeHtml(dateKey)}" data-token="${safeRefToken}">
+          <button class="fb-btn fb-btn--pos" data-type="positive" title="More like this">+ More</button>
+          <button class="fb-btn fb-btn--neg" data-type="negative" title="Less like this">− Less</button>
+          <button class="fb-btn fb-btn--more">···</button>
+          <div class="fb-more-menu" hidden>
+            <button class="fb-menu-item" data-type="repetitive">Too repetitive</button>
+            <button class="fb-menu-item" data-type="weak_source">Weak source</button>
+            <button class="fb-menu-item" data-type="not_relevant">Not relevant</button>
+          </div>
+          <span class="fb-sent" hidden>Noted</span>
+        </div>`
+        : "";
       return `
       <article class="item-card">
         <div class="item-meta">
           <div class="item-meta-left">
             <span class="item-index">${idx + 1}</span>
             <span class="item-tag">${tag}</span>
+            ${flagsHtml}
           </div>
           ${scoreHtml}
         </div>
         <h2>${headline}</h2>
         ${summary ? `<p class="item-summary">${summary}</p>` : ""}
         ${wim ? `<p class="item-wim">${wim}</p>` : ""}
-        <div class="item-link">${sourceLink}</div>
+        <div class="item-link">
+          ${freshnessHtml}${sourceLink}${sourceBadge ? ` ${sourceBadge}` : ""}${corrNote ? ` ${corrNote}` : ""}
+        </div>
+        ${whyShownText ? `<p class="why-shown">Why included: ${whyShownText}</p>` : ""}
+        ${feedbackRow}
       </article>
     `;
     }).join("");
@@ -251,8 +325,26 @@ function createRenderPublicPages(deps) {
     h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; }
     .item-summary { margin: 0 0 8px; color: #334155; line-height: 1.6; font-size: 15px; }
     .item-wim { margin: 0 0 10px; color: #0f172a; line-height: 1.6; font-size: 14px; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
+    .item-link { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .item-link a { color: #2563eb; text-decoration: none; font-weight: 600; font-size: 14px; }
     .item-link span { color: #64748b; font-size: 14px; }
+    .src-badge { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; letter-spacing: 0.04em; white-space: nowrap; }
+    .src-badge--premium { background: #dbeafe; color: #1d4ed8; }
+    .src-badge--strong { background: #dcfce7; color: #15803d; }
+    .src-badge--corp { background: #fef3c7; color: #92400e; }
+    .src-badge--weak { background: #fee2e2; color: #b91c1c; }
+    .corr-note { font-size: 11px; color: #64748b; font-weight: 600; white-space: nowrap; cursor: default; }
+    .content-flags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+    .flag-chip { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; color: #475569; }
+    .freshness-label { font-size: 12px; color: #64748b; font-weight: 500; }
+    .freshness-label--stale { color: #d97706; }
+    .why-shown { margin: 8px 0 0; font-size: 12px; color: #64748b; line-height: 1.5; }
+    .feedback-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); position: relative; }
+    .fb-btn { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; color: var(--muted); font-family: inherit; }
+    .fb-btn:hover { background: #f1f5f9; }
+    .fb-more-menu { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 2px; }
+    .fb-menu-item { background: none; border: none; padding: 0; font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline; font-family: inherit; }
+    .fb-sent { font-size: 12px; color: #15803d; font-weight: 600; }
     .footer { margin-top: 18px; text-align: center; color: #64748b; font-size: 13px; }
     @media (max-width: 640px) {
       h1 { font-size: 28px; }
@@ -280,6 +372,47 @@ function createRenderPublicPages(deps) {
     </section>
     <p class="footer">Built with SignalBrief · <a href="https://getsignalbrief.com" target="_blank" rel="noopener">getsignalbrief.com</a></p>
   </main>
+${isPersonalized ? `<script>
+(function() {
+  function sendFeedback(digestId, token, itemIndex, type) {
+    if (!token) return;
+    fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: token, digest_id: digestId, item_index: Number(itemIndex), feedback_type: type }),
+    }).catch(function() {});
+  }
+  document.querySelectorAll(".feedback-row").forEach(function(row) {
+    var idx = row.dataset.item;
+    var did = row.dataset.digest;
+    var tok = row.dataset.token;
+    function markSent() {
+      row.querySelectorAll(".fb-btn, .fb-more-menu").forEach(function(el) { el.hidden = true; });
+      var sent = row.querySelector(".fb-sent");
+      if (sent) sent.hidden = false;
+    }
+    row.querySelectorAll(".fb-btn--pos, .fb-btn--neg").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        sendFeedback(did, tok, idx, btn.dataset.type);
+        markSent();
+      });
+    });
+    var moreBtn = row.querySelector(".fb-btn--more");
+    if (moreBtn) {
+      moreBtn.addEventListener("click", function() {
+        var menu = row.querySelector(".fb-more-menu");
+        if (menu) menu.hidden = !menu.hidden;
+      });
+    }
+    row.querySelectorAll(".fb-menu-item").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        sendFeedback(did, tok, idx, btn.dataset.type);
+        markSent();
+      });
+    });
+  });
+})();
+</script>` : ""}
 </body>
 </html>`;
   }

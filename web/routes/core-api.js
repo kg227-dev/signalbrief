@@ -2,6 +2,7 @@ const { handleCoreArchiveRoutes } = require("./core-api-archive-runtime");
 const { handleCoreUnsubscribeRoutes } = require("./core-api-unsubscribe-runtime");
 const { handleCoreEngagementRoutes } = require("./core-api-engagement-runtime");
 const { handleCoreBookmarksRoute } = require("./core-api-bookmarks-runtime");
+const { handleCoreFeedbackRoute } = require("./core-api-feedback-actions-runtime");
 const { handleCoreRequestLinkRoute } = require("./core-api-link-runtime");
 const { handleCheckAvailabilityRoute } = require("./core-api-availability-runtime");
 const { handleHealthRoute } = require("./core-api-health-runtime");
@@ -220,6 +221,7 @@ function createCoreApiRouteHandler(deps) {
 
     if (await handleCoreEngagementRoutes(ctx, deps)) return true;
     if (await handleCoreBookmarksRoute(ctx, deps)) return true;
+    if (await handleCoreFeedbackRoute(ctx, deps)) return true;
     if (await handleCoreRequestLinkRoute(ctx, deps)) return true;
     if (await handleCheckAvailabilityRoute(ctx, deps)) return true;
 

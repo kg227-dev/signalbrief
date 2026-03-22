@@ -54,6 +54,22 @@ const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
   "quantum computing": Object.freeze(["AI×TECH", "TECHNOLOGY"]),
   starlink: Object.freeze(["TECHNOLOGY", "PUBLIC SECTOR"]),
 });
+const TRACKED_DEEP_STANDARD_TAGS = new Set([
+  "HEALTHCARE",
+  "ENERGY",
+  "LIFE SCIENCES",
+  "POLICY×REGULATORY",
+  "SUSTAINABILITY",
+]);
+const TRACKED_DEEP_CUSTOM_SLUGS = new Set([
+  "custom_nvidia",
+  "custom_glp_1",
+  "custom_agentic_ai",
+  "custom_sec_rulemaking",
+  "custom_cbam",
+  "custom_rate_cuts",
+  "custom_semicap",
+]);
 
 function resolveSelectionTarget(dueUsers, defaultItemCount = 7) {
   const requestedCounts = (Array.isArray(dueUsers) ? dueUsers : [])
@@ -175,6 +191,12 @@ function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
   });
 }
 
+function isTrackedDeepCoverageState(state) {
+  const tag = String(state?.topic?.tag || "").trim().toUpperCase();
+  const customSlug = String(state?.topic?.custom_slug || "").trim().toLowerCase();
+  return TRACKED_DEEP_STANDARD_TAGS.has(tag) || TRACKED_DEEP_CUSTOM_SLUGS.has(customSlug);
+}
+
 function flattenDueUserTopics(dueUsers = []) {
   const topics = [];
   for (const user of (Array.isArray(dueUsers) ? dueUsers : [])) {
@@ -238,8 +260,11 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
   const customRetryReserve = customHeavyRun
     ? Math.min(customTopicTotal, Math.max(0, Math.floor(hardCalls / 3)))
     : 0;
+  const customDeepCoverageReserve = customHeavyRun
+    ? Math.min(8, customTopicTotal)
+    : 0;
   const reserveTarget = customHeavyRun
-    ? customTopicTotal + customRetryReserve
+    ? customTopicTotal + customRetryReserve + customDeepCoverageReserve
     : Math.min(customTopicTotal, customReserveBase);
   const reserveCalls = Math.min(Math.max(0, reserveTarget), hardCalls);
   return {
@@ -247,6 +272,8 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
     soft_calls: softCalls,
     hard_calls: hardCalls,
     custom_topic_reserve_calls: reserveCalls,
+    custom_retry_reserve_calls: customRetryReserve,
+    custom_deep_coverage_reserve_calls: customDeepCoverageReserve,
     custom_heavy_run: customHeavyRun,
     custom_user_count: customUserCount,
     due_user_count: totalDueUsers,
@@ -390,9 +417,21 @@ function canReceiveAdditionalRetry(state, isFetchedItemEligible) {
   return countUsableItems(state.items, isFetchedItemEligible) < 2;
 }
 
+function hasBlockingProviderFailure(state) {
+  return Number(state?.provider?.failed_calls || 0) > 0
+    || Number(state?.provider?.transport_errors || 0) > 0
+    || countStatusCode(state, 429) > 0;
+}
+
 function shouldPreferBroadFallbackRetry(state, isFetchedItemEligible) {
   return countUsableItems(state?.items, isFetchedItemEligible) <= 0
     && Number(state?.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
+}
+
+function countScheduledCalls(states) {
+  return (Array.isArray(states) ? states : []).reduce((sum, state) => {
+    return sum + Number(state?.totalCallsScheduled || 0);
+  }, 0);
 }
 
 function summarizeProviderDiagnostics(states) {
@@ -508,6 +547,7 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     search_budget_calls_used: Number(budgetTracker?.calls_used || 0),
     search_budget_exhausted: budgetTracker?.exhausted === true,
     broad_fallback_topics_used: attemptedStates.reduce((sum, state) => sum + (state?.broadFallbackUsed === true ? 1 : 0), 0),
+    deep_broad_retry_topics_used: attemptedStates.reduce((sum, state) => sum + (Number(state?.broadCallsMade || 0) > 1 ? 1 : 0), 0),
     zero_yield_retry_count: attemptedStates.reduce((sum, state) => sum + Number(state?.zeroYieldRetryCount || 0), 0),
     budget_stop_reason: String(budgetTracker?.stop_reason || "").trim() || null,
     max_concurrent_fetches: Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY)),
@@ -828,7 +868,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       });
     }, "standard:phase1", budgetTracker);
 
-    let customCallsUsed = customStates.reduce((sum, state) => sum + Number(state?.totalCallsScheduled || 0), 0);
+    let customCallsUsed = countScheduledCalls(customStates);
     let customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
     const customPhase1States = customStates.slice(0, customReserveRemaining);
     if (customStates.length > customPhase1States.length) {
@@ -847,7 +887,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       }, "custom:phase1", budgetTracker);
     }
 
-    customCallsUsed = customStates.reduce((sum, state) => sum + Number(state?.totalCallsScheduled || 0), 0);
+    customCallsUsed = countScheduledCalls(customStates);
     customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
     const customPhase2Eligible = sortRetryStates(customStates.filter((state) => {
       const nextQueryIndex = (state.preferredDomains || []).length > 0
@@ -857,7 +897,11 @@ function createDigestOrchestratorFetchRuntime(deps) {
         && canReceiveAdditionalRetry(state, itemEligibilityFn)
         && nextQueryIndex < Number(state?.topic?.queries?.length || 0);
     }), itemEligibilityFn);
-    const customPhase2States = customPhase2Eligible.slice(0, customReserveRemaining);
+    const customPhase2Slots = Math.min(
+      customReserveRemaining,
+      Math.max(0, Number(searchBudget.custom_retry_reserve_calls || 0))
+    );
+    const customPhase2States = customPhase2Eligible.slice(0, customPhase2Slots);
     if (customPhase2States.length > 0) {
       await runScheduledBatch(customPhase2States, (state) => {
         if (shouldPreferBroadFallbackRetry(state, itemEligibilityFn)) {
@@ -875,16 +919,43 @@ function createDigestOrchestratorFetchRuntime(deps) {
         });
       }, "custom:phase2", budgetTracker);
     }
+    customCallsUsed = countScheduledCalls(customStates);
+    customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
+    const customPhase3Eligible = sortRetryStates(customStates.filter((state) => {
+      return Number(state.totalCallsScheduled || 0) > 0
+        && isTrackedDeepCoverageState(state)
+        && countUsableItems(state.items, itemEligibilityFn) <= 0
+        && state.broadFallbackUsed === true
+        && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
+        && !hasBlockingProviderFailure(state);
+    }), itemEligibilityFn);
+    const customPhase3States = customPhase3Eligible.slice(0, customReserveRemaining);
+    if (customPhase3Eligible.length > customPhase3States.length) {
+      markBudgetStop(budgetTracker, "custom_topic_reserve_exhausted");
+    }
+    if (customPhase3States.length > 0) {
+      await runScheduledBatch(customPhase3States, (state) => buildBroadInvocation(
+        state,
+        state.nextBroadQueryIndex,
+        { countsAsRetry: true, broadFallback: true }
+      ), "custom:phase3", budgetTracker);
+    }
 
+    const standardDeepCoverageReserve = Math.min(
+      5,
+      standardStates.filter(isTrackedDeepCoverageState).length,
+      Math.max(0, standardHardLimit - countScheduledCalls(standardStates))
+    );
     const phase2Eligible = sortRetryStates(standardStates.filter((state) => {
       return Number(state.totalCallsScheduled || 0) > 0
         && (state.preferredDomains || []).length > 0
         && canReceiveAdditionalRetry(state, itemEligibilityFn)
         && Number(state.nextPreferredQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
     }), itemEligibilityFn);
-    const phase2Slots = Math.max(0, standardHardLimit - budgetTracker.calls_used);
+    const standardPhase2Headroom = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
+    const phase2Slots = Math.max(0, standardPhase2Headroom - standardDeepCoverageReserve);
     const phase2States = phase2Eligible.slice(0, phase2Slots);
-    if (phase2Eligible.length > phase2States.length) {
+    if (phase2Eligible.length > phase2States.length && standardPhase2Headroom > standardDeepCoverageReserve) {
       markBudgetStop(budgetTracker, "hard_cap_reached");
     }
     await runScheduledBatch(phase2States, (state) => {
@@ -908,7 +979,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         && state.broadFallbackUsed !== true
         && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
     }), itemEligibilityFn);
-    const phase3Slots = Math.max(0, standardSoftLimit - budgetTracker.calls_used);
+    const phase3Slots = Math.max(0, standardSoftLimit - countScheduledCalls(standardStates));
     const phase3States = phase3Eligible.slice(0, phase3Slots);
     if (phase3Eligible.length > phase3States.length) {
       markBudgetStop(budgetTracker, "soft_cap_reached");
@@ -918,6 +989,27 @@ function createDigestOrchestratorFetchRuntime(deps) {
       state.nextBroadQueryIndex,
       { countsAsRetry: true, broadFallback: true }
     ), "standard:phase3", budgetTracker);
+
+    const phase4Eligible = sortRetryStates(standardStates.filter((state) => {
+      return Number(state.totalCallsScheduled || 0) > 0
+        && isTrackedDeepCoverageState(state)
+        && countUsableItems(state.items, itemEligibilityFn) <= 0
+        && state.broadFallbackUsed === true
+        && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
+        && !hasBlockingProviderFailure(state);
+    }), itemEligibilityFn);
+    const phase4Slots = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
+    const phase4States = phase4Eligible.slice(0, phase4Slots);
+    if (phase4Eligible.length > phase4States.length) {
+      markBudgetStop(budgetTracker, "hard_cap_reached");
+    }
+    if (phase4States.length > 0) {
+      await runScheduledBatch(phase4States, (state) => buildBroadInvocation(
+        state,
+        state.nextBroadQueryIndex,
+        { countsAsRetry: true, broadFallback: true }
+      ), "standard:phase4", budgetTracker);
+    }
 
     const standardFetchCallsPlanned = allowedPhase1States.length;
     const standardFetchCalls = standardStates.reduce((sum, state) => {

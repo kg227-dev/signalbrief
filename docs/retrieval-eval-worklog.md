@@ -111,6 +111,35 @@ Completed in this pass:
   - `keyword_ambiguity_or_off_topic_query`
   - `thin_but_precise`
 
+### Pass 5: One more broad-query step for tracked weak buckets
+
+Completed in this pass:
+
+- added one additional broad-query step for zero-yield tracked standard topics:
+  - `HEALTHCARE`
+  - `ENERGY`
+  - `LIFE SCIENCES`
+  - `POLICY×REGULATORY`
+  - `SUSTAINABILITY`
+- added one additional broad-query step for tracked broad custom keywords:
+  - `Nvidia`
+  - `GLP-1`
+  - `agentic AI`
+  - `SEC rulemaking`
+  - `CBAM`
+  - `rate cuts`
+  - `semicap`
+- reserved fetch budget explicitly so deep broad retries do not get crowded out by earlier standard/custom retry phases
+- kept the current precision-first / fail-closed behavior unchanged
+- added contract coverage for the new deep broad retry path in:
+  - `tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js`
+
+Key findings:
+
+- the extra broad-query step helps some weak standard categories, but not all of them
+- it did not reintroduce noisy fallback, stale leakage, or weak-source exposure
+- it was not enough to recover the targeted broad custom keywords, which still exit with unused broad query depth
+
 ## Important Run IDs
 
 ### Baselines
@@ -136,6 +165,10 @@ Completed in this pass:
   - standard weak-category rerun with explicit `query_plan_not_exhausted` diagnosis
 - `retrieval-eval:2026-03-22T05-39-36-205Z`
   - realistic-custom rerun with full custom second-pass retries and keyword-level gap audit
+- `retrieval-eval:2026-03-22T06-06-01-508Z`
+  - clean `standard_full` rerun after the extra broad-query step
+- `retrieval-eval:2026-03-22T06-10-49-849Z`
+  - clean `custom_realistic` rerun after the extra broad-query step
 
 ## What Improved
 
@@ -163,26 +196,44 @@ Completed in this pass:
 
 ### Standard weak-category picture
 
-Run: `retrieval-eval:2026-03-22T05-36-16-565Z`
+Before the extra broad step:
 
-- `standard_full` raw candidates: `9`
+- run `retrieval-eval:2026-03-22T05-36-16-565Z`
+- raw candidates: `9`
 - cleaned candidates: `9`
 - 429 rate: `0%`
 - stale rejection rate: `0%`
-- weak categories now split into:
-  - short precise recoveries:
-    - `HEALTHCARE`
-    - `ENERGY`
-    - `LIFE SCIENCES`
-  - still failed closed:
-    - `POLICY×REGULATORY`
-    - `SUSTAINABILITY`
+- tracked weak-category completion: `3/5`
+- all `5` tracked weak categories were still `query_plan_not_exhausted`
+
+After the extra broad step:
+
+- run `retrieval-eval:2026-03-22T06-06-01-508Z`
+- raw candidates: `11`
+- cleaned candidates: `11`
+- 429 rate: `0%`
+- stale rejection rate: `0%`
+- tracked weak-category completion: `2/5`
+- root-cause transitions:
+  - `ENERGY`: `query_plan_not_exhausted -> thin_but_precise`
+  - `SUSTAINABILITY`: `query_plan_not_exhausted -> thin_but_precise`
+  - `HEALTHCARE`: still `query_plan_not_exhausted`
+  - `LIFE SCIENCES`: still `query_plan_not_exhausted`
+  - `POLICY×REGULATORY`: still `query_plan_not_exhausted`
 
 Interpretation:
 
-- the main issue is no longer “provider returned nothing” by default
-- the tracked weak tags got one preferred call and one broad call, but still had `2` broad queries left unused
-- the next high-leverage move is to allow one more broad query before declaring those tags uncovered
+- the deeper query step is working technically:
+  - tracked weak categories now show `broad_call_count: 2`
+  - remaining broad depth dropped from `2` to `1`
+- the extra step recovered better precise coverage in:
+  - `ENERGY`
+  - `SUSTAINABILITY`
+- it did not help enough in:
+  - `HEALTHCARE`
+  - `LIFE SCIENCES`
+  - `POLICY×REGULATORY`
+- there was no new stale leakage and no weak-source regression
 
 ### Broad custom picture
 
@@ -197,20 +248,33 @@ Before early broad fallback + source hints:
   - `Nvidia`
   - `semicap`
 
-After early broad fallback + source hints + full custom second pass:
+After one additional broad-query step:
 
-- run `retrieval-eval:2026-03-22T05-39-36-205Z`
-- raw candidates: `6`
-- cleaned candidates: `6`
-- personas completed precisely: `1/8`
-- successful precise outcome:
-  - `grid infrastructure`
+- run `retrieval-eval:2026-03-22T06-10-49-849Z`
+- raw candidates: `3`
+- cleaned candidates: `3`
+- personas completed precisely: `0/8`
+- all tracked broad custom keywords still failed closed
 
 Interpretation:
 
-- the system is now preserving precision correctly and broad-retrying every custom keyword once
-- the remaining misses are mostly not final-selection pollution and not first-pass preferred-only starvation
-- the dominant remaining issue is that each keyword still has `3` broad queries left unused when the run ends
+- the system is still preserving precision correctly:
+  - no noisy fallback returned
+  - stale rate stayed `0%`
+  - weak-source exposure stayed `0%`
+- the extra broad step is not enough for the targeted broad custom keywords:
+  - `Nvidia`
+  - `GLP-1`
+  - `agentic AI`
+  - `SEC rulemaking`
+  - `CBAM`
+  - `rate cuts`
+  - `semicap`
+- each of those keywords moved from:
+  - `broad_call_count: 1` and `remaining_broad_queries: 3`
+  - to `broad_call_count: 2` and `remaining_broad_queries: 2`
+- every one of those keywords still shows `better_source_opportunity: likely`
+- current evidence says the next blocker is still unused query depth / query design, not ranking pollution
 
 ### Adversarial custom picture
 
@@ -238,21 +302,22 @@ Interpretation:
 
 ## Remaining Problems
 
-- weak standard categories still stop after the first broad query even when alternate broad queries exist
-- realistic custom keywords still stop after the first broad query even when `3` more custom queries remain
-- provider variability is real, but the latest diagnostics show we still have fixable retrieval-design headroom before blaming provider scarcity
+- some weak standard categories still stop too early even after the extra broad query:
+  - `HEALTHCARE`
+  - `LIFE SCIENCES`
+  - `POLICY×REGULATORY`
+- realistic broad custom keywords still stop with `2` unused broad queries left after the new pass
+- provider variability is real, but the latest clean reruns show we still have fixable retrieval-design headroom before blaming provider scarcity
 - 429 pressure remains a meaningful constraint on some custom runs, especially around `SEC rulemaking`, `rate cuts`, `grid infrastructure`, and `semicap`
 
 ## Next Planned Work
 
 If this thread continues, the next highest-value retrieval-side steps are:
 
-1. Allow one more broad query for zero-yield topics before declaring no coverage:
+1. Improve retrieval recall for the buckets that still have unused depth after the extra broad step:
    - `HEALTHCARE`
-   - `ENERGY`
    - `LIFE SCIENCES`
    - `POLICY×REGULATORY`
-   - `SUSTAINABILITY`
    - `Nvidia`
    - `GLP-1`
    - `agentic AI`
@@ -260,8 +325,11 @@ If this thread continues, the next highest-value retrieval-side steps are:
    - `CBAM`
    - `rate cuts`
    - `semicap`
-2. Keep the precision-first rule:
+2. Focus on query shaping before source-registry changes:
+   - narrower broad-query variants for ambiguous custom terms
+   - category-specific alternate phrasings for weak standard tags
+3. Keep the precision-first rule:
    - no reintroduction of broad anchor-topic fallback for custom-heavy personas
-3. Re-run the weak-category matrix after any retrieval-only change and compare against:
-   - `retrieval-eval:2026-03-22T05-36-16-565Z`
-   - `retrieval-eval:2026-03-22T05-39-36-205Z`
+4. Re-run the weak-category matrix after any retrieval-only change and compare against:
+   - `retrieval-eval:2026-03-22T06-06-01-508Z`
+   - `retrieval-eval:2026-03-22T06-10-49-849Z`

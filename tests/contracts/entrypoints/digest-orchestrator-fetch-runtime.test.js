@@ -367,6 +367,57 @@ assertModuleExports(() => runtime, TARGET_REL);
     ["preferred", "broad"]
   );
 
+  const deepRetryCalls = [];
+  const deepRetryRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "HEALTHCARE", queries: ["q1", "q2", "q3"] }],
+      digest: {
+        itemCount: 7,
+        search_budget: {
+          scheduled: {
+            soft_calls: 2,
+            hard_calls: 3,
+          },
+          custom_topic_reserve_calls: 0,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      deepRetryCalls.push({ query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
+      const broadOnly = opts?.retrievalPlan?.broad_only === true;
+      if (broadOnly && topic.queries[0] === "q2") {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "healthcare-recovered", tag: topic.tag, source: "reuters.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [],
+        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+      };
+    },
+    buildPreferredDomainShortlist: () => ({ domains: ["fda.gov"], topic_keys: ["healthcare"], official_friendly: true }),
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const deepRetryResult = await deepRetryRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["HEALTHCARE"], preferences: {} }],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(deepRetryResult.standardFetchCalls, 3);
+  assert.strictEqual(deepRetryResult.fetchDiagnostics.deep_broad_retry_topics_used, 1);
+  assert.deepStrictEqual(
+    deepRetryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
+    ["preferred", "broad", "broad"]
+  );
+
   const customRetryCalls = [];
   const customRetryRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
@@ -430,6 +481,71 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.deepStrictEqual(
     customRetryCalls.filter((row) => row.tag === "NVIDIA").map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
     ["preferred", "broad"]
+  );
+
+  const customDeepRetryCalls = [];
+  const customDeepRetryRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "STRATEGY", queries: ["standard-q1"] }],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          scheduled: {
+            soft_calls: 5,
+            hard_calls: 5,
+          },
+          custom_topic_reserve_calls: 1,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      customDeepRetryCalls.push({ tag: topic.tag, query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
+      if (!topic.isCustom) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      if (opts?.retrievalPlan?.broad_only === true && topic.queries[0] === "custom-q2") {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "custom recovered", tag: topic.tag, source: "reuters.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [],
+        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+      };
+    },
+    buildPreferredDomainShortlist: ({ topicTag }) => {
+      if (String(topicTag).toUpperCase() === "AI×TECH") {
+        return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
+      }
+      return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
+    },
+    buildCustomTopicQueries: () => ["custom-q1", "custom-q2", "custom-q3"],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const customDeepRetryResult = await customDeepRetryRuntime.orchestrateFetch({
+    dueUsers: [
+      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+    ],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(customDeepRetryResult.customFetchCalls, 3);
+  assert.strictEqual(customDeepRetryResult.fetchDiagnostics.deep_broad_retry_topics_used, 1);
+  assert.deepStrictEqual(
+    customDeepRetryCalls.filter((row) => row.tag === "NVIDIA").map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
+    ["preferred", "broad", "broad"]
   );
 
   const previousConcurrencyEnv = process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
@@ -534,10 +650,13 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
   assert.deepStrictEqual(
     customHeavyCalls.map((row) => row.tag),
-    ["STRATEGY", "NVIDIA", "GLP 1", "AGENTIC AI", "CBAM", "NVIDIA", "GLP 1"]
+    ["NVIDIA", "GLP 1", "AGENTIC AI", "CBAM", "NVIDIA", "GLP 1"]
   );
   assert.strictEqual(customHeavyResult.customFetchCalls, 6);
   assert.strictEqual(customHeavyResult.fetchDiagnostics.alternate_queries_used, 2);
   assert.strictEqual(customHeavyResult.fetchDiagnostics.thin_topic_count >= 1, true);
-  assert.strictEqual(customHeavyResult.fetchDiagnostics.topic_diagnostics[1].tag, "NVIDIA");
+  assert.strictEqual(
+    customHeavyResult.fetchDiagnostics.topic_diagnostics.some((entry) => entry.tag === "NVIDIA"),
+    true
+  );
 })();

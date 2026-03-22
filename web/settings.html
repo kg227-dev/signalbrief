@@ -21,11 +21,23 @@
     position: fixed; top: 16px; right: 16px; z-index: 999;
     width: 38px; height: 38px; border-radius: 50%;
     border: 1px solid var(--border); background: var(--card);
-    cursor: pointer; font-size: 17px;
+    cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s ease; box-shadow: var(--shadow);
   }
   #darkToggle:hover { transform: scale(1.06); }
+  #darkToggle svg { display: block; }
+  /* Danger zone */
+  .danger-zone {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(220,38,38,0.12);
+  }
+  .danger-zone-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #DC2626;
+    margin-bottom: 10px; opacity: 0.7;
+  }
   .loading-state { text-align:center; padding: 60px 24px; color: var(--text-muted); }
   .btn-save { background: var(--blue); }
   /* Back nav */
@@ -80,7 +92,9 @@
 </head>
 <body>
 
-<button id="darkToggle" type="button" title="Toggle dark mode">🌙</button>
+<button id="darkToggle" type="button" aria-label="Toggle dark mode" aria-pressed="false">
+  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+</button>
 
 <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:100%"></div></div>
 
@@ -93,7 +107,7 @@
 </div>
 
 <header class="site-header">
-  <div class="brand"><span class="brand-sun">☀️</span> SignalBrief</div>
+  <div class="brand"><span class="brand-sun" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--orange,#c2770a)"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></span> SignalBrief</div>
 </header>
 
 <div class="container">
@@ -273,8 +287,12 @@
 
       <div class="error-msg" id="saveError"></div>
       <button type="button" class="btn-submit btn-save" id="saveBtn">Save preferences</button>
-      <div id="unsub"></div>
-      <button type="button" class="btn-danger" id="unsubBtn">Unsubscribe from SignalBrief</button>
+
+      <div class="danger-zone">
+        <div class="danger-zone-label">Danger zone</div>
+        <div id="unsub"></div>
+        <button type="button" class="btn-danger" id="unsubBtn">Unsubscribe from SignalBrief</button>
+      </div>
     </div>
 
   </div>
@@ -290,7 +308,7 @@
         style="width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
         Send me my settings link
       </button>
-      <div id="linkSent" style="display:none;margin-top:12px;color:#065F46;font-size:13px;font-weight:500;">✅ Check your inbox — your settings link is on the way.</div>
+      <div id="linkSent" style="display:none;margin-top:12px;color:#065F46;font-size:13px;font-weight:500;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><polyline points="20 6 9 17 4 12"></polyline></svg>Check your inbox — your settings link is on the way.</div>
       <div id="linkError" style="display:none;margin-top:12px;color:#DC2626;font-size:13px;"></div>
     </div>
     <div style="margin-top:20px;font-size:13px;color:var(--text-muted);">New to SignalBrief? <a href="/" style="color:var(--blue);">Sign up →</a></div>
@@ -298,7 +316,7 @@
 
 </div>
 
-<div class="saved-banner" id="savedBanner">✅ Preferences saved</div>
+<div class="saved-banner" id="savedBanner"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:6px"><polyline points="20 6 9 17 4 12"></polyline></svg>Preferences saved</div>
 
 <footer class="site-footer">
   Powered by SignalBrief
@@ -307,11 +325,16 @@
 <script>
 (function() {
   var toggle = document.getElementById('darkToggle');
+  var moonSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+  var sunSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
   function apply(isDark) {
     document.body.classList.toggle('dark', isDark);
-    if (toggle) toggle.textContent = isDark ? '☀️' : '🌙';
+    if (toggle) {
+      toggle.innerHTML = isDark ? sunSvg : moonSvg;
+      toggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+    }
   }
-  try { if (localStorage.getItem('sbDark') === '1') apply(true); } catch(e) {}
+  try { if (localStorage.getItem('sbDark') === '1') apply(true); else if (toggle) toggle.innerHTML = moonSvg; } catch(e) {}
   if (toggle) toggle.addEventListener('click', function() {
     var isDark = !document.body.classList.contains('dark');
     apply(isDark);

@@ -571,3 +571,90 @@ Current bottom line:
   - likely provider/content scarcity: `CBAM`, `rate cuts`
   - still fixable retrieval design: `semicap`
   - unstable retrieval with one traced selection-cap exclusion: `grid infrastructure`
+
+## Latest Pass Update
+
+### Pass 11: Semicap retry and source-specific decision pass
+
+Completed:
+
+- tightened the `semicap` custom query pack again to bias toward real semicap terms:
+  - `ASML`
+  - `Applied Materials`
+  - `Lam Research`
+  - `wafer fab equipment`
+  - `lithography`
+  - `etch deposition`
+- reran `custom_realistic`
+- ran a strict preferred-domain probe for:
+  - `SEMICAP`
+  - `CBAM`
+  - `RATE CUTS`
+  - `GRID INFRASTRUCTURE`
+
+New run ID:
+
+- `retrieval-eval:2026-03-22T17-35-50-430Z`
+  - post-semicap-query-shaping `custom_realistic` rerun
+
+Semicap rerun result:
+
+- `semicap`
+  - latest rerun: `1 raw / 1 cleaned / 0 final`
+  - final outcome: `ranking_limited`
+  - source score: `0` final, raw-baseline loss `-72.78`
+  - surviving candidate was a review-tier `nemo.money` article about `ASML`
+  - this is better than pure zero-yield, but it is not a trustworthy recovery win
+
+Source-specific preferred-domain probe results:
+
+- `SEMICAP`
+  - preferred domains: `semianalysis.com`, `reuters.com`, `ft.com`, `wsj.com`
+  - result: `0` items
+  - interpretation: no good recent trusted-source coverage was surfaced, even with a narrow probe
+- `CBAM`
+  - preferred domains: `ec.europa.eu`, `eur-lex.europa.eu`, `reuters.com`, `ft.com`, `trellis.net`
+  - result: `0` items
+  - preferred search hits existed on `ec.europa.eu` and `trellis.net`, but no deliverable article came back
+- `RATE CUTS`
+  - preferred domains: `federalreserve.gov`, `reuters.com`, `ft.com`, `wsj.com`, `americanbanker.com`
+  - result: `0` items
+  - the probe only surfaced `federalreserve.gov` search hits, with no deliverable item
+- `GRID INFRASTRUCTURE`
+  - preferred domains: `ferc.gov`, `energy.gov`, `utilitydive.com`, `reuters.com`, `powermag.com`
+  - result: `1` item
+  - returned article:
+    - `Republican, Democratic senators call for project certainty at permitting talks`
+    - source: `utilitydive.com`
+    - published: `2026-03-21`
+
+Decision-oriented interpretation:
+
+- `CBAM`
+  - now looks like a true low recent coverage window under current quality standards
+- `rate cuts`
+  - now looks like a low recent coverage / low-quality window:
+    - the regular run found one `foxbusiness.com` item
+    - the trusted-source probe found nothing deliverable
+- `semicap`
+  - no longer looks like the clearest easy win
+  - the tighter query pack surfaced only a review-tier finance-site item
+  - the trusted-source probe returned nothing
+  - this is now closer to a low trusted-coverage window than a high-confidence retrieval miss
+- `grid infrastructure`
+  - remains worth one more targeted retrieval pass
+  - the trusted-source probe found a real `utilitydive.com` article that the main pipeline missed
+  - this is the strongest remaining evidence that better coverage exists and current retrieval is still missing it
+
+Current recommendation:
+
+- still worth pursuing with more retrieval/query tuning:
+  - `grid infrastructure`
+- likely low recent coverage / not worth more narrow tuning right now:
+  - `CBAM`
+  - `rate cuts`
+  - `semicap`
+- thin but acceptable:
+  - `ENERGY`
+  - `LIFE SCIENCES`
+  - `SUSTAINABILITY`

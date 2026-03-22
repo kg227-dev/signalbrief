@@ -86,5 +86,6 @@ assert.ok(rateCutQueries.some((query) => String(query).toLowerCase().includes("f
 assert.ok(rateCutQueries.some((query) => String(query).toLowerCase().includes("leveraged finance")));
 
 const semicapQueries = buildCustomTopicQueries("semicap");
-assert.ok(semicapQueries.some((query) => String(query).toLowerCase().includes("chipmaking tools")));
+assert.ok(semicapQueries.some((query) => String(query).toLowerCase().includes("lam research")));
 assert.ok(semicapQueries.some((query) => String(query).toLowerCase().includes("wfe")));
+assert.ok(semicapQueries.some((query) => String(query).toLowerCase().includes("lithography")));

@@ -42,6 +42,9 @@ const CUSTOM_TOPIC_ALIASES = {
     "chipmaking tools",
     "fab tools",
     "wfe",
+    "lithography",
+    "etch deposition",
+    "equipment bookings",
   ],
   "agentic ai": [
     "ai agents",
@@ -112,10 +115,10 @@ const CUSTOM_TOPIC_QUERY_PLANS = Object.freeze({
     "interconnection queue transmission project utility last 48 hours",
   ]),
   semicap: Object.freeze([
-    "semiconductor equipment orders chipmaking tools fab investment last 48 hours",
-    "ASML Applied Materials Lam Research chip equipment orders last 48 hours",
-    "wafer fab equipment WFE memory logic spending last 48 hours",
-    "chipmaking tools export controls China fabs foundry spending last 48 hours",
+    "ASML Applied Materials Lam Research wafer fab equipment orders backlog last 48 hours",
+    "wafer fab equipment WFE memory logic spending TSMC Samsung Intel Micron last 48 hours",
+    "semiconductor equipment export controls Netherlands Japan China lithography etch deposition last 48 hours",
+    "chipmaking tools equipment bookings foundry capex last 48 hours",
   ]),
 });
 

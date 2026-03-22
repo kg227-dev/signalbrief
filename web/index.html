@@ -154,15 +154,13 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
 
 /* Dark toggle */
 #darkToggle {
-  position: fixed; top: 20px; right: 20px; z-index: 999;
-  width: 42px; height: 42px; border-radius: 50%;
-  border: 1px solid var(--border); background: var(--card);
-  cursor: pointer;
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--border); background: transparent;
+  cursor: pointer; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
+  transition: background 0.2s ease;
 }
-#darkToggle:hover { transform: scale(1.06); box-shadow: var(--shadow-elevated); }
+#darkToggle:hover { background: var(--bg); }
 #darkToggle svg { display: block; }
 
 /* ── Sticky Nav ── */
@@ -750,13 +748,14 @@ body.dark .topics-custom-row {
 </head>
 <body>
 
-<button id="darkToggle" type="button" aria-label="Toggle dark mode" aria-pressed="false">
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-</button>
-
 <nav class="sticky-nav" id="stickyNav" aria-label="Site navigation">
   <span class="sticky-nav-brand">SignalBrief</span>
-  <a href="/signup" class="sticky-nav-cta">Get started, it's free</a>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <button id="darkToggle" type="button" aria-label="Toggle dark mode" aria-pressed="false">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    </button>
+    <a href="/signup" class="sticky-nav-cta">Get started, it's free</a>
+  </div>
 </nav>
 
 <div class="page">

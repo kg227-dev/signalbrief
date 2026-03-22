@@ -356,6 +356,7 @@ async function initSettingsPage() {
 
   try {
     const user = await loadSettingsUser(token);
+    globalScope._signalBriefToken = token;
     if (ui) {
       ui.renderInitialState(user, statusBanner, loadingEl, formEl);
       ui.bindTopicHandlers();

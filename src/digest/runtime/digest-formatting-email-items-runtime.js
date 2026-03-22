@@ -8,10 +8,44 @@ function createDigestEmailItemsRuntime(deps) {
     escapeHtml,
   } = deps;
 
+  const EMAIL_FLAG_LABELS = { earnings: "Earnings", guidance: "Guidance", m_and_a: "Deal", regulatory: "Regulatory", leadership: "Leadership", ipo: "IPO" };
+
+  function renderEmailSourceBadge(tier) {
+    if (tier === "premium") return " · <span style=\"font-size:11px;color:#1d4ed8;font-weight:600;\">Primary</span>";
+    if (tier === "strong") return " · <span style=\"font-size:11px;color:#15803d;font-weight:600;\">Verified</span>";
+    if (tier === "corporate") return " · <span style=\"font-size:11px;color:#92400e;font-weight:600;\">Press release</span>";
+    if (tier === "weak" || tier === "suspect") return " · <span style=\"font-size:11px;color:#b91c1c;font-weight:600;\">Use caution</span>";
+    return "";
+  }
+
+  function renderEmailFreshness(publishedDate, digestDateKey) {
+    if (!publishedDate || !digestDateKey) return "";
+    const pub = new Date(publishedDate);
+    if (isNaN(pub)) return "";
+    const digest = new Date(digestDateKey + "T12:00:00Z");
+    const diffDays = Math.round((digest - pub) / 86400000);
+    if (diffDays <= 0) return " · <span style=\"font-size:11px;color:#6B7280;\">Today</span>";
+    if (diffDays === 1) return " · <span style=\"font-size:11px;color:#6B7280;\">Yesterday</span>";
+    if (diffDays <= 3) return ` · <span style="font-size:11px;color:#6B7280;">${diffDays}d ago</span>`;
+    return ` · <span style="font-size:11px;color:#b45309;">${diffDays}d ago</span>`;
+  }
+
+  function buildEmailWhyShownText(item) {
+    if (Array.isArray(item.why_shown) && item.why_shown.length) {
+      return item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ");
+    }
+    const entities = (item.entity_keys || []).slice(0, 2).map((k) =>
+      k.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    );
+    if (entities.length) return `${item.tag || "Signal"} · ${entities.join(", ")}`;
+    return item.tag || "";
+  }
+
   function renderDigestItemHtml(item, index, opts = {}) {
     const userToken = String(opts.userToken || "");
     const digestId = String(opts.digestId || "");
     const depth = String(opts.depth || "headline_plus_why");
+    const digestDateKey = String(opts.digestDateKey || "");
     const linkUrl = item.url && item.url !== "#" ? item.url : `https://${item.source}`;
     const trackedLinkUrl = userToken && digestId
       ? `${BASE_URL}/api/click?token=${encodeURIComponent(userToken)}&did=${encodeURIComponent(digestId)}&item=${index + 1}&url=${encodeURIComponent(linkUrl)}`
@@ -26,6 +60,12 @@ function createDigestEmailItemsRuntime(deps) {
     })() : "";
 
     const isDeep = depth === "headline_plus_why" || depth === "full" || depth === "deep";
+
+    // Content flag chips (muted text, before headline)
+    const knownFlags = (item.content_flags || []).filter((f) => EMAIL_FLAG_LABELS[f]);
+    const flagsHtml = knownFlags.length
+      ? `<div style="margin-bottom:8px;">${knownFlags.map((f) => `<span style="font-size:11px;font-weight:600;color:#6B7280;background:#F3F4F6;padding:2px 7px;border-radius:100px;margin-right:4px;">${EMAIL_FLAG_LABELS[f]}</span>`).join("")}</div>`
+      : "";
 
     // WIM (already contains <strong> markup from enrichment) merged with summary
     const bodyHtml = (() => {
@@ -42,9 +82,17 @@ function createDigestEmailItemsRuntime(deps) {
     const watchHtml = (isDeep && item.watch_next)
       ? `<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-bottom:8px;font-style:italic;">👀 ${item.watch_next}</div>`
       : "";
-    const whyShownHtml = Array.isArray(item.why_shown) && item.why_shown.length
-      ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why shown: ${item.why_shown.map((key) => String(key).replace(/_/g, " ")).join(" · ")}</div>`
+
+    const whyText = buildEmailWhyShownText(item);
+    const whyShownHtml = whyText
+      ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why included: ${escapeHtml(whyText)}</div>`
       : "";
+
+    const sourceBadgeHtml = renderEmailSourceBadge(item.source_tier);
+    const corrobHtml = Number(item.cross_source_count) >= 2
+      ? ` · <span style="font-size:11px;color:#6B7280;">+${Number(item.cross_source_count) - 1} source${Number(item.cross_source_count) > 2 ? "s" : ""}</span>`
+      : "";
+    const freshnessHtml = renderEmailFreshness(item.published_date, digestDateKey);
 
     const itemStyle = "padding:22px 28px;border-bottom:1px solid #EAECEF;";
     return `
@@ -58,6 +106,7 @@ function createDigestEmailItemsRuntime(deps) {
             <td style="text-align:right;vertical-align:middle;padding:0;white-space:nowrap;">${scoreHtml}</td>
           </tr>
         </table>
+        ${flagsHtml}
         <a href="${trackedLinkUrl}" style="text-decoration:none;color:inherit;">
           <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;font-family:'Playfair Display',Georgia,serif;">${item.headline}</div>
         </a>
@@ -65,7 +114,7 @@ function createDigestEmailItemsRuntime(deps) {
         ${implHtml}
         ${watchHtml}
         ${whyShownHtml}
-        <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}</span></div>
+        <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}${sourceBadgeHtml}${corrobHtml}${freshnessHtml}</span></div>
       </div>`;
   }
 

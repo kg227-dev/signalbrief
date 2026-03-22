@@ -79,9 +79,23 @@
       chip.innerHTML = `<span class="chip-check">✓</span> ${topicDisplayLabel(topic)}`;
 
       if (typeof weight === "number" && Math.abs(weight) >= 1) {
-        const badge = document.createElement("span");
+        const badge = document.createElement("button");
+        badge.type = "button";
         badge.className = weight >= 1 ? "weight-badge weight-badge--up" : "weight-badge weight-badge--down";
         badge.textContent = weight >= 1 ? "↑" : "↓";
+        badge.title = "Click to reset this topic's weight";
+        badge.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const token = globalScope._signalBriefToken;
+          if (!token) return;
+          fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, topic_weights: { [topic]: 0 } }),
+          }).then(() => {
+            badge.remove();
+          }).catch(() => {});
+        });
         chip.appendChild(badge);
       }
 

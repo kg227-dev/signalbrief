@@ -167,6 +167,27 @@ function createSettingsHandler({
       safeBody.topics = topicsResult.topics;
     }
 
+    if (safeBody.topic_weights != null) {
+      const tw = safeBody.topic_weights;
+      if (typeof tw !== "object" || Array.isArray(tw)) {
+        return json(res, { error: "topic_weights must be an object" }, 400);
+      }
+      const patch = {};
+      for (const [key, val] of Object.entries(tw)) {
+        const tag = String(key || "").trim();
+        if (!tag) continue;
+        const n = Number(val);
+        patch[tag] = Number.isFinite(n) ? Math.max(-5, Math.min(5, n)) : 0;
+      }
+      // Merge patch: 0 = remove key, otherwise set value
+      const merged = { ...(existing.topic_weights || {}) };
+      for (const [tag, val] of Object.entries(patch)) {
+        if (val === 0) delete merged[tag];
+        else merged[tag] = val;
+      }
+      safeBody.topic_weights = merged;
+    }
+
     if (safeBody.source_preferences != null) {
       const sp = safeBody.source_preferences;
       if (typeof sp !== "object" || Array.isArray(sp)) {

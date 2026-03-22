@@ -36,4 +36,4 @@ const html = emailItemsRuntime.renderDigestItemHtml({
 
 assert.ok(html.includes("Read more"), "email item should keep the read-more link");
 assert.ok(html.includes("reuters.com"), "email item should keep source attribution");
-assert.ok(html.includes("Why shown: source trusted · tracked topic"), "email item should keep why_shown details");
+assert.ok(html.includes("Why included: source trusted · tracked topic"), "email item should keep why_shown details");

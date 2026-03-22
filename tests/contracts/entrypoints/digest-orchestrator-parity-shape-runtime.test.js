@@ -69,6 +69,10 @@ function sortedKeys(obj) {
     buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
     selectItems: (items) => items.slice(0, 1),
     loadRecentArchiveItems: () => [],
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items, suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
     emitDigestIncident: async () => {},
   });
   const selectionOut = await selectionRuntime.selectForEnrichment({
@@ -87,6 +91,7 @@ function sortedKeys(obj) {
       "rankingPolicy",
       "repeatIndex",
       "repeatPenalty",
+      "repetitionNote",
       "selected",
       "selectionDiagnostics",
     ],

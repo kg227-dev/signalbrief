@@ -89,6 +89,28 @@ Completed in this pass:
 - fixed the remaining custom precision bug in ranking:
   - if a custom-precision persona has zero custom matches, it now fails closed instead of quietly falling back to anchor-topic stories
 
+### Pass 4: Root-cause split between provider scarcity and unused query plans
+
+Completed in this pass:
+
+- moved zero-yield preferred-domain retries to a real broad fallback on the second call
+- added custom keyword source hints so broad custom terms no longer inherit obviously wrong preferred shortlists
+- expanded custom-heavy retry reserve so realistic custom runs can broad-retry every keyword once
+- added per-topic gap-audit fields in eval/admin:
+  - raw / cleaned / final counts
+  - source score
+  - selection lift
+  - preferred vs broad call counts
+  - remaining broad queries
+  - better-source opportunity signal
+- split retrieval-limited outcomes into clearer buckets:
+  - `preferred_only_query_design`
+  - `query_plan_not_exhausted`
+  - `provider_429_or_transport`
+  - `provider_no_recent_coverage`
+  - `keyword_ambiguity_or_off_topic_query`
+  - `thin_but_precise`
+
 ## Important Run IDs
 
 ### Baselines
@@ -108,6 +130,12 @@ Completed in this pass:
   - rerun after removing the custom-heavy fetch cap
 - `retrieval-eval:2026-03-22T04-45-55-682Z`
   - rerun after the strict custom-precision fail-closed fix
+- `retrieval-eval:2026-03-22T05-13-22-887Z`
+  - first rerun after early broad fallback for zero-yield preferred topics
+- `retrieval-eval:2026-03-22T05-36-16-565Z`
+  - standard weak-category rerun with explicit `query_plan_not_exhausted` diagnosis
+- `retrieval-eval:2026-03-22T05-39-36-205Z`
+  - realistic-custom rerun with full custom second-pass retries and keyword-level gap audit
 
 ## What Improved
 
@@ -135,50 +163,54 @@ Completed in this pass:
 
 ### Standard weak-category picture
 
-Run: `retrieval-eval:2026-03-22T04-38-38-412Z`
+Run: `retrieval-eval:2026-03-22T05-36-16-565Z`
 
-- `standard_full` raw candidates: `10`
-- cleaned candidates: `10`
+- `standard_full` raw candidates: `9`
+- cleaned candidates: `9`
 - 429 rate: `0%`
 - stale rejection rate: `0%`
-- weak categories still failed closed:
-  - `HEALTHCARE`
-  - `ENERGY`
-  - `LIFE SCIENCES`
-  - `POLICY×REGULATORY`
-  - `SUSTAINABILITY`
+- weak categories now split into:
+  - short precise recoveries:
+    - `HEALTHCARE`
+    - `ENERGY`
+    - `LIFE SCIENCES`
+  - still failed closed:
+    - `POLICY×REGULATORY`
+    - `SUSTAINABILITY`
 
 Interpretation:
 
-- the current limiting factor for those tags is now retrieval coverage, not selector dilution
-- query tuning improved overall standard raw yield, but not enough to recover those specific weak tags
+- the main issue is no longer “provider returned nothing” by default
+- the tracked weak tags got one preferred call and one broad call, but still had `2` broad queries left unused
+- the next high-leverage move is to allow one more broad query before declaring those tags uncovered
 
 ### Broad custom picture
 
-Before cap removal:
-
-- run `retrieval-eval:2026-03-22T04-38-38-412Z`
-- `custom_realistic` fetched `6/8` custom keywords
-- raw candidates: `5`
-- 429 rate: `25%`
-- personas completed: `2/8`
-
-After cap removal:
+Before early broad fallback + source hints:
 
 - run `retrieval-eval:2026-03-22T04-42-40-204Z`
 - `custom_realistic` fetched all `8` custom keywords
 - raw candidates: `7`
 - cleaned candidates: `7`
-- 429 rate: `0%` on that run
 - personas completed: `2/8`
 - successful precise outcomes:
   - `Nvidia`
   - `semicap`
 
+After early broad fallback + source hints + full custom second pass:
+
+- run `retrieval-eval:2026-03-22T05-39-36-205Z`
+- raw candidates: `6`
+- cleaned candidates: `6`
+- personas completed precisely: `1/8`
+- successful precise outcome:
+  - `grid infrastructure`
+
 Interpretation:
 
-- the cap removal improved raw custom coverage without reintroducing noisy fallback
-- remaining misses are still primarily retrieval-limited, not ranking-limited
+- the system is now preserving precision correctly and broad-retrying every custom keyword once
+- the remaining misses are mostly not final-selection pollution and not first-pass preferred-only starvation
+- the dominant remaining issue is that each keyword still has `3` broad queries left unused when the run ends
 
 ### Adversarial custom picture
 
@@ -202,31 +234,34 @@ Interpretation:
 
 - the earlier success pattern in the adversarial run was not trustworthy because zero-match custom personas could still inherit anchor-topic items
 - after the strict precision fix, those personas now fail closed cleanly
+- later reruns also produced one clean positive case (`Starlink`) without reintroducing noisy fallback
 
 ## Remaining Problems
 
-- weak standard categories remain retrieval-limited even after query tuning
-- provider variability is still large enough that two runs close together can produce materially different outcomes
-- broad custom coverage improved, but only a subset of realistic custom keywords are consistently returning relevant deliverable items
-- 429 pressure remains a meaningful constraint, especially once multiple custom topics are active in the same run
+- weak standard categories still stop after the first broad query even when alternate broad queries exist
+- realistic custom keywords still stop after the first broad query even when `3` more custom queries remain
+- provider variability is real, but the latest diagnostics show we still have fixable retrieval-design headroom before blaming provider scarcity
+- 429 pressure remains a meaningful constraint on some custom runs, especially around `SEC rulemaking`, `rate cuts`, `grid infrastructure`, and `semicap`
 
 ## Next Planned Work
 
 If this thread continues, the next highest-value retrieval-side steps are:
 
-1. Add one more targeted query pass for the still-weak standard tags rather than broadening fallback:
+1. Allow one more broad query for zero-yield topics before declaring no coverage:
    - `HEALTHCARE`
    - `ENERGY`
    - `LIFE SCIENCES`
    - `POLICY×REGULATORY`
    - `SUSTAINABILITY`
-2. Add tag-aware retry prioritization so zero-yield weak categories get another query before healthier categories do.
-3. Add a small preferred-domain / trusted-domain recall report by topic so weak-category misses can be split into:
-   - provider returned nothing useful
-   - preferred sources were found but not converted into usable items
-4. Keep the precision-first rule:
+   - `Nvidia`
+   - `GLP-1`
+   - `agentic AI`
+   - `SEC rulemaking`
+   - `CBAM`
+   - `rate cuts`
+   - `semicap`
+2. Keep the precision-first rule:
    - no reintroduction of broad anchor-topic fallback for custom-heavy personas
-5. Re-run the weak-category matrix after any retrieval-only change and compare against:
-   - `retrieval-eval:2026-03-22T04-38-38-412Z`
-   - `retrieval-eval:2026-03-22T04-42-40-204Z`
-   - `retrieval-eval:2026-03-22T04-45-55-682Z`
+3. Re-run the weak-category matrix after any retrieval-only change and compare against:
+   - `retrieval-eval:2026-03-22T05-36-16-565Z`
+   - `retrieval-eval:2026-03-22T05-39-36-205Z`

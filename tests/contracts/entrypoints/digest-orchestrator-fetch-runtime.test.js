@@ -52,15 +52,15 @@ assertModuleExports(() => runtime, TARGET_REL);
       if (topic.isCustom) {
         return {
           apiCalls: 2,
-          items: [{ headline: "custom", tag: topic.tag, source: "sec.gov" }],
+          items: [{ headline: "custom", tag: topic.tag, source: "fda.gov" }],
           diagnostics: {
             provider: "perplexity",
             preferred_domains_used: opts?.retrievalPlan?.preferred_domains || [],
             preferred_fallback_triggered: false,
             preferred_pass_item_count: 1,
             broad_pass_item_count: 0,
-            search_result_domains: ["sec.gov"],
-            preferred_search_result_domains: ["sec.gov"],
+            search_result_domains: ["fda.gov"],
+            preferred_search_result_domains: ["fda.gov"],
             preferred_search_result_hit_count: 1,
             preferred_search_results_without_preferred_item: false,
           },
@@ -92,6 +92,9 @@ assertModuleExports(() => runtime, TARGET_REL);
       }
       if (String(topicTag).toUpperCase() === "STRATEGY") {
         return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
+      }
+      if (String(topicTag).toUpperCase() === "LIFE SCIENCES") {
+        return { domains: ["fda.gov", "statnews.com"], topic_keys: ["life sciences"], official_friendly: true };
       }
       return { domains: ["sec.gov"], topic_keys: [], official_friendly: true };
     },
@@ -133,22 +136,24 @@ assertModuleExports(() => runtime, TARGET_REL);
   );
   assert.deepStrictEqual(
     fetchCalls[2].opts.retrievalPlan.preferred_domains,
-    ["sec.gov"]
+    ["fda.gov", "statnews.com"]
   );
   assert.strictEqual(shortlistCalls.length, 3);
+  assert.strictEqual(shortlistCalls[2].topicTag, "LIFE SCIENCES");
+  assert.strictEqual(shortlistCalls[2].dueUserTopics.includes("LIFE SCIENCES"), true);
   assert.strictEqual(fetched.tagPriority["ai×tech"], 1);
   assert.strictEqual(fetched.tagPriority.custom_glp_1, 1);
   assert.strictEqual(Array.isArray(fetched.allItems), true);
   assert.deepStrictEqual(
     fetched.fetchDiagnostics.preferred_domains_used,
-    ["theinformation.com", "reuters.com", "wsj.com", "sec.gov"]
+    ["theinformation.com", "reuters.com", "wsj.com", "fda.gov", "statnews.com"]
   );
   assert.strictEqual(fetched.fetchDiagnostics.preferred_fallback_triggered, false);
   assert.strictEqual(fetched.fetchDiagnostics.preferred_pass_item_count, 5);
   assert.strictEqual(fetched.fetchDiagnostics.broad_pass_item_count, 0);
   assert.deepStrictEqual(
     fetched.fetchDiagnostics.preferred_search_result_domains,
-    ["theinformation.com", "wsj.com", "sec.gov"]
+    ["theinformation.com", "wsj.com", "fda.gov"]
   );
   assert.strictEqual(fetched.fetchDiagnostics.preferred_search_result_hit_count, 3);
   assert.strictEqual(fetched.fetchDiagnostics.preferred_search_results_without_preferred_item_count, 0);
@@ -321,7 +326,6 @@ assertModuleExports(() => runtime, TARGET_REL);
     fetchTopicNews: async (topic, opts) => {
       retryCalls.push({ tag: topic.tag, retrievalPlan: opts?.retrievalPlan || {} });
       const broadOnly = opts?.retrievalPlan?.broad_only === true;
-      const allowBroadFallback = opts?.retrievalPlan?.allow_broad_fallback !== false;
       if (broadOnly) {
         return {
           apiCalls: 1,
@@ -329,10 +333,10 @@ assertModuleExports(() => runtime, TARGET_REL);
           diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
         };
       }
-      if (allowBroadFallback === false && topic.queries[0] === "q1") {
+      if (topic.queries[0] === "q1") {
         return {
           apiCalls: 1,
-          items: [{ headline: "strategy-one", tag: topic.tag, source: "wsj.com" }],
+          items: [],
           diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
         };
       }
@@ -355,12 +359,77 @@ assertModuleExports(() => runtime, TARGET_REL);
     runMode: "scheduled",
   });
   assert.strictEqual(retryResult.standardFetchCalls, 2);
-  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 1);
-  assert.strictEqual(retryResult.fetchDiagnostics.broad_fallback_topics_used, 0);
+  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 0);
+  assert.strictEqual(retryResult.fetchDiagnostics.broad_fallback_topics_used, 1);
   assert.strictEqual(retryResult.fetchDiagnostics.alternate_queries_used, 1);
   assert.deepStrictEqual(
     retryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "preferred"]
+    ["preferred", "broad"]
+  );
+
+  const customRetryCalls = [];
+  const customRetryRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [{ tag: "STRATEGY", queries: ["standard-q1"] }],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          scheduled: {
+            soft_calls: 4,
+            hard_calls: 4,
+          },
+          custom_topic_reserve_calls: 2,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      customRetryCalls.push({ tag: topic.tag, query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
+      if (topic.isCustom && opts?.retrievalPlan?.broad_only === true) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: `${topic.tag} recovered`, tag: topic.tag, source: "reuters.com" }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      if (topic.isCustom) {
+        return {
+          apiCalls: 1,
+          items: [],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
+        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+      };
+    },
+    buildPreferredDomainShortlist: ({ topicTag }) => {
+      if (String(topicTag).toUpperCase() === "AI×TECH") {
+        return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
+      }
+      return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
+    },
+    buildCustomTopicQueries: () => ["custom-q1", "custom-q2"],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const customRetryResult = await customRetryRuntime.orchestrateFetch({
+    dueUsers: [
+      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+    ],
+    targetChatId: null,
+    runMode: "scheduled",
+  });
+  assert.strictEqual(customRetryResult.customFetchCalls, 2);
+  assert.strictEqual(customRetryResult.fetchDiagnostics.broad_fallback_topics_used, 1);
+  assert.deepStrictEqual(
+    customRetryCalls.filter((row) => row.tag === "NVIDIA").map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
+    ["preferred", "broad"]
   );
 
   const previousConcurrencyEnv = process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
@@ -465,10 +534,10 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
   assert.deepStrictEqual(
     customHeavyCalls.map((row) => row.tag),
-    ["STRATEGY", "NVIDIA", "GLP 1", "AGENTIC AI", "CBAM", "NVIDIA"]
+    ["STRATEGY", "NVIDIA", "GLP 1", "AGENTIC AI", "CBAM", "NVIDIA", "GLP 1"]
   );
-  assert.strictEqual(customHeavyResult.customFetchCalls, 5);
-  assert.strictEqual(customHeavyResult.fetchDiagnostics.alternate_queries_used, 1);
+  assert.strictEqual(customHeavyResult.customFetchCalls, 6);
+  assert.strictEqual(customHeavyResult.fetchDiagnostics.alternate_queries_used, 2);
   assert.strictEqual(customHeavyResult.fetchDiagnostics.thin_topic_count >= 1, true);
   assert.strictEqual(customHeavyResult.fetchDiagnostics.topic_diagnostics[1].tag, "NVIDIA");
 })();

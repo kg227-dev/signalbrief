@@ -42,6 +42,18 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "supply chain sustainability reporting emissions corporate investment last 48 hours",
   ]),
 });
+const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
+  nvidia: Object.freeze(["AI×TECH", "TECHNOLOGY"]),
+  "glp 1": Object.freeze(["LIFE SCIENCES", "HEALTHCARE"]),
+  "agentic ai": Object.freeze(["AI×TECH", "TECHNOLOGY", "DIGITAL"]),
+  "sec rulemaking": Object.freeze(["POLICY×REGULATORY", "PUBLIC SECTOR"]),
+  cbam: Object.freeze(["SUSTAINABILITY", "POLICY×REGULATORY", "ENERGY"]),
+  "rate cuts": Object.freeze(["FINANCIAL SERVICES", "STRATEGY"]),
+  "grid infrastructure": Object.freeze(["ENERGY", "SUSTAINABILITY"]),
+  semicap: Object.freeze(["AI×TECH", "TECHNOLOGY"]),
+  "quantum computing": Object.freeze(["AI×TECH", "TECHNOLOGY"]),
+  starlink: Object.freeze(["TECHNOLOGY", "PUBLIC SECTOR"]),
+});
 
 function resolveSelectionTarget(dueUsers, defaultItemCount = 7) {
   const requestedCounts = (Array.isArray(dueUsers) ? dueUsers : [])
@@ -133,6 +145,14 @@ function resolveCustomTopicSlugs({ dueUsers, maxCustomFetchPerRun, log }) {
   return customTopicSlugs;
 }
 
+function normalizeCustomHintKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
   const queryBuilder = typeof buildCustomTopicQueries === "function"
     ? buildCustomTopicQueries
@@ -140,6 +160,9 @@ function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
   return (Array.isArray(customTopicSlugs) ? customTopicSlugs : []).map((slug) => {
     const keyword = String(slug || "").replace(/^custom_/, "").replace(/_/g, " ").trim();
     const queries = queryBuilder(keyword);
+    const preferredTopicHints = Array.isArray(CUSTOM_TOPIC_SOURCE_HINTS[normalizeCustomHintKey(keyword)])
+      ? CUSTOM_TOPIC_SOURCE_HINTS[normalizeCustomHintKey(keyword)].slice()
+      : [];
     return {
       tag: keyword.toUpperCase(),
       custom_slug: slug,
@@ -147,6 +170,7 @@ function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
         ? queries
         : [`${keyword} business strategy developments last 48 hours`],
       isCustom: true,
+      preferred_topic_hints: preferredTopicHints,
     };
   });
 }
@@ -212,7 +236,7 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
   const customHeavyRun = customTopicTotal > 0
     && customUserCount >= Math.max(2, Math.ceil(totalDueUsers * 0.5));
   const customRetryReserve = customHeavyRun
-    ? Math.min(2, Math.max(0, Math.ceil(customTopicTotal / 4)))
+    ? Math.min(customTopicTotal, Math.max(0, Math.floor(hardCalls / 3)))
     : 0;
   const reserveTarget = customHeavyRun
     ? customTopicTotal + customRetryReserve
@@ -366,6 +390,11 @@ function canReceiveAdditionalRetry(state, isFetchedItemEligible) {
   return countUsableItems(state.items, isFetchedItemEligible) < 2;
 }
 
+function shouldPreferBroadFallbackRetry(state, isFetchedItemEligible) {
+  return countUsableItems(state?.items, isFetchedItemEligible) <= 0
+    && Number(state?.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
+}
+
 function summarizeProviderDiagnostics(states) {
   const summary = {
     topics: 0,
@@ -433,11 +462,18 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     tag: state?.topic?.tag || null,
     custom_slug: state?.topic?.custom_slug || null,
     is_custom: state?.topic?.isCustom === true,
+    preferred_topic_hints: Array.isArray(state?.topic?.preferred_topic_hints) ? state.topic.preferred_topic_hints.slice() : [],
+    query_count: Array.isArray(state?.topic?.queries) ? state.topic.queries.length : 0,
     unique_item_count: Array.isArray(state?.items) ? state.items.length : 0,
     usable_item_count: countUsableItems(state?.items, () => true),
     preferred_domains: Array.isArray(state?.preferredDomains) ? state.preferredDomains.slice() : [],
+    preferred_item_count: countPreferredItems(state),
     preferred_call_count: Number(state?.preferredCallsMade || 0),
     broad_call_count: Number(state?.broadCallsMade || 0),
+    next_preferred_query_index: Number(state?.nextPreferredQueryIndex || 0),
+    next_broad_query_index: Number(state?.nextBroadQueryIndex || 0),
+    remaining_preferred_queries: Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextPreferredQueryIndex || 0)),
+    remaining_broad_queries: Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextBroadQueryIndex || 0)),
     total_calls_scheduled: Number(state?.totalCallsScheduled || 0),
     status_counts: { ...(state?.provider?.status_counts || {}) },
     failed_calls: Number(state?.provider?.failed_calls || 0),
@@ -445,6 +481,9 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     degraded: state?.provider?.degraded === true,
     last_error: String(state?.provider?.last_error || "").trim() || null,
     coverage_status: classifyTopicCoverage(state),
+    search_result_domains: Array.isArray(state?.searchResultDomains) ? state.searchResultDomains.slice() : [],
+    preferred_search_result_domains: Array.isArray(state?.preferredSearchResultDomains) ? state.preferredSearchResultDomains.slice() : [],
+    preferred_search_result_hit_count: Number(state?.preferredSearchResultHitCount || 0),
   }));
 
   return {
@@ -750,8 +789,13 @@ function createDigestOrchestratorFetchRuntime(deps) {
     }));
     const customStates = sortTopicStates(customFetchTargets.map((topic, index) => {
       const shortlist = buildPreferredShortlist({
-        topicTag: topic?.tag,
-        dueUserTopics,
+        topicTag: Array.isArray(topic?.preferred_topic_hints) && topic.preferred_topic_hints.length > 0
+          ? topic.preferred_topic_hints[0]
+          : topic?.tag,
+        dueUserTopics: [
+          ...dueUserTopics,
+          ...(Array.isArray(topic?.preferred_topic_hints) ? topic.preferred_topic_hints : []),
+        ],
         queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
         maxDomains: 20,
       });
@@ -816,6 +860,12 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const customPhase2States = customPhase2Eligible.slice(0, customReserveRemaining);
     if (customPhase2States.length > 0) {
       await runScheduledBatch(customPhase2States, (state) => {
+        if (shouldPreferBroadFallbackRetry(state, itemEligibilityFn)) {
+          return buildBroadInvocation(state, state.nextBroadQueryIndex, {
+            countsAsRetry: true,
+            broadFallback: true,
+          });
+        }
         if ((state.preferredDomains || []).length > 0) {
           return buildPreferredInvocation(state, state.nextPreferredQueryIndex, { countsAsRetry: true });
         }
@@ -837,11 +887,20 @@ function createDigestOrchestratorFetchRuntime(deps) {
     if (phase2Eligible.length > phase2States.length) {
       markBudgetStop(budgetTracker, "hard_cap_reached");
     }
-    await runScheduledBatch(phase2States, (state) => buildPreferredInvocation(
-      state,
-      state.nextPreferredQueryIndex,
-      { countsAsRetry: true }
-    ), "standard:phase2", budgetTracker);
+    await runScheduledBatch(phase2States, (state) => {
+      if (shouldPreferBroadFallbackRetry(state, itemEligibilityFn)) {
+        return buildBroadInvocation(
+          state,
+          state.nextBroadQueryIndex,
+          { countsAsRetry: true, broadFallback: true }
+        );
+      }
+      return buildPreferredInvocation(
+        state,
+        state.nextPreferredQueryIndex,
+        { countsAsRetry: true }
+      );
+    }, "standard:phase2", budgetTracker);
 
     const phase3Eligible = sortRetryStates(standardStates.filter((state) => {
       return Number(state.totalCallsScheduled || 0) > 0

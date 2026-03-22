@@ -18,6 +18,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   budgetGuardStatus,
   buildScenarioEstimate,
+  classifyTopicGapAudit,
   computeScenarioCost,
   computePersonaRawBaseline,
   runRetrievalEval,
@@ -84,6 +85,87 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
   assert.strictEqual(baseline.scored.length, 1);
   assert.strictEqual(baseline.scored[0].tag, "NVIDIA");
   assert.strictEqual(baseline.custom_keyword_count, 1);
+
+  const preferredOnlyGap = classifyTopicGapAudit({
+    topicDiagnostic: {
+      tag: "GLP 1",
+      custom_slug: "custom_glp_1",
+      is_custom: true,
+      unique_item_count: 0,
+      preferred_domains: ["fda.gov", "statnews.com"],
+      preferred_call_count: 2,
+      broad_call_count: 0,
+      status_counts: {},
+      failed_calls: 0,
+      transport_errors: 0,
+      degraded: false,
+      preferred_search_result_hit_count: 0,
+      preferred_item_count: 0,
+    },
+    matchingPersonaResults: [{
+      requested_count: 5,
+      candidate_pool_count: 0,
+      final_selected_quality: { item_count: 0, score: 0 },
+      selection_lift: 0,
+    }],
+    rejectionCounts: {},
+  });
+  assert.strictEqual(preferredOnlyGap.root_cause, "preferred_only_query_design");
+  assert.strictEqual(preferredOnlyGap.better_source_opportunity, "likely");
+
+  const ambiguityGap = classifyTopicGapAudit({
+    topicDiagnostic: {
+      tag: "AGENTIC AI",
+      custom_slug: "custom_agentic_ai",
+      is_custom: true,
+      unique_item_count: 2,
+      preferred_domains: ["theinformation.com"],
+      preferred_call_count: 1,
+      broad_call_count: 1,
+      status_counts: {},
+      failed_calls: 0,
+      transport_errors: 0,
+      degraded: false,
+      preferred_search_result_hit_count: 1,
+      preferred_item_count: 1,
+    },
+    matchingPersonaResults: [{
+      requested_count: 5,
+      candidate_pool_count: 0,
+      final_selected_quality: { item_count: 0, score: 0 },
+      selection_lift: 0,
+    }],
+    rejectionCounts: {},
+  });
+  assert.strictEqual(ambiguityGap.root_cause, "keyword_ambiguity_or_off_topic_query");
+  assert.strictEqual(ambiguityGap.better_source_opportunity, "likely");
+
+  const unexhaustedGap = classifyTopicGapAudit({
+    topicDiagnostic: {
+      tag: "HEALTHCARE",
+      is_custom: false,
+      unique_item_count: 0,
+      preferred_domains: ["statnews.com"],
+      preferred_call_count: 1,
+      broad_call_count: 1,
+      remaining_broad_queries: 2,
+      status_counts: {},
+      failed_calls: 0,
+      transport_errors: 0,
+      degraded: false,
+      preferred_search_result_hit_count: 0,
+      preferred_item_count: 0,
+    },
+    matchingPersonaResults: [{
+      requested_count: 5,
+      candidate_pool_count: 0,
+      final_selected_quality: { item_count: 0, score: 0 },
+      selection_lift: -10,
+    }],
+    rejectionCounts: {},
+  });
+  assert.strictEqual(unexhaustedGap.root_cause, "query_plan_not_exhausted");
+  assert.strictEqual(unexhaustedGap.better_source_opportunity, "likely");
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-retrieval-eval-runner-"));
   const storage = createRetrievalEvalStorageRuntime({

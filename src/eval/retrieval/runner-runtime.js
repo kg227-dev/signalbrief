@@ -172,6 +172,155 @@ function diffItems(before = [], after = []) {
   return (Array.isArray(before) ? before : []).filter((item) => !kept.has(itemKey(item)));
 }
 
+function normalizeEvalTopicKey(value) {
+  return normalizeTopicToken(String(value || "").replace(/^custom_/, "").replace(/_/g, " "));
+}
+
+function findMatchingPersonaResults(topicDiagnostic, personaResults = []) {
+  const key = normalizeEvalTopicKey(topicDiagnostic?.custom_slug || topicDiagnostic?.tag);
+  if (!key) return [];
+  return (Array.isArray(personaResults) ? personaResults : []).filter((row) => {
+    const personaKey = normalizeEvalTopicKey(row?.persona_label || row?.persona_id);
+    return personaKey === key;
+  });
+}
+
+function groupRejectedReasonsByTopic(rejected = []) {
+  const grouped = {};
+  for (const row of (Array.isArray(rejected) ? rejected : [])) {
+    const key = normalizeEvalTopicKey(row?.item?.custom_slug || row?.item?.tag);
+    if (!key) continue;
+    if (!grouped[key]) grouped[key] = {};
+    const reason = String(row?.reason || "").trim() || "unknown";
+    grouped[key][reason] = (grouped[key][reason] || 0) + 1;
+  }
+  return grouped;
+}
+
+function classifyTopicGapAudit({
+  topicDiagnostic,
+  matchingPersonaResults,
+  rejectionCounts,
+}) {
+  const topic = topicDiagnostic && typeof topicDiagnostic === "object" ? topicDiagnostic : {};
+  const personas = Array.isArray(matchingPersonaResults) ? matchingPersonaResults : [];
+  const rejections = rejectionCounts && typeof rejectionCounts === "object" ? rejectionCounts : {};
+  const candidatePoolCount = personas.reduce((sum, row) => sum + Number(row?.candidate_pool_count || 0), 0);
+  const finalCount = personas.reduce((sum, row) => sum + Number(row?.final_selected_quality?.item_count || 0), 0);
+  const status429 = Number(topic?.status_counts?.[429] || 0);
+  const staleRejected = Number(rejections.stale_age_filter || 0);
+  const hasProviderFailure = status429 > 0
+    || Number(topic?.failed_calls || 0) > 0
+    || Number(topic?.transport_errors || 0) > 0
+    || topic?.degraded === true;
+  const hasRemainingBroadQueries = Number(topic?.remaining_broad_queries || 0) > 0;
+  const preferredOnlyZeroYield = Number(topic?.unique_item_count || 0) <= 0
+    && Number(topic?.preferred_call_count || 0) > 0
+    && Number(topic?.broad_call_count || 0) <= 0
+    && Array.isArray(topic?.preferred_domains)
+    && topic.preferred_domains.length > 0;
+  const offTopicQueryMiss = topic?.is_custom === true
+    && Number(topic?.unique_item_count || 0) > 0
+    && candidatePoolCount <= 0;
+  let rootCause = "covered";
+  let failureReason = null;
+  if (hasProviderFailure) {
+    rootCause = "provider_429_or_transport";
+    failureReason = status429 > 0 ? "provider_429" : "provider_transport";
+  } else if (staleRejected > 0 && candidatePoolCount <= 0) {
+    rootCause = "freshness_filter_collapse";
+    failureReason = "stale_age_filter";
+  } else if (preferredOnlyZeroYield) {
+    rootCause = "preferred_only_query_design";
+    failureReason = "preferred_only_zero_yield";
+  } else if (Number(topic?.unique_item_count || 0) <= 0 && Number(topic?.broad_call_count || 0) > 0 && hasRemainingBroadQueries) {
+    rootCause = "query_plan_not_exhausted";
+    failureReason = "unused_broad_queries";
+  } else if (offTopicQueryMiss) {
+    rootCause = "keyword_ambiguity_or_off_topic_query";
+    failureReason = "topic_filter_miss";
+  } else if (Number(topic?.unique_item_count || 0) <= 0 && Number(topic?.broad_call_count || 0) > 0) {
+    rootCause = "provider_no_recent_coverage";
+    failureReason = "zero_yield_broad";
+  } else if (candidatePoolCount > 0 && finalCount <= 0) {
+    rootCause = "ranking_or_quality_gate";
+    failureReason = "final_quality_gate";
+  } else if (Number(topic?.unique_item_count || 0) > 0 && finalCount > 0 && finalCount < Math.max(1, personas[0]?.requested_count || 1)) {
+    rootCause = "thin_but_precise";
+    failureReason = "thin_pool";
+  }
+
+  let betterSourceOpportunity = "unlikely";
+  let betterSourceNote = null;
+  if (rootCause === "preferred_only_query_design") {
+    betterSourceOpportunity = "likely";
+    betterSourceNote = "Preferred-only retries exhausted before a real broad fallback ran.";
+  } else if (rootCause === "query_plan_not_exhausted") {
+    betterSourceOpportunity = "likely";
+    betterSourceNote = "A broad fallback ran, but alternate broad queries were left unused.";
+  } else if (rootCause === "keyword_ambiguity_or_off_topic_query") {
+    betterSourceOpportunity = "likely";
+    betterSourceNote = "Items were retrieved, but none survived keyword/topic matching.";
+  } else if (Number(topic?.preferred_search_result_hit_count || 0) > 0 && Number(topic?.preferred_item_count || 0) <= 0) {
+    betterSourceOpportunity = "possible";
+    betterSourceNote = "Preferred/trusted domains appeared in search results but did not convert into retained items.";
+  } else if (rootCause === "freshness_filter_collapse") {
+    betterSourceOpportunity = "possible";
+    betterSourceNote = "Retrieved coverage existed, but it missed the freshness policy.";
+  } else if (rootCause === "provider_429_or_transport") {
+    betterSourceOpportunity = "unknown";
+    betterSourceNote = "Provider failures limited the evidence available for this topic.";
+  } else if (rootCause === "provider_no_recent_coverage") {
+    betterSourceOpportunity = "unclear";
+    betterSourceNote = "Broad retrieval ran but still found no usable recent items.";
+  }
+
+  const sourceScore = personas.length > 0
+    ? Number((personas.reduce((sum, row) => sum + Number(row?.final_selected_quality?.score || 0), 0) / personas.length).toFixed(2))
+    : 0;
+  const selectionLift = personas.length > 0
+    ? Number((personas.reduce((sum, row) => sum + Number(row?.selection_lift || 0), 0) / personas.length).toFixed(2))
+    : 0;
+
+  return {
+    tag: topic?.tag || null,
+    custom_slug: topic?.custom_slug || null,
+    is_custom: topic?.is_custom === true,
+    raw_count: Number(topic?.unique_item_count || 0),
+    cleaned_count: candidatePoolCount,
+    final_count: finalCount,
+    source_score: sourceScore,
+    selection_lift: selectionLift,
+    stale_rate: Number(topic?.unique_item_count || 0) > 0
+      ? Number(((staleRejected / Math.max(1, Number(topic?.unique_item_count || 0))) * 100).toFixed(2))
+      : 0,
+    provider_429_count: status429,
+    preferred_call_count: Number(topic?.preferred_call_count || 0),
+    broad_call_count: Number(topic?.broad_call_count || 0),
+    query_count: Number(topic?.query_count || 0),
+    remaining_broad_queries: Number(topic?.remaining_broad_queries || 0),
+    coverage_status: String(topic?.coverage_status || "").trim() || null,
+    root_cause: rootCause,
+    failure_reason: failureReason,
+    better_source_opportunity: betterSourceOpportunity,
+    better_source_note: betterSourceNote,
+    preferred_domains: Array.isArray(topic?.preferred_domains) ? topic.preferred_domains.slice() : [],
+    preferred_topic_hints: Array.isArray(topic?.preferred_topic_hints) ? topic.preferred_topic_hints.slice() : [],
+  };
+}
+
+function buildTopicGapAudit(globalResult, personaResults) {
+  const topicDiagnostics = Array.isArray(globalResult?.fetchResult?.fetchDiagnostics?.topic_diagnostics)
+    ? globalResult.fetchResult.fetchDiagnostics.topic_diagnostics
+    : [];
+  const rejectedByTopic = groupRejectedReasonsByTopic(globalResult?.rejected);
+  return topicDiagnostics.map((topicDiagnostic) => classifyTopicGapAudit({
+    topicDiagnostic,
+    matchingPersonaResults: findMatchingPersonaResults(topicDiagnostic, personaResults),
+    rejectionCounts: rejectedByTopic[normalizeEvalTopicKey(topicDiagnostic?.custom_slug || topicDiagnostic?.tag)] || {},
+  }));
+}
+
 function createEvalServices() {
   const CONFIG = loadConfig();
   const runtimePaths = resolveSignalBriefRuntimePaths({
@@ -626,6 +775,7 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const rawSourceSummary = buildSourceLevelSummary(globalResult.cleanedAnnotated);
   const finalItems = personaResults.flatMap((row) => row.final_items || []);
   const finalSourceSummary = buildSourceLevelSummary(finalItems);
+  const topicGapAudit = buildTopicGapAudit(globalResult, personaResults);
   const strongest = personaResults.slice().sort((left, right) => Number(right.final_selected_quality?.score || 0) - Number(left.final_selected_quality?.score || 0))[0] || null;
   const weakest = personaResults.slice().sort((left, right) => Number(left.final_selected_quality?.score || 0) - Number(right.final_selected_quality?.score || 0))[0] || null;
   const negativeLiftCount = personaResults.filter((row) => Number(row.selection_lift || 0) < 0).length;
@@ -633,6 +783,7 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const scarcityCounts = {};
   const reasonCounts = {};
   const coverageLimiterCounts = {};
+  const topicRootCauseCounts = {};
   for (const row of personaResults) {
     const scarcityKey = String(row?.scarcity_profile || "").trim() || "unknown";
     scarcityCounts[scarcityKey] = (scarcityCounts[scarcityKey] || 0) + 1;
@@ -641,6 +792,10 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     for (const [reason, count] of Object.entries(row?.failure_reasons?.reason_counts || {})) {
       reasonCounts[reason] = (reasonCounts[reason] || 0) + Number(count || 0);
     }
+  }
+  for (const row of topicGapAudit) {
+    const rootCause = String(row?.root_cause || "").trim() || "unknown";
+    topicRootCauseCounts[rootCause] = (topicRootCauseCounts[rootCause] || 0) + 1;
   }
   const recommendations = [];
   const avgFinalScore = personaResults.length
@@ -667,6 +822,9 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   if ((scarcityCounts.short_but_precise || 0) > 0) recommendations.push("Some digests are intentionally short but precise; treat fill-rate separately from quality.");
   if (provider429Count > 0) recommendations.push("Provider rate limits are collapsing coverage for part of this scenario; inspect batching and query sequencing.");
   if (retrievalLimitedCount > rankingLimitedCount && retrievalLimitedCount > 0) recommendations.push("Most failures are retrieval-limited rather than ranking-limited; prioritize candidate yield.");
+  if ((topicRootCauseCounts.preferred_only_query_design || 0) > 0) recommendations.push("Zero-yield preferred-domain topics are still missing broad fallback coverage; fix retry sequencing before adding more fallback.");
+  if ((topicRootCauseCounts.query_plan_not_exhausted || 0) > 0) recommendations.push("Zero-yield topics still have unused alternate broad queries; one more broad pass is likely higher-leverage than looser fallback.");
+  if ((topicRootCauseCounts.keyword_ambiguity_or_off_topic_query || 0) > 0) recommendations.push("Broad custom keywords are retrieving off-topic items; tighten keyword/source hints rather than padding.");
   return {
     scenario_id: scenario.id,
     label: scenario.label,
@@ -695,6 +853,8 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     scarcity_counts: scarcityCounts,
     coverage_limiter_counts: coverageLimiterCounts,
     reason_counts: reasonCounts,
+    topic_root_cause_counts: topicRootCauseCounts,
+    topic_gap_audit: topicGapAudit,
     raw_source_summary: rawSourceSummary,
     final_source_summary: finalSourceSummary,
     provider_429_count: provider429Count,
@@ -992,6 +1152,8 @@ module.exports = {
   budgetGuardStatus,
   buildGlobalSelection,
   buildScenarioEstimate,
+  buildTopicGapAudit,
+  classifyTopicGapAudit,
   computeScenarioCost,
   computePersonaRawBaseline,
   createEvalServices,

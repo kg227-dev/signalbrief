@@ -98,6 +98,20 @@
         <div id="failureReasons"></div>
       </div>
     </section>
+    <section class="split">
+      <div class="panel">
+        <h2>Topic Root Causes</h2>
+        <div id="rootCauses"></div>
+      </div>
+      <div class="panel">
+        <h2>Better Source Signals</h2>
+        <div id="sourceGapSignals"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Gap Audit</h2>
+      <div id="gapAudit"></div>
+    </section>
     <section class="panel">
       <h2>Retrieval vs Final</h2>
       <div id="retrievalVsFinal"></div>
@@ -171,6 +185,40 @@
       return Object.entries(counts).map(([domain, count]) => ({ domain, count })).sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain));
     }
 
+    function summarizeRootCauses(run) {
+      const counts = {};
+      for (const scenario of (run.scenarios || [])) {
+        for (const [reason, count] of Object.entries(scenario.summary?.topic_root_cause_counts || {})) {
+          counts[reason] = (counts[reason] || 0) + Number(count || 0);
+        }
+      }
+      return Object.entries(counts).map(([root_cause, count]) => ({ root_cause, count })).sort((a, b) => b.count - a.count || a.root_cause.localeCompare(b.root_cause));
+    }
+
+    function summarizeSourceGapSignals(run) {
+      const counts = {};
+      for (const scenario of (run.scenarios || [])) {
+        for (const row of (scenario.summary?.topic_gap_audit || [])) {
+          const key = String(row.better_source_opportunity || "unknown");
+          counts[key] = (counts[key] || 0) + 1;
+        }
+      }
+      return Object.entries(counts).map(([signal, count]) => ({ signal, count })).sort((a, b) => b.count - a.count || a.signal.localeCompare(b.signal));
+    }
+
+    function collectGapAuditRows(run) {
+      return (run.scenarios || [])
+        .flatMap((scenario) => (scenario.summary?.topic_gap_audit || []).map((row) => ({
+          ...row,
+          scenario_label: scenario.label || scenario.id,
+          topic_label: row.custom_slug ? String(row.custom_slug).replace(/^custom_/, "").replace(/_/g, " ") : row.tag,
+        })))
+        .sort((left, right) => {
+          if (left.root_cause !== right.root_cause) return String(left.root_cause || "").localeCompare(String(right.root_cause || ""));
+          return Number(left.final_count || 0) - Number(right.final_count || 0);
+        });
+    }
+
     async function loadRuns() {
       const payload = await getJson("/api/admin/retrieval-eval/runs");
       const picker = document.getElementById("runPicker");
@@ -231,6 +279,28 @@
       document.getElementById("failureReasons").innerHTML = renderRows(summarizeFailureReasons(run).slice(0, 12), [
         { label: "Reason", key: "reason" },
         { label: "Count", key: "count" },
+      ]);
+      document.getElementById("rootCauses").innerHTML = renderRows(summarizeRootCauses(run), [
+        { label: "Root cause", key: "root_cause" },
+        { label: "Topics", key: "count" },
+      ]);
+      document.getElementById("sourceGapSignals").innerHTML = renderRows(summarizeSourceGapSignals(run), [
+        { label: "Better source signal", key: "signal" },
+        { label: "Topics", key: "count" },
+      ]);
+      document.getElementById("gapAudit").innerHTML = renderRows(collectGapAuditRows(run), [
+        { label: "Scenario", key: "scenario_label" },
+        { label: "Topic", key: "topic_label" },
+        { label: "Raw", key: "raw_count" },
+        { label: "Cleaned", key: "cleaned_count" },
+        { label: "Final", key: "final_count" },
+        { label: "Source", render: (row) => Number(row.source_score || 0).toFixed(1) },
+        { label: "Lift", render: (row) => Number(row.selection_lift || 0).toFixed(1) },
+        { label: "Stale", render: (row) => `${Number(row.stale_rate || 0).toFixed(1)}%` },
+        { label: "429", key: "provider_429_count" },
+        { label: "Calls", render: (row) => `P:${Number(row.preferred_call_count || 0)} / B:${Number(row.broad_call_count || 0)} / left:${Number(row.remaining_broad_queries || 0)}` },
+        { label: "Root cause", key: "root_cause" },
+        { label: "Better source", render: (row) => row.better_source_note ? `${esc(row.better_source_opportunity)}<br><span class="muted">${esc(row.better_source_note)}</span>` : esc(row.better_source_opportunity || "") },
       ]);
       document.getElementById("retrievalVsFinal").innerHTML = renderRows((run.scenarios || []).map((scenario) => ({
         scenario: scenario.label || scenario.id,

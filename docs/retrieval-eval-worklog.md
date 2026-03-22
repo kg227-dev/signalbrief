@@ -140,6 +140,42 @@ Key findings:
 - it did not reintroduce noisy fallback, stale leakage, or weak-source exposure
 - it was not enough to recover the targeted broad custom keywords, which still exit with unused broad query depth
 
+### Pass 6: Admin progress visibility and production artifact sync
+
+Completed in this pass:
+
+- added progress sections to `/admin/retrieval-eval`:
+  - `Progress Log`
+  - `Current Focus`
+- made the admin progress loader read from:
+  - `docs/retrieval-eval-worklog.md`
+  - fallback: `data/retrieval-evals/worklog.md`
+- synced the completed retrieval-eval artifacts into the production data volume so the admin page can render real runs instead of an empty state
+- synced the retrieval eval worklog into the production data volume so the progress panels can render in production even though `docs/` is excluded from the runtime image
+
+Key findings:
+
+- the admin page had looked empty for infrastructure reasons, not because testing had not started
+- production runtime data and the repo worklog need to stay aligned if the admin page is expected to reflect the latest local eval progress
+
+### Pass 7: Perplexity source transparency in admin
+
+Completed in this pass:
+
+- added a source inspector to `/admin/retrieval-eval`
+- exposed the raw Perplexity-returned article set for the selected scenario
+- added direct article links so raw returned sources can be opened from the admin page
+- added survival context for each raw item:
+  - whether it survived cleanup
+  - whether it reached the scenario final pool
+  - how many persona finals kept it
+- added a side-by-side final-source view so raw retrieval can be compared against kept items without leaving the page
+
+Key findings:
+
+- the eval artifacts already contained the necessary raw source data; the missing piece was making it visible in the admin UI
+- transparency into raw Perplexity output is now good enough to inspect source recall and specific misses directly from the admin page
+
 ## Important Run IDs
 
 ### Baselines
@@ -310,6 +346,40 @@ Interpretation:
 - provider variability is real, but the latest clean reruns show we still have fixable retrieval-design headroom before blaming provider scarcity
 - 429 pressure remains a meaningful constraint on some custom runs, especially around `SEC rulemaking`, `rate cuts`, `grid infrastructure`, and `semicap`
 
+## Overall Plan Status
+
+### Done
+
+- audited the real retrieval, cleanup, selection, personalization, and current DQS codepath
+- built the production-faithful no-send eval runner
+- added source-focused scoring, scarcity-aware labeling, and raw vs cleaned vs final diagnostics
+- added the retrieval eval admin page and progress/worklog visibility
+- fixed the main selection-side precision issues:
+  - custom-heavy fail-closed behavior
+  - stale-item tightening
+  - removal of noisy anchor-topic fallback in custom-heavy cases
+  - custom leak-path cleanup
+- ran multiple budget-capped eval passes and targeted reruns
+
+### Partially Done
+
+- historical comparison exists, but the local historical digest sample is still thin
+- manual review exists in targeted form, but not yet as a deeper recurring review loop
+- category coverage is good enough for v1, but not yet a stable long-run regression suite under consistent provider conditions
+
+### Not Done Yet
+
+- retrieval recall recovery for the remaining weak categories and broad custom keywords
+- automatic publishing of local eval artifacts and worklog updates into production runtime storage after each fresh run
+- deeper source-inspector controls if needed later:
+  - stage-only filtering
+  - keyword/topic filtering inside the source table
+  - direct per-item drop-off reason coverage for earlier fetch/cleanup stages
+- stronger separation between:
+  - fixable query-design failures
+  - provider-limited failures
+  - true low-coverage / market-scarcity failures
+
 ## Next Planned Work
 
 If this thread continues, the next highest-value retrieval-side steps are:
@@ -328,8 +398,15 @@ If this thread continues, the next highest-value retrieval-side steps are:
 2. Focus on query shaping before source-registry changes:
    - narrower broad-query variants for ambiguous custom terms
    - category-specific alternate phrasings for weak standard tags
+   - continue separating:
+     - query-design failures
+     - provider-limited failures
+     - true low-coverage / market-scarcity failures
 3. Keep the precision-first rule:
    - no reintroduction of broad anchor-topic fallback for custom-heavy personas
 4. Re-run the weak-category matrix after any retrieval-only change and compare against:
    - `retrieval-eval:2026-03-22T06-06-01-508Z`
    - `retrieval-eval:2026-03-22T06-10-49-849Z`
+5. Keep the admin progress view current:
+   - update this markdown after each pass
+   - sync the latest worklog and run artifacts into production data when fresh eval runs are promoted

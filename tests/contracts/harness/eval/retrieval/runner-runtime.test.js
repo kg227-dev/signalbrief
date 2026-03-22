@@ -168,6 +168,36 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
   assert.strictEqual(unexhaustedGap.root_cause, "query_plan_not_exhausted");
   assert.strictEqual(unexhaustedGap.better_source_opportunity, "likely");
 
+  const selectionCapGap = classifyTopicGapAudit({
+    topicDiagnostic: {
+      tag: "GRID INFRASTRUCTURE",
+      custom_slug: "custom_grid_infrastructure",
+      is_custom: true,
+      unique_item_count: 1,
+      preferred_domains: ["utilitydive.com"],
+      preferred_call_count: 1,
+      broad_call_count: 3,
+      remaining_broad_queries: 1,
+      status_counts: {},
+      failed_calls: 0,
+      transport_errors: 0,
+      degraded: false,
+      preferred_search_result_hit_count: 0,
+      preferred_item_count: 0,
+    },
+    matchingPersonaResults: [{
+      requested_count: 5,
+      candidate_pool_count: 1,
+      final_selected_quality: { item_count: 0, score: 0 },
+      selection_lift: -72.78,
+    }],
+    rejectionCounts: {
+      selection_custom_cap: 1,
+    },
+  });
+  assert.strictEqual(selectionCapGap.root_cause, "selection_custom_cap");
+  assert.strictEqual(selectionCapGap.failure_reason, "selection_custom_cap");
+
   const expandedEvalSelectionTarget = resolveEvalSelectionTarget({
     scenarioId: "custom_realistic",
     baseSelectionTarget: 5,

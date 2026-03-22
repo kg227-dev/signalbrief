@@ -24,6 +24,9 @@ const CUSTOM_TOPIC_ALIASES = {
     "interest rate cuts",
     "fed rate decision",
     "fomc rate decision",
+    "fed easing cycle",
+    "policy easing",
+    "market pricing for rate cuts",
   ],
   "sec rulemaking": [
     "sec proposed rules",
@@ -36,6 +39,9 @@ const CUSTOM_TOPIC_ALIASES = {
     "chip equipment",
     "wafer fab equipment",
     "asml applied materials lam research",
+    "chipmaking tools",
+    "fab tools",
+    "wfe",
   ],
   "agentic ai": [
     "ai agents",
@@ -45,7 +51,13 @@ const CUSTOM_TOPIC_ALIASES = {
   ],
   "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
   "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
-  cbam: ["carbon border adjustment mechanism", "eu carbon border tax", "eu cbam"],
+  cbam: [
+    "carbon border adjustment mechanism",
+    "eu carbon border tax",
+    "eu cbam",
+    "carbon border levy",
+    "embedded emissions reporting",
+  ],
   "grid infrastructure": [
     "power grid transmission",
     "utility transmission",
@@ -82,16 +94,16 @@ const CUSTOM_TOPIC_QUERY_PLANS = Object.freeze({
     "SEC enforcement rule proposal public company compliance last 48 hours",
   ]),
   cbam: Object.freeze([
-    "CBAM carbon border adjustment mechanism EU trade compliance last 48 hours",
-    "EU CBAM steel cement aluminum trade last 48 hours",
-    "CBAM supply chain carbon reporting corporate impact last 48 hours",
-    "carbon border tax EU import policy last 48 hours",
+    "carbon border adjustment mechanism importer reporting European Commission last 48 hours",
+    "CBAM transition period importer emissions filings steel aluminum cement last 48 hours",
+    "EU carbon border levy trade compliance customs carbon last 48 hours",
+    "CBAM corporate supply chain decarbonization importer costs last 48 hours",
   ]),
   "rate cuts": Object.freeze([
-    "Federal Reserve rate cuts inflation Treasury markets last 48 hours",
-    "Fed rate decision Powell labor market inflation last 48 hours",
-    "rate cuts corporate borrowing M&A strategy last 48 hours",
-    "interest rate cuts bank lending credit markets last 48 hours",
+    "Federal Reserve rate cut timing CPI jobs Treasury yields last 48 hours",
+    "Fed speakers FOMC rate cuts market pricing last 48 hours",
+    "rate cuts leveraged finance refinancing private equity borrowing last 48 hours",
+    "interest rate cuts bank lending credit spreads corporate borrowing last 48 hours",
   ]),
   "grid infrastructure": Object.freeze([
     "grid infrastructure transmission interconnection utility data center power last 48 hours",
@@ -100,10 +112,10 @@ const CUSTOM_TOPIC_QUERY_PLANS = Object.freeze({
     "interconnection queue transmission project utility last 48 hours",
   ]),
   semicap: Object.freeze([
-    "semicap semiconductor equipment orders fab investment last 48 hours",
-    "ASML Applied Materials Lam Research semiconductor equipment last 48 hours",
-    "chip equipment export controls China fab last 48 hours",
-    "wafer fab equipment memory logic spending last 48 hours",
+    "semiconductor equipment orders chipmaking tools fab investment last 48 hours",
+    "ASML Applied Materials Lam Research chip equipment orders last 48 hours",
+    "wafer fab equipment WFE memory logic spending last 48 hours",
+    "chipmaking tools export controls China fabs foundry spending last 48 hours",
   ]),
 });
 

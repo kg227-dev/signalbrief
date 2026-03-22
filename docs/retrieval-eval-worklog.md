@@ -487,3 +487,87 @@ If this thread continues, the next highest-value retrieval-side steps are:
 6. Keep the admin progress view current:
    - update this markdown after each pass
    - sync the latest worklog and run artifacts into production data when fresh eval runs are promoted
+
+## Latest Pass Update
+
+### Pass 10: Targeted custom query shaping and weak-matrix rerun
+
+Completed:
+
+- reshaped custom queries for `CBAM`, `rate cuts`, and `semicap`
+- expanded alias coverage for those same custom keywords so retrieval and matching reflect more real-world phrasing
+- refined eval gap classification so scenario-level exclusions can be labeled more precisely, including `selection_custom_cap`
+- reran `custom_realistic`
+- reran `standard_full`
+
+New run IDs:
+
+- `retrieval-eval:2026-03-22T16-55-09-561Z`
+  - discarded post-query-shaping `custom_realistic` run; provider response quality was not decision-grade
+- `retrieval-eval:2026-03-22T16-56-55-227Z`
+  - clean post-query-shaping `custom_realistic` rerun
+- `retrieval-eval:2026-03-22T16-58-49-554Z`
+  - post-query-shaping `standard_full` rerun
+
+Targeted custom results:
+
+- `CBAM`
+  - before (`retrieval-eval:2026-03-22T16-39-36-409Z`): `0 raw / 0 cleaned / 0 final`, `provider_no_recent_coverage`
+  - after (`retrieval-eval:2026-03-22T16-56-55-227Z`): `0 / 0 / 0`, `provider_no_recent_coverage`
+- `rate cuts`
+  - before: `0 / 0 / 0`, `provider_no_recent_coverage`
+  - after: `0 / 0 / 0`, `provider_no_recent_coverage`
+- `semicap`
+  - before: `0 / 0 / 0`, `provider_no_recent_coverage`
+  - after: `0 / 0 / 0`, but now `query_plan_not_exhausted` with `1` broad query still unused
+- `grid infrastructure`
+  - traced pre-change run (`retrieval-eval:2026-03-22T16-39-36-409Z`): `1 / 1 / 0`, rejected by `selection_custom_cap`
+  - latest clean rerun (`retrieval-eval:2026-03-22T16-56-55-227Z`): `0 / 0 / 0`, `provider_no_recent_coverage`
+
+Interpretation:
+
+- the targeted query-shaping pass did not create a clean recall win for `CBAM`, `rate cuts`, or `semicap`
+- `CBAM` and `rate cuts` remain the strongest candidates for true low recent coverage rather than a simple query-budget issue
+- `semicap` is still the clearest custom keyword with remaining unused query depth, so it stays in the fixable retrieval-design bucket
+- `grid infrastructure` is not one stable failure mode:
+  - one traced failure was a scenario-level custom selection cap on a review-tier `powermag.com` item
+  - the latest clean rerun found no usable item at all, which points back to unstable retrieval rather than a persistent ranking bug
+
+Weak-category matrix rerun:
+
+- baseline comparison run: `retrieval-eval:2026-03-22T16-25-18-670Z`
+- latest rerun: `retrieval-eval:2026-03-22T16-58-49-554Z`
+- latest rerun summary:
+  - raw candidates: `19`
+  - cleaned candidates: `19`
+  - average final score: `81.12`
+  - average fill: `31.43`
+  - `429 rate`: `0%`
+  - stale rejection rate: `0%`
+
+Tracked weak-category deltas:
+
+- `ENERGY`
+  - before: `0 raw / 3 cleaned / 2 final`, `query_plan_not_exhausted`
+  - after: `1 / 3 / 2`, `thin_but_precise`
+- `POLICY×REGULATORY`
+  - before: `0 / 1 / 1`, `query_plan_not_exhausted`
+  - after: `0 / 1 / 1`, `provider_no_recent_coverage`
+- `HEALTHCARE`
+  - before: `0 / 2 / 1`, `query_plan_not_exhausted`
+  - after: `0 / 2 / 2`, `provider_no_recent_coverage`
+- `LIFE SCIENCES`
+  - before: `0 / 2 / 1`, `query_plan_not_exhausted`
+  - after: `1 / 2 / 2`, `thin_but_precise`
+- `SUSTAINABILITY`
+  - before: `1 / 1 / 1`, `thin_but_precise`
+  - after: `1 / 2 / 1`, `thin_but_precise`
+
+Current bottom line:
+
+- selector/fallback behavior remains healthy
+- rate limiting is not the dominant blocker on the latest targeted runs
+- the remaining custom gaps split into:
+  - likely provider/content scarcity: `CBAM`, `rate cuts`
+  - still fixable retrieval design: `semicap`
+  - unstable retrieval with one traced selection-cap exclusion: `grid infrastructure`

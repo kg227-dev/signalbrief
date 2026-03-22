@@ -76,3 +76,15 @@ const nvidiaQueries = buildCustomTopicQueries("Nvidia");
 assert.ok(nvidiaQueries.every((query) => !String(query).includes("72 hours")));
 assert.ok(nvidiaQueries.some((query) => String(query).toLowerCase().includes("48 hours")));
 assert.ok(nvidiaQueries.some((query) => String(query).toLowerCase().includes("blackwell")));
+
+const cbamQueries = buildCustomTopicQueries("CBAM");
+assert.ok(cbamQueries.some((query) => String(query).toLowerCase().includes("importer reporting")));
+assert.ok(cbamQueries.some((query) => String(query).toLowerCase().includes("carbon border levy")));
+
+const rateCutQueries = buildCustomTopicQueries("rate cuts");
+assert.ok(rateCutQueries.some((query) => String(query).toLowerCase().includes("fomc")));
+assert.ok(rateCutQueries.some((query) => String(query).toLowerCase().includes("leveraged finance")));
+
+const semicapQueries = buildCustomTopicQueries("semicap");
+assert.ok(semicapQueries.some((query) => String(query).toLowerCase().includes("chipmaking tools")));
+assert.ok(semicapQueries.some((query) => String(query).toLowerCase().includes("wfe")));

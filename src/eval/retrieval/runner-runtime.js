@@ -243,8 +243,19 @@ function classifyTopicGapAudit({
     rootCause = "provider_no_recent_coverage";
     failureReason = "zero_yield_broad";
   } else if (candidatePoolCount > 0 && finalCount <= 0) {
-    rootCause = "ranking_or_quality_gate";
-    failureReason = "final_quality_gate";
+    if (Number(rejections.selection_custom_cap || 0) > 0) {
+      rootCause = "selection_custom_cap";
+      failureReason = "selection_custom_cap";
+    } else if (Number(rejections.storyline_quality_gate || 0) > 0) {
+      rootCause = "storyline_quality_gate";
+      failureReason = "storyline_quality_gate";
+    } else if (Number(rejections.removed_by_source_policy_cap || 0) > 0) {
+      rootCause = "source_policy_gate";
+      failureReason = "source_policy_cap";
+    } else {
+      rootCause = "ranking_or_quality_gate";
+      failureReason = "final_quality_gate";
+    }
   } else if (Number(topic?.unique_item_count || 0) > 0 && finalCount > 0 && finalCount < Math.max(1, personas[0]?.requested_count || 1)) {
     rootCause = "thin_but_precise";
     failureReason = "thin_pool";
@@ -273,6 +284,9 @@ function classifyTopicGapAudit({
   } else if (rootCause === "provider_no_recent_coverage") {
     betterSourceOpportunity = "unclear";
     betterSourceNote = "Broad retrieval ran but still found no usable recent items.";
+  } else if (rootCause === "selection_custom_cap") {
+    betterSourceOpportunity = "possible";
+    betterSourceNote = "A candidate survived retrieval but lost to the scenario-level custom selection cap.";
   }
 
   const sourceScore = personas.length > 0

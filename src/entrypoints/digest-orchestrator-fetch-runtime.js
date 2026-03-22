@@ -13,6 +13,7 @@ const DEFAULT_SEARCH_BUDGET = Object.freeze({
   }),
   custom_topic_reserve_calls: 3,
 });
+const DEFAULT_MAX_FETCH_CONCURRENCY = 4;
 
 function resolveSelectionTarget(dueUsers, defaultItemCount = 7) {
   const requestedCounts = (Array.isArray(dueUsers) ? dueUsers : [])
@@ -161,6 +162,15 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0 
     hard_calls: hardCalls,
     custom_topic_reserve_calls: reserveCalls,
   };
+}
+
+function resolveFetchConcurrency(digestConfig) {
+  const configured = digestConfig?.providerResilience?.perplexity?.maxConcurrentFetches;
+  return toBoundedInt(
+    process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES || configured,
+    DEFAULT_MAX_FETCH_CONCURRENCY,
+    { min: 1, max: 24 }
+  );
 }
 
 function normalizeCandidateDomain(value) {
@@ -324,7 +334,7 @@ function countPreferredItems(state) {
   }, 0);
 }
 
-function buildFetchDiagnostics(states, budgetTracker) {
+function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
   const attemptedStates = (Array.isArray(states) ? states : []).filter((state) => Number(state?.totalCallsScheduled || 0) > 0);
   const preferredDomainsUsed = uniqueValues(attemptedStates.flatMap((state) => state.preferredDomains || []));
   const searchResultDomains = uniqueValues(attemptedStates.flatMap((state) => state.searchResultDomains || []));
@@ -356,6 +366,7 @@ function buildFetchDiagnostics(states, budgetTracker) {
     broad_fallback_topics_used: attemptedStates.reduce((sum, state) => sum + (state?.broadFallbackUsed === true ? 1 : 0), 0),
     zero_yield_retry_count: attemptedStates.reduce((sum, state) => sum + Number(state?.zeroYieldRetryCount || 0), 0),
     budget_stop_reason: String(budgetTracker?.stop_reason || "").trim() || null,
+    max_concurrent_fetches: Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY)),
   };
 }
 
@@ -389,6 +400,26 @@ function createDigestOrchestratorFetchRuntime(deps) {
   const itemEligibilityFn = typeof isFetchedItemEligible === "function"
     ? isFetchedItemEligible
     : () => true;
+  const maxFetchConcurrency = resolveFetchConcurrency(CONFIG?.digest);
+
+  async function runWithConcurrency(entries, worker) {
+    const jobs = Array.isArray(entries) ? entries : [];
+    if (jobs.length === 0) return [];
+    const results = new Array(jobs.length);
+    let cursor = 0;
+    const workerCount = Math.min(Math.max(1, maxFetchConcurrency), jobs.length);
+
+    async function consume() {
+      while (cursor < jobs.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await worker(jobs[index], index);
+      }
+    }
+
+    await Promise.all(Array.from({ length: workerCount }, () => consume()));
+    return results;
+  }
 
   async function runScheduledBatch(states, buildInvocation, batchName, budgetTracker) {
     const invocations = [];
@@ -405,7 +436,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     }
     logger(`Fetch phase ${batchName}: ${invocations.map(({ state }) => state.topic.tag).join(", ")}`);
 
-    const results = await Promise.all(invocations.map(async ({ invocation }) => {
+    const results = await runWithConcurrency(invocations, async ({ invocation }) => {
       try {
         return await fetchTopic(invocation.topic, invocation.opts);
       } catch (err) {
@@ -423,7 +454,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
           },
         };
       }
-    }));
+    });
 
     return invocations.map((entry, idx) => {
       const result = results[idx] || {};
@@ -681,7 +712,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const customItems = customStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
     let allItems = customItems.concat(standardItems);
     const providerDiagnostics = summarizeProviderDiagnostics([...standardStates, ...customStates]);
-    const fetchDiagnostics = buildFetchDiagnostics([...standardStates, ...customStates], budgetTracker);
+    const fetchDiagnostics = buildFetchDiagnostics([...standardStates, ...customStates], budgetTracker, maxFetchConcurrency);
 
     logger(`Fetched ${allItems.length} raw items`);
 

@@ -64,6 +64,7 @@ const {
   buildManualReviewQueue,
   buildSourceLevelSummary,
   computeSetQuality,
+  describeScarcity,
   itemSourceScore,
   rankItemsBySourceScore,
 } = require("./scoring-runtime");
@@ -134,6 +135,9 @@ function buildFailedPersonaQuality() {
     unique_domain_count: 0,
     top_domain_share: 0,
     stale_item_share: 0,
+    item_count: 0,
+    requested_count: 0,
+    fill_rate: 0,
   };
 }
 
@@ -283,6 +287,24 @@ function recordBudgetEvent(storage, budget, entry) {
   return storage.saveBudget(next);
 }
 
+function computeScenarioCost(result = {}) {
+  const fetchResult = result?.fetchResult || {};
+  const enrichResult = result?.enrichResult || {};
+  const perplexityCost = (
+    Number(fetchResult.standardFetchCalls || 0)
+    + Number(fetchResult.customFetchCalls || 0)
+  ) * 0.005;
+  const claudeCost = (
+    (Number(enrichResult.claudeUsage?.input_tokens || 0) / 1_000_000) * 0.8
+    + (Number(enrichResult.claudeUsage?.output_tokens || 0) / 1_000_000) * 4.0
+  );
+  return {
+    perplexityCost: Number(perplexityCost.toFixed(6)),
+    claudeCost: Number(claudeCost.toFixed(6)),
+    totalCost: Number((perplexityCost + claudeCost).toFixed(6)),
+  };
+}
+
 function buildGlobalSelection({
   services,
   scenarioId,
@@ -318,71 +340,105 @@ function buildGlobalSelection({
     targetChatId: null,
     runMode: scenarioId,
   }).then(async (fetchResult) => {
-    const digestPolicies = createDigestPolicies(CONFIG.digest || {});
-    const selectionTarget = fetchResult.selectionTarget;
-    const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
-    const dedupRes = archiveRuntime.dedupAgainstRecentArchives(fetchResult.allItems, {
-      days: crossDayDedupDays,
-      targetCount: selectionTarget,
-      minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || digestPolicies.depthPolicy.defaultItemCount || 5)),
-    });
-    const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 48);
-    const freshItems = dedupRes.items.filter((item) => !articleAgeTooOld(item, maxArticleAgeHours));
-    const staleRejected = diffItems(dedupRes.items, freshItems).map((item) => ({
-      item,
-      reason: "stale_age_filter",
-    }));
-    const dedupRejected = diffItems(fetchResult.allItems, dedupRes.items).map((item) => ({
-      item,
-      reason: "archive_dedup",
-    }));
-    const maxCustomItems = computeMaxCustomItems({
-      configuredMaxCustom: Number(CONFIG.digest.maxCustomItemsPerRun),
-      selectionTarget,
-      customTags: fetchResult.customTags,
-    });
-    const globalSelection = selectDigestItemsDetailed(freshItems, {
-      maxItems: selectionTarget,
-      maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
-      customTags: fetchResult.customTags,
-      maxCustomItems,
-      tagPriority: fetchResult.tagPriority,
-      maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
-      normalizeUrl: normalizeUrlForDedup,
-      parseDomain: archiveRuntime.parseSourceDomain,
-      normalizeTopicToken,
-      isCandidate: (_item, ctx) => Boolean(ctx.headlineKey),
-    });
-    const enrichResult = await enrichmentRuntime.enrichSelectedItems({
-      selected: globalSelection.selected,
-      runMode: "scheduled",
-      dueUsersCount: dueUsers.length,
-    });
-    const clusters = clusterStorylines(enrichResult.enriched);
-    const storylineCandidates = buildStorylineCandidates(enrichResult.enriched);
-    const storylinePool = applyStrategicQualityGate(storylineCandidates, {
-      minStrategicValue: 0.34,
-      maxRoutineScore: 0.65,
-      minKeep: Math.min(Math.max(2, Number(selectionTarget || 3)), Math.max(3, storylineCandidates.length)),
-    });
-    const clusterRejected = clusters.flatMap((cluster) => {
-      const representativeKey = itemKey(cluster?.representative || {});
-      return (Array.isArray(cluster?.items) ? cluster.items : [])
-        .filter((item) => itemKey(item) !== representativeKey)
-        .map((item) => ({
-          item,
-          reason: item?.suppressed_by_preferred_source
-            ? "storyline_preferred_substitute"
-            : item?.suppressed_by_derivative_source
-              ? "storyline_derivative_suppressed"
-              : "storyline_displaced",
-        }));
-    });
-    const strategicRejected = diffItems(storylineCandidates, storylinePool).map((item) => ({
-      item,
-      reason: "storyline_quality_gate",
-    }));
-    const cleanedAnnotated = annotateEditorialSignals(freshItems);
+    let dedupRes = { items: [], removed: 0 };
+    let freshItems = [];
+    let cleanedAnnotated = [];
+    let globalSelection = { selected: [], rejected: [] };
+    let enrichResult = { enriched: [], claudeUsage: { input_tokens: 0, output_tokens: 0 } };
+    let clusters = [];
+    let storylineCandidates = [];
+    let storylinePool = [];
+    let rejected = [];
+
+    try {
+      const digestPolicies = createDigestPolicies(CONFIG.digest || {});
+      const selectionTarget = fetchResult.selectionTarget;
+      const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
+      dedupRes = archiveRuntime.dedupAgainstRecentArchives(fetchResult.allItems, {
+        days: crossDayDedupDays,
+        targetCount: selectionTarget,
+        minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || digestPolicies.depthPolicy.defaultItemCount || 5)),
+      });
+      const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 48);
+      freshItems = dedupRes.items.filter((item) => !articleAgeTooOld(item, maxArticleAgeHours));
+      const staleRejected = diffItems(dedupRes.items, freshItems).map((item) => ({
+        item,
+        reason: "stale_age_filter",
+      }));
+      const dedupRejected = diffItems(fetchResult.allItems, dedupRes.items).map((item) => ({
+        item,
+        reason: "archive_dedup",
+      }));
+      const maxCustomItems = computeMaxCustomItems({
+        configuredMaxCustom: Number(CONFIG.digest.maxCustomItemsPerRun),
+        selectionTarget,
+        customTags: fetchResult.customTags,
+      });
+      globalSelection = selectDigestItemsDetailed(freshItems, {
+        maxItems: selectionTarget,
+        maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
+        customTags: fetchResult.customTags,
+        maxCustomItems,
+        tagPriority: fetchResult.tagPriority,
+        maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
+        normalizeUrl: normalizeUrlForDedup,
+        parseDomain: archiveRuntime.parseSourceDomain,
+        normalizeTopicToken,
+        isCandidate: (_item, ctx) => Boolean(ctx.headlineKey),
+      });
+      enrichResult = await enrichmentRuntime.enrichSelectedItems({
+        selected: globalSelection.selected,
+        runMode: "scheduled",
+        dueUsersCount: dueUsers.length,
+      });
+      clusters = clusterStorylines(enrichResult.enriched);
+      storylineCandidates = buildStorylineCandidates(enrichResult.enriched);
+      storylinePool = applyStrategicQualityGate(storylineCandidates, {
+        minStrategicValue: 0.34,
+        maxRoutineScore: 0.65,
+        minKeep: Math.min(Math.max(2, Number(selectionTarget || 3)), Math.max(3, storylineCandidates.length)),
+      });
+      const clusterRejected = clusters.flatMap((cluster) => {
+        const representativeKey = itemKey(cluster?.representative || {});
+        return (Array.isArray(cluster?.items) ? cluster.items : [])
+          .filter((item) => itemKey(item) !== representativeKey)
+          .map((item) => ({
+            item,
+            reason: item?.suppressed_by_preferred_source
+              ? "storyline_preferred_substitute"
+              : item?.suppressed_by_derivative_source
+                ? "storyline_derivative_suppressed"
+                : "storyline_displaced",
+          }));
+      });
+      const strategicRejected = diffItems(storylineCandidates, storylinePool).map((item) => ({
+        item,
+        reason: "storyline_quality_gate",
+      }));
+      cleanedAnnotated = annotateEditorialSignals(freshItems);
+      rejected = [
+        ...dedupRejected,
+        ...staleRejected,
+        ...globalSelection.rejected,
+        ...clusterRejected,
+        ...strategicRejected,
+      ];
+    } catch (error) {
+      error.partialEvalResult = {
+        fetchResult,
+        dedupRes,
+        freshItems,
+        cleanedAnnotated: cleanedAnnotated.length > 0 ? cleanedAnnotated : annotateEditorialSignals(freshItems),
+        globalSelection,
+        enrichResult,
+        clusters,
+        storylineCandidates,
+        storylinePool,
+        rejected,
+      };
+      throw error;
+    }
+
     return {
       fetchResult,
       dedupRes,
@@ -393,13 +449,7 @@ function buildGlobalSelection({
       clusters,
       storylineCandidates,
       storylinePool,
-      rejected: [
-        ...dedupRejected,
-        ...staleRejected,
-        ...globalSelection.rejected,
-        ...clusterRejected,
-        ...strategicRejected,
-      ],
+      rejected,
     };
   });
 }
@@ -424,9 +474,10 @@ function computePersonaRawBaseline(items, user, parseSourceDomain) {
   return {
     filtered,
     scored,
+    requestedCount,
     rawBaselineItems,
-    candidatePoolQuality: computeSetQuality(scored),
-    rawBaselineQuality: computeSetQuality(rawBaselineItems),
+    candidatePoolQuality: computeSetQuality(scored, { requestedCount }),
+    rawBaselineQuality: computeSetQuality(rawBaselineItems, { requestedCount }),
   };
 }
 
@@ -445,6 +496,7 @@ function evaluatePersona({
 }) {
   const { archiveRuntime, rankingRuntime } = services;
   const rawBaseline = computePersonaRawBaseline(cleanedAnnotated, user, archiveRuntime.parseSourceDomain);
+  const requestedCount = rawBaseline.requestedCount;
   try {
     const ranking = rankingRuntime.rankAndSuppressUserItems({
       user,
@@ -464,24 +516,31 @@ function evaluatePersona({
       captureDiagnostics: true,
     });
     const finalItems = applyDigestDepth(ranking.userItems, user?.preferences?.depth || "headline_plus_why");
-    const finalQuality = computeSetQuality(finalItems);
+    const finalQuality = computeSetQuality(finalItems, { requestedCount });
     const digestQuality = computeDigestQualityScore({
       items: finalItems,
       user,
       previous_items: [],
     });
+    const selectionLift = Number((finalQuality.score - rawBaseline.rawBaselineQuality.score).toFixed(2));
     return {
       status: "completed",
       scenario_id: scenarioId,
       persona_id: user.chatId,
       persona_label: user.eval_label || user.email || user.chatId,
       group: user.eval_group || "unknown",
-      requested_count: Math.max(1, Number(user?.preferences?.items_per_digest || 5)),
+      requested_count: requestedCount,
       candidate_pool_count: rawBaseline.scored.length,
       candidate_pool_quality: rawBaseline.candidatePoolQuality,
       raw_baseline_quality: rawBaseline.rawBaselineQuality,
       final_selected_quality: finalQuality,
-      selection_lift: Number((finalQuality.score - rawBaseline.rawBaselineQuality.score).toFixed(2)),
+      selection_lift: selectionLift,
+      scarcity_profile: describeScarcity({
+        itemCount: finalItems.length,
+        requestedCount,
+        score: finalQuality.score,
+        selectionLift,
+      }),
       current_digest_quality: digestQuality,
       candidate_pool_items: rawBaseline.scored.map((item) => serializeItem(item)),
       raw_baseline_items: rawBaseline.rawBaselineItems.map((item) => serializeItem(item)),
@@ -498,12 +557,16 @@ function evaluatePersona({
       persona_id: user.chatId,
       persona_label: user.eval_label || user.email || user.chatId,
       group: user.eval_group || "unknown",
-      requested_count: Math.max(1, Number(user?.preferences?.items_per_digest || 5)),
+      requested_count: requestedCount,
       candidate_pool_count: rawBaseline.scored.length,
       candidate_pool_quality: rawBaseline.candidatePoolQuality,
       raw_baseline_quality: rawBaseline.rawBaselineQuality,
-      final_selected_quality: buildFailedPersonaQuality(),
+      final_selected_quality: {
+        ...buildFailedPersonaQuality(),
+        requested_count: requestedCount,
+      },
       selection_lift: Number((0 - rawBaseline.rawBaselineQuality.score).toFixed(2)),
+      scarcity_profile: "short_and_thin",
       current_digest_quality: {
         score: 0,
         band: "poor",
@@ -538,8 +601,11 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const weakest = personaResults.slice().sort((left, right) => Number(left.final_selected_quality?.score || 0) - Number(right.final_selected_quality?.score || 0))[0] || null;
   const negativeLiftCount = personaResults.filter((row) => Number(row.selection_lift || 0) < 0).length;
   const failedPersonaCount = personaResults.filter((row) => row?.status === "failed").length;
+  const scarcityCounts = {};
   const reasonCounts = {};
   for (const row of personaResults) {
+    const scarcityKey = String(row?.scarcity_profile || "").trim() || "unknown";
+    scarcityCounts[scarcityKey] = (scarcityCounts[scarcityKey] || 0) + 1;
     for (const [reason, count] of Object.entries(row?.failure_reasons?.reason_counts || {})) {
       reasonCounts[reason] = (reasonCounts[reason] || 0) + Number(count || 0);
     }
@@ -551,11 +617,15 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const avgFreshness = personaResults.length
     ? personaResults.reduce((sum, row) => sum + Number(row?.final_selected_quality?.avg_freshness || 0), 0) / personaResults.length
     : 0;
+  const avgFillRate = personaResults.length
+    ? personaResults.reduce((sum, row) => sum + Number(row?.final_selected_quality?.fill_rate || 0), 0) / personaResults.length
+    : 0;
   const topDomainShare = finalSourceSummary[0]?.top_domain_share || 0;
   if (avgFreshness < 75) recommendations.push("Freshness is slipping below the 24-48h target in final selections.");
   if (negativeLiftCount > 0) recommendations.push("Selection is reducing quality for some personas; inspect negative-lift cases.");
   if (topDomainShare > 50) recommendations.push("Source concentration is high in final selections; review source-cap behavior.");
   if (failedPersonaCount > 0) recommendations.push("Some personas failed to produce deliverable items after fallback; inspect thin-pool and backfill behavior.");
+  if ((scarcityCounts.short_but_precise || 0) > 0) recommendations.push("Some digests are intentionally short but precise; treat fill-rate separately from quality.");
   return {
     scenario_id: scenario.id,
     label: scenario.label,
@@ -581,12 +651,14 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
       score: weakest.final_selected_quality.score,
     } : null,
     negative_lift_count: negativeLiftCount,
+    scarcity_counts: scarcityCounts,
     reason_counts: reasonCounts,
     raw_source_summary: rawSourceSummary,
     final_source_summary: finalSourceSummary,
     recommendations,
     average_final_score: Number(avgFinalScore.toFixed(2)),
     average_final_freshness: Number(avgFreshness.toFixed(2)),
+    average_fill_rate: Number(avgFillRate.toFixed(2)),
   };
 }
 
@@ -726,16 +798,12 @@ async function runRetrievalEval(options = {}) {
         }));
         allPersonaResults.push(...personaResults);
 
-        const perplexityCost = (Number(globalResult.fetchResult.standardFetchCalls || 0) + Number(globalResult.fetchResult.customFetchCalls || 0)) * 0.005;
-        const claudeCost = (
-          (Number(globalResult.enrichResult.claudeUsage?.input_tokens || 0) / 1_000_000) * 0.8
-          + (Number(globalResult.enrichResult.claudeUsage?.output_tokens || 0) / 1_000_000) * 4.0
-        );
+        const scenarioCost = computeScenarioCost(globalResult);
         budget = recordBudgetEvent(storage, budget, {
           ts: new Date().toISOString(),
           provider: "eval_scenario",
           purpose: scenario.id,
-          cost_usd: Number((perplexityCost + claudeCost).toFixed(6)),
+          cost_usd: scenarioCost.totalCost,
           standard_fetch_calls: Number(globalResult.fetchResult.standardFetchCalls || 0),
           custom_fetch_calls: Number(globalResult.fetchResult.customFetchCalls || 0),
           claude_usage: globalResult.enrichResult.claudeUsage,
@@ -748,7 +816,7 @@ async function runRetrievalEval(options = {}) {
           status: summary.status,
           error: null,
           due_users_count: scenario.dueUsers.length,
-          budget_cost_usd: Number((perplexityCost + claudeCost).toFixed(6)),
+          budget_cost_usd: scenarioCost.totalCost,
           raw_candidates: globalResult.fetchResult.allItems.map((item) => serializeItem(item)),
           cleaned_candidates: globalResult.cleanedAnnotated.map((item) => serializeItem(item)),
           global_selected_items: globalResult.enrichResult.enriched.map((item) => serializeItem(item)),
@@ -773,19 +841,40 @@ async function runRetrievalEval(options = {}) {
         runRecord.scenarios.push(scenarioRecord);
       } catch (error) {
         const message = String(error?.message || error || "scenario failed");
+        const partialResult = error?.partialEvalResult && typeof error.partialEvalResult === "object"
+          ? error.partialEvalResult
+          : null;
+        const partialCost = computeScenarioCost(partialResult || {});
+        if (partialCost.totalCost > 0) {
+          budget = recordBudgetEvent(storage, budget, {
+            ts: new Date().toISOString(),
+            provider: "eval_scenario_partial_failure",
+            purpose: scenario.id,
+            cost_usd: partialCost.totalCost,
+            standard_fetch_calls: Number(partialResult?.fetchResult?.standardFetchCalls || 0),
+            custom_fetch_calls: Number(partialResult?.fetchResult?.customFetchCalls || 0),
+            claude_usage: partialResult?.enrichResult?.claudeUsage || null,
+            failed: true,
+          });
+        }
         runRecord.scenarios.push({
           id: scenario.id,
           label: scenario.label,
           status: "failed",
           error: message,
           due_users_count: scenario.dueUsers.length,
-          budget_cost_usd: 0,
-          raw_candidates: [],
-          cleaned_candidates: [],
-          global_selected_items: [],
-          storyline_pool_items: [],
-          global_rejections: [],
-          clusters: [],
+          budget_cost_usd: partialCost.totalCost,
+          raw_candidates: (Array.isArray(partialResult?.fetchResult?.allItems) ? partialResult.fetchResult.allItems : []).map((item) => serializeItem(item)),
+          cleaned_candidates: (Array.isArray(partialResult?.cleanedAnnotated) ? partialResult.cleanedAnnotated : []).map((item) => serializeItem(item)),
+          global_selected_items: (Array.isArray(partialResult?.enrichResult?.enriched) ? partialResult.enrichResult.enriched : []).map((item) => serializeItem(item)),
+          storyline_pool_items: (Array.isArray(partialResult?.storylinePool) ? partialResult.storylinePool : []).map((item) => serializeItem(item)),
+          global_rejections: (Array.isArray(partialResult?.rejected) ? partialResult.rejected : []).map((row) => serializeItem(row.item, { stage_reason: row.reason })),
+          clusters: (Array.isArray(partialResult?.clusters) ? partialResult.clusters : []).map((cluster) => ({
+            storyline_id: cluster.storyline_id,
+            canonical_headline: cluster.canonical_headline,
+            representative: serializeItem(cluster.representative || {}),
+            items: (Array.isArray(cluster.items) ? cluster.items : []).map((item) => serializeItem(item)),
+          })),
           summary: {
             scenario_id: scenario.id,
             label: scenario.label,
@@ -795,6 +884,9 @@ async function runRetrievalEval(options = {}) {
             reason_counts: {
               scenario_failed: 1,
             },
+            raw_candidate_count: Math.max(0, Number(partialResult?.fetchResult?.allItems?.length || 0)),
+            cleaned_candidate_count: Math.max(0, Number(partialResult?.cleanedAnnotated?.length || 0)),
+            average_fill_rate: 0,
             recommendations: [
               `Scenario failed before final selection: ${message}`,
             ],
@@ -849,6 +941,7 @@ module.exports = {
   budgetGuardStatus,
   buildGlobalSelection,
   buildScenarioEstimate,
+  computeScenarioCost,
   computePersonaRawBaseline,
   createEvalServices,
   ensureBudgetCanAfford,

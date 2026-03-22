@@ -2,6 +2,7 @@
 
 const { isWeakSourceItem } = require("../../digest/domain/storyline-domain-runtime");
 const {
+  SOURCE_EVAL_BANDS,
   SOURCE_EVAL_FORMULA,
   sourceEvalBand,
 } = require("./constants-runtime");
@@ -86,9 +87,25 @@ function topDomainShare(items = []) {
   return clamp((Math.max(...counts) / total) * 100, 0, 100);
 }
 
-function computeSetQuality(items = []) {
+function fillRate(itemCount, requestedCount) {
+  const requested = Math.max(1, Number(requestedCount || 0));
+  const count = Math.max(0, Number(itemCount || 0));
+  return clamp((count / requested) * 100, 0, 100);
+}
+
+function describeScarcity({ itemCount = 0, requestedCount = 0, score = 0, selectionLift = 0 } = {}) {
+  const rate = fillRate(itemCount, requestedCount);
+  if (rate < 100) {
+    return Number(score || 0) >= SOURCE_EVAL_BANDS.decent ? "short_but_precise" : "short_and_thin";
+  }
+  if (Number(selectionLift || 0) < -5) return "full_but_diluted";
+  return "full_and_precise";
+}
+
+function computeSetQuality(items = [], opts = {}) {
   const rows = Array.isArray(items) ? items : [];
   const weights = SOURCE_EVAL_FORMULA.set_quality;
+  const requestedCount = Math.max(1, Number(opts?.requestedCount || rows.length || 1));
   const itemScores = rows.map(itemSourceScore);
   const relevanceScores = rows.map(relevanceScore);
   const freshnessScores = rows.map(freshnessScore);
@@ -112,6 +129,9 @@ function computeSetQuality(items = []) {
     unique_domain_count: Object.keys(domainCounts(rows)).length,
     top_domain_share: Number(topDomainShare(rows).toFixed(2)),
     stale_item_share: Number(rate(rows, (item) => freshnessScore(item) <= SOURCE_EVAL_FORMULA.freshness_buckets.le_72h && freshnessScore(item) > 0 && freshnessScore(item) < 75).toFixed(2)),
+    item_count: rows.length,
+    requested_count: requestedCount,
+    fill_rate: Number(fillRate(rows.length, requestedCount).toFixed(2)),
   };
 }
 
@@ -168,7 +188,9 @@ module.exports = {
   buildManualReviewQueue,
   buildSourceLevelSummary,
   computeSetQuality,
+  describeScarcity,
   credibilityScore,
+  fillRate,
   freshnessScore,
   itemSourceScore,
   preferredScore,

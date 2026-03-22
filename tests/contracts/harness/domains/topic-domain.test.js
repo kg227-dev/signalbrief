@@ -10,7 +10,7 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 
-const { applyTopicRelevanceScores } = runtime;
+const { applyTopicRelevanceScores, buildCustomTopicQueries } = runtime;
 
 const [preferredWinner, weakLoser, blockedPreferred] = applyTopicRelevanceScores([
   {
@@ -71,3 +71,7 @@ assert.ok(weakLoser.score_breakdown.derivative_content_penalty > 0);
 assert.ok(weakLoser.score_breakdown.platform_ambiguity_penalty > 0);
 assert.strictEqual(blockedPreferred.score_breakdown.preferred_source_boost, 0);
 assert.strictEqual(blockedPreferred.relevanceScore, 0);
+
+const nvidiaQueries = buildCustomTopicQueries("Nvidia");
+assert.ok(nvidiaQueries.every((query) => !String(query).includes("72 hours")));
+assert.ok(nvidiaQueries.some((query) => String(query).toLowerCase().includes("48 hours")));

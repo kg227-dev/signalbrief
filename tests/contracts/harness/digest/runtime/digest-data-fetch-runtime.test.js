@@ -46,7 +46,7 @@ async function testCustomFallbackFlowWithProviderPolicy() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Custom story", summary: "Summary", url: "https://example.com/story" },
+                { headline: "Custom story", summary: "Summary", url: "https://example.com/story", published_date: "2026-03-21T00:00:00.000Z" },
               ]),
             },
           }],
@@ -115,7 +115,7 @@ async function testStandardTopicsUseFallbackQueriesForThinPools() {
             choices: [{
               message: {
                 content: JSON.stringify([
-                  { headline: "Standard story one", summary: "Summary", url: "https://example.com/one" },
+                  { headline: "Standard story one", summary: "Summary", url: "https://example.com/one", published_date: "2026-03-21T00:00:00.000Z" },
                 ]),
               },
             }],
@@ -129,7 +129,7 @@ async function testStandardTopicsUseFallbackQueriesForThinPools() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Standard story two", summary: "Summary", url: "https://example.com/two" },
+                { headline: "Standard story two", summary: "Summary", url: "https://example.com/two", published_date: "2026-03-21T00:00:00.000Z" },
               ]),
             },
           }],
@@ -179,6 +179,7 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
                     summary: "Summary",
                     source: "blocked.example",
                     url: "https://preferred.example/story",
+                    published_date: "2026-03-21T00:00:00.000Z",
                   },
                 ]),
               },
@@ -197,14 +198,15 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
           choices: [{
             message: {
               content: JSON.stringify([
-                {
-                  headline: "Broad source story",
-                  summary: "Summary",
-                  source: "reuters.com",
-                  url: "https://broad.example/story",
-                },
-              ]),
-            },
+                  {
+                    headline: "Broad source story",
+                    summary: "Summary",
+                    source: "reuters.com",
+                    url: "https://broad.example/story",
+                    published_date: "2026-03-21T00:00:00.000Z",
+                  },
+                ]),
+              },
           }],
         },
       };
@@ -262,7 +264,7 @@ async function testPreferredOnlyModeSkipsBroadFallback() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Preferred only story", summary: "Summary", source: "reuters.com", url: "https://preferred.example/story" },
+                { headline: "Preferred only story", summary: "Summary", source: "reuters.com", url: "https://preferred.example/story", published_date: "2026-03-21T00:00:00.000Z" },
               ]),
             },
           }],
@@ -308,7 +310,7 @@ async function testBroadOnlyModeSkipsSearchFilter() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Broad only story", summary: "Summary", source: "wsj.com", url: "https://broad.example/story" },
+                { headline: "Broad only story", summary: "Summary", source: "wsj.com", url: "https://broad.example/story", published_date: "2026-03-21T00:00:00.000Z" },
               ]),
             },
           }],
@@ -354,6 +356,7 @@ async function testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl() {
                 summary: "Summary",
                 source: "wsj.com",
                 url: "https://www.wsj.com/articles/blackstone-exits-energy-portfolio-15-billion-deal-3f8d2a1c",
+                published_date: "2026-03-21T00:00:00.000Z",
               },
             ]),
           },
@@ -394,6 +397,7 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
                 summary: "Summary",
                 source: "wsj.com",
                 url: "https://www.wsj.com/articles/blackstone-exits-energy-portfolio-15-billion-deal-3f8d2a1c",
+                published_date: "2026-03-21T00:00:00.000Z",
               },
             ]),
           },

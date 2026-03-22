@@ -57,6 +57,43 @@ function itemIsCorroborated(item) {
     || Number(item?.supporting_sources_avg_authority || 0) >= 0.7;
 }
 
+function hasCustomKeywordSignal(item) {
+  return Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword");
+}
+
+function isCustomPrecisionMode(customKeywords = [], standardTopicsLower = []) {
+  const customCount = Array.isArray(customKeywords) ? customKeywords.length : 0;
+  const standardCount = Array.isArray(standardTopicsLower) ? standardTopicsLower.length : 0;
+  return customCount > 0 && customCount >= Math.max(1, standardCount) && standardCount <= 1;
+}
+
+function applyCustomPrecisionGate(items = [], enabled = false) {
+  const ranked = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!enabled || ranked.length === 0) {
+    return {
+      items: ranked,
+      removed: 0,
+      matched: 0,
+      applied: false,
+    };
+  }
+  const customMatched = ranked.filter((item) => hasCustomKeywordSignal(item));
+  if (customMatched.length === 0) {
+    return {
+      items: ranked,
+      removed: 0,
+      matched: 0,
+      applied: false,
+    };
+  }
+  return {
+    items: customMatched,
+    removed: Math.max(0, ranked.length - customMatched.length),
+    matched: customMatched.length,
+    applied: true,
+  };
+}
+
 function applySourcePolicyCaps(items = [], requestedCount = 5) {
   const ranked = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!ranked.length) return [];
@@ -255,6 +292,9 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     if (trace) appendStageTrace(trace, userItems, filteredResult.items, "topic_filter", "filtered_by_topic");
     userItems = filteredResult.items;
     wasFiltered = filteredResult.wasFiltered;
+    const standardTopicsLower = Array.isArray(filteredResult.standardTopicsLower)
+      ? filteredResult.standardTopicsLower
+      : [];
     if (trace) trace.snapshots.push(snapshotStage(userItems, "topic_filter", "filtered_by_topic"));
     const recentHistory = typeof buildRecentEntityHistory === "function"
       ? buildRecentEntityHistory(
@@ -330,6 +370,17 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     }
     if (trace) trace.snapshots.push(snapshotStage(userItems, "semantic_repeat", strictFreshness ? "removed_by_semantic_repeat" : "semantic_soft_preview"));
 
+    const customPrecisionMode = isCustomPrecisionMode(customKeywords, standardTopicsLower);
+    const precisionGate = applyCustomPrecisionGate(userItems, customPrecisionMode);
+    if (precisionGate.applied) {
+      if (trace) appendStageTrace(trace, userItems, precisionGate.items, "custom_precision_gate", "removed_by_custom_precision");
+      userItems = precisionGate.items;
+      log(`  [custom-precision] ${user.email || user.chatId}: kept ${precisionGate.matched} custom-matched item(s), removed ${precisionGate.removed} broad fallback candidate(s)`);
+    }
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "custom_precision_gate", precisionGate.applied ? "removed_by_custom_precision" : "custom_precision_skipped"));
+
+    const rankedFilteredPool = userItems.slice();
+
     const minStrategicValue = Math.max(0, Math.min(1, Number(CONFIG.digest.minStrategicValue ?? rankingPolicy.minStrategicValue ?? 0.34)));
     const maxRoutineScore = Math.max(0, Math.min(1, Number(CONFIG.digest.maxRoutineScore ?? rankingPolicy.maxRoutineScore ?? 0.65)));
     const minSignalScoreForFinal = Number(CONFIG.digest.minSignalScoreForFinal ?? rankingPolicy.minSignalScoreForFinal ?? 5.0);
@@ -379,22 +430,12 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     if (trace) appendStageTrace(trace, beforeSourcePolicyCaps, userItems, "source_policy_caps", "removed_by_source_policy_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "source_policy_caps", "removed_by_source_policy_cap"));
 
-    // Minimum-count backfill: if we have fewer than requestedCount items,
-    // pull additional items from the full enriched pool (re-scored) to reach the minimum.
+    // Minimum-count backfill: stay inside the ranked filtered pool so we do not
+    // dilute thin digests with unrelated stories from the broader enriched set.
     if (userItems.length > 0 && userItems.length < requestedCount) {
       const currentUrls = new Set(userItems.map((i) => i.url));
       const poolCandidates = filterFreshCandidates(
-        applyTopicRelevanceScores(enriched, user.topics || [], weights, {
-          specialistMode: false,
-          repeatPenalty,
-          isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
-          sourceDomainForItem: parseSourceDomain,
-          recentEntityCounts: recentHistory.entityCounts,
-          recentStorylineKeys: recentHistory.storylineKeys,
-          blockedSources,
-          trustedSources,
-          nowIso,
-        })
+        rankedFilteredPool
           .filter((item) => !item?.hard_exclude && !currentUrls.has(item.url))
           .sort((a, b) => b.relevanceScore - a.relevanceScore),
         {
@@ -406,14 +447,19 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       if (poolCandidates.length > 0) {
         userItems = [...userItems, ...poolCandidates];
         minCountBackfillCount = poolCandidates.length;
-        log(`  [min-count-backfill] added ${poolCandidates.length} item(s) from enriched pool to reach ${userItems.length}/${requestedCount}`);
+        log(`  [min-count-backfill] added ${poolCandidates.length} item(s) from ranked filtered pool to reach ${userItems.length}/${requestedCount}`);
       }
     }
 
     if (userItems.length === 0) {
       const emergencyCount = Math.max(1, Math.min(3, requestedCount));
-      const emergency = filterFreshCandidates(
-        applyTopicRelevanceScores(enriched, user.topics || [], weights, {
+      let emergencyPool = rankedFilteredPool
+        .filter((item) => !item?.hard_exclude)
+        .filter((item) => Number(item?.routine_item_score || 0) <= maxRoutineScore)
+        .filter((item) => Number(item?.strategic_value || 0) >= (minStrategicValue * 0.9))
+        .sort((a, b) => b.relevanceScore - a.relevanceScore);
+      if (emergencyPool.length === 0 && !wasFiltered && !customPrecisionMode) {
+        emergencyPool = applyTopicRelevanceScores(enriched, user.topics || [], weights, {
           specialistMode: false,
           repeatPenalty,
           isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
@@ -427,12 +473,12 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           .sort((a, b) => b.relevanceScore - a.relevanceScore)
           .filter((item) => !item?.hard_exclude)
           .filter((item) => Number(item?.routine_item_score || 0) <= maxRoutineScore)
-          .filter((item) => Number(item?.strategic_value || 0) >= (minStrategicValue * 0.9)),
-        {
-          globalRepeatIndex: strictFreshness ? repeatIndex : null,
-          userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
-        }
-      ).items.slice(0, emergencyCount);
+          .filter((item) => Number(item?.strategic_value || 0) >= (minStrategicValue * 0.9));
+      }
+      const emergency = filterFreshCandidates(emergencyPool, {
+        globalRepeatIndex: strictFreshness ? repeatIndex : null,
+        userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
+      }).items.slice(0, emergencyCount);
       const emergencyCapped = typeof applyEntityCoverageCap === "function"
         ? applyEntityCoverageCap(emergency, Math.max(1, Number(CONFIG.digest.maxSignalsPerEntity || 1)))
         : emergency;
@@ -507,6 +553,10 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         fallback_reason: fallbackReason,
         refill_count: qualityBackfillCount + minCountBackfillCount + emergencyFallbackCount,
         thin_pool: thinPool,
+        custom_precision_mode: customPrecisionMode,
+        custom_precision_applied: precisionGate.applied,
+        custom_precision_removed_count: Math.max(0, Number(precisionGate.removed || 0)),
+        short_digest_accepted: thinPool && userItems.length > 0,
         item_trace: trace,
         dominant_failure_mode: deriveDominantFailureMode({
           finalItems: userItems,

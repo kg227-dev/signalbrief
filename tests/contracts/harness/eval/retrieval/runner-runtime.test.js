@@ -18,6 +18,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   budgetGuardStatus,
   buildScenarioEstimate,
+  computeScenarioCost,
   runRetrievalEval,
 } = runtime;
 const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "src/eval/retrieval/storage-runtime.js"));
@@ -42,6 +43,22 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
     dueUsers: [{ chatId: "one" }, { chatId: "two" }],
   });
   assert.strictEqual(estimate, 0.091);
+
+  const scenarioCost = computeScenarioCost({
+    fetchResult: {
+      standardFetchCalls: 3,
+      customFetchCalls: 2,
+    },
+    enrichResult: {
+      claudeUsage: {
+        input_tokens: 1000,
+        output_tokens: 2000,
+      },
+    },
+  });
+  assert.strictEqual(scenarioCost.perplexityCost, 0.025);
+  assert.strictEqual(scenarioCost.claudeCost, 0.0088);
+  assert.strictEqual(scenarioCost.totalCost, 0.0338);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-retrieval-eval-runner-"));
   const storage = createRetrievalEvalStorageRuntime({

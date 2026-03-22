@@ -16,6 +16,8 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   buildSourceLevelSummary,
   computeSetQuality,
+  describeScarcity,
+  fillRate,
   freshnessScore,
   itemSourceScore,
 } = runtime;
@@ -49,12 +51,18 @@ try {
   };
   assert.strictEqual(Number(itemSourceScore(weakItem).toFixed(2)), 29.05);
 
-  const quality = computeSetQuality([strongPreferred, weakItem]);
+  const quality = computeSetQuality([strongPreferred, weakItem], { requestedCount: 5 });
   assert.strictEqual(quality.preferred_hit_rate, 50);
   assert.strictEqual(quality.weak_source_rate, 50);
   assert.strictEqual(quality.unique_domain_count, 2);
   assert.strictEqual(quality.top_domain_share, 50);
+  assert.strictEqual(quality.item_count, 2);
+  assert.strictEqual(quality.requested_count, 5);
+  assert.strictEqual(quality.fill_rate, 40);
   assert.ok(quality.score > 0 && quality.score < 100);
+  assert.strictEqual(fillRate(2, 5), 40);
+  assert.strictEqual(describeScarcity({ itemCount: 2, requestedCount: 5, score: 72 }), "short_but_precise");
+  assert.strictEqual(describeScarcity({ itemCount: 5, requestedCount: 5, score: 72, selectionLift: -6 }), "full_but_diluted");
 
   const summary = buildSourceLevelSummary([
     strongPreferred,

@@ -185,6 +185,7 @@ function createDigestDataFetchRuntime(deps) {
     searchDomainFilter,
     preferredEvidenceDomains,
     promptBias,
+    maxAgeHours,
   }) {
     const maxAttempts = Math.min(3, queries.length);
     const diagnostics = createPassDiagnostics(maxAttempts);
@@ -277,7 +278,10 @@ function createDigestDataFetchRuntime(deps) {
             preferred_source_available_in_search: searchEvidence.preferred_search_result_domains.length > 0
               && !searchEvidence.preferred_search_result_domains.some((candidate) => matchesDomain(item?.source || item?.url, candidate)),
           }));
-        collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup);
+        collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
+          maxAgeHours,
+          requireVerifiedPublishedDate: true,
+        });
       } catch (err) {
         log(`Parse error for ${topic.tag} ${passName}: ${err.message}`);
       }
@@ -340,7 +344,10 @@ function createDigestDataFetchRuntime(deps) {
       preferred_search_result_domains: [],
       preferred_search_result_hit_count: 0,
       preferred_search_results_without_preferred_item: false,
+      freshness_max_age_hours: Number(CONFIG?.digest?.maxArticleAgeHours || 48),
+      require_verified_published_date: true,
     };
+    const maxAgeHours = Number(CONFIG?.digest?.maxArticleAgeHours || 48);
 
     if (!queries.length) {
       return { items: [], apiCalls: 0, diagnostics };
@@ -360,6 +367,7 @@ function createDigestDataFetchRuntime(deps) {
         searchDomainFilter: preferredDomains,
         preferredEvidenceDomains: preferredDomains,
         promptBias: buildPreferredPromptBias(preferredDomains),
+        maxAgeHours,
       });
       apiCalls += preferredPass.apiCalls;
       mergePassDiagnostics(diagnostics, preferredPass.diagnostics);
@@ -385,6 +393,7 @@ function createDigestDataFetchRuntime(deps) {
         searchDomainFilter: [],
         preferredEvidenceDomains: preferredDomains,
         promptBias: buildBroadFallbackPromptBias(retrievalPlan),
+        maxAgeHours,
       });
       apiCalls += broadPass.apiCalls;
       mergePassDiagnostics(diagnostics, broadPass.diagnostics);

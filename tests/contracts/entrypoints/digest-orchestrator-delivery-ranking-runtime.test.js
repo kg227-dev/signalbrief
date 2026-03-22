@@ -36,7 +36,8 @@ assertModuleExports(() => runtime, TARGET_REL);
         { tag: "STRATEGY", baseScore: 5.5, strategic_value: 0.18, routine_item_score: 0.88, why_shown: ["custom_keyword"], entity_keys: ["pfizer"] },
         { tag: "HEALTHCARE", baseScore: 8.4, strategic_value: 0.79, routine_item_score: 0.12, entity_keys: ["nvidia"] },
       ],
-      customKeywords: ["glp_1"],
+      standardTopicsLower: ["ai tech"],
+      customKeywords: [],
       specialistMode: false,
       wasFiltered: true,
     }),
@@ -80,7 +81,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     nowIso: "2026-03-13T11:00:00.000Z",
   });
 
-  assert.strictEqual(scoreCallCount, 2); // 1 initial + 1 min-count-backfill (userItems < requestedCount)
+  assert.strictEqual(scoreCallCount, 1);
   assert.strictEqual(ranked.wasFiltered, true);
   assert.strictEqual(ranked.userItems.length, 1);
   assert.strictEqual(ranked.userItems[0].tag, "AI×TECH");
@@ -103,7 +104,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       items: [],
       customKeywords: [],
       specialistMode: false,
-      wasFiltered: true,
+      wasFiltered: false,
     }),
     applyTopicRelevanceScores: () => {
       emergencyScoreCalls += 1;
@@ -138,6 +139,64 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(emergencyOut.wasFiltered, false);
   assert.strictEqual(emergencyOut.userItems.length, 1);
   assert.strictEqual(emergencyOut.diagnostics.fallback_reason, "emergency_fallback");
+
+  const customPrecisionRuntime = createDigestOrchestratorDeliveryRankingRuntime({
+    CONFIG: {
+      digest: {
+        perUserFreshnessMinItems: 2,
+        perUserFreshnessDigests: 3,
+        perUserEntityHistoryDigests: 3,
+        maxSignalsPerEntity: 3,
+      },
+    },
+    log: () => {},
+    filterItemsByTopics: () => ({
+      items: [
+        { tag: "STRATEGY", headline: "General strategy item", strategic_value: 0.8, routine_item_score: 0.1, url: "https://example.com/strategy" },
+        { tag: "NVIDIA", headline: "Nvidia launches Blackwell service", strategic_value: 0.9, routine_item_score: 0.1, url: "https://example.com/nvidia" },
+      ],
+      standardTopicsLower: ["strategy"],
+      customKeywords: ["nvidia"],
+      specialistMode: true,
+      wasFiltered: true,
+    }),
+    applyTopicRelevanceScores: (items) => items.map((item) => ({
+      ...item,
+      relevanceScore: item.tag === "NVIDIA" ? 9.5 : 8.8,
+      why_shown: item.tag === "NVIDIA" ? ["custom_keyword"] : ["topic_match"],
+    })),
+    buildRecentEntityHistory: () => ({ entityCounts: {}, storylineKeys: new Set() }),
+    suppressRecentlySentForUser: (items) => ({ items, removed: 0, backfilled: 0 }),
+    isRecentRepeatItem: () => false,
+    parseSourceDomain: () => "example.com",
+    applyEntityCoverageCap: (items) => items,
+    reserveCustomKeywordSlot: (items) => items,
+  });
+
+  const customPrecisionOut = customPrecisionRuntime.rankAndSuppressUserItems({
+    user: {
+      chatId: "custom-precision",
+      topics: ["STRATEGY", "custom_nvidia"],
+      preferences: { items_per_digest: 3 },
+      topic_weights: {},
+    },
+    enriched: [
+      { tag: "STRATEGY", headline: "Broad filler", relevanceScore: 7.2, strategic_value: 0.7, routine_item_score: 0.1, url: "https://example.com/filler" },
+    ],
+    repeatIndex: { days: 3, urlKeys: new Set(), headlineKeys: new Set() },
+    repeatPenalty: 0.2,
+    depthPolicy: { minFilteredItems: 2, defaultItemCount: 3 },
+    rankingPolicy: { minSignalScoreForFinal: 0 },
+    recentDigestRecords: [],
+    nowIso: "2026-03-13T11:00:00.000Z",
+    deliveryMode: "scheduled",
+  });
+
+  assert.strictEqual(customPrecisionOut.userItems.length, 1);
+  assert.strictEqual(customPrecisionOut.userItems[0].tag, "NVIDIA");
+  assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_mode, true);
+  assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_applied, true);
+  assert.strictEqual(customPrecisionOut.diagnostics.short_digest_accepted, true);
 
   const repeatLogs = [];
   const freshnessRuntime = createDigestOrchestratorDeliveryRankingRuntime({

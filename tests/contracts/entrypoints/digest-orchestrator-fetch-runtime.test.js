@@ -346,4 +346,49 @@ assertModuleExports(() => runtime, TARGET_REL);
     retryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
     ["preferred", "preferred"]
   );
+
+  const previousConcurrencyEnv = process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
+  process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES = "2";
+  try {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const concurrencyRuntime = createDigestOrchestratorFetchRuntime({
+      CONFIG: {
+        topics: [
+          { tag: "AI×TECH", queries: ["a"] },
+          { tag: "STRATEGY", queries: ["b"] },
+          { tag: "ENERGY", queries: ["c"] },
+          { tag: "HEALTHCARE", queries: ["d"] },
+        ],
+        digest: { itemCount: 4 },
+      },
+      log: () => {},
+      normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+      fetchTopicNews: async (topic) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return {
+          apiCalls: 1,
+          items: [{ headline: `${topic.tag} only item`, tag: topic.tag }],
+          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
+        };
+      },
+      buildCustomTopicQueries: () => [],
+      buildCustomRescueItemsFromStandard: () => [],
+      emitDigestIncident: async () => {},
+    });
+
+    const concurrencyResult = await concurrencyRuntime.orchestrateFetch({
+      dueUsers: [{ topics: ["AI×TECH"], preferences: {} }],
+      targetChatId: null,
+      runMode: "scheduled",
+    });
+    assert.strictEqual(maxInFlight, 2);
+    assert.strictEqual(concurrencyResult.fetchDiagnostics.max_concurrent_fetches, 2);
+  } finally {
+    if (previousConcurrencyEnv == null) delete process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
+    else process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES = previousConcurrencyEnv;
+  }
 })();

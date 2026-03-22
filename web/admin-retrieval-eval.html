@@ -203,12 +203,17 @@
         { label: "Scenario", key: "label" },
         { label: "Avg final", render: (row) => Number(row.summary?.average_final_score || 0).toFixed(1) },
         { label: "Avg freshness", render: (row) => Number(row.summary?.average_final_freshness || 0).toFixed(1) },
+        { label: "Avg fill", render: (row) => `${Number(row.summary?.average_fill_rate || 0).toFixed(1)}%` },
         { label: "Neg lift", render: (row) => Number(row.summary?.negative_lift_count || 0) },
+        { label: "Scarcity", render: (row) => Object.entries(row.summary?.scarcity_counts || {}).map(([key, count]) => `${key}:${count}`).join("<br>") || '<span class="muted">n/a</span>' },
       ]);
       document.getElementById("personaSummary").innerHTML = renderRows(flattenPersonaRows(run), [
         { label: "Persona", key: "persona_label" },
         { label: "Scenario", key: "scenario_label" },
         { label: "Final", render: (row) => `${Number(row.final_selected_quality?.score || 0).toFixed(1)} ${bandPill(row.final_selected_quality?.band)}` },
+        { label: "Items", render: (row) => `${Number(row.final_selected_quality?.item_count || 0)}/${Number(row.requested_count || 0)}` },
+        { label: "Fill", render: (row) => `${Number(row.final_selected_quality?.fill_rate || 0).toFixed(1)}%` },
+        { label: "Scarcity", render: (row) => esc(row.scarcity_profile || "n/a") },
         { label: "Lift", render: (row) => Number(row.selection_lift || 0).toFixed(1) },
         { label: "DQS", render: (row) => Number(row.current_digest_quality?.score || 0).toFixed(1) },
       ]);

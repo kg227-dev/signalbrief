@@ -2,7 +2,7 @@
 
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
 
-const MAX_ARTICLE_AGE_HOURS = 72;
+const MAX_ARTICLE_AGE_HOURS = 48;
 const TITLE_TOKEN_MIN_LENGTH = 4;
 const TITLE_STOP_WORDS = new Set([
   "about",
@@ -26,18 +26,21 @@ const TITLE_STOP_WORDS = new Set([
   "with",
 ]);
 
+function publishedDateTimestamp(item) {
+  const pubDate = Date.parse(String(item?.published_date || ""));
+  return Number.isFinite(pubDate) ? pubDate : null;
+}
+
+function hasVerifiedPublishedDate(item) {
+  return publishedDateTimestamp(item) != null;
+}
+
 function articleAgeTooOld(item, maxAgeHours) {
   const limit = Number.isFinite(maxAgeHours) ? maxAgeHours : MAX_ARTICLE_AGE_HOURS;
   const now = Date.now();
-  const pubDate = Date.parse(String(item?.published_date || ""));
-  if (Number.isFinite(pubDate)) {
-    return (now - pubDate) / (60 * 60 * 1000) > limit;
-  }
-  const retrieved = Date.parse(String(item?.retrieved_at || ""));
-  if (Number.isFinite(retrieved)) {
-    return (now - retrieved) / (60 * 60 * 1000) > limit;
-  }
-  return false;
+  const pubDate = publishedDateTimestamp(item);
+  if (!Number.isFinite(pubDate)) return true;
+  return (now - pubDate) / (60 * 60 * 1000) > limit;
 }
 
 function parsePerplexityItems(content) {
@@ -208,10 +211,15 @@ function enrichWithCitationUrls(items, citations, searchResults, topicTag, log) 
   }).filter(Boolean);
 }
 
-function collectUniqueItems(items, seenHeadline, seenUrl, out, normalizeUrlForDedup) {
+function collectUniqueItems(items, seenHeadline, seenUrl, out, normalizeUrlForDedup, opts = {}) {
+  const maxAgeHours = Number.isFinite(Number(opts?.maxAgeHours))
+    ? Number(opts.maxAgeHours)
+    : MAX_ARTICLE_AGE_HOURS;
+  const requireVerifiedPublishedDate = opts?.requireVerifiedPublishedDate !== false;
   for (const item of items) {
     if (!item || !item.headline) continue;
-    if (articleAgeTooOld(item, MAX_ARTICLE_AGE_HOURS)) continue;
+    if (requireVerifiedPublishedDate && !hasVerifiedPublishedDate(item)) continue;
+    if (articleAgeTooOld(item, maxAgeHours)) continue;
     const headKey = String(item.headline || "").toLowerCase().trim().slice(0, 80);
     const urlKey = normalizeUrlForDedup(item.url || "");
     if (headKey && seenHeadline.has(headKey)) continue;
@@ -236,5 +244,6 @@ module.exports = {
   collectUniqueItems,
   shouldStopAttempts,
   articleAgeTooOld,
+  hasVerifiedPublishedDate,
   MAX_ARTICLE_AGE_HOURS,
 };

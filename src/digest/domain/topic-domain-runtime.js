@@ -13,6 +13,12 @@ function normalizeTopicToken(value) {
 }
 
 const CUSTOM_TOPIC_ALIASES = {
+  nvidia: [
+    "nvda",
+    "data center gpu",
+    "blackwell",
+    "ai chip demand",
+  ],
   "rate cuts": [
     "federal reserve rate cut",
     "interest rate cuts",
@@ -39,6 +45,13 @@ const CUSTOM_TOPIC_ALIASES = {
   ],
   "quantum computing": ["quantum hardware", "quantum platform", "quantum commercial deployment"],
   "glp 1": ["obesity drugs", "weight loss drug", "novo nordisk eli lilly"],
+  cbam: ["carbon border adjustment mechanism", "eu carbon border tax", "eu cbam"],
+  "grid infrastructure": [
+    "power grid transmission",
+    "utility transmission",
+    "grid modernization",
+    "interconnection queue",
+  ],
   doge: ["dogecoin", "crypto regulation", "crypto market"],
   medtech: ["medical device", "diagnostics", "surgical systems", "hospital technology"],
 };
@@ -599,13 +612,13 @@ function buildCustomTopicQueries(keywordRaw) {
   const aliases = CUSTOM_KEYWORD_ALIASES[normalized] || [];
   const base = [
     `${keyword} business strategy developments last 48 hours`,
-    `${keyword} market impact regulation deals earnings last 72 hours`,
-    `${keyword} strategy and investment implications last 72 hours`,
+    `${keyword} market impact regulation deals earnings last 48 hours`,
+    `${keyword} strategy and investment implications last 48 hours`,
   ];
   if (keyword.split(" ").length <= 2) {
     base.unshift(`${keyword} company and sector news last 48 hours`);
   }
-  const merged = [...base, ...aliases.map((a) => `${a} business and market developments last 72 hours`)];
+  const merged = [...base, ...aliases.map((a) => `${a} business and market developments last 48 hours`)];
   const seen = new Set();
   const queries = [];
   for (const query of merged) {

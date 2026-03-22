@@ -41,6 +41,7 @@ const {
   assert.strictEqual(paths.sqlitePath, path.join(appRoot, "state", "users.sqlite"));
   assert.strictEqual(paths.archiveDir, path.join(appRoot, "archive-volume"));
   assert.strictEqual(paths.digestRecordsDir, path.join(appRoot, "runtime", "digest-records"));
+  assert.strictEqual(paths.digestRetryStatePath, path.join(appRoot, "runtime", "digest-retry-state.json"));
   assert.strictEqual(paths.sourceRegistryPath, path.join(appRoot, "runtime", "source-registry.json"));
   assert.strictEqual(paths.preferredSourcesPath, path.join(appRoot, "runtime", "preferred-sources.json"));
 

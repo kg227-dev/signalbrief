@@ -97,6 +97,7 @@ const {
 } = require("../digest/domain/domain-learning-runtime");
 const { setLearnedDomainAdjustments, setAdminSourceRegistry, setPreferredSourceRegistry } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
+const { createDigestRetryStateRuntime } = require("../runtime/digest-retry-state-runtime");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../runtime/source-policy-registry-runtime");
 const {
@@ -131,6 +132,7 @@ let digestFormattingRuntimeCache = null;
 let digestDataRuntimeCache = null;
 let digestArchiveRuntimeCache = null;
 let digestDeliveryRecordRuntimeCache = null;
+let digestRetryStateRuntimeCache = null;
 let digestOrchestratorArchiveRuntimeCache = null;
 let digestOrchestratorCostRuntimeCache = null;
 let digestOrchestratorIncidentRuntimeCache = null;
@@ -367,6 +369,19 @@ function getDigestDeliveryRecordRuntime() {
     });
   }
   return digestDeliveryRecordRuntimeCache;
+}
+
+function getDigestRetryStateRuntime() {
+  if (!digestRetryStateRuntimeCache) {
+    digestRetryStateRuntimeCache = createDigestRetryStateRuntime({
+      APP_ROOT,
+      digestRetryStatePath: RUNTIME_PATHS.digestRetryStatePath,
+      fs,
+      path,
+      log,
+    });
+  }
+  return digestRetryStateRuntimeCache;
 }
 
 function getDigestOrchestratorArchiveRuntime() {
@@ -635,6 +650,7 @@ async function main() {
     CONFIG,
     log,
     allowExampleEmails,
+    retryStateRuntime: getDigestRetryStateRuntime(),
   });
   const digestDateKey = String(dueContext?.todayET || "").trim() || formatEtDateKey(new Date());
   let dueUsers = Array.isArray(dueContext?.dueUsers) ? dueContext.dueUsers.slice() : [];
@@ -834,6 +850,8 @@ async function main() {
     beginDigestDeliveryRecord: (...args) => digestDeliveryRecordRuntime.beginDigestDeliveryRecord(...args),
     updateDigestDeliveryRecord: (...args) => digestDeliveryRecordRuntime.updateDigestDeliveryRecord(...args),
     loadRecentSentDigests: (...args) => digestDeliveryRecordRuntime.loadRecentSentDigests(...args),
+    loadAllCurrentRecords: (...args) => digestDeliveryRecordRuntime.loadAllCurrentRecords(...args),
+    digestRetryStateRuntime: getDigestRetryStateRuntime(),
     sendTelegram,
     formatTelegram,
     buildDigestInlineKeyboard,
@@ -904,6 +922,10 @@ async function main() {
         budget_stop_reason: String(fetchDiagnostics?.budget_stop_reason || "").trim() || null,
         candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
         candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
+        provider_429_count: Number(fetchDiagnostics?.provider_429_count || 0),
+        provider_429_rate: Number(fetchDiagnostics?.provider_429_rate || 0),
+        provider_transport_errors: Number(fetchDiagnostics?.transport_errors || 0),
+        provider_degraded: Number(fetchDiagnostics?.degraded_topic_rate || 0) > 0,
       },
     });
     deliveredUsers = deliveryResult.deliveredUsers;

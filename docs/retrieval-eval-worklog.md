@@ -658,3 +658,143 @@ Current recommendation:
   - `ENERGY`
   - `LIFE SCIENCES`
   - `SUSTAINABILITY`
+
+## Latest Pass Update
+
+### Pass 12: 5-item delivery contract, retry policy, and product KPI instrumentation
+
+Completed:
+
+- implemented an explicit shipped-digest contract:
+  - every shipped digest must contain `5` items
+  - first pass may ship with `4 high-confidence + 1 lower-confidence`
+  - retry may ship with `3 high-confidence + 2 lower-confidence`
+- added persisted retry state keyed by `user_id + date_et`
+- added adaptive retry timing based on failure class:
+  - transient
+  - retrieval-thin
+  - ranking/policy-limited
+- added explicit confidence classification gates in runtime code:
+  - freshness
+  - topic match
+  - relevance
+  - strategic value
+  - routine suppression
+  - source policy
+  - source authority
+  - source-type exclusions
+- added a rolling `7`-day cap on lower-confidence-assisted deliveries
+- added a topic-class policy layer instead of ad hoc per-topic exceptions
+- defined `macro_policy_noise_sensitive` and attached:
+  - `rate cuts`
+  - `CBAM`
+- disallowed lower-confidence backfill for trusted-only topic classes
+- updated delivery records to persist:
+  - `delivery_outcome`
+  - `attempt_count`
+  - `retry_scheduled_for`
+  - `high_confidence_count`
+  - `lower_confidence_count`
+  - `lower_confidence_assist_7d_count`
+  - `internal_thinness_label`
+- updated eval/admin to expose product-facing KPI surfaces:
+  - `5_item_fulfillment_rate`
+  - `withheld_after_retry_rate`
+  - `lower_confidence_usage_rate`
+  - `repeated_lower_confidence_exposure_rate`
+- added `grid infrastructure` comparison output and structured `source_family_audit` artifacts to retrieval eval
+- expanded `grid infrastructure` preferred family hints to include:
+  - `POLICY×REGULATORY`
+  - `PUBLIC SECTOR`
+- split `grid infrastructure` query plans into:
+  - permitting / interconnection / regulatory
+  - transformer / equipment / utility capex / data-center load
+
+Validation completed:
+
+- contract tests passed for:
+  - delivery policy classification
+  - retry state persistence
+  - scheduler retry-aware due logic
+  - delivery runtime shipping behavior
+  - delivery record persistence
+  - retrieval eval serialization
+  - admin retrieval eval UI
+- `scripts/test-critical-paths.js` passed after the policy/runtime changes
+
+Current focus after this implementation:
+
+- run fresh retrieval evals so the new product KPIs and grid/source-family artifacts are populated with live data
+- inspect real-world `5_item_fulfillment_rate` and `withheld_after_retry_rate` under the new shipping contract
+- verify whether `grid infrastructure` remains a normal-path vs strict-probe mismatch after the new mapping/query split
+- confirm whether `rate cuts` and `CBAM` now fail closed under trusted-only policy as intended
+
+Open next steps for this pass:
+
+1. run a fresh retrieval-eval batch with the new delivery policy enabled
+2. sync the new run artifacts and this worklog into production runtime data
+3. review:
+   - standard vs custom `5_item_fulfillment_rate`
+   - lower-confidence usage rate
+   - repeated lower-confidence exposure rate
+   - `grid infrastructure` comparison output
+4. decide whether remaining misses are:
+   - acceptable underdelivery
+   - query-design limited
+   - provider/content scarcity
+
+Live run completed:
+
+- `retrieval-eval:2026-03-22T22-07-52-280Z`
+  - scenarios:
+    - `standard_full`
+    - `custom_realistic`
+    - `custom_adversarial`
+  - status: `completed_with_errors`
+  - provider pressure:
+    - `0%` provider `429` rate in the scenario summaries
+    - stale rejection remained `0%`
+
+What this run changed:
+
+- the retrieval/selection stack is now precise enough that the new `5`-item contract is the dominant product constraint
+- overall KPI result under the new shipping policy:
+  - `5_item_fulfillment_rate: 0%`
+  - `withheld_after_retry_rate: 100%`
+  - `lower_confidence_usage_rate: 0%`
+  - `repeated_lower_confidence_exposure_rate: 0%`
+- every evaluated persona simulated `withheld_after_retry`
+
+Interpretation:
+
+- this does **not** point to noisy fallback returning; that stayed off
+- this does **not** point to stale leakage; that stayed at `0%`
+- it means the current candidate yield is not sufficient to meet a strict `5`-item product promise with the current quality bar
+- the strategic bottleneck has now moved decisively to candidate generation / retrieval recall
+
+Important topic-level findings from this run:
+
+- `grid infrastructure`
+  - normal pipeline: `0 raw / 0 cleaned / 0 final`
+  - strict probe: also `0 returned items`
+  - root cause: `strict_probe_also_thin`
+  - implication: the earlier `Utility Dive` recovery did not recur in this run; this is now an unstable recall issue rather than a stable selector bug
+- `rate cuts`
+  - trusted-only topic-class policy is now behaving as intended
+  - earlier low-trust edge cases no longer count as successful coverage
+- `CBAM`
+  - still looks like a true low-recent-coverage window under the current source bar
+- `standard_full`
+  - many standard topics are still either:
+    - `ranking_or_quality_gate`
+    - `preferred_only_query_design`
+    - `provider_no_recent_coverage`
+  - the product issue is now bigger than the old narrow custom-only misses
+
+Current recommendation after the first live `5`-item-policy run:
+
+- treat the new delivery KPIs as real product signals, not just eval artifacts
+- do **not** loosen the current precision / freshness / weak-source bar just to force fulfillment
+- next work should focus on one question:
+  - how to improve trusted candidate yield enough to hit the `5`-item promise
+- if that cannot be done reliably with more Perplexity-only tuning, the next step should be a larger retrieval architecture change rather than more ranking changes

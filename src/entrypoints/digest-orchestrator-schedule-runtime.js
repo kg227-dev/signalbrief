@@ -11,6 +11,7 @@ function resolveDueUsers(deps) {
     CONFIG,
     log,
     allowExampleEmails = true,
+    retryStateRuntime = null,
   } = deps;
 
   const now = getEtNow();
@@ -41,6 +42,17 @@ function resolveDueUsers(deps) {
     );
     dueUsers = allActive.filter((user) => {
       const prefs = user.preferences || {};
+      const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
+        ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
+        : null;
+      if (retryState?.delivery_outcome === "withheld_after_retry" || retryState?.delivery_outcome === "withheld_after_retry_window") {
+        return false;
+      }
+      if (retryState?.retry_pending === true) {
+        const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
+        if (Number.isFinite(nextRetryAt) && now.getTime() < nextRetryAt) return false;
+        return true;
+      }
       const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
       if (!allowedDays.includes(todayDOW)) return false;
       if (toEtDateString(user.last_digest_at) === todayET) return false;
@@ -51,6 +63,13 @@ function resolveDueUsers(deps) {
       if (diff < -(12 * 60)) diff += 24 * 60;
       if (diff > (12 * 60)) diff -= 24 * 60;
       return diff >= 0 && diff <= catchupWindowMinutes;
+    }).map((user) => {
+      const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
+        ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
+        : null;
+      return retryState
+        ? { ...user, __digest_retry: { ...retryState } }
+        : user;
     });
   }
 
@@ -59,6 +78,17 @@ function resolveDueUsers(deps) {
       const prefs = user.preferences || {};
       const alreadyToday = toEtDateString(user.last_digest_at) === todayET;
       if (alreadyToday) return `${user.email || user.chatId}: alreadyToday`;
+      const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
+        ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
+        : null;
+      if (retryState?.delivery_outcome === "withheld_after_retry" || retryState?.delivery_outcome === "withheld_after_retry_window") {
+        return `${user.email || user.chatId}: withheld(${retryState.delivery_outcome})`;
+      }
+      if (retryState?.retry_pending === true) {
+        const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
+        const retryReady = Number.isFinite(nextRetryAt) ? now.getTime() >= nextRetryAt : true;
+        return `${user.email || user.chatId}: retry ${retryReady ? "ready" : "waiting"} → ${dueUsers.some((dueUser) => dueUser.chatId === user.chatId) ? "DUE" : "skip"}`;
+      }
       const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
       let diff = nowMinutes - (dh * 60 + dm);
       if (diff < -(12 * 60)) diff += 24 * 60;

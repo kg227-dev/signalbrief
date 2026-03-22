@@ -7,6 +7,9 @@ const {
 const {
   isWeakSourceItem,
 } = require("../digest/domain/storyline-domain-runtime");
+const {
+  DELIVERY_POLICY,
+} = require("../runtime/digest-delivery-policy-runtime");
 
 function isStrictFreshnessMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
@@ -333,12 +336,19 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       : userItems;
     if (trace) trace.snapshots.push(snapshotStage(userItems, "entity_cap", "entity_cap_applied"));
 
-    const requestedCount = Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5);
+    const requestedCount = Math.max(
+      Number(DELIVERY_POLICY.target_item_count || 5),
+      Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5)
+    );
+    const candidatePoolTargetCount = Math.max(
+      requestedCount,
+      Number(DELIVERY_POLICY.candidate_pool_target_count || requestedCount)
+    );
     const strictFreshness = isStrictFreshnessMode(deliveryMode);
     const freshnessLookbackDigests = strictFreshness
       ? Math.max(1, Number(CONFIG.digest.scheduledFreshnessWindowDays || 5))
       : Math.max(1, Number(CONFIG.digest.perUserFreshnessDigests || 3));
-    const perUserFreshnessMin = Math.max(1, Math.min(requestedCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
+    const perUserFreshnessMin = Math.max(1, Math.min(candidatePoolTargetCount, Number(CONFIG.digest.perUserFreshnessMinItems || 3)));
     const suppression = suppressRecentlySentForUser(userItems, user, {
       maxDigests: freshnessLookbackDigests,
       minItems: perUserFreshnessMin,
@@ -395,7 +405,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     ));
     if (qualityEligible.length > 0) {
       if (trace) appendStageTrace(trace, userItems, qualityEligible, "final_quality_gate", "excluded_by_final_quality_threshold");
-      if (qualityEligible.length < requestedCount) {
+      if (qualityEligible.length < candidatePoolTargetCount) {
         const qualityUrls = new Set(qualityEligible.map((i) => i.url));
         const backfill = filterFreshCandidates(
           userItems
@@ -405,11 +415,11 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
             globalRepeatIndex: strictFreshness ? repeatIndex : null,
             userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
           }
-        ).items.slice(0, requestedCount - qualityEligible.length);
+        ).items.slice(0, candidatePoolTargetCount - qualityEligible.length);
         userItems = [...qualityEligible, ...backfill];
         if (backfill.length > 0) {
           qualityBackfillCount = backfill.length;
-          log(`  [quality-backfill] added ${backfill.length} item(s) to reach ${requestedCount}`);
+          log(`  [quality-backfill] added ${backfill.length} item(s) to reach ${candidatePoolTargetCount}`);
         }
       } else {
         userItems = qualityEligible;
@@ -423,16 +433,16 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       log(`  [post-sort] ${userItems.map((item) => `${item.tag}(${item.relevanceScore})`).join(", ")}`);
     }
 
-    userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
-    userItems = reserveCustomKeywordSlot(userItems, requestedCount, customKeywords);
+    userItems = applyTopFitCoverageFloor(userItems, candidatePoolTargetCount, Number(CONFIG.digest.minTopFitItems || 3));
+    userItems = reserveCustomKeywordSlot(userItems, candidatePoolTargetCount, customKeywords);
     const beforeSourcePolicyCaps = userItems.slice();
-    userItems = applySourcePolicyCaps(userItems, requestedCount);
+    userItems = applySourcePolicyCaps(userItems, candidatePoolTargetCount);
     if (trace) appendStageTrace(trace, beforeSourcePolicyCaps, userItems, "source_policy_caps", "removed_by_source_policy_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "source_policy_caps", "removed_by_source_policy_cap"));
 
     // Minimum-count backfill: stay inside the ranked filtered pool so we do not
     // dilute thin digests with unrelated stories from the broader enriched set.
-    if (userItems.length > 0 && userItems.length < requestedCount) {
+    if (userItems.length > 0 && userItems.length < candidatePoolTargetCount) {
       const currentUrls = new Set(userItems.map((i) => i.url));
       const poolCandidates = filterFreshCandidates(
         rankedFilteredPool
@@ -443,16 +453,16 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           globalRepeatIndex: strictFreshness ? repeatIndex : null,
           userRepeatIndex: strictFreshness ? recentUserRepeatIndex : null,
         }
-      ).items.slice(0, requestedCount - userItems.length);
+      ).items.slice(0, candidatePoolTargetCount - userItems.length);
       if (poolCandidates.length > 0) {
         userItems = [...userItems, ...poolCandidates];
         minCountBackfillCount = poolCandidates.length;
-        log(`  [min-count-backfill] added ${poolCandidates.length} item(s) from ranked filtered pool to reach ${userItems.length}/${requestedCount}`);
+        log(`  [min-count-backfill] added ${poolCandidates.length} item(s) from ranked filtered pool to reach ${userItems.length}/${candidatePoolTargetCount}`);
       }
     }
 
     if (userItems.length === 0) {
-      const emergencyCount = Math.max(1, Math.min(3, requestedCount));
+      const emergencyCount = Math.max(1, Math.min(3, candidatePoolTargetCount));
       let emergencyPool = rankedFilteredPool
         .filter((item) => !item?.hard_exclude)
         .filter((item) => Number(item?.routine_item_score || 0) <= maxRoutineScore)
@@ -496,9 +506,9 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       throw new Error("No deliverable items after emergency fallback");
     }
 
-    userItems = applyTopFitCoverageFloor(userItems, requestedCount, Number(CONFIG.digest.minTopFitItems || 3));
+    userItems = applyTopFitCoverageFloor(userItems, candidatePoolTargetCount, Number(CONFIG.digest.minTopFitItems || 3));
     const beforeFinalPolicyCaps = userItems.slice();
-    userItems = applySourcePolicyCaps(userItems, requestedCount);
+    userItems = applySourcePolicyCaps(userItems, candidatePoolTargetCount);
     if (trace) appendStageTrace(trace, beforeFinalPolicyCaps, userItems, "final_source_policy_caps", "removed_by_source_policy_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "final_source_policy_caps", "removed_by_source_policy_cap"));
 
@@ -522,6 +532,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       wasFiltered,
       diagnostics: {
         requested_count: requestedCount,
+        candidate_pool_target_count: candidatePoolTargetCount,
         strict_freshness_applied: strictFreshness,
         freshness_block_count: freshnessBlockCount,
         semantic_repeat_block_count: semanticRepeatBlockCount,

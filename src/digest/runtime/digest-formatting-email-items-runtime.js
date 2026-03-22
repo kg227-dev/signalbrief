@@ -84,6 +84,9 @@ function createDigestEmailItemsRuntime(deps) {
       : "";
 
     const whyText = buildEmailWhyShownText(item);
+    const confidenceBadgeHtml = item?.delivery_confidence === "lower"
+      ? `<div style="margin-bottom:8px;"><span style="font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;padding:3px 8px;border-radius:999px;">Lower confidence</span></div>`
+      : "";
     const whyShownHtml = whyText
       ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why included: ${escapeHtml(whyText)}</div>`
       : "";
@@ -107,6 +110,7 @@ function createDigestEmailItemsRuntime(deps) {
           </tr>
         </table>
         ${flagsHtml}
+        ${confidenceBadgeHtml}
         <a href="${trackedLinkUrl}" style="text-decoration:none;color:inherit;">
           <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;font-family:'Playfair Display',Georgia,serif;">${item.headline}</div>
         </a>

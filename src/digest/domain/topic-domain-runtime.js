@@ -71,6 +71,14 @@ const CUSTOM_TOPIC_ALIASES = {
   medtech: ["medical device", "diagnostics", "surgical systems", "hospital technology"],
 };
 const CUSTOM_KEYWORD_ALIASES = CUSTOM_TOPIC_ALIASES;
+const CUSTOM_TOPIC_METADATA = Object.freeze({
+  "rate cuts": Object.freeze({
+    topic_classes: Object.freeze(["macro_policy_noise_sensitive"]),
+  }),
+  cbam: Object.freeze({
+    topic_classes: Object.freeze(["macro_policy_noise_sensitive"]),
+  }),
+});
 const CUSTOM_TOPIC_QUERY_PLANS = Object.freeze({
   nvidia: Object.freeze([
     "Nvidia Blackwell data center AI chip demand last 48 hours",
@@ -103,22 +111,22 @@ const CUSTOM_TOPIC_QUERY_PLANS = Object.freeze({
     "CBAM corporate supply chain decarbonization importer costs last 48 hours",
   ]),
   "rate cuts": Object.freeze([
-    "Federal Reserve rate cut timing CPI jobs Treasury yields last 48 hours",
-    "Fed speakers FOMC rate cuts market pricing last 48 hours",
-    "rate cuts leveraged finance refinancing private equity borrowing last 48 hours",
-    "interest rate cuts bank lending credit spreads corporate borrowing last 48 hours",
+    "Federal Reserve rate cuts CPI jobs Treasury yields market pricing last 48 hours",
+    "FOMC rate cuts corporate borrowing lending spreads refinancing last 48 hours",
+    "interest rate cuts leveraged finance bank lending private credit last 48 hours",
+    "Federal Reserve policy easing macro strategy implications last 48 hours",
   ]),
   "grid infrastructure": Object.freeze([
-    "grid infrastructure transmission interconnection utility data center power last 48 hours",
-    "transmission line permitting grid modernization utility investment last 48 hours",
-    "power demand transformer utility equipment grid last 48 hours",
-    "interconnection queue transmission project utility last 48 hours",
+    "grid infrastructure transmission permitting interconnection regulator utility last 48 hours",
+    "transmission line permitting interconnection queue FERC utility buildout last 48 hours",
+    "power transformer utility equipment grid capex data center load last 48 hours",
+    "grid modernization transformer utility equipment transmission capex last 48 hours",
   ]),
   semicap: Object.freeze([
     "ASML Applied Materials Lam Research wafer fab equipment orders backlog last 48 hours",
     "wafer fab equipment WFE memory logic spending TSMC Samsung Intel Micron last 48 hours",
-    "semiconductor equipment export controls Netherlands Japan China lithography etch deposition last 48 hours",
-    "chipmaking tools equipment bookings foundry capex last 48 hours",
+    "semiconductor equipment lithography etch deposition foundry capex last 48 hours",
+    "ASML Applied Materials Lam Research semicap bookings service demand last 48 hours",
   ]),
 });
 
@@ -257,6 +265,21 @@ function matchWeightToTag(tag, topicWeights) {
 
 function normalizeCustomKeyword(topic) {
   return normalizeTopicToken(topic);
+}
+
+function getCustomTopicMetadata(keywordRaw) {
+  const normalized = normalizeTopicToken(keywordRaw);
+  const raw = CUSTOM_TOPIC_METADATA[normalized];
+  if (!raw) {
+    return {
+      keyword: normalized,
+      topic_classes: [],
+    };
+  }
+  return {
+    keyword: normalized,
+    topic_classes: Array.isArray(raw.topic_classes) ? raw.topic_classes.slice() : [],
+  };
 }
 
 function splitUserTopics(userTopics) {
@@ -703,12 +726,14 @@ function buildCustomTopicQueries(keywordRaw) {
 module.exports = {
   CUSTOM_KEYWORD_ALIASES,
   CUSTOM_TOPIC_ALIASES,
+  CUSTOM_TOPIC_METADATA,
   RELATED_TOPIC_GROUPS,
   buildCustomTopicQueries,
   computeTopicMatch,
   computeTopicSignals,
   customKeywordMatches,
   filterItemsByTopics,
+  getCustomTopicMetadata,
   applyDigestDepth,
   reserveCustomKeywordSlot,
   applyTopicRelevanceScores,

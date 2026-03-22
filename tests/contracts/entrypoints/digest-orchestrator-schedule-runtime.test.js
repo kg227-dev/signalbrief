@@ -53,6 +53,12 @@ function runResolveDueUsers({ nowIso, lastDigestAt, catchupWindowMinutes = 12 * 
   });
 }
 
+function buildRetryStateRuntime(entry) {
+  return {
+    getRetryState: () => entry || null,
+  };
+}
+
 {
   const parts = getEtNowParts(new Date("2026-03-14T05:09:11.391Z"));
   assert.strictEqual(parts.todayET, "2026-03-14");
@@ -124,4 +130,49 @@ function runResolveDueUsers({ nowIso, lastDigestAt, catchupWindowMinutes = 12 * 
   });
   assert.strictEqual(out.todayET, "2026-03-15");
   assert.strictEqual(out.dueUsers.length, 0, "60-min window: user is not due 61 min after 21:30 ET");
+}
+
+{
+  const out = resolveDueUsers({
+    targetChatId: null,
+    allUsers: () => [buildUser("2026-03-14T04:04:00.000Z")],
+    USER_STATUS: { ACTIVE: "active" },
+    getEtNow: () => new Date("2026-03-16T02:05:00.000Z"),
+    getEtNowParts,
+    toEtDateString,
+    CONFIG: { digest: { catchupWindowMinutes: 60 } },
+    log: () => {},
+    allowExampleEmails: true,
+    retryStateRuntime: buildRetryStateRuntime({
+      user_id: "8711828141",
+      date_et: "2026-03-15",
+      attempt_count: 1,
+      next_retry_at: "2026-03-16T02:00:00.000Z",
+      retry_pending: true,
+    }),
+  });
+  assert.strictEqual(out.dueUsers.length, 1, "ready retry should be due even outside normal schedule diff");
+  assert.strictEqual(out.dueUsers[0].__digest_retry.attempt_count, 1);
+}
+
+{
+  const out = resolveDueUsers({
+    targetChatId: null,
+    allUsers: () => [buildUser("2026-03-14T04:04:00.000Z")],
+    USER_STATUS: { ACTIVE: "active" },
+    getEtNow: () => new Date("2026-03-16T01:40:00.000Z"),
+    getEtNowParts,
+    toEtDateString,
+    CONFIG: { digest: { catchupWindowMinutes: 60 } },
+    log: () => {},
+    allowExampleEmails: true,
+    retryStateRuntime: buildRetryStateRuntime({
+      user_id: "8711828141",
+      date_et: "2026-03-15",
+      attempt_count: 1,
+      next_retry_at: "2026-03-16T02:00:00.000Z",
+      retry_pending: true,
+    }),
+  });
+  assert.strictEqual(out.dueUsers.length, 0, "retry should wait until next_retry_at");
 }

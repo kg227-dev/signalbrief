@@ -184,6 +184,10 @@
         <div class="lead">This section keeps the secondary tables available without putting them in the way. Use it when you want more detail after reviewing the main tables above.</div>
         <div class="details-grid">
           <div class="panel">
+            <h3>Delivery KPIs</h3>
+            <div id="deliveryKpis"></div>
+          </div>
+          <div class="panel">
             <h3>Scenario Summary</h3>
             <div id="scenarioSummary"></div>
           </div>
@@ -206,6 +210,14 @@
           <div class="panel">
             <h3>Top Domains</h3>
             <div id="topDomains"></div>
+          </div>
+          <div class="panel">
+            <h3>Grid Comparison</h3>
+            <div id="gridComparison"></div>
+          </div>
+          <div class="panel">
+            <h3>Source-Family Audit</h3>
+            <div id="sourceFamilyAudit"></div>
           </div>
         </div>
         <div class="panel">
@@ -556,12 +568,38 @@
         + `<div><div class="muted">Overall score</div><div class="kpi">${Number(overall.overall_score || 0).toFixed(1)}</div></div>`
         + `<div><div class="muted">Scenarios</div><div class="kpi">${Number(overall.scenario_count || 0)}</div></div>`
         + `<div><div class="muted">Personas</div><div class="kpi">${Number(overall.persona_count || 0)}</div></div>`
+        + `<div><div class="muted">5-item fulfillment</div><div class="kpi">${Number(overall.five_item_fulfillment_rate || 0).toFixed(1)}%</div></div>`
         + `</div>`
-        + `<div class="muted" style="margin-top:10px;">Run status: ${esc(run.status || "unknown")} · budget spent $${Number(run.budget?.spent_usd || 0).toFixed(3)}</div>`
+        + `<div class="muted" style="margin-top:10px;">Run status: ${esc(run.status || "unknown")} · budget spent $${Number(run.budget?.spent_usd || 0).toFixed(3)} · withheld after retry ${Number(overall.withheld_after_retry_rate || 0).toFixed(1)}% · lower-confidence usage ${Number(overall.lower_confidence_usage_rate || 0).toFixed(1)}%</div>`
         + `<div class="muted" style="margin-top:10px;">Current DQS formula: ${esc(run.dqs_formula?.standard || "")}; headline-only: ${esc(run.dqs_formula?.headline_only || "")}</div>`;
       document.getElementById("recommendations").innerHTML = (run.recommendations || []).length
         ? `<ul>${run.recommendations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`
         : `<div class="muted">No recommendations recorded.</div>`;
+      document.getElementById("deliveryKpis").innerHTML = renderRows([
+        {
+          bucket: "overall",
+          fulfillment: overall.five_item_fulfillment_rate || 0,
+          withheld: overall.withheld_after_retry_rate || 0,
+          lowerConfidence: overall.lower_confidence_usage_rate || 0,
+          repeatedLowerConfidence: overall.repeated_lower_confidence_exposure_rate || 0,
+          outcomes: Object.entries(overall.delivery_outcome_counts || {}).map(([key, count]) => `${key}:${count}`).join(" · "),
+        },
+        ...Object.entries(overall.bucket_kpis || {}).map(([bucket, stats]) => ({
+          bucket,
+          fulfillment: stats.five_item_fulfillment_rate || 0,
+          withheld: stats.withheld_after_retry_rate || 0,
+          lowerConfidence: stats.lower_confidence_usage_rate || 0,
+          repeatedLowerConfidence: 0,
+          outcomes: `delivered:${Number(stats.delivered_count || 0)} · withheld:${Number(stats.withheld_after_retry_count || 0)}`,
+        })),
+      ], [
+        { label: "Bucket", key: "bucket" },
+        { label: "5-item", render: (row) => `${Number(row.fulfillment || 0).toFixed(1)}%` },
+        { label: "Withheld", render: (row) => `${Number(row.withheld || 0).toFixed(1)}%` },
+        { label: "Lower conf", render: (row) => `${Number(row.lowerConfidence || 0).toFixed(1)}%` },
+        { label: "Repeat lower conf", render: (row) => `${Number(row.repeatedLowerConfidence || 0).toFixed(1)}%` },
+        { label: "Outcomes", key: "outcomes" },
+      ]);
       document.getElementById("scenarioSummary").innerHTML = renderRows(run.scenarios || [], [
         { label: "Scenario", key: "label" },
         { label: "Raw/Cleaned", render: (row) => `${Number(row.summary?.raw_candidate_count || 0)}/${Number(row.summary?.cleaned_candidate_count || 0)}` },
@@ -571,6 +609,9 @@
         { label: "Avg final", render: (row) => Number(row.summary?.average_final_score || 0).toFixed(1) },
         { label: "Avg freshness", render: (row) => Number(row.summary?.average_final_freshness || 0).toFixed(1) },
         { label: "Avg fill", render: (row) => `${Number(row.summary?.average_fill_rate || 0).toFixed(1)}%` },
+        { label: "5-item", render: (row) => `${Number(row.summary?.five_item_fulfillment_rate || 0).toFixed(1)}%` },
+        { label: "Withheld", render: (row) => `${Number(row.summary?.withheld_after_retry_rate || 0).toFixed(1)}%` },
+        { label: "Lower conf", render: (row) => `${Number(row.summary?.lower_confidence_usage_rate || 0).toFixed(1)}%` },
         { label: "Neg lift", render: (row) => Number(row.summary?.negative_lift_count || 0) },
         { label: "Coverage", render: (row) => Object.entries(row.summary?.coverage_limiter_counts || {}).map(([key, count]) => `${key}:${count}`).join("<br>") || '<span class="muted">n/a</span>' },
         { label: "Scarcity", render: (row) => Object.entries(row.summary?.scarcity_counts || {}).map(([key, count]) => `${key}:${count}`).join("<br>") || '<span class="muted">n/a</span>' },
@@ -581,7 +622,11 @@
         { label: "Status", key: "status" },
         { label: "Final", render: (row) => `${Number(row.final_selected_quality?.score || 0).toFixed(1)} ${bandPill(row.final_selected_quality?.band)}` },
         { label: "Items", render: (row) => `${Number(row.final_selected_quality?.item_count || 0)}/${Number(row.requested_count || 0)}` },
+        { label: "Delivery", render: (row) => esc(row.delivery_policy?.delivery_outcome || "n/a") },
+        { label: "Attempt 1", render: (row) => `${Number(row.delivery_policy?.attempt_1?.high_confidence_count || 0)}H/${Number(row.delivery_policy?.attempt_1?.lower_confidence_count || 0)}L` },
+        { label: "Retry", render: (row) => `${Number(row.delivery_policy?.retry?.high_confidence_count || 0)}H/${Number(row.delivery_policy?.retry?.lower_confidence_count || 0)}L` },
         { label: "Fill", render: (row) => `${Number(row.final_selected_quality?.fill_rate || 0).toFixed(1)}%` },
+        { label: "Thinness", render: (row) => esc(row.delivery_policy?.internal_thinness_label || "n/a") },
         { label: "Limiter", render: (row) => esc(row.coverage_limiter || "n/a") },
         { label: "Scarcity", render: (row) => esc(row.scarcity_profile || "n/a") },
         { label: "Lift", render: (row) => Number(row.selection_lift || 0).toFixed(1) },
@@ -639,6 +684,42 @@
         { label: "429 rate", render: (row) => `${Number(row.rate429Pct || 0).toFixed(1)}%` },
         { label: "Provider-limited topics", key: "limitedTopics" },
         { label: "Thin topics", key: "thinTopics" },
+      ]);
+      const gridComparison = run.weak_topic_artifacts?.grid_infrastructure_comparison || null;
+      document.getElementById("gridComparison").innerHTML = gridComparison
+        ? renderRows([
+          {
+            path: "normal pipeline",
+            raw: gridComparison.normal_pipeline?.raw_count || 0,
+            cleaned: gridComparison.normal_pipeline?.cleaned_count || 0,
+            final: gridComparison.normal_pipeline?.final_count || 0,
+            score: gridComparison.normal_pipeline?.source_score || 0,
+            root: gridComparison.normal_pipeline?.root_cause || "n/a",
+          },
+          {
+            path: "strict probe",
+            raw: gridComparison.strict_probe?.returned_items?.length || 0,
+            cleaned: gridComparison.strict_probe?.returned_items?.length || 0,
+            final: gridComparison.strict_probe?.returned_items?.length || 0,
+            score: (gridComparison.strict_probe?.returned_items || [])[0]?.source_eval_item_score || 0,
+            root: gridComparison.likely_root_cause || "n/a",
+          },
+        ], [
+          { label: "Path", key: "path" },
+          { label: "Raw", key: "raw" },
+          { label: "Cleaned", key: "cleaned" },
+          { label: "Final", key: "final" },
+          { label: "Source", render: (row) => Number(row.score || 0).toFixed(1) },
+          { label: "Root cause", key: "root" },
+        ]) + `<div class="muted" style="margin-top:10px;">Miss stage: ${esc(gridComparison.miss_stage || "n/a")} · likely root cause: ${esc(gridComparison.likely_root_cause || "n/a")}</div>`
+        : `<div class="muted">No grid comparison recorded.</div>`;
+      document.getElementById("sourceFamilyAudit").innerHTML = renderRows(run.weak_topic_artifacts?.source_family_audit || [], [
+        { label: "Topic", key: "topic" },
+        { label: "Current family", render: (row) => esc((row.current_preferred_family || []).join(", ")) },
+        { label: "Normal path domains", render: (row) => esc((row.repeated_candidate_domains_seen || []).join(", ") || "n/a") },
+        { label: "Strict probe domains", render: (row) => esc((row.strict_probe_domains_seen || []).join(", ") || "n/a") },
+        { label: "Recommendation", key: "recommendation" },
+        { label: "Confidence", key: "confidence" },
       ]);
       syncSourceInspectControls(run);
       renderSourceTransparency(run);

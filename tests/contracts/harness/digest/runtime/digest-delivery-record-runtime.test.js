@@ -50,6 +50,16 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
       sent_at: "2026-03-13T11:05:00.000Z",
       date_str: "Friday, March 13, 2026",
       quick_scan: "Pfizer pivots",
+      delivery_outcome: "delivered_with_lower_confidence",
+      attempt_count: 2,
+      retry_scheduled_for: "2026-03-13T11:00:00.000Z",
+      high_confidence_count: 4,
+      lower_confidence_count: 1,
+      high_confidence_available_count: 4,
+      lower_confidence_available_count: 1,
+      lower_confidence_used: true,
+      lower_confidence_assist_7d_count: 1,
+      internal_thinness_label: "product_underdelivery",
       requested_count: 5,
       freshness_block_count: 2,
       semantic_repeat_block_count: 2,
@@ -143,6 +153,9 @@ assert.strictEqual(typeof createDigestDeliveryRecordRuntime, "function");
     assert.strictEqual(scheduledByRun.mode, "scheduled");
     assert.strictEqual(scheduledByRun.items[0].headline, "Pfizer pivots");
     assert.strictEqual(scheduledByRun.items[0].freshness_key, "pfizer|pipeline");
+    assert.strictEqual(scheduledByRun.delivery_outcome, "delivered_with_lower_confidence");
+    assert.strictEqual(scheduledByRun.attempt_count, 2);
+    assert.strictEqual(scheduledByRun.lower_confidence_used, true);
     assert.strictEqual(scheduledByRun.requested_count, 5);
     assert.strictEqual(scheduledByRun.freshness_block_count, 2);
     assert.strictEqual(scheduledByRun.preferred_domains_count, 4);

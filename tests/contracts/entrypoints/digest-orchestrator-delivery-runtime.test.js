@@ -40,6 +40,11 @@ assertModuleExports(() => runtime, TARGET_REL);
           summary: "Summary",
           url: "https://example.com/low",
           source: "Example",
+          published_date: "2026-03-14T05:00:00.000Z",
+          topicMatch: 8,
+          source_policy: "preferred",
+          source_type: "reported_media",
+          source_authority: 0.9,
           relevanceScore: 6.8,
           strategic_value: 0.8,
           routine_item_score: 0.1,
@@ -50,6 +55,11 @@ assertModuleExports(() => runtime, TARGET_REL);
           summary: "Summary",
           url: "https://example.com/high",
           source: "Example",
+          published_date: "2026-03-14T05:00:00.000Z",
+          topicMatch: 10,
+          source_policy: "preferred",
+          source_type: "reported_media",
+          source_authority: 0.9,
           relevanceScore: 7.6,
           strategic_value: 0.8,
           routine_item_score: 0.1,
@@ -60,7 +70,42 @@ assertModuleExports(() => runtime, TARGET_REL);
           summary: "Summary",
           url: "https://example.com/mid",
           source: "Example",
+          published_date: "2026-03-14T05:00:00.000Z",
+          topicMatch: 9,
+          source_policy: "preferred",
+          source_type: "reported_media",
+          source_authority: 0.9,
           relevanceScore: 7.2,
+          strategic_value: 0.8,
+          routine_item_score: 0.1,
+        },
+        {
+          tag: "AI×TECH",
+          headline: "Fourth scored item",
+          summary: "Summary",
+          url: "https://example.com/fourth",
+          source: "Example",
+          published_date: "2026-03-14T05:00:00.000Z",
+          topicMatch: 8,
+          source_policy: "preferred",
+          source_type: "reported_media",
+          source_authority: 0.9,
+          relevanceScore: 7.0,
+          strategic_value: 0.8,
+          routine_item_score: 0.1,
+        },
+        {
+          tag: "POLICY×REGULATORY",
+          headline: "Fifth scored item",
+          summary: "Summary",
+          url: "https://example.com/fifth",
+          source: "Example",
+          published_date: "2026-03-14T05:00:00.000Z",
+          topicMatch: 7,
+          source_policy: "preferred",
+          source_type: "reported_media",
+          source_authority: 0.9,
+          relevanceScore: 6.5,
           strategic_value: 0.8,
           routine_item_score: 0.1,
         },
@@ -91,6 +136,11 @@ assertModuleExports(() => runtime, TARGET_REL);
       return { ok: true };
     },
     loadRecentSentDigests: () => [],
+    loadAllCurrentRecords: () => [],
+    digestRetryStateRuntime: {
+      upsertRetryState: () => null,
+      clearRetryState: () => true,
+    },
     sendTelegram: async () => {},
     formatTelegram: () => "",
     buildDigestInlineKeyboard: () => ({}),
@@ -147,15 +197,15 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(result.deliveredUsers.length, 1);
   assert.deepStrictEqual(
     qualityOrders[0],
-    ["Highest scored item", "Middle scored item", "Lower scored item"]
+    ["Highest scored item", "Middle scored item", "Fourth scored item", "Lower scored item", "Fifth scored item"]
   );
   assert.deepStrictEqual(
     sentEmailOrders[0],
-    ["Highest scored item", "Middle scored item", "Lower scored item"]
+    ["Highest scored item", "Middle scored item", "Fourth scored item", "Lower scored item", "Fifth scored item"]
   );
   assert.ok(snapshotOrders.some((order) => (
     Array.isArray(order)
-    && order.join("|") === "Highest scored item|Middle scored item|Lower scored item"
+    && order.join("|") === "Highest scored item|Middle scored item|Fourth scored item|Lower scored item|Fifth scored item"
   )));
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

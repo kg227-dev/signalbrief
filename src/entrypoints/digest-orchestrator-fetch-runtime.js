@@ -52,7 +52,7 @@ const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
   "sec rulemaking": Object.freeze(["POLICY×REGULATORY", "PUBLIC SECTOR"]),
   cbam: Object.freeze(["SUSTAINABILITY", "POLICY×REGULATORY", "ENERGY"]),
   "rate cuts": Object.freeze(["FINANCIAL SERVICES", "STRATEGY"]),
-  "grid infrastructure": Object.freeze(["ENERGY", "SUSTAINABILITY"]),
+  "grid infrastructure": Object.freeze(["ENERGY", "SUSTAINABILITY", "POLICY×REGULATORY", "PUBLIC SECTOR"]),
   semicap: Object.freeze(["AI×TECH", "TECHNOLOGY"]),
   "quantum computing": Object.freeze(["AI×TECH", "TECHNOLOGY"]),
   starlink: Object.freeze(["TECHNOLOGY", "PUBLIC SECTOR"]),

@@ -67,16 +67,21 @@
   /* ── Dark mode ── */
   (function() {
     var toggle = byId("darkToggle");
+    var moonSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+    var sunSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
     function apply(isDark) {
       document.body.classList.toggle("dark", isDark);
-      if (toggle) toggle.textContent = isDark ? "\u2600\uFE0F" : "\uD83C\uDF19";
+      if (toggle) {
+        toggle.innerHTML = isDark ? sunSvg : moonSvg;
+        toggle.setAttribute("aria-pressed", isDark ? "true" : "false");
+      }
     }
     try { if (localStorage.getItem("sbDark") === "1") apply(true); } catch(e) {}
-    if (toggle) toggle.addEventListener("click", function() {
+    if (toggle) toggle.onclick = function() {
       var isDark = !document.body.classList.contains("dark");
       apply(isDark);
       try { localStorage.setItem("sbDark", isDark ? "1" : "0"); } catch(e) {}
-    });
+    };
   })();
 
   /* ── Pre-fill email from URL ── */

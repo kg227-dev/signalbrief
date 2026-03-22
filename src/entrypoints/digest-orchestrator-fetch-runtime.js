@@ -19,6 +19,12 @@ const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
 const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
+  STRATEGY: Object.freeze([
+    "corporate strategic review divestiture restructuring capital allocation last 48 hours",
+    "board strategic alternatives portfolio optimization spin off last 48 hours",
+    "operating model transformation restructuring turnaround strategy last 48 hours",
+    "CEO strategic reset cost program reorganization activist defense last 48 hours",
+  ]),
   HEALTHCARE: Object.freeze([
     "hospital system merger acquisition payer provider strategy last 48 hours",
     "Medicare Advantage payer provider value-based care last 48 hours",
@@ -33,6 +39,12 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "FDA approval clinical trial pharma licensing biotech last 48 hours",
     "biopharma M&A licensing deal trial readout last 48 hours",
     "drug pricing obesity drug biotech manufacturing last 48 hours",
+  ]),
+  TECHNOLOGY: Object.freeze([
+    "enterprise software cloud infrastructure CIO platform strategy Reuters Bloomberg FT WSJ last 48 hours",
+    "data center AI infrastructure enterprise tech capex export controls last 48 hours",
+    "cybersecurity enterprise software vendor strategy regulation last 48 hours",
+    "semiconductor cloud enterprise platform pricing product launch Reuters Bloomberg last 48 hours",
   ]),
   "POLICY×REGULATORY": Object.freeze([
     "FTC DOJ antitrust trade tariff regulation business last 48 hours",
@@ -58,11 +70,20 @@ const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
   starlink: Object.freeze(["TECHNOLOGY", "PUBLIC SECTOR"]),
 });
 const TRACKED_DEEP_STANDARD_TAGS = new Set([
+  "STRATEGY",
   "HEALTHCARE",
   "ENERGY",
   "LIFE SCIENCES",
+  "TECHNOLOGY",
   "POLICY×REGULATORY",
   "SUSTAINABILITY",
+]);
+const FULL_EXHAUST_STANDARD_TAGS = new Set([
+  "STRATEGY",
+  "HEALTHCARE",
+  "LIFE SCIENCES",
+  "TECHNOLOGY",
+  "POLICY×REGULATORY",
 ]);
 const TRACKED_DEEP_CUSTOM_SLUGS = new Set([
   "custom_nvidia",
@@ -100,7 +121,7 @@ function buildTagPriority(dueUsers, normalizeTopicToken) {
   return priority;
 }
 
-function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, log }) {
+function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, runMode, log }) {
   const topics = (Array.isArray(configTopics) ? configTopics : []).map((topic) => {
     const tag = String(topic?.tag || "").trim().toUpperCase();
     const overrideQueries = TRACKED_TOPIC_QUERY_OVERRIDES[tag];
@@ -111,6 +132,12 @@ function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, log }) {
     };
   });
   const logger = typeof log === "function" ? log : () => {};
+  if (String(runMode || "").trim() === "standard_core") {
+    const focusedTags = buildFocusedStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
+    const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));
+    logger(`Focused eval: fetching ${focusedTopics.length}/${topics.length} standard topic(s) for ${runMode}`);
+    return focusedTopics;
+  }
   // Always fetch all configured topics — even for targeted on-demand runs.
   // Narrowing to the user's subscribed topics produced thin raw pools that
   // were decimated by cross-day dedup, resulting in 2-3 signal digests.
@@ -199,6 +226,24 @@ function isTrackedDeepCoverageState(state) {
   const tag = String(state?.topic?.tag || "").trim().toUpperCase();
   const customSlug = String(state?.topic?.custom_slug || "").trim().toLowerCase();
   return TRACKED_DEEP_STANDARD_TAGS.has(tag) || TRACKED_DEEP_CUSTOM_SLUGS.has(customSlug);
+}
+
+function buildFocusedStandardTagSet(dueUsers = [], normalizeTopicToken = (value) => String(value || "").trim().toUpperCase()) {
+  const normalized = typeof normalizeTopicToken === "function"
+    ? normalizeTopicToken
+    : (value) => String(value || "").trim().toUpperCase();
+  const focused = new Set();
+  for (const topic of flattenDueUserTopics(dueUsers)) {
+    const key = String(normalized(topic) || "").trim().toUpperCase();
+    if (!key) continue;
+    if (FULL_EXHAUST_STANDARD_TAGS.has(key)) focused.add(key);
+  }
+  return focused;
+}
+
+function isFocusedStandardDeepCoverageState(state, focusedStandardTags) {
+  const tag = String(state?.topic?.tag || "").trim().toUpperCase();
+  return focusedStandardTags instanceof Set && focusedStandardTags.has(tag);
 }
 
 function flattenDueUserTopics(dueUsers = []) {
@@ -836,10 +881,12 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 7));
     const tagPriority = buildTagPriority(dueUsers, topicNormalizer);
     const dueUserTopics = flattenDueUserTopics(dueUsers);
+    const focusedStandardTags = buildFocusedStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
     const topicsToFetch = resolveTopicsToFetch({
       configTopics: CONFIG?.topics,
       dueUsers,
       targetChatId,
+      runMode,
       log: logger,
     });
 
@@ -999,9 +1046,10 @@ function createDigestOrchestratorFetchRuntime(deps) {
       customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
     }
 
+    const trackedStandardDeepStates = standardStates.filter(isTrackedDeepCoverageState).length;
     const standardDeepCoverageReserve = Math.min(
-      5,
-      standardStates.filter(isTrackedDeepCoverageState).length,
+      Math.max(5, focusedStandardTags.size * 2),
+      Math.max(trackedStandardDeepStates, focusedStandardTags.size),
       Math.max(0, standardHardLimit - countScheduledCalls(standardStates))
     );
     const phase2Eligible = sortRetryStates(standardStates.filter((state) => {
@@ -1065,6 +1113,28 @@ function createDigestOrchestratorFetchRuntime(deps) {
       }
       if (phase4States.length <= 0) break;
       await runScheduledBatch(phase4States, (state) => buildBroadInvocation(
+        state,
+        state.nextBroadQueryIndex,
+        { countsAsRetry: true, broadFallback: true }
+      ), `standard:phase${standardDeepPhaseIndex}`, budgetTracker);
+      standardDeepPhaseIndex += 1;
+    }
+
+    while (true) {
+      const focusedPhaseEligible = sortDeepCoverageRetryStates(standardStates.filter((state) => {
+        return Number(state.totalCallsScheduled || 0) > 0
+          && isFocusedStandardDeepCoverageState(state, focusedStandardTags)
+          && state.broadFallbackUsed === true
+          && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
+          && !hasBlockingProviderFailure(state);
+      }), itemEligibilityFn);
+      const focusedPhaseSlots = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
+      const focusedPhaseStates = focusedPhaseEligible.slice(0, focusedPhaseSlots);
+      if (focusedPhaseEligible.length > focusedPhaseStates.length) {
+        markBudgetStop(budgetTracker, "hard_cap_reached");
+      }
+      if (focusedPhaseStates.length <= 0) break;
+      await runScheduledBatch(focusedPhaseStates, (state) => buildBroadInvocation(
         state,
         state.nextBroadQueryIndex,
         { countsAsRetry: true, broadFallback: true }

@@ -924,3 +924,148 @@ Current focus after this pass:
   - `LIFE SCIENCES`
   - `TECHNOLOGY`
 - or stop and treat the current result as the decision point that the 5-item promise is too ambitious for the present Perplexity-first architecture
+
+## 2026-03-22 23:55 ET — isolated core-standard pass
+
+What changed in this pass:
+
+- added a `standard_core` eval mode that fetches only the five focus categories instead of competing against the full standard-topic universe
+- kept the stronger query shaping for:
+  - `HEALTHCARE`
+  - `LIFE SCIENCES`
+  - `TECHNOLOGY`
+  - `STRATEGY`
+  - `POLICY×REGULATORY`
+- added source-family rollups to the focused persona outputs so each category now reports whether the surviving pool is:
+  - `premium`
+  - `strong`
+  - `standard`
+  - `review_tier`
+  - `corporate`
+  - `other_unknown`
+
+Validation completed:
+
+- `tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js`
+- `tests/contracts/harness/eval/retrieval/personas-runtime.test.js`
+- `tests/contracts/harness/eval/retrieval/runner-runtime.test.js`
+
+Focused live run completed:
+
+- `retrieval-eval:2026-03-22T23-51-37-693Z`
+
+Headline result:
+
+- even with the run isolated to the five core standard categories:
+  - `5_item_fulfillment_rate: 0%`
+  - `withheld_after_retry_rate: 100%`
+  - `lower_confidence_usage_rate: 0%`
+- stale stayed `0%`
+- provider `429` pressure stayed `0%`
+- weak-source and noisy-fallback regressions did not return
+
+What the isolated run proves:
+
+- the earlier ambiguity was real:
+  - previous `standard_core` evals were still sharing budget with the full standard-topic universe
+- after fixing that, the conclusion is cleaner:
+  - the main blocker is no longer “we might have stopped too early because other standard topics consumed the run”
+  - the main blocker is that the surviving candidate pools for these categories are overwhelmingly review-tier and too weak to satisfy the shipping confidence bar
+
+Category-by-category result from `retrieval-eval:2026-03-22T23-51-37-693Z`:
+
+- `HEALTHCARE`
+  - `raw 0 / cleaned 2 / internal 2 / final 0`
+  - preferred calls `1`, broad calls `3`, remaining broad queries `0`
+  - final blocker: `delivery_policy_score_threshold`
+  - source-family mix in the internal final pool:
+    - `review_tier: 2`
+  - interpretation:
+    - this bucket now fully exhausted broad depth in the isolated run
+    - it still only produced review-tier candidates
+- `LIFE SCIENCES`
+  - `raw 1 / cleaned 1 / internal 1 / final 0`
+  - preferred calls `1`, broad calls `3`, remaining broad queries `0`
+  - final blocker: `delivery_policy_score_threshold`
+  - source-family mix:
+    - `review_tier: 1`
+  - interpretation:
+    - full broad exhaustion now happened here too
+    - the surviving item is still below the shipping bar
+- `TECHNOLOGY`
+  - `raw 4 / cleaned 4 / internal 2 / final 0`
+  - preferred calls `1`, broad calls `4`, remaining broad queries `0`
+  - final blocker: `delivery_policy_score_threshold`
+  - source-family mix:
+    - candidate pool: `review_tier: 4`
+    - internal final pool: `review_tier: 2`
+  - interpretation:
+    - query shaping increased yield, but not quality tier
+    - this is still dominated by review-tier enterprise-tech/report-summary style material
+- `STRATEGY`
+  - `raw 1 / cleaned 1 / internal 1 / final 0`
+  - preferred calls `1`, broad calls `4`, remaining broad queries `0`
+  - final blocker: `delivery_policy_score_threshold`
+  - source-family mix:
+    - `review_tier: 1`
+  - interpretation:
+    - this bucket now fully exhausts its query pack in the isolated run
+    - the surviving item quality is still not good enough to count toward the shipping promise
+- `POLICY×REGULATORY`
+  - `raw 0 / cleaned 0 / internal 0 / final 0`
+  - preferred calls `1`, broad calls `3`, remaining broad queries `0`
+  - final blocker: `delivery_policy_total_item_shortfall`
+  - source-family mix:
+    - none
+  - interpretation:
+    - this is now a cleaner zero-yield / no-conversion case, not a leftover-budget artifact
+
+Category-by-category source-family breakdown:
+
+- `HEALTHCARE`
+  - candidate pool: `review_tier 2`
+  - internal final: `review_tier 2`
+  - final shipped: none
+- `LIFE SCIENCES`
+  - candidate pool: `review_tier 1`
+  - internal final: `review_tier 1`
+  - final shipped: none
+- `TECHNOLOGY`
+  - candidate pool: `review_tier 4`
+  - internal final: `review_tier 2`
+  - final shipped: none
+- `STRATEGY`
+  - candidate pool: `review_tier 1`
+  - internal final: `review_tier 1`
+  - final shipped: none
+- `POLICY×REGULATORY`
+  - candidate pool: none
+  - internal final: none
+  - final shipped: none
+
+What this means:
+
+- the standard-category problem is now clearer:
+  - the system is not mainly blocked by stale items
+  - it is not mainly blocked by `429`s
+  - it is not mainly blocked by source blacklist/governance
+- it is blocked because:
+  - broad exhaustion on the five core categories still yields mostly review-tier material
+  - the items that survive are too weak to clear the delivery confidence bar
+  - `POLICY×REGULATORY` still has true low-yield behavior even after full exhaustion
+
+Smallest realistic next changes if we keep tuning:
+
+1. `TECHNOLOGY`
+   - bias even harder toward Reuters/Bloomberg/FT/WSJ/official/regulatory enterprise-tech coverage
+   - cut report-summary and CIO/IT-trade-review style retrieval paths further
+2. `HEALTHCARE` and `LIFE SCIENCES`
+   - bias toward official + top-tier specialist coverage and away from review-tier trade commentary
+3. `POLICY×REGULATORY`
+   - treat as a low-yield bucket unless a broader retrieval architecture change is made
+
+Current candid recommendation after the isolated pass:
+
+- for the five core standard categories, the daily `5`-item promise does **not** look realistically supportable under the current Perplexity-first retrieval architecture and current trust bar
+- moderate additional tuning may improve some single-category yield
+- it does **not** look likely to make daily five-item fulfillment reliable without a more meaningful retrieval redesign

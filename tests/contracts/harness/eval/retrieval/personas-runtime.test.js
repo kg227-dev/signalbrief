@@ -18,10 +18,11 @@ const {
   buildVirtualUser,
 } = runtime;
 
-const [standard, customRealistic, customAdversarial] = buildScenarioMatrix([
+const [standard, customRealistic, customAdversarial, standardCore] = buildScenarioMatrix([
   "standard_full",
   "custom_realistic",
   "custom_adversarial",
+  "standard_core",
 ]);
 
 assert.strictEqual(standard.personaCount, 21);
@@ -35,6 +36,13 @@ assert.ok(customRealistic.dueUsers.every((user) => user.topics.some((topic) => t
 assert.strictEqual(customAdversarial.personaCount, 4);
 assert.ok(customAdversarial.dueUsers.every((user) => user.preferences.email_enabled === false));
 assert.ok(customAdversarial.dueUsers.every((user) => user.preferences.telegram_enabled === false));
+
+assert.strictEqual(standardCore.personaCount, 5);
+assert.ok(standardCore.dueUsers.every((user) => user.eval_group === "standard_core"));
+assert.deepStrictEqual(
+  standardCore.dueUsers.map((user) => user.eval_label),
+  ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "STRATEGY", "POLICY×REGULATORY"]
+);
 
 const virtualUser = buildVirtualUser({
   id: "demo",

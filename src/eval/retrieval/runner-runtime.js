@@ -353,6 +353,48 @@ function buildFailedPersonaQuality() {
   };
 }
 
+function normalizeSourceTierFamily(value) {
+  const tier = String(value || "").trim().toLowerCase();
+  if (!tier) return "";
+  if (tier.startsWith("learned-")) return tier.slice("learned-".length);
+  return tier;
+}
+
+function classifySourceFamily(item = {}) {
+  const tier = normalizeSourceTierFamily(item?.source_tier);
+  const policy = String(item?.source_policy || "").trim().toLowerCase();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  if (tier === "premium") return "premium";
+  if (tier === "strong") return "strong";
+  if (tier === "standard") return "standard";
+  if (tier === "corporate" || sourceType === "corporate_pr") return "corporate";
+  if (
+    policy === "review"
+    || tier === "blog"
+    || tier === "weak"
+    || tier === "suspect"
+    || tier === "unknown"
+  ) {
+    return "review_tier";
+  }
+  return "other_unknown";
+}
+
+function summarizeSourceFamilyCounts(items = []) {
+  const counts = {
+    premium: 0,
+    strong: 0,
+    standard: 0,
+    review_tier: 0,
+    corporate: 0,
+    other_unknown: 0,
+  };
+  for (const item of (Array.isArray(items) ? items : [])) {
+    incrementCount(counts, classifySourceFamily(item));
+  }
+  return counts;
+}
+
 function serializeItem(item, extra = {}) {
   return {
     key: itemKey(item),
@@ -361,6 +403,7 @@ function serializeItem(item, extra = {}) {
     tag: String(item?.tag || "").trim() || null,
     source: String(item?.source || "").trim() || null,
     source_domain: String(item?.source_domain || "").trim() || null,
+    source_type: String(item?.source_type || "").trim() || null,
     source_tier: String(item?.source_tier || "").trim() || null,
     source_policy: String(item?.source_policy || "").trim() || null,
     source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
@@ -561,6 +604,9 @@ function classifyTopicGapAudit({
   const selectionLift = personas.length > 0
     ? Number((personas.reduce((sum, row) => sum + Number(row?.selection_lift || 0), 0) / personas.length).toFixed(2))
     : 0;
+  const internalSourceFamilyCounts = personas.reduce((combined, row) => {
+    return combineCounts(combined, row?.internal_final_source_family_counts || {});
+  }, {});
 
   return {
     tag: topic?.tag || null,
@@ -587,6 +633,7 @@ function classifyTopicGapAudit({
     final_gate_breakdown: gateBreakdown.final_gate_breakdown,
     ranking_gate_breakdown: gateBreakdown.ranking_gate_breakdown,
     delivery_policy_breakdown: gateBreakdown.delivery_policy_breakdown,
+    internal_source_family_counts: internalSourceFamilyCounts,
     better_source_opportunity: betterSourceOpportunity,
     better_source_note: betterSourceNote,
     preferred_domains: Array.isArray(topic?.preferred_domains) ? topic.preferred_domains.slice() : [],
@@ -1186,6 +1233,9 @@ function evaluatePersona({
     const finalItems = applyDigestDepth(deliveryPolicy.delivered_items, user?.preferences?.depth || "headline_plus_why");
     const finalQuality = computeSetQuality(finalItems, { requestedCount });
     const internalFinalQuality = computeSetQuality(internalFinalItems, { requestedCount });
+    const candidatePoolSourceFamilyCounts = summarizeSourceFamilyCounts(rawBaseline.scored);
+    const internalFinalSourceFamilyCounts = summarizeSourceFamilyCounts(internalFinalItems);
+    const finalSelectedSourceFamilyCounts = summarizeSourceFamilyCounts(finalItems);
     const digestQuality = computeDigestQualityScore({
       items: finalItems.length > 0 ? finalItems : internalFinalItems,
       user,
@@ -1251,6 +1301,9 @@ function evaluatePersona({
       ranking_gate_breakdown: gateBreakdown.ranking_gate_breakdown,
       delivery_policy_breakdown: gateBreakdown.delivery_policy_breakdown,
       primary_final_gate_reason: gateBreakdown.primary_final_gate_reason,
+      candidate_pool_source_family_counts: candidatePoolSourceFamilyCounts,
+      internal_final_source_family_counts: internalFinalSourceFamilyCounts,
+      final_selected_source_family_counts: finalSelectedSourceFamilyCounts,
       candidate_pool_items: rawBaseline.scored.map((item) => serializeItem(item)),
       raw_baseline_items: rawBaseline.rawBaselineItems.map((item) => serializeItem(item)),
       final_items: finalItems.map((item) => serializeItem(item)),
@@ -1335,6 +1388,9 @@ function evaluatePersona({
       ranking_gate_breakdown: failedGateBreakdown.ranking_gate_breakdown,
       delivery_policy_breakdown: failedGateBreakdown.delivery_policy_breakdown,
       primary_final_gate_reason: failedGateBreakdown.primary_final_gate_reason,
+      candidate_pool_source_family_counts: {},
+      internal_final_source_family_counts: {},
+      final_selected_source_family_counts: {},
       candidate_pool_items: rawBaseline.scored.map((item) => serializeItem(item)),
       raw_baseline_items: rawBaseline.rawBaselineItems.map((item) => serializeItem(item)),
       final_items: [],

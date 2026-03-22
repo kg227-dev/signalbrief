@@ -43,6 +43,38 @@ const MIXED_PERSONAS = Object.freeze([
     group: "mixed_realistic",
   },
 ]);
+const STANDARD_CORE_PERSONAS = Object.freeze([
+  {
+    id: "core_healthcare",
+    label: "HEALTHCARE",
+    topics: ["HEALTHCARE", "STRATEGY"],
+    group: "standard_core",
+  },
+  {
+    id: "core_life_sciences",
+    label: "LIFE SCIENCES",
+    topics: ["LIFE SCIENCES", "HEALTHCARE"],
+    group: "standard_core",
+  },
+  {
+    id: "core_technology",
+    label: "TECHNOLOGY",
+    topics: ["TECHNOLOGY", "AI×TECH"],
+    group: "standard_core",
+  },
+  {
+    id: "core_strategy",
+    label: "STRATEGY",
+    topics: ["STRATEGY", "PE×M&A"],
+    group: "standard_core",
+  },
+  {
+    id: "core_policy_regulatory",
+    label: "POLICY×REGULATORY",
+    topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"],
+    group: "standard_core",
+  },
+]);
 
 function topicSlug(value) {
   return normalizeTopicToken(value).replace(/\s+/g, "_");
@@ -110,6 +142,15 @@ function buildMixedPersonas() {
   }));
 }
 
+function buildStandardCorePersonas() {
+  return STANDARD_CORE_PERSONAS.map((persona) => buildVirtualUser({
+    id: persona.id,
+    label: persona.label,
+    group: persona.group,
+    topics: persona.topics,
+  }));
+}
+
 function buildCustomPersonas(keywords, group) {
   return (Array.isArray(keywords) ? keywords : []).map((keyword) => {
     const anchorTopic = group === "custom_adversarial" ? "AI×TECH" : "STRATEGY";
@@ -137,6 +178,9 @@ function buildScenarioRoster(scenarioId) {
   if (scenarioId === "custom_adversarial") {
     return buildCustomPersonas(CUSTOM_KEYWORD_SETS.adversarial, "custom_adversarial");
   }
+  if (scenarioId === "standard_core") {
+    return buildStandardCorePersonas();
+  }
   return [];
 }
 
@@ -158,6 +202,7 @@ module.exports = {
   buildCapabilityPersonas,
   buildIndustryPersonas,
   buildMixedPersonas,
+  buildStandardCorePersonas,
   buildScenarioDefinition,
   buildScenarioMatrix,
   buildScenarioRoster,

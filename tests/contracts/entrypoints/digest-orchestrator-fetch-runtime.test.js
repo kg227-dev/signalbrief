@@ -11,10 +11,37 @@ const TARGET_REL = "src/entrypoints/digest-orchestrator-fetch-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
-const { createDigestOrchestratorFetchRuntime, resolveCustomTopicSlugs } = runtime;
+const {
+  createDigestOrchestratorFetchRuntime,
+  resolveCustomTopicSlugs,
+  resolveTopicsToFetch,
+} = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
+  const focusedTopics = resolveTopicsToFetch({
+    configTopics: [
+      { tag: "HEALTHCARE", queries: ["a", "b"] },
+      { tag: "LIFE SCIENCES", queries: ["c", "d"] },
+      { tag: "TECHNOLOGY", queries: ["e", "f"] },
+      { tag: "STRATEGY", queries: ["g", "h"] },
+      { tag: "POLICY×REGULATORY", queries: ["i", "j"] },
+      { tag: "ENERGY", queries: ["k", "l"] },
+    ],
+    dueUsers: [
+      { topics: ["HEALTHCARE", "STRATEGY"] },
+      { topics: ["LIFE SCIENCES", "HEALTHCARE"] },
+      { topics: ["TECHNOLOGY", "AI×TECH"] },
+      { topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"] },
+    ],
+    runMode: "standard_core",
+    log: () => {},
+  });
+  assert.deepStrictEqual(
+    focusedTopics.map((topic) => topic.tag),
+    ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "STRATEGY", "POLICY×REGULATORY"]
+  );
+
   const uncappedCustomHeavy = resolveCustomTopicSlugs({
     dueUsers: [
       { topics: ["custom_nvidia"] },
@@ -220,6 +247,61 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(budgetedResult.fetchDiagnostics.budget_stop_reason, "hard_cap_reached");
   assert.strictEqual(budgetedResult.fetchDiagnostics.alternate_queries_used, 0);
 
+  let healthcareBroadCalls = 0;
+  const focusedDeepRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [
+        { tag: "HEALTHCARE", queries: ["ignored-1"] },
+      ],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          targeted: undefined,
+          on_demand: {
+            soft_calls: 4,
+            hard_calls: 4,
+          },
+          custom_topic_reserve_calls: 0,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (_topic, opts) => {
+      const broadOnly = opts?.retrievalPlan?.broad_only === true;
+      if (broadOnly) {
+        healthcareBroadCalls += 1;
+      }
+      return {
+        apiCalls: 1,
+        items: broadOnly && healthcareBroadCalls === 1
+          ? [{ headline: "healthcare retained", tag: "HEALTHCARE", url: `https://example.com/${healthcareBroadCalls}` }]
+          : [],
+        diagnostics: {
+          provider: "perplexity",
+          successful_calls: 1,
+          failed_calls: 0,
+          transport_errors: 0,
+          status_counts: {},
+        },
+      };
+    },
+    buildPreferredDomainShortlist: () => ({ domains: ["statnews.com"], topic_keys: ["healthcare"], official_friendly: false }),
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+  });
+
+  const focusedDeepResult = await focusedDeepRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["HEALTHCARE"], preferences: { items_per_digest: 5 } }],
+    targetChatId: "healthcare-focus",
+    runMode: "targeted",
+  });
+  const focusedTopic = focusedDeepResult.fetchDiagnostics.topic_diagnostics.find((row) => row.tag === "HEALTHCARE");
+  assert.ok(focusedTopic);
+  assert.strictEqual(focusedTopic.broad_call_count, 3);
+  assert.strictEqual(focusedTopic.remaining_broad_queries, 0);
+
   const emptyIncidents = [];
   const emptyRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
@@ -251,7 +333,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     CONFIG: {
       topics: [
         { tag: "AI×TECH", queries: ["a"] },
-        { tag: "STRATEGY", queries: ["b"] },
+        { tag: "CONSUMER", queries: ["b"] },
       ],
       digest: { itemCount: 7 },
     },
@@ -293,7 +375,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   const degradedResult = await degradedRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["AI×TECH", "STRATEGY"], preferences: {} }],
+    dueUsers: [{ topics: ["AI×TECH", "CONSUMER"], preferences: {} }],
     targetChatId: null,
     runMode: "scheduled",
   });
@@ -309,7 +391,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const retryCalls = [];
   const retryRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "STRATEGY", queries: ["q1", "q2", "q3"] }],
+      topics: [{ tag: "CONSUMER", queries: ["q1", "q2", "q3"] }],
       digest: {
         itemCount: 7,
         search_budget: {
@@ -346,7 +428,7 @@ assertModuleExports(() => runtime, TARGET_REL);
         diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
       };
     },
-    buildPreferredDomainShortlist: () => ({ domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false }),
+    buildPreferredDomainShortlist: () => ({ domains: ["retaildive.com"], topic_keys: ["consumer"], official_friendly: false }),
     buildCustomTopicQueries: () => [],
     buildCustomRescueItemsFromStandard: () => [],
     emitDigestIncident: async () => {},
@@ -354,7 +436,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   const retryResult = await retryRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["STRATEGY"], preferences: {} }],
+    dueUsers: [{ topics: ["CONSUMER"], preferences: {} }],
     targetChatId: null,
     runMode: "scheduled",
   });
@@ -599,13 +681,13 @@ assertModuleExports(() => runtime, TARGET_REL);
     targetChatId: null,
     runMode: "scheduled",
   });
-  assert.strictEqual(rateLimitedDeepRetryResult.standardFetchCalls, 3);
+  assert.strictEqual(rateLimitedDeepRetryResult.standardFetchCalls, 4);
   assert.strictEqual(rateLimitedDeepRetryResult.allItems.length, 1);
   assert.strictEqual(rateLimitedDeepRetryResult.fetchDiagnostics.provider_429_count, 1);
   assert.strictEqual(rateLimitedDeepRetryResult.fetchDiagnostics.rate_limit_cooldown_ms > 0, true);
   assert.deepStrictEqual(
     rateLimitedDeepRetryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad", "broad"]
+    ["preferred", "broad", "broad", "broad"]
   );
 
   const previousConcurrencyEnv = process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;

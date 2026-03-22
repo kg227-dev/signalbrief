@@ -42,7 +42,7 @@ It is meant to preserve the short-term execution queue while the implementation 
 - [x] Identity-aware source annotation now carries the winning identity override through editorial signals
 - [ ] Admin editing and inspect UX is still mostly domain-first
 - [x] Diagnostics-driven curation queues now surface in the source governance admin page for specialist winners, derivative-style winners, platform ambiguity, and topic coverage gaps
-- [ ] Story/event fingerprinting is still heuristic and should be strengthened
+- [x] Story/event fingerprinting now uses lightweight event markers and fingerprints to cluster paraphrased versions of the same underlying signal more reliably, while still remaining heuristic rather than fully canonical
 
 ## Highest-leverage next steps
 
@@ -95,7 +95,8 @@ Best modules to extend:
 ### 3. Improve event/story fingerprinting
 
 Current state:
-- v2 substitute logic is better, but story equivalence is still heuristic
+- v2 substitute logic is better, and the storyline layer now includes lightweight event markers and fingerprints
+- story equivalence is still heuristic rather than entity-linked or citation-backed
 
 Next change:
 - strengthen the event fingerprint layer using:
@@ -105,6 +106,10 @@ Next change:
   - cited-source overlap
   - preferred-source evidence from search results
   - source-family hints
+
+Current implementation note:
+- the storyline runtime now uses event markers, time/amount extraction, and lightweight phrase fingerprints to better cluster paraphrased coverage of the same event
+- the next meaningful jump would be citation overlap and stronger canonical entity/event resolution, not more regex alone
 
 Why it matters:
 - improves "best representation of the same story" decisions

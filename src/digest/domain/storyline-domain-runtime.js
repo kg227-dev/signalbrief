@@ -295,6 +295,44 @@ const HINT_RULES = [
   { hint: "executive_commentary", pattern: /\b(ceo|boardroom|must prioritize|business reality)\b/i },
 ];
 
+const EVENT_MARKER_CONTENT_FLAGS = Object.freeze({
+  trial_readout: "evt:trial",
+  m_and_a: "evt:deal",
+  regulatory: "evt:regulatory",
+  earnings: "evt:earnings",
+  product_launch: "evt:launch",
+  guidance: "evt:guidance",
+  investor_relations: "evt:investor",
+  conference_recap: "evt:conference",
+});
+
+const EVENT_ACTION_RULES = [
+  { marker: "evt:deal", pattern: /\b(acquire|acquisition|buyout|merger|sell|sale|takeover|deal)\b/i },
+  { marker: "evt:regulatory", pattern: /\b(rule|rules|regulation|regulatory|guidance|proposal|proposed|filing|disclosure|enforcement|deadline)\b/i },
+  { marker: "evt:approval", pattern: /\b(approves?|approval|approved|clearance|cleared|authorization)\b/i },
+  { marker: "evt:trial", pattern: /\b(phase ii|phase iii|trial|study|readout|clinical data|clinical)\b/i },
+  { marker: "evt:earnings", pattern: /\b(earnings|results|quarter|q1|q2|q3|q4)\b/i },
+  { marker: "evt:launch", pattern: /\b(launch|rollout|release|introduces?|debut)\b/i },
+  { marker: "evt:funding", pattern: /\b(capex|capital expenditure|investment|investing|invests|raises?|funding)\b/i },
+  { marker: "evt:partnership", pattern: /\b(partnership|partner(?:s|ed)?|collaboration|alliance)\b/i },
+  { marker: "evt:leadership", pattern: /\b(appoint(?:s|ed)?|names?|hire(?:s|d)?|resigns?|steps down|chief financial officer|cfo|chief executive officer|ceo)\b/i },
+];
+
+const EVENT_MARKER_STOPWORDS = new Set([
+  "about", "across", "after", "amid", "among", "around", "before", "below", "between",
+  "beyond", "fresh", "from", "into", "latest", "more", "less", "much", "near", "news",
+  "over", "their", "these", "those", "this", "through", "under", "very", "with", "without",
+  "would", "could", "should", "report", "reports", "reporting", "says", "said", "faces",
+  "face", "proposes", "proposal", "announces", "announced", "company", "companies", "market",
+  "markets", "business", "industry", "industries", "giants", "firms", "shareholders", "record",
+  "quarterly", "payout", "executives", "leaders", "strategy", "technology", "healthcare",
+]);
+
+const EVENT_BIGRAM_BLOCK_TOKENS = new Set([
+  "approval", "approves", "approved", "deal", "deals", "disclosure", "earnings", "launch",
+  "launches", "guidance", "regulatory", "rule", "rules", "study", "trial", "results", "proposal",
+]);
+
 const HARD_EXCLUDE_FLAGS = new Set(["routine_dividend", "stock_promo"]);
 
 function clamp(value, min = 0, max = 1) {
@@ -309,6 +347,17 @@ function stripHtml(value) {
 
 function uniqSorted(values) {
   return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean))).sort();
+}
+
+function uniqPreserveOrder(values) {
+  const seen = new Set();
+  const out = [];
+  for (const value of (Array.isArray(values) ? values : [])) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
 }
 
 function tokenSet(value) {
@@ -1017,6 +1066,115 @@ function buildStorylineHints(item, contentFlags, promptHints = []) {
   return uniqSorted(hints.map((hint) => normalizeTopicToken(hint)).filter(Boolean));
 }
 
+function extractAmountMarkers(text) {
+  const markers = [];
+  const regex = /\b(?:\$|usd\s*)?(\d+(?:\.\d+)?)\s*(trillion|billion|million|bn|mn|b|m|t)\b/gi;
+  let match;
+  while ((match = regex.exec(String(text || ""))) !== null) {
+    const amount = String(match[1] || "").trim();
+    const unitRaw = String(match[2] || "").trim().toLowerCase();
+    if (!amount || !unitRaw) continue;
+    const unit = unitRaw === "trillion" || unitRaw === "t" ? "t"
+      : (unitRaw === "billion" || unitRaw === "bn" || unitRaw === "b" ? "b" : "m");
+    markers.push(`amt:${amount}${unit}`);
+    if (markers.length >= 2) break;
+  }
+  return uniqPreserveOrder(markers);
+}
+
+function extractTimeMarkers(text) {
+  const markers = [];
+  const years = String(text || "").match(/\b20\d{2}\b/g) || [];
+  for (const year of years) {
+    markers.push(`year:${year}`);
+    if (markers.length >= 2) break;
+  }
+  const quarters = String(text || "").match(/\bq[1-4]\b/gi) || [];
+  for (const quarter of quarters) {
+    markers.push(`quarter:${String(quarter).toLowerCase()}`);
+    if (markers.length >= 4) break;
+  }
+  return uniqPreserveOrder(markers);
+}
+
+function buildIgnoredEventTokens(entityKeys, storylineHints) {
+  const ignored = new Set();
+  const primaryEntityKeys = Array.isArray(entityKeys) && entityKeys.length ? [entityKeys[0]] : [];
+  for (const rawValue of uniqPreserveOrder([...primaryEntityKeys, ...(storylineHints || [])])) {
+    for (const token of normalizeMatchText(rawValue).split(" ").filter(Boolean)) {
+      ignored.add(token);
+    }
+  }
+  return ignored;
+}
+
+function extractHeadlineBigramMarkers(text, entityKeys = [], storylineHints = []) {
+  const ignoredTokens = buildIgnoredEventTokens(entityKeys, storylineHints);
+  const tokens = normalizeMatchText(text)
+    .split(" ")
+    .filter((token) => token.length >= 4)
+    .filter((token) => !EVENT_MARKER_STOPWORDS.has(token))
+    .filter((token) => !ignoredTokens.has(token));
+  const markers = [];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const left = tokens[index];
+    const right = tokens[index + 1];
+    if (!left || !right || left === right) continue;
+    if (EVENT_BIGRAM_BLOCK_TOKENS.has(left) && EVENT_BIGRAM_BLOCK_TOKENS.has(right)) continue;
+    markers.push(`lex:${left}_${right}`);
+    if (markers.length >= 4) break;
+  }
+  return uniqPreserveOrder(markers);
+}
+
+function buildEventMarkers(item, contentFlags = [], storylineHints = [], entityKeys = []) {
+  const text = `${item?.headline || ""} ${item?.summary || ""} ${stripHtml(item?.wim || "")}`;
+  const markers = [];
+  for (const flag of (Array.isArray(contentFlags) ? contentFlags : [])) {
+    const marker = EVENT_MARKER_CONTENT_FLAGS[String(flag || "").trim()];
+    if (marker) markers.push(marker);
+  }
+  for (const hint of (Array.isArray(storylineHints) ? storylineHints : []).slice(0, 3)) {
+    if (!hint) continue;
+    markers.push(`hint:${hint}`);
+  }
+  for (const rule of EVENT_ACTION_RULES) {
+    if (rule.pattern.test(text)) markers.push(rule.marker);
+  }
+  markers.push(...extractAmountMarkers(text));
+  markers.push(...extractTimeMarkers(text));
+  markers.push(...extractHeadlineBigramMarkers(item?.headline || "", entityKeys, storylineHints));
+  return uniqPreserveOrder(markers).slice(0, 8);
+}
+
+function eventMarkerPriority(marker) {
+  const value = String(marker || "").trim();
+  if (!value) return 99;
+  if (value.startsWith("amt:")) return 0;
+  if (value.startsWith("year:") || value.startsWith("quarter:")) return 1;
+  if (value.startsWith("hint:")) return 2;
+  if (value.startsWith("lex:")) return 3;
+  if (value.startsWith("evt:")) return 4;
+  return 9;
+}
+
+function buildEventFingerprint(item) {
+  const entityKeys = uniqPreserveOrder(Array.isArray(item?.entity_keys) ? item.entity_keys : []);
+  const tagToken = normalizeTopicToken(item?.tag || "");
+  const eventMarkers = uniqPreserveOrder(Array.isArray(item?.event_markers) ? item.event_markers : []);
+  const baseKeys = entityKeys.length > 0
+    ? entityKeys.slice(0, 1)
+    : ((tagToken && !STANDARD_TOPIC_TOKENS.has(tagToken)) ? [tagToken] : []);
+  const prioritizedMarkers = eventMarkers
+    .slice()
+    .sort((left, right) => eventMarkerPriority(left) - eventMarkerPriority(right) || String(left).localeCompare(String(right)))
+    .slice(0, 4);
+  const components = uniqPreserveOrder([...baseKeys, ...prioritizedMarkers]);
+  if (components.length < 3) return "";
+  if (baseKeys.length === 0 && prioritizedMarkers.length < 3) return "";
+  return components.join("|");
+}
+
 function extractEntityKeys(item) {
   const entities = new Set();
   const tagToken = normalizeTopicToken(item?.tag || "");
@@ -1101,6 +1259,8 @@ function computeStrategicValue(item, sourceInfo, routineItemScore, contentFlags)
 }
 
 function buildStorylineFingerprint(item) {
+  const eventFingerprint = buildEventFingerprint(item);
+  if (eventFingerprint) return eventFingerprint;
   const entity = Array.isArray(item?.entity_keys) && item.entity_keys.length ? item.entity_keys[0] : normalizeTopicToken(item?.tag || "");
   const hints = Array.isArray(item?.storyline_hints) ? item.storyline_hints.slice(0, 3) : [];
   return uniqSorted([entity, ...hints]).join("|");
@@ -1128,6 +1288,13 @@ function annotateEditorialSignals(items = []) {
     const originalitySignal = computeOriginalitySignal(item, sourceInfo);
     const storylineHints = buildStorylineHints(item, contentFlags, promptHints);
     const entityKeys = extractEntityKeys(item);
+    const eventMarkers = buildEventMarkers(item, contentFlags, storylineHints, entityKeys);
+    const eventFingerprint = buildEventFingerprint({
+      ...item,
+      tag: item?.tag,
+      entity_keys: entityKeys,
+      event_markers: eventMarkers,
+    });
     const routineItemScore = computeRoutineItemScore(contentFlags, sourceInfo);
     const strategicValue = computeStrategicValue(item, sourceInfo, routineItemScore, contentFlags);
     const hardExclude = contentFlags.some((flag) => HARD_EXCLUDE_FLAGS.has(flag));
@@ -1137,6 +1304,8 @@ function annotateEditorialSignals(items = []) {
       content_flags: contentFlags,
       entity_keys: entityKeys,
       storyline_hints: storylineHints,
+      event_markers: eventMarkers,
+      event_fingerprint: eventFingerprint || null,
       source_tier: sourceInfo.source_tier,
       source_authority: Number(sourceInfo.source_authority.toFixed(3)),
       baseline_source_tier: sourceInfo.baseline_source_tier || sourceInfo.source_tier,
@@ -1190,6 +1359,7 @@ function annotateEditorialSignals(items = []) {
       derivative_reason_codes: [],
       derivative_parent_domain: null,
       derivative_parent_identity_key: null,
+      derivative_of_primary: false,
       suppression_reason_codes: [],
       selection_reason_codes: [],
       winner_selection_reason: null,
@@ -1200,6 +1370,7 @@ function annotateEditorialSignals(items = []) {
         ...item,
         entity_keys: entityKeys,
         storyline_hints: storylineHints,
+        event_markers: eventMarkers,
       }),
       freshness_key: buildFreshnessKey({
         ...item,
@@ -1227,30 +1398,38 @@ function storylineSimilarity(leftItem, rightItem) {
 
   const entityOverlap = jaccard(leftItem?.entity_keys || [], rightItem?.entity_keys || []);
   const hintOverlap = jaccard(leftItem?.storyline_hints || [], rightItem?.storyline_hints || []);
+  const eventOverlap = jaccard(leftItem?.event_markers || [], rightItem?.event_markers || []);
   const textOverlap = headlineTokenOverlap(leftItem, rightItem);
   const tagRelated = topicsRelated(leftItem?.tag || "", rightItem?.tag || "") ? 1 : 0;
+  const exactEventFingerprint = String(leftItem?.event_fingerprint || "").trim()
+    && String(leftItem?.event_fingerprint || "").trim() === String(rightItem?.event_fingerprint || "").trim();
+
+  if (exactEventFingerprint && (entityOverlap > 0 || eventOverlap >= 0.34 || tagRelated > 0)) return 0.92;
 
   if (
     entityOverlap > 0
+    && eventOverlap === 0
     && hintOverlap === 0
     && textOverlap < 0.18
-    && ((leftItem?.storyline_hints || []).length > 0 || (rightItem?.storyline_hints || []).length > 0)
   ) {
     return 0;
   }
 
+  if (entityOverlap >= 0.5 && eventOverlap >= 0.34) return 0.88;
   if (entityOverlap >= 0.5 && hintOverlap >= 0.34) return 0.86;
+  if (eventOverlap >= 0.45 && (entityOverlap >= 0.25 || tagRelated > 0)) return 0.82;
   if (entityOverlap >= 0.5 && textOverlap >= 0.34) return 0.8;
   if (textOverlap >= 0.52 && (tagRelated > 0 || entityOverlap >= 0.2)) return 0.78;
 
   const weightedScore = (
-    0.38 * entityOverlap
-    + 0.28 * hintOverlap
-    + 0.24 * textOverlap
+    0.3 * entityOverlap
+    + 0.22 * eventOverlap
+    + 0.2 * hintOverlap
+    + 0.18 * textOverlap
     + 0.1 * tagRelated
   );
   const trigramSim = headlineTrigramOverlap(leftItem, rightItem);
-  if (trigramSim >= 0.35 && tagRelated > 0) {
+  if (trigramSim >= 0.35 && (tagRelated > 0 || eventOverlap >= 0.2)) {
     return Math.min(1, weightedScore + 0.12);
   }
   return weightedScore;
@@ -1436,6 +1615,17 @@ function estimateDerivativeCompetition(item, originCandidate, similarity) {
     reasonCodes.push("story_overlap");
   }
 
+  const exactEventFingerprint = String(item?.event_fingerprint || "").trim()
+    && String(item?.event_fingerprint || "").trim() === String(originCandidate?.event_fingerprint || "").trim();
+  const eventOverlap = jaccard(item?.event_markers || [], originCandidate?.event_markers || []);
+  if (exactEventFingerprint) {
+    confidence += 0.18;
+    reasonCodes.push("exact_event_fingerprint");
+  } else if (eventOverlap >= 0.42) {
+    confidence += 0.1;
+    reasonCodes.push("event_marker_overlap");
+  }
+
   if (Number(originCandidate?.originality_signal || 0) >= Number(item?.originality_signal || 0) + 0.12) {
     confidence += 0.12;
     reasonCodes.push("weaker_than_original");
@@ -1483,6 +1673,7 @@ function applyPreferredCloseSubstituteSuppression(cluster) {
     item.derivative_reason_codes = [];
     item.derivative_parent_domain = null;
     item.derivative_parent_identity_key = null;
+    item.derivative_of_primary = false;
     item.suppression_reason_codes = [];
     item.selection_reason_codes = Array.isArray(item.selection_reason_codes) ? item.selection_reason_codes : [];
   }
@@ -1501,6 +1692,7 @@ function applyPreferredCloseSubstituteSuppression(cluster) {
     item.derivative_parent_domain = String(bestOrigin?.source_domain || bestOrigin?.source || "").trim() || null;
     item.derivative_parent_identity_key = String(bestOrigin?.source_identity_key || "").trim() || item.derivative_parent_domain;
     item.suppressed_by_derivative_source = true;
+    item.derivative_of_primary = true;
     item.suppression_reason_codes = appendUniqueCode(item.suppression_reason_codes, "derivative_source_suppressed");
     for (const reasonCode of derivative.reasonCodes) {
       item.suppression_reason_codes = appendUniqueCode(item.suppression_reason_codes, reasonCode);
@@ -1555,6 +1747,16 @@ function annotateClusterOutcome(cluster, baselineRepresentative, representative,
   };
 
   const strongPreferredAlternatives = cluster.items.filter((item) => item !== representative && isStrongPreferredClusterCandidate(item));
+  const sharedEventFingerprint = cluster.items.some((item) => {
+    if (!item || item === representative) return false;
+    const exactFingerprint = String(representative?.event_fingerprint || "").trim()
+      && String(item?.event_fingerprint || "").trim() === String(representative?.event_fingerprint || "").trim();
+    if (exactFingerprint) return true;
+    const eventOverlap = jaccard(representative?.event_markers || [], item?.event_markers || []);
+    const entityOverlap = jaccard(representative?.entity_keys || [], item?.entity_keys || []);
+    const tagRelated = topicsRelated(representative?.tag || "", item?.tag || "");
+    return eventOverlap >= 0.42 && (entityOverlap > 0 || tagRelated);
+  });
   const specialistTradeBeatPreferred = String(representative?.source_type || "").trim().toLowerCase() === "trade_specialist"
     && strongPreferredAlternatives.some((candidate) => canTradeSpecialistOutperformPreferred(representative, candidate));
   const hasPreferredSignal = competitionStats.preferred_signal_present === true;
@@ -1585,6 +1787,9 @@ function annotateClusterOutcome(cluster, baselineRepresentative, representative,
   }
   if (competitionStats.derivative_suppressed_count > 0) {
     representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "best_source_representation");
+  }
+  if (sharedEventFingerprint) {
+    representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "canonical_event_match");
   }
   if (baselineRepresentative && baselineRepresentative !== representative) {
     representative.selection_reason_codes = appendUniqueCode(representative.selection_reason_codes, "displaced_weaker_substitute");
@@ -1717,6 +1922,7 @@ function buildStorylineCandidates(items = []) {
         || (cluster.representative?.specialist_trade_outperformed_preferred === true),
       broader_retrieval_found_better: cluster.broader_retrieval_found_better === true,
       storyline_key: buildStorylineFingerprint({
+        ...(cluster.representative || {}),
         entity_keys: cluster.entity_keys,
         storyline_hints: cluster.storyline_hints,
       }),

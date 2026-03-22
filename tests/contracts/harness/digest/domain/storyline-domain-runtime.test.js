@@ -346,6 +346,63 @@ assert.ok(corporateTier.source_authority < 0.5);
   setPreferredSourceRegistry(null);
 }
 
+// ── Event fingerprinting clusters paraphrased versions of the same regulatory story ──
+{
+  setPreferredSourceRegistry({
+    version: 1,
+    global: { reported: ["reuters.com"], official: [] },
+    topics: {},
+    aliases: {},
+  });
+  const candidates = buildStorylineCandidates([
+    {
+      tag: "POLICY×REGULATORY",
+      headline: "FTC proposes new AI merger disclosure rule for private funds in 2026",
+      summary: "Reuters says the proposal would expand reporting requirements for private fund managers in 2026.",
+      source_domain: "reuters.com",
+      baseScore: 7.4,
+      strategic_value: 0.76,
+    },
+    {
+      tag: "POLICY×REGULATORY",
+      headline: "Private funds face fresh AI merger disclosure mandate under FTC proposal for 2026",
+      summary: "A weaker rewrite says managers could face broader 2026 reporting duties.",
+      source_domain: "benzinga.com",
+      baseScore: 8.0,
+      strategic_value: 0.81,
+    },
+  ]);
+  assert.strictEqual(candidates.length, 1, "paraphrased coverage of the same FTC proposal should cluster");
+  assert.strictEqual(candidates[0].source_domain, "reuters.com");
+  assert.ok(String(candidates[0].event_fingerprint || "").includes("year:2026"));
+  assert.ok(Array.isArray(candidates[0].selection_reason_codes) && candidates[0].selection_reason_codes.includes("canonical_event_match"));
+  assert.ok(Number(candidates[0].cluster_derivative_suppressed_count || 0) >= 1);
+  setPreferredSourceRegistry(null);
+}
+
+// ── Event fingerprinting should not collapse distinct events from the same company ──
+{
+  const candidates = buildStorylineCandidates([
+    {
+      tag: "PFIZER",
+      headline: "Pfizer acquires oncology platform company in $11 billion deal",
+      summary: "The acquisition expands Pfizer's cancer pipeline.",
+      source_domain: "reuters.com",
+      baseScore: 7.8,
+      strategic_value: 0.79,
+    },
+    {
+      tag: "PFIZER",
+      headline: "Pfizer names new chief financial officer after finance leadership reshuffle",
+      summary: "The company announced a new CFO appointment following a broader finance reorganization.",
+      source_domain: "reuters.com",
+      baseScore: 6.9,
+      strategic_value: 0.62,
+    },
+  ]);
+  assert.strictEqual(candidates.length, 2, "different Pfizer events should not cluster just because the entity matches");
+}
+
 // ── Specialist trade can beat a global preferred generalist on topic fit ──
 {
   setPreferredSourceRegistry({

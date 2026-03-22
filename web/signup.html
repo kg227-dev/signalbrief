@@ -80,18 +80,41 @@ body.dark .success-card { background: var(--card); }
   position: fixed; top: 20px; right: 20px; z-index: 999;
   width: 42px; height: 42px; border-radius: 50%;
   border: 1px solid var(--border); background: var(--card);
-  cursor: pointer; font-size: 18px;
+  cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.2s ease;
   box-shadow: var(--shadow-sm);
 }
 #darkToggle:hover { transform: scale(1.06); }
+#darkToggle svg { display: block; }
 
 /* Progress bar */
 .progress-track {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   height: 3px; background: var(--border);
 }
+
+/* Step progress label */
+.step-progress-label {
+  position: fixed; top: 3px; left: 0; right: 0; z-index: 99;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 9px 24px 8px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px;
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.step-progress-label .spl-step { color: var(--accent); }
+.step-progress-label .spl-dots { display: flex; gap: 5px; align-items: center; }
+.step-progress-label .spl-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border); transition: all 0.3s ease;
+}
+.step-progress-label .spl-dot.active {
+  width: 18px; border-radius: 3px; background: var(--accent);
+}
+.step-progress-label .spl-dot.done { background: var(--accent); opacity: 0.35; }
 
 /* Step dots */
 .step-dots {
@@ -240,6 +263,7 @@ select.input-field {
   align-items: center;
   gap: 7px;
   padding: 9px 15px;
+  min-height: 44px;
   border: 1.5px solid var(--border);
   border-radius: 100px;
   font-size: 13px;
@@ -654,33 +678,47 @@ select.input-field {
 </head>
 <body>
 
-<button id="darkToggle" type="button" title="Toggle dark mode">&#x1F319;</button>
+<button id="darkToggle" type="button" aria-label="Toggle dark mode" aria-pressed="false">
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+</button>
 
 <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+
+<div class="step-progress-label" id="stepProgressLabel" aria-live="polite">
+  <span class="spl-step" id="splStep">Step 1 of 5</span>
+  <span class="spl-dots" id="splDots">
+    <span class="spl-dot active"></span>
+    <span class="spl-dot"></span>
+    <span class="spl-dot"></span>
+    <span class="spl-dot"></span>
+    <span class="spl-dot"></span>
+  </span>
+</div>
 
 <div class="flow-container">
 
   <!-- Step 0: Details -->
   <div class="step active" id="step-0">
-    <div class="step-counter">Step 1 of 5</div>
-    <div class="step-dots"><div class="sdot active"></div><div class="sdot"></div><div class="sdot"></div><div class="sdot"></div><div class="sdot"></div></div>
-    <h2>Let's set up your briefing</h2>
+    <div class="step-counter" aria-hidden="true">Step 1 of 5</div>
+    <div class="step-dots" aria-hidden="true"><div class="sdot active"></div><div class="sdot"></div><div class="sdot"></div><div class="sdot"></div><div class="sdot"></div></div>
+    <h2 id="step-0-heading">Let's set up your briefing</h2>
     <p class="step-sub">We'll deliver a personalized digest at your chosen time.</p>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:20px;"><span aria-hidden="true">*</span> Required</p>
     <div class="input-group">
-      <label class="input-label">Full name</label>
-      <input type="text" class="input-field" placeholder="e.g. Jane Smith" id="name" autocomplete="name">
+      <label class="input-label" for="name">Full name <span aria-hidden="true" style="color:var(--accent)">*</span></label>
+      <input type="text" class="input-field" placeholder="e.g. Jane Smith" id="name" autocomplete="name" required>
     </div>
     <div class="input-group">
-      <label class="input-label">Email address</label>
-      <input type="email" class="input-field" placeholder="you@company.com" id="email" autocomplete="email">
-      <div class="field-error" id="email-error"></div>
+      <label class="input-label" for="email">Email address <span aria-hidden="true" style="color:var(--accent)">*</span></label>
+      <input type="email" class="input-field" placeholder="you@company.com" id="email" autocomplete="email" required>
+      <div class="field-error" id="email-error" aria-live="polite"></div>
     </div>
     <div class="input-group">
-      <label class="input-label">Telegram username <span class="optional">(optional)</span></label>
+      <label class="input-label" for="telegram">Telegram username <span class="optional">(optional)</span></label>
       <input type="text" class="input-field" placeholder="@yourusername" id="telegram">
-      <div class="field-error" id="telegram-error"></div>
+      <div class="field-error" id="telegram-error" aria-live="polite"></div>
     </div>
-    <div class="step-error" id="error-0"></div>
+    <div class="step-error" id="error-0" aria-live="polite"></div>
     <div class="step-nav">
       <button class="continue-btn" id="next-0">Continue</button>
       <a href="/" class="back-btn">&larr; Back to home</a>
@@ -707,7 +745,7 @@ select.input-field {
     <div class="step-error" id="error-1"></div>
     <div class="step-nav">
       <button class="continue-btn" id="next-1">Continue</button>
-      <button class="back-btn" id="back-1">&larr; Back</button>
+      <button class="back-btn" id="back-1" aria-label="Back to step 1: Your details">&larr; Back</button>
     </div>
   </div>
 
@@ -744,7 +782,7 @@ select.input-field {
     <div class="step-error" id="error-2"></div>
     <div class="step-nav">
       <button class="continue-btn" id="next-2">Continue</button>
-      <button class="back-btn" id="back-2">&larr; Back</button>
+      <button class="back-btn" id="back-2" aria-label="Back to step 2: Topics">&larr; Back</button>
     </div>
   </div>
 
@@ -826,7 +864,7 @@ select.input-field {
     <div class="step-error" id="error-3"></div>
     <div class="step-nav">
       <button class="continue-btn" id="next-3">Continue</button>
-      <button class="back-btn" id="back-3">&larr; Back</button>
+      <button class="back-btn" id="back-3" aria-label="Back to step 3: Analysis depth">&larr; Back</button>
     </div>
   </div>
 
@@ -840,7 +878,7 @@ select.input-field {
     <div class="step-error" id="error-4"></div>
     <div class="step-nav">
       <button class="continue-btn" id="next-4">Start my SignalBrief &rarr;</button>
-      <button class="back-btn" id="back-4">&larr; Back</button>
+      <button class="back-btn" id="back-4" aria-label="Back to step 4: Delivery schedule">&larr; Back</button>
     </div>
   </div>
 
@@ -870,6 +908,55 @@ select.input-field {
 <script src="index-helpers-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="index-form-submit-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="signup-flow.js?v=__ASSET_VERSION__"></script>
+
+<script>
+/* Dark mode toggle */
+(function() {
+  var toggle = document.getElementById('darkToggle');
+  var moonSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+  var sunSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+  function apply(isDark) {
+    document.body.classList.toggle('dark', isDark);
+    if (toggle) {
+      toggle.innerHTML = isDark ? sunSvg : moonSvg;
+      toggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+    }
+  }
+  try { if (localStorage.getItem('sbDark') === '1') apply(true); else if (toggle) toggle.innerHTML = moonSvg; } catch(e) {}
+  if (toggle) toggle.addEventListener('click', function() {
+    var isDark = !document.body.classList.contains('dark');
+    apply(isDark);
+    try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
+  });
+})();
+
+/* Step progress label sync — hooks into signup-flow.js step transitions via MutationObserver */
+(function() {
+  var stepNames = ['Your details', 'Topics', 'Analysis depth', 'Delivery schedule', 'Review'];
+  var label = document.getElementById('splStep');
+  var dotsEl = document.getElementById('splDots');
+  if (!label || !dotsEl) return;
+  function updateProgress(activeStep) {
+    if (activeStep >= 5) return; // success state
+    label.textContent = 'Step ' + (activeStep + 1) + ' of 5\u2002\u2013\u2002' + stepNames[activeStep];
+    var dots = dotsEl.querySelectorAll('.spl-dot');
+    dots.forEach(function(d, i) {
+      d.classList.remove('active', 'done');
+      if (i < activeStep) d.classList.add('done');
+      else if (i === activeStep) d.classList.add('active');
+    });
+  }
+  var observer = new MutationObserver(function() {
+    for (var i = 0; i <= 5; i++) {
+      var step = document.getElementById('step-' + i);
+      if (step && step.classList.contains('active')) { updateProgress(i); return; }
+    }
+  });
+  var container = document.querySelector('.flow-container');
+  if (container) observer.observe(container, { subtree: true, attributeFilter: ['class'] });
+  updateProgress(0);
+})();
+</script>
 
 </body>
 </html>

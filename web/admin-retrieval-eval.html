@@ -43,6 +43,13 @@
     .plain-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
     .plain-list li { color: var(--text-2); font-size: 13px; line-height: 1.45; }
     .meta-line { font-size: 12px; color: var(--text-secondary); }
+    .lead { color: var(--text-2); font-size: 14px; line-height: 1.55; }
+    .guide-grid { display: grid; gap: 18px; grid-template-columns: 1.35fr 1fr; }
+    .stage-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-top: 12px; }
+    .stage-card { background: #f6f3ee; border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    .stage-card strong { display: block; margin-bottom: 6px; font-size: 14px; }
+    .callout { background: #f6f3ee; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .guide-note { margin-top: 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
     th { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
@@ -60,9 +67,15 @@
     .stage-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .stage-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--accent-light); color: var(--accent); }
     .stage-chip.muted { background: #f3f0eb; color: var(--muted); }
+    .details-shell { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+    .details-shell summary { list-style: none; cursor: pointer; padding: 20px; font-size: 16px; font-weight: 700; }
+    .details-shell summary::-webkit-details-marker { display: none; }
+    .details-shell[open] summary { border-bottom: 1px solid var(--border); }
+    .details-content { padding: 20px; display: grid; gap: 18px; }
+    .details-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
     pre { white-space: pre-wrap; font-size: 12px; }
     select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 13px; }
-    @media (max-width: 920px) { .split { grid-template-columns: 1fr; } }
+    @media (max-width: 920px) { .split, .guide-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -79,6 +92,48 @@
     <p>Read-only view of raw retrieval, final selection, source quality, freshness, and drop-off reasons.</p>
   </div>
   <main>
+    <section class="panel">
+      <h2>How This Page Works</h2>
+      <div class="guide-grid">
+        <div class="stack">
+          <div class="lead">This page answers one question: did SignalBrief find good articles, and did it keep the right ones?</div>
+          <div class="subhead">The pipeline</div>
+          <div class="stage-grid">
+            <div class="stage-card">
+              <strong>1. Raw retrieval</strong>
+              <div class="muted">Perplexity returns candidate articles.</div>
+            </div>
+            <div class="stage-card">
+              <strong>2. Cleanup</strong>
+              <div class="muted">We remove stale items, duplicates, weak fits, and policy problems.</div>
+            </div>
+            <div class="stage-card">
+              <strong>3. Final selection</strong>
+              <div class="muted">We keep the strongest items for the scenario or persona.</div>
+            </div>
+          </div>
+          <div class="subhead">Start Here</div>
+          <ul class="plain-list">
+            <li><strong>Pick a run.</strong> That loads one retrieval test to inspect.</li>
+            <li><strong>Read Gap Audit.</strong> This is the main table. It shows where each topic or keyword broke.</li>
+            <li><strong>Open Perplexity Sources.</strong> This is the raw article list returned by Perplexity.</li>
+            <li><strong>Compare Final Source Picks.</strong> This shows what SignalBrief actually kept.</li>
+          </ul>
+        </div>
+        <div class="callout">
+          <div class="subhead">What The Main Terms Mean</div>
+          <ul class="plain-list">
+            <li><strong>Raw</strong>: what Perplexity returned.</li>
+            <li><strong>Cleaned</strong>: what survived freshness, dedupe, and source-policy cleanup.</li>
+            <li><strong>Final</strong>: what SignalBrief kept.</li>
+            <li><strong>Lift</strong>: whether selection helped or hurt versus the raw baseline.</li>
+            <li><strong>429</strong>: provider rate-limit errors.</li>
+            <li><strong>Fail closed</strong>: we preferred showing less rather than padding with noisy filler.</li>
+          </ul>
+          <div class="guide-note">If you only look at two things, look at <strong>Gap Audit</strong> and <strong>Perplexity Sources</strong>.</div>
+        </div>
+      </div>
+    </section>
     <section class="grid">
       <div class="panel"><h2>Active Run</h2><div id="activeRun" class="muted">Loading…</div></div>
       <div class="panel"><h2>Budget</h2><div id="budgetSummary" class="muted">Loading…</div></div>
@@ -86,61 +141,24 @@
     </section>
     <section class="split">
       <div class="panel">
-        <h2>Progress Log</h2>
-        <div id="progressLog" class="muted">Loading…</div>
+        <h2>Progress and Next Steps</h2>
+        <div id="progressOverview" class="muted">Loading…</div>
       </div>
       <div class="panel">
-        <h2>Current Focus</h2>
-        <div id="progressFocus" class="muted">Loading…</div>
-      </div>
-    </section>
-    <section class="split">
-      <div class="panel">
-        <h2>Run Summary</h2>
+        <h2>Run At A Glance</h2>
         <div id="runSummary" class="muted">Select a run.</div>
-      </div>
-      <div class="panel">
-        <h2>Recommendations</h2>
+        <div class="subhead">Recommendations</div>
         <div id="recommendations" class="muted">No run loaded.</div>
       </div>
     </section>
-    <section class="split">
-      <div class="panel">
-        <h2>Scenario Summary</h2>
-        <div id="scenarioSummary"></div>
-      </div>
-      <div class="panel">
-        <h2>Persona Summary</h2>
-        <div id="personaSummary"></div>
-      </div>
-    </section>
-    <section class="split">
-      <div class="panel">
-        <h2>Top Domains</h2>
-        <div id="topDomains"></div>
-      </div>
-      <div class="panel">
-        <h2>Failure Reasons</h2>
-        <div id="failureReasons"></div>
-      </div>
-    </section>
-    <section class="split">
-      <div class="panel">
-        <h2>Topic Root Causes</h2>
-        <div id="rootCauses"></div>
-      </div>
-      <div class="panel">
-        <h2>Better Source Signals</h2>
-        <div id="sourceGapSignals"></div>
-      </div>
-    </section>
     <section class="panel">
-      <h2>Gap Audit</h2>
+      <h2>Where It Broke</h2>
+      <div class="table-note">This is the main diagnostics table. It shows, topic by topic, how many items Perplexity found, how many survived cleanup, how many made final selection, and the most likely root cause when coverage stayed weak.</div>
       <div id="gapAudit"></div>
     </section>
     <section class="split">
       <div class="panel">
-        <h2>Perplexity Sources</h2>
+        <h2>What Perplexity Returned</h2>
         <div class="control-row">
           <div class="control-group">
             <label for="sourceScenarioPicker">Scenario</label>
@@ -155,15 +173,47 @@
         <div id="perplexitySources"></div>
       </div>
       <div class="panel">
-        <h2>Final Source Picks</h2>
+        <h2>What SignalBrief Kept</h2>
         <div id="finalSourceSummary" class="table-note muted">No run loaded.</div>
         <div id="finalSourcePicks"></div>
       </div>
     </section>
-    <section class="panel">
-      <h2>Retrieval vs Final</h2>
-      <div id="retrievalVsFinal"></div>
-    </section>
+    <details class="details-shell">
+      <summary>Supporting Details</summary>
+      <div class="details-content">
+        <div class="lead">This section keeps the secondary tables available without putting them in the way. Use it when you want more detail after reviewing the main tables above.</div>
+        <div class="details-grid">
+          <div class="panel">
+            <h3>Scenario Summary</h3>
+            <div id="scenarioSummary"></div>
+          </div>
+          <div class="panel">
+            <h3>Persona Summary</h3>
+            <div id="personaSummary"></div>
+          </div>
+          <div class="panel">
+            <h3>Failure Reasons</h3>
+            <div id="failureReasons"></div>
+          </div>
+          <div class="panel">
+            <h3>Topic Root Causes</h3>
+            <div id="rootCauses"></div>
+          </div>
+          <div class="panel">
+            <h3>Better Source Signals</h3>
+            <div id="sourceGapSignals"></div>
+          </div>
+          <div class="panel">
+            <h3>Top Domains</h3>
+            <div id="topDomains"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Retrieval vs Final</h3>
+          <div id="retrievalVsFinal"></div>
+        </div>
+      </div>
+    </details>
   </main>
 </div>
 <script>
@@ -249,15 +299,14 @@
     function renderProgress(status) {
       const progress = status?.progress || {};
       if (progress.available !== true) {
-        document.getElementById("progressLog").innerHTML = `<div class="muted">No worklog progress found.</div>`;
-        document.getElementById("progressFocus").innerHTML = `<div class="muted">No current focus recorded.</div>`;
+        document.getElementById("progressOverview").innerHTML = `<div class="muted">No worklog progress found.</div>`;
         return;
       }
       const latestPass = progress.latest_pass || {};
       const recentPasses = Array.isArray(progress.recent_passes) ? progress.recent_passes : [];
       const importantRuns = Array.isArray(progress.important_runs) ? progress.important_runs : [];
 
-      document.getElementById("progressLog").innerHTML =
+      document.getElementById("progressOverview").innerHTML =
         `<div class="stack">`
         + `<div class="meta-line">Synced from ${esc(progress.worklog_path || "worklog")} · updated ${esc(formatDateTime(progress.updated_at))}</div>`
         + `<div><div class="subhead">Latest Pass</div><div style="font-size:18px;font-weight:700;">${esc(latestPass.title || "No pass logged yet.")}</div></div>`
@@ -267,10 +316,6 @@
           : "")
         + `<div><div class="subhead">Completed</div>${renderPlainList((latestPass.completed || []).slice(0, 8), "No completed items recorded.")}</div>`
         + `<div><div class="subhead">Latest Findings</div>${renderPlainList((latestPass.findings || []).slice(0, 6), "No findings recorded.")}</div>`
-        + `</div>`;
-
-      document.getElementById("progressFocus").innerHTML =
-        `<div class="stack">`
         + `<div><div class="subhead">Remaining Problems</div>${renderPlainList((progress.remaining_problems || []).slice(0, 8), "No open problems recorded.")}</div>`
         + `<div><div class="subhead">Next Steps</div>${renderPlainList((progress.next_steps || []).slice(0, 8), "No next steps recorded.")}</div>`
         + `<div><div class="subhead">Reference Runs</div>${importantRuns.length ? `<div class="chip-row">${importantRuns.map((runId) => `<span class="chip">${esc(runId)}</span>`).join("")}</div>` : `<div class="muted">No reference runs recorded.</div>`}</div>`

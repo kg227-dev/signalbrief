@@ -176,6 +176,27 @@ Key findings:
 - the eval artifacts already contained the necessary raw source data; the missing piece was making it visible in the admin UI
 - transparency into raw Perplexity output is now good enough to inspect source recall and specific misses directly from the admin page
 
+### Pass 8: Admin page simplification and plain-English guide
+
+Completed in this pass:
+
+- simplified `/admin/retrieval-eval` around the core workflow:
+  - how it works
+  - where it broke
+  - what Perplexity returned
+  - what SignalBrief kept
+- added a plain-English guide at the top that explains:
+  - raw retrieval
+  - cleanup
+  - final selection
+  - the main terms on the page
+- moved secondary diagnostics into a collapsed supporting-details section so the page is less overwhelming on first load
+
+Key findings:
+
+- the main problem with the page was legibility, not missing data
+- the right simplification is to foreground the source flow and hide the secondary rollups until needed
+
 ## Important Run IDs
 
 ### Baselines

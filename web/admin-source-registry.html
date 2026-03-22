@@ -593,11 +593,14 @@ function setLastRefreshed(dateObj) {
     second: "2-digit",
   });
 }
-function setSelectedDomain(domain) {
+function setSelectedDomain(domain, identityKey = "") {
   selectedSourceRegistryDomain = String(domain || "").trim();
+  selectedSourceRegistryIdentityKey = String(identityKey || "").trim();
   const url = new URL(window.location.href);
   if (selectedSourceRegistryDomain) url.searchParams.set("domain", selectedSourceRegistryDomain);
   else url.searchParams.delete("domain");
+  if (selectedSourceRegistryIdentityKey) url.searchParams.set("identity_key", selectedSourceRegistryIdentityKey);
+  else url.searchParams.delete("identity_key");
   history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
 function getSourceRegistryOverviewSearchInput() {
@@ -626,6 +629,46 @@ function isEditingSourceRegistry() {
   const active = document.activeElement;
   const inspector = document.getElementById("sourceRegistryInspector");
   return !!(active && inspector && inspector.contains(active));
+}
+function getSelectedInspectorIdentityKey() {
+  const scopeInput = document.getElementById("sourceRegistryScopeInput");
+  const scopeValue = String(scopeInput?.value || "").trim();
+  if (scopeValue.startsWith("identity:")) return scopeValue.slice("identity:".length);
+  return String(selectedSourceRegistryIdentityKey || "").trim();
+}
+function renderIdentityScopeOptions(detail) {
+  const domain = String(detail?.domain || "").trim();
+  const selectedIdentityKey = String(detail?.selected_identity_key || "").trim();
+  const candidates = Array.isArray(detail?.identity_candidates) ? detail.identity_candidates : [];
+  const options = [
+    `<option value="domain" ${selectedIdentityKey ? "" : "selected"}>Domain override (${esc(domain || "domain")})</option>`,
+  ];
+  candidates.forEach((candidate) => {
+    const identityKey = String(candidate?.identity_key || "").trim();
+    if (!identityKey) return;
+    const label = String(candidate?.source_identity_label || identityKey).trim();
+    const scope = String(candidate?.source_identity_scope || "identity").trim();
+    const sends = Math.max(0, Number(candidate?.send_count || 0));
+    options.push(
+      `<option value="identity:${esc(identityKey)}" ${selectedIdentityKey === identityKey ? "selected" : ""}>${esc(label)} · ${esc(scope)} · sends ${sends}</option>`
+    );
+  });
+  return options.join("");
+}
+function formatSelectedScopeLabel(detail) {
+  const selectedIdentity = detail?.selected_identity || null;
+  if (selectedIdentity && selectedIdentity.identity_key) {
+    const label = String(selectedIdentity.source_identity_label || selectedIdentity.identity_key).trim();
+    return `Identity · ${label}`;
+  }
+  return `Domain · ${String(detail?.domain || "unknown").trim() || "unknown"}`;
+}
+async function changeSourceRegistryInspectScope() {
+  if (!selectedSourceRegistryDomain) return;
+  const scopeInput = document.getElementById("sourceRegistryScopeInput");
+  const scopeValue = String(scopeInput?.value || "").trim();
+  const identityKey = scopeValue.startsWith("identity:") ? scopeValue.slice("identity:".length) : "";
+  await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true, identityKey || "");
 }
 function getTopicFitSortScore(topicFit) {
   const map = topicFit && typeof topicFit === "object" ? topicFit : {};
@@ -909,11 +952,18 @@ function renderSourceRegistryInspector(detail, overview) {
   const topTags = Array.isArray(recent.top_tags) ? recent.top_tags : [];
   const policyEffects = policy.policy_effects || {};
   const inheritedFrom = policy.inherits_from_domain || "";
+  const selectedIdentity = detail.selected_identity || null;
+  const identityCandidates = Array.isArray(detail.identity_candidates) ? detail.identity_candidates : [];
+  const selectedScopeLabel = formatSelectedScopeLabel(detail);
+  const selectedIdentityLabel = selectedIdentity?.identity_key
+    ? `${selectedIdentity.source_identity_label || selectedIdentity.identity_key} (${selectedIdentity.source_identity_scope || "identity"})`
+    : "Domain-level policy";
+  const directOverrideScope = directOverride?.identity_key ? "identity override" : "domain override";
   container.innerHTML = `
     <div class="table-toolbar" style="margin-bottom:16px;">
       <div>
         <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
-        <div class="subscriber-sub">${sourcePath ? esc(sourcePath) : "Global source governance registry"}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
+        <div class="subscriber-sub">${sourcePath ? esc(sourcePath) : "Global source governance registry"} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
       </div>
       <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · tracked sends ${Math.max(0, Number(recent.send_count || 0))}</div>
     </div>
@@ -929,7 +979,7 @@ function renderSourceRegistryInspector(detail, overview) {
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
           <div class="explain-block">
             <div class="explain-label">Identity</div>
-            <div class="explain-copy">Source type ${esc(titleizeSourceValue(policy.source_type || "unclassified"))}. ${policy.source_family_domain ? `Family ${esc(policy.source_family_domain)}.` : ""} ${inheritedFrom ? `Inherited from ${esc(inheritedFrom)}.` : "No inherited parent override."}</div>
+            <div class="explain-copy">Source type ${esc(titleizeSourceValue(policy.source_type || "unclassified"))}. Editing ${esc(selectedIdentityLabel)}. ${policy.source_family_domain ? `Family ${esc(policy.source_family_domain)}.` : ""} ${inheritedFrom ? `Inherited from ${esc(inheritedFrom)}.` : "No inherited parent override."}</div>
           </div>
           <div class="explain-block">
             <div class="explain-label">Policy</div>
@@ -952,12 +1002,22 @@ function renderSourceRegistryInspector(detail, overview) {
             <div class="explain-copy">${Math.max(0, Number(recent.weak_source_item_count || 0))} constrained-source item${Number(recent.weak_source_item_count || 0) === 1 ? "" : "s"} in tracked history. Common topics: ${esc(formatSourceMetricTags(topTags))}</div>
           </div>
         </div>
+        <div class="explain-block">
+          <div class="explain-label">Identity candidates</div>
+          <div class="explain-copy">${identityCandidates.length
+            ? esc(identityCandidates.map((candidate) => {
+              const label = String(candidate?.source_identity_label || candidate?.identity_key || "identity").trim();
+              const scope = String(candidate?.source_identity_scope || "identity").trim();
+              return `${label} (${scope}, ${Math.max(0, Number(candidate?.send_count || 0))} sends)`;
+            }).join(" · "))
+            : "No distinct publisher identities observed yet for this domain."}</div>
+        </div>
         <div>
           <div class="section-title" style="font-size:11px;margin-bottom:6px;">Latest sample items</div>
           ${sampleItems.length ? sampleItems.map((item) => `
             <div style="padding:8px 0;border-top:1px solid var(--border-subtle);">
               <div style="font-size:12px;font-weight:600;line-height:1.45;">${item.url ? `<a href="${esc(item.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${esc(item.headline || item.url)}</a>` : esc(item.headline || "Untitled item")}</div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")} · ${esc(titleizeSourceValue(item.source_policy || "policy pending"))}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")} · ${esc(titleizeSourceValue(item.source_policy || "policy pending"))}${item.source_identity_label ? ` · ${esc(item.source_identity_label)}` : ""}</div>
             </div>
           `).join("") : `<div class="empty" style="padding:10px 0;">No tracked sent items for this domain.</div>`}
         </div>
@@ -978,6 +1038,13 @@ function renderSourceRegistryInspector(detail, overview) {
         <div class="modal-field">
           <label for="sourceRegistryDomainInput">Domain</label>
           <input id="sourceRegistryDomainInput" class="modal-input" type="text" value="${esc(detail.domain || "")}" placeholder="benzinga.com">
+        </div>
+        <div class="modal-field">
+          <label for="sourceRegistryScopeInput">Edit scope</label>
+          <select id="sourceRegistryScopeInput" class="table-filter" style="width:100%;" onchange="changeSourceRegistryInspectScope()">
+            ${renderIdentityScopeOptions(detail)}
+          </select>
+          <div class="table-meta">Identity overrides win before domain fallback when a parsed publisher identity exists. Current direct entry: ${esc(directOverride ? directOverrideScope : "no direct override")}</div>
         </div>
         <div class="modal-field">
           <label for="sourceRegistrySourceTypeInput">Source type</label>
@@ -1037,6 +1104,10 @@ function renderSourceRegistryInspector(detail, overview) {
         </div>
       </div>
     </div>`;
+  const scopeInput = document.getElementById("sourceRegistryScopeInput");
+  if (scopeInput) scopeInput.value = detail.selected_identity_key ? `identity:${detail.selected_identity_key}` : "domain";
+  const domainInput = document.getElementById("sourceRegistryDomainInput");
+  if (domainInput) domainInput.value = String(detail.domain || "");
 }
 function setSourceRegistryFeedback(type, message) {
   const feedback = document.getElementById("sourceRegistryFormFeedback");
@@ -1054,6 +1125,7 @@ function setSourceRegistryFeedback(type, message) {
 }
 let latestSourceRegistryOverview = null;
 let selectedSourceRegistryDomain = "";
+let selectedSourceRegistryIdentityKey = "";
 let sourceRegistryOverviewQuery = "";
 let loadInFlight = false;
 let _allSuggestions = [];
@@ -1137,26 +1209,29 @@ async function loadSourceRegistryOverview(silent = true) {
   renderSourceRegistrySuggestions(data);
   return data;
 }
-async function inspectSourceRegistryDomain(domainValue, silent = false) {
+async function inspectSourceRegistryDomain(domainValue, silent = false, identityKeyValue = "") {
   const searchEl = document.getElementById("sourceRegistrySearch");
   const rawDomain = String(domainValue || (searchEl ? searchEl.value : "") || "").trim();
+  const identityKey = String(identityKeyValue || "").trim();
   if (!rawDomain) {
     if (!silent) showToast("err", "Enter a domain first.");
     return;
   }
   if (searchEl) searchEl.value = rawDomain;
-  const resp = await apiFetchJson(`/api/admin/source-registry/domain?domain=${encodeURIComponent(rawDomain)}`, {}, 1);
+  const detailUrl = `/api/admin/source-registry/domain?domain=${encodeURIComponent(rawDomain)}${identityKey ? `&identity_key=${encodeURIComponent(identityKey)}` : ""}`;
+  const resp = await apiFetchJson(detailUrl, {}, 1);
   const data = resp.data || {};
   if (!resp.ok || data.error) {
     if (!silent) showToast("err", data.error || "Failed to inspect source domain");
     renderSourceRegistryInspector(null, latestSourceRegistryOverview);
     return;
   }
-  setSelectedDomain(String(data.domain || rawDomain).trim());
+  setSelectedDomain(String(data.domain || rawDomain).trim(), String(data.selected_identity_key || identityKey).trim());
   renderSourceRegistryInspector(data, latestSourceRegistryOverview);
 }
 async function saveSourceRegistryDomain() {
   const domain = String(document.getElementById("sourceRegistryDomainInput")?.value || "").trim();
+  const identityKey = getSelectedInspectorIdentityKey();
   const sourceType = String(document.getElementById("sourceRegistrySourceTypeInput")?.value || "").trim();
   const policy = String(document.getElementById("sourceRegistryPolicyInput")?.value || "").trim();
   const reviewStatus = String(document.getElementById("sourceRegistryReviewStatusInput")?.value || "").trim();
@@ -1174,6 +1249,7 @@ async function saveSourceRegistryDomain() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       domain,
+      identity_key: identityKey || null,
       source_type: sourceType || null,
       policy: policy || null,
       review_status: reviewStatus || null,
@@ -1190,27 +1266,29 @@ async function saveSourceRegistryDomain() {
     return;
   }
   setSourceRegistryFeedback("ok", "Source governance saved.");
-  showToast("ok", `Saved source governance for ${domain}`);
+  showToast("ok", `Saved source governance for ${identityKey || domain}`);
   delete sourceAuditCache[domain];
   if (data.detail) {
-    setSelectedDomain(String(data.detail.domain || domain).trim());
+    setSelectedDomain(String(data.detail.domain || domain).trim(), String(data.detail.selected_identity_key || identityKey).trim());
     renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
   }
   await loadSourceRegistryOverview(true);
-  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true, selectedSourceRegistryIdentityKey);
 }
 async function resetSourceRegistryDomain() {
   const domain = String(document.getElementById("sourceRegistryDomainInput")?.value || selectedSourceRegistryDomain || "").trim();
+  const identityKey = getSelectedInspectorIdentityKey();
+  const resetLabel = identityKey || domain;
   if (!domain) {
     setSourceRegistryFeedback("err", "No source selected.");
     return;
   }
-  const accepted = await openConfirmModal("Reset source governance", `Reset ${domain} back to default source policy?`, "Reset");
+  const accepted = await openConfirmModal("Reset source governance", `Reset ${resetLabel} back to default source policy?`, "Reset");
   if (!accepted) return;
   const resp = await apiFetchJson("/api/admin/source-registry/domain/reset", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domain }),
+    body: JSON.stringify({ domain, identity_key: identityKey || null }),
   }, 1);
   const data = resp.data || {};
   if (!resp.ok || data.error) {
@@ -1219,14 +1297,14 @@ async function resetSourceRegistryDomain() {
     return;
   }
   setSourceRegistryFeedback("ok", "Source governance reset.");
-  showToast("ok", `Reset source governance for ${domain}`);
+  showToast("ok", `Reset source governance for ${resetLabel}`);
   delete sourceAuditCache[domain];
   if (data.detail) {
-    setSelectedDomain(String(data.detail.domain || domain).trim());
+    setSelectedDomain(String(data.detail.domain || domain).trim(), String(data.detail.selected_identity_key || "").trim());
     renderSourceRegistryInspector(data.detail, latestSourceRegistryOverview);
   }
   await loadSourceRegistryOverview(true);
-  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+  if (selectedSourceRegistryDomain) await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true, selectedSourceRegistryIdentityKey);
 }
 async function logout() {
   await fetch("/api/admin/logout", { method: "POST" });
@@ -1249,7 +1327,7 @@ async function load(silent = false) {
     if (!selectedSourceRegistryDomain) {
       renderSourceRegistryInspector(null, overview || latestSourceRegistryOverview);
     } else if (!isEditingSourceRegistry()) {
-      await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true);
+      await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true, selectedSourceRegistryIdentityKey);
     }
     setLastRefreshed(new Date());
   } finally {
@@ -1263,8 +1341,9 @@ window.addEventListener("focus", () => load(true));
 (function init() {
   const params = new URLSearchParams(window.location.search);
   const initialDomain = params.get("domain") || "";
+  const initialIdentityKey = params.get("identity_key") || "";
   const initialQuery = params.get("query") || "";
-  setSelectedDomain(initialDomain);
+  setSelectedDomain(initialDomain, initialIdentityKey);
   setSourceRegistryOverviewQuery(initialQuery);
   renderSuggestionsHeaderRow();
   const searchEl = document.getElementById("sourceRegistrySearch");

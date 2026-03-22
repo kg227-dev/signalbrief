@@ -6,6 +6,8 @@ const {
 } = require("../services/admin-source-registry-runtime");
 const {
   normalizeSourcePolicyDomain,
+  normalizeSourceIdentityKey,
+  inferSourceDomainFromIdentityKey,
   clampAuthority,
   sanitizeOriginalityProfile,
   sanitizeReviewStatus,
@@ -23,6 +25,7 @@ function parseLimitParam(url) {
 
 function sanitizeBody(body = {}) {
   const domain = normalizeSourcePolicyDomain(body?.domain);
+  const identityKey = normalizeSourceIdentityKey(body?.identity_key);
   const sourceType = sanitizeSourceType(body?.source_type);
   const policy = sanitizeSourcePolicy(body?.policy);
   const reviewStatus = sanitizeReviewStatus(body?.review_status);
@@ -36,6 +39,7 @@ function sanitizeBody(body = {}) {
   const note = String(body?.note || "").trim();
   return {
     domain,
+    identity_key: identityKey,
     source_type: sourceType,
     policy: hardBlock ? "blocked" : policy,
     review_status: reviewStatus,
@@ -46,6 +50,12 @@ function sanitizeBody(body = {}) {
     hard_block: hardBlock,
     note,
   };
+}
+
+function resolveInspectableDomain(domain, identityKey) {
+  return normalizeSourcePolicyDomain(domain)
+    || inferSourceDomainFromIdentityKey(identityKey)
+    || "";
 }
 
 async function handleAdminSourceRegistryRoutes(ctx, deps) {
@@ -68,6 +78,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     bundledPreferredSourcesPath,
     upsertSourceRegistryEntry,
     resetSourceRegistryEntry,
+    resetSourceRegistryIdentityEntry,
     logAdminActionEvent,
   } = deps;
 
@@ -91,10 +102,12 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
 
   if (pathname === "/api/admin/source-registry/domain" && req.method === "GET") {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
-    const domain = normalizeSourcePolicyDomain(url.searchParams.get("domain"));
+    const identityKey = normalizeSourceIdentityKey(url.searchParams.get("identity_key"));
+    const domain = resolveInspectableDomain(url.searchParams.get("domain"), identityKey);
     if (!domain) return json(res, { error: "domain required" }, 400);
     const payload = buildSourceRegistryDomainDetail({
       domain,
+      identityKey,
       loadSourceRegistry,
       buildSourceRegistryMap,
       setAdminSourceRegistry,
@@ -110,11 +123,14 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     const body = await requireJsonBody(req, res);
     if (body == null) return true;
     const input = sanitizeBody(body);
-    if (!input.domain) return json(res, { error: "valid domain required" }, 400);
+    if (!input.domain && !input.identity_key) {
+      return json(res, { error: "valid domain or identity_key required" }, 400);
+    }
     try {
       const result = upsertSourceRegistryEntry(input, {
         updated_by: typeof getAdminActor === "function" ? getAdminActor(req) : null,
       });
+      const detailDomain = resolveInspectableDomain(input.domain, input.identity_key);
       if (typeof setAdminSourceRegistry === "function" && typeof buildSourceRegistryMap === "function") {
         setAdminSourceRegistry(buildSourceRegistryMap(result.registry));
       }
@@ -123,22 +139,26 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
           action: "source_policy_upsert",
           success: true,
           details: {
-            domain: input.domain,
+            domain: detailDomain || input.domain || null,
+            identity_key: input.identity_key || null,
             note: input.note,
             before: result.before,
             after: result.after,
           },
         });
       }
-      const payload = buildSourceRegistryDomainDetail({
-        domain: input.domain,
-        loadSourceRegistry: () => result.registry,
-        buildSourceRegistryMap,
-        setAdminSourceRegistry,
-        buildRecentDigestsExport,
-        readJsonLineLog,
-        adminActionLog: ADMIN_ACTION_LOG,
-      });
+      const payload = detailDomain
+        ? buildSourceRegistryDomainDetail({
+          domain: detailDomain,
+          identityKey: input.identity_key || null,
+          loadSourceRegistry: () => result.registry,
+          buildSourceRegistryMap,
+          setAdminSourceRegistry,
+          buildRecentDigestsExport,
+          readJsonLineLog,
+          adminActionLog: ADMIN_ACTION_LOG,
+        })
+        : null;
       return json(res, { success: true, detail: payload });
     } catch (error) {
       return json(res, { error: error?.message || "failed to update source policy" }, 400);
@@ -149,12 +169,18 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const body = await requireJsonBody(req, res);
     if (body == null) return true;
-    const domain = normalizeSourcePolicyDomain(body?.domain);
-    if (!domain) return json(res, { error: "valid domain required" }, 400);
+    const identityKey = normalizeSourceIdentityKey(body?.identity_key);
+    const domain = resolveInspectableDomain(body?.domain, identityKey);
+    if (!domain && !identityKey) return json(res, { error: "valid domain or identity_key required" }, 400);
     try {
-      const result = resetSourceRegistryEntry(domain, {
-        updated_by: typeof getAdminActor === "function" ? getAdminActor(req) : null,
-      });
+      const result = identityKey
+        ? resetSourceRegistryIdentityEntry(identityKey, {
+          updated_by: typeof getAdminActor === "function" ? getAdminActor(req) : null,
+        })
+        : resetSourceRegistryEntry(domain, {
+          updated_by: typeof getAdminActor === "function" ? getAdminActor(req) : null,
+        });
+      const detailDomain = resolveInspectableDomain(domain, identityKey);
       if (typeof setAdminSourceRegistry === "function" && typeof buildSourceRegistryMap === "function") {
         setAdminSourceRegistry(buildSourceRegistryMap(result.registry));
       }
@@ -163,21 +189,25 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
           action: "source_policy_reset",
           success: true,
           details: {
-            domain,
+            domain: detailDomain || domain || null,
+            identity_key: identityKey || null,
             before: result.before,
             after: null,
           },
         });
       }
-      const payload = buildSourceRegistryDomainDetail({
-        domain,
-        loadSourceRegistry: () => result.registry,
-        buildSourceRegistryMap,
-        setAdminSourceRegistry,
-        buildRecentDigestsExport,
-        readJsonLineLog,
-        adminActionLog: ADMIN_ACTION_LOG,
-      });
+      const payload = detailDomain
+        ? buildSourceRegistryDomainDetail({
+          domain: detailDomain,
+          identityKey: identityKey || null,
+          loadSourceRegistry: () => result.registry,
+          buildSourceRegistryMap,
+          setAdminSourceRegistry,
+          buildRecentDigestsExport,
+          readJsonLineLog,
+          adminActionLog: ADMIN_ACTION_LOG,
+        })
+        : null;
       return json(res, { success: true, detail: payload });
     } catch (error) {
       return json(res, { error: error?.message || "failed to reset source policy" }, 400);

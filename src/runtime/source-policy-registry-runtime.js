@@ -121,6 +121,15 @@ function normalizeSourceIdentityKey(rawValue) {
   return value;
 }
 
+function inferSourceDomainFromIdentityKey(rawValue) {
+  const identityKey = normalizeSourceIdentityKey(rawValue);
+  if (!identityKey) return "";
+  if (identityKey.startsWith("youtube:")) return "youtube.com";
+  if (identityKey.startsWith("substack:")) return "substack.com";
+  if (identityKey.startsWith("medium:")) return "medium.com";
+  return "";
+}
+
 function sanitizeTierOverride(rawValue) {
   const normalized = String(rawValue || "").trim().toLowerCase();
   return ALLOWED_TIER_OVERRIDES.has(normalized) ? normalized : null;
@@ -434,6 +443,7 @@ module.exports = {
   clampAuthority,
   createSourceRegistryRuntime,
   normalizeSourceIdentityKey,
+  inferSourceDomainFromIdentityKey,
   normalizeSourcePolicyDomain,
   normalizeSourceTopicToken,
   sanitizeRegistry,

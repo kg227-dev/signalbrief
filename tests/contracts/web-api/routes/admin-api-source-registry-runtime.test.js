@@ -52,13 +52,16 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     json,
     isAdminAuthed: () => true,
     requireJsonBody: async () => body,
-    loadSourceRegistry: () => ({ version: 1, updated_at: null, domains: {} }),
+    loadSourceRegistry: () => ({ version: 1, updated_at: null, domains: {}, identities: {} }),
     loadPreferredSourceRegistry: () => ({
       version: 1,
       global: { reported: ["reuters.com"], official: ["sec.gov"] },
       topics: {},
     }),
-    buildSourceRegistryMap: (registry) => new Map(Object.entries(registry.domains || {})),
+    buildSourceRegistryMap: (registry) => ({
+      domains: new Map(Object.entries(registry.domains || {})),
+      identities: new Map(Object.entries(registry.identities || {})),
+    }),
     setAdminSourceRegistry: () => {},
     buildRecentDigestsExport: () => ({ rows: [] }),
     readJsonLineLog: () => [],
@@ -78,6 +81,14 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
             note: "Too noisy",
           },
         },
+        identities: {
+          "youtube:@insideboardroom": {
+            identity_key: "youtube:@insideboardroom",
+            policy: "allowed",
+            review_status: "reviewed",
+            note: "Reviewed channel override",
+          },
+        },
       },
       before: null,
       after: {
@@ -88,8 +99,13 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
         note: "Too noisy",
       },
     }),
+    resetSourceRegistryIdentityEntry: () => ({
+      registry: { version: 1, updated_at: "2026-03-20T12:05:00.000Z", domains: {}, identities: {} },
+      before: { identity_key: "youtube:@insideboardroom" },
+      after: null,
+    }),
     resetSourceRegistryEntry: () => ({
-      registry: { version: 1, updated_at: "2026-03-20T12:05:00.000Z", domains: {} },
+      registry: { version: 1, updated_at: "2026-03-20T12:05:00.000Z", domains: {}, identities: {} },
       before: { domain: "benzinga.com" },
       after: null,
     }),
@@ -132,6 +148,25 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
   {
     const { handled, res } = await invoke({}, {
       method: "POST",
+      pathname: "/api/admin/source-registry/domain",
+      body: {
+        domain: "youtube.com",
+        identity_key: "youtube:@insideboardroom",
+        policy: "allowed",
+        review_status: "reviewed",
+        note: "Reviewed channel override",
+      },
+    });
+    assert.ok(handled);
+    const payload = JSON.parse(res.body);
+    assert.strictEqual(payload.success, true);
+    assert.strictEqual(payload.detail.domain, "youtube.com");
+    assert.strictEqual(payload.detail.selected_identity_key, "youtube:@insideboardroom");
+  }
+
+  {
+    const { handled, res } = await invoke({}, {
+      method: "POST",
       pathname: "/api/admin/source-registry/domain/reset",
       body: { domain: "benzinga.com" },
     });
@@ -139,6 +174,19 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.success, true);
     assert.strictEqual(payload.detail.domain, "benzinga.com");
+  }
+
+  {
+    const { handled, res } = await invoke({}, {
+      method: "POST",
+      pathname: "/api/admin/source-registry/domain/reset",
+      body: { domain: "youtube.com", identity_key: "youtube:@insideboardroom" },
+    });
+    assert.ok(handled);
+    const payload = JSON.parse(res.body);
+    assert.strictEqual(payload.success, true);
+    assert.strictEqual(payload.detail.domain, "youtube.com");
+    assert.strictEqual(payload.detail.selected_identity_key, "youtube:@insideboardroom");
   }
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

@@ -411,8 +411,10 @@ const {
   buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
   listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),
   getSourceRegistryEntry: (domain) => sourceRegistryRuntime.getSourceRegistryEntry(domain),
+  getSourceRegistryIdentityEntry: (identityKey) => sourceRegistryRuntime.getSourceRegistryIdentityEntry(identityKey),
   upsertSourceRegistryEntry: (input, meta) => sourceRegistryRuntime.upsertSourceRegistryEntry(input, meta),
   resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
+  resetSourceRegistryIdentityEntry: (identityKey, meta) => sourceRegistryRuntime.resetSourceRegistryIdentityEntry(identityKey, meta),
   setAdminSourceRegistry,
   getAdminActor,
 });

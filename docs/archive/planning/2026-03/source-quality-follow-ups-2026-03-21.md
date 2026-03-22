@@ -40,7 +40,7 @@ It is meant to preserve the short-term execution queue while the implementation 
 
 - [x] Identity-level governance storage and lookup now exist in runtime resolution, with exact identity match winning before domain fallback
 - [x] Identity-aware source annotation now carries the winning identity override through editorial signals
-- [ ] Admin editing and inspect UX is still mostly domain-first
+- [x] Admin editing and inspect UX now supports identity-aware inspection and editing for parsed publisher identities while keeping the overview/search flow domain-first
 - [x] Diagnostics-driven curation queues now surface in the source governance admin page for specialist winners, derivative-style winners, platform ambiguity, and topic coverage gaps
 - [x] Story/event fingerprinting now uses lightweight event markers and fingerprints to cluster paraphrased versions of the same underlying signal more reliably, while still remaining heuristic rather than fully canonical
 
@@ -50,11 +50,17 @@ It is meant to preserve the short-term execution queue while the implementation 
 
 Current state:
 - v2 can detect sub-identity on some platforms
-- governance is still mostly domain-first
+- governance resolution supports identity-level matches, and the admin inspector can now switch between domain and parsed identity scope
+- the overview table and review queue remain domain-first, which is still the right default for browseability
 
 Next change:
 - let the registry accept keys like `youtube:@channel`, `substack:publication`, or `medium:author`
 - fall back to domain-level policy only when no identity-level rule exists
+
+Current implementation note:
+- runtime resolution already prefers exact identity matches before domain fallback
+- the source governance console now shows observed identity candidates per inspected domain and can save/reset identity-scoped overrides
+- the next UX increment would be surfacing identity-level rows directly in dedicated review queues where they matter
 
 Why it matters:
 - fixes the biggest remaining precision gap

@@ -5,6 +5,10 @@ const {
   isWeakSourceItem,
   normalizeSourceDomain,
 } = require("../../src/digest/domain/storyline-domain-runtime");
+const {
+  inferSourceDomainFromIdentityKey,
+  normalizeSourceIdentityKey,
+} = require("../../src/runtime/source-policy-registry-runtime");
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -63,6 +67,10 @@ function pushSample(entry, row, item) {
     source_type: String(item?.source_type || "").trim() || null,
     source_policy: String(item?.source_policy || "").trim() || null,
     source_review_status: String(item?.source_review_status || "").trim() || null,
+    source_identity_key: String(item?.source_identity_key || "").trim() || null,
+    source_identity_scope: String(item?.source_identity_scope || "").trim() || null,
+    source_identity_label: String(item?.source_identity_label || "").trim() || null,
+    source_identity_ambiguous: item?.source_identity_ambiguous === true,
   });
 }
 
@@ -271,27 +279,179 @@ function buildCurationQueues(metricsMap, rows = [], limit = 8) {
   };
 }
 
-function buildSourceAuditEntries({ readJsonLineLog, adminActionLog, domain, limit = 20 }) {
+function buildSourceAuditEntries({ readJsonLineLog, adminActionLog, domain, identityKey, limit = 20 }) {
   if (typeof readJsonLineLog !== "function") return [];
   const normalized = normalizeSourceDomain(domain);
-  if (!normalized) return [];
+  const normalizedIdentityKey = normalizeSourceIdentityKey(identityKey);
+  if (!normalized && !normalizedIdentityKey) return [];
   return readJsonLineLog(adminActionLog, limit * 8)
     .filter((row) => {
       const action = String(row?.action || "").trim();
       if (action !== "source_policy_upsert" && action !== "source_policy_reset") return false;
-      return normalizeSourceDomain(row?.details?.domain) === normalized;
+      if (normalizedIdentityKey) {
+        return normalizeSourceIdentityKey(row?.details?.identity_key) === normalizedIdentityKey;
+      }
+      return normalizeSourceDomain(row?.details?.domain) === normalized
+        && !normalizeSourceIdentityKey(row?.details?.identity_key);
     })
     .map((row) => ({
       at: String(row?.at || "").trim() || null,
       actor: String(row?.actor || "").trim() || "unknown",
       action: String(row?.action || "").trim() || "source_policy",
       success: row?.success !== false,
+      scope: normalizeSourceIdentityKey(row?.details?.identity_key) ? "identity" : "domain",
+      domain: normalizeSourceDomain(row?.details?.domain) || null,
+      identity_key: normalizeSourceIdentityKey(row?.details?.identity_key) || null,
       note: String(row?.details?.note || "").trim() || "",
       before: row?.details?.before || null,
       after: row?.details?.after || null,
     }))
     .sort((left, right) => String(right?.at || "").localeCompare(String(left?.at || "")))
     .slice(0, limit);
+}
+
+function createEmptyMetricSummary(key) {
+  return {
+    domain: key,
+    send_count: 0,
+    weak_source_item_count: 0,
+    poor_digest_item_count: 0,
+    preferred_win_count: 0,
+    specialist_trade_win_count: 0,
+    derivative_winner_count: 0,
+    platform_identity_ambiguity_count: 0,
+    broad_rescue_count: 0,
+    preferred_missing_winner_count: 0,
+    preferred_weaker_winner_count: 0,
+    user_count: 0,
+    digest_count: 0,
+    avg_sent_authority: null,
+    top_tags: [],
+    recent_users: [],
+    sample_items: [],
+    last_seen_at: null,
+  };
+}
+
+function buildIdentityRecentMetrics(rows = [], domain, identityKey) {
+  const normalizedDomain = normalizeSourceDomain(domain) || inferSourceDomainFromIdentityKey(identityKey);
+  const normalizedIdentityKey = normalizeSourceIdentityKey(identityKey);
+  if (!normalizedDomain || !normalizedIdentityKey) return createEmptyMetricSummary(normalizedIdentityKey || normalizedDomain || "unknown");
+  const entry = createMetricEntry(normalizedDomain);
+  for (const row of (Array.isArray(rows) ? rows : [])) {
+    const digestKey = String(row?.digest_id || row?.run_id || "").trim();
+    const userKey = String(row?.user_email || row?.recipient || row?.user_id || "").trim().toLowerCase();
+    const items = Array.isArray(row?.sent_items) ? row.sent_items : [];
+    const poorDigest = Number(row?.quality_score || 0) < 70
+      || String(row?.dominant_failure_mode || "").trim().toLowerCase() === "weak_source";
+    for (const item of items) {
+      const itemDomain = normalizeSourceDomain(item?.source_domain) || inferSourceDomainFromIdentityKey(item?.source_identity_key);
+      const itemIdentityKey = normalizeSourceIdentityKey(item?.source_identity_key);
+      if (itemDomain !== normalizedDomain || itemIdentityKey !== normalizedIdentityKey) continue;
+      entry.send_count += 1;
+      if (userKey) entry.users.add(userKey);
+      if (digestKey) entry.digests.add(digestKey);
+      if (isWeakSourceItem(item)) entry.weak_source_item_count += 1;
+      if (poorDigest) entry.poor_digest_item_count += 1;
+      if (item?.won_by_preferred_substitute === true) entry.preferred_win_count += 1;
+      if (item?.specialist_trade_outperformed_preferred === true) entry.specialist_trade_win_count += 1;
+      if (item?.source_identity_ambiguous === true) entry.platform_identity_ambiguity_count += 1;
+      if (item?.broader_retrieval_found_better === true) entry.broad_rescue_count += 1;
+      if (String(item?.coverage_gap_status || "").trim() === "preferred_missing") entry.preferred_missing_winner_count += 1;
+      if (String(item?.coverage_gap_status || "").trim() === "preferred_weaker") entry.preferred_weaker_winner_count += 1;
+      const winnerSelectionReason = String(item?.winner_selection_reason || "").trim();
+      const selectionReasonCodes = Array.isArray(item?.selection_reason_codes) ? item.selection_reason_codes : [];
+      if (winnerSelectionReason === "best_available_derivative" || selectionReasonCodes.includes("best_available_derivative")) {
+        entry.derivative_winner_count += 1;
+      }
+      if (Number.isFinite(Number(item?.source_authority))) {
+        entry.authority_sum += Number(item.source_authority);
+        entry.authority_count += 1;
+      }
+      const tag = String(item?.tag || "").trim();
+      if (tag) entry.tags.set(tag, (entry.tags.get(tag) || 0) + 1);
+      if (userKey) entry.recent_users.set(userKey, (entry.recent_users.get(userKey) || 0) + 1);
+      const seenAt = String(row?.run_at_utc || row?.sent_at_utc || "").trim();
+      if (seenAt && (!entry.last_seen_at || seenAt > entry.last_seen_at)) entry.last_seen_at = seenAt;
+      pushSample(entry, row, item);
+    }
+  }
+  const summary = finalizeMetricEntry(entry);
+  return {
+    ...summary,
+    identity_key: normalizedIdentityKey,
+  };
+}
+
+function formatIdentityLabel(identityKey) {
+  const normalized = normalizeSourceIdentityKey(identityKey);
+  if (!normalized) return "";
+  const separatorIndex = normalized.indexOf(":");
+  if (separatorIndex === -1) return normalized;
+  return normalized.slice(separatorIndex + 1);
+}
+
+function buildIdentityCandidates(rows = [], domain, registryIdentities = {}) {
+  const normalizedDomain = normalizeSourceDomain(domain);
+  if (!normalizedDomain) return [];
+  const candidates = new Map();
+  for (const row of (Array.isArray(rows) ? rows : [])) {
+    const seenAt = String(row?.run_at_utc || row?.sent_at_utc || "").trim() || null;
+    for (const item of (Array.isArray(row?.sent_items) ? row.sent_items : [])) {
+      const itemDomain = normalizeSourceDomain(item?.source_domain) || inferSourceDomainFromIdentityKey(item?.source_identity_key);
+      const identityKey = normalizeSourceIdentityKey(item?.source_identity_key);
+      if (itemDomain !== normalizedDomain || !identityKey || identityKey === normalizedDomain) continue;
+      if (!candidates.has(identityKey)) {
+        candidates.set(identityKey, {
+          identity_key: identityKey,
+          source_identity_scope: String(item?.source_identity_scope || "").trim() || "identity",
+          source_identity_label: String(item?.source_identity_label || "").trim() || formatIdentityLabel(identityKey),
+          source_identity_ambiguous: item?.source_identity_ambiguous === true,
+          send_count: 0,
+          tags: new Map(),
+          last_seen_at: null,
+        });
+      }
+      const entry = candidates.get(identityKey);
+      entry.send_count += 1;
+      entry.source_identity_ambiguous = entry.source_identity_ambiguous || item?.source_identity_ambiguous === true;
+      const tag = String(item?.tag || "").trim();
+      if (tag) entry.tags.set(tag, (entry.tags.get(tag) || 0) + 1);
+      if (seenAt && (!entry.last_seen_at || seenAt > entry.last_seen_at)) entry.last_seen_at = seenAt;
+    }
+  }
+  for (const identityKey of Object.keys(registryIdentities && typeof registryIdentities === "object" ? registryIdentities : {})) {
+    if (inferSourceDomainFromIdentityKey(identityKey) !== normalizedDomain) continue;
+    if (!candidates.has(identityKey)) {
+      candidates.set(identityKey, {
+        identity_key: identityKey,
+        source_identity_scope: "identity",
+        source_identity_label: formatIdentityLabel(identityKey),
+        source_identity_ambiguous: false,
+        send_count: 0,
+        tags: new Map(),
+        last_seen_at: null,
+      });
+    }
+  }
+  return Array.from(candidates.values())
+    .map((entry) => ({
+      identity_key: entry.identity_key,
+      source_identity_scope: entry.source_identity_scope,
+      source_identity_label: entry.source_identity_label,
+      source_identity_ambiguous: entry.source_identity_ambiguous,
+      send_count: entry.send_count,
+      top_tags: Array.from(entry.tags.entries())
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .slice(0, 5)
+        .map(([tag, count]) => ({ tag, count })),
+      last_seen_at: entry.last_seen_at,
+      direct_override: registryIdentities?.[entry.identity_key] || null,
+      effective_policy: explainSourcePolicy(normalizedDomain, null, { sourceIdentityKey: entry.identity_key }),
+    }))
+    .sort((left, right) => Number(right.send_count || 0) - Number(left.send_count || 0)
+      || String(right.last_seen_at || "").localeCompare(String(left.last_seen_at || ""))
+      || String(left.identity_key || "").localeCompare(String(right.identity_key || "")));
 }
 
 function summarizePreferredSourceRegistry({
@@ -460,6 +620,7 @@ function buildSourceRegistryOverview({
 
 function buildSourceRegistryDomainDetail({
   domain,
+  identityKey,
   loadSourceRegistry,
   buildSourceRegistryMap,
   setAdminSourceRegistry,
@@ -468,39 +629,59 @@ function buildSourceRegistryDomainDetail({
   adminActionLog,
 }) {
   const normalizedDomain = normalizeSourceDomain(domain);
+  const normalizedIdentityKey = normalizeSourceIdentityKey(identityKey);
   if (!normalizedDomain) return null;
   const registry = refreshEffectiveRegistry(loadSourceRegistry, buildSourceRegistryMap, setAdminSourceRegistry);
   const recent = typeof buildRecentDigestsExport === "function"
     ? buildRecentDigestsExport({ all_time: true })
     : { rows: [] };
   const metricsMap = buildRecentDomainMetrics(recent.rows);
-  const effectivePolicy = explainSourcePolicy(normalizedDomain);
+  const effectivePolicy = explainSourcePolicy(
+    normalizedDomain,
+    null,
+    normalizedIdentityKey ? { sourceIdentityKey: normalizedIdentityKey } : undefined
+  );
+  const domainRecentMetrics = metricsMap.get(normalizedDomain) || createEmptyMetricSummary(normalizedDomain);
+  const identityCandidates = buildIdentityCandidates(recent.rows, normalizedDomain, registry.identities || {});
+  const selectedIdentity = normalizedIdentityKey
+    ? (identityCandidates.find((candidate) => candidate.identity_key === normalizedIdentityKey) || {
+      identity_key: normalizedIdentityKey,
+      source_identity_scope: "identity",
+      source_identity_label: formatIdentityLabel(normalizedIdentityKey),
+      source_identity_ambiguous: false,
+      send_count: 0,
+      top_tags: [],
+      last_seen_at: null,
+      direct_override: registry.identities?.[normalizedIdentityKey] || null,
+      effective_policy: effectivePolicy,
+    })
+    : null;
   const recentMetrics = metricsMap.get(normalizedDomain) || {
-    domain: normalizedDomain,
-    send_count: 0,
-    weak_source_item_count: 0,
-    poor_digest_item_count: 0,
-    user_count: 0,
-    digest_count: 0,
-    avg_sent_authority: null,
-    top_tags: [],
-    recent_users: [],
-    sample_items: [],
-    last_seen_at: null,
+    ...createEmptyMetricSummary(normalizedDomain),
   };
   return {
     generated_at: new Date().toISOString(),
     history_scope: recent?.window?.all_time === true ? "all_time" : "windowed",
     days: recent?.window?.days ?? null,
     domain: normalizedDomain,
+    selected_scope: normalizedIdentityKey ? "identity" : "domain",
+    selected_identity_key: normalizedIdentityKey || null,
+    selected_identity: selectedIdentity,
+    identity_candidates: identityCandidates,
     effective_policy: effectivePolicy,
     admin_override: effectivePolicy?.admin_override || null,
-    direct_override: registry.domains?.[normalizedDomain] || null,
-    recent_metrics: recentMetrics,
+    direct_override: normalizedIdentityKey
+      ? (registry.identities?.[normalizedIdentityKey] || null)
+      : (registry.domains?.[normalizedDomain] || null),
+    recent_metrics: normalizedIdentityKey
+      ? buildIdentityRecentMetrics(recent.rows, normalizedDomain, normalizedIdentityKey)
+      : recentMetrics,
+    domain_recent_metrics: domainRecentMetrics,
     audit_entries: buildSourceAuditEntries({
       readJsonLineLog,
       adminActionLog,
       domain: normalizedDomain,
+      identityKey: normalizedIdentityKey || null,
       limit: 20,
     }),
   };

@@ -78,6 +78,16 @@ async function flushMicrotasks() {
     "confirmModalTitle",
     "confirmModalBody",
     "confirmModalAcceptBtn",
+    "sourceRegistryScopeInput",
+    "sourceRegistryDomainInput",
+    "sourceRegistryFormFeedback",
+    "sourceRegistrySourceTypeInput",
+    "sourceRegistryPolicyInput",
+    "sourceRegistryReviewStatusInput",
+    "sourceRegistryTopicFitInput",
+    "sourceRegistryTierInput",
+    "sourceRegistryAuthorityInput",
+    "sourceRegistryNoteInput",
   ];
   const elements = new Map(elementIds.map((id) => [id, createElement(id)]));
   const location = new URL("https://example.com/admin/source-registry");
@@ -126,10 +136,15 @@ async function flushMicrotasks() {
         return jsonResponse({ authenticated: true });
       }
       if (href.startsWith("/api/admin/source-registry/domain?")) {
-        const requestedDomain = new URL(href, "https://example.com").searchParams.get("domain");
+        const parsed = new URL(href, "https://example.com");
+        const requestedDomain = parsed.searchParams.get("domain");
+        const requestedIdentityKey = parsed.searchParams.get("identity_key");
         if (requestedDomain === "news.broadcom.com") {
           return jsonResponse({
             domain: "news.broadcom.com",
+            selected_scope: "domain",
+            selected_identity_key: null,
+            identity_candidates: [],
             effective_policy: {},
             admin_override: {},
             recent_metrics: {
@@ -147,8 +162,39 @@ async function flushMicrotasks() {
             ],
           });
         }
+        if (requestedDomain === "youtube.com") {
+          return jsonResponse({
+            domain: "youtube.com",
+            selected_scope: requestedIdentityKey ? "identity" : "domain",
+            selected_identity_key: requestedIdentityKey || null,
+            selected_identity: requestedIdentityKey ? {
+              identity_key: "youtube:@insideboardroom",
+              source_identity_label: "@InsideBoardroom",
+              source_identity_scope: "platform_channel",
+            } : null,
+            identity_candidates: [
+              {
+                identity_key: "youtube:@insideboardroom",
+                source_identity_label: "@InsideBoardroom",
+                source_identity_scope: "platform_channel",
+                send_count: 2,
+              },
+            ],
+            effective_policy: {},
+            admin_override: {},
+            recent_metrics: {
+              sample_items: [],
+              recent_users: [],
+              top_tags: [],
+            },
+            audit_entries: [],
+          });
+        }
         return jsonResponse({
           domain: "benzinga.com",
+          selected_scope: "domain",
+          selected_identity_key: null,
+          identity_candidates: [],
           effective_policy: {},
           admin_override: {},
           recent_metrics: {
@@ -303,6 +349,24 @@ async function flushMicrotasks() {
     elements.get("sourceRegistrySearch").value,
     "benzinga.com",
     "inspect field should reflect the selected domain"
+  );
+
+  fetchCalls.length = 0;
+  await context.inspectSourceRegistryDomain("youtube.com", true, "youtube:@insideboardroom");
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/domain?domain=youtube.com&identity_key=youtube%3A%40insideboardroom"),
+    "identity-scope inspection should request detail with identity_key"
+  );
+  assert.strictEqual(
+    elements.get("sourceRegistryScopeInput").value,
+    "identity:youtube:@insideboardroom",
+    "rendered scope selector should reflect the selected identity scope"
+  );
+  assert.ok(
+    elements.get("sourceRegistryInspector").innerHTML.includes("@InsideBoardroom"),
+    "inspector should render identity candidate details when available"
   );
 
   fetchCalls.length = 0;

@@ -117,6 +117,31 @@ const {
         },
       ],
     },
+    {
+      user_email: "epsilon@example.com",
+      recipient: "epsilon@example.com",
+      digest_id: "2026-03-21:epsilon",
+      run_at_utc: "2026-03-21T13:00:00.000Z",
+      quality_score: 81,
+      dominant_failure_mode: "unknown",
+      sent_items: [
+        {
+          source_domain: "youtube.com",
+          source_identity_key: "youtube:@insideboardroom",
+          source_identity_scope: "platform_channel",
+          source_identity_label: "@InsideBoardroom",
+          source_tier: "unknown",
+          source_authority: 0.3,
+          source_type: "platform_user_generated",
+          source_policy: "review",
+          source_review_status: "monitor",
+          routine_item_score: 0.55,
+          tag: "TECHNOLOGY",
+          headline: "InsideBoardroom clip",
+          url: "https://youtube.com/@InsideBoardroom/videos",
+        },
+      ],
+    },
   ];
 
   const metrics = buildRecentDomainMetrics(rows);
@@ -141,6 +166,17 @@ const {
         updated_by: "admin@example.com",
       },
     },
+    identities: {
+      "youtube:@insideboardroom": {
+        identity_key: "youtube:@insideboardroom",
+        source_type: "reported_media",
+        policy: "allowed",
+        review_status: "reviewed",
+        note: "Reviewed channel override",
+        updated_at: "2026-03-21T12:00:00.000Z",
+        updated_by: "admin@example.com",
+      },
+    },
   };
 
   const overview = buildSourceRegistryOverview({
@@ -158,7 +194,10 @@ const {
         },
       },
     }),
-    buildSourceRegistryMap: (value) => new Map(Object.entries(value.domains || {})),
+    buildSourceRegistryMap: (value) => ({
+      domains: new Map(Object.entries(value.domains || {})),
+      identities: new Map(Object.entries(value.identities || {})),
+    }),
     setAdminSourceRegistry,
     buildRecentDigestsExport: (options) => {
       recentDigestsCalls.push(options);
@@ -192,7 +231,10 @@ const {
   const detail = buildSourceRegistryDomainDetail({
     domain: "benzinga.com",
     loadSourceRegistry: () => registry,
-    buildSourceRegistryMap: (value) => new Map(Object.entries(value.domains || {})),
+    buildSourceRegistryMap: (value) => ({
+      domains: new Map(Object.entries(value.domains || {})),
+      identities: new Map(Object.entries(value.identities || {})),
+    }),
     setAdminSourceRegistry,
     buildRecentDigestsExport: (options) => {
       recentDigestsCalls.push(options);
@@ -214,6 +256,38 @@ const {
   assert.strictEqual(detail.recent_metrics.send_count, 2);
   assert.strictEqual(detail.audit_entries.length, 1);
   assert.deepStrictEqual(recentDigestsCalls[1], { all_time: true });
+
+  const identityDetail = buildSourceRegistryDomainDetail({
+    domain: "youtube.com",
+    identityKey: "youtube:@insideboardroom",
+    loadSourceRegistry: () => registry,
+    buildSourceRegistryMap: (value) => ({
+      domains: new Map(Object.entries(value.domains || {})),
+      identities: new Map(Object.entries(value.identities || {})),
+    }),
+    setAdminSourceRegistry,
+    buildRecentDigestsExport: () => ({ rows, window: { all_time: true, days: null } }),
+    readJsonLineLog: () => [{
+      at: "2026-03-21T12:00:00.000Z",
+      actor: "admin@example.com",
+      action: "source_policy_upsert",
+      success: true,
+      details: {
+        domain: "youtube.com",
+        identity_key: "youtube:@insideboardroom",
+        note: "Reviewed channel override",
+      },
+    }],
+    adminActionLog: "/tmp/admin-action-log.json",
+  });
+  assert.ok(identityDetail);
+  assert.strictEqual(identityDetail.domain, "youtube.com");
+  assert.strictEqual(identityDetail.selected_scope, "identity");
+  assert.strictEqual(identityDetail.selected_identity_key, "youtube:@insideboardroom");
+  assert.strictEqual(identityDetail.recent_metrics.send_count, 1);
+  assert.strictEqual(identityDetail.direct_override.identity_key, "youtube:@insideboardroom");
+  assert.ok(identityDetail.identity_candidates.some((candidate) => candidate.identity_key === "youtube:@insideboardroom"));
+  assert.strictEqual(identityDetail.audit_entries[0].scope, "identity");
   setAdminSourceRegistry(null);
 })();
 

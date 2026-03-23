@@ -5,12 +5,14 @@ const { parseRetryAfterMs } = require("../../entrypoints/digest-orchestrator-tra
 const { getTopicQueries, buildSearchRequest } = require("./digest-data-fetch-request-runtime");
 const {
   enrichWithCitationUrls,
+  buildSearchEvidenceCandidates,
   collectUniqueItems,
   shouldStopAttempts,
   parsePerplexityItems,
   classifyUrlShape,
   createConversionFunnel,
   mergeConversionFunnel,
+  prioritizeItemsForRetention,
 } = require("./digest-data-fetch-items-runtime");
 
 const DEFAULT_PERPLEXITY_TIMEOUT_MS = 25_000;
@@ -82,8 +84,12 @@ function matchesDomain(sourceDomain, candidateDomain) {
 function collectSearchResultEvidence(searchResults, preferredDomains = []) {
   const domains = [];
   const preferredHits = [];
+  const articleResults = [];
+  const preferredArticleResults = [];
   const seenDomains = new Set();
   const seenPreferred = new Set();
+  const seenArticleUrls = new Set();
+  const seenPreferredArticleUrls = new Set();
   for (const result of (Array.isArray(searchResults) ? searchResults : [])) {
     let normalized = "";
     try {
@@ -104,10 +110,23 @@ function collectSearchResultEvidence(searchResults, preferredDomains = []) {
         preferredHits.push(preferredNormalized);
       }
     }
+    if (classifyUrlShape(result?.url) === "article_url") {
+      const url = String(result?.url || "").trim();
+      if (url && !seenArticleUrls.has(url)) {
+        seenArticleUrls.add(url);
+        articleResults.push(result);
+      }
+      if (matchingPreferred && url && !seenPreferredArticleUrls.has(url)) {
+        seenPreferredArticleUrls.add(url);
+        preferredArticleResults.push(result);
+      }
+    }
   }
   return {
     search_result_domains: domains,
     preferred_search_result_domains: preferredHits,
+    article_search_results: articleResults,
+    preferred_article_search_results: preferredArticleResults,
   };
 }
 
@@ -220,6 +239,7 @@ function createDigestDataFetchRuntime(deps) {
     preferredEvidenceDomains,
     promptBias,
     maxAgeHours,
+    officialFriendly,
   }) {
     const maxAttempts = Math.min(3, queries.length);
     const diagnostics = createPassDiagnostics(maxAttempts);
@@ -335,11 +355,67 @@ function createDigestDataFetchRuntime(deps) {
           const shape = classifyUrlShape(item?.url);
           diagnostics.conversion_funnel.normalized_url_shape_counts[shape] = (diagnostics.conversion_funnel.normalized_url_shape_counts[shape] || 0) + 1;
         }
-        collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
+        const searchEvidenceCandidates = topic?.isCustom === true
+          ? []
+          : buildSearchEvidenceCandidates(searchEvidence.article_search_results, {
+            preferredDomains: Array.isArray(preferredEvidenceDomains) ? preferredEvidenceDomains : [],
+            trustedOnly: true,
+            topicTag: topic.tag,
+            retrievedAt,
+            maxAgeHours,
+            passName,
+          });
+        diagnostics.conversion_funnel.search_evidence_candidate_count += searchEvidenceCandidates.length;
+
+        const prioritizedProviderItems = prioritizeItemsForRetention(normalized, {
+          standardTopicMode: topic?.isCustom !== true,
+          hasTrustedArticleEvidence: searchEvidenceCandidates.length > 0,
+          preferredDomains: Array.isArray(preferredEvidenceDomains) ? preferredEvidenceDomains : [],
+          officialFriendly: officialFriendly === true,
+          maxAgeHours,
+          diagnostics: diagnostics.conversion_funnel,
+        });
+        const providerArticleCount = prioritizedProviderItems.reduce((sum, item) => {
+          return sum + (classifyUrlShape(item?.url) === "article_url" ? 1 : 0);
+        }, 0);
+        const retainedBeforeProvider = collected.length;
+        const staleBeforeProvider = diagnostics.conversion_funnel.stale_item_count;
+        const evidenceFirst = topic?.isCustom !== true
+          && searchEvidenceCandidates.length > 0
+          && (prioritizedProviderItems.length === 0 || providerArticleCount <= 0);
+        let evidenceFirstRetainedCount = 0;
+        if (evidenceFirst) {
+          const retainedBeforeEvidenceFirst = collected.length;
+          collectUniqueItems(searchEvidenceCandidates, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
+            maxAgeHours,
+            requireVerifiedPublishedDate: true,
+            diagnostics: diagnostics.conversion_funnel,
+          });
+          evidenceFirstRetainedCount = Math.max(0, collected.length - retainedBeforeEvidenceFirst);
+        }
+        collectUniqueItems(prioritizedProviderItems, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
           maxAgeHours,
           requireVerifiedPublishedDate: true,
           diagnostics: diagnostics.conversion_funnel,
         });
+        const retainedAfterProvider = collected.length;
+        const staleProviderDelta = diagnostics.conversion_funnel.stale_item_count - staleBeforeProvider;
+        const retainedProviderDelta = retainedAfterProvider - retainedBeforeProvider;
+        const shouldRescueFromEvidence = topic?.isCustom !== true
+          && searchEvidenceCandidates.length > 0
+          && !evidenceFirst
+          && (retainedProviderDelta <= 1 || staleProviderDelta > 0 || providerArticleCount <= 0);
+        if (shouldRescueFromEvidence) {
+          const retainedBeforeEvidence = collected.length;
+          collectUniqueItems(searchEvidenceCandidates, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
+            maxAgeHours,
+            requireVerifiedPublishedDate: true,
+            diagnostics: diagnostics.conversion_funnel,
+          });
+          diagnostics.conversion_funnel.search_evidence_retained_count += Math.max(0, collected.length - retainedBeforeEvidence);
+        } else if (evidenceFirst) {
+          diagnostics.conversion_funnel.search_evidence_retained_count += evidenceFirstRetainedCount;
+        }
       } catch (err) {
         diagnostics.conversion_funnel.parse_error_count += 1;
         log(`Parse error for ${topic.tag} ${passName}: ${err.message}`);
@@ -428,6 +504,7 @@ function createDigestDataFetchRuntime(deps) {
         preferredEvidenceDomains: preferredDomains,
         promptBias: buildPreferredPromptBias(preferredDomains),
         maxAgeHours,
+        officialFriendly: retrievalPlan?.official_friendly === true,
       });
       apiCalls += preferredPass.apiCalls;
       mergePassDiagnostics(diagnostics, preferredPass.diagnostics);
@@ -454,6 +531,7 @@ function createDigestDataFetchRuntime(deps) {
         preferredEvidenceDomains: preferredDomains,
         promptBias: buildBroadFallbackPromptBias(retrievalPlan),
         maxAgeHours,
+        officialFriendly: retrievalPlan?.official_friendly === true,
       });
       apiCalls += broadPass.apiCalls;
       mergePassDiagnostics(diagnostics, broadPass.diagnostics);

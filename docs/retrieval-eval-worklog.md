@@ -2659,3 +2659,78 @@ The next highest-leverage work should therefore be:
 - direct evidence-to-article conversion for standard topics
 - freshness-aware replacement from visible trusted search evidence
 - broad-fallback forcing after weak preferred conversion
+
+### 2026-03-22 23:15 ET - Standard-topic conversion fixes implemented and re-evaluated
+
+#### What changed
+
+- added a standard-topic evidence-first fallback in `src/digest/runtime/digest-data-fetch-runtime.js`
+  - when trusted article-shaped search evidence exists but provider conversion is empty or weak, the fetch layer now builds candidate items directly from those trusted search-result URLs
+- added freshness-aware rescue using trusted visible search evidence
+  - recent trusted search-result URLs can now survive even when the provider returns stale or listing-page outputs
+- added earlier listing-page suppression in `src/digest/runtime/digest-data-fetch-items-runtime.js`
+  - non-official listing/tag/search/homepage outputs are now penalized before they can occupy scarce retained slots when trusted article evidence is visible
+- forced standard-topic broad fallback after weak preferred conversion in `src/entrypoints/digest-orchestrator-fetch-runtime.js`
+  - standard topics no longer stop early just because the preferred pass returned zero or listing-heavy results
+
+#### Live run
+
+- post-fix standard-topic run: `retrieval-eval:2026-03-23T03-10-11-771Z`
+- traced baseline for comparison: `retrieval-eval:2026-03-23T02-17-15-798Z`
+
+#### Before / after headline metrics
+
+- retained items: `11 -> 11`
+- retained article-shaped URLs: `5 -> 7`
+- topics with at least 1 retained item: `7 -> 6`
+- topics with at least 3 retained items: `0 -> 1`
+- strict-shippable personas: `0 -> 0`
+- stretch-shippable personas: `0 -> 0`
+
+#### What we learned
+
+- the fix set improved **article-shaped retention**, not total retained inventory
+- evidence-first rescue is working mechanically
+  - run-level search-evidence rescue produced `4` candidates and retained all `4`
+- standard broad fallback is now engaging much more aggressively
+  - the post-fix run reached deeper standard phases (`phase2`, trusted passes, then deeper standard phases) instead of dying after the first weak preferred pass
+- the remaining standard bottleneck is still upstream of shipping:
+  - more trusted evidence is converting into retained items
+  - but the resulting pool is still too small and too weak to satisfy the 5-item delivery contract
+
+#### Topic-level impact on the representative failures
+
+- `LIFE SCIENCES`
+  - before: `0 retained`, `0 article-shaped retained`, stopped early with unused broad depth
+  - after: `1 retained`, `1 article-shaped retained`, `1` evidence-rescued candidate retained
+  - decision effect: confirms the evidence-first fallback can recover a previously dead standard topic
+- `TECHNOLOGY`
+  - before: `1 retained`, `0 article-shaped retained`
+  - after: `0 retained`, `0 article-shaped retained`, still stale-dominated and still not converting trusted search evidence into kept candidates
+  - decision effect: this remains the clearest provider conversion problem
+- `HEALTHCARE`
+  - before: `0 retained`
+  - after: `0 retained`, but `1` cleaned / internal candidate survives before failing at the delivery score threshold
+  - decision effect: this is no longer a pure zero-conversion hole, but still not promotable enough
+- `PE×M&A`
+  - before: parse/extraction errors were part of the miss
+  - after: parse errors dropped away, but retained inventory is still `0`
+  - decision effect: this moved from parser failure toward broader conversion/yield weakness
+- `POLICY×REGULATORY`
+  - before: `2 retained`, `1 article-shaped retained`
+  - after: still `2 retained`, `1 article-shaped retained`
+  - decision effect: unchanged structurally; still dies at delivery score / quantity gate rather than raw retrieval
+
+#### Decision this affects
+
+This pass makes the product call cleaner:
+
+- the conversion-focused fix set was the right next move
+- it is not enough by itself to make the standard 5-item product viable
+- the next decision should not be “more prompt tweaks”
+- the next decision should be whether to build a **stronger standard-topic article-conversion layer** on top of visible search evidence, or move to a broader retrieval redesign
+
+#### What remains uncertain
+
+- how much further a stronger evidence-to-article conversion layer can push standard-topic retained inventory before a larger retrieval redesign is unavoidable
+- whether `TECHNOLOGY` needs a dedicated provider workaround because the provider still sees the right evidence but often fails to return usable article records

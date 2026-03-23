@@ -754,9 +754,28 @@ function markBudgetStop(budgetTracker, reason) {
 }
 
 function canReceiveAdditionalRetry(state, isFetchedItemEligible) {
-  if (!state || state.retryBlockReason === "repeat" || state.retryBlockReason === "topic_fit") return false;
+  if (!state || state.retryBlockReason === "repeat") return false;
   if (Number(state.zeroYieldRetryStreak || 0) >= 2) return false;
+  if (state.retryBlockReason === "topic_fit" && !hasWeakPreferredConversion(state, isFetchedItemEligible)) return false;
   return countUsableItems(state.items, isFetchedItemEligible) < 2;
+}
+
+function hasWeakPreferredConversion(state, isFetchedItemEligible) {
+  if (!state || state?.topic?.isCustom === true) return false;
+  if (Number(state?.preferredCallsMade || 0) <= 0) return false;
+  if (Number(state?.nextBroadQueryIndex || 0) >= Number(state?.topic?.queries?.length || 0)) return false;
+  const usableCount = countUsableItems(state?.items, isFetchedItemEligible);
+  const providerArticleCount = Number(state?.conversionFunnel?.provider_url_shape_counts?.article_url || 0);
+  const providerListingCount = Number(state?.conversionFunnel?.provider_url_shape_counts?.listing_page || 0)
+    + Number(state?.conversionFunnel?.provider_url_shape_counts?.tag_page || 0)
+    + Number(state?.conversionFunnel?.provider_url_shape_counts?.search_page || 0)
+    + Number(state?.conversionFunnel?.provider_url_shape_counts?.homepage || 0);
+  const staleCount = Number(state?.conversionFunnel?.stale_item_count || 0);
+  const evidenceRetainedCount = Number(state?.conversionFunnel?.search_evidence_retained_count || 0);
+  return usableCount < 2
+    || (providerArticleCount <= 0 && evidenceRetainedCount <= 0)
+    || providerListingCount > providerArticleCount
+    || staleCount > 0;
 }
 
 function hasBlockingProviderFailure(state) {
@@ -767,8 +786,9 @@ function hasBlockingProviderFailure(state) {
 }
 
 function shouldPreferBroadFallbackRetry(state, isFetchedItemEligible) {
+  if (Number(state?.nextBroadQueryIndex || 0) >= Number(state?.topic?.queries?.length || 0)) return false;
   return countUsableItems(state?.items, isFetchedItemEligible) <= 0
-    && Number(state?.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
+    || hasWeakPreferredConversion(state, isFetchedItemEligible);
 }
 
 function needsStandardTrustedSourcePass(state, annotateFetchedItems, isFetchedItemEligible) {

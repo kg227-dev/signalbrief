@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
+const { normalizeSourcePolicyDomain } = require("../../runtime/source-policy-registry-runtime");
 
 const MAX_ARTICLE_AGE_HOURS = 48;
 const TITLE_TOKEN_MIN_LENGTH = 4;
@@ -72,6 +73,34 @@ const TAG_SEGMENTS = new Set([
   "category",
   "categories",
 ]);
+const SEARCH_RESULT_DATE_KEYS = Object.freeze([
+  "published_date",
+  "publishedDate",
+  "published_at",
+  "publishedAt",
+  "date",
+  "datetime",
+  "last_updated",
+  "lastUpdated",
+  "time",
+]);
+const SEARCH_RESULT_MONTH_PATTERN = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4}\b/i;
+const URL_DATE_PATTERN = /(?:^|\/)((?:19|20)\d{2})[\/\-](0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])(?:\/|$)/i;
+const URL_DATE_COMPACT_PATTERN = /(?:^|[\/\-_])((?:19|20)\d{2})[-_](0[1-9]|1[0-2])[-_](0[1-9]|[12]\d|3[01])(?:[\/\-_]|$)/i;
+const OFFICIAL_URL_SUFFIXES = Object.freeze([
+  ".gov",
+  ".mil",
+  ".europa.eu",
+  ".govinfo.gov",
+]);
+const OFFICIAL_DOMAIN_ALLOWLIST = new Set([
+  "clinicaltrials.gov",
+  "federalregister.gov",
+  "regulations.gov",
+  "govinfo.gov",
+  "ema.europa.eu",
+  "iea.org",
+]);
 
 function createUrlShapeCounts() {
   return URL_SHAPE_KEYS.reduce((counts, key) => {
@@ -141,9 +170,12 @@ function createConversionFunnel() {
     provider_url_shape_counts: createUrlShapeCounts(),
     normalized_item_count: 0,
     normalized_url_shape_counts: createUrlShapeCounts(),
+    search_evidence_candidate_count: 0,
+    search_evidence_retained_count: 0,
     evidence_url_replacement_count: 0,
     invalid_item_url_count: 0,
     unsupported_evidence_url_drop_count: 0,
+    listing_page_penalty_count: 0,
     missing_headline_count: 0,
     missing_published_date_count: 0,
     stale_item_count: 0,
@@ -156,6 +188,7 @@ function createConversionFunnel() {
       search_result_non_article_urls: [],
       provider_non_article_urls: [],
       evidence_resolution_drops: [],
+      listing_penalty_items: [],
       missing_published_date_items: [],
       stale_items: [],
       duplicate_items: [],
@@ -173,9 +206,12 @@ function mergeConversionFunnel(target, extra) {
     "parse_error_count",
     "parsed_item_count",
     "normalized_item_count",
+    "search_evidence_candidate_count",
+    "search_evidence_retained_count",
     "evidence_url_replacement_count",
     "invalid_item_url_count",
     "unsupported_evidence_url_drop_count",
+    "listing_page_penalty_count",
     "missing_headline_count",
     "missing_published_date_count",
     "stale_item_count",
@@ -267,6 +303,13 @@ function parsePerplexityItems(content) {
   throw lastError || new Error("Unable to parse Perplexity items");
 }
 
+function matchesDomain(sourceDomain, candidateDomain) {
+  const source = normalizeSourcePolicyDomain(sourceDomain);
+  const candidate = normalizeSourcePolicyDomain(candidateDomain);
+  if (!source || !candidate) return false;
+  return source === candidate || source.endsWith(`.${candidate}`);
+}
+
 function normalizeUrlMatchKey(value, stripSearch = false) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -278,6 +321,69 @@ function normalizeUrlMatchKey(value, stripSearch = false) {
   } catch {
     return normalizeCanonicalUrl(raw);
   }
+}
+
+function isOfficialLikeDomain(value) {
+  const domain = normalizeSourcePolicyDomain(value);
+  if (!domain) return false;
+  if (OFFICIAL_DOMAIN_ALLOWLIST.has(domain)) return true;
+  return OFFICIAL_URL_SUFFIXES.some((suffix) => domain === suffix.slice(1) || domain.endsWith(suffix));
+}
+
+function normalizeSearchResultHeadline(value) {
+  let headline = String(value || "")
+    .replace(/^\[pdf\]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!headline) return "";
+  for (const separator of [/\s+\|\s+/, /\s+[–—-]\s+/]) {
+    const parts = headline.split(separator).map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+    const candidate = parts[0];
+    const suffix = parts[parts.length - 1];
+    if (candidate.length >= 12 && suffix.length <= 40) {
+      headline = candidate;
+      break;
+    }
+  }
+  return headline.trim();
+}
+
+function parsePublishedDateValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return "";
+  return new Date(parsed).toISOString();
+}
+
+function extractDateFromText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const monthMatch = raw.match(SEARCH_RESULT_MONTH_PATTERN);
+  if (monthMatch) {
+    const parsed = Date.parse(monthMatch[0]);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  const urlPatternMatch = raw.match(URL_DATE_PATTERN) || raw.match(URL_DATE_COMPACT_PATTERN);
+  if (urlPatternMatch) {
+    const iso = `${urlPatternMatch[1]}-${urlPatternMatch[2]}-${urlPatternMatch[3]}T00:00:00.000Z`;
+    const parsed = Date.parse(iso);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return "";
+}
+
+function extractPublishedDateFromSearchResult(result) {
+  for (const key of SEARCH_RESULT_DATE_KEYS) {
+    const parsed = parsePublishedDateValue(result?.[key]);
+    if (parsed) return parsed;
+  }
+  for (const value of [result?.snippet, result?.description, result?.title, result?.url]) {
+    const parsed = extractDateFromText(value);
+    if (parsed) return parsed;
+  }
+  return "";
 }
 
 function toEvidenceRecord(url, title = "") {
@@ -374,6 +480,111 @@ function resolveEvidenceBackedUrl(item, evidenceRecords) {
   const sameHostEvidence = evidenceRecords.filter((record) => record.hostname === itemUrl.hostname);
   const selected = selectSameHostEvidence(item, sameHostEvidence);
   return selected?.url || "";
+}
+
+function buildSearchEvidenceCandidates(searchResults, opts = {}) {
+  const preferredDomains = Array.isArray(opts?.preferredDomains) ? opts.preferredDomains : [];
+  const trustedOnly = opts?.trustedOnly !== false;
+  const topicTag = String(opts?.topicTag || "").trim();
+  const retrievedAt = String(opts?.retrievedAt || "").trim() || new Date().toISOString();
+  const maxAgeHours = Number.isFinite(Number(opts?.maxAgeHours)) ? Number(opts.maxAgeHours) : MAX_ARTICLE_AGE_HOURS;
+  const passName = String(opts?.passName || "search_evidence").trim() || "search_evidence";
+  const seen = new Set();
+  const out = [];
+  for (const result of (Array.isArray(searchResults) ? searchResults : [])) {
+    const url = String(result?.url || "").trim();
+    if (!url || classifyUrlShape(url) !== "article_url") continue;
+    let hostname = "";
+    try {
+      hostname = normalizeSourcePolicyDomain(new URL(url).hostname);
+    } catch {
+      hostname = "";
+    }
+    if (!hostname) continue;
+    const preferredMatch = preferredDomains.some((candidate) => matchesDomain(hostname, candidate));
+    if (trustedOnly) {
+      const trustedDomain = preferredDomains.length > 0
+        ? preferredMatch || isOfficialLikeDomain(hostname)
+        : isOfficialLikeDomain(hostname);
+      if (!trustedDomain) continue;
+    }
+    const publishedDate = extractPublishedDateFromSearchResult(result);
+    if (!publishedDate) continue;
+    const headline = normalizeSearchResultHeadline(result?.title);
+    if (!headline) continue;
+    const dedupeKey = normalizeUrlMatchKey(url, true);
+    if (!dedupeKey || seen.has(dedupeKey)) continue;
+    const candidate = {
+      headline,
+      summary: String(result?.snippet || result?.description || "").trim() || headline,
+      source: hostname,
+      source_domain: hostname,
+      url,
+      retrieval_original_url: url,
+      published_date: publishedDate,
+      tag: topicTag || null,
+      retrieved_at: retrievedAt,
+      retrieval_pass: `${passName}_search_evidence`,
+      retrieval_from_search_evidence: true,
+      preferred_source_available_in_search: preferredMatch,
+      search_result_title: String(result?.title || "").trim() || null,
+    };
+    if (articleAgeTooOld(candidate, maxAgeHours)) continue;
+    seen.add(dedupeKey);
+    out.push(candidate);
+  }
+  return out;
+}
+
+function buildRetentionPriority(item, opts = {}) {
+  const maxAgeHours = Number.isFinite(Number(opts?.maxAgeHours)) ? Number(opts.maxAgeHours) : MAX_ARTICLE_AGE_HOURS;
+  const preferredDomains = Array.isArray(opts?.preferredDomains) ? opts.preferredDomains : [];
+  const shape = classifyUrlShape(item?.url);
+  const domain = normalizeSourcePolicyDomain(item?.source_domain || item?.source || item?.url);
+  let score = 0;
+  if (shape === "article_url") score += 6;
+  else if (shape === "document_file") score += 1;
+  else if (shape === "listing_page") score -= 4;
+  else score -= 5;
+  if (hasVerifiedPublishedDate(item)) score += 2;
+  if (!articleAgeTooOld(item, maxAgeHours)) score += 2;
+  if (preferredDomains.some((candidate) => matchesDomain(domain, candidate))) score += 3;
+  if (isOfficialLikeDomain(domain)) score += 2;
+  if (item?.retrieval_from_search_evidence === true) score += 1;
+  return score;
+}
+
+function shouldSuppressWeakListingItem(item, opts = {}) {
+  if (opts?.standardTopicMode !== true || opts?.hasTrustedArticleEvidence !== true) return false;
+  const shape = classifyUrlShape(item?.url);
+  if (shape !== "listing_page" && shape !== "tag_page" && shape !== "search_page" && shape !== "homepage") return false;
+  const domain = normalizeSourcePolicyDomain(item?.source_domain || item?.source || item?.url);
+  return !isOfficialLikeDomain(domain);
+}
+
+function prioritizeItemsForRetention(items, opts = {}) {
+  const diagnostics = opts?.diagnostics && typeof opts.diagnostics === "object" ? opts.diagnostics : null;
+  const filtered = [];
+  for (const item of (Array.isArray(items) ? items : [])) {
+    if (shouldSuppressWeakListingItem(item, opts)) {
+      if (diagnostics) {
+        diagnostics.listing_page_penalty_count += 1;
+        recordSample(diagnostics.samples, "listing_penalty_items", {
+          headline: String(item?.headline || "").trim() || null,
+          url: String(item?.url || "").trim() || null,
+          shape: classifyUrlShape(item?.url),
+        });
+      }
+      continue;
+    }
+    filtered.push(item);
+  }
+  return filtered.sort((left, right) => {
+    const rightScore = buildRetentionPriority(right, opts);
+    const leftScore = buildRetentionPriority(left, opts);
+    if (rightScore !== leftScore) return rightScore - leftScore;
+    return String(left?.headline || "").localeCompare(String(right?.headline || ""));
+  });
 }
 
 function enrichWithCitationUrls(items, citations, searchResults, topicTag, log, diagnostics = null) {
@@ -495,6 +706,7 @@ function shouldStopAttempts(topic, collected) {
 module.exports = {
   parsePerplexityItems,
   enrichWithCitationUrls,
+  buildSearchEvidenceCandidates,
   collectUniqueItems,
   shouldStopAttempts,
   articleAgeTooOld,
@@ -503,4 +715,5 @@ module.exports = {
   classifyUrlShape,
   createConversionFunnel,
   mergeConversionFunnel,
+  prioritizeItemsForRetention,
 };

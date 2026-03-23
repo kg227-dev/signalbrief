@@ -420,6 +420,109 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
   assert.strictEqual(result.items.length, 0);
 }
 
+async function testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsNothing() {
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    httpsPostWithRetry: async () => ({
+      status: 200,
+      body: {
+        citations: [],
+        search_results: [
+          {
+            title: "AI chip demand is reshaping data center strategy | TechCrunch",
+            url: "https://techcrunch.com/2026/03/22/ai-chip-demand-is-reshaping-data-center-strategy/",
+          },
+          {
+            title: "Tag page",
+            url: "https://techcrunch.com/tag/ai/",
+          },
+        ],
+        choices: [{
+          message: {
+            content: JSON.stringify([]),
+          },
+        }],
+      },
+    }),
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "TECHNOLOGY",
+    queries: ["q1"],
+  }, {
+    retrievalPlan: {
+      preferred_domains: ["techcrunch.com", "theinformation.com"],
+      thin_item_threshold: 2,
+      official_friendly: false,
+    },
+  });
+
+  assert.strictEqual(result.items.length, 1);
+  assert.strictEqual(result.items[0].retrieval_from_search_evidence, true);
+  assert.strictEqual(result.items[0].url, "https://techcrunch.com/2026/03/22/ai-chip-demand-is-reshaping-data-center-strategy/");
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_candidate_count, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_retained_count, 1);
+}
+
+async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProviderItems() {
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    httpsPostWithRetry: async () => ({
+      status: 200,
+      body: {
+        citations: ["https://www.healthcaredive.com/news/sutter-allina-health-form-26-billion-nonprofit-system/815028/"],
+        search_results: [
+          {
+            title: "CMS proposes new payment model for hospitals | CMS",
+            url: "https://www.cms.gov/newsroom/fact-sheets/2026-03-21-hospital-payment-model",
+            date: "2026-03-21T12:00:00.000Z",
+          },
+        ],
+        choices: [{
+          message: {
+            content: JSON.stringify([
+              {
+                headline: "Sutter, Allina Health to form $26B nonprofit system",
+                summary: "Summary",
+                source: "healthcaredive.com",
+                url: "https://www.healthcaredive.com/news/sutter-allina-health-form-26-billion-nonprofit-system/815028/",
+                published_date: "2026-03-17T12:00:00.000Z",
+              },
+            ]),
+          },
+        }],
+      },
+    }),
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "HEALTHCARE",
+    queries: ["q1"],
+  }, {
+    retrievalPlan: {
+      preferred_domains: ["cms.gov", "healthcaredive.com"],
+      thin_item_threshold: 2,
+      official_friendly: true,
+    },
+  });
+
+  assert.strictEqual(result.items.length, 1);
+  assert.strictEqual(result.items[0].url, "https://www.cms.gov/newsroom/fact-sheets/2026-03-21-hospital-payment-model");
+  assert.strictEqual(result.items[0].retrieval_from_search_evidence, true);
+  assert.strictEqual(result.diagnostics.conversion_funnel.listing_page_penalty_count, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_retained_count, 1);
+}
+
 (async () => {
   await testCustomFallbackFlowWithProviderPolicy();
   await testTransportErrorDiagnostics();
@@ -429,6 +532,8 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
   await testBroadOnlyModeSkipsSearchFilter();
   await testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl();
   await testFetchDropsAmbiguousSameHostMismatch();
+  await testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsNothing();
+  await testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProviderItems();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

@@ -620,12 +620,11 @@ assertModuleExports(() => runtime, TARGET_REL);
     runMode: "scheduled",
   });
   assert.strictEqual(retryResult.standardFetchCalls, 2);
-  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 1);
-  assert.strictEqual(retryResult.fetchDiagnostics.broad_fallback_topics_used, 0);
+  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 0);
   assert.strictEqual(retryResult.fetchDiagnostics.alternate_queries_used, 1);
   assert.deepStrictEqual(
     retryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "preferred"]
+    ["preferred", "broad"]
   );
 
   const deepRetryCalls = [];

@@ -1182,3 +1182,244 @@ My recommendation:
 - the system is now clean enough to trust the diagnosis
 - the diagnosis says the present architecture is **not** enough for a daily 5-item promise at the current quality bar
 - the next meaningful step is retrieval architecture work, not more narrow tuning
+
+## 2026-03-23 00:15 ET — concrete retrieval redesign memo
+
+This is the decision memo version of the recommendation.
+
+### What the second retrieval layer should actually be
+
+The second layer should **not** just be “another general AI search.” It should be a **targeted trusted-source retrieval layer** made of source types that Perplexity is currently weak at converting into deliverable candidates.
+
+Recommended source/retrieval types:
+
+1. official and regulatory feeds
+   - structured or semi-structured sources such as:
+     - agency newsrooms
+     - filings
+     - rulemaking feeds
+     - trial/result registries
+     - public consultation / enforcement pages
+   - purpose:
+     - improve recall on policy, healthcare, life sciences, and regulatory-heavy tech stories
+2. curated publisher/source-family feed ingestion
+   - direct RSS/feed or crawl ingestion for trusted source families already represented in the registry
+   - purpose:
+     - improve recall from Reuters / FT / WSJ / specialist trade press without relying on Perplexity to surface them
+3. source-family retrieval by topic
+   - not broad web search
+   - explicitly query the source families that match the topic
+   - purpose:
+     - when Perplexity returns thin or review-tier results, the system immediately asks the right trusted family for that topic
+4. optional SERP-style news retrieval
+   - useful as a discovery/backfill layer, not as the main trusted layer
+   - purpose:
+     - catch fresh article URLs Perplexity missed
+   - this should stay behind trusted-source filters and not become another noisy fallback
+
+My practical recommendation:
+
+- keep `Perplexity` as stage-1 discovery
+- add:
+  - `official/regulatory retrieval`
+  - `curated publisher/source-family feed retrieval`
+- use generic SERP/news retrieval only as a narrow backup, not as the core second layer
+
+### Best retrieval approach by category
+
+#### Strategy
+
+Best second-layer mix:
+
+- top-tier business journalism feeds
+- SEC / 8-K / investor-relations / deal / activist / bankruptcy / restructuring source retrieval
+- selective legal/regulatory source retrieval for strategy events
+
+Why:
+
+- this category fails less on zero coverage and more on weak review-tier summaries
+- it needs better recall from trusted business reporting and primary corporate-event sources
+
+#### Healthcare
+
+Best second-layer mix:
+
+- official healthcare / reimbursement / approval / rulemaking feeds
+- top-tier specialist healthcare journalism feeds
+- top-tier business press as supporting layer
+
+Why:
+
+- this category currently broadens into review-tier healthcare commentary
+- the gap is better conversion of official and specialist coverage, not more generic discovery
+
+#### Life Sciences
+
+Best second-layer mix:
+
+- official approval / trial / label / regulator sources
+- specialist biotech/pharma journalism feeds
+- company IR only as corroboration, not as a primary final source by itself
+
+Why:
+
+- this category is thin and weak at the same time
+- high-signal items often originate in official or specialist sources before they appear broadly
+
+#### Technology
+
+Best second-layer mix:
+
+- top-tier business/technology publisher feeds
+- official/regulatory tech-policy sources
+- company disclosures only when tied to filings or broadly covered events
+
+Why:
+
+- technology has volume already, but mostly review-tier volume
+- the second layer should improve **source family quality**, not just count
+
+#### Policy/Regulatory
+
+Best second-layer mix:
+
+- official/regulatory sources first
+- trusted legal / compliance / policy-trade publications second
+- top-tier press third
+
+Why:
+
+- this bucket is often zero-yield in the current system even when official sources clearly exist
+- this is the strongest case for first-class official-source retrieval
+
+#### Custom topics
+
+Best second-layer mix:
+
+- entity-type classification first:
+  - company
+  - product / technology
+  - regulator / policy
+  - therapy / drug class
+  - macro theme
+- then route to the matching source families
+
+Why:
+
+- custom topics are not one retrieval problem
+- the right follow-up source family depends on what the keyword actually is
+
+### Phased implementation path
+
+#### Phase 1: minimal engineering on top of current stack
+
+Scope:
+
+- keep current Perplexity-first flow
+- after a thin or review-tier result, trigger one follow-up retrieval pass against:
+  - official/regulatory sources for policy, healthcare, life sciences
+  - curated publisher feeds for technology and strategy
+- merge and dedupe those candidates into the existing cleanup/ranking flow
+
+What this requires:
+
+- source-family metadata by topic
+- feed fetch/parsing for a limited trusted-source set
+- follow-up retrieval orchestration when stage 1 underperforms
+
+Why it is attractive:
+
+- smallest engineering step with real upside
+- preserves current ranking/selection architecture
+
+#### Phase 2: moderate changes
+
+Scope:
+
+- add a persistent ingestion layer for trusted feeds and official sources
+- store normalized candidate records before scoring
+- make topic-to-source-family routing explicit and configurable
+- improve custom-topic routing by keyword/entity class
+
+What this requires:
+
+- background ingestion jobs
+- article normalization + dedupe across retrieval sources
+- candidate broker logic before ranking
+
+Why it matters:
+
+- this is the level where retrieval starts becoming reliable instead of ad hoc
+
+#### Phase 3: true retrieval redesign
+
+Scope:
+
+- build a multi-source candidate generation layer:
+  - Perplexity or SERP-style discovery
+  - official/regulatory retrieval
+  - trusted publisher/source-family retrieval
+- use stage-specific orchestration:
+  - discovery
+  - trusted-source recall
+  - merge / dedupe / cluster
+  - final ranking
+
+What this requires:
+
+- a real retrieval broker
+- persistent candidate store
+- source-family-aware routing as a first-class subsystem
+
+Why it counts as the real redesign:
+
+- this is no longer “query tuning”
+- it changes candidate generation from one-provider search into a deliberate multi-source retrieval system
+
+### Honest interim product policy
+
+If retrieval is **not** redesigned immediately, my recommendation is:
+
+- change the promise to:
+  - `3-5 high-quality items daily`
+  - or `up to 5 high-quality items daily`
+
+I would **not** keep advertising a guaranteed 5-item daily promise under the current architecture.
+
+If you want the blunt recommendation:
+
+- short term:
+  - relax the promise
+- medium term:
+  - redesign retrieval if five-item reliability is strategically important
+
+### Simple decision table
+
+| Model | Expected quality | Expected fulfillment | Engineering complexity | Recommendation |
+| --- | --- | --- | --- | --- |
+| Current architecture + current 5-item promise | High when it delivers, but too brittle | Poor / not operationally viable | Low | Do not recommend |
+| Current architecture + relaxed promise | High | Moderate and honest | Low | Best short-term choice if redesign is not immediate |
+| Redesigned retrieval + current 5-item promise | High | Good if executed well | High | Best choice if the 5-item promise matters strategically |
+| Hybrid model | High | Moderate-to-good | Medium | Best transition path |
+
+What I mean by `hybrid model`:
+
+- retrieval:
+  - Perplexity-first discovery
+  - plus targeted trusted-source retrieval for weak families
+- product policy:
+  - broad standard categories aim for 5
+  - narrower/custom categories are explicitly precision-first and may deliver fewer
+
+### Directional recommendation on viability
+
+My directional judgment:
+
+- `current architecture + more tuning`
+  - not enough
+- `current architecture + relaxed promise`
+  - workable as an interim product
+- `Perplexity-first + targeted trusted-source second layer`
+  - the most practical next engineering move
+- `full multi-source retrieval redesign`
+  - the path most likely to make the current 5-item promise genuinely real

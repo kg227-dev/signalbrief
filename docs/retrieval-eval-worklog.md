@@ -2734,3 +2734,115 @@ This pass makes the product call cleaner:
 
 - how much further a stronger evidence-to-article conversion layer can push standard-topic retained inventory before a larger retrieval redesign is unavoidable
 - whether `TECHNOLOGY` needs a dedicated provider workaround because the provider still sees the right evidence but often fails to return usable article records
+
+### 2026-03-22 23:35 ET - Decision pass on one stronger standard-topic conversion layer
+
+#### Recommendation
+
+One more stronger local conversion pass is justified, but only **one**.
+
+The next layer should be:
+
+- a **standard-topic evidence resolver**
+- fed only by trusted visible search-result URLs
+- restricted to the 17 standard industries/capabilities
+- used only when the provider returns:
+  - `0-1` usable article records
+  - stale records
+  - or listing-page shaped outputs despite article-shaped trusted evidence being visible
+
+This is stronger than the current rescue because it should not just promote already visible URLs into lightweight candidates. It should actively resolve, normalize, and score those article URLs as first-class records before final retention.
+
+#### Smallest stronger layer to build next
+
+For standard topics only:
+
+1. collect the top `3-5` trusted article-shaped search-result URLs per topic from visible search evidence
+2. fetch and normalize those URLs directly
+3. extract:
+   - canonical URL
+   - publish date
+   - headline
+   - source domain
+   - article-vs-listing/document shape
+4. merge those directly extracted records into the existing dedupe + ranking flow
+5. use them only when they beat the provider-returned candidate on:
+   - freshness
+   - URL shape
+   - or missing/invalid article metadata
+
+That is the smallest meaningful next layer. It is still local conversion work, not a full retrieval redesign.
+
+#### Expected lift if we build that next layer
+
+Honest directional estimate for `standard_topics`, using the current post-fix run as the starting point:
+
+- retained items:
+  - current: `11`
+  - expected next-pass range: `14-18`
+- retained article-shaped URLs:
+  - current: `7`
+  - expected next-pass range: `10-14`
+- topics with at least `1` retained item:
+  - current: `6`
+  - expected next-pass range: `9-12`
+- topics with at least `3` retained items:
+  - current: `1`
+  - expected next-pass range: `3-5`
+- strict-shippable standard personas:
+  - current: `0`
+  - expected next-pass range: still likely `0`
+- stretch-shippable standard personas:
+  - current: `0`
+  - expected next-pass range: `1-3`
+
+Interpretation:
+
+- I do expect another noticeable gain in **inventory shape**
+- I do **not** expect this alone to make the standard 5-item product truly reliable
+
+#### Technology recommendation
+
+`TECHNOLOGY` now deserves a dedicated workaround.
+
+Why:
+
+- it repeatedly shows rich trusted search evidence
+- it repeatedly fails to convert that evidence into retained article inventory
+- it is no longer behaving like the other standard topics
+
+My recommendation:
+
+- keep it inside the standard-topic program
+- but treat it as a special conversion path for this next pass
+- specifically:
+  - direct evidence resolution for trusted tech/article URLs
+  - fresher-url replacement over stale provider picks
+  - no dependence on provider-structured article output when trusted evidence is already visible
+
+#### Stop rule
+
+This is my honest threshold for stopping local conversion work and moving to broader retrieval redesign:
+
+Stop local conversion work after **one more stronger evidence-resolver pass** if any of these remain true on a fresh `standard_topics` run:
+
+- retained items stay below `14`
+- retained article-shaped URLs stay below `10`
+- fewer than `3` standard topics reach `3+` retained items
+- stretch-shippable standard personas stay at `0`
+- `TECHNOLOGY` still shows trusted article search evidence but zero retained article records
+
+If that happens, the conclusion should be:
+
+- local conversion work improved diagnostics and some inventory shape
+- but the standard product now needs broader retrieval redesign, not more local patching
+
+#### Direct call
+
+My recommendation is:
+
+- do **one** stronger evidence-resolver pass for the 17 standard topics
+- include a dedicated `TECHNOLOGY` workaround in that pass
+- then stop and decide
+
+I would not keep iterating small local fixes after that.

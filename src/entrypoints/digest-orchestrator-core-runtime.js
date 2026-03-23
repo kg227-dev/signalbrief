@@ -122,6 +122,7 @@ const DIGEST_RUN_LOCK = RUNTIME_PATHS.digestRunLockPath;
 const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
 const SPEND_GUARD_STATE = RUNTIME_PATHS.spendGuardStatePath;
 const CIRCUIT_BREAKER_STATE = RUNTIME_PATHS.circuitBreakerStatePath;
+const INCIDENT_STORE = RUNTIME_PATHS.incidentStorePath;
 const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP_USD || "1.00");
 const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
 const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
@@ -255,6 +256,7 @@ function getDigestOrchestratorIncidentRuntime() {
       fs,
       path,
       incidentLogPath: DIGEST_INCIDENT_LOG,
+      incidentStorePath: INCIDENT_STORE,
       log,
       formatEtDateKey,
       resolveOpsChatId: () => process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null,
@@ -1081,6 +1083,19 @@ async function main() {
           `Circuit breaker opened: ${cbResult.opened_reason}`,
           { run_id: runId, date_et: digestDateKey, reason: cbResult.opened_reason }
         );
+      }
+    }
+
+    // Resolve open incidents when delivery succeeds
+    if (deliveredUsers.length > 0) {
+      try {
+        const incidentRuntime = getDigestOrchestratorIncidentRuntime();
+        const activeIncidents = incidentRuntime.getActiveIncidents(digestDateKey);
+        for (const incident of activeIncidents) {
+          await incidentRuntime.resolveIncident(incident.fingerprint);
+        }
+      } catch (e) {
+        log(`[warn] Incident resolve failed: ${e.message}`);
       }
     }
 

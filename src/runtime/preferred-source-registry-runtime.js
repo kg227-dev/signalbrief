@@ -20,6 +20,201 @@ const OFFICIAL_FRIENDLY_TOPIC_KEYS = Object.freeze([
   "sustainability",
 ]);
 const OFFICIAL_QUERY_HINT_PATTERN = /\b(rule|rules|rulemaking|filing|filings|approval|approves?|approved|agency|register|proposed|guidance|enforcement|regulation|regulatory|directive|law|laws|compliance)\b/i;
+const BUILT_IN_PREFERRED_ALIASES = Object.freeze({
+  "consumer retail": "consumer",
+  "private equity m a": "pe m a",
+  "ai technology": "ai tech",
+  "policy & regulatory": "policy regulatory",
+  "digital transformation": "digital",
+  "sustainability esg": "sustainability",
+  "talent workforce": "talent",
+});
+const BUILT_IN_STANDARD_TOPIC_SOURCE_MAP = Object.freeze({
+  "healthcare": Object.freeze({
+    reported: Object.freeze([
+      "statnews.com",
+      "endpointsnews.com",
+      "modernhealthcare.com",
+      "healthcaredive.com",
+      "beckershospitalreview.com",
+      "pharmavoice.com",
+    ]),
+    official: Object.freeze(["fda.gov", "cms.gov", "hhs.gov", "nih.gov"]),
+  }),
+  "financial services": Object.freeze({
+    reported: Object.freeze([
+      "americanbanker.com",
+      "bankingdive.com",
+      "paymentsdive.com",
+      "risk.net",
+    ]),
+    official: Object.freeze(["federalreserve.gov", "sec.gov", "occ.treas.gov", "fdic.gov", "cfpb.gov"]),
+  }),
+  "pe m a": Object.freeze({
+    reported: Object.freeze([
+      "pitchbook.com",
+      "pehub.com",
+      "mergermarket.com",
+      "globalcompetitionreview.com",
+    ]),
+    official: Object.freeze(["ftc.gov", "justice.gov", "sec.gov"]),
+  }),
+  "energy": Object.freeze({
+    reported: Object.freeze([
+      "utilitydive.com",
+      "energydive.com",
+      "canarymedia.com",
+      "powermag.com",
+      "heatmap.news",
+      "solarpowerworldonline.com",
+    ]),
+    official: Object.freeze(["ferc.gov", "eia.gov", "energy.gov", "iea.org"]),
+  }),
+  "consumer": Object.freeze({
+    reported: Object.freeze([
+      "retaildive.com",
+      "modernretail.co",
+      "chainstoreage.com",
+      "progressivegrocer.com",
+    ]),
+    official: Object.freeze(["ftc.gov", "census.gov"]),
+  }),
+  "life sciences": Object.freeze({
+    reported: Object.freeze([
+      "statnews.com",
+      "endpointsnews.com",
+      "fiercebiotech.com",
+      "fiercepharma.com",
+      "biopharmadive.com",
+      "biospace.com",
+    ]),
+    official: Object.freeze(["fda.gov", "ema.europa.eu", "clinicaltrials.gov"]),
+  }),
+  "technology": Object.freeze({
+    reported: Object.freeze([
+      "theinformation.com",
+      "semianalysis.com",
+      "techcrunch.com",
+      "theverge.com",
+      "ciodive.com",
+      "datacenterknowledge.com",
+      "arstechnica.com",
+      "wired.com",
+    ]),
+    official: Object.freeze(["sec.gov", "bis.gov"]),
+  }),
+  "industrials": Object.freeze({
+    reported: Object.freeze([
+      "industryweek.com",
+      "supplychaindive.com",
+      "freightwaves.com",
+      "manufacturingdive.com",
+    ]),
+    official: Object.freeze(["commerce.gov", "transportation.gov", "osha.gov"]),
+  }),
+  "real estate": Object.freeze({
+    reported: Object.freeze([
+      "costar.com",
+      "bisnow.com",
+      "commercialobserver.com",
+      "housingwire.com",
+    ]),
+    official: Object.freeze(["hud.gov", "census.gov", "sec.gov"]),
+  }),
+  "public sector": Object.freeze({
+    reported: Object.freeze([
+      "govexec.com",
+      "federalnewsnetwork.com",
+      "route-fifty.com",
+      "nextgov.com",
+    ]),
+    official: Object.freeze(["govinfo.gov", "federalregister.gov", "regulations.gov", "gao.gov", "gsa.gov"]),
+  }),
+  "ai tech": Object.freeze({
+    reported: Object.freeze([
+      "theinformation.com",
+      "semianalysis.com",
+      "techcrunch.com",
+      "theverge.com",
+      "arstechnica.com",
+      "wired.com",
+    ]),
+    official: Object.freeze(["bis.gov", "nist.gov", "sec.gov"]),
+  }),
+  "strategy": Object.freeze({
+    reported: Object.freeze([
+      "economist.com",
+      "axios.com",
+      "fortune.com",
+      "semafor.com",
+    ]),
+    official: Object.freeze(["sec.gov"]),
+  }),
+  "policy regulatory": Object.freeze({
+    reported: Object.freeze([
+      "govexec.com",
+      "federalnewsnetwork.com",
+      "route-fifty.com",
+      "politico.com",
+      "globalcompetitionreview.com",
+    ]),
+    official: Object.freeze([
+      "federalregister.gov",
+      "regulations.gov",
+      "govinfo.gov",
+      "sec.gov",
+      "ftc.gov",
+      "justice.gov",
+      "fda.gov",
+      "cms.gov",
+      "epa.gov",
+      "treasury.gov",
+      "bis.gov",
+      "ec.europa.eu",
+      "eur-lex.europa.eu",
+    ]),
+  }),
+  "sustainability": Object.freeze({
+    reported: Object.freeze([
+      "trellis.net",
+      "esgtoday.com",
+      "responsible-investor.com",
+      "canarymedia.com",
+      "heatmap.news",
+      "utilitydive.com",
+    ]),
+    official: Object.freeze(["epa.gov", "energy.gov", "eia.gov", "ec.europa.eu", "eur-lex.europa.eu", "sec.gov"]),
+  }),
+  "digital": Object.freeze({
+    reported: Object.freeze([
+      "ciodive.com",
+      "cio.com",
+      "informationweek.com",
+      "techtarget.com",
+      "techcrunch.com",
+      "theinformation.com",
+    ]),
+    official: Object.freeze(["sec.gov"]),
+  }),
+  "m a advisory": Object.freeze({
+    reported: Object.freeze([
+      "pitchbook.com",
+      "mergermarket.com",
+      "pehub.com",
+      "globalcompetitionreview.com",
+    ]),
+    official: Object.freeze(["ftc.gov", "justice.gov", "sec.gov"]),
+  }),
+  "talent": Object.freeze({
+    reported: Object.freeze([
+      "shrm.org",
+      "hrdive.com",
+      "workforce.com",
+      "staffingindustry.com",
+    ]),
+    official: Object.freeze(["bls.gov", "dol.gov", "eeoc.gov", "uscis.gov"]),
+  }),
+});
 
 function uniqueStrings(values = []) {
   const seen = new Set();
@@ -125,7 +320,10 @@ function mergePublisherTopicEntries(left = {}, right = {}) {
 
 function sanitizePreferredSourceRegistry(rawRegistry) {
   const registry = rawRegistry && typeof rawRegistry === "object" ? rawRegistry : {};
-  const aliases = sanitizePreferredAliases(registry.aliases);
+  const aliases = {
+    ...sanitizePreferredAliases(BUILT_IN_PREFERRED_ALIASES),
+    ...sanitizePreferredAliases(registry.aliases),
+  };
   const topicsRaw = registry.topics && typeof registry.topics === "object" && !Array.isArray(registry.topics)
     ? registry.topics
     : {};
@@ -145,6 +343,14 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
   };
 
   for (const [rawTopicKey, rawEntry] of Object.entries(topicsRaw)) {
+    const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
+    if (!topicKey) continue;
+    const sanitizedEntry = sanitizeTopicEntry(rawEntry);
+    if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
+    topics[topicKey] = mergeTopicEntries(topics[topicKey], sanitizedEntry);
+  }
+
+  for (const [rawTopicKey, rawEntry] of Object.entries(BUILT_IN_STANDARD_TOPIC_SOURCE_MAP)) {
     const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
     if (!topicKey) continue;
     const sanitizedEntry = sanitizeTopicEntry(rawEntry);

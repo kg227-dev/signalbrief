@@ -18,33 +18,98 @@ const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
 const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
+const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics"]);
+const ALL_STANDARD_TOPIC_TAGS = new Set([
+  "HEALTHCARE",
+  "FINANCIAL SERVICES",
+  "PE×M&A",
+  "ENERGY",
+  "CONSUMER",
+  "LIFE SCIENCES",
+  "TECHNOLOGY",
+  "INDUSTRIALS",
+  "REAL ESTATE",
+  "PUBLIC SECTOR",
+  "AI×TECH",
+  "STRATEGY",
+  "POLICY×REGULATORY",
+  "SUSTAINABILITY",
+  "DIGITAL",
+  "M&A ADVISORY",
+  "TALENT",
+]);
 const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
   STRATEGY: Object.freeze([
-    "corporate strategic review divestiture restructuring capital allocation last 48 hours",
-    "board strategic alternatives portfolio optimization spin off last 48 hours",
-    "operating model transformation restructuring turnaround strategy last 48 hours",
-    "CEO strategic reset cost program reorganization activist defense last 48 hours",
+    "corporate strategic review divestiture restructuring capital allocation Reuters Bloomberg FT WSJ last 48 hours",
+    "board strategic alternatives portfolio optimization spin off activist strategy last 48 hours",
+    "operating model transformation restructuring turnaround strategy Reuters FT last 48 hours",
+    "capital allocation portfolio pruning carve-out strategic reset last 48 hours",
   ]),
   HEALTHCARE: Object.freeze([
-    "hospital system merger acquisition payer provider strategy last 48 hours",
-    "Medicare Advantage payer provider value-based care last 48 hours",
-    "clinical AI hospital operations FDA healthcare rollout last 48 hours",
+    "hospital system merger acquisition payer provider strategy Reuters Modern Healthcare STAT last 48 hours",
+    "Medicare Advantage payer provider value-based care CMS hospital strategy last 48 hours",
+    "clinical AI hospital operations FDA healthcare rollout provider strategy last 48 hours",
+    "health system labor reimbursement payer prior authorization healthcare last 48 hours",
+  ]),
+  "FINANCIAL SERVICES": Object.freeze([
+    "bank regulation capital liquidity private credit lending Reuters Bloomberg FT WSJ last 48 hours",
+    "Federal Reserve OCC FDIC CFPB bank supervision capital rule last 48 hours",
+    "payments cards fintech bank partnership enforcement last 48 hours",
+    "asset management insurance wealth regulation strategy last 48 hours",
+  ]),
+  "PE×M&A": Object.freeze([
+    "private equity leveraged buyout sale process sponsor-backed acquisition last 48 hours",
+    "M&A antitrust deal review sponsor-backed transaction FTC DOJ last 48 hours",
+    "PE exit continuation fund carve-out divestiture last 48 hours",
+    "deal financing private credit sponsor transaction last 48 hours",
   ]),
   ENERGY: Object.freeze([
-    "utility grid transmission interconnection power demand policy last 48 hours",
-    "renewables battery storage utility strategy last 48 hours",
-    "oil gas LNG refinery energy markets last 48 hours",
+    "utility grid transmission interconnection power demand policy Reuters Utility Dive FERC last 48 hours",
+    "renewables battery storage utility strategy power demand last 48 hours",
+    "oil gas LNG refinery energy markets capex strategy last 48 hours",
+    "transformer transmission data center load energy reliability last 48 hours",
+  ]),
+  CONSUMER: Object.freeze([
+    "retail earnings pricing promotion store traffic consumer demand Reuters WSJ last 48 hours",
+    "consumer brand strategy supply chain tariff pricing last 48 hours",
+    "ecommerce marketplace retail media grocery apparel last 48 hours",
+    "restaurant grocery apparel retail restructuring last 48 hours",
   ]),
   "LIFE SCIENCES": Object.freeze([
-    "FDA approval clinical trial pharma licensing biotech last 48 hours",
+    "FDA approval clinical trial pharma licensing biotech STAT Fierce last 48 hours",
     "biopharma M&A licensing deal trial readout last 48 hours",
     "drug pricing obesity drug biotech manufacturing last 48 hours",
+    "clinical readout trial setback biotech financing last 48 hours",
   ]),
   TECHNOLOGY: Object.freeze([
     "enterprise software cloud infrastructure CIO platform strategy Reuters Bloomberg FT WSJ last 48 hours",
     "data center AI infrastructure enterprise tech capex export controls last 48 hours",
     "cybersecurity enterprise software vendor strategy regulation last 48 hours",
     "semiconductor cloud enterprise platform pricing product launch Reuters Bloomberg last 48 hours",
+  ]),
+  INDUSTRIALS: Object.freeze([
+    "manufacturing automation reshoring supply chain industrial strategy Reuters last 48 hours",
+    "aerospace defense logistics freight industrial demand last 48 hours",
+    "factory capex industrial order book pricing last 48 hours",
+    "procurement tariff trade industrial supply chain last 48 hours",
+  ]),
+  "REAL ESTATE": Object.freeze([
+    "commercial real estate office multifamily industrial property financing last 48 hours",
+    "REIT earnings cap rates refinancing mortgage commercial property last 48 hours",
+    "housing affordability homebuilder mortgage zoning last 48 hours",
+    "data center real estate power land lease development last 48 hours",
+  ]),
+  "PUBLIC SECTOR": Object.freeze([
+    "federal budget procurement government contractor agency rulemaking last 48 hours",
+    "state local government procurement grants public sector technology last 48 hours",
+    "defense civilian agency modernization public sector last 48 hours",
+    "government shutdown budget appropriations oversight last 48 hours",
+  ]),
+  "AI×TECH": Object.freeze([
+    "AI model infrastructure enterprise deployment regulation Reuters FT last 48 hours",
+    "semiconductor AI accelerator data center export control last 48 hours",
+    "OpenAI Anthropic Microsoft Google enterprise AI product last 48 hours",
+    "AI governance copyright safety policy last 48 hours",
   ]),
   "POLICY×REGULATORY": Object.freeze([
     "FTC DOJ antitrust trade tariff regulation business last 48 hours",
@@ -55,6 +120,24 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "SEC climate disclosure CBAM carbon markets corporate sustainability last 48 hours",
     "power demand grid decarbonization clean energy policy last 48 hours",
     "supply chain sustainability reporting emissions corporate investment last 48 hours",
+  ]),
+  DIGITAL: Object.freeze([
+    "enterprise software cloud modernization CIO digital transformation last 48 hours",
+    "ERP CRM workflow automation data platform strategy last 48 hours",
+    "digital transformation cybersecurity data migration tech debt last 48 hours",
+    "IT services consulting enterprise platform rollout last 48 hours",
+  ]),
+  "M&A ADVISORY": Object.freeze([
+    "deal advisory antitrust financing due diligence sponsor deal last 48 hours",
+    "merger review activism carve-out sale process last 48 hours",
+    "private equity exit strategic buyer deal advisory last 48 hours",
+    "cross-border M&A antitrust CFIUS financing last 48 hours",
+  ]),
+  TALENT: Object.freeze([
+    "labor market hiring layoffs workforce regulation immigration last 48 hours",
+    "pay transparency union labor compliance workforce strategy last 48 hours",
+    "talent retention HR tech workforce planning last 48 hours",
+    "workforce restructuring return to office labor rule last 48 hours",
   ]),
 });
 const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
@@ -136,6 +219,12 @@ function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, runMode, l
     const focusedTags = buildFocusedStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
     const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));
     logger(`Focused eval: fetching ${focusedTopics.length}/${topics.length} standard topic(s) for ${runMode}`);
+    return focusedTopics;
+  }
+  if (isAggressiveStandardRun(runMode)) {
+    const focusedTags = buildAllStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
+    const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));
+    logger(`Standard-only eval: fetching ${focusedTopics.length}/${topics.length} standard topic(s) for ${runMode}`);
     return focusedTopics;
   }
   // Always fetch all configured topics — even for targeted on-demand runs.
@@ -241,6 +330,19 @@ function buildFocusedStandardTagSet(dueUsers = [], normalizeTopicToken = (value)
   return focused;
 }
 
+function buildAllStandardTagSet(dueUsers = [], normalizeTopicToken = (value) => String(value || "").trim().toUpperCase()) {
+  const normalized = typeof normalizeTopicToken === "function"
+    ? normalizeTopicToken
+    : (value) => String(value || "").trim().toUpperCase();
+  const focused = new Set();
+  for (const topic of flattenDueUserTopics(dueUsers)) {
+    const key = String(normalized(topic) || "").trim().toUpperCase();
+    if (!key || !ALL_STANDARD_TOPIC_TAGS.has(key)) continue;
+    focused.add(key);
+  }
+  return focused;
+}
+
 function isFocusedStandardDeepCoverageState(state, focusedStandardTags) {
   const tag = String(state?.topic?.tag || "").trim().toUpperCase();
   return focusedStandardTags instanceof Set && focusedStandardTags.has(tag);
@@ -262,6 +364,10 @@ function uniqueValues(values = []) {
       .map((value) => String(value || "").trim())
       .filter(Boolean)
   ));
+}
+
+function isAggressiveStandardRun(runMode) {
+  return STANDARD_ONLY_AGGRESSIVE_RUN_MODES.has(String(runMode || "").trim());
 }
 
 function mergeStatusCounts(target, source) {
@@ -333,6 +439,21 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
     custom_heavy_run: customHeavyRun,
     custom_user_count: customUserCount,
     due_user_count: totalDueUsers,
+  };
+}
+
+function applyRunModeSearchBudgetOverrides(searchBudget, { runMode, standardTopicCount = 0, customTopicCount = 0 } = {}) {
+  const base = searchBudget && typeof searchBudget === "object" ? searchBudget : resolveSearchBudget({});
+  if (!isAggressiveStandardRun(runMode) || Number(customTopicCount || 0) > 0) return base;
+  const standardCount = Math.max(0, Number(standardTopicCount || 0));
+  return {
+    ...base,
+    soft_calls: Math.max(base.soft_calls, Math.min(96, (standardCount * 3) + 8)),
+    hard_calls: Math.max(base.hard_calls, Math.min(120, (standardCount * 4) + 12)),
+    custom_topic_reserve_calls: 0,
+    custom_retry_reserve_calls: 0,
+    custom_deep_coverage_reserve_calls: 0,
+    custom_heavy_extra_deep_calls: 0,
   };
 }
 
@@ -433,6 +554,24 @@ function summarizeAnnotatedTrustMix(items, annotateFetchedItems, isFetchedItemEl
   };
 }
 
+function classifyRetrievedSourceFamily(item, state) {
+  const sourceDomain = normalizeCandidateDomain(item?.source_domain || item?.source || item?.url);
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const sourceTier = normalizeSourceTierForFetch(item?.source_tier);
+  const officialDomains = Array.isArray(state?.officialDomains) ? state.officialDomains : [];
+  const reportedDomains = Array.isArray(state?.reportedDomains) ? state.reportedDomains : [];
+  const globalReportedDomains = Array.isArray(state?.globalReportedDomains) ? state.globalReportedDomains : [];
+  if (sourceDomain && officialDomains.some((domain) => matchesDomain(sourceDomain, domain))) return "official";
+  if (sourceType === "corporate_pr" || sourceTier === "corporate") return "corporate";
+  if (sourceDomain && reportedDomains.some((domain) => matchesDomain(sourceDomain, domain))) {
+    const isGlobalReported = globalReportedDomains.some((domain) => matchesDomain(sourceDomain, domain));
+    return isGlobalReported ? "reported" : "specialist";
+  }
+  if (sourceType === "trade_specialist" || sourceType === "analysis_blog") return "specialist";
+  if (sourceType === "reported_media") return "reported";
+  return "other_unknown";
+}
+
 function buildTrustedFamilyQueue(shortlist = {}, familyShortlists = {}) {
   const queue = [];
   const seenDomains = new Set();
@@ -477,6 +616,8 @@ function buildTopicState(topic, shortlist, familyShortlists, priority, originalI
     officialFriendly: shortlist?.official_friendly === true,
     officialDomains: Array.isArray(familyShortlists?.official_domains) ? familyShortlists.official_domains.slice() : [],
     reportedDomains: Array.isArray(familyShortlists?.reported_domains) ? familyShortlists.reported_domains.slice() : [],
+    globalOfficialDomains: Array.isArray(familyShortlists?.global_official_domains) ? familyShortlists.global_official_domains.slice() : [],
+    globalReportedDomains: Array.isArray(familyShortlists?.global_reported_domains) ? familyShortlists.global_reported_domains.slice() : [],
     trustedFamilyQueue: buildTrustedFamilyQueue(shortlist, familyShortlists),
     nextTrustedFamilyIndex: 0,
     items: [],
@@ -505,6 +646,19 @@ function buildTopicState(topic, shortlist, familyShortlists, priority, originalI
     preferredPassItemCount: 0,
     broadPassItemCount: 0,
     trustedFamilyPassItemCount: 0,
+    retrievalOriginCounts: {
+      preferred: 0,
+      broad: 0,
+      trusted_official: 0,
+      trusted_reported: 0,
+    },
+    retrievalSourceFamilyCounts: {
+      official: 0,
+      reported: 0,
+      specialist: 0,
+      corporate: 0,
+      other_unknown: 0,
+    },
     searchResultDomains: [],
     preferredSearchResultDomains: [],
     preferredSearchResultHitCount: 0,
@@ -515,11 +669,13 @@ function mergeUniqueItemsIntoState(state, items, normalizeUrlForDedup, isFetched
   const incoming = Array.isArray(items) ? items : [];
   let addedUniqueCount = 0;
   let addedUsableCount = 0;
+  const addedItems = [];
   for (const item of incoming) {
     const key = buildItemDedupKey(item, normalizeUrlForDedup);
     if (!key || state.itemKeys.has(key)) continue;
     state.itemKeys.add(key);
     state.items.push(item);
+    addedItems.push(item);
     addedUniqueCount += 1;
     if ((typeof isFetchedItemEligible === "function" ? isFetchedItemEligible(item) : true) !== false) {
       addedUsableCount += 1;
@@ -528,6 +684,7 @@ function mergeUniqueItemsIntoState(state, items, normalizeUrlForDedup, isFetched
   return {
     addedUniqueCount,
     addedUsableCount,
+    addedItems,
   };
 }
 
@@ -689,6 +846,30 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     return classifyTopicCoverage(state).startsWith("provider_limited");
   }).length;
   const thinTopicCount = attemptedStates.filter((state) => classifyTopicCoverage(state).includes("thin")).length;
+  const retrievalOriginCounts = attemptedStates.reduce((combined, state) => ({
+    preferred: Number(combined.preferred || 0) + Number(state?.retrievalOriginCounts?.preferred || 0),
+    broad: Number(combined.broad || 0) + Number(state?.retrievalOriginCounts?.broad || 0),
+    trusted_official: Number(combined.trusted_official || 0) + Number(state?.retrievalOriginCounts?.trusted_official || 0),
+    trusted_reported: Number(combined.trusted_reported || 0) + Number(state?.retrievalOriginCounts?.trusted_reported || 0),
+  }), {
+    preferred: 0,
+    broad: 0,
+    trusted_official: 0,
+    trusted_reported: 0,
+  });
+  const retrievalSourceFamilyCounts = attemptedStates.reduce((combined, state) => ({
+    official: Number(combined.official || 0) + Number(state?.retrievalSourceFamilyCounts?.official || 0),
+    reported: Number(combined.reported || 0) + Number(state?.retrievalSourceFamilyCounts?.reported || 0),
+    specialist: Number(combined.specialist || 0) + Number(state?.retrievalSourceFamilyCounts?.specialist || 0),
+    corporate: Number(combined.corporate || 0) + Number(state?.retrievalSourceFamilyCounts?.corporate || 0),
+    other_unknown: Number(combined.other_unknown || 0) + Number(state?.retrievalSourceFamilyCounts?.other_unknown || 0),
+  }), {
+    official: 0,
+    reported: 0,
+    specialist: 0,
+    corporate: 0,
+    other_unknown: 0,
+  });
   const topicDiagnostics = attemptedStates.map((state) => ({
     tag: state?.topic?.tag || null,
     custom_slug: state?.topic?.custom_slug || null,
@@ -704,6 +885,8 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     trusted_source_call_count: Number(state?.trustedFamilyCallsMade || 0),
     trusted_official_call_count: Number(state?.trustedOfficialCallsMade || 0),
     trusted_reported_call_count: Number(state?.trustedReportedCallsMade || 0),
+    retrieval_origin_counts: { ...(state?.retrievalOriginCounts || {}) },
+    retrieval_source_family_counts: { ...(state?.retrievalSourceFamilyCounts || {}) },
     next_preferred_query_index: Number(state?.nextPreferredQueryIndex || 0),
     next_broad_query_index: Number(state?.nextBroadQueryIndex || 0),
     next_trusted_family_index: Number(state?.nextTrustedFamilyIndex || 0),
@@ -751,6 +934,8 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     trusted_source_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedFamilyCallsMade || 0), 0),
     trusted_official_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedOfficialCallsMade || 0), 0),
     trusted_reported_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedReportedCallsMade || 0), 0),
+    retrieval_origin_counts: retrievalOriginCounts,
+    retrieval_source_family_counts: retrievalSourceFamilyCounts,
     zero_yield_retry_count: attemptedStates.reduce((sum, state) => sum + Number(state?.zeroYieldRetryCount || 0), 0),
     budget_stop_reason: String(budgetTracker?.stop_reason || "").trim() || null,
     max_concurrent_fetches: Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY)),
@@ -913,6 +1098,21 @@ function createDigestOrchestratorFetchRuntime(deps) {
       state.apiCalls += Math.max(0, Number(result?.apiCalls || 0));
       const usableBefore = countUsableItems(state.items, itemEligibilityFn);
       const merged = mergeUniqueItemsIntoState(state, result?.items, normalizeUrlForDedup, itemEligibilityFn);
+      const originKey = entry.invocation.phase === "trusted"
+        ? `trusted_${String(entry.invocation.trustedFamilyName || "reported").trim().toLowerCase()}`
+        : entry.invocation.phase === "preferred"
+          ? "preferred"
+          : "broad";
+      const annotatedAddedItems = annotateItemsForFetch(merged.addedItems, annotateFetched);
+      for (let index = 0; index < merged.addedItems.length; index += 1) {
+        const item = merged.addedItems[index];
+        const annotatedItem = annotatedAddedItems[index] || item;
+        const sourceFamily = classifyRetrievedSourceFamily(annotatedItem, state);
+        item.retrieval_origin = originKey;
+        item.retrieval_source_family = sourceFamily;
+        state.retrievalOriginCounts[originKey] = (state.retrievalOriginCounts[originKey] || 0) + 1;
+        state.retrievalSourceFamilyCounts[sourceFamily] = (state.retrievalSourceFamilyCounts[sourceFamily] || 0) + 1;
+      }
       const usableAfter = countUsableItems(state.items, itemEligibilityFn);
 
       state.provider.degraded = state.provider.degraded || diagnostics.degraded === true;
@@ -1056,10 +1256,14 @@ function createDigestOrchestratorFetchRuntime(deps) {
 
   async function orchestrateFetch({ dueUsers, targetChatId, runMode }) {
     const digestConfig = CONFIG?.digest || {};
+    const aggressiveStandardRun = isAggressiveStandardRun(runMode);
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 7));
     const tagPriority = buildTagPriority(dueUsers, topicNormalizer);
     const dueUserTopics = flattenDueUserTopics(dueUsers);
-    const focusedStandardTags = buildFocusedStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
+    const allStandardTags = buildAllStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
+    const focusedStandardTags = aggressiveStandardRun
+      ? allStandardTags
+      : buildFocusedStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
     const topicsToFetch = resolveTopicsToFetch({
       configTopics: CONFIG?.topics,
       dueUsers,
@@ -1080,10 +1284,15 @@ function createDigestOrchestratorFetchRuntime(deps) {
       customTopicCount: customFetchTargets.length,
       dueUsers,
     });
+    const adjustedSearchBudget = applyRunModeSearchBudgetOverrides(searchBudget, {
+      runMode,
+      standardTopicCount: topicsToFetch.length,
+      customTopicCount: customFetchTargets.length,
+    });
     const budgetTracker = {
-      soft_calls: searchBudget.soft_calls,
-      hard_calls: searchBudget.hard_calls,
-      custom_topic_reserve_calls: searchBudget.custom_topic_reserve_calls,
+      soft_calls: adjustedSearchBudget.soft_calls,
+      hard_calls: adjustedSearchBudget.hard_calls,
+      custom_topic_reserve_calls: adjustedSearchBudget.custom_topic_reserve_calls,
       calls_used: 0,
       exhausted: false,
       stop_reason: null,
@@ -1212,7 +1421,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     }), itemEligibilityFn);
     const customPhase2Slots = Math.min(
       customReserveRemaining,
-      Math.max(0, Number(searchBudget.custom_retry_reserve_calls || 0))
+      Math.max(0, Number(adjustedSearchBudget.custom_retry_reserve_calls || 0))
     );
     const customPhase2States = customPhase2Eligible.slice(0, customPhase2Slots);
     if (customPhase2States.length > 0) {
@@ -1270,8 +1479,12 @@ function createDigestOrchestratorFetchRuntime(deps) {
       )
       : 0;
     const standardDeepCoverageReserve = Math.min(
-      Math.max(5, focusedStandardTags.size * 2),
-      Math.max(trackedStandardDeepStates, focusedStandardTags.size),
+      aggressiveStandardRun
+        ? Math.max(12, focusedStandardTags.size * 3)
+        : Math.max(5, focusedStandardTags.size * 2),
+      aggressiveStandardRun
+        ? Math.max(standardStates.length, focusedStandardTags.size)
+        : Math.max(trackedStandardDeepStates, focusedStandardTags.size),
       Math.max(0, standardHardLimit - countScheduledCalls(standardStates))
     );
     const phase2Eligible = sortRetryStates(standardStates.filter((state) => {
@@ -1340,7 +1553,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     while (true) {
       const phase4Eligible = sortRetryStates(standardStates.filter((state) => {
         return Number(state.totalCallsScheduled || 0) > 0
-          && isTrackedDeepCoverageState(state)
+          && (aggressiveStandardRun || isTrackedDeepCoverageState(state))
           && countUsableItems(state.items, itemEligibilityFn) <= 0
           && state.broadFallbackUsed === true
           && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)

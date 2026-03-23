@@ -419,6 +419,8 @@ function serializeItem(item, extra = {}) {
     why_shown: Array.isArray(item?.why_shown) ? item.why_shown.slice() : [],
     delivery_confidence: String(item?.delivery_confidence || "").trim() || null,
     delivery_topic_classes: Array.isArray(item?.delivery_topic_classes) ? item.delivery_topic_classes.slice() : [],
+    retrieval_origin: String(item?.retrieval_origin || "").trim() || null,
+    retrieval_source_family: String(item?.retrieval_source_family || "").trim() || null,
     stage_reason: extra.stage_reason || null,
   };
 }
@@ -489,6 +491,12 @@ function classifyTopicGapAudit({
   const candidatePoolCount = personas.reduce((sum, row) => sum + Number(row?.candidate_pool_count || 0), 0);
   const internalFinalCount = personas.reduce((sum, row) => sum + Number(row?.internal_final_quality?.item_count || 0), 0);
   const finalCount = personas.reduce((sum, row) => sum + Number(row?.final_selected_quality?.item_count || 0), 0);
+  const attempt1HighConfidenceAvailableCount = personas.reduce((sum, row) => {
+    return sum + Number(row?.delivery_policy?.attempt_1?.high_confidence_available_count || 0);
+  }, 0);
+  const attempt1LowerConfidenceAvailableCount = personas.reduce((sum, row) => {
+    return sum + Number(row?.delivery_policy?.attempt_1?.lower_confidence_available_count || 0);
+  }, 0);
   const gateBreakdown = aggregatePersonaGateBreakdown(personas);
   const status429 = Number(topic?.status_counts?.[429] || 0);
   const staleRejected = Number(rejections.stale_age_filter || 0);
@@ -627,6 +635,11 @@ function classifyTopicGapAudit({
     query_count: Number(topic?.query_count || 0),
     remaining_broad_queries: Number(topic?.remaining_broad_queries || 0),
     coverage_status: String(topic?.coverage_status || "").trim() || null,
+    retrieval_origin_counts: { ...(topic?.retrieval_origin_counts || {}) },
+    retrieval_source_family_counts: { ...(topic?.retrieval_source_family_counts || {}) },
+    retrieval_rejection_breakdown: { ...rejections },
+    attempt_1_high_confidence_available_count: attempt1HighConfidenceAvailableCount,
+    attempt_1_lower_confidence_available_count: attempt1LowerConfidenceAvailableCount,
     root_cause: rootCause,
     failure_reason: failureReason,
     primary_final_gate_reason: gateBreakdown.primary_final_gate_reason,
@@ -1440,6 +1453,8 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   const coverageLimiterCounts = {};
   const topicRootCauseCounts = {};
   const finalGateBreakdownCounts = {};
+  const rankingGateBreakdownCounts = {};
+  const deliveryPolicyBreakdownCounts = {};
   for (const row of personaResults) {
     const scarcityKey = String(row?.scarcity_profile || "").trim() || "unknown";
     scarcityCounts[scarcityKey] = (scarcityCounts[scarcityKey] || 0) + 1;
@@ -1447,6 +1462,12 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     coverageLimiterCounts[limiterKey] = (coverageLimiterCounts[limiterKey] || 0) + 1;
     for (const [reason, count] of Object.entries(row?.failure_reasons?.reason_counts || {})) {
       reasonCounts[reason] = (reasonCounts[reason] || 0) + Number(count || 0);
+    }
+    for (const [reason, count] of Object.entries(row?.ranking_gate_breakdown || {})) {
+      rankingGateBreakdownCounts[reason] = (rankingGateBreakdownCounts[reason] || 0) + Number(count || 0);
+    }
+    for (const [reason, count] of Object.entries(row?.delivery_policy_breakdown || {})) {
+      deliveryPolicyBreakdownCounts[reason] = (deliveryPolicyBreakdownCounts[reason] || 0) + Number(count || 0);
     }
     if (Number(row?.candidate_pool_count || 0) > 0 && Number(row?.final_selected_quality?.item_count || 0) <= 0) {
       incrementCount(finalGateBreakdownCounts, row?.primary_final_gate_reason || "unknown");
@@ -1515,11 +1536,15 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     scarcity_counts: scarcityCounts,
     coverage_limiter_counts: coverageLimiterCounts,
     final_gate_breakdown_counts: finalGateBreakdownCounts,
+    ranking_gate_breakdown_counts: rankingGateBreakdownCounts,
+    delivery_policy_breakdown_counts: deliveryPolicyBreakdownCounts,
     reason_counts: reasonCounts,
     topic_root_cause_counts: topicRootCauseCounts,
     topic_gap_audit: topicGapAudit,
     raw_source_summary: rawSourceSummary,
     final_source_summary: finalSourceSummary,
+    retrieval_origin_counts: { ...(globalResult?.fetchResult?.fetchDiagnostics?.retrieval_origin_counts || {}) },
+    retrieval_source_family_counts: { ...(globalResult?.fetchResult?.fetchDiagnostics?.retrieval_source_family_counts || {}) },
     five_item_fulfillment_rate: personaResults.length > 0 ? Number(((deliveredCount / personaResults.length) * 100).toFixed(2)) : 0,
     withheld_after_retry_rate: personaResults.length > 0 ? Number(((withheldAfterRetryCount / personaResults.length) * 100).toFixed(2)) : 0,
     lower_confidence_usage_rate: personaResults.length > 0 ? Number(((lowerConfidenceUsedCount / personaResults.length) * 100).toFixed(2)) : 0,

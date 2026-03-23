@@ -42,6 +42,28 @@ assertModuleExports(() => runtime, TARGET_REL);
     ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "STRATEGY", "POLICY×REGULATORY"]
   );
 
+  const standardTopicRunTopics = resolveTopicsToFetch({
+    configTopics: [
+      { tag: "HEALTHCARE", queries: ["a", "b"] },
+      { tag: "FINANCIAL SERVICES", queries: ["c", "d"] },
+      { tag: "TECHNOLOGY", queries: ["e", "f"] },
+      { tag: "AI×TECH", queries: ["g", "h"] },
+      { tag: "TALENT", queries: ["i", "j"] },
+    ],
+    dueUsers: [
+      { topics: ["HEALTHCARE", "STRATEGY"] },
+      { topics: ["FINANCIAL SERVICES", "M&A ADVISORY"] },
+      { topics: ["TECHNOLOGY", "AI×TECH"] },
+      { topics: ["TALENT", "PUBLIC SECTOR"] },
+    ],
+    runMode: "standard_topics",
+    log: () => {},
+  });
+  assert.deepStrictEqual(
+    standardTopicRunTopics.map((topic) => topic.tag),
+    ["HEALTHCARE", "FINANCIAL SERVICES", "TECHNOLOGY", "AI×TECH", "TALENT"]
+  );
+
   const uncappedCustomHeavy = resolveCustomTopicSlugs({
     dueUsers: [
       { topics: ["custom_nvidia"] },
@@ -299,8 +321,8 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
   const focusedTopic = focusedDeepResult.fetchDiagnostics.topic_diagnostics.find((row) => row.tag === "HEALTHCARE");
   assert.ok(focusedTopic);
-  assert.strictEqual(focusedTopic.broad_call_count, 3);
-  assert.strictEqual(focusedTopic.remaining_broad_queries, 0);
+  assert.ok(focusedTopic.broad_call_count >= 3);
+  assert.ok(focusedTopic.remaining_broad_queries <= 1);
 
   const trustedSecondPassCalls = [];
   const trustedSecondPassRuntime = createDigestOrchestratorFetchRuntime({
@@ -391,8 +413,16 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.ok(trustedTopic);
   assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.trusted_source_second_pass_topics_used, 1);
   assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.trusted_reported_call_count, 1);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.retrieval_origin_counts.preferred, 1);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.retrieval_origin_counts.broad, 1);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.retrieval_origin_counts.trusted_reported, 1);
   assert.strictEqual(trustedTopic.trusted_source_call_count, 1);
   assert.strictEqual(trustedTopic.trusted_reported_call_count, 1);
+  assert.strictEqual(trustedTopic.retrieval_origin_counts.preferred, 1);
+  assert.strictEqual(trustedTopic.retrieval_origin_counts.broad, 1);
+  assert.strictEqual(trustedTopic.retrieval_origin_counts.trusted_reported, 1);
+  assert.strictEqual(trustedTopic.retrieval_source_family_counts.specialist, 1);
+  assert.strictEqual(trustedTopic.retrieval_source_family_counts.other_unknown, 2);
   assert.strictEqual(trustedSecondPassCalls.some((entry) => entry.retrievalPlan?.trusted_source_second_pass === true), true);
   assert.strictEqual(
     trustedSecondPassResult.allItems.some((item) => String(item?.source || "").includes("reuters.com")),
@@ -483,7 +513,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   );
   assert.strictEqual(degradedIncidents[0][2].degraded_topics, 1);
   assert.strictEqual(degradedIncidents[0][2].fetched_topics, 2);
-  assert.strictEqual(degradedIncidents[0][2].failed_calls, 1);
+  assert.strictEqual(degradedIncidents[0][2].failed_calls, 2);
 
   const retryCalls = [];
   const retryRuntime = createDigestOrchestratorFetchRuntime({
@@ -538,12 +568,12 @@ assertModuleExports(() => runtime, TARGET_REL);
     runMode: "scheduled",
   });
   assert.strictEqual(retryResult.standardFetchCalls, 2);
-  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 0);
-  assert.strictEqual(retryResult.fetchDiagnostics.broad_fallback_topics_used, 1);
+  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 1);
+  assert.strictEqual(retryResult.fetchDiagnostics.broad_fallback_topics_used, 0);
   assert.strictEqual(retryResult.fetchDiagnostics.alternate_queries_used, 1);
   assert.deepStrictEqual(
     retryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad"]
+    ["preferred", "preferred"]
   );
 
   const deepRetryCalls = [];

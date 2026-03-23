@@ -151,6 +151,13 @@ function buildStandardCorePersonas() {
   }));
 }
 
+function buildStandardTopicPersonas() {
+  return [
+    ...buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
+    ...buildCapabilityPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
+  ];
+}
+
 function buildCustomPersonas(keywords, group) {
   return (Array.isArray(keywords) ? keywords : []).map((keyword) => {
     const anchorTopic = group === "custom_adversarial" ? "AI×TECH" : "STRATEGY";
@@ -181,6 +188,9 @@ function buildScenarioRoster(scenarioId) {
   if (scenarioId === "standard_core") {
     return buildStandardCorePersonas();
   }
+  if (scenarioId === "standard_topics") {
+    return buildStandardTopicPersonas();
+  }
   return [];
 }
 
@@ -206,5 +216,6 @@ module.exports = {
   buildScenarioDefinition,
   buildScenarioMatrix,
   buildScenarioRoster,
+  buildStandardTopicPersonas,
   buildVirtualUser,
 };

@@ -1978,3 +1978,210 @@ That points to a larger retrieval step next:
 - feed / source-family ingestion
 - official-source retrieval by category family
 - or a broader multi-source retrieval broker
+
+## 2026-03-23 - Aggressive 17-topic standard-only retrieval pressure test
+
+### What changed
+
+- added a built-in standard-topic source map in [src/runtime/preferred-source-registry-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/runtime/preferred-source-registry-runtime.js) so all `17` standard industries/capabilities now have explicit:
+  - `official` source families
+  - `reported` source families
+  - built-in aliases that do not depend on the runtime JSON file
+- expanded source recognition in [src/digest/domain/storyline-domain-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/digest/domain/storyline-domain-runtime.js) so standard-category trade and specialist publishers can promote out of `unknown` more reliably
+- added richer query packs for all `17` standard topics in [src/entrypoints/digest-orchestrator-fetch-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/entrypoints/digest-orchestrator-fetch-runtime.js)
+- added a new aggressive eval scenario, `standard_topics`, in [src/eval/retrieval/personas-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/eval/retrieval/personas-runtime.js) so the harness can run:
+  - industries only
+  - capabilities only
+  - no mixed personas
+  - no custom keywords
+- expanded eval instrumentation in [src/eval/retrieval/runner-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/eval/retrieval/runner-runtime.js) so the run artifact now records:
+  - retrieval origin counts:
+    - `preferred`
+    - `broad`
+    - `trusted_official`
+    - `trusted_reported`
+  - retrieval source-family counts:
+    - `official`
+    - `reported`
+    - `specialist`
+    - `corporate`
+    - `other_unknown`
+  - attempt-1 high-confidence and lower-confidence availability per topic
+  - ranking-gate and delivery-policy breakdowns per topic and per scenario
+
+### Run used for the pressure test
+
+- `retrieval-eval:2026-03-23T01-41-15-561Z`
+
+Scenario:
+
+- `standard_topics`
+  - all `10` industries
+  - all `7` capabilities
+  - `17` due users total
+
+Provider settings:
+
+- `SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES=1`
+- `SIGNALBRIEF_PERPLEXITY_RETRIES=5`
+- `SIGNALBRIEF_PERPLEXITY_RETRY_DELAY_MS=3000`
+
+### Run headline
+
+- fetch calls: `80 standard / 0 custom`
+- raw candidates: `3`
+- cleaned candidates: `3`
+- storyline pool: `3`
+- final delivered items: `0`
+- stale rejection rate: `0%`
+- provider `429` rate: `0%`
+- `5_item_fulfillment_rate = 0%`
+- stretch-layer fulfillment (`>=3 high-confidence + >=5 total`) = `0/17`
+- `withheld_after_retry_rate = 100%`
+
+### Inventory origin and source-family mix
+
+Across the whole `standard_topics` run:
+
+- retrieval origins:
+  - `preferred: 0`
+  - `broad: 1`
+  - `trusted_official: 0`
+  - `trusted_reported: 2`
+- retrieved source families:
+  - `official: 0`
+  - `reported: 2`
+  - `specialist: 0`
+  - `corporate: 0`
+  - `other_unknown: 1`
+- persona-level internal pool mix:
+  - `premium: 2`
+  - `review_tier: 2`
+  - `strong: 0`
+  - `standard: 0`
+  - `corporate: 0`
+  - `other_unknown: 0`
+
+Interpretation:
+
+- the richer query packs and trusted second pass were invoked
+- but almost no search evidence converted into actual usable article inventory
+- the run did **not** fail because junk was flooding through; it failed because the pipeline only retained `3` candidates total
+
+### Exactly where inventory died
+
+Scenario-level gate breakdown:
+
+- retrieval-limited personas: `14/17`
+- product-underdelivery personas: `3/17`
+- ranking gate counts:
+  - `other_final_selection_rule: 14`
+- delivery policy gate counts:
+  - `delivery_policy_total_item_shortfall: 15`
+  - `delivery_policy_score_threshold: 2`
+- source-quality threshold deaths: `0`
+- freshness deaths: `0`
+- dedupe deaths: `0`
+
+Practical interpretation:
+
+- most standard topics never produced enough usable items to reach a promotion decision at all
+- the delivery policy gate only activated on the `3` personas that produced internal finalists:
+  - `PUBLIC SECTOR`
+  - `POLICY×REGULATORY`
+  - `TALENT`
+- the source bar itself was **not** the main blocker in this run; there was simply too little promotable inventory
+
+### Per-topic bottleneck table
+
+| Topic | Raw | Cleaned | Internal | Final | High | Lower | Retrieval origin | Source family | Primary bottleneck |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `HEALTHCARE` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `FINANCIAL SERVICES` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `PE×M&A` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `ENERGY` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `CONSUMER` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `TECHNOLOGY` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `INDUSTRIALS` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `PUBLIC SECTOR` | `1` | `1` | `1` | `0` | `0` | `0` | `broad: 1` | `other_unknown: 1` | `delivery_policy_score_threshold` |
+| `LIFE SCIENCES` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `REAL ESTATE` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `AI×TECH` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `STRATEGY` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `POLICY×REGULATORY` | `0` | `1` | `1` | `0` | `0` | `0` | none | `review_tier: 1` | `delivery_policy_score_threshold` |
+| `SUSTAINABILITY` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `DIGITAL` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `M&A ADVISORY` | `0` | `0` | `0` | `0` | `0` | `0` | none | none | `query_plan_not_exhausted` |
+| `TALENT` | `2` | `2` | `2` | `0` | `2` | `0` | `trusted_reported: 2` | `premium: 2` | `delivery_policy_total_item_shortfall` |
+
+Notes:
+
+- `15/17` topics still ended with unused broad-query depth
+- only `TALENT` produced more than one promotable item, and even there the run only had `2/5` high-confidence items
+- `PUBLIC SECTOR` and `POLICY×REGULATORY` did produce one internal finalist each, but both were too weak to clear the shipping threshold
+
+### What search evidence existed even when usable inventory was zero
+
+The aggressive pass still saw preferred-family domains in search-result evidence for many zero-yield topics:
+
+- `TECHNOLOGY` search evidence included:
+  - `techtarget.com`
+  - `techcrunch.com`
+  - `bis.gov`
+  - `ciodive.com`
+  - `cio.com`
+  - `datacenterknowledge.com`
+  - `axios.com`
+- `HEALTHCARE` search evidence included:
+  - `healthcaredive.com`
+  - `biospace.com`
+  - `statnews.com`
+  - `pharmavoice.com`
+  - `nih.gov`
+  - `clinicaltrials.gov`
+  - `fda.gov`
+- `ENERGY` search evidence included:
+  - `utilitydive.com`
+  - `ferc.gov`
+  - `energy.gov`
+  - `powermag.com`
+- `POLICY×REGULATORY` search evidence included:
+  - `ftc.gov`
+  - `sec.gov`
+- `TALENT` search evidence included:
+  - `dol.gov`
+  - `bls.gov`
+  - `shrm.org`
+  - `sec.gov`
+
+This matters because it means the aggressive pass did not simply fail to see relevant domains. In many categories, the system saw the right source families in search evidence but did not convert that evidence into parsed, retained items.
+
+### What this pass changed in the diagnosis
+
+This was the most aggressive standard-only test run so far:
+
+- all `17` standard categories were fetched
+- custom was removed from the budget entirely
+- query packs were richer
+- the trusted-source second pass fired
+- source-family targeting was more explicit
+
+After that push, the result was still:
+
+- `0/17` strict shippable personas
+- `0/17` stretch shippable personas
+- only `3` cleaned candidates total
+
+That does **not** prove the standard product is impossible. It does prove that, under the current Perplexity-first mechanics, even an aggressive standard-only pass is still losing inventory before promotion. The bottleneck is now clearly:
+
+1. search evidence not converting into retained items
+2. too many topics still exiting with unused broad depth
+3. too little high-confidence volume even in the best standard topic (`TALENT`)
+
+### Immediate conclusion from this pass
+
+Before declaring the architecture dead, the next question is narrower and more practical:
+
+- why are standard-topic search hits from trusted families not converting into usable retained items?
+
+That is a more specific question than “is retrieval broken?” and it should drive the next design decision. The current run says the loss is happening **between** search-result evidence and promotable inventory, not mainly at the final delivery policy gate.

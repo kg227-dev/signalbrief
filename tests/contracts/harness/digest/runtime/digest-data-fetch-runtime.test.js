@@ -14,6 +14,25 @@ const runtime = require(TARGET_PATH);
 const { createDigestDataFetchRuntime } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 const RECENT_PUBLISHED_DATE = new Date(Date.now() - (6 * 60 * 60 * 1000)).toISOString();
+const STALE_PUBLISHED_DATE = new Date(Date.now() - (72 * 60 * 60 * 1000)).toISOString();
+
+function createResolverRuntime(items = [], diagnostics = {}) {
+  return {
+    resolveSearchEvidenceUrls: async () => ({
+      items: Array.isArray(items) ? items : [],
+      diagnostics: {
+        attempt_count: 0,
+        success_count: Array.isArray(items) ? items.length : 0,
+        fetch_failure_count: 0,
+        parse_failure_count: 0,
+        non_article_drop_count: 0,
+        stale_count: 0,
+        failed_urls: [],
+        ...diagnostics,
+      },
+    }),
+  };
+}
 
 async function testCustomFallbackFlowWithProviderPolicy() {
   const callOpts = [];
@@ -34,6 +53,7 @@ async function testCustomFallbackFlowWithProviderPolicy() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async (_host, _path, _headers, _payload, opts) => {
       callOpts.push(opts);
       calls += 1;
@@ -81,6 +101,7 @@ async function testTransportErrorDiagnostics() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async () => {
       throw new Error("HTTP timeout after 3s");
     },
@@ -106,6 +127,7 @@ async function testStandardTopicsUseFallbackQueriesForThinPools() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async () => {
       calls += 1;
       if (calls === 1) {
@@ -159,6 +181,7 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     isFetchedItemEligible: (item) => item?.source !== "blocked.example",
     httpsPostWithRetry: async (_host, _path, _headers, payload) => {
       payloads.push(payload);
@@ -258,6 +281,7 @@ async function testPreferredOnlyModeSkipsBroadFallback() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     isFetchedItemEligible: () => false,
     httpsPostWithRetry: async (_host, _path, _headers, payload) => {
       calls += 1;
@@ -305,6 +329,7 @@ async function testBroadOnlyModeSkipsSearchFilter() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async (_host, _path, _headers, payload) => {
       payloads.push(payload);
       calls += 1;
@@ -350,6 +375,7 @@ async function testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async () => ({
       status: 200,
       body: {
@@ -388,6 +414,7 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async () => ({
       status: 200,
       body: {
@@ -428,6 +455,7 @@ async function testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsN
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async () => ({
       status: 200,
       body: {
@@ -469,6 +497,73 @@ async function testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsN
   assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_retained_count, 1);
 }
 
+async function testStandardTopicsResolveTrustedEvidenceUrlsDirectlyWhenSearchMetadataIsThin() {
+  const fetchRuntime = createDigestDataFetchRuntime({
+    CONFIG: {
+      keys: { perplexity: "test-key" },
+      digest: {},
+    },
+    log: () => {},
+    normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime([
+      {
+        headline: "AI infrastructure demand is forcing data center redesigns",
+        summary: "Summary",
+        source: "techcrunch.com",
+        source_domain: "techcrunch.com",
+        url: "https://techcrunch.com/2026/03/22/ai-infrastructure-demand-is-forcing-data-center-redesigns/",
+        retrieval_original_url: "https://techcrunch.com/2026/03/22/ai-infrastructure-demand-is-forcing-data-center-redesigns/",
+        published_date: RECENT_PUBLISHED_DATE,
+        tag: "TECHNOLOGY",
+        retrieved_at: RECENT_PUBLISHED_DATE,
+        retrieval_pass: "preferred_evidence_resolver",
+        retrieval_from_search_evidence: true,
+        retrieval_from_evidence_resolver: true,
+      },
+    ], {
+      attempt_count: 1,
+      success_count: 1,
+    }),
+    httpsPostWithRetry: async () => ({
+      status: 200,
+      body: {
+        citations: [],
+        search_results: [
+          {
+            title: "AI infrastructure demand is forcing data center redesigns | TechCrunch",
+            url: "https://techcrunch.com/2026/03/22/ai-infrastructure-demand-is-forcing-data-center-redesigns/",
+          },
+        ],
+        choices: [{
+          message: {
+            content: JSON.stringify([]),
+          },
+        }],
+      },
+    }),
+  });
+
+  const result = await fetchRuntime.fetchTopicNews({
+    tag: "TECHNOLOGY",
+    queries: ["q1"],
+  }, {
+    retrievalPlan: {
+      preferred_domains: ["theinformation.com"],
+      reported_domains: ["techcrunch.com", "theinformation.com"],
+      official_domains: ["nist.gov", "bis.gov"],
+      thin_item_threshold: 2,
+      official_friendly: true,
+    },
+  });
+
+  assert.strictEqual(result.items.length, 1);
+  assert.strictEqual(result.items[0].retrieval_from_evidence_resolver, true);
+  assert.strictEqual(result.items[0].url, "https://techcrunch.com/2026/03/22/ai-infrastructure-demand-is-forcing-data-center-redesigns/");
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_resolver_attempt_count, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_resolver_success_count, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_retained_count, 1);
+}
+
 async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProviderItems() {
   const fetchRuntime = createDigestDataFetchRuntime({
     CONFIG: {
@@ -477,6 +572,7 @@ async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProvid
     },
     log: () => {},
     normalizeUrlForDedup: (value) => String(value || ""),
+    searchEvidenceResolverRuntime: createResolverRuntime(),
     httpsPostWithRetry: async () => ({
       status: 200,
       body: {
@@ -485,7 +581,7 @@ async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProvid
           {
             title: "CMS proposes new payment model for hospitals | CMS",
             url: "https://www.cms.gov/newsroom/fact-sheets/2026-03-21-hospital-payment-model",
-            date: "2026-03-21T12:00:00.000Z",
+            date: RECENT_PUBLISHED_DATE,
           },
         ],
         choices: [{
@@ -496,7 +592,7 @@ async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProvid
                 summary: "Summary",
                 source: "healthcaredive.com",
                 url: "https://www.healthcaredive.com/news/sutter-allina-health-form-26-billion-nonprofit-system/815028/",
-                published_date: "2026-03-17T12:00:00.000Z",
+                published_date: STALE_PUBLISHED_DATE,
               },
             ]),
           },
@@ -533,6 +629,7 @@ async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProvid
   await testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl();
   await testFetchDropsAmbiguousSameHostMismatch();
   await testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsNothing();
+  await testStandardTopicsResolveTrustedEvidenceUrlsDirectlyWhenSearchMetadataIsThin();
   await testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProviderItems();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

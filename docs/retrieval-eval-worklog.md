@@ -2846,3 +2846,129 @@ My recommendation is:
 - then stop and decide
 
 I would not keep iterating small local fixes after that.
+
+### 2026-03-23 15:20 ET - Stronger evidence resolver implemented, tested, and gated off by default
+
+#### What changed
+
+Built the stronger standard-topic evidence resolver that was scoped for one last local conversion pass:
+
+- direct resolution of trusted visible search-result URLs for the 17 standard topics
+- HTML metadata extraction for canonical URL, headline, and published date
+- standard-topic-only integration into the existing dedupe + retention path
+- `TECHNOLOGY`-specific wider trusted-domain handling inside that resolver
+- richer conversion-funnel diagnostics for resolver attempts / stale drops / non-article drops / fetch failures
+
+Important final product decision from this pass:
+
+- the resolver code is **kept in the repo**
+- but it is now **disabled by default**
+- it only runs when `SIGNALBRIEF_ENABLE_STANDARD_EVIDENCE_RESOLVER=1`
+
+Reason: the same-time control run without the resolver outperformed the resolver-on run.
+
+#### Runs compared
+
+- older standard-topic baseline after the earlier evidence rescue pass:
+  - `retrieval-eval:2026-03-23T03-10-11-771Z`
+- resolver enabled:
+  - `retrieval-eval:2026-03-23T19-01-40-697Z`
+- same-time control, resolver disabled:
+  - `retrieval-eval:2026-03-23T19-08-03-283Z`
+
+#### What we learned
+
+There are two different comparisons here:
+
+1. **Against the old morning baseline**, retained inventory improved a lot:
+   - retained items: `11 -> 26`
+   - retained article-shaped URLs: `7 -> 15`
+   - topics with at least 1 retained item: `6 -> 14`
+   - topics with at least 3 retained items: `0 -> 3`
+   - strict-shippable: `0 -> 0`
+   - stretch-shippable: `0 -> 0`
+
+2. **Against the same-time control**, the resolver did **not** earn its keep:
+   - resolver enabled:
+     - raw `25`
+     - cleaned `25`
+     - retained `26`
+     - retained article-shaped `15`
+     - topics with `1+` retained `14`
+     - topics with `3+` retained `3`
+   - resolver disabled:
+     - raw `30`
+     - cleaned `30`
+     - retained `30`
+     - retained article-shaped `17`
+     - topics with `1+` retained `15`
+     - topics with `3+` retained `6`
+
+Resolver-specific funnel result:
+
+- resolver attempts: `74`
+- resolver successes: `0`
+- resolver stale drops: `58`
+- resolver non-article drops: `11`
+- resolver fetch failures: `5`
+
+That is the decisive result from this pass.
+
+The resolver was a reasonable hypothesis, but in practice:
+
+- it did not directly convert any new standard-topic evidence into retained article records
+- it spent effort on URLs that mostly collapsed into stale or non-article outputs
+- the control run without it produced **more** retained and article-shaped inventory
+
+#### Topic-level read
+
+Resolver enabled vs disabled:
+
+- `TECHNOLOGY`
+  - enabled: `1` retained
+  - disabled: `2` retained
+  - still not shippable either way
+- `HEALTHCARE`
+  - enabled: `2`
+  - disabled: `2`
+  - thin, but not worse without resolver
+- `PE×M&A`
+  - enabled: `1`
+  - disabled: `3`
+  - materially better without resolver in the same-time control
+- `POLICY×REGULATORY`
+  - enabled: `0`
+  - disabled: `3`
+  - materially better without resolver in the same-time control
+
+This is why I do not want to keep the resolver on by default.
+
+#### What decision this affects
+
+This closes the “one more stronger local conversion pass” question.
+
+Answer:
+
+- the stronger local resolver pass was worth testing
+- it was **not** worth adopting as the default standard-topic path
+- the next step should **not** be more local conversion work of this same kind
+
+The remaining standard-topic problem is still upstream of shipping, but this pass suggests the highest-value next move is no longer “resolve more visible URLs locally.” The likely next move is broader retrieval design, not another article-resolution layer.
+
+#### What remains uncertain
+
+- why the same-time control produced materially better retained inventory than the resolver-on run
+  - likely explanation: normal query/path variation plus the resolver adding no usable direct wins
+  - still worth monitoring if we revisit this path later
+- whether `TECHNOLOGY` should get a completely separate retrieval path rather than another conversion tweak
+
+#### Recommendation after this pass
+
+For the 17 standard topics:
+
+- keep the stronger resolver code available behind a flag for future experiments
+- do **not** keep iterating local evidence-resolution work right now
+- do **not** default that resolver on in production
+- move the decision discussion back to broader retrieval design for standard categories
+
+This pass hit the stop rule.

@@ -21,6 +21,8 @@ const {
   hasVerifiedPublishedDate,
   parsePerplexityItems,
 } = runtime;
+const RECENT_PUBLISHED_DATE = new Date(Date.now() - (6 * 60 * 60 * 1000)).toISOString();
+const STALE_PUBLISHED_DATE = new Date(Date.now() - (72 * 60 * 60 * 1000)).toISOString();
 
 const wrappedArray = parsePerplexityItems(`Here are the results:
 
@@ -37,10 +39,10 @@ const wrappedObject = parsePerplexityItems(`json {"items":[{"headline":"Item Two
 assert.strictEqual(wrappedObject.length, 1);
 assert.strictEqual(wrappedObject[0].headline, "Item Two");
 
-assert.strictEqual(hasVerifiedPublishedDate({ published_date: "2026-03-21T10:00:00.000Z" }), true);
+assert.strictEqual(hasVerifiedPublishedDate({ published_date: RECENT_PUBLISHED_DATE }), true);
 assert.strictEqual(hasVerifiedPublishedDate({ published_date: "" }), false);
 assert.strictEqual(articleAgeTooOld({ published_date: "" }, 48), true);
-assert.strictEqual(articleAgeTooOld({ published_date: "2026-03-19T09:00:00.000Z" }, 48), true);
+assert.strictEqual(articleAgeTooOld({ published_date: STALE_PUBLISHED_DATE }, 48), true);
 assert.strictEqual(classifyUrlShape("https://www.reuters.com/technology/story-slug"), "article_url");
 assert.strictEqual(classifyUrlShape("https://www.reuters.com/"), "homepage");
 assert.strictEqual(classifyUrlShape("https://www.ft.com/search?q=ai"), "search_page");
@@ -50,9 +52,9 @@ assert.strictEqual(classifyUrlShape("https://www.example.com/news"), "listing_pa
 const out = [];
 const diagnostics = createConversionFunnel();
 collectUniqueItems([
-  { headline: "Fresh", url: "https://example.com/fresh", published_date: "2026-03-21T10:00:00.000Z" },
+  { headline: "Fresh", url: "https://example.com/fresh", published_date: RECENT_PUBLISHED_DATE },
   { headline: "Unknown", url: "https://example.com/unknown", published_date: "" },
-  { headline: "Stale", url: "https://example.com/stale", published_date: "2026-03-19T09:00:00.000Z" },
+  { headline: "Stale", url: "https://example.com/stale", published_date: STALE_PUBLISHED_DATE },
 ], new Set(), new Set(), out, (value) => value, { maxAgeHours: 48, diagnostics });
 assert.strictEqual(out.length, 1);
 assert.strictEqual(out[0].headline, "Fresh");

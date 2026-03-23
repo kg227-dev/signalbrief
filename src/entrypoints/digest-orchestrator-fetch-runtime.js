@@ -1236,6 +1236,8 @@ function createDigestOrchestratorFetchRuntime(deps) {
       opts: {
         retrievalPlan: {
           preferred_domains: Array.isArray(state.preferredDomains) ? state.preferredDomains.slice() : [],
+          reported_domains: Array.isArray(state.reportedDomains) ? state.reportedDomains.slice() : [],
+          official_domains: Array.isArray(state.officialDomains) ? state.officialDomains.slice() : [],
           thin_item_threshold: 2,
           official_friendly: state.officialFriendly === true,
           topic_keys: Array.isArray(state.topicKeys) ? state.topicKeys.slice() : [],
@@ -1260,6 +1262,8 @@ function createDigestOrchestratorFetchRuntime(deps) {
       opts: {
         retrievalPlan: {
           preferred_domains: Array.isArray(state.preferredDomains) ? state.preferredDomains.slice() : [],
+          reported_domains: Array.isArray(state.reportedDomains) ? state.reportedDomains.slice() : [],
+          official_domains: Array.isArray(state.officialDomains) ? state.officialDomains.slice() : [],
           thin_item_threshold: 2,
           official_friendly: state.officialFriendly === true,
           topic_keys: Array.isArray(state.topicKeys) ? state.topicKeys.slice() : [],
@@ -1288,6 +1292,8 @@ function createDigestOrchestratorFetchRuntime(deps) {
       opts: {
         retrievalPlan: {
           preferred_domains: Array.isArray(family.domains) ? family.domains.slice() : [],
+          reported_domains: Array.isArray(state.reportedDomains) ? state.reportedDomains.slice() : [],
+          official_domains: Array.isArray(state.officialDomains) ? state.officialDomains.slice() : [],
           thin_item_threshold: 1,
           official_friendly: family.official_friendly === true,
           topic_keys: Array.isArray(state.topicKeys) ? state.topicKeys.slice() : [],

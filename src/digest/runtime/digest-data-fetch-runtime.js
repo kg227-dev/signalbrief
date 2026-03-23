@@ -13,7 +13,9 @@ const {
   createConversionFunnel,
   mergeConversionFunnel,
   prioritizeItemsForRetention,
+  articleAgeTooOld,
 } = require("./digest-data-fetch-items-runtime");
+const { createDigestSearchEvidenceResolverRuntime } = require("./digest-search-evidence-resolver-runtime");
 
 const DEFAULT_PERPLEXITY_TIMEOUT_MS = 25_000;
 const DEFAULT_PERPLEXITY_RETRIES = 2;
@@ -213,6 +215,21 @@ function buildBroadFallbackPromptBias(retrievalPlan = {}) {
   return "If preferred-domain coverage is thin, return the best available specialist trade or original reporting. Avoid derivative rewrites or press release reposts when better direct sources exist.";
 }
 
+function dedupeResolvedEvidenceItems(items = [], normalizeUrlForDedup) {
+  const out = [];
+  const seen = new Set();
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const normalizedUrl = typeof normalizeUrlForDedup === "function"
+      ? String(normalizeUrlForDedup(item?.url || "") || "").trim()
+      : String(item?.url || "").trim();
+    const dedupeKey = normalizedUrl || `${String(item?.headline || "").trim().toLowerCase()}::${String(item?.published_date || "").trim()}`;
+    if (!dedupeKey || seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push(item);
+  }
+  return out;
+}
+
 function createDigestDataFetchRuntime(deps) {
   const {
     CONFIG,
@@ -220,10 +237,18 @@ function createDigestDataFetchRuntime(deps) {
     httpsPostWithRetry,
     normalizeUrlForDedup,
     isFetchedItemEligible,
+    searchEvidenceResolverRuntime,
   } = deps;
   const itemEligibilityFn = typeof isFetchedItemEligible === "function"
     ? isFetchedItemEligible
     : () => true;
+  const evidenceResolverRuntime = searchEvidenceResolverRuntime
+    && typeof searchEvidenceResolverRuntime.resolveSearchEvidenceUrls === "function"
+    ? searchEvidenceResolverRuntime
+    : createDigestSearchEvidenceResolverRuntime({ log });
+  const evidenceResolverEnabled = deps?.enableSearchEvidenceResolver === true
+    || (searchEvidenceResolverRuntime && typeof searchEvidenceResolverRuntime.resolveSearchEvidenceUrls === "function")
+    || String(process.env.SIGNALBRIEF_ENABLE_STANDARD_EVIDENCE_RESOLVER || "").trim() === "1";
 
   async function runFetchPass({
     topic,
@@ -237,6 +262,8 @@ function createDigestDataFetchRuntime(deps) {
     passName,
     searchDomainFilter,
     preferredEvidenceDomains,
+    reportedEvidenceDomains,
+    officialEvidenceDomains,
     promptBias,
     maxAgeHours,
     officialFriendly,
@@ -366,7 +393,6 @@ function createDigestDataFetchRuntime(deps) {
             passName,
           });
         diagnostics.conversion_funnel.search_evidence_candidate_count += searchEvidenceCandidates.length;
-
         const prioritizedProviderItems = prioritizeItemsForRetention(normalized, {
           standardTopicMode: topic?.isCustom !== true,
           hasTrustedArticleEvidence: searchEvidenceCandidates.length > 0,
@@ -378,15 +404,72 @@ function createDigestDataFetchRuntime(deps) {
         const providerArticleCount = prioritizedProviderItems.reduce((sum, item) => {
           return sum + (classifyUrlShape(item?.url) === "article_url" ? 1 : 0);
         }, 0);
+        const providerListingCount = prioritizedProviderItems.reduce((sum, item) => {
+          const shape = classifyUrlShape(item?.url);
+          return sum + (shape === "listing_page" || shape === "tag_page" || shape === "search_page" || shape === "homepage" ? 1 : 0);
+        }, 0);
+        const providerFreshArticleCount = prioritizedProviderItems.reduce((sum, item) => {
+          return sum + ((classifyUrlShape(item?.url) === "article_url" && !articleAgeTooOld(item, maxAgeHours)) ? 1 : 0);
+        }, 0);
+        const shouldRunEvidenceResolver = topic?.isCustom !== true
+          && evidenceResolverEnabled
+          && searchEvidence.article_search_results.length > 0
+          && (
+            prioritizedProviderItems.length <= 1
+            || providerFreshArticleCount <= 0
+            || searchEvidenceCandidates.length <= 1
+            || (String(topic?.tag || "").trim().toUpperCase() === "TECHNOLOGY" && searchEvidence.article_search_results.length >= 3)
+          );
+        let resolvedEvidenceItems = [];
+        if (shouldRunEvidenceResolver) {
+          const resolvedEvidence = await evidenceResolverRuntime.resolveSearchEvidenceUrls(searchEvidence.article_search_results, {
+            topicTag: topic.tag,
+            preferredDomains: Array.isArray(preferredEvidenceDomains) ? preferredEvidenceDomains : [],
+            reportedDomains: Array.isArray(reportedEvidenceDomains) ? reportedEvidenceDomains : [],
+            officialDomains: Array.isArray(officialEvidenceDomains) ? officialEvidenceDomains : [],
+            passName,
+            retrievedAt,
+            maxAgeHours,
+          });
+          resolvedEvidenceItems = dedupeResolvedEvidenceItems(resolvedEvidence?.items, normalizeUrlForDedup);
+          diagnostics.conversion_funnel.search_evidence_resolver_attempt_count += Number(resolvedEvidence?.diagnostics?.attempt_count || 0);
+          diagnostics.conversion_funnel.search_evidence_resolver_success_count += Number(resolvedEvidence?.diagnostics?.success_count || 0);
+          diagnostics.conversion_funnel.search_evidence_resolver_fetch_failure_count += Number(resolvedEvidence?.diagnostics?.fetch_failure_count || 0);
+          diagnostics.conversion_funnel.search_evidence_resolver_parse_failure_count += Number(resolvedEvidence?.diagnostics?.parse_failure_count || 0);
+          diagnostics.conversion_funnel.search_evidence_resolver_non_article_drop_count += Number(resolvedEvidence?.diagnostics?.non_article_drop_count || 0);
+          diagnostics.conversion_funnel.search_evidence_resolver_stale_count += Number(resolvedEvidence?.diagnostics?.stale_count || 0);
+          for (const failedUrl of (Array.isArray(resolvedEvidence?.diagnostics?.failed_urls) ? resolvedEvidence.diagnostics.failed_urls : [])) {
+            if (Array.isArray(diagnostics.conversion_funnel.samples?.search_evidence_resolver_failures)
+              && diagnostics.conversion_funnel.samples.search_evidence_resolver_failures.length < 5) {
+              diagnostics.conversion_funnel.samples.search_evidence_resolver_failures.push(failedUrl);
+            }
+          }
+        }
+        const prioritizedEvidenceItems = prioritizeItemsForRetention(
+          dedupeResolvedEvidenceItems([...resolvedEvidenceItems, ...searchEvidenceCandidates], normalizeUrlForDedup),
+          {
+            standardTopicMode: topic?.isCustom !== true,
+            hasTrustedArticleEvidence: searchEvidenceCandidates.length > 0 || resolvedEvidenceItems.length > 0,
+            preferredDomains: Array.isArray(preferredEvidenceDomains) ? preferredEvidenceDomains : [],
+            officialFriendly: officialFriendly === true,
+            maxAgeHours,
+            diagnostics: diagnostics.conversion_funnel,
+          }
+        );
         const retainedBeforeProvider = collected.length;
         const staleBeforeProvider = diagnostics.conversion_funnel.stale_item_count;
         const evidenceFirst = topic?.isCustom !== true
-          && searchEvidenceCandidates.length > 0
-          && (prioritizedProviderItems.length === 0 || providerArticleCount <= 0);
+          && prioritizedEvidenceItems.length > 0
+          && (
+            prioritizedProviderItems.length === 0
+            || providerFreshArticleCount <= 0
+            || providerListingCount > providerArticleCount
+            || String(topic?.tag || "").trim().toUpperCase() === "TECHNOLOGY"
+          );
         let evidenceFirstRetainedCount = 0;
         if (evidenceFirst) {
           const retainedBeforeEvidenceFirst = collected.length;
-          collectUniqueItems(searchEvidenceCandidates, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
+          collectUniqueItems(prioritizedEvidenceItems, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
             maxAgeHours,
             requireVerifiedPublishedDate: true,
             diagnostics: diagnostics.conversion_funnel,
@@ -402,12 +485,12 @@ function createDigestDataFetchRuntime(deps) {
         const staleProviderDelta = diagnostics.conversion_funnel.stale_item_count - staleBeforeProvider;
         const retainedProviderDelta = retainedAfterProvider - retainedBeforeProvider;
         const shouldRescueFromEvidence = topic?.isCustom !== true
-          && searchEvidenceCandidates.length > 0
+          && prioritizedEvidenceItems.length > 0
           && !evidenceFirst
           && (retainedProviderDelta <= 1 || staleProviderDelta > 0 || providerArticleCount <= 0);
         if (shouldRescueFromEvidence) {
           const retainedBeforeEvidence = collected.length;
-          collectUniqueItems(searchEvidenceCandidates, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
+          collectUniqueItems(prioritizedEvidenceItems, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
             maxAgeHours,
             requireVerifiedPublishedDate: true,
             diagnostics: diagnostics.conversion_funnel,
@@ -445,6 +528,12 @@ function createDigestDataFetchRuntime(deps) {
       : {};
     const preferredDomains = Array.isArray(retrievalPlan.preferred_domains)
       ? retrievalPlan.preferred_domains.map((domain) => String(domain || "").trim()).filter(Boolean)
+      : [];
+    const reportedDomains = Array.isArray(retrievalPlan.reported_domains)
+      ? retrievalPlan.reported_domains.map((domain) => String(domain || "").trim()).filter(Boolean)
+      : [];
+    const officialDomains = Array.isArray(retrievalPlan.official_domains)
+      ? retrievalPlan.official_domains.map((domain) => String(domain || "").trim()).filter(Boolean)
       : [];
     const broadOnly = retrievalPlan.broad_only === true;
     const allowBroadFallback = retrievalPlan.allow_broad_fallback !== false;
@@ -502,6 +591,8 @@ function createDigestDataFetchRuntime(deps) {
         passName: "preferred",
         searchDomainFilter: preferredDomains,
         preferredEvidenceDomains: preferredDomains,
+        reportedEvidenceDomains: reportedDomains,
+        officialEvidenceDomains: officialDomains,
         promptBias: buildPreferredPromptBias(preferredDomains),
         maxAgeHours,
         officialFriendly: retrievalPlan?.official_friendly === true,
@@ -529,6 +620,8 @@ function createDigestDataFetchRuntime(deps) {
         passName: "broad",
         searchDomainFilter: [],
         preferredEvidenceDomains: preferredDomains,
+        reportedEvidenceDomains: reportedDomains,
+        officialEvidenceDomains: officialDomains,
         promptBias: buildBroadFallbackPromptBias(retrievalPlan),
         maxAgeHours,
         officialFriendly: retrievalPlan?.official_friendly === true,

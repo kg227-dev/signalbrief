@@ -104,6 +104,9 @@ const {
   createPreferredSourceRegistryRuntime,
   buildPreferredDomainShortlist,
 } = require("../runtime/preferred-source-registry-runtime");
+const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestrator-spend-guard-runtime");
+const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orchestrator-circuit-breaker-runtime");
+const { createDigestOrchestratorAdmissionGateRuntime } = require("./digest-orchestrator-admission-gate-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -116,6 +119,11 @@ const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
 const COST_LOG = RUNTIME_PATHS.costLogPath;
 const DIGEST_RUN_LOCK = RUNTIME_PATHS.digestRunLockPath;
 const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
+const SPEND_GUARD_STATE = RUNTIME_PATHS.spendGuardStatePath;
+const CIRCUIT_BREAKER_STATE = RUNTIME_PATHS.circuitBreakerStatePath;
+const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP_USD || "1.00");
+const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
+const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
@@ -139,6 +147,8 @@ let digestOrchestratorIncidentRuntimeCache = null;
 let digestOrchestratorLockRuntimeCache = null;
 let digestOrchestratorTransportRuntimeCache = null;
 let digestOrchestratorBootstrapRuntimeCache = null;
+let digestOrchestratorSpendGuardRuntimeCache = null;
+let digestOrchestratorCircuitBreakerRuntimeCache = null;
 
 function getConfig() {
   if (!configCache) configCache = loadConfig();
@@ -251,6 +261,30 @@ function getDigestOrchestratorIncidentRuntime() {
     });
   }
   return digestOrchestratorIncidentRuntimeCache;
+}
+
+function getDigestOrchestratorSpendGuardRuntime() {
+  if (!digestOrchestratorSpendGuardRuntimeCache) {
+    digestOrchestratorSpendGuardRuntimeCache = createDigestOrchestratorSpendGuardRuntime({
+      fs,
+      path,
+      spendGuardStatePath: SPEND_GUARD_STATE,
+      log,
+    });
+  }
+  return digestOrchestratorSpendGuardRuntimeCache;
+}
+
+function getDigestOrchestratorCircuitBreakerRuntime() {
+  if (!digestOrchestratorCircuitBreakerRuntimeCache) {
+    digestOrchestratorCircuitBreakerRuntimeCache = createDigestOrchestratorCircuitBreakerRuntime({
+      fs,
+      path,
+      circuitBreakerStatePath: CIRCUIT_BREAKER_STATE,
+      log,
+    });
+  }
+  return digestOrchestratorCircuitBreakerRuntimeCache;
 }
 
 function getDigestOrchestratorLockRuntime() {
@@ -690,6 +724,56 @@ async function main() {
     process.exit(0); // no users due this window
   }
 
+  // ── Pre-spend admission gate (scheduled runs only) ─────────────────────────
+  if (!targetChatId) {
+    const spendGuard = getDigestOrchestratorSpendGuardRuntime();
+    const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
+    const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
+      circuitBreakerRuntime: circuitBreaker,
+      spendGuardRuntime: spendGuard,
+      rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
+      rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
+      dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
+      log,
+    });
+    const gate = admissionGate.checkScheduledAdmission({
+      dueUsers,
+      dateEt: digestDateKey,
+      retryStateRuntime: getDigestRetryStateRuntime(),
+    });
+    if (!gate.allowed) {
+      logEvent("warn", "digest.run.blocked", {
+        provider: "admission-gate",
+        outcome: gate.runValueState,
+        blocked_reason: gate.blockedReason,
+        due_users: dueUsers.length,
+        date_et: digestDateKey,
+      });
+      log(`⛔ Admission gate blocked: ${gate.blockedReason} (${dueUsers.length} due user(s), date=${digestDateKey})`);
+      recordRunCost({
+        now: new Date(),
+        runId,
+        targetChatId: null,
+        standardFetchCalls: 0,
+        customFetchCalls: 0,
+        claudeUsage: {},
+        dueUsers,
+        deliveredUsers: [],
+        failedUsers: [],
+        publicDigestUrl: "",
+        runValueState: gate.runValueState,
+        blockedReason: gate.blockedReason,
+      });
+      releaseDigestLock(runMode);
+      process.exit(0);
+    }
+    if (gate.eligibleUsers.length < dueUsers.length) {
+      const filtered = dueUsers.length - gate.eligibleUsers.length;
+      log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
+      dueUsers = gate.eligibleUsers;
+    }
+  }
+
   if (dryRun) {
     const dueList = dueUsers.map((u) => u.email || u.chatId).filter(Boolean);
     logEvent("info", "digest.run.skipped", {
@@ -932,6 +1016,61 @@ async function main() {
     });
     deliveredUsers = deliveryResult.deliveredUsers;
     failedUsers = deliveryResult.failedUsers;
+
+    // ── Post-delivery: circuit breaker evaluation and spend recording ───────
+    if (!targetChatId && Array.isArray(failedUsers) && Array.isArray(deliveredUsers)) {
+      const spendRuntime = getDigestOrchestratorSpendGuardRuntime();
+      const cbRuntime = getDigestOrchestratorCircuitBreakerRuntime();
+
+      // Record zero-value runs per user to spend guard
+      if (failedUsers.length > 0) {
+        const zeroCostPerUser = standardFetchCalls > 0 || customFetchCalls > 0
+          ? ((standardFetchCalls + customFetchCalls) * 0.005) / failedUsers.length
+          : 0;
+        for (const failed of failedUsers) {
+          spendRuntime.recordZeroValueRun({
+            runId,
+            dateEt: digestDateKey,
+            userId: String(failed?.userId || failed?.chatId || ""),
+            failureClass: String(failed?.withheld_reason || "unknown"),
+            costUsd: zeroCostPerUser,
+          });
+        }
+      }
+
+      // Evaluate circuit breaker triggers
+      const dominantFailure = failedUsers.length > 0
+        ? (failedUsers[0]?.withheld_reason || null)
+        : null;
+      const rollingSpend = spendRuntime.queryRollingZeroValueSpend(ROLLING_ZERO_VALUE_WINDOW_HOURS);
+      const dailySpend = spendRuntime.queryDailyZeroValueSpend(digestDateKey);
+      const cbResult = cbRuntime.evaluateRunOutcome({
+        dueCount: dueUsers.length,
+        servedCount: deliveredUsers.length,
+        dominantFailureClass: dominantFailure,
+        runId,
+        dateEt: digestDateKey,
+        rollingZeroValueSpend: rollingSpend,
+        rollingCap: ROLLING_ZERO_VALUE_CAP_USD,
+        dailyZeroValueSpend: dailySpend,
+        dailyCap: DAILY_ZERO_VALUE_CAP_USD,
+      });
+      if (cbResult) {
+        logEvent("warn", "digest.circuit_breaker.opened", {
+          provider: "circuit-breaker",
+          outcome: "opened",
+          reason: cbResult.opened_reason,
+          run_id: runId,
+          date_et: digestDateKey,
+        });
+        log(`⛔ Circuit breaker OPENED: ${cbResult.opened_reason}`);
+        emitDigestIncident(
+          "circuit_breaker_opened",
+          `Circuit breaker opened: ${cbResult.opened_reason}`,
+          { run_id: runId, date_et: digestDateKey, reason: cbResult.opened_reason }
+        );
+      }
+    }
 
     // Accumulate domain stats from delivered items for dynamic domain learning
     try {

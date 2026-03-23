@@ -65,6 +65,8 @@ function createDigestOrchestratorCostRuntime(deps) {
       deliveredUsers,
       failedUsers,
       publicDigestUrl,
+      runValueState,
+      blockedReason,
     } = params;
 
     const costs = calculateRunCosts({
@@ -102,6 +104,8 @@ function createDigestOrchestratorCostRuntime(deps) {
       digest_url: String(publicDigestUrl || ""),
       per_user: Array.isArray(deliveredUsers) ? deliveredUsers : [],
       per_user_failed: Array.isArray(failedUsers) ? failedUsers : [],
+      run_value_state: runValueState ? String(runValueState) : (Array.isArray(deliveredUsers) && deliveredUsers.length > 0 ? "delivered" : "zero_value"),
+      blocked_reason: blockedReason ? String(blockedReason) : null,
     });
 
     logger(`Run cost: $${costs.totalCost.toFixed(4)} (Perplexity $${costs.perplexityCost.toFixed(3)} - Claude in=${Number(claudeUsage?.input_tokens || 0)} out=${Number(claudeUsage?.output_tokens || 0)} $${costs.claudeCost.toFixed(4)})`);

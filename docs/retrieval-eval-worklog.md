@@ -2425,3 +2425,237 @@ It means the next architecture decision should be framed as:
 not:
 
 - how do we prompt Perplexity a little differently and hope for more volume?
+
+## 2026-03-22 22:45 ET - URL-level conversion trace for representative standard topics
+
+### What changed
+
+- added URL-level trace capture for selected topics from:
+  - search-result evidence
+  - provider-returned items
+  - normalized items
+  - dropped items with explicit stage reasons
+  - retained items
+  - parse errors
+- added `dominant_conversion_failure` to topic gap audit rows
+- reran `standard_topics` with tracing enabled for:
+  - `HEALTHCARE`
+  - `LIFE SCIENCES`
+  - `TECHNOLOGY`
+  - `PE×M&A`
+  - `POLICY×REGULATORY`
+- run id: `retrieval-eval:2026-03-23T02-43-53-249Z`
+
+### What we learned
+
+The conversion problem is not one thing. It splits into three distinct failure modes:
+
+1. `provider_not_returning_article_records`
+2. `freshness_or_date_validation_failure`
+3. `orchestrator / fallback not pushing far enough after a weak preferred pass`
+
+#### Topic-by-topic dominant failure
+
+| Topic | Search article URLs | Provider article URLs | Parsed | Retained | Dominant failure |
+| --- | --- | --- | --- | --- | --- |
+| `HEALTHCARE` | `12` | `3` | `4` | `0` | `freshness_or_date_validation_failure` |
+| `LIFE SCIENCES` | `21` | `1` | `2` | `1` | `delivery_quantity_shortfall` after weak preferred conversion |
+| `TECHNOLOGY` | `26` | `0` | `0` | `0` | `provider_not_returning_article_records` |
+| `PE×M&A` | `10` | `1` | `3` | `0` | `freshness_or_date_validation_failure` |
+| `POLICY×REGULATORY` | `22` | `1` | `2` | `0` | `freshness_or_date_validation_failure` |
+
+### Representative traces
+
+#### `HEALTHCARE`
+
+Search evidence was credible and relevant:
+
+- `healthcaredive.com/news/sutter-allina-health-form-26-billion-nonprofit-system/815028/`
+- `xtalks.com/healthcare-ma-in-2026-a-roundup-of-deals-4615/`
+- `lawrenceevans.com/2026/03/16/healthcare-news-deals-and-investments-update-mar-16th-2026/`
+- plus `biospace`, `cms`, `aha`, `vbidcenter`
+
+Provider actually returned:
+
+- `healthcaredive.com/.../815028/` -> listing-page shaped, dated `2026-03-17`
+- `xtalks.com/healthcare-ma-in-2026-a-roundup-of-deals-4615/` -> article URL, dated `2026-03-09`
+- `lawrenceevans.com/.../mar-16th-2026/` -> article URL, dated `2026-03-16`
+
+All four normalized items died as `stale_item`.
+
+Practical read:
+
+- provider did find article-shaped URLs here
+- the main failure was stale selection, not parsing
+- broad fallback still stopped with `retry_guard_zero_yield`, so alternate queries remained unused after those stale picks
+
+#### `LIFE SCIENCES`
+
+Search evidence was very strong:
+
+- `fda.gov/...`
+- `clinicaltrials.gov/study/...`
+- `dailymed.nlm.nih.gov/...`
+- multiple `biospace.com/...`
+
+Provider returned only:
+
+- `biospace.com/press-releases/fasenra-approved-in-the-us...` -> listing-page shaped, dated `2026-03-22`
+- `biospace.com/oyster-point-pharma-announces-fda-approval...` -> article URL, dated `2021-11-11`
+
+Result:
+
+- the stale 2021 article was dropped
+- the only retained item was the BioSpace press-release-style listing page
+- broad fallback never started: `broad_depth_stop_reason = broad_fallback_not_started`
+
+Practical read:
+
+- this is not “no evidence exists”
+- it is weak provider conversion plus orchestration stopping after a thin preferred pass
+
+#### `TECHNOLOGY`
+
+Search evidence included exactly the right source family:
+
+- `csrc.nist.gov/...`
+- `techcrunch.com/...`
+- `informationweek.com/...`
+- `datacenterknowledge.com/...`
+- `axios.com/...`
+
+But provider returned:
+
+- no items at all
+
+Result:
+
+- `26` article-shaped search URLs
+- `0` provider items
+- `0` parsed items
+- `0` retained items
+
+Practical read:
+
+- this is the clearest pure conversion miss in the whole pass
+- the provider sees credible article URLs but does not turn them into structured article records
+
+#### `PE×M&A`
+
+Search evidence included:
+
+- `semafor.com/article/...`
+- `cepr.net/publications/buyouts-march2026/`
+- `rulegarza.com/antitrust-ma-outlook-for-2026/`
+- `jdsupra.com/...`
+- `natlawreview.com/...`
+
+Provider returned:
+
+- `sec.gov/.../ex-c18.htm` -> listing page, dated `2025-03-24`
+- `semafor.com/article/...` -> article URL, dated `2026-03-01`
+- `ajbell.co.uk/news/articles/...` -> listing page / ambiguous date
+
+All normalized items died as `stale_item`.
+
+Practical read:
+
+- provider conversion happened, but it selected old / listing-style items instead of fresher article-shaped evidence visible in search
+
+#### `POLICY×REGULATORY`
+
+Search evidence included:
+
+- `ftc.gov/...`
+- `occ.treas.gov/news-issuances/...`
+- `sec.gov/newsroom/...`
+- `jdsupra.com/...`
+- `natlawreview.com/...`
+- `wiley.law/...`
+
+Provider returned:
+
+- `occ.treas.gov/news-issuances/news-releases/2026/nr-occ-2026-15.html` -> article URL, dated `2026-03-18`
+- `sec.gov/newsroom/press-releases/2026-20-secs-division-enforcement-announces-updates-enforcement-manual` -> listing page, dated `2026-03-18`
+
+Both died as `stale_item`.
+
+Practical read:
+
+- again, not a search-evidence problem
+- the provider returned plausible official URLs, but they missed freshness and then the topic still stopped with unused broad depth
+
+### What decision this affects
+
+The next build should target **conversion mechanics**, not just query wording.
+
+The question is now:
+
+- how do we convert trusted search evidence into fresh, article-shaped candidate records?
+
+not:
+
+- how do we add even more search evidence?
+
+### Smallest practical fix set
+
+#### 1. Add an evidence-first fallback for standard topics
+
+When a topic has:
+
+- strong article-shaped search evidence
+- but `0-1` provider items
+
+run a second-step article candidate builder directly from the search-result URLs on trusted domains.
+
+This is the highest-leverage conversion fix.
+
+#### 2. Tighten freshness before promotion, not only after parsing
+
+For standard topics, if the provider returns:
+
+- old article URLs
+- or listing pages with stale dates
+
+prefer a different search-result article URL from the same trusted evidence set before treating the topic as zero-yield.
+
+This specifically targets `HEALTHCARE`, `PE×M&A`, and `POLICY×REGULATORY`.
+
+#### 3. Force broad fallback after weak preferred conversion
+
+If preferred pass yields:
+
+- only listing-page shaped items
+- or only `1` retained item
+- or all retained items are low-shape / stale-prone
+
+do not stop. Force at least one broad conversion pass.
+
+This directly targets the `LIFE SCIENCES` miss.
+
+#### 4. Penalize listing-page outputs earlier in candidate acceptance
+
+Listing pages are still surviving too deep into the pipeline.
+
+Minimum change:
+
+- mark listing-page URLs as conversion-risk
+- prefer article-shaped search evidence over listing-page provider outputs when both exist
+
+### What remains uncertain
+
+- whether a direct evidence-first URL extraction pass is enough, or whether the provider still needs to be replaced for structured article recovery
+- how often official pages that look like “listing pages” are actually valid enough to keep for policy topics
+- whether the current `48h` freshness rule is directionally right, or whether the problem is that the provider is picking 3-5 day old items even when fresher evidence is visible
+
+### Current decision
+
+This pass strengthens the conclusion that the main standard-topic bottleneck is:
+
+- failure to convert trusted search evidence into valid article records
+
+The next highest-leverage work should therefore be:
+
+- direct evidence-to-article conversion for standard topics
+- freshness-aware replacement from visible trusted search evidence
+- broad-fallback forcing after weak preferred conversion

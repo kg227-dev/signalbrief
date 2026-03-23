@@ -121,6 +121,10 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.incidentStorePath || readEnvValue(env, "SIGNALBRIEF_INCIDENT_STORE_PATH"),
     path.join(dataDir, "incident-store.json")
   );
+  const recoveryQueuePath = resolveOptionalPath(
+    options.recoveryQueuePath || readEnvValue(env, "SIGNALBRIEF_RECOVERY_QUEUE_PATH"),
+    path.join(dataDir, "recovery-queue.json")
+  );
 
   return {
     appRoot,
@@ -146,6 +150,7 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     spendGuardStatePath,
     circuitBreakerStatePath,
     incidentStorePath,
+    recoveryQueuePath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };
@@ -205,6 +210,7 @@ function describeRuntimePathAlignment(runtimePaths) {
     spend_guard: deriveComponentRoot(paths.spendGuardStatePath, dataRoot),
     circuit_breaker: deriveComponentRoot(paths.circuitBreakerStatePath, dataRoot),
     incident_store: deriveComponentRoot(paths.incidentStorePath, dataRoot),
+    recovery_queue: deriveComponentRoot(paths.recoveryQueuePath, dataRoot),
     logs: logRoots.length === 1 ? logRoots[0] : null,
     scheduler: schedulerRoots.length === 1 ? schedulerRoots[0] : null,
   };
@@ -221,6 +227,7 @@ function describeRuntimePathAlignment(runtimePaths) {
   if (componentRoots.spend_guard !== dataRoot) divergentComponents.push("spend_guard");
   if (componentRoots.circuit_breaker !== dataRoot) divergentComponents.push("circuit_breaker");
   if (componentRoots.incident_store !== dataRoot) divergentComponents.push("incident_store");
+  if (componentRoots.recovery_queue !== dataRoot) divergentComponents.push("recovery_queue");
   if (logRoots.length !== 1 || logRoots[0] !== dataRoot) divergentComponents.push("logs");
   if (schedulerRoots.length !== 1 || schedulerRoots[0] !== dataRoot) divergentComponents.push("scheduler");
 
@@ -243,6 +250,7 @@ function describeRuntimePathAlignment(runtimePaths) {
       spend_guard_outside_data_root: componentRoots.spend_guard !== dataRoot,
       circuit_breaker_outside_data_root: componentRoots.circuit_breaker !== dataRoot,
       incident_store_outside_data_root: componentRoots.incident_store !== dataRoot,
+      recovery_queue_outside_data_root: componentRoots.recovery_queue !== dataRoot,
       multiple_log_roots: logRoots.length > 1,
       logs_outside_data_root: logRoots.some((root) => root !== dataRoot),
       multiple_scheduler_roots: schedulerRoots.length > 1,
@@ -278,6 +286,7 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "spendGuardStatePath", path: paths.spendGuardStatePath, kind: "file" },
     { key: "circuitBreakerStatePath", path: paths.circuitBreakerStatePath, kind: "file" },
     { key: "incidentStorePath", path: paths.incidentStorePath, kind: "file" },
+    { key: "recoveryQueuePath", path: paths.recoveryQueuePath, kind: "file" },
   ];
 }
 

@@ -18,11 +18,12 @@ const {
   buildVirtualUser,
 } = runtime;
 
-const [standard, customRealistic, customAdversarial, standardCore, standardTopics] = buildScenarioMatrix([
+const [standard, customRealistic, customAdversarial, standardCore, standardPhase1, standardTopics] = buildScenarioMatrix([
   "standard_full",
   "custom_realistic",
   "custom_adversarial",
   "standard_core",
+  "standard_phase1",
   "standard_topics",
 ]);
 
@@ -43,6 +44,13 @@ assert.ok(standardCore.dueUsers.every((user) => user.eval_group === "standard_co
 assert.deepStrictEqual(
   standardCore.dueUsers.map((user) => user.eval_label),
   ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "STRATEGY", "POLICY×REGULATORY"]
+);
+
+assert.strictEqual(standardPhase1.personaCount, 6);
+assert.ok(standardPhase1.dueUsers.every((user) => user.eval_group === "standard_phase1"));
+assert.deepStrictEqual(
+  standardPhase1.dueUsers.map((user) => user.eval_label),
+  ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "POLICY×REGULATORY"]
 );
 
 assert.strictEqual(standardTopics.personaCount, 17);

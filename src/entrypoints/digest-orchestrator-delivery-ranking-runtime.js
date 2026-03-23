@@ -138,6 +138,39 @@ function applySourcePolicyCaps(items = [], requestedCount = 5) {
   return chosen;
 }
 
+function isOfficialDocumentRepresentative(item) {
+  const contentKind = String(item?.content_kind || "article").trim().toLowerCase();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  return contentKind !== "article" || sourceType === "primary_official";
+}
+
+function resolveOfficialDocumentCap(standardTopicsLower = [], requestedCount = 5) {
+  const topics = new Set((Array.isArray(standardTopicsLower) ? standardTopicsLower : [])
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean));
+  const isPolicyRegulatoryDigest = topics.size === 1 && topics.has("policy regulatory");
+  const requested = Math.max(1, Number(requestedCount || 5));
+  return Math.min(requested, isPolicyRegulatoryDigest ? 3 : 2);
+}
+
+function applyOfficialDocumentCap(items = [], standardTopicsLower = [], requestedCount = 5) {
+  const ranked = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!ranked.length) return [];
+  const officialCap = resolveOfficialDocumentCap(standardTopicsLower, requestedCount);
+  let officialCount = 0;
+  const chosen = [];
+  for (const item of ranked) {
+    if (!isOfficialDocumentRepresentative(item)) {
+      chosen.push(item);
+      continue;
+    }
+    if (officialCount >= officialCap) continue;
+    officialCount += 1;
+    chosen.push(item);
+  }
+  return chosen;
+}
+
 function averageMetric(items = [], field) {
   const values = (Array.isArray(items) ? items : [])
     .map((item) => Number(item?.[field]))
@@ -529,6 +562,11 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     userItems = applySourcePolicyCaps(userItems, candidatePoolTargetCount);
     if (trace) appendStageTrace(trace, beforeFinalPolicyCaps, userItems, "final_source_policy_caps", "removed_by_source_policy_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "final_source_policy_caps", "removed_by_source_policy_cap"));
+
+    const beforeOfficialDocumentCap = userItems.slice();
+    userItems = applyOfficialDocumentCap(userItems, standardTopicsLower, requestedCount);
+    if (trace) appendStageTrace(trace, beforeOfficialDocumentCap, userItems, "official_document_cap", "removed_by_official_document_cap");
+    if (trace) trace.snapshots.push(snapshotStage(userItems, "official_document_cap", "removed_by_official_document_cap"));
 
     const freshnessBlockCount = Math.max(0, Number(suppression.removed || 0))
       + Math.max(0, Number(semanticFreshness.removedGlobal || 0))

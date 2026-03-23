@@ -1573,12 +1573,25 @@ function computeRepresentativeScore(item, opts = {}) {
 
 function chooseRepresentative(items, opts = {}) {
   const ignoreCompetitivePenalties = opts.ignorePreferredSuppression === true || opts.ignoreCompetitivePenalties === true;
-  const ranked = (Array.isArray(items) ? items : []).slice().sort((left, right) => {
-    const leftScore = computeRepresentativeScore(left, { ignoreCompetitivePenalties });
-    const rightScore = computeRepresentativeScore(right, { ignoreCompetitivePenalties });
-    return rightScore - leftScore;
+  const ranked = (Array.isArray(items) ? items : []).slice().map((item) => ({
+    item,
+    score: computeRepresentativeScore(item, { ignoreCompetitivePenalties }),
+  })).sort((left, right) => right.score - left.score);
+  const winner = ranked[0]?.item || null;
+  if (!winner) return null;
+  const winnerOfficial = String(winner?.content_kind || "").trim().toLowerCase() !== "article"
+    || String(winner?.source_type || "").trim().toLowerCase() === "primary_official";
+  if (!winnerOfficial) return winner;
+  const reportedAlternative = ranked.find((entry) => {
+    if (!entry?.item || entry.item === winner) return false;
+    const sourceType = String(entry.item?.source_type || "").trim().toLowerCase();
+    const contentKind = String(entry.item?.content_kind || "article").trim().toLowerCase();
+    if (contentKind !== "article") return false;
+    if (sourceType !== "reported_media" && sourceType !== "trade_specialist") return false;
+    if (!isGovernanceEligiblePreferredItem(entry.item)) return false;
+    return entry.score >= (ranked[0].score - 0.06);
   });
-  return ranked[0] || null;
+  return reportedAlternative?.item || winner;
 }
 
 function isGovernanceEligiblePreferredItem(item) {

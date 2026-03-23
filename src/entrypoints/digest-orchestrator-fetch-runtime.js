@@ -22,7 +22,7 @@ const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
 const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
-const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics"]);
+const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
 const ALL_STANDARD_TOPIC_TAGS = new Set([
   "HEALTHCARE",
   "FINANCIAL SERVICES",
@@ -41,6 +41,14 @@ const ALL_STANDARD_TOPIC_TAGS = new Set([
   "DIGITAL",
   "M&A ADVISORY",
   "TALENT",
+]);
+const PHASE1_STANDARD_TOPIC_TAGS = new Set([
+  "HEALTHCARE",
+  "LIFE SCIENCES",
+  "TECHNOLOGY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
+  "POLICY×REGULATORY",
 ]);
 const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
   STRATEGY: Object.freeze([
@@ -224,6 +232,11 @@ function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, runMode, l
     const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));
     logger(`Focused eval: fetching ${focusedTopics.length}/${topics.length} standard topic(s) for ${runMode}`);
     return focusedTopics;
+  }
+  if (String(runMode || "").trim() === "standard_phase1") {
+    const phase1Topics = topics.filter((topic) => PHASE1_STANDARD_TOPIC_TAGS.has(String(topic?.tag || "").trim().toUpperCase()));
+    logger(`Phase 1 eval: fetching ${phase1Topics.length}/${topics.length} standard topic(s) for ${runMode}`);
+    return phase1Topics;
   }
   if (isAggressiveStandardRun(runMode)) {
     const focusedTags = buildAllStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
@@ -655,6 +668,8 @@ function buildTopicState(topic, shortlist, familyShortlists, priority, originalI
       broad: 0,
       trusted_official: 0,
       trusted_reported: 0,
+      broker_official: 0,
+      broker_publisher_feed: 0,
     },
     retrievalSourceFamilyCounts: {
       official: 0,
@@ -667,6 +682,10 @@ function buildTopicState(topic, shortlist, familyShortlists, priority, originalI
     searchResultDomains: [],
     preferredSearchResultDomains: [],
     preferredSearchResultHitCount: 0,
+    brokerItemCount: 0,
+    brokerOfficialItemCount: 0,
+    brokerPublisherFeedItemCount: 0,
+    brokerSourceIds: [],
   };
 }
 
@@ -691,6 +710,30 @@ function mergeUniqueItemsIntoState(state, items, normalizeUrlForDedup, isFetched
     addedUsableCount,
     addedItems,
   };
+}
+
+function mergeBrokerItemsIntoState(state, items, normalizeUrlForDedup, isFetchedItemEligible, annotateFetchedItems) {
+  const merged = mergeUniqueItemsIntoState(state, items, normalizeUrlForDedup, isFetchedItemEligible);
+  const annotatedAddedItems = annotateItemsForFetch(merged.addedItems, annotateFetchedItems);
+  for (let index = 0; index < merged.addedItems.length; index += 1) {
+    const item = merged.addedItems[index];
+    const annotatedItem = annotatedAddedItems[index] || item;
+    const originKey = String(item?.retrieval_origin || "").trim() === "broker_official"
+      ? "broker_official"
+      : "broker_publisher_feed";
+    const sourceFamily = String(item?.retrieval_source_family || "").trim()
+      || classifyRetrievedSourceFamily(annotatedItem, state);
+    item.retrieval_origin = originKey;
+    item.retrieval_source_family = sourceFamily;
+    state.retrievalOriginCounts[originKey] = (state.retrievalOriginCounts[originKey] || 0) + 1;
+    state.retrievalSourceFamilyCounts[sourceFamily] = (state.retrievalSourceFamilyCounts[sourceFamily] || 0) + 1;
+    state.brokerItemCount += 1;
+    if (originKey === "broker_official") state.brokerOfficialItemCount += 1;
+    if (originKey === "broker_publisher_feed") state.brokerPublisherFeedItemCount += 1;
+    const sourceId = String(item?.broker_source_id || "").trim();
+    if (sourceId && !state.brokerSourceIds.includes(sourceId)) state.brokerSourceIds.push(sourceId);
+  }
+  return merged;
 }
 
 function sortTopicStates(states) {
@@ -869,7 +912,7 @@ function classifyTopicCoverage(state) {
   return "zero_yield";
 }
 
-function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
+function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, brokerDiagnostics) {
   const attemptedStates = (Array.isArray(states) ? states : []).filter((state) => Number(state?.totalCallsScheduled || 0) > 0);
   const preferredDomainsUsed = uniqueValues(attemptedStates.flatMap((state) => state.preferredDomains || []));
   const searchResultDomains = uniqueValues(attemptedStates.flatMap((state) => state.searchResultDomains || []));
@@ -889,11 +932,15 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     broad: Number(combined.broad || 0) + Number(state?.retrievalOriginCounts?.broad || 0),
     trusted_official: Number(combined.trusted_official || 0) + Number(state?.retrievalOriginCounts?.trusted_official || 0),
     trusted_reported: Number(combined.trusted_reported || 0) + Number(state?.retrievalOriginCounts?.trusted_reported || 0),
+    broker_official: Number(combined.broker_official || 0) + Number(state?.retrievalOriginCounts?.broker_official || 0),
+    broker_publisher_feed: Number(combined.broker_publisher_feed || 0) + Number(state?.retrievalOriginCounts?.broker_publisher_feed || 0),
   }), {
     preferred: 0,
     broad: 0,
     trusted_official: 0,
     trusted_reported: 0,
+    broker_official: 0,
+    broker_publisher_feed: 0,
   });
   const retrievalSourceFamilyCounts = attemptedStates.reduce((combined, state) => ({
     official: Number(combined.official || 0) + Number(state?.retrievalSourceFamilyCounts?.official || 0),
@@ -926,6 +973,10 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     trusted_source_call_count: Number(state?.trustedFamilyCallsMade || 0),
     trusted_official_call_count: Number(state?.trustedOfficialCallsMade || 0),
     trusted_reported_call_count: Number(state?.trustedReportedCallsMade || 0),
+    broker_item_count: Number(state?.brokerItemCount || 0),
+    broker_official_item_count: Number(state?.brokerOfficialItemCount || 0),
+    broker_publisher_feed_item_count: Number(state?.brokerPublisherFeedItemCount || 0),
+    broker_source_ids: Array.isArray(state?.brokerSourceIds) ? state.brokerSourceIds.slice() : [],
     retrieval_origin_counts: { ...(state?.retrievalOriginCounts || {}) },
     retrieval_source_family_counts: { ...(state?.retrievalSourceFamilyCounts || {}) },
     next_preferred_query_index: Number(state?.nextPreferredQueryIndex || 0),
@@ -980,6 +1031,33 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     retrieval_origin_counts: retrievalOriginCounts,
     retrieval_source_family_counts: retrievalSourceFamilyCounts,
     conversion_funnel: conversionFunnel,
+    standard_topic_broker: brokerDiagnostics && typeof brokerDiagnostics === "object"
+      ? {
+        enabled: brokerDiagnostics.enabled === true,
+        config_source: brokerDiagnostics.config_source || "none",
+        active_path: brokerDiagnostics.active_path || null,
+        active_topic_tags: Array.isArray(brokerDiagnostics.active_topic_tags) ? brokerDiagnostics.active_topic_tags.slice() : [],
+        lane_counts: { ...(brokerDiagnostics.lane_counts || {}) },
+        source_fetch_count: Number(brokerDiagnostics.source_fetch_count || 0),
+        source_success_count: Number(brokerDiagnostics.source_success_count || 0),
+        source_failure_count: Number(brokerDiagnostics.source_failure_count || 0),
+        source_diagnostics: Array.isArray(brokerDiagnostics.source_diagnostics) ? brokerDiagnostics.source_diagnostics.slice() : [],
+        topic_diagnostics: Array.isArray(brokerDiagnostics.topic_diagnostics)
+          ? brokerDiagnostics.topic_diagnostics.slice()
+          : Object.values(brokerDiagnostics.topic_diagnostics || {}),
+      }
+      : {
+        enabled: false,
+        config_source: "none",
+        active_path: null,
+        active_topic_tags: [],
+        lane_counts: { publisher_feed: 0, official: 0 },
+        source_fetch_count: 0,
+        source_success_count: 0,
+        source_failure_count: 0,
+        source_diagnostics: [],
+        topic_diagnostics: [],
+      },
     zero_yield_retry_count: attemptedStates.reduce((sum, state) => sum + Number(state?.zeroYieldRetryCount || 0), 0),
     budget_stop_reason: String(budgetTracker?.stop_reason || "").trim() || null,
     max_concurrent_fetches: Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY)),
@@ -1009,6 +1087,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     normalizeUrlForDedup,
     isFetchedItemEligible,
     annotateFetchedItems,
+    standardTopicBrokerRuntime,
   } = deps || {};
   const logger = typeof log === "function" ? log : () => {};
   const topicNormalizer = typeof normalizeTopicToken === "function"
@@ -1033,6 +1112,10 @@ function createDigestOrchestratorFetchRuntime(deps) {
   const annotateFetched = typeof annotateFetchedItems === "function"
     ? annotateFetchedItems
     : (items) => Array.isArray(items) ? items : [];
+  const standardTopicBroker = standardTopicBrokerRuntime
+    && typeof standardTopicBrokerRuntime.fetchBrokerCandidates === "function"
+    ? standardTopicBrokerRuntime
+    : null;
   const maxFetchConcurrency = resolveFetchConcurrency(CONFIG?.digest);
 
   function resolveBatchConcurrency(batchName, jobCount, budgetTracker) {
@@ -1653,11 +1736,27 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const customFetchCalls = customStates.reduce((sum, state) => {
       return sum + Number(state?.apiCalls || 0);
     }, 0);
+    let brokerDiagnostics = null;
+    if (standardTopicBroker && standardStates.length > 0) {
+      const brokerResult = await standardTopicBroker.fetchBrokerCandidates({
+        topicStates: standardStates,
+        retrievedAt: new Date().toISOString(),
+        maxAgeHours: Number(digestConfig.maxArticleAgeHours || (targetChatId ? 72 : 48)),
+      });
+      brokerDiagnostics = brokerResult?.diagnostics || null;
+      for (const state of standardStates) {
+        const tag = String(state?.topic?.tag || "").trim().toUpperCase();
+        const brokerItems = Array.isArray(brokerResult?.topicItems?.[tag]) ? brokerResult.topicItems[tag] : [];
+        if (brokerItems.length > 0) {
+          mergeBrokerItemsIntoState(state, brokerItems, normalizeUrlForDedup, itemEligibilityFn, annotateFetched);
+        }
+      }
+    }
     const standardItems = standardStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
     const customItems = customStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
     let allItems = customItems.concat(standardItems);
     const providerDiagnostics = summarizeProviderDiagnostics([...standardStates, ...customStates]);
-    const fetchDiagnostics = buildFetchDiagnostics([...standardStates, ...customStates], budgetTracker, maxFetchConcurrency);
+    const fetchDiagnostics = buildFetchDiagnostics([...standardStates, ...customStates], budgetTracker, maxFetchConcurrency, brokerDiagnostics);
 
     logger(`Fetched ${allItems.length} raw items`);
 

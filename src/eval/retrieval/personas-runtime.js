@@ -75,6 +75,44 @@ const STANDARD_CORE_PERSONAS = Object.freeze([
     group: "standard_core",
   },
 ]);
+const STANDARD_PHASE1_PERSONAS = Object.freeze([
+  {
+    id: "phase1_healthcare",
+    label: "HEALTHCARE",
+    topics: ["HEALTHCARE", "STRATEGY"],
+    group: "standard_phase1",
+  },
+  {
+    id: "phase1_life_sciences",
+    label: "LIFE SCIENCES",
+    topics: ["LIFE SCIENCES", "HEALTHCARE"],
+    group: "standard_phase1",
+  },
+  {
+    id: "phase1_technology",
+    label: "TECHNOLOGY",
+    topics: ["TECHNOLOGY", "AI×TECH"],
+    group: "standard_phase1",
+  },
+  {
+    id: "phase1_energy",
+    label: "ENERGY",
+    topics: ["ENERGY", "SUSTAINABILITY"],
+    group: "standard_phase1",
+  },
+  {
+    id: "phase1_financial_services",
+    label: "FINANCIAL SERVICES",
+    topics: ["FINANCIAL SERVICES", "M&A ADVISORY"],
+    group: "standard_phase1",
+  },
+  {
+    id: "phase1_policy_regulatory",
+    label: "POLICY×REGULATORY",
+    topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"],
+    group: "standard_phase1",
+  },
+]);
 
 function topicSlug(value) {
   return normalizeTopicToken(value).replace(/\s+/g, "_");
@@ -151,6 +189,15 @@ function buildStandardCorePersonas() {
   }));
 }
 
+function buildStandardPhase1Personas() {
+  return STANDARD_PHASE1_PERSONAS.map((persona) => buildVirtualUser({
+    id: persona.id,
+    label: persona.label,
+    group: persona.group,
+    topics: persona.topics,
+  }));
+}
+
 function buildStandardTopicPersonas() {
   return [
     ...buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
@@ -188,6 +235,9 @@ function buildScenarioRoster(scenarioId) {
   if (scenarioId === "standard_core") {
     return buildStandardCorePersonas();
   }
+  if (scenarioId === "standard_phase1") {
+    return buildStandardPhase1Personas();
+  }
   if (scenarioId === "standard_topics") {
     return buildStandardTopicPersonas();
   }
@@ -213,6 +263,7 @@ module.exports = {
   buildIndustryPersonas,
   buildMixedPersonas,
   buildStandardCorePersonas,
+  buildStandardPhase1Personas,
   buildScenarioDefinition,
   buildScenarioMatrix,
   buildScenarioRoster,

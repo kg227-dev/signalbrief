@@ -340,3 +340,122 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(freshnessOut.diagnostics.dominant_failure_mode, "thin_pool");
   assert.ok(repeatLogs.some((line) => line.includes("[freshness-semantic]")));
 })();
+
+(() => {
+  const officialCapRuntime = createDigestOrchestratorDeliveryRankingRuntime({
+    CONFIG: {
+      digest: {
+        perUserFreshnessMinItems: 3,
+        perUserFreshnessDigests: 3,
+        perUserEntityHistoryDigests: 3,
+        maxSignalsPerEntity: 5,
+      },
+    },
+    log: () => {},
+    filterItemsByTopics: () => ({
+      items: [
+        {
+          tag: "HEALTHCARE",
+          headline: "FDA approves first therapy",
+          url: "https://www.fda.gov/approvals/one",
+          source_type: "primary_official",
+          content_kind: "official_document",
+          source_policy: "preferred",
+          source_authority: 0.95,
+          strategic_value: 0.8,
+          routine_item_score: 0.1,
+          topicMatch: 9,
+        },
+        {
+          tag: "HEALTHCARE",
+          headline: "FDA issues guidance",
+          url: "https://www.fda.gov/guidance/two",
+          source_type: "primary_official",
+          content_kind: "official_document",
+          source_policy: "preferred",
+          source_authority: 0.95,
+          strategic_value: 0.79,
+          routine_item_score: 0.1,
+          topicMatch: 9,
+        },
+        {
+          tag: "HEALTHCARE",
+          headline: "CMS expands model",
+          url: "https://www.cms.gov/model/three",
+          source_type: "primary_official",
+          content_kind: "official_document",
+          source_policy: "preferred",
+          source_authority: 0.93,
+          strategic_value: 0.78,
+          routine_item_score: 0.1,
+          topicMatch: 9,
+        },
+        {
+          tag: "HEALTHCARE",
+          headline: "STAT explains the market impact",
+          url: "https://www.statnews.com/2026/03/22/market-impact/",
+          source_type: "reported_media",
+          content_kind: "article",
+          source_policy: "preferred",
+          source_authority: 0.88,
+          strategic_value: 0.82,
+          routine_item_score: 0.1,
+          topicMatch: 9,
+        },
+        {
+          tag: "HEALTHCARE",
+          headline: "Reuters on payer response",
+          url: "https://www.reuters.com/world/us/payer-response/",
+          source_type: "reported_media",
+          content_kind: "article",
+          source_policy: "preferred",
+          source_authority: 0.95,
+          strategic_value: 0.83,
+          routine_item_score: 0.1,
+          topicMatch: 9,
+        },
+      ],
+      standardTopicsLower: ["healthcare"],
+      customKeywords: [],
+      specialistMode: false,
+      wasFiltered: true,
+    }),
+    applyTopicRelevanceScores: (items) => items.map((item, index) => ({
+      ...item,
+      relevanceScore: 10 - index,
+      why_shown: ["topic_match"],
+    })),
+    buildRecentEntityHistory: () => ({ entityCounts: {}, storylineKeys: new Set() }),
+    suppressRecentlySentForUser: (items) => ({ items, removed: 0, backfilled: 0 }),
+    isRecentRepeatItem: () => false,
+    parseSourceDomain: () => "example.com",
+    applyEntityCoverageCap: (items) => items,
+    reserveCustomKeywordSlot: (items) => items,
+  });
+
+  const officialCapOut = officialCapRuntime.rankAndSuppressUserItems({
+    user: {
+      chatId: "official-cap",
+      topics: ["HEALTHCARE"],
+      preferences: { items_per_digest: 5 },
+      topic_weights: {},
+    },
+    enriched: [],
+    repeatIndex: { days: 3, urlKeys: new Set(), headlineKeys: new Set() },
+    repeatPenalty: 0.2,
+    depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+    rankingPolicy: { minSignalScoreForFinal: 0 },
+    recentDigestRecords: [],
+    nowIso: "2026-03-23T11:00:00.000Z",
+    captureDiagnostics: true,
+  });
+
+  assert.strictEqual(
+    officialCapOut.userItems.filter((item) => String(item?.source_type || "").trim().toLowerCase() === "primary_official").length,
+    2
+  );
+  assert.ok(
+    Array.isArray(officialCapOut.diagnostics.item_trace?.transitions)
+      && officialCapOut.diagnostics.item_trace.transitions.some((row) => row.reason === "removed_by_official_document_cap")
+  );
+})();

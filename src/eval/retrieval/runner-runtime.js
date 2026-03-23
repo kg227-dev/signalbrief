@@ -51,6 +51,7 @@ const {
 } = require("../../runtime/preferred-source-registry-runtime");
 const { createSourceRegistryRuntime } = require("../../runtime/source-policy-registry-runtime");
 const { resolveSignalBriefRuntimePaths } = require("../../runtime/runtime-state-paths-runtime");
+const { createStandardTopicBrokerRuntime } = require("../../runtime/standard-topic-broker-runtime");
 const {
   DELIVERY_POLICY,
   classifyDeliveryConfidence,
@@ -173,7 +174,13 @@ function classifyTraceTransitionCategory(transition = {}) {
     return null;
   }
   if (reason === "removed_by_source_policy_cap") return "source_quality_threshold";
-  if (reason === "removed_by_entity_cap" || reason === "selection_custom_cap") return "diversity_or_cap_logic";
+  if (
+    reason === "removed_by_entity_cap"
+    || reason === "selection_custom_cap"
+    || reason === "removed_by_official_document_cap"
+  ) {
+    return "diversity_or_cap_logic";
+  }
   if (reason === "removed_by_custom_precision") return "topic_relevance_threshold";
   if (reason === "no_deliverable_items") return "other_final_selection_rule";
   if (reason === "excluded_by_final_quality_threshold") {
@@ -696,6 +703,16 @@ function createEvalServices() {
     fs,
     preferredSourcesPath: runtimePaths.preferredSourcesPath,
   });
+  const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
+    fs,
+    path,
+    appRoot: runtimePaths.appRoot,
+    env: process.env,
+    nodeEnv: process.env.NODE_ENV,
+    standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath: path.join(runtimePaths.appRoot, "config", "standard-topic-broker-sources.json"),
+    log,
+  });
   const archiveRuntime = createDigestArchiveRuntime({
     APP_ROOT: runtimePaths.appRoot,
     archiveDir: runtimePaths.archiveDir,
@@ -770,6 +787,7 @@ function createEvalServices() {
     rankingRuntime,
     runtimePaths,
     sourceRegistryRuntime,
+    standardTopicBrokerRuntime,
   };
 }
 
@@ -856,6 +874,7 @@ function buildGlobalSelection({
       return annotated.length > 0 && annotated[0].hard_exclude !== true;
     },
     annotateFetchedItems: annotateEditorialSignals,
+    standardTopicBrokerRuntime: services.standardTopicBrokerRuntime,
   });
 
   return fetchRuntime.orchestrateFetch({

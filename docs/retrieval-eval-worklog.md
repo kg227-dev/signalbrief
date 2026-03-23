@@ -3194,3 +3194,147 @@ For the 17 standard topics only:
   - then strict shippability
 
 If this next architecture step does not materially lift standard-topic stretch shippability, then the next decision should be a larger retrieval redesign rather than more local tuning.
+
+## 2026-03-23 — Phase 1 standard-topic broker implemented (6-topic MVP)
+
+### What changed
+
+Implemented the Phase 1 `standard-topic retrieval broker` for:
+
+- `HEALTHCARE`
+- `LIFE SCIENCES`
+- `TECHNOLOGY`
+- `ENERGY`
+- `FINANCIAL SERVICES`
+- `POLICY×REGULATORY`
+
+Runtime changes:
+
+- added bundled broker config at `config/standard-topic-broker-sources.json`
+- added broker runtime in `src/runtime/standard-topic-broker-runtime.js`
+- wired broker candidates into `src/entrypoints/digest-orchestrator-fetch-runtime.js`
+- added `standard_phase1` eval scenario and run-mode scoping so eval fetches only the 6 Phase 1 topics
+- added official-document representative guardrails:
+  - prefer strong reported article over official representative when the storyline is close
+  - cap official-document-heavy finalists in delivery ranking
+- wired the broker into the retrieval-eval harness so eval now measures the actual Phase 1 architecture rather than a stale fetch path
+
+Operability details implemented:
+
+- global lane toggles
+- per-topic enable/disable
+- per-topic lane enable/disable
+- per-source enable/disable
+- per-lane / per-topic / per-source diagnostics in fetch output
+
+### What we learned
+
+The broker now works mechanically. The valid broker-on eval is:
+
+- `retrieval-eval:2026-03-23T20-08-08-957Z`
+
+The same-scope broker-disabled control is:
+
+- `retrieval-eval:2026-03-23T20-12-07-953Z`
+
+#### Broker-on vs broker-off
+
+- raw candidates: `84` vs `16`
+- cleaned candidates: `84` vs `16`
+- global selected pool: `7` vs `7`
+- broker contribution:
+  - `broker_publisher_feed: 69`
+  - `broker_official: 9`
+- topics with at least `1` usable retained item:
+  - broker on: `5/6`
+  - broker off: `6/6`
+- topics with at least `3` usable retained items:
+  - broker on: `3/6`
+  - broker off: `3/6`
+- strict shippable: `0/6` in both runs
+- stretch shippable: `0/6` in both runs
+- 5-item fulfillment rate: `0%` in both runs
+- withheld-after-retry rate: `100%` in both runs
+
+So Phase 1 changed candidate supply a lot, but did **not** materially improve product shippability yet.
+
+#### Where the broker helped
+
+- `HEALTHCARE`
+  - broker added `13` specialist feed candidates
+  - topic moved to a deeper pool but still died at `delivery_policy_total_item_shortfall`
+- `TECHNOLOGY`
+  - broker added `52` publisher-feed candidates
+  - topic became heavily supplied, but internal promotable inventory still stayed thin
+- `POLICY×REGULATORY`
+  - broker added `13` candidates (`9 official`, `4 publisher-feed`)
+  - topic moved from earlier zero-yield patterns to actual covered inventory, but still not enough for the 5-item shipping contract
+
+#### Where the starter source pack failed
+
+- `FINANCIAL SERVICES`
+  - broker contributed `0`
+  - current source pack did not convert into retained inventory
+- `ENERGY`
+  - broker contributed `0`
+  - source endpoints returned empty / stale / blocked (`FERC 403`, `EIA` stale/validation-heavy)
+- `LIFE SCIENCES`
+  - broker contributed `0`
+  - current sources are misconfigured or low-converting:
+    - `BioSpace` endpoint `404`
+    - `EMA` endpoint `404`
+    - `FDA press announcements` endpoint `404`
+    - `FierceBiotech` / `FiercePharma` parsed but `25/25` entries dropped by validation
+
+#### Source-level diagnostics that matter
+
+Broker-on source diagnostics showed the current v1 starter set is mixed:
+
+- strong:
+  - `STAT`: `20 parsed / 13 retained`
+  - `TechCrunch`: `20 / 20`
+  - `Ars Technica`: `20 / 10` (`10` stale)
+  - `WIRED`: `50 / 22` (`28` stale)
+  - `Federal Register API`: `20 / 9`
+  - `Federal News Network`: `15 / 4`
+- weak / broken / not ready:
+  - `FDA press announcements`: `404`
+  - `BioSpace RSS`: `404`
+  - `EMA news`: `404`
+  - `GovExec feeds`: `404`
+  - `DOJ Antitrust news`: `404`
+  - `FERC news releases`: `403`
+  - `American Banker feed`: `0 parsed / 0 retained`
+  - `Canary Media RSS`: `0 parsed / 0 retained`
+  - `CMS newsroom`: `0 parsed / 0 retained`
+  - `Federal Reserve press releases`: `0 parsed / 0 retained`
+  - `SEC press releases`: `0 parsed / 0 retained`
+
+### What decision this affects
+
+The broker architecture is now real and testable, but the current starter source pack is not yet good enough to improve standard-topic shippability.
+
+That means:
+
+- the architecture direction still looks right
+- the immediate bottleneck has shifted to `source-pack quality + endpoint correctness + feed normalization`
+- the next broker iteration should focus on hardening Phase 1 source endpoints and replacing low-converting feeds before expanding topic coverage
+
+### What remains uncertain
+
+- whether a hardened Phase 1 source pack can move `stretch-shippable` above `0/6` without changing downstream trust bars
+- how much of `TECHNOLOGY` saturation is useful supply vs noisy publisher overproduction
+- whether `FINANCIAL SERVICES`, `ENERGY`, and `LIFE SCIENCES` need different first-choice source families rather than just corrected endpoints
+
+### Current recommendation
+
+Do **not** back out the broker implementation.
+
+Do **not** expand to Phase 2A yet.
+
+Next broker work should be narrow:
+
+- fix broken/empty endpoints in the Phase 1 source pack
+- replace low-converting feeds with validated source-owned feeds or stable dated indexes
+- rerun `standard_phase1`
+- only expand topic coverage if that hardened Phase 1 pack moves retained article-shaped inventory and stretch shippability materially

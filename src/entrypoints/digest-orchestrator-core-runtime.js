@@ -104,6 +104,7 @@ const {
   createPreferredSourceRegistryRuntime,
   buildPreferredDomainShortlist,
 } = require("../runtime/preferred-source-registry-runtime");
+const { createStandardTopicBrokerRuntime } = require("../runtime/standard-topic-broker-runtime");
 const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestrator-spend-guard-runtime");
 const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orchestrator-circuit-breaker-runtime");
 const { createDigestOrchestratorAdmissionGateRuntime } = require("./digest-orchestrator-admission-gate-runtime");
@@ -808,6 +809,16 @@ async function main() {
   }
   const preferredSourceRegistry = preferredSourceRegistryRuntime.loadPreferredSourceRegistry();
   setPreferredSourceRegistry(preferredSourceRegistry);
+  const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
+    fs,
+    path,
+    appRoot: APP_ROOT,
+    env: process.env,
+    nodeEnv: process.env.NODE_ENV,
+    standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
+    log,
+  });
   const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
   if (learnedAdjustments.size > 0) {
     setLearnedDomainAdjustments(learnedAdjustments);
@@ -829,6 +840,7 @@ async function main() {
       return annotated.length > 0 && annotated[0].hard_exclude !== true;
     },
     annotateFetchedItems: annotateEditorialSignals,
+    standardTopicBrokerRuntime,
   });
   const {
     selectionTarget,

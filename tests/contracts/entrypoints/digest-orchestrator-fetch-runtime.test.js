@@ -64,6 +64,33 @@ assertModuleExports(() => runtime, TARGET_REL);
     ["HEALTHCARE", "FINANCIAL SERVICES", "TECHNOLOGY", "AI×TECH", "TALENT"]
   );
 
+  const standardPhase1Topics = resolveTopicsToFetch({
+    configTopics: [
+      { tag: "HEALTHCARE", queries: ["a", "b"] },
+      { tag: "FINANCIAL SERVICES", queries: ["c", "d"] },
+      { tag: "ENERGY", queries: ["e", "f"] },
+      { tag: "LIFE SCIENCES", queries: ["g", "h"] },
+      { tag: "TECHNOLOGY", queries: ["i", "j"] },
+      { tag: "POLICY×REGULATORY", queries: ["k", "l"] },
+      { tag: "AI×TECH", queries: ["m", "n"] },
+      { tag: "STRATEGY", queries: ["o", "p"] },
+    ],
+    dueUsers: [
+      { topics: ["HEALTHCARE", "STRATEGY"] },
+      { topics: ["FINANCIAL SERVICES", "M&A ADVISORY"] },
+      { topics: ["ENERGY", "SUSTAINABILITY"] },
+      { topics: ["LIFE SCIENCES", "HEALTHCARE"] },
+      { topics: ["TECHNOLOGY", "AI×TECH"] },
+      { topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"] },
+    ],
+    runMode: "standard_phase1",
+    log: () => {},
+  });
+  assert.deepStrictEqual(
+    standardPhase1Topics.map((topic) => topic.tag),
+    ["HEALTHCARE", "FINANCIAL SERVICES", "ENERGY", "LIFE SCIENCES", "TECHNOLOGY", "POLICY×REGULATORY"]
+  );
+
   const uncappedCustomHeavy = resolveCustomTopicSlugs({
     dueUsers: [
       { topics: ["custom_nvidia"] },
@@ -214,6 +241,93 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(fetched.fetchDiagnostics.zero_yield_retry_count, 0);
   assert.strictEqual(fetched.fetchDiagnostics.budget_stop_reason, null);
   assert.strictEqual(incidents.length, 0);
+  assert.strictEqual(fetched.fetchDiagnostics.standard_topic_broker.enabled, false);
+
+  const brokerRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [
+        { tag: "HEALTHCARE", queries: ["a"] },
+      ],
+      digest: {
+        itemCount: 5,
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async () => ({
+      apiCalls: 1,
+      items: [],
+      diagnostics: {
+        provider: "perplexity",
+        successful_calls: 1,
+        failed_calls: 0,
+        transport_errors: 0,
+        status_counts: {},
+      },
+    }),
+    annotateFetchedItems: (items) => Array.isArray(items) ? items.map((item) => ({ ...item, annotated: true })) : [],
+    standardTopicBrokerRuntime: {
+      fetchBrokerCandidates: async () => ({
+        topicItems: {
+          HEALTHCARE: [{
+            headline: "FDA approves rare disease therapy",
+            url: "https://www.fda.gov/news-events/press-announcements/fda-approves-rare-disease-therapy",
+            canonical_url: "https://www.fda.gov/news-events/press-announcements/fda-approves-rare-disease-therapy",
+            published_date: "2026-03-22T14:00:00.000Z",
+            tag: "HEALTHCARE",
+            source: "fda.gov",
+            source_domain: "fda.gov",
+            source_policy: "preferred",
+            source_authority: 0.9,
+            source_type: "primary_official",
+            source_tier: "strong",
+            content_kind: "official_document",
+            retrieval_origin: "broker_official",
+            broker_source_id: "fda_healthcare",
+          }],
+        },
+        diagnostics: {
+          enabled: true,
+          config_source: "bundled",
+          active_path: "/tmp/broker.json",
+          active_topic_tags: ["HEALTHCARE"],
+          lane_counts: { publisher_feed: 0, official: 1 },
+          source_fetch_count: 1,
+          source_success_count: 1,
+          source_failure_count: 0,
+          source_diagnostics: [{ id: "fda_healthcare", lane: "official", retained_count: 1 }],
+          topic_diagnostics: {
+            HEALTHCARE: {
+              tag: "HEALTHCARE",
+              lane_counts: { publisher_feed: 0, official: 1 },
+              source_counts: { fda_healthcare: 1 },
+              source_ids: ["fda_healthcare"],
+              item_count: 1,
+              article_item_count: 0,
+              official_document_count: 1,
+              errors: [],
+            },
+          },
+        },
+      }),
+    },
+    emitDigestIncident: async () => {},
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+  });
+
+  const brokered = await brokerRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["HEALTHCARE"], preferences: { items_per_digest: 5 } }],
+    runMode: "standard_phase1",
+  });
+  assert.strictEqual(brokered.allItems.length, 1);
+  assert.strictEqual(brokered.allItems[0].retrieval_origin, "broker_official");
+  assert.strictEqual(brokered.fetchDiagnostics.standard_topic_broker.enabled, true);
+  assert.strictEqual(brokered.fetchDiagnostics.standard_topic_broker.lane_counts.official, 1);
+  assert.strictEqual(brokered.fetchDiagnostics.retrieval_origin_counts.broker_official, 1);
+  assert.strictEqual(brokered.fetchDiagnostics.topic_diagnostics[0].broker_item_count, 1);
+  assert.strictEqual(brokered.fetchDiagnostics.topic_diagnostics[0].broker_official_item_count, 1);
+  assert.deepStrictEqual(brokered.fetchDiagnostics.topic_diagnostics[0].broker_source_ids, ["fda_healthcare"]);
 
   const budgetedFetchCalls = [];
   const budgetRuntime = createDigestOrchestratorFetchRuntime({

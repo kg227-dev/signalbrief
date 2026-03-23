@@ -105,6 +105,14 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.preferredSourcesPath || readEnvValue(env, "SIGNALBRIEF_PREFERRED_SOURCES_PATH"),
     path.join(dataDir, "preferred-sources.json")
   );
+  const spendGuardStatePath = resolveOptionalPath(
+    options.spendGuardStatePath || readEnvValue(env, "SIGNALBRIEF_SPEND_GUARD_STATE_PATH"),
+    path.join(dataDir, "spend-guard-state.json")
+  );
+  const circuitBreakerStatePath = resolveOptionalPath(
+    options.circuitBreakerStatePath || readEnvValue(env, "SIGNALBRIEF_CIRCUIT_BREAKER_STATE_PATH"),
+    path.join(dataDir, "circuit-breaker.json")
+  );
 
   return {
     appRoot,
@@ -126,6 +134,8 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     domainStatsPath,
     sourceRegistryPath,
     preferredSourcesPath,
+    spendGuardStatePath,
+    circuitBreakerStatePath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };
@@ -181,6 +191,8 @@ function describeRuntimePathAlignment(runtimePaths) {
     domain_stats: deriveComponentRoot(paths.domainStatsPath, dataRoot),
     source_registry: deriveComponentRoot(paths.sourceRegistryPath, dataRoot),
     preferred_sources: deriveComponentRoot(paths.preferredSourcesPath, dataRoot),
+    spend_guard: deriveComponentRoot(paths.spendGuardStatePath, dataRoot),
+    circuit_breaker: deriveComponentRoot(paths.circuitBreakerStatePath, dataRoot),
     logs: logRoots.length === 1 ? logRoots[0] : null,
     scheduler: schedulerRoots.length === 1 ? schedulerRoots[0] : null,
   };
@@ -193,6 +205,8 @@ function describeRuntimePathAlignment(runtimePaths) {
   if (componentRoots.domain_stats !== dataRoot) divergentComponents.push("domain_stats");
   if (componentRoots.source_registry !== dataRoot) divergentComponents.push("source_registry");
   if (componentRoots.preferred_sources !== dataRoot) divergentComponents.push("preferred_sources");
+  if (componentRoots.spend_guard !== dataRoot) divergentComponents.push("spend_guard");
+  if (componentRoots.circuit_breaker !== dataRoot) divergentComponents.push("circuit_breaker");
   if (logRoots.length !== 1 || logRoots[0] !== dataRoot) divergentComponents.push("logs");
   if (schedulerRoots.length !== 1 || schedulerRoots[0] !== dataRoot) divergentComponents.push("scheduler");
 
@@ -211,6 +225,8 @@ function describeRuntimePathAlignment(runtimePaths) {
       domain_stats_outside_data_root: componentRoots.domain_stats !== dataRoot,
       source_registry_outside_data_root: componentRoots.source_registry !== dataRoot,
       preferred_sources_outside_data_root: componentRoots.preferred_sources !== dataRoot,
+      spend_guard_outside_data_root: componentRoots.spend_guard !== dataRoot,
+      circuit_breaker_outside_data_root: componentRoots.circuit_breaker !== dataRoot,
       multiple_log_roots: logRoots.length > 1,
       logs_outside_data_root: logRoots.some((root) => root !== dataRoot),
       multiple_scheduler_roots: schedulerRoots.length > 1,
@@ -242,6 +258,8 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "domainStatsPath", path: paths.domainStatsPath, kind: "file" },
     { key: "sourceRegistryPath", path: paths.sourceRegistryPath, kind: "file" },
     { key: "preferredSourcesPath", path: paths.preferredSourcesPath, kind: "file" },
+    { key: "spendGuardStatePath", path: paths.spendGuardStatePath, kind: "file" },
+    { key: "circuitBreakerStatePath", path: paths.circuitBreakerStatePath, kind: "file" },
   ];
 }
 

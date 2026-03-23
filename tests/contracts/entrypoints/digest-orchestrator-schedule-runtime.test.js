@@ -176,3 +176,48 @@ function buildRetryStateRuntime(entry) {
   });
   assert.strictEqual(out.dueUsers.length, 0, "retry should wait until next_retry_at");
 }
+
+{
+  const out = resolveDueUsers({
+    targetChatId: null,
+    allUsers: () => [{
+      ...buildUser("2026-03-14T04:04:00.000Z"),
+      preferences: {
+        delivery_time: "21:30",
+        days_of_week: [0, 1, 2, 3, 4, 5, 6],
+        email_enabled: false,
+        telegram_enabled: false,
+      },
+    }],
+    USER_STATUS: { ACTIVE: "active" },
+    getEtNow: () => new Date("2026-03-16T01:30:00.000Z"),
+    getEtNowParts,
+    toEtDateString,
+    CONFIG: { digest: { catchupWindowMinutes: 60 } },
+    log: () => {},
+    allowExampleEmails: true,
+  });
+  assert.strictEqual(out.dueUsers.length, 0, "scheduled runs should ignore users with no enabled delivery channel");
+}
+
+{
+  const out = resolveDueUsers({
+    targetChatId: null,
+    allUsers: () => [buildUser("2026-03-14T04:04:00.000Z")],
+    USER_STATUS: { ACTIVE: "active" },
+    getEtNow: () => new Date("2026-03-16T02:05:00.000Z"),
+    getEtNowParts,
+    toEtDateString,
+    CONFIG: { digest: { catchupWindowMinutes: 60 } },
+    log: () => {},
+    allowExampleEmails: true,
+    retryStateRuntime: buildRetryStateRuntime({
+      user_id: "8711828141",
+      date_et: "2026-03-15",
+      attempt_count: 2,
+      delivery_outcome: "delivery_failed_after_retry",
+      retry_pending: false,
+    }),
+  });
+  assert.strictEqual(out.dueUsers.length, 0, "terminal delivery failures should halt further scheduled retries");
+}

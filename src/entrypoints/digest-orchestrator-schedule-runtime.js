@@ -1,5 +1,27 @@
 "use strict";
 
+const TERMINAL_RETRY_OUTCOMES = new Set([
+  "withheld_after_retry",
+  "withheld_after_retry_window",
+  "delivery_failed_after_retry",
+  "delivery_failed_after_retry_window",
+]);
+
+function hasScheduledDeliveryChannel(user = {}) {
+  const prefs = user.preferences || {};
+  const hasTelegram = !!(
+    user.chatId
+    && !String(user.chatId).startsWith("email-")
+    && prefs.telegram_enabled !== false
+  );
+  const hasEmail = !!(user.email && prefs.email_enabled !== false);
+  return hasTelegram || hasEmail;
+}
+
+function isTerminalRetryOutcome(outcome) {
+  return TERMINAL_RETRY_OUTCOMES.has(String(outcome || "").trim());
+}
+
 function resolveDueUsers(deps) {
   const {
     targetChatId,
@@ -45,7 +67,10 @@ function resolveDueUsers(deps) {
       const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
         ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
         : null;
-      if (retryState?.delivery_outcome === "withheld_after_retry" || retryState?.delivery_outcome === "withheld_after_retry_window") {
+      if (!hasScheduledDeliveryChannel(user)) {
+        return false;
+      }
+      if (isTerminalRetryOutcome(retryState?.delivery_outcome)) {
         return false;
       }
       if (retryState?.retry_pending === true) {
@@ -78,11 +103,12 @@ function resolveDueUsers(deps) {
       const prefs = user.preferences || {};
       const alreadyToday = toEtDateString(user.last_digest_at) === todayET;
       if (alreadyToday) return `${user.email || user.chatId}: alreadyToday`;
+      if (!hasScheduledDeliveryChannel(user)) return `${user.email || user.chatId}: noChannel`;
       const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
         ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
         : null;
-      if (retryState?.delivery_outcome === "withheld_after_retry" || retryState?.delivery_outcome === "withheld_after_retry_window") {
-        return `${user.email || user.chatId}: withheld(${retryState.delivery_outcome})`;
+      if (isTerminalRetryOutcome(retryState?.delivery_outcome)) {
+        return `${user.email || user.chatId}: halted(${retryState.delivery_outcome})`;
       }
       if (retryState?.retry_pending === true) {
         const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
@@ -111,5 +137,7 @@ function resolveDueUsers(deps) {
 }
 
 module.exports = {
+  hasScheduledDeliveryChannel,
+  isTerminalRetryOutcome,
   resolveDueUsers,
 };

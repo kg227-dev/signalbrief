@@ -1069,3 +1069,116 @@ Current candid recommendation after the isolated pass:
 - for the five core standard categories, the daily `5`-item promise does **not** look realistically supportable under the current Perplexity-first retrieval architecture and current trust bar
 - moderate additional tuning may improve some single-category yield
 - it does **not** look likely to make daily five-item fulfillment reliable without a more meaningful retrieval redesign
+
+## 2026-03-23 00:05 ET — final architecture recommendation
+
+This closes the current retrieval-eval pass. The remaining question is no longer “which query should we tweak next?” It is “what retrieval architecture can actually support the product promise?”
+
+### Internal plain-English summary
+
+What we tested:
+
+- the real production retrieval and selection pipeline
+- no-send eval runs across standard categories and custom-heavy cases
+- retrieval-side fixes for freshness, weak-source leakage, custom fallback, broad-query depth, rate-limit handling, and focused standard-category isolation
+
+What we learned:
+
+- the system is much cleaner than where it started:
+  - stale leakage is `0%`
+  - weak/noisy fallback is staying out
+  - `429`s are no longer the dominant issue in focused runs
+- but under a real 5-item contract, core standard categories still cannot ship:
+  - isolated `standard_core` stayed at `0%` fulfillment
+  - the remaining candidate pools are mostly review-tier or empty
+  - the problem is now candidate quality and yield, not selection pollution
+
+What decision this points to:
+
+- if the product promise is truly “5 credible items every day,” the next step should be a retrieval redesign, not more local tuning
+
+### What can still be done inside the current Perplexity-first architecture
+
+These are the remaining practical moves that do **not** change the architecture:
+
+1. stronger topic-family query packs
+   - especially for `TECHNOLOGY`, `HEALTHCARE`, and `LIFE SCIENCES`
+   - bias harder toward Reuters/Bloomberg/FT/WSJ/official/specialist journalism
+   - suppress review-tier trade and summary-heavy domains earlier
+2. better topic-to-source-family mapping
+   - especially for low-yield policy/infrastructure topics
+   - use source-family hints more deliberately before broad fallback
+3. more selective preferred-first behavior
+   - avoid spending too much time on preferred-domain passes when search-result evidence already shows low conversion
+4. better candidate conversion diagnostics
+   - keep distinguishing:
+     - no retrieval
+     - review-tier retrieval
+     - good candidate found but failed policy gate
+
+Expected impact:
+
+- this path can probably move the system from `0%` fulfillment to “occasionally acceptable on good-news days”
+- it does **not** look like the path to a reliable daily 5-item standard-category product
+
+### What requires a more meaningful retrieval redesign
+
+If we want the 5-item promise to be real, these are the changes that matter:
+
+1. add a second retrieval source
+   - not as a replacement, but as recall backfill when Perplexity returns thin or review-tier pools
+   - use Perplexity for broad discovery, then another source for higher-trust/top-tier recall
+2. split retrieval into two stages
+   - stage 1: broad candidate discovery
+   - stage 2: targeted source-specific retrieval against trusted/premium/specialist families for the weak topics that underperformed in stage 1
+3. promote source-family retrieval to a first-class system behavior
+   - instead of only query text + domain hints
+   - example:
+     - healthcare = official + top-tier specialist + top-tier business
+     - policy = official/regulatory first, trusted legal/trade second, general media last
+4. keep the trust bar where it is
+   - the redesign should improve yield without reopening weak-source or filler behavior
+
+Expected impact:
+
+- this is the first path that looks plausibly capable of turning the current system into something operationally viable under a 5-item promise
+
+### Directional viability estimate
+
+My directional judgment:
+
+- `current Perplexity-first architecture + more tuning`
+  - likely improves diagnostics and some bucket-level results
+  - unlikely to make daily 5-item fulfillment reliable
+- `Perplexity-first + second retrieval source + targeted trusted-source retrieval layer`
+  - most likely path to operational viability while preserving the current trust gains
+
+If the goal is to move from `0%` to something actually usable, this second path is the one I would choose.
+
+### Product-policy recommendation
+
+I would frame the product decision as three options:
+
+1. keep the 5-item promise and redesign retrieval
+   - best choice if the promise is strategically important
+   - requires meaningful retrieval work
+2. keep the current architecture and relax the promise
+   - simplest operational path
+   - example:
+     - “up to 5 items”
+     - or a smaller daily minimum for narrower categories
+3. move to a hybrid policy
+   - standard categories: target 5
+   - narrower/custom categories: precision-first with explicit lower guaranteed count
+
+My recommendation:
+
+- if the promise must stay “5 items daily,” redesign retrieval
+- if retrieval redesign is not in scope soon, relax the promise rather than quietly underdelivering
+- the hybrid policy is the most practical short-term product compromise, but it is still a product change, not a retrieval fix
+
+### Final candid recommendation
+
+- the system is now clean enough to trust the diagnosis
+- the diagnosis says the present architecture is **not** enough for a daily 5-item promise at the current quality bar
+- the next meaningful step is retrieval architecture work, not more narrow tuning

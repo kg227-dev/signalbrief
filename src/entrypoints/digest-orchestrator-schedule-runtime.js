@@ -22,6 +22,12 @@ function isTerminalRetryOutcome(outcome) {
   return TERMINAL_RETRY_OUTCOMES.has(String(outcome || "").trim());
 }
 
+function hasExhaustedScheduledRetryBudget(retryState) {
+  if (!retryState || typeof retryState !== "object") return false;
+  const attemptCount = Math.max(0, Number(retryState.attempt_count || 0));
+  return attemptCount >= 2;
+}
+
 function resolveDueUsers(deps) {
   const {
     targetChatId,
@@ -73,6 +79,9 @@ function resolveDueUsers(deps) {
       if (isTerminalRetryOutcome(retryState?.delivery_outcome)) {
         return false;
       }
+      if (hasExhaustedScheduledRetryBudget(retryState)) {
+        return false;
+      }
       if (retryState?.retry_pending === true) {
         const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
         if (Number.isFinite(nextRetryAt) && now.getTime() < nextRetryAt) return false;
@@ -110,6 +119,9 @@ function resolveDueUsers(deps) {
       if (isTerminalRetryOutcome(retryState?.delivery_outcome)) {
         return `${user.email || user.chatId}: halted(${retryState.delivery_outcome})`;
       }
+      if (hasExhaustedScheduledRetryBudget(retryState)) {
+        return `${user.email || user.chatId}: halted(retry_budget_exhausted)`;
+      }
       if (retryState?.retry_pending === true) {
         const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
         const retryReady = Number.isFinite(nextRetryAt) ? now.getTime() >= nextRetryAt : true;
@@ -137,6 +149,7 @@ function resolveDueUsers(deps) {
 }
 
 module.exports = {
+  hasExhaustedScheduledRetryBudget,
   hasScheduledDeliveryChannel,
   isTerminalRetryOutcome,
   resolveDueUsers,

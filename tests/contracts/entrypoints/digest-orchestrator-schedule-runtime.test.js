@@ -221,3 +221,26 @@ function buildRetryStateRuntime(entry) {
   });
   assert.strictEqual(out.dueUsers.length, 0, "terminal delivery failures should halt further scheduled retries");
 }
+
+{
+  const out = resolveDueUsers({
+    targetChatId: null,
+    allUsers: () => [buildUser("2026-03-14T04:04:00.000Z")],
+    USER_STATUS: { ACTIVE: "active" },
+    getEtNow: () => new Date("2026-03-16T02:05:00.000Z"),
+    getEtNowParts,
+    toEtDateString,
+    CONFIG: { digest: { catchupWindowMinutes: 60 } },
+    log: () => {},
+    allowExampleEmails: true,
+    retryStateRuntime: buildRetryStateRuntime({
+      user_id: "8711828141",
+      date_et: "2026-03-15",
+      attempt_count: 2,
+      delivery_outcome: "withheld_retry_pending",
+      retry_pending: true,
+      next_retry_at: "2026-03-16T02:00:00.000Z",
+    }),
+  });
+  assert.strictEqual(out.dueUsers.length, 0, "scheduler should hard-stop users that already exhausted the single retry budget");
+}

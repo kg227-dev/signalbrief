@@ -113,6 +113,26 @@ const STANDARD_PHASE1_PERSONAS = Object.freeze([
     group: "standard_phase1",
   },
 ]);
+const STANDARD_PHASE1_FOCUS_PERSONAS = Object.freeze([
+  {
+    id: "phase1_focus_technology",
+    label: "TECHNOLOGY",
+    topics: ["TECHNOLOGY", "AI×TECH"],
+    group: "standard_phase1_focus",
+  },
+  {
+    id: "phase1_focus_energy",
+    label: "ENERGY",
+    topics: ["ENERGY", "SUSTAINABILITY"],
+    group: "standard_phase1_focus",
+  },
+  {
+    id: "phase1_focus_financial_services",
+    label: "FINANCIAL SERVICES",
+    topics: ["FINANCIAL SERVICES", "M&A ADVISORY"],
+    group: "standard_phase1_focus",
+  },
+]);
 
 function topicSlug(value) {
   return normalizeTopicToken(value).replace(/\s+/g, "_");
@@ -198,6 +218,15 @@ function buildStandardPhase1Personas() {
   }));
 }
 
+function buildStandardPhase1FocusPersonas() {
+  return STANDARD_PHASE1_FOCUS_PERSONAS.map((persona) => buildVirtualUser({
+    id: persona.id,
+    label: persona.label,
+    group: persona.group,
+    topics: persona.topics,
+  }));
+}
+
 function buildStandardTopicPersonas() {
   return [
     ...buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
@@ -238,6 +267,9 @@ function buildScenarioRoster(scenarioId) {
   if (scenarioId === "standard_phase1") {
     return buildStandardPhase1Personas();
   }
+  if (scenarioId === "standard_phase1_focus") {
+    return buildStandardPhase1FocusPersonas();
+  }
   if (scenarioId === "standard_topics") {
     return buildStandardTopicPersonas();
   }
@@ -264,6 +296,7 @@ module.exports = {
   buildMixedPersonas,
   buildStandardCorePersonas,
   buildStandardPhase1Personas,
+  buildStandardPhase1FocusPersonas,
   buildScenarioDefinition,
   buildScenarioMatrix,
   buildScenarioRoster,

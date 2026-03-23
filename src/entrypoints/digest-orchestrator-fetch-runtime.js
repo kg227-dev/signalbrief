@@ -50,6 +50,11 @@ const PHASE1_STANDARD_TOPIC_TAGS = new Set([
   "FINANCIAL SERVICES",
   "POLICY×REGULATORY",
 ]);
+const PHASE1_FOCUS_STANDARD_TOPIC_TAGS = new Set([
+  "TECHNOLOGY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
+]);
 const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
   STRATEGY: Object.freeze([
     "corporate strategic review divestiture restructuring capital allocation Reuters Bloomberg FT WSJ last 48 hours",
@@ -237,6 +242,11 @@ function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, runMode, l
     const phase1Topics = topics.filter((topic) => PHASE1_STANDARD_TOPIC_TAGS.has(String(topic?.tag || "").trim().toUpperCase()));
     logger(`Phase 1 eval: fetching ${phase1Topics.length}/${topics.length} standard topic(s) for ${runMode}`);
     return phase1Topics;
+  }
+  if (String(runMode || "").trim() === "standard_phase1_focus") {
+    const focusTopics = topics.filter((topic) => PHASE1_FOCUS_STANDARD_TOPIC_TAGS.has(String(topic?.tag || "").trim().toUpperCase()));
+    logger(`Focused Phase 1 eval: fetching ${focusTopics.length}/${topics.length} standard topic(s) for ${runMode}`);
+    return focusTopics;
   }
   if (isAggressiveStandardRun(runMode)) {
     const focusedTags = buildAllStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());

@@ -64,6 +64,20 @@ const config = {
       content_kind: "article",
     },
     {
+      id: "dive_rss",
+      enabled: true,
+      lane: "publisher_feed",
+      topic_tags: ["HEALTHCARE"],
+      family: "healthcare_reported",
+      source_kind: "trade_specialist",
+      domains: ["utilitydive.com"],
+      endpoint: "https://feeds.example.com/dive.xml",
+      parser: "rss",
+      content_kind: "article",
+      allow_article_like_listing_urls: true,
+      url_exclude_patterns: ["/spons/"],
+    },
+    {
       id: "fda_index",
       enabled: true,
       lane: "official",
@@ -125,6 +139,29 @@ const responses = new Map([
         </channel>
       </rss>`,
   }],
+  ["https://feeds.example.com/dive.xml", {
+    ok: true,
+    status: 200,
+    url: "https://feeds.example.com/dive.xml",
+    bodyText: `<?xml version="1.0" encoding="UTF-8"?>
+      <rss version="2.0">
+        <channel>
+          <title>Utility Dive</title>
+          <item>
+            <title>Grid resilience funding accelerates hospital backup power upgrades</title>
+            <link>https://www.utilitydive.com/news/grid-resilience-funding-accelerates-hospital-backup-power-upgrades/815999/</link>
+            <pubDate>Sun, 22 Mar 2026 12:00:00 GMT</pubDate>
+            <description>Fresh article-shaped utility item.</description>
+          </item>
+          <item>
+            <title>Sponsored utility marketing content</title>
+            <link>https://www.utilitydive.com/spons/grid-marketing-playbook/815998/</link>
+            <pubDate>Sun, 22 Mar 2026 12:00:00 GMT</pubDate>
+            <description>Sponsored content.</description>
+          </item>
+        </channel>
+      </rss>`,
+  }],
   ["https://www.fda.gov/news-events/press-announcements", {
     ok: true,
     status: 200,
@@ -167,7 +204,7 @@ const brokerRuntime = createStandardTopicBrokerRuntime({
 });
 
 const sanitized = sanitizeBrokerConfig(config);
-assert.strictEqual(sanitized.sources.length, 3);
+assert.strictEqual(sanitized.sources.length, 4);
 assert.strictEqual(sanitized.topics.HEALTHCARE.enabled, true);
 
 const snapshot = brokerRuntime.inspectStandardTopicBrokerConfig();
@@ -182,12 +219,14 @@ assert.strictEqual(snapshot.active_path, runtimeConfigPath);
   });
 
   assert.ok(Array.isArray(result.topicItems.HEALTHCARE));
-  assert.strictEqual(result.topicItems.HEALTHCARE.length, 3);
+  assert.strictEqual(result.topicItems.HEALTHCARE.length, 4);
   const articleItem = result.topicItems.HEALTHCARE.find((item) => item.retrieval_origin === "broker_publisher_feed");
+  const diveItem = result.topicItems.HEALTHCARE.find((item) => item.source_domain === "utilitydive.com");
   const officialItems = result.topicItems.HEALTHCARE.filter((item) => item.retrieval_origin === "broker_official");
   const officialItem = officialItems.find((item) => item.source_domain === "fda.gov");
   const cmsItem = officialItems.find((item) => item.source_domain === "cms.gov");
   assert.ok(articleItem);
+  assert.ok(diveItem);
   assert.ok(officialItem);
   assert.ok(cmsItem);
   assert.strictEqual(articleItem.content_kind, "article");
@@ -195,22 +234,27 @@ assert.strictEqual(snapshot.active_path, runtimeConfigPath);
   assert.strictEqual(cmsItem.url, "https://www.cms.gov/newsroom/press-releases/cms-final-rule-modernizes-claims-attachments");
   assert.strictEqual(articleItem.source_policy, "preferred");
   assert.strictEqual(officialItem.source_type, "primary_official");
-  assert.strictEqual(result.diagnostics.lane_counts.publisher_feed, 1);
+  assert.strictEqual(result.diagnostics.lane_counts.publisher_feed, 2);
   assert.strictEqual(result.diagnostics.lane_counts.official, 2);
-  assert.strictEqual(result.diagnostics.source_fetch_count, 3);
-  assert.strictEqual(result.diagnostics.source_success_count, 3);
+  assert.strictEqual(result.diagnostics.source_fetch_count, 4);
+  assert.strictEqual(result.diagnostics.source_success_count, 4);
   const statDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "stat_rss");
+  const diveDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "dive_rss");
   const fdaDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "fda_index");
   const cmsDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "cms_rss");
   assert.strictEqual(statDiag.parsed_count, 3);
   assert.strictEqual(statDiag.retained_count, 1);
   assert.strictEqual(statDiag.non_article_count, 1);
   assert.strictEqual(statDiag.stale_count, 1);
+  assert.strictEqual(diveDiag.parsed_count, 2);
+  assert.strictEqual(diveDiag.retained_count, 1);
+  assert.strictEqual(diveDiag.non_article_count, 0);
+  assert.strictEqual(diveDiag.validation_drop_count, 1);
   assert.ok(fdaDiag.parsed_count >= 2);
   assert.strictEqual(fdaDiag.retained_count, 1);
   assert.strictEqual(cmsDiag.parsed_count, 1);
   assert.strictEqual(cmsDiag.retained_count, 1);
-  assert.strictEqual(result.diagnostics.topic_diagnostics.HEALTHCARE.item_count, 3);
+  assert.strictEqual(result.diagnostics.topic_diagnostics.HEALTHCARE.item_count, 4);
   process.stdout.write("[standard-topic-broker-runtime] all assertions passed\n");
 })().catch((error) => {
   process.stderr.write(`${error && error.stack ? error.stack : error}\n`);

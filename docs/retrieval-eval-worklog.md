@@ -3505,3 +3505,164 @@ Do **not** roll back the broker.
 Do **not** expand to Phase 2A.
 
 Treat this run as evidence that the next narrow pass should still be source-pack hardening only if we are prepared to replace weak live feeds with better source families. If not, this is the point where the broker needs a broader redesign rather than more endpoint patching.
+
+## 2026-03-23 23:52 ET - Phase 1 focus pass on Technology, Energy, and Financial Services
+
+### What changed
+
+I narrowed Phase 1 to the three topics with the most useful remaining headroom signal:
+
+- `TECHNOLOGY`
+- `ENERGY`
+- `FINANCIAL SERVICES`
+
+I changed only the broker source pack and topic routing for those three:
+
+- added `The Register` as a technology specialist publisher feed
+- fixed `Ars Technica` to use the stable `https` feed endpoint
+- disabled `WIRED` for this focused run because it was adding general-interest volume without helping promotable depth
+- added `Utility Dive` for energy specialist coverage
+- allowed article-like `/news/` listing URLs for `Canary`, `Utility Dive`, `American Banker`, and `Banking Dive`
+- added `Banking Dive` as a finance specialist publisher feed
+- kept ranking, delivery policy, and the overall Phase 1 broker architecture unchanged
+- fixed the eval fetch scope so `standard_phase1_focus` now really fetches only `3/17` standard topics
+
+The focused rerun is:
+
+- `retrieval-eval:2026-03-23T23-52-32-502Z`
+
+The comparison baseline is the hardened six-topic Phase 1 run, filtered to the same three topics:
+
+- `retrieval-eval:2026-03-23T23-30-10-531Z`
+
+### What we learned
+
+This focused hardening pass improved broker-sourced supply for `TECHNOLOGY`, `ENERGY`, and `FINANCIAL SERVICES`, but it still did not move product-level shippability.
+
+#### Before vs after for the three-topic slice
+
+- cleaned / retained items: `5 -> 3`
+- retained article-shaped URLs: `2 -> 1`
+- topics with at least `1` retained item: `3/3 -> 2/3`
+- topics with at least `3` retained items: `1/3 -> 0/3`
+- strict-shippable personas: `0/3 -> 0/3`
+- stretch-shippable personas: `0/3 -> 0/3`
+- delivery-policy gate: remained `delivery_policy_total_item_shortfall` for all `3/3` topics
+
+The source-pack work still taught us something useful because the candidate mix improved even where retained depth did not:
+
+- `TECHNOLOGY`
+  - broker publisher-feed supply rose from `42` to `50`
+  - source-family mix improved from `reported: 42 / specialist: 1` to `reported: 36 / specialist: 15`
+  - final outcome did not move: still only `1` high-confidence item available and still `withheld_after_retry`
+- `ENERGY`
+  - moved from `3` retained candidates with `0` high-confidence items to `7` candidates with `1` high-confidence item
+  - broker contribution rose from `0` to `6`
+  - still failed closed on `delivery_policy_total_item_shortfall`
+- `FINANCIAL SERVICES`
+  - moved from `1` weak retained candidate to `13` broker-retained candidates and `2` high-confidence internal finalists
+  - source-family mix improved to `reported: 10 / specialist: 3`
+  - still failed closed because `2` good items is still too far from the `5`-item contract
+
+#### Dominant failure mode by topic
+
+- `TECHNOLOGY`
+  - dominant issue is **source-family fit plus downstream promotability**, not a dead endpoint problem
+  - `TechCrunch` retained `20`
+  - `Ars` retained `16`
+  - `The Register` retained `14`, but dropped `25` on validation and `11` as stale
+  - `NIST` retained `0`
+  - `BIS` aborted this run
+  - practical read: too much general reported volume, not enough enterprise/infrastructure-grade promotable depth
+- `ENERGY`
+  - dominant issue is **stale-heavy feed mix**
+  - `Canary` retained only `3/100`, with `97` stale
+  - `Utility Dive` retained `3/10`, with `6` stale
+  - `EIA` official feeds retained `0`
+  - practical read: specialist coverage is better than before, but the current energy families are still too stale to support a daily product
+- `FINANCIAL SERVICES`
+  - dominant issue is **thin promotable depth after a promising broker improvement**
+  - `American Banker` retained `10`
+  - `Banking Dive` retained `3`
+  - official `Fed` and `SEC` feeds retained `0`
+  - practical read: this is the clearest sign that Phase 1 still has a little source-pack headroom, but only a little
+
+### More opinionated source-family recommendation
+
+- `TECHNOLOGY`
+  - current source families are incomplete
+  - general-interest tech reporting should be secondary
+  - the topic needs heavier weighting toward enterprise infrastructure, semiconductors, cloud/data-center, cybersecurity, standards, and export-control reporting
+  - official sources should stay as supporting evidence, not expected primary daily supply
+- `ENERGY`
+  - current source families are directionally right but still too stale
+  - keep specialist/trade energy coverage as the core
+  - treat official EIA-style feeds as secondary context unless they are clearly fresh and action-oriented
+  - if Phase 1 continues at all, energy needs fresher utility/grid/power specialist families rather than more macro-climate commentary
+- `FINANCIAL SERVICES`
+  - current families are closest to correct
+  - specialist banking/payments/regulatory reporting is the right backbone
+  - official Fed/SEC material is useful as support, but not reliable daily fill
+  - this topic looks like the best candidate for one more source-family pass if we decide Phase 1 still has any patching headroom
+
+### Keep / replace / drop for these three topics only
+
+- `TECHNOLOGY`
+  - `keep`
+    - `technology_techcrunch`
+    - `technology_ars`
+    - `technology_register`
+  - `keep and fix`
+    - `technology_nist_news`
+    - `technology_bis_news`
+  - `drop for Phase 1`
+    - `technology_wired`
+  - recommendation
+    - if Technology stays in Phase 1 patching, the next source change should be family replacement, not more endpoint repair
+- `ENERGY`
+  - `keep`
+    - `energy_utilitydive`
+  - `keep and watch`
+    - `energy_canary`
+  - `drop or defer`
+    - `energy_eia_today`
+    - `energy_eia_press`
+  - recommendation
+    - Energy needs fresher specialist/trade families more than it needs more official feeds
+- `FINANCIAL SERVICES`
+  - `keep`
+    - `financial_american_banker`
+    - `financial_bankingdive`
+  - `drop or defer`
+    - `financial_fed_press`
+    - `financial_sec_press`
+  - recommendation
+    - Financial Services still has the strongest remaining source-pack headroom of the three, but only if we add more specialist reporting families rather than more official/regulatory endpoints
+
+### What decision this affects
+
+This run is the cleanest answer yet to the Phase 1 question.
+
+The broker stays. The architectural move was right.
+
+But the three-topic focus pass did **not** move stretch or strict shippability, even after a targeted source-family hardening pass. That means Phase 1 still has only limited remaining headroom.
+
+### What remains uncertain
+
+- whether one more source-family-only pass on `FINANCIAL SERVICES` could move `stretch-shippable` off `0`
+- whether `ENERGY` could improve materially with fresher utility/grid/power trade sources instead of the current stale-heavy mix
+- whether `TECHNOLOGY` is already at the stop point for source-pack-only patching and now needs a more opinionated retrieval design inside the broker
+
+### Current recommendation
+
+Do **not** expand to Phase 2A.
+
+Do **not** roll back the broker.
+
+Treat `TECHNOLOGY` as effectively at the stop point for Phase 1 source-pack patching.
+
+Treat `ENERGY` as having a small amount of remaining headroom if and only if we replace stale-heavy specialist families with fresher utility/grid/power trade sources.
+
+Treat `FINANCIAL SERVICES` as the one topic that still shows meaningful patching headroom.
+
+Across the three-topic slice, the product-level result is still unchanged: `0/3` stretch-shippable and `0/3` strict-shippable. So if we are not prepared to do one last, highly opinionated family replacement pass on `ENERGY` and `FINANCIAL SERVICES`, this should be treated as the stop point for Phase 1 source-pack patching.

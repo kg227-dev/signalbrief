@@ -24,6 +24,7 @@
     "energy_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
     "energy_official": { "lane": "official", "source_family": "official" },
     "financial_reported": { "lane": "publisher_feed", "source_family": "reported" },
+    "financial_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
     "financial_official": { "lane": "official", "source_family": "official" },
     "policy_reported": { "lane": "publisher_feed", "source_family": "reported" },
     "policy_official": { "lane": "official", "source_family": "official" }
@@ -187,13 +188,13 @@
       "source_kind": "reported_media",
       "source_family": "reported",
       "domains": ["arstechnica.com"],
-      "endpoint": "http://feeds.arstechnica.com/arstechnica/index",
+      "endpoint": "https://feeds.arstechnica.com/arstechnica/index",
       "parser": "rss",
       "content_kind": "article"
     },
     {
       "id": "technology_wired",
-      "enabled": true,
+      "enabled": false,
       "lane": "publisher_feed",
       "topic_tags": ["TECHNOLOGY"],
       "family": "technology_reported",
@@ -202,6 +203,19 @@
       "domains": ["wired.com"],
       "endpoint": "https://www.wired.com/feed/rss",
       "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "id": "technology_register",
+      "enabled": true,
+      "lane": "publisher_feed",
+      "topic_tags": ["TECHNOLOGY"],
+      "family": "technology_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["theregister.com"],
+      "endpoint": "https://www.theregister.com/headlines.atom",
+      "parser": "atom",
       "content_kind": "article"
     },
     {
@@ -243,7 +257,24 @@
       "domains": ["canarymedia.com"],
       "endpoint": "https://www.canarymedia.com/rss.rss",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": ["/spons/"]
+    },
+    {
+      "id": "energy_utilitydive",
+      "enabled": true,
+      "lane": "publisher_feed",
+      "topic_tags": ["ENERGY"],
+      "family": "energy_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["utilitydive.com"],
+      "endpoint": "https://www.utilitydive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": ["/spons/"]
     },
     {
       "id": "energy_ferc_news",
@@ -298,7 +329,23 @@
       "domains": ["americanbanker.com"],
       "endpoint": "https://www.americanbanker.com/feed.rss",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true
+    },
+    {
+      "id": "financial_bankingdive",
+      "enabled": true,
+      "lane": "publisher_feed",
+      "topic_tags": ["FINANCIAL SERVICES"],
+      "family": "financial_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["bankingdive.com"],
+      "endpoint": "https://www.bankingdive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": ["/spons/"]
     },
     {
       "id": "financial_fed_press",

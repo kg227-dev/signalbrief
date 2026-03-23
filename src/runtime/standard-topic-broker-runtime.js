@@ -69,6 +69,23 @@ function sanitizePatternList(values) {
   return out;
 }
 
+function buildPatternMatcher(patterns = [], defaultValue = true) {
+  const compiled = sanitizePatternList(patterns)
+    .map((pattern) => {
+      try {
+        return new RegExp(pattern, "i");
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  return (value) => {
+    if (compiled.length <= 0) return defaultValue;
+    const text = String(value || "").trim();
+    return compiled.some((pattern) => pattern.test(text));
+  };
+}
+
 function toIsoDate(value) {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -262,6 +279,8 @@ function sanitizeSource(source) {
     parser,
     content_kind: contentKind,
     title_include_patterns: sanitizePatternList(entry.title_include_patterns),
+    url_exclude_patterns: sanitizePatternList(entry.url_exclude_patterns),
+    allow_article_like_listing_urls: entry.allow_article_like_listing_urls === true,
   };
 }
 
@@ -450,20 +469,11 @@ function parseSourceBody(source, response) {
 }
 
 function buildTitlePatternMatcher(patterns = []) {
-  const compiled = sanitizePatternList(patterns)
-    .map((pattern) => {
-      try {
-        return new RegExp(pattern, "i");
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-  return (headline) => {
-    if (compiled.length <= 0) return true;
-    const text = String(headline || "").trim();
-    return compiled.some((pattern) => pattern.test(text));
-  };
+  return buildPatternMatcher(patterns, true);
+}
+
+function buildUrlExclusionMatcher(patterns = []) {
+  return buildPatternMatcher(patterns, false);
 }
 
 function officialListingUrlLooksArticleLike(url) {
@@ -505,7 +515,14 @@ function officialListingUrlLooksArticleLike(url) {
 
 function laneAcceptsShape(source, urlShape, url) {
   if (String(source?.lane || "").trim() === "publisher_feed") {
-    return urlShape === "article_url";
+    return (
+      urlShape === "article_url"
+      || (
+        source?.allow_article_like_listing_urls === true
+        && urlShape === "listing_page"
+        && officialListingUrlLooksArticleLike(url)
+      )
+    );
   }
   return (
     urlShape === "article_url"
@@ -528,6 +545,7 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
   const retrievedAt = String(opts?.retrievedAt || "").trim() || new Date().toISOString();
   const maxAgeHours = Number.isFinite(Number(opts?.maxAgeHours)) ? Number(opts.maxAgeHours) : 48;
   const matchesTitle = buildTitlePatternMatcher(source?.title_include_patterns);
+  const urlExcluded = buildUrlExclusionMatcher(source?.url_exclude_patterns);
   const baseDomain = pickFirstDomain(source?.domains, source?.endpoint);
   const baseAuthority = String(source?.lane || "").trim() === "official"
     ? 0.9
@@ -549,6 +567,10 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
     const publishedDate = toIsoDate(entry?.publishedDate || entry?.published_date || "");
     const urlShape = classifyUrlShape(url);
     if (!headline || !url || !publishedDate) {
+      diagnostics.validation_drop_count += 1;
+      continue;
+    }
+    if (urlExcluded(url)) {
       diagnostics.validation_drop_count += 1;
       continue;
     }

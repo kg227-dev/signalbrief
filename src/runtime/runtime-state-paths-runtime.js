@@ -117,6 +117,10 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.circuitBreakerStatePath || readEnvValue(env, "SIGNALBRIEF_CIRCUIT_BREAKER_STATE_PATH"),
     path.join(dataDir, "circuit-breaker.json")
   );
+  const incidentStorePath = resolveOptionalPath(
+    options.incidentStorePath || readEnvValue(env, "SIGNALBRIEF_INCIDENT_STORE_PATH"),
+    path.join(dataDir, "incident-store.json")
+  );
 
   return {
     appRoot,
@@ -141,6 +145,7 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     standardTopicBrokerSourcesPath,
     spendGuardStatePath,
     circuitBreakerStatePath,
+    incidentStorePath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };
@@ -199,6 +204,7 @@ function describeRuntimePathAlignment(runtimePaths) {
     standard_topic_broker_sources: deriveComponentRoot(paths.standardTopicBrokerSourcesPath, dataRoot),
     spend_guard: deriveComponentRoot(paths.spendGuardStatePath, dataRoot),
     circuit_breaker: deriveComponentRoot(paths.circuitBreakerStatePath, dataRoot),
+    incident_store: deriveComponentRoot(paths.incidentStorePath, dataRoot),
     logs: logRoots.length === 1 ? logRoots[0] : null,
     scheduler: schedulerRoots.length === 1 ? schedulerRoots[0] : null,
   };
@@ -214,6 +220,7 @@ function describeRuntimePathAlignment(runtimePaths) {
   if (componentRoots.standard_topic_broker_sources !== dataRoot) divergentComponents.push("standard_topic_broker_sources");
   if (componentRoots.spend_guard !== dataRoot) divergentComponents.push("spend_guard");
   if (componentRoots.circuit_breaker !== dataRoot) divergentComponents.push("circuit_breaker");
+  if (componentRoots.incident_store !== dataRoot) divergentComponents.push("incident_store");
   if (logRoots.length !== 1 || logRoots[0] !== dataRoot) divergentComponents.push("logs");
   if (schedulerRoots.length !== 1 || schedulerRoots[0] !== dataRoot) divergentComponents.push("scheduler");
 
@@ -235,6 +242,7 @@ function describeRuntimePathAlignment(runtimePaths) {
       standard_topic_broker_sources_outside_data_root: componentRoots.standard_topic_broker_sources !== dataRoot,
       spend_guard_outside_data_root: componentRoots.spend_guard !== dataRoot,
       circuit_breaker_outside_data_root: componentRoots.circuit_breaker !== dataRoot,
+      incident_store_outside_data_root: componentRoots.incident_store !== dataRoot,
       multiple_log_roots: logRoots.length > 1,
       logs_outside_data_root: logRoots.some((root) => root !== dataRoot),
       multiple_scheduler_roots: schedulerRoots.length > 1,
@@ -269,6 +277,7 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "standardTopicBrokerSourcesPath", path: paths.standardTopicBrokerSourcesPath, kind: "file" },
     { key: "spendGuardStatePath", path: paths.spendGuardStatePath, kind: "file" },
     { key: "circuitBreakerStatePath", path: paths.circuitBreakerStatePath, kind: "file" },
+    { key: "incidentStorePath", path: paths.incidentStorePath, kind: "file" },
   ];
 }
 

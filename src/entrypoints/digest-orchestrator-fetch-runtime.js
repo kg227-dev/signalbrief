@@ -1,6 +1,10 @@
 "use strict";
 
 const { normalizeSourcePolicyDomain } = require("../runtime/source-policy-registry-runtime");
+const {
+  createConversionFunnel,
+  mergeConversionFunnel,
+} = require("../digest/runtime/digest-data-fetch-items-runtime");
 
 const DEFAULT_SEARCH_BUDGET = Object.freeze({
   scheduled: Object.freeze({
@@ -659,6 +663,7 @@ function buildTopicState(topic, shortlist, familyShortlists, priority, originalI
       corporate: 0,
       other_unknown: 0,
     },
+    conversionFunnel: createConversionFunnel(),
     searchResultDomains: [],
     preferredSearchResultDomains: [],
     preferredSearchResultHitCount: 0,
@@ -804,6 +809,19 @@ function summarizeProviderDiagnostics(states) {
   return summary;
 }
 
+function classifyBroadDepthStopReason(state, budgetTracker) {
+  const remainingBroadQueries = Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextBroadQueryIndex || 0));
+  if (remainingBroadQueries <= 0) return null;
+  if (state?.broadFallbackUsed !== true) return "broad_fallback_not_started";
+  if (hasBlockingProviderFailure(state)) return "provider_failure_blocked";
+  if (state?.retryBlockReason === "repeat") return "retry_guard_repeat";
+  if (state?.retryBlockReason === "topic_fit") return "retry_guard_zero_yield";
+  if (budgetTracker?.stop_reason === "hard_cap_reached") return "global_search_budget_hard_cap";
+  if (budgetTracker?.stop_reason === "soft_cap_reached") return "global_search_budget_soft_cap";
+  if (budgetTracker?.stop_reason === "custom_topic_reserve_exhausted") return "custom_reserve_preempted";
+  return "unscheduled_remaining_queries";
+}
+
 function countPreferredItems(state) {
   const preferredDomains = Array.isArray(state?.preferredDomains) ? state.preferredDomains : [];
   if (preferredDomains.length === 0) return 0;
@@ -870,6 +888,9 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     corporate: 0,
     other_unknown: 0,
   });
+  const conversionFunnel = attemptedStates.reduce((combined, state) => {
+    return mergeConversionFunnel(combined, state?.conversionFunnel);
+  }, createConversionFunnel());
   const topicDiagnostics = attemptedStates.map((state) => ({
     tag: state?.topic?.tag || null,
     custom_slug: state?.topic?.custom_slug || null,
@@ -892,6 +913,7 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     next_trusted_family_index: Number(state?.nextTrustedFamilyIndex || 0),
     remaining_preferred_queries: Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextPreferredQueryIndex || 0)),
     remaining_broad_queries: Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextBroadQueryIndex || 0)),
+    broad_depth_stop_reason: classifyBroadDepthStopReason(state, budgetTracker),
     remaining_trusted_source_families: Math.max(0, Number((state?.trustedFamilyQueue || []).length || 0) - Number(state?.nextTrustedFamilyIndex || 0)),
     official_domains: Array.isArray(state?.officialDomains) ? state.officialDomains.slice() : [],
     reported_domains: Array.isArray(state?.reportedDomains) ? state.reportedDomains.slice() : [],
@@ -905,6 +927,7 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     search_result_domains: Array.isArray(state?.searchResultDomains) ? state.searchResultDomains.slice() : [],
     preferred_search_result_domains: Array.isArray(state?.preferredSearchResultDomains) ? state.preferredSearchResultDomains.slice() : [],
     preferred_search_result_hit_count: Number(state?.preferredSearchResultHitCount || 0),
+    conversion_funnel: mergeConversionFunnel(createConversionFunnel(), state?.conversionFunnel),
   }));
 
   return {
@@ -936,6 +959,7 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     trusted_reported_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedReportedCallsMade || 0), 0),
     retrieval_origin_counts: retrievalOriginCounts,
     retrieval_source_family_counts: retrievalSourceFamilyCounts,
+    conversion_funnel: conversionFunnel,
     zero_yield_retry_count: attemptedStates.reduce((sum, state) => sum + Number(state?.zeroYieldRetryCount || 0), 0),
     budget_stop_reason: String(budgetTracker?.stop_reason || "").trim() || null,
     max_concurrent_fetches: Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY)),
@@ -1131,6 +1155,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         ...(Array.isArray(diagnostics.preferred_search_result_domains) ? diagnostics.preferred_search_result_domains : []),
       ]);
       state.preferredSearchResultHitCount += Number(diagnostics.preferred_search_result_hit_count || 0);
+      mergeConversionFunnel(state.conversionFunnel, diagnostics.conversion_funnel);
 
       if (entry.invocation.phase === "preferred") {
         state.preferredCallsMade += 1;

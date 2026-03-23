@@ -8,6 +8,9 @@ const {
   collectUniqueItems,
   shouldStopAttempts,
   parsePerplexityItems,
+  classifyUrlShape,
+  createConversionFunnel,
+  mergeConversionFunnel,
 } = require("./digest-data-fetch-items-runtime");
 
 const DEFAULT_PERPLEXITY_TIMEOUT_MS = 25_000;
@@ -122,6 +125,7 @@ function createPassDiagnostics(maxAttempts) {
     search_result_domains: [],
     preferred_search_result_domains: [],
     preferred_search_result_hit_count: 0,
+    conversion_funnel: createConversionFunnel(),
   };
 }
 
@@ -146,8 +150,32 @@ function mergePassDiagnostics(target, extra) {
     ...(Array.isArray(extra?.preferred_search_result_domains) ? extra.preferred_search_result_domains : []),
   ]));
   target.preferred_search_result_hit_count += Number(extra?.preferred_search_result_hit_count || 0);
+  target.conversion_funnel = mergeConversionFunnel(target.conversion_funnel, extra?.conversion_funnel);
   for (const [code, count] of Object.entries(extra?.status_counts || {})) {
     target.status_counts[code] = (target.status_counts[code] || 0) + Number(count || 0);
+  }
+  return target;
+}
+
+function accumulateSearchEvidenceShapes(funnel, citations, searchResults) {
+  const target = funnel && typeof funnel === "object" ? funnel : createConversionFunnel();
+  for (const citation of (Array.isArray(citations) ? citations : [])) {
+    const shape = classifyUrlShape(citation);
+    target.citation_count += 1;
+    target.citation_url_shape_counts[shape] = (target.citation_url_shape_counts[shape] || 0) + 1;
+  }
+  for (const result of (Array.isArray(searchResults) ? searchResults : [])) {
+    const url = result?.url;
+    const shape = classifyUrlShape(url);
+    target.search_result_count += 1;
+    target.search_result_url_shape_counts[shape] = (target.search_result_url_shape_counts[shape] || 0) + 1;
+    if (shape !== "article_url" && Array.isArray(target.samples?.search_result_non_article_urls) && target.samples.search_result_non_article_urls.length < 5) {
+      target.samples.search_result_non_article_urls.push({
+        url: String(url || "").trim() || null,
+        shape,
+        title: String(result?.title || "").trim() || null,
+      });
+    }
   }
   return target;
 }
@@ -250,6 +278,7 @@ function createDigestDataFetchRuntime(deps) {
 
       const citations = res.body?.citations || [];
       const searchResults = Array.isArray(res.body?.search_results) ? res.body.search_results : [];
+      accumulateSearchEvidenceShapes(diagnostics.conversion_funnel, citations, searchResults);
       const searchEvidence = collectSearchResultEvidence(
         searchResults,
         Array.isArray(preferredEvidenceDomains) ? preferredEvidenceDomains : searchDomainFilter
@@ -269,6 +298,7 @@ function createDigestDataFetchRuntime(deps) {
       try {
         const content = res.body?.choices?.[0]?.message?.content || "[]";
         if (!res.body?.choices?.[0]?.message?.content) {
+          diagnostics.conversion_funnel.provider_empty_payload_count += 1;
           const errDetail = res.body?.error?.message || res.body?.error || res.body?.message || "no choices content";
           log(`⚠️ Perplexity returned empty payload for ${topic.tag} ${passName}: ${String(errDetail).slice(0, 180)}`);
         }
@@ -277,8 +307,20 @@ function createDigestDataFetchRuntime(deps) {
           log(`⚠️ Perplexity payload for ${topic.tag} ${passName} was not an array`);
           continue;
         }
+        diagnostics.conversion_funnel.parsed_item_count += parsed.length;
+        for (const item of parsed) {
+          const shape = classifyUrlShape(item?.url);
+          diagnostics.conversion_funnel.provider_url_shape_counts[shape] = (diagnostics.conversion_funnel.provider_url_shape_counts[shape] || 0) + 1;
+          if (shape !== "article_url" && Array.isArray(diagnostics.conversion_funnel.samples?.provider_non_article_urls) && diagnostics.conversion_funnel.samples.provider_non_article_urls.length < 5) {
+            diagnostics.conversion_funnel.samples.provider_non_article_urls.push({
+              headline: String(item?.headline || "").trim() || null,
+              url: String(item?.url || "").trim() || null,
+              shape,
+            });
+          }
+        }
 
-        const normalized = enrichWithCitationUrls(parsed, citations, searchResults, topic.tag, log)
+        const normalized = enrichWithCitationUrls(parsed, citations, searchResults, topic.tag, log, diagnostics.conversion_funnel)
           .map((item) => ({
             ...item,
             retrieved_at: retrievedAt,
@@ -288,11 +330,18 @@ function createDigestDataFetchRuntime(deps) {
             preferred_source_available_in_search: searchEvidence.preferred_search_result_domains.length > 0
               && !searchEvidence.preferred_search_result_domains.some((candidate) => matchesDomain(item?.source || item?.url, candidate)),
           }));
+        diagnostics.conversion_funnel.normalized_item_count += normalized.length;
+        for (const item of normalized) {
+          const shape = classifyUrlShape(item?.url);
+          diagnostics.conversion_funnel.normalized_url_shape_counts[shape] = (diagnostics.conversion_funnel.normalized_url_shape_counts[shape] || 0) + 1;
+        }
         collectUniqueItems(normalized, seenHeadline, seenUrl, collected, normalizeUrlForDedup, {
           maxAgeHours,
           requireVerifiedPublishedDate: true,
+          diagnostics: diagnostics.conversion_funnel,
         });
       } catch (err) {
+        diagnostics.conversion_funnel.parse_error_count += 1;
         log(`Parse error for ${topic.tag} ${passName}: ${err.message}`);
       }
 
@@ -354,6 +403,7 @@ function createDigestDataFetchRuntime(deps) {
       preferred_search_result_domains: [],
       preferred_search_result_hit_count: 0,
       preferred_search_results_without_preferred_item: false,
+      conversion_funnel: createConversionFunnel(),
       freshness_max_age_hours: Number(CONFIG?.digest?.maxArticleAgeHours || 48),
       require_verified_published_date: true,
     };

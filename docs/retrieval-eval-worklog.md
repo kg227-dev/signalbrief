@@ -2185,3 +2185,243 @@ Before declaring the architecture dead, the next question is narrower and more p
 - why are standard-topic search hits from trusted families not converting into usable retained items?
 
 That is a more specific question than “is retrieval broken?” and it should drive the next design decision. The current run says the loss is happening **between** search-result evidence and promotable inventory, not mainly at the final delivery policy gate.
+
+## 2026-03-22 22:20 ET - Search-to-article conversion funnel pass
+
+### Scope
+
+- added explicit conversion-funnel instrumentation from:
+  - search-result evidence
+  - provider-returned URLs
+  - normalized items
+  - validation / freshness / dedupe
+  - retained item inventory
+- reran `standard_topics` with low Perplexity concurrency and richer diagnostics:
+  - run id: `retrieval-eval:2026-03-23T02-17-15-798Z`
+
+### Direct answer
+
+The bottleneck is **not** primarily “trusted article supply does not exist.”
+
+The bottleneck is **failure to convert visible search evidence into usable article records**.
+
+The strongest proof is the top-level funnel:
+
+- search results seen: `576`
+- article-shaped search URLs: `257`
+- provider parsed items: `51`
+- provider article-shaped URLs: `23`
+- normalized items: `50`
+- stale items dropped: `38`
+- retained items: `11`
+- retained article-shaped URLs: `5`
+
+In plain terms:
+
+- the run saw a large amount of article-shaped search evidence
+- Perplexity converted only a small slice of that evidence into article URLs
+- most of the returned items were then stale or listing-page shaped
+- only `11` items survived into retained inventory across all `17` standard topics
+
+### Where the loss is happening
+
+#### 1. Search evidence to provider output is the biggest collapse
+
+Across the run:
+
+- search-result article URLs: `257`
+- provider article URLs: `23`
+
+That is the biggest single drop in the whole funnel.
+
+This is the clearest evidence that the provider is surfacing the right domains in search evidence but not reliably returning article-shaped outputs for them.
+
+#### 2. Provider output is still heavily polluted by listing/document-style URLs
+
+Across the run:
+
+- search-result listing pages: `245`
+- provider listing pages: `26`
+- provider document files: `2`
+
+Retained inventory still included:
+
+- retained article URLs: `5`
+- retained listing pages: `6`
+
+So even after retention, more than half of surviving items were still listing-page shaped rather than clean article URLs.
+
+#### 3. Freshness is a major downstream loss once items are parsed
+
+Across the run:
+
+- parsed items: `51`
+- stale drops: `38`
+
+That means many items are getting far enough to parse, but they are too old by the time they hit validation.
+
+#### 4. Parse/extraction failure exists, but it is smaller than the URL-shape conversion problem
+
+Across the run:
+
+- parse errors: `3`
+
+Representative failures:
+
+- `PE×M&A`: `9` article-shaped search results, `2` parse errors, `0` parsed items
+- `CONSUMER`: `11` article-shaped search results, `1` parse error, `0` parsed items
+
+This matters, but it is not the dominant failure mode.
+
+### Representative standard-topic breakdown
+
+#### `HEALTHCARE`
+
+- search evidence:
+  - `40` search results
+  - `11` article-shaped search URLs
+  - preferred-family domains seen: `biospace.com`, `statnews.com`, `pharmavoice.com`, `cms.gov`
+- provider conversion:
+  - parsed items: `0`
+  - provider article URLs: `0`
+  - retained items: `0`
+- result:
+  - loss happened before parsing, not at ranking
+  - `unused broad depth` ended as `retry_guard_zero_yield`
+
+#### `LIFE SCIENCES`
+
+- search evidence:
+  - `28` article-shaped search URLs
+  - preferred-family domains seen: `biospace.com`, `clinicaltrials.gov`, `fda.gov`, `fiercebiotech.com`, `fiercepharma.com`
+- provider conversion:
+  - parsed items: `0`
+  - provider article URLs: `0`
+  - retained items: `0`
+- result:
+  - very strong evidence of search-to-provider conversion loss
+
+#### `TECHNOLOGY`
+
+- search evidence:
+  - `37` search results
+  - `19` article-shaped search URLs
+  - preferred-family domains seen: `techtarget.com`, `techcrunch.com`, `bis.gov`, `ciodive.com`, `cio.com`
+- provider conversion:
+  - parsed items: `3`
+  - provider article URLs: `2`
+  - retained items: `1`
+- downstream loss:
+  - stale drops: `2`
+  - surviving retained URL shape: listing page, not article URL
+- result:
+  - some conversion happened, but provider output skewed weak / stale / listing-shaped before promotion
+
+#### `POLICY×REGULATORY`
+
+- search evidence:
+  - `29` search results
+  - `14` article-shaped search URLs
+  - preferred-family domains seen: `ftc.gov`, `justice.gov`
+- provider conversion:
+  - parsed items: `3`
+  - provider article URLs: `2`
+  - retained items: `2`
+- downstream loss:
+  - `1` stale drop
+  - survivors died at `delivery_policy_score_threshold`
+- result:
+  - this one is not a pure search-to-provider miss; it produced retained items, but they were too weak to ship
+
+#### `TALENT`
+
+- search evidence:
+  - `21` search results
+  - `4` article-shaped search URLs
+  - preferred-family domains seen: `bls.gov`, `dol.gov`, `shrm.org`
+- provider conversion:
+  - parsed items: `8`
+  - provider article URLs: `3`
+  - retained items: `2`
+- downstream loss:
+  - `1` unsupported evidence URL drop
+  - `5` stale drops
+- result:
+  - best example of a topic that can convert, but still loses too much to stale/listing-style output and then dies on `5-item` shortfall
+
+#### `PE×M&A`
+
+- search evidence:
+  - `35` search results
+  - `9` article-shaped search URLs
+  - preferred-family domains seen: `sec.gov`, `ftc.gov`
+- provider conversion:
+  - parse errors: `2`
+  - parsed items: `0`
+  - retained items: `0`
+- result:
+  - strongest example of raw parse/extraction failure
+
+### What "unused broad-query depth" actually means here
+
+This was not just a reporting artifact.
+
+In code, `retry_guard_zero_yield` means:
+
+- a retry fetch ran
+- it produced no additional usable items
+- the state was marked with `retryBlockReason = "topic_fit"` because usable inventory was still `0`
+
+That shows up in `classifyBroadDepthStopReason(...)` as `retry_guard_zero_yield`.
+
+So when a topic ends with:
+
+- `broad_call_count > 0`
+- `remaining_broad_queries > 0`
+- `broad_depth_stop_reason = retry_guard_zero_yield`
+
+the concrete meaning is:
+
+- the orchestrator *did* start broad fallback
+- the last broad retry still produced no usable items
+- more alternate broad queries existed
+- but that topic was deprioritized after repeated zero-yield retries rather than fully exhausted
+
+There is also a second real abandonment case:
+
+- `global_search_budget_hard_cap`
+
+That means remaining broad queries existed, but the global standard-topic budget ran out first.
+
+### Important clarification on source-family classification
+
+Items are **not** currently rejected for “failing source-family classification.”
+
+Source-family classification is attribution, not a gating step. The real reject paths in this pass were:
+
+- provider parse/extraction failure
+- unsupported evidence URL drop
+- stale-item rejection
+- duplicate rejection
+- later delivery-policy / score thresholds
+
+So the right question is not “which items failed source-family classification?” It is “which items never became valid article records at all, and which valid records later died on freshness or shipping gates?”
+
+### Decision-ready conclusion from this pass
+
+For standard topics, the main bottleneck is now clearly:
+
+1. search evidence on trusted domains does exist
+2. Perplexity often does **not** return article-shaped outputs for that evidence
+3. when it does return items, too many are listing-page shaped or stale
+4. only a small remainder becomes retained inventory
+
+That is a much stronger conclusion than “the run only produced 11 candidates.”
+
+It means the next architecture decision should be framed as:
+
+- how do we convert trusted search evidence into usable article records more reliably?
+
+not:
+
+- how do we prompt Perplexity a little differently and hope for more volume?

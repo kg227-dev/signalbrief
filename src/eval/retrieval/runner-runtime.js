@@ -587,6 +587,9 @@ function classifyTopicGapAudit({
   } else if (rootCause === "provider_429_or_transport") {
     betterSourceOpportunity = "unknown";
     betterSourceNote = "Provider failures limited the evidence available for this topic.";
+  } else if (rootCause === "query_plan_not_exhausted" && String(topic?.broad_depth_stop_reason || "").trim() === "global_search_budget_hard_cap") {
+    betterSourceOpportunity = "likely";
+    betterSourceNote = "Preferred/broad evidence existed, but the global hard-cap stopped deeper standard-topic retries before the remaining broad queries ran.";
   } else if (rootCause === "provider_no_recent_coverage") {
     betterSourceOpportunity = "unclear";
     betterSourceNote = "Broad retrieval ran but still found no usable recent items.";
@@ -634,9 +637,13 @@ function classifyTopicGapAudit({
     broad_call_count: Number(topic?.broad_call_count || 0),
     query_count: Number(topic?.query_count || 0),
     remaining_broad_queries: Number(topic?.remaining_broad_queries || 0),
+    broad_depth_stop_reason: String(topic?.broad_depth_stop_reason || "").trim() || null,
     coverage_status: String(topic?.coverage_status || "").trim() || null,
     retrieval_origin_counts: { ...(topic?.retrieval_origin_counts || {}) },
     retrieval_source_family_counts: { ...(topic?.retrieval_source_family_counts || {}) },
+    conversion_funnel: topic?.conversion_funnel && typeof topic.conversion_funnel === "object"
+      ? JSON.parse(JSON.stringify(topic.conversion_funnel))
+      : null,
     retrieval_rejection_breakdown: { ...rejections },
     attempt_1_high_confidence_available_count: attempt1HighConfidenceAvailableCount,
     attempt_1_lower_confidence_available_count: attempt1LowerConfidenceAvailableCount,
@@ -1545,6 +1552,10 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     final_source_summary: finalSourceSummary,
     retrieval_origin_counts: { ...(globalResult?.fetchResult?.fetchDiagnostics?.retrieval_origin_counts || {}) },
     retrieval_source_family_counts: { ...(globalResult?.fetchResult?.fetchDiagnostics?.retrieval_source_family_counts || {}) },
+    conversion_funnel: globalResult?.fetchResult?.fetchDiagnostics?.conversion_funnel
+      && typeof globalResult.fetchResult.fetchDiagnostics.conversion_funnel === "object"
+      ? JSON.parse(JSON.stringify(globalResult.fetchResult.fetchDiagnostics.conversion_funnel))
+      : null,
     five_item_fulfillment_rate: personaResults.length > 0 ? Number(((deliveredCount / personaResults.length) * 100).toFixed(2)) : 0,
     withheld_after_retry_rate: personaResults.length > 0 ? Number(((withheldAfterRetryCount / personaResults.length) * 100).toFixed(2)) : 0,
     lower_confidence_usage_rate: personaResults.length > 0 ? Number(((lowerConfidenceUsedCount / personaResults.length) * 100).toFixed(2)) : 0,

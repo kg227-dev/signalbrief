@@ -150,6 +150,7 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
       preferred_call_count: 1,
       broad_call_count: 1,
       remaining_broad_queries: 2,
+      broad_depth_stop_reason: "global_search_budget_hard_cap",
       status_counts: {},
       failed_calls: 0,
       transport_errors: 0,
@@ -167,6 +168,7 @@ const { createRetrievalEvalStorageRuntime } = require(path.join(process.cwd(), "
   });
   assert.strictEqual(unexhaustedGap.root_cause, "query_plan_not_exhausted");
   assert.strictEqual(unexhaustedGap.better_source_opportunity, "likely");
+  assert.strictEqual(unexhaustedGap.broad_depth_stop_reason, "global_search_budget_hard_cap");
 
   const selectionCapGap = classifyTopicGapAudit({
     topicDiagnostic: {

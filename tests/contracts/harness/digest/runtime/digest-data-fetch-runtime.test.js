@@ -237,6 +237,11 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
   assert.deepStrictEqual(result.diagnostics.preferred_search_result_domains, ["reuters.com", "theinformation.com"]);
   assert.strictEqual(result.diagnostics.preferred_search_result_hit_count, 2);
   assert.strictEqual(result.diagnostics.preferred_search_results_without_preferred_item, false);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_result_count, 4);
+  assert.strictEqual(result.diagnostics.conversion_funnel.parsed_item_count, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.provider_url_shape_counts.article_url, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.normalized_item_count, 2);
+  assert.strictEqual(result.diagnostics.conversion_funnel.retained_item_count, 2);
   assert.strictEqual(result.items[0].retrieval_pass, "preferred");
   assert.strictEqual(result.items[0].preferred_source_available_in_search, true);
   assert.deepStrictEqual(result.items[0].retrieval_preferred_search_domains, ["reuters.com", "theinformation.com"]);

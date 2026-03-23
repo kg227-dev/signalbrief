@@ -358,6 +358,30 @@ assertModuleExports(() => runtime, TARGET_REL);
             failed_calls: 0,
             transport_errors: 0,
             status_counts: {},
+            conversion_funnel: {
+              search_result_count: 1,
+              citation_count: 1,
+              search_result_url_shape_counts: { article_url: 1 },
+              citation_url_shape_counts: { article_url: 1 },
+              provider_empty_payload_count: 0,
+              parse_error_count: 0,
+              parsed_item_count: 1,
+              provider_url_shape_counts: { article_url: 1 },
+              normalized_item_count: 1,
+              normalized_url_shape_counts: { article_url: 1 },
+              evidence_url_replacement_count: 0,
+              invalid_item_url_count: 0,
+              unsupported_evidence_url_drop_count: 0,
+              missing_headline_count: 0,
+              missing_published_date_count: 0,
+              stale_item_count: 0,
+              canonicalization_invalid_url_count: 0,
+              duplicate_headline_count: 0,
+              duplicate_url_count: 0,
+              retained_item_count: 1,
+              retained_url_shape_counts: { article_url: 1 },
+              samples: {},
+            },
           },
         };
       }
@@ -370,6 +394,30 @@ assertModuleExports(() => runtime, TARGET_REL);
           failed_calls: 0,
           transport_errors: 0,
           status_counts: {},
+          conversion_funnel: {
+            search_result_count: 1,
+            citation_count: 1,
+            search_result_url_shape_counts: { article_url: 1 },
+            citation_url_shape_counts: { article_url: 1 },
+            provider_empty_payload_count: 0,
+            parse_error_count: 0,
+            parsed_item_count: 1,
+            provider_url_shape_counts: { article_url: 1 },
+            normalized_item_count: 1,
+            normalized_url_shape_counts: { article_url: 1 },
+            evidence_url_replacement_count: 0,
+            invalid_item_url_count: 0,
+            unsupported_evidence_url_drop_count: 0,
+            missing_headline_count: 0,
+            missing_published_date_count: 0,
+            stale_item_count: 0,
+            canonicalization_invalid_url_count: 0,
+            duplicate_headline_count: 0,
+            duplicate_url_count: 0,
+            retained_item_count: 1,
+            retained_url_shape_counts: { article_url: 1 },
+            samples: {},
+          },
         },
       };
     },
@@ -423,6 +471,10 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(trustedTopic.retrieval_origin_counts.trusted_reported, 1);
   assert.strictEqual(trustedTopic.retrieval_source_family_counts.specialist, 1);
   assert.strictEqual(trustedTopic.retrieval_source_family_counts.other_unknown, 2);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.conversion_funnel.parsed_item_count, 3);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.conversion_funnel.retained_item_count, 3);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.conversion_funnel.provider_url_shape_counts.article_url, 3);
+  assert.ok(trustedTopic.conversion_funnel);
   assert.strictEqual(trustedSecondPassCalls.some((entry) => entry.retrievalPlan?.trusted_source_second_pass === true), true);
   assert.strictEqual(
     trustedSecondPassResult.allItems.some((item) => String(item?.source || "").includes("reuters.com")),

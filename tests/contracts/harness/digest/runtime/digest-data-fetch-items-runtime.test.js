@@ -15,7 +15,9 @@ assertModuleExports(() => runtime, TARGET_REL);
 
 const {
   articleAgeTooOld,
+  classifyUrlShape,
   collectUniqueItems,
+  createConversionFunnel,
   hasVerifiedPublishedDate,
   parsePerplexityItems,
 } = runtime;
@@ -39,14 +41,23 @@ assert.strictEqual(hasVerifiedPublishedDate({ published_date: "2026-03-21T10:00:
 assert.strictEqual(hasVerifiedPublishedDate({ published_date: "" }), false);
 assert.strictEqual(articleAgeTooOld({ published_date: "" }, 48), true);
 assert.strictEqual(articleAgeTooOld({ published_date: "2026-03-19T09:00:00.000Z" }, 48), true);
+assert.strictEqual(classifyUrlShape("https://www.reuters.com/technology/story-slug"), "article_url");
+assert.strictEqual(classifyUrlShape("https://www.reuters.com/"), "homepage");
+assert.strictEqual(classifyUrlShape("https://www.ft.com/search?q=ai"), "search_page");
+assert.strictEqual(classifyUrlShape("https://www.example.com/topic/ai"), "tag_page");
+assert.strictEqual(classifyUrlShape("https://www.example.com/news"), "listing_page");
 
 const out = [];
+const diagnostics = createConversionFunnel();
 collectUniqueItems([
   { headline: "Fresh", url: "https://example.com/fresh", published_date: "2026-03-21T10:00:00.000Z" },
   { headline: "Unknown", url: "https://example.com/unknown", published_date: "" },
   { headline: "Stale", url: "https://example.com/stale", published_date: "2026-03-19T09:00:00.000Z" },
-], new Set(), new Set(), out, (value) => value, { maxAgeHours: 48 });
+], new Set(), new Set(), out, (value) => value, { maxAgeHours: 48, diagnostics });
 assert.strictEqual(out.length, 1);
 assert.strictEqual(out[0].headline, "Fresh");
+assert.strictEqual(diagnostics.missing_published_date_count, 1);
+assert.strictEqual(diagnostics.stale_item_count, 1);
+assert.strictEqual(diagnostics.retained_item_count, 1);
 
 process.stdout.write("[digest-data-fetch-items-runtime] all assertions passed\n");

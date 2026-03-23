@@ -7,9 +7,6 @@ const INCIDENT_SEVERITY_WARNING = "WARNING";
 const INCIDENT_SEVERITY_CRITICAL = "CRITICAL";
 const INCIDENT_SEVERITY_FATAL = "FATAL";
 
-// Module-level in-memory store used when incidentStorePath is falsy
-let _inMemoryStore = { version: 1, updated_at: "", incidents: {} };
-
 function _computeSeverity(occurrenceCount) {
   if (occurrenceCount >= 3) return INCIDENT_SEVERITY_FATAL;
   if (occurrenceCount >= 2) return INCIDENT_SEVERITY_CRITICAL;
@@ -33,6 +30,9 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     sendTelegram,
     nowProvider = () => new Date(),
   } = deps || {};
+
+  // In-memory fallback when incidentStorePath is not provided (isolated per factory instance)
+  let _inMemoryStore = { version: 1, updated_at: "", incidents: {} };
 
   const logger = typeof log === "function" ? log : () => {};
   const getOpsChatId = typeof resolveOpsChatId === "function" ? resolveOpsChatId : () => null;

@@ -9,6 +9,7 @@ const {
   countRecentLowerConfidenceAssist,
   deriveInternalThinnessLabel,
   getCustomTopicMetadata,
+  isRetryEligibleFailureClass,
   listTrustedOnlyCustomKeywords,
   selectDeliveryItems,
 } = require("../runtime/digest-delivery-policy-runtime");
@@ -507,7 +508,9 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             },
             availableCandidateCount: userItems.length,
           });
-          const retryableScheduledAttempt = deliveryMode === "scheduled" && attemptCount === 1;
+          const retryableScheduledAttempt = deliveryMode === "scheduled"
+            && attemptCount === 1
+            && isRetryEligibleFailureClass(failureClass);
           const latestSafeDelay = computeRemainingWindowMinutes(prefs, now) - 5;
           const retryDelayMinutes = retryableScheduledAttempt
             ? computeRetryDelayMinutes(failureClass, latestSafeDelay)

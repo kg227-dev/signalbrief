@@ -1,5 +1,14 @@
 "use strict";
 
+const NON_RETRYABLE_UNDERFILL_REASONS = new Set([
+  "retrieval_thin",
+  "ranking_policy_limited",
+  "quality_below_floor",
+  "empty_items",
+  "zero_standard_results",
+  "no_selectable_items",
+]);
+
 const TERMINAL_RETRY_OUTCOMES = new Set([
   "withheld_after_retry",
   "withheld_after_retry_window",
@@ -82,6 +91,10 @@ function resolveDueUsers(deps) {
       if (hasExhaustedScheduledRetryBudget(retryState)) {
         return false;
       }
+      if (retryState?.underfill_reason
+        && NON_RETRYABLE_UNDERFILL_REASONS.has(String(retryState.underfill_reason))) {
+        return false;
+      }
       if (retryState?.retry_pending === true) {
         const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
         if (Number.isFinite(nextRetryAt) && now.getTime() < nextRetryAt) return false;
@@ -121,6 +134,10 @@ function resolveDueUsers(deps) {
       }
       if (hasExhaustedScheduledRetryBudget(retryState)) {
         return `${user.email || user.chatId}: halted(retry_budget_exhausted)`;
+      }
+      if (retryState?.underfill_reason
+        && NON_RETRYABLE_UNDERFILL_REASONS.has(String(retryState.underfill_reason))) {
+        return `${user.email || user.chatId}: halted(non_transient_underfill:${retryState.underfill_reason})`;
       }
       if (retryState?.retry_pending === true) {
         const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));

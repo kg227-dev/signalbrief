@@ -48,6 +48,12 @@ const DELIVERY_POLICY = Object.freeze({
   }),
 });
 
+const TRANSIENT_FAILURE_CLASSES = Object.freeze(new Set(["transient"]));
+
+function isRetryEligibleFailureClass(failureClass) {
+  return TRANSIENT_FAILURE_CLASSES.has(String(failureClass || "").trim());
+}
+
 function clamp(value, min, max) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return min;
@@ -316,9 +322,11 @@ function deriveInternalThinnessLabel(params = {}) {
 
 module.exports = {
   DELIVERY_POLICY,
+  TRANSIENT_FAILURE_CLASSES,
   ageHoursForItem,
   classifyDeliveryConfidence,
   classifyRetryFailureClass,
+  isRetryEligibleFailureClass,
   computeRetryDelayMinutes,
   countRecentLowerConfidenceAssist,
   deriveInternalThinnessLabel,

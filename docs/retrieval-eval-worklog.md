@@ -2972,3 +2972,225 @@ For the 17 standard topics:
 - move the decision discussion back to broader retrieval design for standard categories
 
 This pass hit the stop rule.
+
+## 2026-03-23 16:35 ET - Decision memo: next retrieval architecture step for the 17 standard topics
+
+This section is the decision-oriented recommendation after the stronger local evidence-resolver pass failed its same-time control.
+
+### What I would build next
+
+The next architecture step worth building is:
+
+- keep `Perplexity` as broad discovery
+- add a **standard-topic retrieval broker** for the 17 standard industries/capabilities
+- make that broker pull from two additional source types:
+  - `feed-based trusted publisher retrieval`
+  - `official / regulatory / filing retrieval`
+- merge all candidates into the existing cleanup / dedupe / clustering / ranking flow
+
+That is the smallest next architecture step that is meaningfully different from the local conversion work we just tested.
+
+It is not another URL-resolver tweak.
+It changes candidate generation itself.
+
+### Why this is the right next step
+
+What we now know:
+
+- trusted source families are visible in search evidence
+- local conversion work improved diagnostics but did not materially improve shippability
+- same-time control beat the stronger resolver-on path
+- standard-topic failure is still mostly upstream of final ranking
+
+So the next useful move is not “resolve visible URLs a bit better.”
+The next useful move is “generate better trusted candidates directly.”
+
+### Smallest next architecture step
+
+Build a `standard-topic retrieval broker` with three candidate lanes:
+
+1. `Perplexity discovery lane`
+   - unchanged purpose:
+     - broad discovery
+     - topic breadth
+     - early signal finding
+
+2. `trusted publisher feed lane`
+   - curated RSS/feed ingestion from topic-family publishers
+   - normalized into article records with canonical URL, headline, publish date, domain, topic family
+   - no dependence on Perplexity to hand back the final article URL
+
+3. `official / regulatory / filing lane`
+   - targeted retrieval from official and primary sources for policy-heavy categories
+   - normalized the same way and merged with the other lanes
+
+Then:
+
+- dedupe across lanes
+- cluster and score as today
+- keep current trust / freshness gates
+- keep noisy fallback off
+
+### What this changes in the pipeline
+
+Current shape:
+
+- query topic
+- Perplexity search evidence
+- Perplexity returned URLs
+- fetch / parse / retain
+- rank / gate / ship
+
+Recommended next shape:
+
+- query topic
+- Perplexity discovery candidates
+- feed / official-source candidates
+- normalize into one candidate set
+- dedupe / cluster / retain
+- rank / gate / ship
+
+The important difference is that trusted article supply no longer depends on Perplexity successfully converting visible evidence into article-shaped outputs.
+
+### Why this is more likely to move shippability
+
+The current local fixes were trying to rescue supply after Perplexity had already narrowed or malformed it.
+
+This next step is stronger because it:
+
+- creates article records directly from trusted source inputs
+- reduces dependence on provider URL conversion quality
+- gives standard topics a larger base of already-valid candidates before ranking
+- should improve both quantity and quality tier at the same time
+
+That is much more likely to change standard-topic shippability than another resolver-style pass.
+
+### Technology recommendation
+
+`TECHNOLOGY` should stay inside the standard-topic program, but it should get a dedicated treatment inside the broker.
+
+Recommendation:
+
+- shared broker architecture
+- topic-specific `TECHNOLOGY` source family pack
+- more weight on:
+  - enterprise-tech publishers
+  - semiconductor / infrastructure specialists
+  - cyber / standards / export-control / procurement official sources
+
+Reason:
+
+- Technology repeatedly shows strong visible evidence but weak provider conversion
+- that makes it the clearest case for direct trusted-source candidate generation
+- it does **not** need a separate standalone architecture, but it does need a stronger lane than generic standard-topic retrieval
+
+### Retrieval-source recommendation by source type
+
+For the 17 standard topics, the next layer should be a combination of:
+
+- `feed-based ingestion`:
+  - best default second layer for journalism-heavy categories
+- `official / regulatory / filing retrieval`:
+  - required for policy-heavy, healthcare, life sciences, public-sector, and finance-adjacent categories
+- `direct source-family retrieval`:
+  - useful for specialist/trade categories where RSS/feed coverage exists but needs family-based routing
+- `another retrieval provider`:
+  - not my first next step
+  - useful later if feed + official retrieval still leaves large gaps
+- `source-specific crawling / extraction`:
+  - only where feeds are weak and the category is strategically important
+  - this is closer to the larger redesign tier
+
+### Practical source strategy for the standard 17
+
+Best default mix by family:
+
+- `Healthcare`
+  - official/regulatory + specialist healthcare journalism + top-tier business reporting
+- `Financial Services`
+  - official/regulatory/filings + top-tier financial reporting + specialist banking/payments trade
+- `Private Equity & M&A`
+  - top-tier deal reporting + filings / antitrust / bankruptcy sources + transaction trade
+- `Energy`
+  - official/regulatory + energy journalism + utility / power / grid trade
+- `Consumer & Retail`
+  - top-tier business reporting + retail/consumer trade + earnings/filings
+- `Life Sciences`
+  - official/trial/approval sources + specialist biotech/pharma journalism + limited IR corroboration
+- `Technology`
+  - top-tier business/tech + enterprise-tech/semis/infrastructure specialists + tech-policy official sources
+- `Industrials`
+  - top-tier business + manufacturing/logistics/supply-chain trade + procurement/trade-policy sources
+- `Real Estate`
+  - top-tier business/markets + CRE/housing/mortgage trade + permitting/finance sources
+- `Public Sector`
+  - official/government/procurement sources + top policy reporting + public-sector trade
+- `AI & Technology`
+  - top-tier tech/business + frontier-model / enterprise AI specialists + policy/standards sources
+- `Strategy`
+  - top-tier business/economics + selective consulting/management specialists + filings / macro policy sources
+- `Policy & Regulatory`
+  - official/regulatory first + trusted legal/compliance/policy publishers second
+- `Sustainability & ESG`
+  - official climate/policy/regulatory + strong ESG/climate reporting + sector trade where needed
+- `Digital Transformation`
+  - enterprise-tech / CIO / cloud / consulting-adjacent specialists + top-tier reporting + public procurement where relevant
+- `M&A Advisory`
+  - deal journalism + antitrust / competition / financing sources + restructuring trade
+- `Talent & Workforce`
+  - labor / immigration / workplace-rule sources + trusted workforce / HR publications + top-tier business reporting
+
+### Expected impact
+
+Directional, not precise:
+
+If this standard-topic broker is built well, my expected lift for the 17-topic standard eval is:
+
+- retained items:
+  - from roughly `30` same-time-control retained items
+  - to roughly `45-65`
+- retained article-shaped URLs:
+  - from roughly `17`
+  - to roughly `30-45`
+- topics with at least `1` retained item:
+  - from roughly `15`
+  - to roughly `16-17`
+- topics with at least `3` retained items:
+  - from roughly `6`
+  - to roughly `10-14`
+- strict-shippable standard personas:
+  - from `0`
+  - to roughly `3-6`
+- stretch-shippable standard personas:
+  - from `0`
+  - to roughly `8-12`
+
+That is the first path I think has a realistic chance of making the standard product look operationally viable.
+
+It still may not fully solve the `5`-item promise, but it should materially change the shape of the problem.
+
+### What a larger follow-on version would be
+
+If the broker materially improves inventory but still leaves standard shippability too low, the follow-on version should be:
+
+- persistent multi-source ingestion
+- stronger topic routing and source-family weighting
+- optional second discovery provider or SERP-style news retrieval as a supplement
+- source-specific extraction for critical weak categories
+
+That is the real retrieval redesign tier.
+
+### My recommendation
+
+For the 17 standard topics only:
+
+- do **not** spend more time on local resolver-style conversion work
+- build the standard-topic retrieval broker next
+- keep `TECHNOLOGY` in the shared broker, but with a dedicated stronger source-family lane
+- judge success on:
+  - retained article-shaped inventory
+  - topics with `3+` retained items
+  - stretch-shippable personas first
+  - then strict shippability
+
+If this next architecture step does not materially lift standard-topic stretch shippability, then the next decision should be a larger retrieval redesign rather than more local tuning.

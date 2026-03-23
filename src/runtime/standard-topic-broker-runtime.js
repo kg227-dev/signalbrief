@@ -4,7 +4,7 @@ const path = require("path");
 
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
-const { classifyUrlShape, articleAgeTooOld } = require("../digest/runtime/digest-data-fetch-items-runtime");
+const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
@@ -31,6 +31,16 @@ const ATOM_LINK_PATTERN = /<link\b[^>]*href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>
 
 function normalizeWhitespace(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function maybeDecodeUriComponent(value) {
+  const text = String(value || "").trim();
+  if (!text || !/%[0-9a-f]{2}/i.test(text)) return text;
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
 }
 
 function decodeHtmlEntities(value) {
@@ -62,8 +72,18 @@ function sanitizePatternList(values) {
 function toIsoDate(value) {
   const text = String(value || "").trim();
   if (!text) return "";
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
+  const candidates = [
+    text,
+    text
+      .replace(/\b([A-Z][a-z]{2})\.(?=\s+\d{1,2},\s+\d{4})/g, "$1")
+      .replace(/(\d)(am|pm)\b/gi, "$1 $2")
+      .replace(/^(?:[A-Z][a-z]{2},\s+)?(\d{2}\/\d{2}\/\d{4})\s+-\s+(\d{1,2}:\d{2})(?::\d{2})?$/, "$1 $2"),
+  ];
+  for (const candidate of candidates) {
+    const parsed = Date.parse(candidate);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return "";
 }
 
 function findTagValue(block, names) {
@@ -99,6 +119,21 @@ function normalizeAbsoluteUrl(candidate, baseUrl) {
   } catch {
     return "";
   }
+}
+
+function extractHrefFromMarkup(rawValue, baseUrl) {
+  const markup = maybeDecodeUriComponent(String(rawValue || ""));
+  const match = markup.match(/<a\b[^>]*href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  return normalizeAbsoluteUrl(match?.[1] || match?.[2] || match?.[3] || "", baseUrl);
+}
+
+function normalizeFeedLink(rawValue, baseUrl) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+  if (/<a\b/i.test(raw) || /%3ca\b/i.test(raw)) {
+    return extractHrefFromMarkup(raw, baseUrl);
+  }
+  return normalizeAbsoluteUrl(raw, baseUrl);
 }
 
 function normalizeTopicTag(value) {
@@ -324,10 +359,14 @@ async function defaultFetchEndpoint(url, opts = {}) {
 function parseRss(xml, endpointUrl) {
   const items = [];
   for (const block of (String(xml || "").match(RSS_ITEM_PATTERN) || [])) {
-    const title = stripTags(findTagValue(block, "title"));
-    const link = normalizeAbsoluteUrl(findTagValue(block, ["link", "guid"]), endpointUrl);
+    const rawTitle = findTagValue(block, "title");
+    const rawDescription = findTagValue(block, ["description", "content:encoded", "summary"]);
+    const title = stripTags(rawTitle);
+    const link = normalizeFeedLink(findTagValue(block, ["link", "guid"]), endpointUrl)
+      || extractHrefFromMarkup(rawTitle, endpointUrl)
+      || extractHrefFromMarkup(rawDescription, endpointUrl);
     const publishedDate = toIsoDate(findTagValue(block, ["pubDate", "dc:date", "published", "updated"]));
-    const summary = stripTags(findTagValue(block, ["description", "content:encoded", "summary"]));
+    const summary = stripTags(rawDescription);
     items.push({ title, url: link, publishedDate, summary });
   }
   return items;
@@ -427,11 +466,61 @@ function buildTitlePatternMatcher(patterns = []) {
   };
 }
 
-function laneAcceptsShape(source, urlShape) {
+function officialListingUrlLooksArticleLike(url) {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const pathname = String(parsed.pathname || "/").toLowerCase();
+    const segments = pathname.split("/").filter(Boolean);
+    const lastSegment = segments.length > 0 ? segments[segments.length - 1] : "";
+    if (segments.length < 2 || !lastSegment) return false;
+    if (
+      lastSegment === "news"
+      || lastSegment === "latest"
+      || lastSegment === "archive"
+      || lastSegment === "archives"
+      || lastSegment === "stories"
+      || lastSegment === "articles"
+      || lastSegment === "blog"
+      || lastSegment === "blogs"
+      || lastSegment === "press"
+      || lastSegment === "press-releases"
+      || lastSegment === "press-release"
+      || lastSegment === "insights"
+      || lastSegment === "opinion"
+      || lastSegment === "opinions"
+      || lastSegment === "authors"
+      || lastSegment === "author"
+      || lastSegment === "section"
+      || lastSegment === "sections"
+      || lastSegment === "search"
+    ) {
+      return false;
+    }
+    if (parsed.search && !/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|csv)$/i.test(lastSegment)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function laneAcceptsShape(source, urlShape, url) {
   if (String(source?.lane || "").trim() === "publisher_feed") {
     return urlShape === "article_url";
   }
-  return urlShape === "article_url" || urlShape === "document_file";
+  return (
+    urlShape === "article_url"
+    || urlShape === "document_file"
+    || (urlShape === "listing_page" && officialListingUrlLooksArticleLike(url))
+  );
+}
+
+function itemAgeTooOldAtTime(item, maxAgeHours, retrievedAt) {
+  const limit = Number.isFinite(maxAgeHours) ? maxAgeHours : 48;
+  const pubDate = Date.parse(String(item?.published_date || "").trim());
+  const referenceTime = Date.parse(String(retrievedAt || "").trim());
+  const now = Number.isFinite(referenceTime) ? referenceTime : Date.now();
+  if (!Number.isFinite(pubDate)) return true;
+  return (now - pubDate) / (60 * 60 * 1000) > limit;
 }
 
 function buildNormalizedItemsForSource(source, entries, opts = {}) {
@@ -463,7 +552,7 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       diagnostics.validation_drop_count += 1;
       continue;
     }
-    if (!laneAcceptsShape(source, urlShape)) {
+    if (!laneAcceptsShape(source, urlShape, url)) {
       diagnostics.non_article_count += 1;
       continue;
     }
@@ -502,7 +591,7 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       broker_source_family: source?.family || null,
       broker_source_endpoint: source?.endpoint || null,
     };
-    if (articleAgeTooOld(itemBase, maxAgeHours)) {
+    if (itemAgeTooOldAtTime(itemBase, maxAgeHours, retrievedAt)) {
       diagnostics.stale_count += 1;
       continue;
     }

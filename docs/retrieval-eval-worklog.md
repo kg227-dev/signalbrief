@@ -3338,3 +3338,170 @@ Next broker work should be narrow:
 - replace low-converting feeds with validated source-owned feeds or stable dated indexes
 - rerun `standard_phase1`
 - only expand topic coverage if that hardened Phase 1 pack moves retained article-shaped inventory and stretch shippability materially
+
+## 2026-03-23 23:30 ET — Phase 1 source-pack hardening pass
+
+### What changed
+
+I hardened the Phase 1 broker source pack without changing ranking, delivery policy, or topic scope.
+
+Applied fixes:
+
+- replaced broken or empty endpoints:
+  - `life_ema_news` -> `https://www.ema.europa.eu/en/new-human-medicine-new.xml`
+  - `healthcare_fda_press` -> direct FDA RSS
+  - `healthcare_cms_newsroom` -> CMS RSS feed
+  - `healthcare_fda_medwatch` -> direct FDA MedWatch RSS
+  - `financial_american_banker` -> `feed.rss`
+  - `financial_fed_press` -> `press_all.xml`
+  - `financial_sec_press` -> SEC press RSS
+  - `policy_govexec_feed` -> `https://www.govexec.com/rss/all/`
+  - `policy_doj_atr_news` -> direct DOJ Antitrust RSS
+  - `energy_canary` -> `https://www.canarymedia.com/rss.rss`
+  - `energy_eia_today` / `energy_eia_press` -> direct EIA RSS feeds
+- dropped or deferred sources that were dead, blocked, or empty:
+  - `life_biospace`
+  - `financial_occ_news`
+  - `policy_ftc_press`
+  - `energy_ferc_news` remained deferred
+- fixed broker normalization issues uncovered during source hardening:
+  - broker freshness now uses run `retrievedAt` instead of wall-clock `Date.now()`
+  - RSS parsing now recovers malformed CMS-style encoded links and anchor-in-title feeds
+  - official-lane URL acceptance now keeps direct official article pages that previously looked listing-shaped
+  - broker date parsing now handles feeds like `Mar 23, 2026 2:42pm` and `Fri, 03/20/2026 - 16:46`
+
+The hardened rerun is:
+
+- `retrieval-eval:2026-03-23T23-30-10-531Z`
+
+Baseline for this comparison is the earlier broker-on Phase 1 run:
+
+- `retrieval-eval:2026-03-23T20-08-08-957Z`
+
+### What we learned
+
+The hardened source pack improved retained inventory materially, but still did not move shippability.
+
+#### Before vs after
+
+- cleaned / retained items: `84 -> 119`
+- retained article-shaped URLs: `5 -> 10`
+- topics with at least `1` retained item: `5/6 -> 6/6`
+- topics with at least `3` retained items: `4/6 -> 5/6`
+- strict-shippable personas: `0/6 -> 0/6`
+- stretch-shippable personas: `0/6 -> 0/6`
+- 5-item fulfillment rate: `0% -> 0%`
+- withheld-after-retry rate: `100% -> 100%`
+
+So the source-pack pass was real progress on inventory shape, but still not enough to make the standard product shippable.
+
+#### Topic-by-topic top failure reason before vs after
+
+- `HEALTHCARE`
+  - before: `delivery_policy_total_item_shortfall` with `17` retained / `2` article-shaped
+  - after: `delivery_policy_total_item_shortfall` with `44` retained / `2` article-shaped
+  - interpretation: volume improved, but it remained dominated by specialist reported items; official feeds still contributed `0` retained
+- `FINANCIAL SERVICES`
+  - before: `zero_yield_broad`
+  - after: `delivery_policy_score_threshold`
+  - interpretation: the hardening pass moved this from a retrieval hole to one weak retained candidate, but not enough promotable quality
+- `ENERGY`
+  - before: `delivery_policy_score_threshold` with `1` retained / `0` article-shaped
+  - after: `delivery_policy_score_threshold` with `3` retained / `1` article-shaped
+  - interpretation: source fixes helped, but current broker sources still do not generate enough usable energy inventory
+- `LIFE SCIENCES`
+  - before: `delivery_policy_total_item_shortfall` with `17` retained / `2` article-shaped
+  - after: `delivery_policy_total_item_shortfall` with `44` retained / `5` article-shaped
+  - interpretation: this is the clearest source-pack win, especially after fixing Fierce date parsing and replacing broken official endpoints
+- `TECHNOLOGY`
+  - before: `delivery_policy_total_item_shortfall` with `53` retained / `1` article-shaped
+  - after: `delivery_policy_total_item_shortfall` with `43` retained / `1` article-shaped
+  - interpretation: still not a source-pack shortage. Technology remains a mix of high publisher volume, stale-heavy reported feeds, and official feeds that parse but promote nothing
+- `POLICY×REGULATORY`
+  - before: `delivery_policy_total_item_shortfall` with `13` retained / `0` article-shaped
+  - after: `delivery_policy_total_item_shortfall` with `28` retained / `1` article-shaped
+  - interpretation: GovExec + Federal News + Federal Register materially improved supply, but not enough to clear the 5-item contract
+
+#### Technology diagnosis
+
+`TECHNOLOGY` is now better understood:
+
+- not primarily a missing-source problem
+- not primarily a broker plumbing problem
+- mostly a mix of:
+  - high reported-feed volume from `TechCrunch` / `WIRED`
+  - one broken publisher feed (`Ars`)
+  - official sources (`NIST`, `BIS`) parsing a lot but retaining `0`
+  - too little promotable article-shaped inventory once freshness and validation are applied
+
+So Technology should stay in the shared broker, but it needs a stronger topic-specific source pack and less reliance on general-interest tech feeds if Phase 1 continues.
+
+#### Hardened source action plan
+
+- `keep`
+  - `healthcare_stat`
+  - `life_fiercebiotech`
+  - `life_fiercepharma`
+  - `technology_techcrunch`
+  - `technology_wired`
+  - `policy_govexec_feed`
+  - `policy_federalnews_feed`
+  - `policy_federal_register`
+- `keep and fix`
+  - `healthcare_fda_press`
+    - live and parsed, but `16/20` dropped by title validation
+  - `healthcare_cms_newsroom`
+    - live and parsed, but stale-heavy and validation-heavy
+  - `life_fda_press`
+    - strong retained count, but validation still drops more than half the feed
+  - `life_fda_biologics`
+    - live, but thin and validation-heavy
+  - `technology_nist_news`
+    - live, parsed `40`, retained `0`
+  - `technology_bis_news`
+    - live, parsed `53`, retained `0`
+  - `energy_eia_today`
+  - `energy_eia_press`
+  - `financial_fed_press`
+  - `financial_sec_press`
+  - `policy_doj_atr_news`
+- `replace`
+  - `technology_ars`
+    - current `http://feeds.arstechnica.com/...` fetch failed in the hardened run; should be replaced with a stable `https` endpoint or removed
+  - `energy_canary`
+    - live feed, but `100/100` entries classified non-article under current URL-shape rules; needs source-specific normalization or replacement
+  - `financial_american_banker`
+    - live feed, but `10/10` entries classified non-article; needs source-specific normalization or replacement
+  - `life_ema_news`
+    - replacement endpoint is now live, but still `14/14` stale in practice; likely keep only if a fresher EMA family exists
+- `drop entirely`
+  - `life_biospace` for Phase 1
+  - `financial_occ_news` for Phase 1
+  - `policy_ftc_press` for Phase 1
+- `defer to later phase`
+  - `energy_ferc_news`
+
+### What decision this affects
+
+This pass confirms the broker still looks like the right architecture direction, but the Phase 1 source pack is not yet strong enough to earn a Phase 2 expansion.
+
+The good news is that the bottleneck is now narrower:
+
+- broker mechanics are working
+- hardened sources can increase retained supply
+- the remaining issue is not “the broker idea failed”
+- it is that several enabled sources still convert into stale-heavy, listing-shaped, or validation-heavy inventory
+
+### What remains uncertain
+
+- whether one more source-pack-only pass could lift `stretch-shippable` above `0/6`
+- whether `ENERGY` and `FINANCIAL SERVICES` need different source families entirely instead of more endpoint fixes
+- whether `TECHNOLOGY` can become promotable with better source routing alone, or whether it needs a more opinionated topic-specific source pack
+
+### Current recommendation
+
+Do **not** roll back the broker.
+
+Do **not** expand to Phase 2A.
+
+Treat this run as evidence that the next narrow pass should still be source-pack hardening only if we are prepared to replace weak live feeds with better source families. If not, this is the point where the broker needs a broader redesign rather than more endpoint patching.

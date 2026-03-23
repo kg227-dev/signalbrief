@@ -13,6 +13,7 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const { createDigestDataFetchRuntime } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
+const RECENT_PUBLISHED_DATE = new Date(Date.now() - (6 * 60 * 60 * 1000)).toISOString();
 
 async function testCustomFallbackFlowWithProviderPolicy() {
   const callOpts = [];
@@ -46,7 +47,7 @@ async function testCustomFallbackFlowWithProviderPolicy() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Custom story", summary: "Summary", url: "https://example.com/story", published_date: "2026-03-21T00:00:00.000Z" },
+                { headline: "Custom story", summary: "Summary", url: "https://example.com/story", published_date: RECENT_PUBLISHED_DATE },
               ]),
             },
           }],
@@ -115,7 +116,7 @@ async function testStandardTopicsUseFallbackQueriesForThinPools() {
             choices: [{
               message: {
                 content: JSON.stringify([
-                  { headline: "Standard story one", summary: "Summary", url: "https://example.com/one", published_date: "2026-03-21T00:00:00.000Z" },
+                  { headline: "Standard story one", summary: "Summary", url: "https://example.com/one", published_date: RECENT_PUBLISHED_DATE },
                 ]),
               },
             }],
@@ -129,7 +130,7 @@ async function testStandardTopicsUseFallbackQueriesForThinPools() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Standard story two", summary: "Summary", url: "https://example.com/two", published_date: "2026-03-21T00:00:00.000Z" },
+                  { headline: "Standard story two", summary: "Summary", url: "https://example.com/two", published_date: RECENT_PUBLISHED_DATE },
               ]),
             },
           }],
@@ -179,7 +180,7 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
                     summary: "Summary",
                     source: "blocked.example",
                     url: "https://preferred.example/story",
-                    published_date: "2026-03-21T00:00:00.000Z",
+                    published_date: RECENT_PUBLISHED_DATE,
                   },
                 ]),
               },
@@ -203,7 +204,7 @@ async function testPreferredDomainPassUsesSearchFilterAndBroadFallback() {
                     summary: "Summary",
                     source: "reuters.com",
                     url: "https://broad.example/story",
-                    published_date: "2026-03-21T00:00:00.000Z",
+                    published_date: RECENT_PUBLISHED_DATE,
                   },
                 ]),
               },
@@ -264,7 +265,7 @@ async function testPreferredOnlyModeSkipsBroadFallback() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Preferred only story", summary: "Summary", source: "reuters.com", url: "https://preferred.example/story", published_date: "2026-03-21T00:00:00.000Z" },
+                { headline: "Preferred only story", summary: "Summary", source: "reuters.com", url: "https://preferred.example/story", published_date: RECENT_PUBLISHED_DATE },
               ]),
             },
           }],
@@ -310,7 +311,7 @@ async function testBroadOnlyModeSkipsSearchFilter() {
           choices: [{
             message: {
               content: JSON.stringify([
-                { headline: "Broad only story", summary: "Summary", source: "wsj.com", url: "https://broad.example/story", published_date: "2026-03-21T00:00:00.000Z" },
+                { headline: "Broad only story", summary: "Summary", source: "wsj.com", url: "https://broad.example/story", published_date: RECENT_PUBLISHED_DATE },
               ]),
             },
           }],
@@ -356,7 +357,7 @@ async function testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl() {
                 summary: "Summary",
                 source: "wsj.com",
                 url: "https://www.wsj.com/articles/blackstone-exits-energy-portfolio-15-billion-deal-3f8d2a1c",
-                published_date: "2026-03-21T00:00:00.000Z",
+                published_date: RECENT_PUBLISHED_DATE,
               },
             ]),
           },
@@ -397,7 +398,7 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
                 summary: "Summary",
                 source: "wsj.com",
                 url: "https://www.wsj.com/articles/blackstone-exits-energy-portfolio-15-billion-deal-3f8d2a1c",
-                published_date: "2026-03-21T00:00:00.000Z",
+                published_date: RECENT_PUBLISHED_DATE,
               },
             ]),
           },

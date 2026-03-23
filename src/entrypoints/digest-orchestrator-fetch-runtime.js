@@ -383,7 +383,89 @@ function countUsableItems(items, isFetchedItemEligible) {
   }, 0);
 }
 
-function buildTopicState(topic, shortlist, priority, originalIndex) {
+function normalizeSourceTierForFetch(value) {
+  const tier = String(value || "").trim().toLowerCase();
+  return tier.startsWith("learned-") ? tier.slice("learned-".length) : tier;
+}
+
+function isHighTrustAnnotatedItem(item) {
+  const sourcePolicy = String(item?.source_policy || "").trim().toLowerCase();
+  const sourceTier = normalizeSourceTierForFetch(item?.source_tier);
+  return (sourcePolicy === "preferred" || sourcePolicy === "allowed")
+    && (sourceTier === "premium" || sourceTier === "strong" || sourceTier === "standard");
+}
+
+function isReviewTierAnnotatedItem(item) {
+  const sourcePolicy = String(item?.source_policy || "").trim().toLowerCase();
+  const sourceTier = normalizeSourceTierForFetch(item?.source_tier);
+  return sourcePolicy === "review"
+    || sourceTier === "blog"
+    || sourceTier === "weak"
+    || sourceTier === "suspect"
+    || sourceTier === "unknown"
+    || sourceTier === "corporate";
+}
+
+function annotateItemsForFetch(items, annotateFetchedItems) {
+  if (typeof annotateFetchedItems !== "function") return Array.isArray(items) ? items : [];
+  try {
+    return annotateFetchedItems(Array.isArray(items) ? items : []);
+  } catch {
+    return Array.isArray(items) ? items : [];
+  }
+}
+
+function summarizeAnnotatedTrustMix(items, annotateFetchedItems, isFetchedItemEligible) {
+  const annotated = annotateItemsForFetch(items, annotateFetchedItems);
+  const eligibilityFn = typeof isFetchedItemEligible === "function"
+    ? isFetchedItemEligible
+    : () => true;
+  const eligible = annotated.filter((item) => eligibilityFn(item) !== false);
+  const highTrustCount = eligible.reduce((sum, item) => sum + (isHighTrustAnnotatedItem(item) ? 1 : 0), 0);
+  const reviewTierCount = eligible.reduce((sum, item) => sum + (isReviewTierAnnotatedItem(item) ? 1 : 0), 0);
+  return {
+    eligible_count: eligible.length,
+    high_trust_count: highTrustCount,
+    review_tier_count: reviewTierCount,
+    review_heavy: eligible.length > 0
+      && highTrustCount <= 0
+      && reviewTierCount >= Math.max(1, Math.ceil(eligible.length / 2)),
+  };
+}
+
+function buildTrustedFamilyQueue(shortlist = {}, familyShortlists = {}) {
+  const queue = [];
+  const seenDomains = new Set();
+
+  function pushFamily(name, domains, officialFriendly) {
+    const normalizedDomains = (Array.isArray(domains) ? domains : [])
+      .map((domain) => String(domain || "").trim())
+      .filter(Boolean)
+      .filter((domain) => {
+        if (seenDomains.has(domain)) return false;
+        seenDomains.add(domain);
+        return true;
+      });
+    if (normalizedDomains.length <= 0) return;
+    queue.push({
+      name,
+      domains: normalizedDomains,
+      official_friendly: officialFriendly === true,
+    });
+  }
+
+  const officialFriendly = shortlist?.official_friendly === true || familyShortlists?.official_friendly === true;
+  if (officialFriendly) {
+    pushFamily("official", familyShortlists?.official_domains, true);
+    pushFamily("reported", familyShortlists?.reported_domains, false);
+  } else {
+    pushFamily("reported", familyShortlists?.reported_domains, false);
+    pushFamily("official", familyShortlists?.official_domains, true);
+  }
+  return queue;
+}
+
+function buildTopicState(topic, shortlist, familyShortlists, priority, originalIndex) {
   return {
     topic,
     priority: Math.max(0, Number(priority || 0)),
@@ -393,11 +475,18 @@ function buildTopicState(topic, shortlist, priority, originalIndex) {
       : [],
     topicKeys: Array.isArray(shortlist?.topic_keys) ? shortlist.topic_keys.slice() : [],
     officialFriendly: shortlist?.official_friendly === true,
+    officialDomains: Array.isArray(familyShortlists?.official_domains) ? familyShortlists.official_domains.slice() : [],
+    reportedDomains: Array.isArray(familyShortlists?.reported_domains) ? familyShortlists.reported_domains.slice() : [],
+    trustedFamilyQueue: buildTrustedFamilyQueue(shortlist, familyShortlists),
+    nextTrustedFamilyIndex: 0,
     items: [],
     itemKeys: new Set(),
     totalCallsScheduled: 0,
     preferredCallsMade: 0,
     broadCallsMade: 0,
+    trustedFamilyCallsMade: 0,
+    trustedOfficialCallsMade: 0,
+    trustedReportedCallsMade: 0,
     broadFallbackUsed: false,
     nextPreferredQueryIndex: 0,
     nextBroadQueryIndex: 0,
@@ -415,6 +504,7 @@ function buildTopicState(topic, shortlist, priority, originalIndex) {
     },
     preferredPassItemCount: 0,
     broadPassItemCount: 0,
+    trustedFamilyPassItemCount: 0,
     searchResultDomains: [],
     preferredSearchResultDomains: [],
     preferredSearchResultHitCount: 0,
@@ -477,6 +567,24 @@ function sortDeepCoverageRetryStates(states, isFetchedItemEligible) {
   });
 }
 
+function sortTrustedSourceRetryStates(states, annotateFetchedItems, isFetchedItemEligible) {
+  return sortTopicStates(states).sort((left, right) => {
+    const leftUsable = countUsableItems(left?.items, isFetchedItemEligible);
+    const rightUsable = countUsableItems(right?.items, isFetchedItemEligible);
+    if (leftUsable !== rightUsable) return leftUsable - rightUsable;
+    const leftTrustMix = summarizeAnnotatedTrustMix(left?.items, annotateFetchedItems, isFetchedItemEligible);
+    const rightTrustMix = summarizeAnnotatedTrustMix(right?.items, annotateFetchedItems, isFetchedItemEligible);
+    if (leftTrustMix.high_trust_count !== rightTrustMix.high_trust_count) {
+      return leftTrustMix.high_trust_count - rightTrustMix.high_trust_count;
+    }
+    if (rightTrustMix.review_tier_count !== leftTrustMix.review_tier_count) {
+      return rightTrustMix.review_tier_count - leftTrustMix.review_tier_count;
+    }
+    if (right.priority !== left.priority) return right.priority - left.priority;
+    return left.originalIndex - right.originalIndex;
+  });
+}
+
 function markBudgetStop(budgetTracker, reason) {
   if (!budgetTracker || !reason) return;
   if (!budgetTracker.stop_reason) budgetTracker.stop_reason = reason;
@@ -499,6 +607,17 @@ function hasBlockingProviderFailure(state) {
 function shouldPreferBroadFallbackRetry(state, isFetchedItemEligible) {
   return countUsableItems(state?.items, isFetchedItemEligible) <= 0
     && Number(state?.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
+}
+
+function needsStandardTrustedSourcePass(state, annotateFetchedItems, isFetchedItemEligible) {
+  if (!state || state?.topic?.isCustom === true) return false;
+  if (!Array.isArray(state?.trustedFamilyQueue) || Number(state?.nextTrustedFamilyIndex || 0) >= state.trustedFamilyQueue.length) {
+    return false;
+  }
+  if (hasBlockingProviderFailure(state)) return false;
+  const usableCount = countUsableItems(state?.items, isFetchedItemEligible);
+  if (usableCount < 2) return true;
+  return summarizeAnnotatedTrustMix(state?.items, annotateFetchedItems, isFetchedItemEligible).review_heavy === true;
 }
 
 function countScheduledCalls(states) {
@@ -582,10 +701,17 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     preferred_item_count: countPreferredItems(state),
     preferred_call_count: Number(state?.preferredCallsMade || 0),
     broad_call_count: Number(state?.broadCallsMade || 0),
+    trusted_source_call_count: Number(state?.trustedFamilyCallsMade || 0),
+    trusted_official_call_count: Number(state?.trustedOfficialCallsMade || 0),
+    trusted_reported_call_count: Number(state?.trustedReportedCallsMade || 0),
     next_preferred_query_index: Number(state?.nextPreferredQueryIndex || 0),
     next_broad_query_index: Number(state?.nextBroadQueryIndex || 0),
+    next_trusted_family_index: Number(state?.nextTrustedFamilyIndex || 0),
     remaining_preferred_queries: Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextPreferredQueryIndex || 0)),
     remaining_broad_queries: Math.max(0, Number((state?.topic?.queries || []).length || 0) - Number(state?.nextBroadQueryIndex || 0)),
+    remaining_trusted_source_families: Math.max(0, Number((state?.trustedFamilyQueue || []).length || 0) - Number(state?.nextTrustedFamilyIndex || 0)),
+    official_domains: Array.isArray(state?.officialDomains) ? state.officialDomains.slice() : [],
+    reported_domains: Array.isArray(state?.reportedDomains) ? state.reportedDomains.slice() : [],
     total_calls_scheduled: Number(state?.totalCallsScheduled || 0),
     status_counts: { ...(state?.provider?.status_counts || {}) },
     failed_calls: Number(state?.provider?.failed_calls || 0),
@@ -621,6 +747,10 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency) {
     search_budget_exhausted: budgetTracker?.exhausted === true,
     broad_fallback_topics_used: attemptedStates.reduce((sum, state) => sum + (state?.broadFallbackUsed === true ? 1 : 0), 0),
     deep_broad_retry_topics_used: attemptedStates.reduce((sum, state) => sum + (Number(state?.broadCallsMade || 0) > 1 ? 1 : 0), 0),
+    trusted_source_second_pass_topics_used: attemptedStates.reduce((sum, state) => sum + (Number(state?.trustedFamilyCallsMade || 0) > 0 ? 1 : 0), 0),
+    trusted_source_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedFamilyCallsMade || 0), 0),
+    trusted_official_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedOfficialCallsMade || 0), 0),
+    trusted_reported_call_count: attemptedStates.reduce((sum, state) => sum + Number(state?.trustedReportedCallsMade || 0), 0),
     zero_yield_retry_count: attemptedStates.reduce((sum, state) => sum + Number(state?.zeroYieldRetryCount || 0), 0),
     budget_stop_reason: String(budgetTracker?.stop_reason || "").trim() || null,
     max_concurrent_fetches: Math.max(1, Number(maxFetchConcurrency || DEFAULT_MAX_FETCH_CONCURRENCY)),
@@ -643,11 +773,13 @@ function createDigestOrchestratorFetchRuntime(deps) {
     normalizeTopicToken,
     fetchTopicNews,
     buildPreferredDomainShortlist,
+    buildPreferredSourceFamilyShortlists,
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard,
     emitDigestIncident,
     normalizeUrlForDedup,
     isFetchedItemEligible,
+    annotateFetchedItems,
   } = deps || {};
   const logger = typeof log === "function" ? log : () => {};
   const topicNormalizer = typeof normalizeTopicToken === "function"
@@ -657,6 +789,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
   const buildPreferredShortlist = typeof buildPreferredDomainShortlist === "function"
     ? buildPreferredDomainShortlist
     : () => ({ domains: [], topic_keys: [], official_friendly: false });
+  const buildPreferredFamilyShortlists = typeof buildPreferredSourceFamilyShortlists === "function"
+    ? buildPreferredSourceFamilyShortlists
+    : null;
   const buildRescueItems = typeof buildCustomRescueItemsFromStandard === "function"
     ? buildCustomRescueItemsFromStandard
     : () => [];
@@ -666,6 +801,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
   const itemEligibilityFn = typeof isFetchedItemEligible === "function"
     ? isFetchedItemEligible
     : () => true;
+  const annotateFetched = typeof annotateFetchedItems === "function"
+    ? annotateFetchedItems
+    : (items) => Array.isArray(items) ? items : [];
   const maxFetchConcurrency = resolveFetchConcurrency(CONFIG?.digest);
 
   function resolveBatchConcurrency(batchName, jobCount, budgetTracker) {
@@ -798,6 +936,16 @@ function createDigestOrchestratorFetchRuntime(deps) {
         state.preferredCallsMade += 1;
         state.preferredPassItemCount += merged.addedUniqueCount;
         state.nextPreferredQueryIndex = Math.max(state.nextPreferredQueryIndex, entry.invocation.queryIndex + 1);
+      } else if (entry.invocation.phase === "trusted") {
+        const familyName = String(entry.invocation.trustedFamilyName || "").trim().toLowerCase();
+        state.trustedFamilyCallsMade += 1;
+        state.trustedFamilyPassItemCount += merged.addedUniqueCount;
+        state.nextTrustedFamilyIndex = Math.max(
+          Number(state.nextTrustedFamilyIndex || 0),
+          Number(state.nextTrustedFamilyIndex || 0) + 1
+        );
+        if (familyName === "official") state.trustedOfficialCallsMade += 1;
+        if (familyName === "reported") state.trustedReportedCallsMade += 1;
       } else {
         state.broadCallsMade += 1;
         state.broadPassItemCount += merged.addedUniqueCount;
@@ -876,6 +1024,36 @@ function createDigestOrchestratorFetchRuntime(deps) {
     };
   }
 
+  function buildTrustedFamilyInvocation(state, { countsAsRetry = true } = {}) {
+    const family = Array.isArray(state?.trustedFamilyQueue)
+      ? state.trustedFamilyQueue[Number(state?.nextTrustedFamilyIndex || 0)]
+      : null;
+    const query = Array.isArray(state?.topic?.queries) ? state.topic.queries[0] : "";
+    if (!family || !query) return null;
+    return {
+      phase: "trusted",
+      queryIndex: 0,
+      countsAsRetry,
+      broadFallback: false,
+      trustedFamilyName: family.name,
+      topic: {
+        ...state.topic,
+        queries: [query],
+      },
+      opts: {
+        retrievalPlan: {
+          preferred_domains: Array.isArray(family.domains) ? family.domains.slice() : [],
+          thin_item_threshold: 1,
+          official_friendly: family.official_friendly === true,
+          topic_keys: Array.isArray(state.topicKeys) ? state.topicKeys.slice() : [],
+          allow_broad_fallback: false,
+          trusted_source_second_pass: true,
+          trusted_source_family: String(family.name || "").trim() || "reported",
+        },
+      },
+    };
+  }
+
   async function orchestrateFetch({ dueUsers, targetChatId, runMode }) {
     const digestConfig = CONFIG?.digest || {};
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 7));
@@ -920,9 +1098,24 @@ function createDigestOrchestratorFetchRuntime(deps) {
         queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
         maxDomains: 20,
       });
+      const familyShortlists = buildPreferredFamilyShortlists
+        ? buildPreferredFamilyShortlists({
+          topicTag: topic?.tag,
+          dueUserTopics,
+          queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
+          maxDomains: 20,
+        })
+        : {
+          reported_domains: [],
+          official_domains: [],
+          combined_domains: [],
+          topic_keys: Array.isArray(shortlist?.topic_keys) ? shortlist.topic_keys.slice() : [],
+          official_friendly: shortlist?.official_friendly === true,
+        };
       return buildTopicState(
         topic,
         shortlist,
+        familyShortlists,
         tagPriority[topicNormalizer(topic?.tag)] || 0,
         index
       );
@@ -939,9 +1132,29 @@ function createDigestOrchestratorFetchRuntime(deps) {
         queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
         maxDomains: 20,
       });
+      const familyShortlists = buildPreferredFamilyShortlists
+        ? buildPreferredFamilyShortlists({
+          topicTag: Array.isArray(topic?.preferred_topic_hints) && topic.preferred_topic_hints.length > 0
+            ? topic.preferred_topic_hints[0]
+            : topic?.tag,
+          dueUserTopics: [
+            ...dueUserTopics,
+            ...(Array.isArray(topic?.preferred_topic_hints) ? topic.preferred_topic_hints : []),
+          ],
+          queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
+          maxDomains: 20,
+        })
+        : {
+          reported_domains: [],
+          official_domains: [],
+          combined_domains: [],
+          topic_keys: Array.isArray(shortlist?.topic_keys) ? shortlist.topic_keys.slice() : [],
+          official_friendly: shortlist?.official_friendly === true,
+        };
       return buildTopicState(
         topic,
         shortlist,
+        familyShortlists,
         tagPriority[topicNormalizer(topic?.custom_slug)] || 1,
         index
       );
@@ -1047,6 +1260,15 @@ function createDigestOrchestratorFetchRuntime(deps) {
     }
 
     const trackedStandardDeepStates = standardStates.filter(isTrackedDeepCoverageState).length;
+    const standardTrustedSecondPassStates = standardStates.filter((state) => (
+      Array.isArray(state?.trustedFamilyQueue) && state.trustedFamilyQueue.length > 0
+    )).length;
+    const standardTrustedSecondPassReserve = standardTrustedSecondPassStates > 0
+      ? Math.min(
+        Math.max(4, Math.ceil(standardTrustedSecondPassStates / 2)),
+        Math.max(0, standardHardLimit - countScheduledCalls(standardStates))
+      )
+      : 0;
     const standardDeepCoverageReserve = Math.min(
       Math.max(5, focusedStandardTags.size * 2),
       Math.max(trackedStandardDeepStates, focusedStandardTags.size),
@@ -1059,7 +1281,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         && Number(state.nextPreferredQueryIndex || 0) < Number(state?.topic?.queries?.length || 0);
     }), itemEligibilityFn);
     const standardPhase2Headroom = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
-    const phase2Slots = Math.max(0, standardPhase2Headroom - standardDeepCoverageReserve);
+    const phase2Slots = Math.max(0, standardPhase2Headroom - standardDeepCoverageReserve - standardTrustedSecondPassReserve);
     const phase2States = phase2Eligible.slice(0, phase2Slots);
     if (phase2Eligible.length > phase2States.length && standardPhase2Headroom > standardDeepCoverageReserve) {
       markBudgetStop(budgetTracker, "hard_cap_reached");
@@ -1097,6 +1319,24 @@ function createDigestOrchestratorFetchRuntime(deps) {
     ), "standard:phase3", budgetTracker);
 
     let standardDeepPhaseIndex = 4;
+    while (true) {
+      const trustedPhaseEligible = sortTrustedSourceRetryStates(standardStates.filter((state) => {
+        return Number(state.totalCallsScheduled || 0) > 0
+          && needsStandardTrustedSourcePass(state, annotateFetched, itemEligibilityFn);
+      }), annotateFetched, itemEligibilityFn);
+      const trustedPhaseSlots = Math.max(0, standardHardLimit - countScheduledCalls(standardStates));
+      const trustedPhaseStates = trustedPhaseEligible.slice(0, trustedPhaseSlots);
+      if (trustedPhaseEligible.length > trustedPhaseStates.length) {
+        markBudgetStop(budgetTracker, "hard_cap_reached");
+      }
+      if (trustedPhaseStates.length <= 0) break;
+      await runScheduledBatch(trustedPhaseStates, (state) => buildTrustedFamilyInvocation(
+        state,
+        { countsAsRetry: true }
+      ), `standard:trusted${standardDeepPhaseIndex - 3}`, budgetTracker);
+      standardDeepPhaseIndex += 1;
+    }
+
     while (true) {
       const phase4Eligible = sortRetryStates(standardStates.filter((state) => {
         return Number(state.totalCallsScheduled || 0) > 0

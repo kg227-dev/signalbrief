@@ -1584,3 +1584,397 @@ My directional judgment:
   - the most practical next engineering move
 - `full multi-source retrieval redesign`
   - the path most likely to make the current 5-item promise genuinely real
+
+## 2026-03-23 00:30 ET — Phase 1 plan for the 17 standard categories
+
+This is the practical execution recommendation if the goal over the next few weeks is:
+
+- keep the `5`-item expectation for standard digests
+- stop spending energy on custom for now
+- make the standard industries/capabilities obviously credible and materially more reliable
+
+### My actual recommendation
+
+If this were my product, I would do **one focused build first**:
+
+- keep `Perplexity` as the broad discovery layer
+- add a **trusted-source second pass for the 17 standard categories only**
+- make that second pass source-family-driven, not prompt-driven
+- ingest trusted publisher feeds + official/regulatory feeds into a small normalized candidate store
+- merge those candidates into the current cleanup/ranking flow
+
+I would **not** broaden fallback.
+I would **not** keep tuning custom right now.
+I would **not** relax the trust bar.
+
+I would keep the standard product aimed at `5`, but I would treat the next few weeks as a standard-category hardening sprint rather than a general retrieval project.
+
+### Phase 1 build: the smallest high-leverage thing
+
+Build this:
+
+1. a `standard trusted-source retrieval layer`
+   - only for the 17 standard onboarding categories
+   - runs after Perplexity if the category pool is:
+     - too small
+     - too review-tier heavy
+     - too weak to satisfy the shipping bar
+2. a small `source-family map`
+   - each standard category points to trusted source families
+3. a `feed/official-source ingestor`
+   - poll curated trusted feeds and official sources on a short interval
+   - normalize title/url/domain/date/topic-family into one candidate store
+4. a `candidate merge step`
+   - Perplexity candidates + trusted-source candidates
+   - then dedupe, freshness, clustering, selection as today
+
+Why this is the right first build:
+
+- it is much smaller than a full retrieval rewrite
+- it directly attacks the current bottleneck: trusted candidate supply
+- it preserves the cleanliness gains already achieved
+
+### Which standard categories are likely fine vs weak vs specialized
+
+This is partly based on direct eval evidence and partly on inference from category shape. I am marking that explicitly.
+
+#### Likely okay under current Perplexity-first approach, with light trusted-source support
+
+Direct evidence is weaker here; this is mostly inference from category shape and how these topics usually behave:
+
+- `Consumer & Retail`
+- `Industrials`
+- `Private Equity & M&A`
+- `M&A Advisory`
+
+What they likely need:
+
+- Perplexity discovery
+- plus light trusted publisher/trade feed support
+
+These categories usually have enough mainstream and trade coverage that the main issue is quality shaping, not total absence.
+
+#### Weak and likely need a trusted-source second layer quickly
+
+Direct eval evidence or strong inference says these are the near-term problem set:
+
+- `Healthcare`
+- `Life Sciences`
+- `Technology`
+- `Strategy`
+- `Energy`
+- `Sustainability & ESG`
+- `Digital Transformation`
+
+What they need:
+
+- Perplexity discovery
+- plus direct trusted-source retrieval to improve quality tier and volume
+
+These are the categories where the current system either:
+
+- returns too few items
+- returns mostly review-tier items
+- or finds 1-2 good items but not enough trusted depth to get to 5
+
+#### Need specialized routing, not just a generic trusted-source layer
+
+These categories depend heavily on primary or domain-specific sources:
+
+- `Policy & Regulatory`
+- `Public Sector`
+- `Financial Services`
+- `Real Estate`
+- `AI & Technology`
+- `Talent & Workforce`
+
+What they need:
+
+- category-specific source routing
+- usually including official / regulatory / filings / specialist trade sources
+
+These categories are less about “more articles” and more about “the right source family first.”
+
+### Source strategy by category
+
+Below is the recommended trusted source base for each onboarding category.
+
+#### Industries
+
+- `Healthcare`
+  - official healthcare regulators / reimbursement / rulemaking
+  - top specialist healthcare journalism
+  - high-trust business press
+  - recommendation:
+    - second-layer retrieval required
+
+- `Financial Services`
+  - central bank / treasury / banking / market regulators
+  - top-tier financial journalism
+  - trusted banking/payments/insurance trade sources
+  - recommendation:
+    - specialized routing required
+
+- `Private Equity & M&A`
+  - deal / antitrust / bankruptcy / filing sources
+  - top-tier business journalism
+  - trusted deal and restructuring trade coverage
+  - recommendation:
+    - likely okay with light trusted-source support
+
+- `Energy`
+  - utility / grid / power-market / permitting / energy-regulator sources
+  - strong energy journalism
+  - strong energy trade publications
+  - recommendation:
+    - second-layer retrieval required
+
+- `Consumer & Retail`
+  - top-tier business journalism
+  - trusted retail / consumer trade sources
+  - filings / earnings / consumer-regulator sources
+  - recommendation:
+    - likely okay with light trusted-source support
+
+- `Life Sciences`
+  - FDA / EMA / trial / approval / label / registry sources
+  - specialist biotech/pharma journalism
+  - selective company IR as corroboration only
+  - recommendation:
+    - second-layer retrieval required
+
+- `Technology`
+  - top-tier business/technology journalism
+  - official tech-policy / export-control / regulator sources
+  - strong enterprise-tech / semiconductor / infrastructure specialists
+  - recommendation:
+    - second-layer retrieval required
+
+- `Industrials`
+  - top-tier business journalism
+  - manufacturing / logistics / supply-chain trade sources
+  - trade-policy / procurement / filings where relevant
+  - recommendation:
+    - likely okay with light trusted-source support
+
+- `Real Estate`
+  - top-tier business / markets journalism
+  - trusted CRE / housing / mortgage trade sources
+  - zoning / permitting / REIT / finance sources
+  - recommendation:
+    - specialized routing required
+
+- `Public Sector`
+  - government / budget / procurement / rulemaking sources
+  - trusted public-sector trade publications
+  - high-trust press as support
+  - recommendation:
+    - specialized routing required
+
+#### Capabilities
+
+- `AI & Technology`
+  - top-tier AI/tech business coverage
+  - standards / export-control / regulator / official policy sources
+  - semiconductor / model / infrastructure specialists
+  - recommendation:
+    - specialized routing required
+
+- `Strategy`
+  - top-tier business press
+  - filings / IR / activist / restructuring / transaction sources
+  - selective legal/regulatory support
+  - recommendation:
+    - second-layer retrieval required
+
+- `Policy & Regulatory`
+  - official/regulatory sources first
+  - trusted legal / compliance / policy-trade sources second
+  - top-tier press third
+  - recommendation:
+    - specialized routing required
+
+- `Sustainability & ESG`
+  - climate / disclosure / environmental / trade-policy official sources
+  - trusted energy-transition and sustainability journalism
+  - strong business press support
+  - recommendation:
+    - second-layer retrieval required
+
+- `Digital Transformation`
+  - enterprise-tech / cloud / software / CIO trusted sources
+  - top-tier business/technology press
+  - official procurement/policy sources where relevant
+  - recommendation:
+    - second-layer retrieval required
+
+- `M&A Advisory`
+  - deal journalism
+  - antitrust / competition / financing / filing sources
+  - restructuring and transaction trade coverage
+  - recommendation:
+    - likely okay with light trusted-source support
+
+- `Talent & Workforce`
+  - labor / immigration / workplace-rule official sources
+  - trusted HR / labor-market / workforce strategy publications
+  - top-tier business press
+  - recommendation:
+    - specialized routing required
+
+### The product stance I recommend right now
+
+My honest recommendation:
+
+- keep the `5`-item expectation for the **standard** digests
+- do **not** spend the next few weeks trying to make custom equally reliable
+- build the standard trusted-source second layer first
+- measure fulfillment only on the 17 standard categories during this hardening phase
+
+Why:
+
+- the standard categories are the core product
+- getting them excellent is more important than making every custom case work
+- the current diagnosis says the bottleneck is trusted supply, which this Phase 1 build directly addresses
+
+I would only change the standard product promise if this focused standard-source build still fails materially.
+
+### If I were building this over the next few weeks
+
+This is the exact order I would do:
+
+1. define a trusted source-family map for all 17 categories
+2. implement a small ingestion layer for:
+   - official/regulatory feeds
+   - trusted publisher/trade feeds
+3. add a standard-category-only second retrieval pass that fires when:
+   - Perplexity pool is too small
+   - or source-family mix is too review-tier heavy
+4. merge those candidates into the existing pipeline
+5. rerun the eval on the 17 standard categories only
+6. judge success on:
+   - 5-item fulfillment rate
+   - source-family mix
+   - stale rate
+   - weak-source exposure
+
+That is the smallest build I think has a real chance of making the standard digests feel strong enough that “getting to 5” stops feeling like a struggle.
+
+## 2026-03-22 / 2026-03-23 - Phase 1 standard trusted-source second pass
+
+### What changed
+
+- Added `buildPreferredSourceFamilyShortlists(...)` in [src/runtime/preferred-source-registry-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/runtime/preferred-source-registry-runtime.js) so the fetch layer can split a topic's preferred domains into:
+  - `official_domains`
+  - `reported_domains`
+  - combined topic-aware trusted families
+- Wired the fetch orchestrator to run a **standard-only trusted-source second pass** after the normal preferred + broad phases when a standard topic still looks thin or review-tier-heavy.
+- Injected the new family-shortlist builder plus editorial annotations into:
+  - [src/entrypoints/digest-orchestrator-core-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/entrypoints/digest-orchestrator-core-runtime.js)
+  - [src/eval/retrieval/runner-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/eval/retrieval/runner-runtime.js)
+- Added contract coverage for:
+  - preferred-source family shortlists
+  - trusted-source second-pass fetch behavior
+  - freshness-safe custom fallback fixtures
+
+### Why this was the right Phase 1 build
+
+This was the smallest meaningful build for the standard products:
+
+1. keep `Perplexity` as discovery
+2. when a standard topic still looks weak, run one extra trusted-source pass
+3. bias that pass toward official and reported source families already present in the registry
+4. merge back into the existing dedupe / ranking / delivery path
+
+This does **not** redesign retrieval yet. It answers whether the current architecture can be materially improved by adding a narrower trusted-source stage before doing a larger rebuild.
+
+### Validation
+
+- [tests/contracts/runtime/preferred-source-registry-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/runtime/preferred-source-registry-runtime.test.js)
+- [tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js)
+- [tests/contracts/harness/eval/retrieval/runner-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/harness/eval/retrieval/runner-runtime.test.js)
+- [tests/contracts/harness/digest/runtime/digest-data-fetch-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/harness/digest/runtime/digest-data-fetch-runtime.test.js)
+- `scripts/test-critical-paths.js`
+
+### Live eval result
+
+Run:
+
+- `retrieval-eval:2026-03-23T01-03-50-192Z`
+
+Scenario:
+
+- `standard_core`
+  - `HEALTHCARE`
+  - `STRATEGY`
+  - `LIFE SCIENCES`
+  - `TECHNOLOGY`
+  - `POLICY×REGULATORY`
+
+Key retrieval facts:
+
+- trusted-source second pass used on all `5/5` topics
+- trusted-source calls: `10`
+  - official: `5`
+  - reported: `5`
+- fetch calls:
+  - standard: `32`
+- stale rate: `0%`
+- provider `429` rate: `0%`
+
+Product result:
+
+- `5_item_fulfillment_rate = 0%`
+- `withheld_after_retry_rate = 100%`
+- lower-confidence usage stayed `0%`
+
+Category outcome:
+
+- `HEALTHCARE`
+  - `1 raw / 5 cleaned / 5 internal / 0 final`
+  - source-family mix: `review_tier 4`, `corporate 1`
+  - final failure: `delivery_policy_score_threshold`
+- `STRATEGY`
+  - `2 / 2 / 2 / 0`
+  - source-family mix: `review_tier 2`
+  - final failure: `delivery_policy_score_threshold`
+- `LIFE SCIENCES`
+  - `2 / 3 / 3 / 0`
+  - source-family mix: `review_tier 2`, `corporate 1`
+  - final failure: `delivery_policy_total_item_shortfall`
+- `TECHNOLOGY`
+  - `0 / 0 / 0 / 0`
+  - final failure: `zero_yield_broad`
+- `POLICY×REGULATORY`
+  - `2 / 2 / 2 / 0`
+  - source-family mix: `review_tier 2`
+  - final failure: `delivery_policy_total_item_shortfall`
+
+### What this means
+
+The trusted-source second pass is working mechanically:
+
+- it fired where expected
+- it did not reintroduce stale items
+- it did not reintroduce noisy fallback
+- it did not get blocked by rate limits in this run
+
+But it did **not** materially improve the standard-category shipping outcome.
+
+The main remaining problem is still trusted candidate supply:
+
+- the search layer is seeing trusted domains in evidence
+- but that evidence is not converting into enough promotable items
+- once the system broadens, the retained pool still skews heavily `review_tier` or `corporate`
+
+### Decision after Phase 1
+
+This Phase 1 build was worth doing because it answers the next product question cleanly:
+
+- adding one narrow trusted-source pass on top of the current Perplexity-first architecture is **not enough** to make the standard categories operationally viable under the current `5-item` trust bar
+
+That points to a larger retrieval step next:
+
+- feed / source-family ingestion
+- official-source retrieval by category family
+- or a broader multi-source retrieval broker

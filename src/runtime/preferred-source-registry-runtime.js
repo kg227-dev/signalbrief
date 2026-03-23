@@ -311,6 +311,50 @@ function buildPreferredDomainShortlist(registryRaw, options = {}) {
   };
 }
 
+function buildPreferredSourceFamilyShortlists(registryRaw, options = {}) {
+  const registry = sanitizePreferredSourceRegistry(registryRaw);
+  const maxDomains = Math.max(1, Number(options.maxDomains || 20));
+  const relevantTopics = resolveRelevantTopicKeys(registry, options.topicTag, options.dueUserTopics);
+  const officialFriendly = relevantTopics.some((topicKey) => isOfficialFriendlyPreferredTopic(topicKey))
+    || queryLooksOfficial(options.queryText);
+
+  const topicReported = [];
+  const topicOfficial = [];
+  const globalReported = sanitizeDomainList(registry?.global?.reported || []);
+  const globalOfficial = sanitizeDomainList(registry?.global?.official || []);
+  const seenTopicReported = new Set();
+  const seenTopicOfficial = new Set();
+
+  function pushUnique(target, seen, value) {
+    const normalized = normalizeSourcePolicyDomain(value);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    target.push(normalized);
+  }
+
+  for (const topicKey of relevantTopics) {
+    const topicEntry = registry?.topics?.[topicKey] || {};
+    for (const domain of (topicEntry.reported || [])) pushUnique(topicReported, seenTopicReported, domain);
+    for (const domain of (topicEntry.official || [])) pushUnique(topicOfficial, seenTopicOfficial, domain);
+  }
+
+  const reportedDomains = uniqueStrings([...topicReported, ...globalReported]).slice(0, maxDomains);
+  const officialDomains = uniqueStrings([...topicOfficial, ...globalOfficial]).slice(0, maxDomains);
+  const combinedDomains = officialFriendly
+    ? uniqueStrings([...officialDomains, ...reportedDomains]).slice(0, maxDomains)
+    : uniqueStrings([...reportedDomains, ...officialDomains]).slice(0, maxDomains);
+
+  return {
+    reported_domains: reportedDomains,
+    official_domains: officialDomains,
+    global_reported_domains: globalReported.slice(0, maxDomains),
+    global_official_domains: globalOfficial.slice(0, maxDomains),
+    combined_domains: combinedDomains,
+    topic_keys: relevantTopics,
+    official_friendly: officialFriendly,
+  };
+}
+
 function matchPreferredSourceDomain(registryRaw, sourceDomain, topicTag, options = {}) {
   const registry = sanitizePreferredSourceRegistry(registryRaw);
   const normalizedSource = normalizeSourcePolicyDomain(sourceDomain);
@@ -537,6 +581,7 @@ function createPreferredSourceRegistryRuntime(options = {}) {
   return {
     preferredSourcesPath,
     bundledPreferredSourcesPath,
+    buildPreferredSourceFamilyShortlists: (registry, options = {}) => buildPreferredSourceFamilyShortlists(registry, options),
     inspectPreferredSourceRegistry,
     loadPreferredSourceRegistry,
   };
@@ -546,6 +591,7 @@ module.exports = {
   DEFAULT_PREFERRED_SOURCES_VERSION,
   OFFICIAL_FRIENDLY_TOPIC_KEYS,
   buildPreferredDomainShortlist,
+  buildPreferredSourceFamilyShortlists,
   createPreferredSourceRegistryRuntime,
   isOfficialFriendlyPreferredTopic,
   matchPreferredSourceDomain,

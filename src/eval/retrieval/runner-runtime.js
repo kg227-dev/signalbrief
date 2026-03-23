@@ -826,6 +826,7 @@ function buildGlobalSelection({
     normalizeTopicToken,
     fetchTopicNews: dataRuntime.fetchTopicNews,
     buildPreferredDomainShortlist: (options) => buildPreferredDomainShortlist(preferredSourceRegistry, options),
+    buildPreferredSourceFamilyShortlists: (options) => preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options),
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard: formattingRuntime.buildCustomRescueItemsFromStandard,
     emitDigestIncident: async () => false,
@@ -834,6 +835,7 @@ function buildGlobalSelection({
       const annotated = annotateEditorialSignals([item]);
       return annotated.length > 0 && annotated[0].hard_exclude !== true;
     },
+    annotateFetchedItems: annotateEditorialSignals,
   });
 
   return fetchRuntime.orchestrateFetch({

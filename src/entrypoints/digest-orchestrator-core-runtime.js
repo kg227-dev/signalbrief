@@ -735,6 +735,7 @@ async function main() {
     normalizeTopicToken,
     fetchTopicNews,
     buildPreferredDomainShortlist: (options) => buildPreferredDomainShortlist(preferredSourceRegistry, options),
+    buildPreferredSourceFamilyShortlists: (options) => preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options),
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard,
     emitDigestIncident,
@@ -743,6 +744,7 @@ async function main() {
       const annotated = annotateEditorialSignals([item]);
       return annotated.length > 0 && annotated[0].hard_exclude !== true;
     },
+    annotateFetchedItems: annotateEditorialSignals,
   });
   const {
     selectionTarget,

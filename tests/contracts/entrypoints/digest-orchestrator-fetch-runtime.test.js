@@ -302,6 +302,103 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(focusedTopic.broad_call_count, 3);
   assert.strictEqual(focusedTopic.remaining_broad_queries, 0);
 
+  const trustedSecondPassCalls = [];
+  const trustedSecondPassRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [
+        { tag: "TECHNOLOGY", queries: ["t1"] },
+      ],
+      digest: {
+        itemCount: 5,
+        search_budget: {
+          on_demand: {
+            soft_calls: 3,
+            hard_calls: 3,
+          },
+          custom_topic_reserve_calls: 0,
+        },
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic, opts) => {
+      trustedSecondPassCalls.push({
+        tag: topic.tag,
+        retrievalPlan: { ...(opts?.retrievalPlan || {}) },
+      });
+      if (opts?.retrievalPlan?.trusted_source_second_pass === true) {
+        return {
+          apiCalls: 1,
+          items: [{ headline: "trusted technology item", tag: "TECHNOLOGY", source: "reuters.com", url: "https://reuters.com/technology-trusted" }],
+          diagnostics: {
+            provider: "perplexity",
+            successful_calls: 1,
+            failed_calls: 0,
+            transport_errors: 0,
+            status_counts: {},
+          },
+        };
+      }
+      return {
+        apiCalls: 1,
+        items: [{ headline: "review technology item", tag: "TECHNOLOGY", source: "cio.com", url: `https://cio.com/review-${trustedSecondPassCalls.length}` }],
+        diagnostics: {
+          provider: "perplexity",
+          successful_calls: 1,
+          failed_calls: 0,
+          transport_errors: 0,
+          status_counts: {},
+        },
+      };
+    },
+    buildPreferredDomainShortlist: () => ({
+      domains: ["techcrunch.com"],
+      topic_keys: ["technology"],
+      official_friendly: false,
+    }),
+    buildPreferredSourceFamilyShortlists: () => ({
+      reported_domains: ["theinformation.com", "reuters.com"],
+      official_domains: ["sec.gov"],
+      combined_domains: ["theinformation.com", "reuters.com", "sec.gov"],
+      topic_keys: ["technology"],
+      official_friendly: false,
+    }),
+    buildCustomTopicQueries: () => [],
+    buildCustomRescueItemsFromStandard: () => [],
+    emitDigestIncident: async () => {},
+    annotateFetchedItems: (items) => (Array.isArray(items) ? items : []).map((item) => {
+      if (String(item?.source || "").includes("reuters.com")) {
+        return {
+          ...item,
+          source_policy: "allowed",
+          source_tier: "premium",
+        };
+      }
+      return {
+        ...item,
+        source_policy: "review",
+        source_tier: "unknown",
+      };
+    }),
+  });
+
+  const trustedSecondPassResult = await trustedSecondPassRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["TECHNOLOGY"], preferences: { items_per_digest: 5 } }],
+    targetChatId: "technology-focus",
+    runMode: "targeted",
+  });
+  const trustedTopic = trustedSecondPassResult.fetchDiagnostics.topic_diagnostics.find((row) => row.tag === "TECHNOLOGY");
+  assert.ok(trustedTopic);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.trusted_source_second_pass_topics_used, 1);
+  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.trusted_reported_call_count, 1);
+  assert.strictEqual(trustedTopic.trusted_source_call_count, 1);
+  assert.strictEqual(trustedTopic.trusted_reported_call_count, 1);
+  assert.strictEqual(trustedSecondPassCalls.some((entry) => entry.retrievalPlan?.trusted_source_second_pass === true), true);
+  assert.strictEqual(
+    trustedSecondPassResult.allItems.some((item) => String(item?.source || "").includes("reuters.com")),
+    true
+  );
+
   const emptyIncidents = [];
   const emptyRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {

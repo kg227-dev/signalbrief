@@ -18,6 +18,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   createPreferredSourceRegistryRuntime,
   buildPreferredDomainShortlist,
+  buildPreferredSourceFamilyShortlists,
   matchPreferredSourceDomain,
 } = runtime;
 
@@ -98,6 +99,36 @@ const officialShortlist = buildPreferredDomainShortlist(registry, {
 assert.deepStrictEqual(
   officialShortlist.domains.slice(0, 3),
   ["federalregister.gov", "sec.gov", "reuters.com"]
+);
+
+const familyShortlists = buildPreferredSourceFamilyShortlists(registry, {
+  topicTag: "AI×TECH",
+  dueUserTopics: ["TECHNOLOGY", "AI×TECH"],
+  queryText: "enterprise ai agents funding last 48 hours",
+  maxDomains: 6,
+});
+assert.deepStrictEqual(
+  familyShortlists.reported_domains.slice(0, 5),
+  ["theinformation.com", "semianalysis.com", "news.example.com", "reuters.com", "wsj.com"]
+);
+assert.deepStrictEqual(
+  familyShortlists.official_domains,
+  ["sec.gov"]
+);
+
+const policyFamilyShortlists = buildPreferredSourceFamilyShortlists(registry, {
+  topicTag: "POLICY×REGULATORY",
+  dueUserTopics: ["POLICY×REGULATORY"],
+  queryText: "sec proposed disclosure rule guidance",
+  maxDomains: 5,
+});
+assert.deepStrictEqual(
+  policyFamilyShortlists.official_domains.slice(0, 2),
+  ["federalregister.gov", "sec.gov"]
+);
+assert.deepStrictEqual(
+  policyFamilyShortlists.reported_domains.slice(0, 2),
+  ["reuters.com", "wsj.com"]
 );
 
 const inheritedMatch = matchPreferredSourceDomain(registry, "alerts.news.example.com", "TECHNOLOGY");

@@ -1227,20 +1227,11 @@ My practical recommendation:
 
 ### Best retrieval approach by category
 
-#### Strategy
+The right second-layer retrieval should follow the category family, not use one generic fallback everywhere.
 
-Best second-layer mix:
+#### Industries
 
-- top-tier business journalism feeds
-- SEC / 8-K / investor-relations / deal / activist / bankruptcy / restructuring source retrieval
-- selective legal/regulatory source retrieval for strategy events
-
-Why:
-
-- this category fails less on zero coverage and more on weak review-tier summaries
-- it needs better recall from trusted business reporting and primary corporate-event sources
-
-#### Healthcare
+##### Healthcare
 
 Best second-layer mix:
 
@@ -1253,7 +1244,58 @@ Why:
 - this category currently broadens into review-tier healthcare commentary
 - the gap is better conversion of official and specialist coverage, not more generic discovery
 
-#### Life Sciences
+##### Financial Services
+
+Best second-layer mix:
+
+- central bank / treasury / regulator / enforcement feeds
+- top-tier financial journalism feeds
+- specialist banking / payments / insurance trade sources with strong governance
+
+Why:
+
+- many real signals start in regulators, filings, or top-tier finance press
+- this category benefits from strong primary-source recall before broader market commentary
+
+##### Private Equity & M&A
+
+Best second-layer mix:
+
+- deal / filing / antitrust / bankruptcy / restructuring primary sources
+- top-tier business journalism feeds
+- trusted deal/trade publications as secondary support
+
+Why:
+
+- the key problem here is event detection and trusted conversion, not generic volume
+- good PE/M&A coverage often ties directly to filings, announcements, and high-trust deal reporting
+
+##### Energy
+
+Best second-layer mix:
+
+- utility / FERC / DOE / grid / permitting / power-market official sources
+- trusted energy journalism and strong specialist trade feeds
+- top-tier business press for market-moving stories
+
+Why:
+
+- energy often sits between infrastructure, policy, and commodity coverage
+- official and specialist sources matter more than broad discovery alone
+
+##### Consumer & Retail
+
+Best second-layer mix:
+
+- top-tier business journalism feeds
+- trusted retail / consumer trade coverage
+- filings / earnings / consumer-regulator sources as event support
+
+Why:
+
+- this category often has enough broad coverage, but quality improves when retail-specific trusted trade sources are directly ingested
+
+##### Life Sciences
 
 Best second-layer mix:
 
@@ -1266,7 +1308,7 @@ Why:
 - this category is thin and weak at the same time
 - high-signal items often originate in official or specialist sources before they appear broadly
 
-#### Technology
+##### Technology
 
 Best second-layer mix:
 
@@ -1279,7 +1321,74 @@ Why:
 - technology has volume already, but mostly review-tier volume
 - the second layer should improve **source family quality**, not just count
 
-#### Policy/Regulatory
+##### Industrials
+
+Best second-layer mix:
+
+- top-tier business press
+- trusted manufacturing / supply-chain / logistics trade sources
+- filings / procurement / trade-policy sources for event confirmation
+
+Why:
+
+- industrial signals often come from capital spending, supply chain, reshoring, labor, and regulatory moves
+- a mix of trusted business press and strong specialist trade is the right shape
+
+##### Real Estate
+
+Best second-layer mix:
+
+- top-tier business / markets journalism
+- trusted commercial real estate trade feeds
+- rate / mortgage / zoning / permitting / REIT filing sources
+
+Why:
+
+- this category depends on a combination of market coverage, financing signals, and local/regulatory triggers
+- official/filing coverage matters more than generic property news
+
+##### Public Sector
+
+Best second-layer mix:
+
+- official government / procurement / rulemaking / budget sources
+- trusted public-sector policy/trade publications
+- top-tier press as supporting coverage
+
+Why:
+
+- this category is often closest to primary-source retrieval
+- government, procurement, and rulemaking feeds should be first-class here
+
+#### Capabilities
+
+##### AI & Technology
+
+Best second-layer mix:
+
+- top-tier business/tech publisher feeds
+- official AI policy / export control / standards / regulator sources
+- trusted infrastructure / semiconductor / enterprise-tech specialist feeds
+
+Why:
+
+- this category currently broadens into noisy enterprise-tech summaries
+- it needs stronger recall from trusted AI, semiconductor, and policy source families
+
+##### Strategy
+
+Best second-layer mix:
+
+- top-tier business journalism feeds
+- SEC / 8-K / investor-relations / deal / activist / bankruptcy / restructuring source retrieval
+- selective legal/regulatory source retrieval for strategy events
+
+Why:
+
+- this category fails less on zero coverage and more on weak review-tier summaries
+- it needs better recall from trusted business reporting and primary corporate-event sources
+
+##### Policy & Regulatory
 
 Best second-layer mix:
 
@@ -1292,6 +1401,57 @@ Why:
 - this bucket is often zero-yield in the current system even when official sources clearly exist
 - this is the strongest case for first-class official-source retrieval
 
+##### Sustainability & ESG
+
+Best second-layer mix:
+
+- official climate / disclosure / environmental / trade-policy sources
+- trusted sustainability and energy-transition journalism
+- top-tier business press for corporate/market impact
+
+Why:
+
+- ESG signals often come from policy, disclosure, and infrastructure developments before they become broad business stories
+
+##### Digital Transformation
+
+Best second-layer mix:
+
+- top-tier enterprise-tech and business press
+- trusted CIO / enterprise software / cloud / consulting-adjacent specialist sources
+- official policy and procurement sources where public-sector digital is relevant
+
+Why:
+
+- this category overlaps technology and operations
+- it needs stronger enterprise execution sources, not generic trend commentary
+
+##### M&A Advisory
+
+Best second-layer mix:
+
+- top-tier business / deal journalism
+- antitrust / competition / filing sources
+- trusted restructuring / financing / transaction-specialist trade coverage
+
+Why:
+
+- this capability depends on transaction timing, regulation, financing, and sponsor behavior
+- high-trust deal/event sources are more important than generic commentary
+
+##### Talent & Workforce
+
+Best second-layer mix:
+
+- official labor / immigration / workplace-rule sources
+- trusted workforce / HR / labor-market specialist publications
+- top-tier business press for large employer and labor strategy moves
+
+Why:
+
+- this category mixes policy, labor markets, employer actions, and operating-model change
+- it needs official and trusted specialist coverage more than generic management content
+
 #### Custom topics
 
 Best second-layer mix:
@@ -1302,6 +1462,7 @@ Best second-layer mix:
   - regulator / policy
   - therapy / drug class
   - macro theme
+  - infrastructure theme
 - then route to the matching source families
 
 Why:

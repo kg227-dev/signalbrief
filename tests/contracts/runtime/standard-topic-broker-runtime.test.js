@@ -76,6 +76,19 @@ const config = {
       content_kind: "official_document",
       title_include_patterns: ["approv", "warn", "guidance", "clearance"],
     },
+    {
+      id: "cms_rss",
+      enabled: true,
+      lane: "official",
+      topic_tags: ["HEALTHCARE"],
+      family: "healthcare_official",
+      source_kind: "primary_official",
+      domains: ["cms.gov"],
+      endpoint: "https://www.cms.gov/newsroom/rss-feeds",
+      parser: "rss",
+      content_kind: "official_document",
+      title_include_patterns: ["rule", "guidance", "medicare", "medicaid", "announcement"],
+    },
   ],
 };
 
@@ -94,7 +107,7 @@ const responses = new Map([
           <item>
             <title>FDA expands obesity drug label after cardiovascular study</title>
             <link>https://www.statnews.com/2026/03/22/obesity-drug-label-expansion/</link>
-            <pubDate>Sun, 22 Mar 2026 14:30:00 GMT</pubDate>
+            <pubDate>Mar 22, 2026 2:30pm</pubDate>
             <description>Fresh article.</description>
           </item>
           <item>
@@ -125,6 +138,23 @@ const responses = new Map([
         </ul>
       </body></html>`,
   }],
+  ["https://www.cms.gov/newsroom/rss-feeds", {
+    ok: true,
+    status: 200,
+    url: "https://www.cms.gov/newsroom/rss-feeds",
+    bodyText: `<?xml version="1.0" encoding="utf-8"?>
+      <rss version="2.0">
+        <channel>
+          <title>CMS Newsroom</title>
+          <item>
+            <title><a href="/newsroom/press-releases/cms-final-rule-modernizes-claims-attachments">CMS Final Rule Modernizes Claims Attachments</a></title>
+            <link>https://www.cms.gov/%3Ca%20href%3D%22/newsroom/press-releases/cms-final-rule-modernizes-claims-attachments%22%3ECMS%20Final%20Rule%20Modernizes%20Claims%20Attachments%3C/a%3E</link>
+            <pubDate>Sat, Mar 21, 2026</pubDate>
+            <description>Official CMS rule announcement.</description>
+          </item>
+        </channel>
+      </rss>`,
+  }],
 ]);
 
 const brokerRuntime = createStandardTopicBrokerRuntime({
@@ -137,7 +167,7 @@ const brokerRuntime = createStandardTopicBrokerRuntime({
 });
 
 const sanitized = sanitizeBrokerConfig(config);
-assert.strictEqual(sanitized.sources.length, 2);
+assert.strictEqual(sanitized.sources.length, 3);
 assert.strictEqual(sanitized.topics.HEALTHCARE.enabled, true);
 
 const snapshot = brokerRuntime.inspectStandardTopicBrokerConfig();
@@ -152,28 +182,35 @@ assert.strictEqual(snapshot.active_path, runtimeConfigPath);
   });
 
   assert.ok(Array.isArray(result.topicItems.HEALTHCARE));
-  assert.strictEqual(result.topicItems.HEALTHCARE.length, 2);
+  assert.strictEqual(result.topicItems.HEALTHCARE.length, 3);
   const articleItem = result.topicItems.HEALTHCARE.find((item) => item.retrieval_origin === "broker_publisher_feed");
-  const officialItem = result.topicItems.HEALTHCARE.find((item) => item.retrieval_origin === "broker_official");
+  const officialItems = result.topicItems.HEALTHCARE.filter((item) => item.retrieval_origin === "broker_official");
+  const officialItem = officialItems.find((item) => item.source_domain === "fda.gov");
+  const cmsItem = officialItems.find((item) => item.source_domain === "cms.gov");
   assert.ok(articleItem);
   assert.ok(officialItem);
+  assert.ok(cmsItem);
   assert.strictEqual(articleItem.content_kind, "article");
   assert.strictEqual(officialItem.content_kind, "official_document");
+  assert.strictEqual(cmsItem.url, "https://www.cms.gov/newsroom/press-releases/cms-final-rule-modernizes-claims-attachments");
   assert.strictEqual(articleItem.source_policy, "preferred");
   assert.strictEqual(officialItem.source_type, "primary_official");
   assert.strictEqual(result.diagnostics.lane_counts.publisher_feed, 1);
-  assert.strictEqual(result.diagnostics.lane_counts.official, 1);
-  assert.strictEqual(result.diagnostics.source_fetch_count, 2);
-  assert.strictEqual(result.diagnostics.source_success_count, 2);
+  assert.strictEqual(result.diagnostics.lane_counts.official, 2);
+  assert.strictEqual(result.diagnostics.source_fetch_count, 3);
+  assert.strictEqual(result.diagnostics.source_success_count, 3);
   const statDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "stat_rss");
   const fdaDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "fda_index");
+  const cmsDiag = result.diagnostics.source_diagnostics.find((row) => row.id === "cms_rss");
   assert.strictEqual(statDiag.parsed_count, 3);
   assert.strictEqual(statDiag.retained_count, 1);
   assert.strictEqual(statDiag.non_article_count, 1);
   assert.strictEqual(statDiag.stale_count, 1);
   assert.ok(fdaDiag.parsed_count >= 2);
   assert.strictEqual(fdaDiag.retained_count, 1);
-  assert.strictEqual(result.diagnostics.topic_diagnostics.HEALTHCARE.item_count, 2);
+  assert.strictEqual(cmsDiag.parsed_count, 1);
+  assert.strictEqual(cmsDiag.retained_count, 1);
+  assert.strictEqual(result.diagnostics.topic_diagnostics.HEALTHCARE.item_count, 3);
   process.stdout.write("[standard-topic-broker-runtime] all assertions passed\n");
 })().catch((error) => {
   process.stderr.write(`${error && error.stack ? error.stack : error}\n`);

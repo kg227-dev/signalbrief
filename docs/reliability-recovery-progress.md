@@ -58,8 +58,32 @@
 ---
 
 ## Phase 2 — Incident System
-**Status: NOT STARTED**
-Deliver: persistent incident lifecycle, severity rules, Telegram open/escalate/resolve
+**Status: COMPLETE** (2026-03-23)
+**Goal:** Replace hourly event deduplication with a persistent incident lifecycle (one root cause → one incident).
+
+### Task P2-1: incidentStorePath in runtime paths ✅ commit c51d97f
+- [x] Add `incidentStorePath` to `runtime-state-paths-runtime.js`
+- [x] Add to `listRuntimeStateTargets` and `describeRuntimePathAlignment`
+
+### Task P2-2: Persistent incident lifecycle runtime ✅ commits e7a27bd, 0fbdfe4
+- [x] Rewrite `src/entrypoints/digest-orchestrator-incident-runtime.js`
+- [x] Fingerprint-keyed store: `${mode}:${type}:${dateEt}`
+- [x] OPEN → ESCALATED → RESOLVED lifecycle with severity WARNING/CRITICAL/FATAL
+- [x] Telegram notifies only on lifecycle transitions (no hourly repeat spam)
+- [x] Exported: `INCIDENT_STATUS_*`, `INCIDENT_SEVERITY_*` constants
+- [x] Methods: `emitDigestIncident`, `resolveIncident`, `getActiveIncidents`
+- [x] In-memory fallback per factory instance (isolation fix)
+- [x] Rewrite `tests/contracts/entrypoints/digest-orchestrator-incident-runtime.test.js`
+- [x] 5 contract test scenarios pass
+
+### Task P2-3: Wire into core orchestrator ✅ commit 18609f9
+- [x] Pass `incidentStorePath` to incident runtime factory in core orchestrator
+- [x] Resolve active incidents when delivery succeeds (resolve-on-success)
+
+### Phase 2 Exit Gate ✅
+- [x] All new contract tests pass (5 scenarios)
+- [x] All existing contracts pass
+- [x] `npm test` exits 0
 
 ## Phase 3 — Recovery Tooling
 **Status: NOT STARTED**

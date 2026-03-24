@@ -27,24 +27,15 @@ const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
 const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
+// MVP topic set — must mirror PHASE1_STANDARD_TOPIC_TAGS exactly.
 const ALL_STANDARD_TOPIC_TAGS = new Set([
   "HEALTHCARE",
-  "FINANCIAL SERVICES",
-  "PE×M&A",
-  "ENERGY",
-  "CONSUMER",
   "LIFE SCIENCES",
   "TECHNOLOGY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
+  "CONSUMER & RETAIL",
   "INDUSTRIALS",
-  "REAL ESTATE",
-  "PUBLIC SECTOR",
-  "AI×TECH",
-  "STRATEGY",
-  "POLICY×REGULATORY",
-  "SUSTAINABILITY",
-  "DIGITAL",
-  "M&A ADVISORY",
-  "TALENT",
 ]);
 // MVP topic set. POLICY×REGULATORY dropped as standalone — regulatory items surface
 // through sector official sources. CONSUMER & RETAIL and INDUSTRIALS added.

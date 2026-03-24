@@ -1,5 +1,6 @@
 const { createSelectionPolicy } = require("./digest-policy-domain-runtime");
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
+const { tokenizeHeadline, isFuzzyDuplicateHeadline } = require("./fuzzy-dedup-runtime");
 
 function normalizeTag(tag) {
   return String(tag || "").toLowerCase().trim();
@@ -28,22 +29,23 @@ function resolveAdapters(adapters) {
 }
 
 function dedupeCandidates(items, adapterFns) {
-  const seenHeadline = new Set();
+  const seenHeadlineTokenSets = []; // fuzzy: array of token Sets
   const seenUrl = new Set();
   return items.filter((item) => {
     const headlineKey = String(adapterFns.headlineFingerprint(item) || "");
     const urlKey = String(adapterFns.normalizeUrl(item?.url || "") || "");
     if (!adapterFns.isCandidate(item, { headlineKey, urlKey })) return false;
-    if (headlineKey && seenHeadline.has(headlineKey)) return false;
     if (urlKey && seenUrl.has(urlKey)) return false;
-    if (headlineKey) seenHeadline.add(headlineKey);
+    const tokenSet = tokenizeHeadline(String(item?.headline || ""));
+    if (tokenSet.size > 0 && isFuzzyDuplicateHeadline(tokenSet, seenHeadlineTokenSets)) return false;
     if (urlKey) seenUrl.add(urlKey);
+    if (tokenSet.size > 0) seenHeadlineTokenSets.push(tokenSet);
     return true;
   });
 }
 
 function dedupeCandidatesDetailed(items, adapterFns) {
-  const seenHeadline = new Set();
+  const seenHeadlineTokenSets = []; // fuzzy: array of token Sets
   const seenUrl = new Set();
   const deduped = [];
   const rejected = [];
@@ -51,34 +53,23 @@ function dedupeCandidatesDetailed(items, adapterFns) {
     const headlineKey = String(adapterFns.headlineFingerprint(item) || "");
     const urlKey = String(adapterFns.normalizeUrl(item?.url || "") || "");
     if (!adapterFns.isCandidate(item, { headlineKey, urlKey })) {
-      rejected.push({
-        item,
-        reason: "selection_invalid_candidate",
-      });
-      continue;
-    }
-    if (headlineKey && seenHeadline.has(headlineKey)) {
-      rejected.push({
-        item,
-        reason: "selection_duplicate_headline",
-      });
+      rejected.push({ item, reason: "selection_invalid_candidate" });
       continue;
     }
     if (urlKey && seenUrl.has(urlKey)) {
-      rejected.push({
-        item,
-        reason: "selection_duplicate_url",
-      });
+      rejected.push({ item, reason: "selection_duplicate_url" });
       continue;
     }
-    if (headlineKey) seenHeadline.add(headlineKey);
+    const tokenSet = tokenizeHeadline(String(item?.headline || ""));
+    if (tokenSet.size > 0 && isFuzzyDuplicateHeadline(tokenSet, seenHeadlineTokenSets)) {
+      rejected.push({ item, reason: "selection_duplicate_headline" });
+      continue;
+    }
     if (urlKey) seenUrl.add(urlKey);
+    if (tokenSet.size > 0) seenHeadlineTokenSets.push(tokenSet);
     deduped.push(item);
   }
-  return {
-    deduped,
-    rejected,
-  };
+  return { deduped, rejected };
 }
 
 function createSelectionState() {

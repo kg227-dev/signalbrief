@@ -118,6 +118,7 @@ const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
   env: process.env,
 });
 const COST_LOG = RUNTIME_PATHS.costLogPath;
+const DIGEST_AUDIT_DIR = RUNTIME_PATHS.digestAuditDir;
 const DIGEST_RUN_LOCK = RUNTIME_PATHS.digestRunLockPath;
 const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
 const SPEND_GUARD_STATE = RUNTIME_PATHS.spendGuardStatePath;
@@ -542,6 +543,90 @@ function persistSharedArchive(...args) {
   return getDigestOrchestratorArchiveRuntime().persistSharedArchive(...args);
 }
 
+/**
+ * Persist the per-run selection audit to data/digest-audit/{dateKey}.json.
+ * Gives the operator a single file to inspect all candidates, scores, and
+ * selection outcomes for any given digest day in under 60 seconds.
+ * Errors are swallowed so a write failure never blocks digest delivery.
+ */
+function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics }) {
+  try {
+    fs.mkdirSync(DIGEST_AUDIT_DIR, { recursive: true });
+    const selectedUrls = new Set(
+      (Array.isArray(selected) ? selected : []).map((item) => String(item?.url || "").trim()).filter(Boolean)
+    );
+
+    // Build per-topic candidate + selection breakdown.
+    const byTag = Object.create(null);
+    for (const c of (Array.isArray(selectionDiagnostics?.scored_candidates) ? selectionDiagnostics.scored_candidates : [])) {
+      const tag = String(c?.tag || "").trim().toUpperCase() || "__untagged__";
+      if (!byTag[tag]) byTag[tag] = [];
+      byTag[tag].push({
+        headline: c.headline,
+        url: c.url,
+        source: c.source,
+        source_tier: c.source_tier,
+        lane: c.lane,
+        _score: c._score,
+        _score_components: c._score_components,
+        selected: selectedUrls.has(c.url),
+      });
+    }
+
+    // Compute per-topic lane breakdown.
+    const topicSummaries = Object.create(null);
+    for (const [tag, candidates] of Object.entries(byTag)) {
+      const laneCounts = Object.create(null);
+      for (const c of candidates) {
+        const lane = String(c.lane || "unknown");
+        laneCounts[lane] = (laneCounts[lane] || 0) + 1;
+      }
+      topicSummaries[tag] = {
+        total_candidates: candidates.length,
+        selected_count: candidates.filter((c) => c.selected).length,
+        lane_breakdown: laneCounts,
+        candidates,
+      };
+    }
+
+    // Lane contribution totals across all topics.
+    const globalLaneCounts = Object.create(null);
+    for (const topic of Object.values(topicSummaries)) {
+      for (const [lane, count] of Object.entries(topic.lane_breakdown)) {
+        globalLaneCounts[lane] = (globalLaneCounts[lane] || 0) + count;
+      }
+    }
+
+    const auditDoc = {
+      run_id: runId || null,
+      date_et: digestDateKey,
+      mode: runMode,
+      generated_at: new Date().toISOString(),
+      summary: {
+        total_candidates: Number(selectionDiagnostics?.candidate_pool_scored || 0),
+        total_selected: selectedUrls.size,
+        candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
+        candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
+        dedup_removed: Number(selectionDiagnostics?.archive_repeat_block_count || 0),
+        stale_removed: Number(selectionDiagnostics?.stale_removed_count || 0),
+        history_suppressed: Number(selectionDiagnostics?.history_suppressed_count || 0),
+        score_top: selectionDiagnostics?.score_top ?? null,
+        score_bottom: selectionDiagnostics?.score_bottom ?? null,
+        global_lane_breakdown: globalLaneCounts,
+        broker_saturated_topics: Array.isArray(fetchDiagnostics?.topic_diagnostics)
+          ? fetchDiagnostics.topic_diagnostics.filter((t) => Number(t?.broker_item_count || 0) >= 10).length
+          : 0,
+      },
+      topics: topicSummaries,
+    };
+
+    const filePath = path.join(DIGEST_AUDIT_DIR, `${digestDateKey}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(auditDoc, null, 2), "utf8");
+  } catch (err) {
+    log(`Audit log write failed (non-fatal): ${String(err?.message || err)}`);
+  }
+}
+
 function recordRunCost(...args) {
   return getDigestOrchestratorCostRuntime().recordRunCost(...args);
 }
@@ -892,6 +977,15 @@ async function main() {
     digestDateKey,
     dueUsersCount: dueUsers.length,
     standardFetchCallsPlanned,
+  });
+
+  writeDigestAuditLog({
+    digestDateKey,
+    runId,
+    runMode,
+    selected,
+    selectionDiagnostics,
+    fetchDiagnostics,
   });
 
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({

@@ -125,6 +125,10 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.recoveryQueuePath || readEnvValue(env, "SIGNALBRIEF_RECOVERY_QUEUE_PATH"),
     path.join(dataDir, "recovery-queue.json")
   );
+  const digestAuditDir = resolveOptionalPath(
+    options.digestAuditDir || readEnvValue(env, "SIGNALBRIEF_DIGEST_AUDIT_DIR"),
+    path.join(dataDir, "digest-audit")
+  );
 
   return {
     appRoot,
@@ -151,6 +155,7 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     circuitBreakerStatePath,
     incidentStorePath,
     recoveryQueuePath,
+    digestAuditDir,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };
@@ -287,6 +292,7 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "circuitBreakerStatePath", path: paths.circuitBreakerStatePath, kind: "file" },
     { key: "incidentStorePath", path: paths.incidentStorePath, kind: "file" },
     { key: "recoveryQueuePath", path: paths.recoveryQueuePath, kind: "file" },
+    { key: "digestAuditDir", path: paths.digestAuditDir, kind: "dir" },
   ];
 }
 

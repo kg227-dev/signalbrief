@@ -68,6 +68,8 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadRetrievalEvalRuns,
     loadRetrievalEvalRun,
     loadRetrievalEvalStatus,
+    digestAuditDir,
+    formatEtDateKey,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
 
@@ -139,6 +141,8 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadRetrievalEvalRuns,
     loadRetrievalEvalRun,
     loadRetrievalEvalStatus,
+    digestAuditDir,
+    formatEtDateKey,
   };
 }
 

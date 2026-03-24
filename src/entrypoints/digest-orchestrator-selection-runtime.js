@@ -216,6 +216,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         score_top: scoredItems[0]?._score ?? null,
         score_bottom: scoredItems.length > 0 ? scoredItems[scoredItems.length - 1]?._score ?? null : null,
         scored_candidates: scoredItems.map((item) => ({
+          tag: String(item?.tag || "").trim().toUpperCase() || null,
           headline: String(item?.headline || "").slice(0, 80),
           url: String(item?.url || ""),
           source: String(item?.source || item?.source_domain || ""),

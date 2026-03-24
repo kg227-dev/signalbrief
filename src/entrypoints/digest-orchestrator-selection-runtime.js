@@ -2,6 +2,27 @@
 
 const { scoreCandidates } = require("../domains/scoring/score-candidate");
 
+function computeItemAgeHours(item, nowMs) {
+  const ts = item?.published_at || item?.date || item?.timestamp;
+  if (!ts) return Infinity;
+  const ms = typeof ts === "number" ? ts : new Date(ts).getTime();
+  if (!Number.isFinite(ms)) return Infinity;
+  return Math.max(0, (nowMs - ms) / (1000 * 60 * 60));
+}
+
+function splitByFreshnessTiers(items, nowMs) {
+  const tier1 = []; // 0–24h: breaking / today
+  const tier2 = []; // 24–48h: yesterday
+  const tier3 = []; // 48h+: analysis / commentary
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const age = computeItemAgeHours(item, nowMs);
+    if (age <= 24) tier1.push(item);
+    else if (age <= 48) tier2.push(item);
+    else tier3.push(item);
+  }
+  return { tier1, tier2, tier3 };
+}
+
 function computeMaxCustomItems({ configuredMaxCustom, selectionTarget, customTags }) {
   const defaultMaxCustom = (Array.isArray(customTags) && customTags.length > 0)
     ? Math.max(1, Math.floor(selectionTarget * 0.4))
@@ -124,11 +145,26 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       byTag.get(topicTag).push(item);
     }
 
-    // Select per topic, then apply discovery cap within each topic.
+    // Select per topic with freshness-tier fallback, then apply discovery cap.
+    // Spec §2.5: prefer 0-24h items first, backfill 24-48h, then 48h+ as last resort.
     const perTopicSelected = [];
     let totalDiscoveryCapped = 0;
-    for (const topicItems of byTag.values()) {
-      const topicPool = selectItems(topicItems, {
+    for (const [topicTag, topicItems] of byTag.entries()) {
+      // Build tiered pool: prefer 0-24h, backfill 24-48h, then 48h+ as last resort.
+      const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
+      const tieredPool = [];
+      for (const tier of [tier1, tier2, tier3]) {
+        for (const item of tier) {
+          if (tieredPool.length >= itemsPerTopic) break;
+          tieredPool.push(item);
+        }
+        if (tieredPool.length >= itemsPerTopic) break;
+      }
+      if (tieredPool.length < itemsPerTopic) {
+        log(`⚠️ Topic ${topicTag}: only ${tieredPool.length}/${itemsPerTopic} items available after freshness-tier fallback (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length})`);
+      }
+
+      const topicPool = selectItems(tieredPool, {
         maxItems: itemsPerTopic,
         maxItemsPerTag: itemsPerTopic,
         customTags: [],
@@ -237,4 +273,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 module.exports = {
   createDigestOrchestratorSelectionRuntime,
   computeMaxCustomItems,
+  computeItemAgeHours,
+  splitByFreshnessTiers,
 };

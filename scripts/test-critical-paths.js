@@ -71,9 +71,9 @@ function buildCoreDeps(overrides = {}) {
       res.end(JSON.stringify(data));
       return { status, data };
     },
-    DEFAULT_TOPICS: ["AI×TECH", "STRATEGY"],
-    INDUSTRY_TOPICS: ["HEALTHCARE"],
-    CAPABILITY_TOPICS: ["AI×TECH", "STRATEGY"],
+    DEFAULT_TOPICS: ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "CONSUMER & RETAIL", "INDUSTRIALS"],
+    INDUSTRY_TOPICS: ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "CONSUMER & RETAIL", "INDUSTRIALS"],
+    CAPABILITY_TOPICS: [],
     findUserByToken: () => null,
     handleSignup: () => ({ ok: true }),
     handleSettings: () => ({ ok: true }),
@@ -97,7 +97,6 @@ function buildCoreDeps(overrides = {}) {
     sendTransparentGif: () => {},
     normalizeEngagementUrl: (value) => String(value || ""),
     requireJsonBody: async () => ({}),
-    normalizeBookmarkUrl: (value) => String(value || ""),
     sendMagicLinkEmail: async () => {},
     getRuntimeStateHealth: () => ({ ok: true, status: "ok" }),
     ...overrides,
@@ -327,7 +326,8 @@ async function testCoreApiRoutesContract() {
   const topicsRes = await invokeCoreRoute("GET", "/api/topics", "/api/topics");
   assert.strictEqual(topicsRes.statusCode, 200, "/api/topics should return 200");
   const topicsBody = JSON.parse(topicsRes.body || "{}");
-  assert.deepStrictEqual(topicsBody.industries, ["HEALTHCARE"], "/api/topics should return configured industry list");
+  assert.ok(Array.isArray(topicsBody.industries) && topicsBody.industries.length === 7, "/api/topics should return 7 MVP industry topics");
+  assert.deepStrictEqual(topicsBody.capabilities, [], "/api/topics should return empty capabilities for MVP");
 
   let signupCalled = false;
   await invokeCoreRoute("POST", "/api/signup", "/api/signup", {
@@ -355,7 +355,6 @@ async function testCoreApiRoutesContract() {
   );
   assert.strictEqual(unsubOneClickInvalidToken.statusCode, 401, "/api/unsubscribe/one-click should reject invalid token");
 
-  // Bookmarks route disabled for email-only MVP (Phase 4); no assertions needed.
 
   const pauseMissingTokenRes = await invokeCoreRoute("GET", "/api/pause", "/api/pause");
   assert.strictEqual(pauseMissingTokenRes.statusCode, 302, "/api/pause should redirect on missing token");
@@ -444,11 +443,13 @@ async function testAdminRuntimeStateRouteContract() {
 async function testSettingsInputNormalizationContract() {
   const writes = [];
   const responses = [];
+  const MVP_TOPICS = ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "CONSUMER & RETAIL", "INDUSTRIALS"];
+
   const existingUser = {
     chatId: "settings-critical",
     token: "settings-token",
     email: "settings@example.com",
-    topics: ["AI×TECH", "STRATEGY"],
+    topics: ["HEALTHCARE", "TECHNOLOGY"],
     preferences: {
       depth: "headline_plus_why",
       delivery_time: "07:00",
@@ -456,14 +457,14 @@ async function testSettingsInputNormalizationContract() {
       days_of_week: [1, 2, 3, 4, 5],
       items_per_digest: 5,
       email_enabled: true,
-      telegram_enabled: true,
+      telegram_enabled: false,
     },
   };
 
   const handlers = createWebUserHandlers({
     requireJsonBody: async () => ({
       token: "settings-token",
-      topics: [" ai×tech ", "custom_Cloud Security", "cloud security", "AI×TECH"],
+      topics: [" healthcare ", "ENERGY", "energy", "HEALTHCARE"],
       preferences: {
         days_of_week: [6, "0", 2, 6],
         items_per_digest: 99,
@@ -488,8 +489,8 @@ async function testSettingsInputNormalizationContract() {
     runDigestTrigger: async () => ({ ok: true }),
     startDigestTrigger: async () => ({ ok: true }),
     BASE_URL: "http://localhost:3003",
-    DEFAULT_TOPICS: ["AI×TECH", "STRATEGY"],
-    MAX_CUSTOM_KEYWORDS: 3,
+    DEFAULT_TOPICS: MVP_TOPICS,
+    MAX_CUSTOM_KEYWORDS: 0,
     PROTECTED_FIELDS: [
       "chatId",
       "token",
@@ -517,7 +518,7 @@ async function testSettingsInputNormalizationContract() {
   assert.strictEqual(writes.length, 1, "settings normalization contract should write one user record");
   assert.deepStrictEqual(
     writes[0].topics,
-    ["AI×TECH", "custom_cloud_security"],
+    ["HEALTHCARE", "ENERGY"],
     "settings normalization contract should canonicalize and dedupe topics"
   );
   assert.deepStrictEqual(

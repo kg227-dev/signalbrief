@@ -355,16 +355,7 @@ async function testCoreApiRoutesContract() {
   );
   assert.strictEqual(unsubOneClickInvalidToken.statusCode, 401, "/api/unsubscribe/one-click should reject invalid token");
 
-  const bookmarkMissingTokenRes = await invokeCoreRoute("POST", "/api/bookmarks", "/api/bookmarks", {
-    requireJsonBody: async () => ({ action: "add", item: { url: "https://example.com/a" } }),
-  });
-  assert.strictEqual(bookmarkMissingTokenRes.statusCode, 400, "/api/bookmarks should require token");
-
-  const bookmarkInvalidTokenRes = await invokeCoreRoute("POST", "/api/bookmarks", "/api/bookmarks", {
-    requireJsonBody: async () => ({ token: "bad", action: "add", item: { url: "https://example.com/a" } }),
-    findUserByToken: () => null,
-  });
-  assert.strictEqual(bookmarkInvalidTokenRes.statusCode, 401, "/api/bookmarks should reject invalid token");
+  // Bookmarks route disabled for email-only MVP (Phase 4); no assertions needed.
 
   const pauseMissingTokenRes = await invokeCoreRoute("GET", "/api/pause", "/api/pause");
   assert.strictEqual(pauseMissingTokenRes.statusCode, 302, "/api/pause should redirect on missing token");
@@ -536,8 +527,8 @@ async function testSettingsInputNormalizationContract() {
   );
   assert.strictEqual(
     writes[0].preferences.items_per_digest,
-    10,
-    "settings normalization contract should clamp items_per_digest to supported bounds"
+    5,
+    "settings normalization contract should clamp items_per_digest to 5 (MVP: always 5)"
   );
   assert.strictEqual(
     writes[0].preferences.frequency,

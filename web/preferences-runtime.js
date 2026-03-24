@@ -3,52 +3,32 @@
   const topicRuntime = globalScope.SignalBriefPrefsTopicRuntime || {};
   const scheduleRuntime = globalScope.SignalBriefPrefsScheduleRuntime || {};
 
+  // MVP topic set: 7 sectors only, no capabilities.
   const FALLBACK_INDUSTRY_TOPICS = [
     "HEALTHCARE",
-    "FINANCIAL SERVICES",
-    "PE×M&A",
-    "ENERGY",
-    "CONSUMER",
     "LIFE SCIENCES",
     "TECHNOLOGY",
+    "ENERGY",
+    "FINANCIAL SERVICES",
+    "CONSUMER & RETAIL",
     "INDUSTRIALS",
-    "REAL ESTATE",
-    "PUBLIC SECTOR",
   ];
 
-  const FALLBACK_CAPABILITY_TOPICS = [
-    "AI×TECH",
-    "STRATEGY",
-    "POLICY×REGULATORY",
-    "SUSTAINABILITY",
-    "DIGITAL",
-    "M&A ADVISORY",
-    "TALENT",
-  ];
+  const FALLBACK_CAPABILITY_TOPICS = [];
 
   const INDUSTRY_TOPICS = [...FALLBACK_INDUSTRY_TOPICS];
   const CAPABILITY_TOPICS = [...FALLBACK_CAPABILITY_TOPICS];
   const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-  const MAX_CUSTOM_KEYWORDS = 3;
+  const MAX_CUSTOM_KEYWORDS = 0; // MVP: no custom keywords
 
   const TOPIC_LABELS = {
     HEALTHCARE: "Healthcare",
-    "FINANCIAL SERVICES": "Financial Services",
-    "PE×M&A": "Private Equity & M&A",
-    ENERGY: "Energy",
-    CONSUMER: "Consumer & Retail",
     "LIFE SCIENCES": "Life Sciences",
     TECHNOLOGY: "Technology",
+    ENERGY: "Energy",
+    "FINANCIAL SERVICES": "Financial Services",
+    "CONSUMER & RETAIL": "Consumer & Retail",
     INDUSTRIALS: "Industrials",
-    "REAL ESTATE": "Real Estate",
-    "PUBLIC SECTOR": "Public Sector",
-    "AI×TECH": "AI & Technology",
-    STRATEGY: "Strategy",
-    "POLICY×REGULATORY": "Policy & Regulatory",
-    SUSTAINABILITY: "Sustainability & ESG",
-    DIGITAL: "Digital Transformation",
-    "M&A ADVISORY": "M&A Advisory",
-    TALENT: "Talent & Workforce",
   };
 
   const DEFAULT_DEPTH = "headline_plus_why";

@@ -1,12 +1,12 @@
 {
+  "_comment": "SignalBrief MVP config. Copy to config.json and fill in keys. Telegram keys not used for email-only MVP.",
   "user": {
     "email": "you@example.com",
-    "telegramChatId": "YOUR_CHAT_ID",
     "deliveryTime": "07:00",
     "timezone": "America/New_York"
   },
   "digest": {
-    "itemCount": 7,
+    "itemCount": 5,
     "maxItemsPerTag": 2,
     "maxItemsPerSourceDomain": 2,
     "catchupWindowMinutes": 720,
@@ -15,156 +15,100 @@
     "minBackfillItemsAfterDedup": 3,
     "perUserFreshnessDigests": 3,
     "perUserFreshnessMinItems": 3,
-    "maxCustomItemsPerRun": 3,
+    "maxArticleAgeHours": 48,
     "search_budget": {
       "scheduled": {
-        "soft_calls": 24,
-        "hard_calls": 36
+        "soft_calls": 14,
+        "hard_calls": 21
       },
       "on_demand": {
-        "soft_calls": 6,
-        "hard_calls": 9
-      },
-      "custom_topic_reserve_calls": 3
+        "soft_calls": 4,
+        "hard_calls": 7
+      }
     },
     "minBaseScoreForFinal": 6.5,
-    "lookbackHours": 48
+    "lookbackHours": 48,
+    "_comment_scoring": "MVP transparent scoring weights. Sum should equal 1.0. See docs/reduced-scope-mvp.md §2.4.",
+    "scoring": {
+      "freshnessWeight": 0.35,
+      "sourceTierWeight": 0.35,
+      "laneBonusWeight": 0.15,
+      "noveltyWeight": 0.15,
+      "laneBonuses": {
+        "rss": 0.8,
+        "official": 1.0,
+        "discovery": 0.3
+      },
+      "tierScores": {
+        "1": 1.0,
+        "2": 0.7,
+        "3": 0.4,
+        "unknown": 0.2
+      }
+    }
   },
   "topics": [
     {
       "tag": "HEALTHCARE",
       "queries": [
-        "hospital system merger acquisition payer provider strategy last 48 hours",
-        "Medicare Advantage payer provider value-based care last 48 hours",
-        "clinical AI hospital operations FDA healthcare rollout last 48 hours"
-      ]
-    },
-    {
-      "tag": "FINANCIAL SERVICES",
-      "queries": [
-        "banking fintech regulation credit markets 2026",
-        "insurance innovation capital markets 2026",
-        "Federal Reserve monetary policy financial services 2026"
-      ]
-    },
-    {
-      "tag": "PE×M&A",
-      "queries": [
-        "private equity leveraged buyout deal 2026",
-        "M&A deal flow sponsor exits restructuring 2026",
-        "corporate merger acquisition strategic deal 2026"
-      ]
-    },
-    {
-      "tag": "ENERGY",
-      "queries": [
-        "utility grid transmission interconnection power demand policy last 48 hours",
-        "renewables battery storage utility strategy last 48 hours",
-        "oil gas LNG refinery energy markets last 48 hours"
-      ]
-    },
-    {
-      "tag": "CONSUMER",
-      "queries": [
-        "retail consumer spending brand strategy 2026",
-        "CPG consumer goods DTC ecommerce trends 2026",
-        "consumer earnings pricing inflation 2026"
+        "hospital system merger acquisition payer provider strategy Modern Healthcare STAT last 48 hours",
+        "Medicare Advantage payer provider value-based care CMS hospital strategy last 48 hours",
+        "clinical AI hospital operations FDA healthcare rollout provider strategy last 48 hours",
+        "health system labor reimbursement payer prior authorization healthcare last 48 hours"
       ]
     },
     {
       "tag": "LIFE SCIENCES",
       "queries": [
-        "FDA approval clinical trial pharma licensing biotech last 48 hours",
+        "FDA approval clinical trial pharma licensing biotech STAT Fierce last 48 hours",
         "biopharma M&A licensing deal trial readout last 48 hours",
-        "drug pricing obesity drug biotech manufacturing last 48 hours"
+        "drug pricing obesity drug biotech manufacturing last 48 hours",
+        "clinical readout trial setback biotech financing last 48 hours"
       ]
     },
     {
       "tag": "TECHNOLOGY",
       "queries": [
-        "enterprise software cloud platform economics 2026",
-        "semiconductor supply chain technology 2026",
-        "technology company strategy earnings 2026"
+        "enterprise software cloud infrastructure CIO platform strategy Reuters Bloomberg FT last 48 hours",
+        "data center AI infrastructure enterprise tech capex export controls last 48 hours",
+        "cybersecurity enterprise software vendor strategy regulation last 48 hours",
+        "semiconductor cloud enterprise platform pricing product launch last 48 hours"
+      ]
+    },
+    {
+      "tag": "ENERGY",
+      "queries": [
+        "utility grid transmission interconnection power demand policy Reuters Utility Dive FERC last 48 hours",
+        "renewables battery storage utility strategy power demand last 48 hours",
+        "oil gas LNG refinery energy markets capex strategy last 48 hours",
+        "transformer transmission data center load energy reliability last 48 hours"
+      ]
+    },
+    {
+      "tag": "FINANCIAL SERVICES",
+      "queries": [
+        "bank regulation capital liquidity private credit lending Reuters Bloomberg FT last 48 hours",
+        "Federal Reserve OCC FDIC CFPB bank supervision capital rule last 48 hours",
+        "payments cards fintech bank partnership enforcement last 48 hours",
+        "asset management insurance wealth regulation strategy last 48 hours"
+      ]
+    },
+    {
+      "tag": "CONSUMER & RETAIL",
+      "queries": [
+        "retail earnings pricing promotion store traffic consumer demand Reuters WSJ last 48 hours",
+        "consumer brand strategy supply chain tariff pricing last 48 hours",
+        "ecommerce marketplace retail media grocery apparel last 48 hours",
+        "restaurant grocery apparel retail restructuring antitrust FTC last 48 hours"
       ]
     },
     {
       "tag": "INDUSTRIALS",
       "queries": [
-        "manufacturing aerospace defense industrial 2026",
-        "industrial automation supply chain reshoring 2026",
-        "industrials infrastructure investment 2026"
-      ]
-    },
-    {
-      "tag": "REAL ESTATE",
-      "queries": [
-        "commercial real estate CRE office industrial REIT 2026",
-        "housing market mortgage proptech rates 2026",
-        "real estate private equity investment 2026"
-      ]
-    },
-    {
-      "tag": "PUBLIC SECTOR",
-      "queries": [
-        "federal government policy corporate business 2026",
-        "defense procurement government services 2026",
-        "public sector reform regulation 2026"
-      ]
-    },
-    {
-      "tag": "AI×TECH",
-      "queries": [
-        "artificial intelligence enterprise deployment foundation models 2026",
-        "AI regulation infrastructure policy 2026",
-        "AI startup funding M&A technology 2026"
-      ]
-    },
-    {
-      "tag": "STRATEGY",
-      "queries": [
-        "corporate strategy operating model competitive dynamics 2026",
-        "org design transformation restructuring 2026",
-        "management consulting McKinsey Bain BCG strategy 2026"
-      ]
-    },
-    {
-      "tag": "POLICY×REGULATORY",
-      "queries": [
-        "FTC DOJ antitrust trade tariff regulation business last 48 hours",
-        "SEC EPA FTC proposed rule enforcement business last 48 hours",
-        "sanctions export controls trade compliance policy last 48 hours"
-      ]
-    },
-    {
-      "tag": "SUSTAINABILITY",
-      "queries": [
-        "SEC climate disclosure CBAM carbon markets corporate sustainability last 48 hours",
-        "power demand grid decarbonization clean energy policy last 48 hours",
-        "supply chain sustainability reporting emissions corporate investment last 48 hours"
-      ]
-    },
-    {
-      "tag": "DIGITAL",
-      "queries": [
-        "digital transformation cloud migration enterprise 2026",
-        "data platforms modernization enterprise technology 2026",
-        "digital strategy technology investment 2026"
-      ]
-    },
-    {
-      "tag": "M&A ADVISORY",
-      "queries": [
-        "M&A valuation trends deal process integration 2026",
-        "activist investors corporate governance 2026",
-        "investment banking advisory deal 2026"
-      ]
-    },
-    {
-      "tag": "TALENT",
-      "queries": [
-        "workforce strategy labor market AI displacement 2026",
-        "upskilling talent acquisition corporate 2026",
-        "CEO leadership human capital strategy 2026"
+        "manufacturing automation reshoring supply chain industrial strategy Reuters last 48 hours",
+        "aerospace defense logistics freight industrial demand last 48 hours",
+        "factory capex industrial order book pricing tariff last 48 hours",
+        "procurement supply chain disruption trade industrial last 48 hours"
       ]
     }
   ],
@@ -176,14 +120,15 @@
   "keys": {
     "perplexity": "",
     "anthropic": "",
-    "googleRefreshToken": "",
-    "googleClientId": "",
-    "googleClientSecret": "",
+    "resendApiKey": "",
+    "fromEmail": "digest@getsignalbrief.com",
+    "fromName": "SignalBrief",
+    "unsubscribeSigningSecret": "",
+    "_comment_deprecated": "Telegram and Google OAuth keys kept here for reference but not used in email-only MVP.",
     "telegramBotToken": "",
     "signalBriefBotToken": "",
-    "resendApiKey": "",
-    "unsubscribeSigningSecret": "",
-    "fromEmail": "digest@getsignalbrief.com",
-    "fromName": "SignalBrief"
+    "googleRefreshToken": "",
+    "googleClientId": "",
+    "googleClientSecret": ""
   }
 }

@@ -1,5 +1,7 @@
 "use strict";
 
+const { scoreCandidates } = require("../domains/scoring/score-candidate");
+
 function computeMaxCustomItems({ configuredMaxCustom, selectionTarget, customTags }) {
   const defaultMaxCustom = (Array.isArray(customTags) && customTags.length > 0)
     ? Math.max(1, Math.floor(selectionTarget * 0.4))
@@ -96,19 +98,68 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       customTags,
     });
 
-    let selected = selectItems(dedupedItems, {
-      maxItems: selectionTarget,
-      maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
-      customTags,
-      maxCustomItems,
-      tagPriority,
-      maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
-    });
+    // MVP transparent scoring: score every candidate before selection.
+    // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
+    // Scored items are sorted by _score descending so the selection policy
+    // always sees the highest-scoring items first.
+    const scoringConfig = CONFIG.digest?.scoring || {};
+    const nowMs = Date.now();
+    const scoredItems = scoreCandidates(dedupedItems, { scoringConfig, nowMs });
+    if (scoredItems.length > 0) {
+      const topScore = scoredItems[0]?._score?.toFixed(3) ?? "?";
+      const bottomScore = scoredItems[scoredItems.length - 1]?._score?.toFixed(3) ?? "?";
+      log(`Scored ${scoredItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
+    }
+
+    // MVP per-topic selection: group candidates by tag, select up to itemsPerTopic
+    // per topic, then cap discovery-origin (Perplexity) items to at most 1 per topic.
+    const itemsPerTopic = Math.max(1, Number(CONFIG.digest.itemCount || selectionTarget || 5));
+    const maxDiscoveryPerTopic = Math.max(0, Number(CONFIG.digest.maxDiscoveryItemsPerTopic ?? 1));
+
+    // Group scored+sorted candidates by topic tag.
+    const byTag = new Map();
+    for (const item of scoredItems) {
+      const topicTag = String(item?.tag || "").trim().toUpperCase() || "__untagged__";
+      if (!byTag.has(topicTag)) byTag.set(topicTag, []);
+      byTag.get(topicTag).push(item);
+    }
+
+    // Select per topic, then apply discovery cap within each topic.
+    const perTopicSelected = [];
+    let totalDiscoveryCapped = 0;
+    for (const topicItems of byTag.values()) {
+      const topicPool = selectItems(topicItems, {
+        maxItems: itemsPerTopic,
+        maxItemsPerTag: itemsPerTopic,
+        customTags: [],
+        maxCustomItems: 0,
+        tagPriority,
+        maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
+      });
+      let discoveryCount = 0;
+      for (const item of topicPool) {
+        const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").toLowerCase();
+        const isDiscovery = origin.includes("discovery") || origin.includes("perplexity");
+        if (isDiscovery) {
+          discoveryCount += 1;
+          if (discoveryCount > maxDiscoveryPerTopic) {
+            totalDiscoveryCapped += 1;
+            continue;
+          }
+        }
+        perTopicSelected.push(item);
+      }
+    }
+    let selected = perTopicSelected;
+    if (totalDiscoveryCapped > 0) {
+      log(`Discovery cap removed ${totalDiscoveryCapped} Perplexity item(s) (max ${maxDiscoveryPerTopic} per topic)`);
+    }
 
     if (selected.length === 0) {
       const fallbackPool = loadRecentArchiveItems(5);
       if (fallbackPool.length > 0) {
-        selected = selectItems(fallbackPool, {
+        const scoredFallback = scoreCandidates(fallbackPool, { scoringConfig, nowMs });
+        selected = selectItems(scoredFallback, {
           maxItems: selectionTarget,
           maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
           customTags: [],
@@ -144,7 +195,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       throw new Error("No items available from live fetch or archive fallback; digest aborted");
     }
 
-    log(`Selected ${selected.length} items (target=${selectionTarget}, customCap=${maxCustomItems}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
+    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
 
     return {
       selected,
@@ -156,11 +207,23 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       selectionDiagnostics: {
         candidate_pool_before_dedup: Array.isArray(allItems) ? allItems.length : 0,
         candidate_pool_after_dedup: dedupedItems.length,
+        candidate_pool_scored: scoredItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
         stale_removed_count: Math.max(0, Number(staleRemoved || 0)),
         history_suppressed_count: Math.max(0, Number(historyResult.suppressedCount || 0)),
         history_lookback_days: historyLookbackDays,
         history_streaks_detected: historyResult.streaks.length,
+        score_top: scoredItems[0]?._score ?? null,
+        score_bottom: scoredItems.length > 0 ? scoredItems[scoredItems.length - 1]?._score ?? null : null,
+        scored_candidates: scoredItems.map((item) => ({
+          headline: String(item?.headline || "").slice(0, 80),
+          url: String(item?.url || ""),
+          source: String(item?.source || item?.source_domain || ""),
+          source_tier: item?.source_tier ?? null,
+          lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
+          _score: item?._score ?? null,
+          _score_components: item?._score_components ?? null,
+        })),
       },
     };
   }

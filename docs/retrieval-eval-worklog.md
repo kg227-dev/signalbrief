@@ -3666,3 +3666,60 @@ Treat `ENERGY` as having a small amount of remaining headroom if and only if we 
 Treat `FINANCIAL SERVICES` as the one topic that still shows meaningful patching headroom.
 
 Across the three-topic slice, the product-level result is still unchanged: `0/3` stretch-shippable and `0/3` strict-shippable. So if we are not prepared to do one last, highly opinionated family replacement pass on `ENERGY` and `FINANCIAL SERVICES`, this should be treated as the stop point for Phase 1 source-pack patching.
+
+## 2026-03-24 00:05 ET - Phase 1 closeout memo
+
+### Final conclusion from Phase 1
+
+What worked:
+
+- the broker was the right architectural move
+- it materially increased candidate supply
+- source-pack hardening improved retained inventory and source-family shape
+- the evaluation path now cleanly shows where inventory is entering and where it dies
+
+What did not work:
+
+- Phase 1 patching never moved the product outcome
+- stretch-shippable stayed at `0`
+- strict-shippable stayed at `0`
+- local source-pack tuning improved supply shape, but not enough promotable depth to satisfy the `5`-item contract
+
+What we now know for sure:
+
+- the problem is no longer broker mechanics
+- the problem is no longer mostly stale leakage, noisy fallback, or rate limiting
+- the remaining bottleneck is trusted, promotable candidate generation for standard topics
+- Phase 1 source-pack patching is exhausted as a useful lane
+
+### Recommended next design step
+
+Build the next broker design as a **multi-lane standard-topic ingestion layer**, not another patching round.
+
+It should differ from Phase 1 in one important way:
+
+- Phase 1 brokered live feeds and official endpoints directly into the existing pipeline
+- the next design should ingest, normalize, and maintain a fresher topic-routed pool of trusted publisher and official-source records before ranking time
+
+That means:
+
+- persistent feed ingestion for trusted publisher families
+- persistent official/regulatory/f filing ingestion for primary-source families
+- topic-routed candidate store for the standard categories
+- Perplexity kept as a discovery lane, not the main source of article-shaped supply
+
+Why this is meaningfully different from patching:
+
+- it solves the actual problem we observed: too little promotable inventory reaching ranking time
+- it does not depend on repeated endpoint-by-endpoint tuning during digest runs
+- it gives the broker a real trusted inventory base instead of asking live feed pulls to do all the work just-in-time
+
+Problem it is intended to solve:
+
+- increase standard-topic promotable depth enough that the `5`-item product can be evaluated on true candidate supply, not on thin just-in-time feed output
+
+Current decision:
+
+- stop Phase 1 source-pack patching
+- keep the broker
+- move the next build to persistent, topic-routed trusted-source ingestion for the standard categories

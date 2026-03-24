@@ -3,27 +3,17 @@
   const runtime = globalScope.SignalBriefPrefsRuntime || {};
   const stateRuntime = globalScope.SignalBriefPrefsStateRuntime || {};
 
+  // MVP topic set: 7 sectors only.
   const FALLBACK_INDUSTRY_TOPICS = [
     "HEALTHCARE",
-    "FINANCIAL SERVICES",
-    "PE×M&A",
-    "ENERGY",
-    "CONSUMER",
     "LIFE SCIENCES",
     "TECHNOLOGY",
+    "ENERGY",
+    "FINANCIAL SERVICES",
+    "CONSUMER & RETAIL",
     "INDUSTRIALS",
-    "REAL ESTATE",
-    "PUBLIC SECTOR",
   ];
-  const FALLBACK_CAPABILITY_TOPICS = [
-    "AI×TECH",
-    "STRATEGY",
-    "POLICY×REGULATORY",
-    "SUSTAINABILITY",
-    "DIGITAL",
-    "M&A ADVISORY",
-    "TALENT",
-  ];
+  const FALLBACK_CAPABILITY_TOPICS = [];
   const INDUSTRY_TOPICS = Array.isArray(runtime.INDUSTRY_TOPICS)
     ? runtime.INDUSTRY_TOPICS
     : FALLBACK_INDUSTRY_TOPICS;
@@ -33,7 +23,7 @@
   const DEFAULT_TOPICS = Array.isArray(runtime.DEFAULT_TOPICS)
     ? runtime.DEFAULT_TOPICS
     : [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-  const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(runtime.MAX_CUSTOM_KEYWORDS || 3));
+  const MAX_CUSTOM_KEYWORDS = 0; // MVP: no custom keywords
   const TOPIC_LABELS = runtime.TOPIC_LABELS && typeof runtime.TOPIC_LABELS === "object"
     ? runtime.TOPIC_LABELS
     : {};

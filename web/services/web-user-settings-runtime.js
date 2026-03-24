@@ -3,7 +3,7 @@ const { normalizeTopicsForUserInput } = require("./topic-normalization-runtime")
 
 const WEEKDAY_DAYS = Object.freeze([1, 2, 3, 4, 5]);
 const ITEMS_PER_DIGEST_MIN = 5;
-const ITEMS_PER_DIGEST_MAX = 10;
+const ITEMS_PER_DIGEST_MAX = 5; // MVP: always 5
 
 function deriveFrequencyFromDays(days) {
   if (!Array.isArray(days) || days.length === 0) return "daily_weekday";
@@ -94,13 +94,16 @@ function sanitizePreferencesPatch(rawPreferences) {
       continue;
     }
 
-    if (key === "email_enabled" || key === "telegram_enabled") {
+    if (key === "email_enabled") {
       if (typeof value !== "boolean") {
         return { ok: false, error: `preferences.${key} must be a boolean` };
       }
       patch[key] = value;
       continue;
     }
+
+    // telegram_enabled: silently accepted but ignored for email-only MVP
+    if (key === "telegram_enabled") continue;
 
     return { ok: false, error: `preferences.${key} is not allowed` };
   }
@@ -211,18 +214,9 @@ function createSettingsHandler({
       safeBody.source_preferences = { trusted_sources: t.value, blocked_sources: b.value };
     }
 
+    // Telegram field: silently accepted but not used for email-only MVP
     if (safeBody.telegram != null) {
-      safeBody.telegram = String(safeBody.telegram).replace(/^@+/, "").trim() || null;
-      if (safeBody.telegram) {
-        const telegramKey = safeBody.telegram.toLowerCase();
-        const telegramConflict = allUsers().find((user) =>
-          String(user.telegram || "").toLowerCase() === telegramKey
-          && String(user.chatId || "") !== String(existing.chatId || "")
-        );
-        if (telegramConflict) {
-          return json(res, { error: "That Telegram username is already linked to another account." }, 409);
-        }
-      }
+      delete safeBody.telegram;
     }
 
     if (safeBody.email != null) {

@@ -68,7 +68,7 @@ function parseSignupInput({
   };
 }
 
-function findSignupConflict({ users, emailNorm, telegramClean }) {
+function findSignupConflict({ users, emailNorm }) {
   const existingEmail = users.find((user) => (user.email || "").toLowerCase().trim() === emailNorm);
   if (existingEmail) {
     return {
@@ -76,16 +76,7 @@ function findSignupConflict({ users, emailNorm, telegramClean }) {
       error: "An account with this email already exists. Use your existing settings link to access it.",
     };
   }
-
-  if (!telegramClean) return null;
-  const telegramKey = telegramClean.toLowerCase();
-  const existingTelegram = users.find((user) => String(user.telegram || "").toLowerCase() === telegramKey);
-  if (!existingTelegram) return null;
-
-  return {
-    status: 409,
-    error: "That Telegram username is already linked to another account.",
-  };
+  return null;
 }
 
 function resolveReferralContext({ referralToken, findUserByToken }) {
@@ -126,7 +117,6 @@ function buildSignupUser({
     chatId,
     name: input.name,
     email: input.emailNorm,
-    telegram: input.telegramClean || null,
     topics: input.normalizedTopics,
     status: "active",
     token,
@@ -135,7 +125,7 @@ function buildSignupUser({
     digests_received: 0,
     bookmarks: [],
     topic_weights: {},
-    custom_topics: input.normalizedTopics.filter((topic) => !defaultTopics.includes(topic)),
+    custom_topics: [],
     signup_referral_source: signupReferralSource,
     digest_dates: [],
     last_digest_items: [],
@@ -144,10 +134,10 @@ function buildSignupUser({
       delivery_time: input.delivery_time || "07:00",
       frequency: input.frequency || "daily_weekday",
       days_of_week: Array.isArray(input.days_of_week) ? input.days_of_week : [1, 2, 3, 4, 5],
-      items_per_digest: parseInt(input.items_per_digest, 10) || 5,
+      items_per_digest: 5, // MVP: always 5
       timezone: "America/New_York",
       email_enabled: true,
-      telegram_enabled: !!input.telegramClean,
+      telegram_enabled: false, // MVP: email only
     },
   }, { chatId });
 }

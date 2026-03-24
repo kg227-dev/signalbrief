@@ -393,6 +393,16 @@ body.dark .dp-tag-finance { background: rgba(3,105,161,0.2); color: #7dd3fc; }
   border-radius: 6px;
   margin-left: auto;
 }
+.dp-read-more {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+.dp-read-more:hover { text-decoration: underline; text-underline-offset: 2px; }
 .dp-title {
   font-family: 'Playfair Display', Georgia, serif;
   font-size: clamp(18px, 1.6vw, 22px);
@@ -534,33 +544,30 @@ body.dark .dp-tag-finance { background: rgba(3,105,161,0.2); color: #7dd3fc; }
 body.dark .topic-pill {
   background: rgba(255,255,255,0.03);
 }
-/* Industry = blue */
-.topic-pill.industry.selected {
-  background: var(--accent-light);
-  color: var(--accent);
-  border-color: rgba(59,95,192,0.2);
-}
-/* Capability = purple */
-.topic-pill.capability.selected {
-  background: var(--purple-light);
-  color: var(--purple);
-  border-color: rgba(109,40,217,0.2);
-}
+/* Per-sector pill colors */
+.topic-pill.s-healthcare.selected   { background: #f0fdf4; color: #166534; border-color: rgba(22,101,52,0.2); }
+.topic-pill.s-lifesciences.selected { background: #ecfeff; color: #0e7490; border-color: rgba(14,116,144,0.2); }
+.topic-pill.s-technology.selected   { background: #eff6ff; color: #1d4ed8; border-color: rgba(29,78,216,0.2); }
+.topic-pill.s-energy.selected       { background: #fffbeb; color: #92400e; border-color: rgba(146,64,14,0.2); }
+.topic-pill.s-financial.selected    { background: #f0f9ff; color: #0369a1; border-color: rgba(3,105,161,0.2); }
+.topic-pill.s-consumer.selected     { background: #fdf4ff; color: #7e22ce; border-color: rgba(126,34,206,0.2); }
+.topic-pill.s-industrials.selected  { background: #f8fafc; color: #334155; border-color: rgba(51,65,85,0.2); }
+
+body.dark .topic-pill.s-healthcare.selected   { background: rgba(22,101,52,0.15);  color: #86efac; border-color: rgba(134,239,172,0.2); }
+body.dark .topic-pill.s-lifesciences.selected { background: rgba(14,116,144,0.15); color: #67e8f9; border-color: rgba(103,232,249,0.2); }
+body.dark .topic-pill.s-technology.selected   { background: rgba(29,78,216,0.15);  color: #93c5fd; border-color: rgba(147,197,253,0.2); }
+body.dark .topic-pill.s-energy.selected       { background: rgba(146,64,14,0.15);  color: #fcd34d; border-color: rgba(252,211,77,0.2); }
+body.dark .topic-pill.s-financial.selected    { background: rgba(3,105,161,0.15);  color: #7dd3fc; border-color: rgba(125,211,252,0.2); }
+body.dark .topic-pill.s-consumer.selected     { background: rgba(126,34,206,0.15); color: #d8b4fe; border-color: rgba(216,180,254,0.2); }
+body.dark .topic-pill.s-industrials.selected  { background: rgba(51,65,85,0.15);   color: #cbd5e1; border-color: rgba(203,213,225,0.2); }
+
 .topic-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1.5px solid currentColor;
+  background: currentColor;
   flex-shrink: 0;
   transition: all 0.15s ease;
-}
-.topic-pill.industry.selected .topic-dot {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.topic-pill.capability.selected .topic-dot {
-  background: var(--purple);
-  border-color: var(--purple);
 }
 .topics-custom-row {
   display: flex;
@@ -759,10 +766,10 @@ body.dark .topics-custom-row {
   <!-- ── Hero ── -->
   <section class="hero">
     <h1>SignalBrief</h1>
-    <p class="tagline">Five signals per sector. Every morning. No noise.</p>
-    <p class="description">AI-curated daily briefings across Healthcare, Technology, Financial Services, Energy, Life Sciences, Consumer & Retail, and Industrials. Pick your sectors. Get the signals that matter before the workday starts.</p>
-    <a href="/signup" class="hero-cta">Get started free</a>
-    <p class="hero-social-proof">Built for executives, operators, and investors who need sector intelligence — not headlines.</p>
+    <p class="tagline">Your daily signal across AI, strategy, and business</p>
+    <p class="description">AI-curated briefings for strategy professionals. Five minutes every morning across the verticals that matter.</p>
+    <a href="/signup" class="hero-cta">Get started</a>
+    <p class="hero-social-proof">Trusted by strategy consulting, investment banking, and private equity professionals</p>
   </section>
 
   <!-- ── Digest Preview Card ── -->
@@ -801,7 +808,8 @@ body.dark .topics-custom-row {
           </div>
           <div class="dp-title">CMS Finalizes Hospital Price Transparency Rules With Enforcement Teeth</div>
           <div class="dp-lede"><strong>Hospitals that continue masking negotiated rates now face daily fines scaled to bed count.</strong> The rule closes the audit gap that let most systems delay compliance for three years.</div>
-          <div class="dp-wim">Health systems still running opaque chargemasters should accelerate vendor negotiations before enforcement begins — the window to reset contracts quietly is closing.</div>
+          <div class="dp-wim">Health systems still running opaque chargemasters should accelerate vendor negotiations before enforcement begins. The window to reset contracts quietly is closing.</div>
+          <a class="dp-read-more" href="https://www.cms.gov/newsroom/press-releases/cms-issues-final-rule-hospital-price-transparency" target="_blank" rel="noopener">Read more &rarr;</a>
         </div>
 
         <div class="dp-item">
@@ -812,7 +820,8 @@ body.dark .topics-custom-row {
           </div>
           <div class="dp-title">Microsoft Embeds Copilot Directly Into Azure Data Factory Pipelines</div>
           <div class="dp-lede"><strong>Enterprise data teams can now generate and debug ETL pipelines in plain language.</strong> The integration targets the 60% of pipeline failures that originate in configuration errors.</div>
-          <div class="dp-wim">IT organizations still evaluating AI tooling for data engineering now have a production-grade answer from their existing vendor — the build-vs-buy calculus just shifted.</div>
+          <div class="dp-wim">IT organizations still evaluating AI tooling for data engineering now have a production-grade answer from their existing vendor. The build-vs-buy calculus just shifted.</div>
+          <a class="dp-read-more" href="https://techcommunity.microsoft.com/blog/azure-data-factory-blog/introducing-microsoft-copilot-in-azure-data-factory/4072527" target="_blank" rel="noopener">Read more &rarr;</a>
         </div>
 
         <div class="dp-item">
@@ -823,7 +832,8 @@ body.dark .topics-custom-row {
           </div>
           <div class="dp-title">Fed Holds Rates, Signals Two Cuts Possible Before Year End</div>
           <div class="dp-lede"><strong>The statement softened language on inflation persistence, the first meaningful shift since Q3 2025.</strong> Markets repriced rate expectations within minutes of the release.</div>
-          <div class="dp-wim">Fixed income portfolios positioned for a higher-for-longer scenario may need rebalancing — the Fed's tone shift is more meaningful than the hold itself.</div>
+          <div class="dp-wim">Fixed income portfolios positioned for a higher-for-longer scenario may need rebalancing. The Fed's tone shift is more meaningful than the hold itself.</div>
+          <a class="dp-read-more" href="https://www.federalreserve.gov/monetarypolicy/fomcpresconf20250129.htm" target="_blank" rel="noopener">Read more &rarr;</a>
         </div>
       </div>
     </div>
@@ -836,12 +846,12 @@ body.dark .topics-custom-row {
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></div>
         <h3>Curated from hundreds of sources</h3>
-        <p>Each morning, SignalBrief scans hundreds of trade publications, official sources, and sector outlets across all 7 industries — then selects only the signals that matter. No fluff, no aggregator noise.</p>
+        <p>Each morning, SignalBrief scans hundreds of trade publications, official sources, and sector outlets across all 7 industries and selects only the signals that matter. No fluff, no aggregator noise.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></div>
         <h3>Ranked by what actually matters</h3>
-        <p>Every item is scored for source quality, freshness, and sector relevance. The most important signal in your sector reaches you first — not whatever got the most clicks.</p>
+        <p>Every item is scored for source quality, freshness, and sector relevance. The most important signal in your sector reaches you first, not whatever got the most clicks.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
@@ -851,19 +861,19 @@ body.dark .topics-custom-row {
     </div>
     <div class="features-about">
       <h2>Sector intelligence, not a news feed</h2>
-      <p>SignalBrief is a daily AI-curated digest for professionals who need to stay current across specific industries without spending hours reading. Every morning, the system scans hundreds of trade publications, official sources, and primary outlets — then filters down to the 5 signals per sector that actually matter to your work.</p>
-      <p>Unlike general news aggregators or broad newsletters, SignalBrief is organized by sector. Pick Healthcare, Technology, Financial Services, Energy, Life Sciences, Consumer & Retail, or Industrials — and get a briefing built around that vertical, delivered before the workday starts. Every item includes a summary and a "why it matters" note grounded in what it means for your sector.</p>
+      <p>SignalBrief is a daily AI-curated digest for professionals who need to stay current across specific industries without spending hours reading. Every morning, the system scans hundreds of trade publications, official sources, and primary outlets, then filters down to the 5 signals per sector that actually matter to your work.</p>
+      <p>Unlike general news aggregators or broad newsletters, SignalBrief is organized by sector. Pick Healthcare, Technology, Financial Services, Energy, Life Sciences, Consumer &amp; Retail, or Industrials and get a briefing built around that vertical, delivered before the workday starts. Every item includes a summary and a "why it matters" note grounded in what it means for your sector.</p>
 
       <div class="topics-section" aria-label="Covered sectors">
         <div class="topics-group-label">Sectors</div>
         <div class="topics-grid">
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Healthcare</div>
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Life Sciences</div>
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Technology</div>
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Energy</div>
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Financial Services</div>
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Consumer &amp; Retail</div>
-          <div class="topic-pill industry selected"><span class="topic-dot"></span>Industrials</div>
+          <div class="topic-pill industry s-healthcare selected"><span class="topic-dot"></span>Healthcare</div>
+          <div class="topic-pill industry s-lifesciences selected"><span class="topic-dot"></span>Life Sciences</div>
+          <div class="topic-pill industry s-technology selected"><span class="topic-dot"></span>Technology</div>
+          <div class="topic-pill industry s-energy selected"><span class="topic-dot"></span>Energy</div>
+          <div class="topic-pill industry s-financial selected"><span class="topic-dot"></span>Financial Services</div>
+          <div class="topic-pill industry s-consumer selected"><span class="topic-dot"></span>Consumer &amp; Retail</div>
+          <div class="topic-pill industry s-industrials selected"><span class="topic-dot"></span>Industrials</div>
         </div>
       </div>
     </div>

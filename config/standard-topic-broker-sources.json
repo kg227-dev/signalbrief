@@ -166,17 +166,17 @@
       "content_kind": "article"
     },
     {
-      "_comment": "ENDPOINTS News — strong biotech/biopharma news, clinical/commercial focus. Verify feed URL before enabling.",
+      "_comment": "ENDPOINTS News — strong biotech/biopharma news, clinical/commercial focus. Domain migrated to endpoints.news.",
       "id": "life_endpoints",
-      "enabled": false,
+      "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": ["LIFE SCIENCES"],
       "family": "life_sciences_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["endpts.com"],
-      "endpoint": "https://endpts.com/feed/",
+      "domains": ["endpoints.news"],
+      "endpoint": "https://endpoints.news/feed/",
       "parser": "rss",
       "content_kind": "article"
     },
@@ -614,9 +614,9 @@
       "url_exclude_patterns": ["/spons/"]
     },
     {
-      "_comment": "CPSC — consumer product safety recalls and alerts. Verify feed URL before relying on.",
+      "_comment": "CPSC — consumer product safety recalls and alerts. Feed URL verified 200.",
       "id": "consumer_cpsc",
-      "enabled": false,
+      "enabled": true,
       "tier": 1,
       "lane": "official",
       "topic_tags": ["CONSUMER & RETAIL"],
@@ -628,6 +628,39 @@
       "parser": "rss",
       "content_kind": "official_document",
       "title_include_patterns": ["recall", "warning", "hazard", "safety", "alert", "ban", "fine", "enforcement"]
+    },
+
+    {
+      "_comment": "Grocery Dive — grocery retail, food service, consumer staples strategy. Industry Dive network.",
+      "id": "consumer_grocery_dive",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": ["CONSUMER & RETAIL"],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["grocerydive.com"],
+      "endpoint": "https://www.grocerydive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": ["/spons/"]
+    },
+    {
+      "_comment": "Restaurant Business — foodservice chains, operator strategy, menu trends.",
+      "id": "consumer_restaurant_business",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": ["CONSUMER & RETAIL"],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["restaurantbusinessonline.com"],
+      "endpoint": "https://www.restaurantbusinessonline.com/feed",
+      "parser": "rss",
+      "content_kind": "article"
     },
 
     {
@@ -691,6 +724,36 @@
       "source_family": "specialist",
       "domains": ["freightwaves.com"],
       "endpoint": "https://www.freightwaves.com/news/rss",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Defense News — defense contracting, DoD budget, aerospace/defense procurement.",
+      "id": "industrials_defense_news",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": ["INDUSTRIALS"],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["defensenews.com"],
+      "endpoint": "https://www.defensenews.com/arc/outboundfeeds/rss/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Aerospace Technology — aerospace/defense engineering, contracts, program milestones.",
+      "id": "industrials_aerospace_technology",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": ["INDUSTRIALS"],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": ["aerospace-technology.com"],
+      "endpoint": "https://www.aerospace-technology.com/feed/",
       "parser": "rss",
       "content_kind": "article"
     },

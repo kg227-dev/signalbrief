@@ -148,9 +148,9 @@ body.dark {
   --orange-light: rgba(217,119,6,0.12);
 }
 body.dark .dp-scan { background: #232019; }
-body.dark .dp-tag-pe { background: rgba(146,64,14,0.2); color: #d4a574; }
-body.dark .dp-tag-ai { background: rgba(30,64,175,0.2); color: #93b4f4; }
-body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
+body.dark .dp-tag-health { background: rgba(5,150,105,0.2); color: #6ee7b7; }
+body.dark .dp-tag-tech { background: rgba(30,64,175,0.2); color: #93b4f4; }
+body.dark .dp-tag-finance { background: rgba(3,105,161,0.2); color: #7dd3fc; }
 
 /* Dark toggle */
 #darkToggle {
@@ -349,9 +349,9 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   padding: 2px 7px;
   border-radius: 4px;
 }
-.dp-scan-tag-pe { color: #92400E; background: #FFFBEB; }
-.dp-scan-tag-ai { color: #1e40af; background: #dbeafe; }
-.dp-scan-tag-policy { color: #5b21b6; background: #ede9fe; }
+.dp-scan-tag-health { color: #065f46; background: #d1fae5; }
+.dp-scan-tag-tech { color: #1e40af; background: #dbeafe; }
+.dp-scan-tag-finance { color: #0c4a6e; background: #e0f2fe; }
 .dp-scan-hl {
   font-size: 14px;
   color: var(--text-body);
@@ -383,9 +383,9 @@ body.dark .dp-tag-policy { background: rgba(91,33,182,0.2); color: #c4b5fd; }
   padding: 3px 9px;
   border-radius: 5px;
 }
-.dp-tag-pe { color: #92400E; background: #FFFBEB; }
-.dp-tag-ai { color: #1e40af; background: #dbeafe; }
-.dp-tag-policy { color: #5b21b6; background: #ede9fe; }
+.dp-tag-health { color: #065f46; background: #d1fae5; }
+.dp-tag-tech { color: #1e40af; background: #dbeafe; }
+.dp-tag-finance { color: #0c4a6e; background: #e0f2fe; }
 .dp-score {
   font-size: 11px;
   font-weight: 700;
@@ -759,10 +759,10 @@ body.dark .topics-custom-row {
   <!-- ── Hero ── -->
   <section class="hero">
     <h1>SignalBrief</h1>
-    <p class="tagline">Your daily signal across AI, strategy, and business</p>
-    <p class="description">AI-curated briefings for strategy professionals. Five minutes every morning across the verticals that matter.</p>
-    <a href="/signup" class="hero-cta">Get started</a>
-    <p class="hero-social-proof">Trusted by strategy consulting, investment banking, and private equity professionals</p>
+    <p class="tagline">Five signals per sector. Every morning. No noise.</p>
+    <p class="description">AI-curated daily briefings across Healthcare, Technology, Financial Services, Energy, Life Sciences, Consumer & Retail, and Industrials. Pick your sectors. Get the signals that matter before the workday starts.</p>
+    <a href="/signup" class="hero-cta">Get started free</a>
+    <p class="hero-social-proof">Built for executives, operators, and investors who need sector intelligence — not headlines.</p>
   </section>
 
   <!-- ── Digest Preview Card ── -->
@@ -777,18 +777,18 @@ body.dark .topics-custom-row {
         <div class="dp-scan-label">Today's Signals</div>
         <div class="dp-scan-row">
           <span class="dp-scan-num">1</span>
-          <span class="dp-scan-tag dp-scan-tag-pe">PE&times;M&amp;A</span>
-          <span class="dp-scan-hl">KKR Acquires Cotiviti in $11B Healthcare IT Buyout</span>
+          <span class="dp-scan-tag dp-scan-tag-health">Healthcare</span>
+          <span class="dp-scan-hl">CMS Finalizes Hospital Price Transparency Rules With Enforcement Teeth</span>
         </div>
         <div class="dp-scan-row">
           <span class="dp-scan-num">2</span>
-          <span class="dp-scan-tag dp-scan-tag-ai">AI&times;TECH</span>
-          <span class="dp-scan-hl">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</span>
+          <span class="dp-scan-tag dp-scan-tag-tech">Technology</span>
+          <span class="dp-scan-hl">Microsoft Embeds Copilot Directly Into Azure Data Factory Pipelines</span>
         </div>
         <div class="dp-scan-row">
           <span class="dp-scan-num">3</span>
-          <span class="dp-scan-tag dp-scan-tag-policy">POLICY&times;REGULATORY</span>
-          <span class="dp-scan-hl">FTC Signals Scrutiny on AI-Adjacent M&amp;A</span>
+          <span class="dp-scan-tag dp-scan-tag-finance">Financial Services</span>
+          <span class="dp-scan-hl">Fed Holds Rates, Signals Two Cuts Possible Before Year End</span>
         </div>
       </div>
 
@@ -796,34 +796,34 @@ body.dark .topics-custom-row {
         <div class="dp-item">
           <div class="dp-item-meta">
             <span class="dp-item-num">1</span>
-            <span class="dp-tag dp-tag-pe">PE&times;M&amp;A</span>
-            <span class="dp-score" style="color:#fff;background:#16A34A;">9.1</span>
+            <span class="dp-tag dp-tag-health">Healthcare</span>
+            <span class="dp-score" style="color:#fff;background:#16A34A;">9.2</span>
           </div>
-          <div class="dp-title">KKR Acquires Cotiviti in $11B Healthcare IT Leveraged Buyout</div>
-          <div class="dp-lede"><strong>The largest healthcare IT LBO of 2026 resets comparable multiples across the sector.</strong> Any PE-backed health tech asset in late-stage diligence needs to recalibrate its comps deck now.</div>
-          <div class="dp-wim">Cotiviti's payer analytics focus signals continued sponsor appetite for recurring-revenue, mission-critical SaaS in healthcare.</div>
+          <div class="dp-title">CMS Finalizes Hospital Price Transparency Rules With Enforcement Teeth</div>
+          <div class="dp-lede"><strong>Hospitals that continue masking negotiated rates now face daily fines scaled to bed count.</strong> The rule closes the audit gap that let most systems delay compliance for three years.</div>
+          <div class="dp-wim">Health systems still running opaque chargemasters should accelerate vendor negotiations before enforcement begins — the window to reset contracts quietly is closing.</div>
         </div>
 
         <div class="dp-item">
           <div class="dp-item-meta">
             <span class="dp-item-num">2</span>
-            <span class="dp-tag dp-tag-ai">AI&times;TECH</span>
-            <span class="dp-score" style="color:#fff;background:#22C55E;">8.4</span>
+            <span class="dp-tag dp-tag-tech">Technology</span>
+            <span class="dp-score" style="color:#fff;background:#22C55E;">8.7</span>
           </div>
-          <div class="dp-title">OpenAI Strikes Enterprise Compliance Suite Deal with Fortune 100s</div>
-          <div class="dp-lede"><strong>Compliance buyers now have a credible AI alternative to building in-house.</strong> Enterprise procurement cycles just compressed.</div>
-          <div class="dp-wim">Incumbents in GRC and legal workflow software face accelerating displacement pressure.</div>
+          <div class="dp-title">Microsoft Embeds Copilot Directly Into Azure Data Factory Pipelines</div>
+          <div class="dp-lede"><strong>Enterprise data teams can now generate and debug ETL pipelines in plain language.</strong> The integration targets the 60% of pipeline failures that originate in configuration errors.</div>
+          <div class="dp-wim">IT organizations still evaluating AI tooling for data engineering now have a production-grade answer from their existing vendor — the build-vs-buy calculus just shifted.</div>
         </div>
 
         <div class="dp-item">
           <div class="dp-item-meta">
             <span class="dp-item-num">3</span>
-            <span class="dp-tag dp-tag-policy">POLICY&times;REGULATORY</span>
-            <span class="dp-score" style="color:#111827;background:#EAB308;">6.8</span>
+            <span class="dp-tag dp-tag-finance">Financial Services</span>
+            <span class="dp-score" style="color:#111827;background:#EAB308;">7.4</span>
           </div>
-          <div class="dp-title">FTC Signals Closer Scrutiny on AI-Adjacent M&amp;A</div>
-          <div class="dp-lede"><strong>Any deal with an AI component now requires a regulatory narrative built into the thesis from day one.</strong></div>
-          <div class="dp-wim">Deal teams underwriting AI-adjacent targets should stress-test their HSR timelines &mdash; expect 6&ndash;9 month delays becoming standard.</div>
+          <div class="dp-title">Fed Holds Rates, Signals Two Cuts Possible Before Year End</div>
+          <div class="dp-lede"><strong>The statement softened language on inflation persistence, the first meaningful shift since Q3 2025.</strong> Markets repriced rate expectations within minutes of the release.</div>
+          <div class="dp-wim">Fixed income portfolios positioned for a higher-for-longer scenario may need rebalancing — the Fed's tone shift is more meaningful than the hold itself.</div>
         </div>
       </div>
     </div>
@@ -836,12 +836,12 @@ body.dark .topics-custom-row {
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></div>
         <h3>Curated from hundreds of sources</h3>
-        <p>Each morning, SignalBrief's AI scans hundreds of business, strategy, and policy publications, from major financial outlets to niche healthcare and private equity sources, and selects only the signals that matter to your work.</p>
+        <p>Each morning, SignalBrief scans hundreds of trade publications, official sources, and sector outlets across all 7 industries — then selects only the signals that matter. No fluff, no aggregator noise.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></div>
-        <h3>Ranked by strategic relevance</h3>
-        <p>Every item is scored for how much it matters to strategy and finance professionals. Breaking M&amp;A, regulatory moves, AI deployments, and market shifts are ranked so the most important signals reach you first.</p>
+        <h3>Ranked by what actually matters</h3>
+        <p>Every item is scored for source quality, freshness, and sector relevance. The most important signal in your sector reaches you first — not whatever got the most clicks.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
@@ -850,9 +850,9 @@ body.dark .topics-custom-row {
       </div>
     </div>
     <div class="features-about">
-      <h2>The AI news digest for strategy professionals</h2>
-      <p>SignalBrief is a daily AI-curated news digest built for professionals who need to stay current across multiple sectors without spending hours reading. Our AI reads thousands of headlines every morning and filters them to the signals most relevant to your work, delivered to your inbox before the workday starts.</p>
-      <p>Unlike general news aggregators or broad newsletters, SignalBrief is designed for strategy work. Each briefing is personalized by vertical and role, so a private equity analyst sees different signals than a healthcare executive or a management consultant. Every item includes a concise summary and a strategic "why it matters" note so you arrive at every meeting with context, not just headlines.</p>
+      <h2>Sector intelligence, not a news feed</h2>
+      <p>SignalBrief is a daily AI-curated digest for professionals who need to stay current across specific industries without spending hours reading. Every morning, the system scans hundreds of trade publications, official sources, and primary outlets — then filters down to the 5 signals per sector that actually matter to your work.</p>
+      <p>Unlike general news aggregators or broad newsletters, SignalBrief is organized by sector. Pick Healthcare, Technology, Financial Services, Energy, Life Sciences, Consumer & Retail, or Industrials — and get a briefing built around that vertical, delivered before the workday starts. Every item includes a summary and a "why it matters" note grounded in what it means for your sector.</p>
 
       <div class="topics-section" aria-label="Covered sectors">
         <div class="topics-group-label">Sectors</div>

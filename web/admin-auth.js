@@ -17,6 +17,7 @@ const LOCAL_BYPASS_API_ROUTES = new Set([
   "/api/admin/stats",
   "/api/admin/user-by-email",
   "/api/admin/audit",
+  "/api/admin/digest-audit",
   "/api/admin/retrieval-eval/status",
   "/api/admin/retrieval-eval/runs",
   "/api/admin/retrieval-eval/run",

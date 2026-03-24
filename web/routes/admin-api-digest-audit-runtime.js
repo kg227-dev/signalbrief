@@ -18,12 +18,12 @@ const path = require("path");
  * what was selected, what was missed, and lane breakdown — in one call.
  */
 async function handleAdminDigestAuditRoutes(ctx, deps) {
-  const { req, res, pathname, url, json, isAdminAuthed } = ctx;
-  const { digestAuditDir, formatEtDateKey } = deps;
+  const { req, res, pathname, url } = ctx;
+  const { json, isAdminAuthed, digestAuditDir, formatEtDateKey } = deps;
 
   if (!pathname.startsWith("/api/admin/digest-audit")) return false;
   if (req.method !== "GET") return false;
-  if (!isAdminAuthed(ctx)) {
+  if (!isAdminAuthed(req)) {
     json(res, { ok: false, error: "unauthorized" }, 401);
     return true;
   }

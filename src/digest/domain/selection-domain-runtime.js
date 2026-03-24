@@ -1,3 +1,5 @@
+"use strict";
+
 const { createSelectionPolicy } = require("./digest-policy-domain-runtime");
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
 const { tokenizeHeadline, isFuzzyDuplicateHeadline } = require("./fuzzy-dedup-runtime");
@@ -35,8 +37,10 @@ function dedupeCandidates(items, adapterFns) {
     const headlineKey = String(adapterFns.headlineFingerprint(item) || "");
     const urlKey = String(adapterFns.normalizeUrl(item?.url || "") || "");
     if (!adapterFns.isCandidate(item, { headlineKey, urlKey })) return false;
+    // URL check runs first — cheaper and equally authoritative; headline fuzzy check follows.
     if (urlKey && seenUrl.has(urlKey)) return false;
     const tokenSet = tokenizeHeadline(String(item?.headline || ""));
+    // Items with no tokens (numeric/punctuation-only headlines) bypass fuzzy dedup — safe, not an oversight.
     if (tokenSet.size > 0 && isFuzzyDuplicateHeadline(tokenSet, seenHeadlineTokenSets)) return false;
     if (urlKey) seenUrl.add(urlKey);
     if (tokenSet.size > 0) seenHeadlineTokenSets.push(tokenSet);
@@ -56,11 +60,13 @@ function dedupeCandidatesDetailed(items, adapterFns) {
       rejected.push({ item, reason: "selection_invalid_candidate" });
       continue;
     }
+    // URL check runs first — cheaper and equally authoritative; headline fuzzy check follows.
     if (urlKey && seenUrl.has(urlKey)) {
       rejected.push({ item, reason: "selection_duplicate_url" });
       continue;
     }
     const tokenSet = tokenizeHeadline(String(item?.headline || ""));
+    // Items with no tokens (numeric/punctuation-only headlines) bypass fuzzy dedup — safe, not an oversight.
     if (tokenSet.size > 0 && isFuzzyDuplicateHeadline(tokenSet, seenHeadlineTokenSets)) {
       rejected.push({ item, reason: "selection_duplicate_headline" });
       continue;

@@ -32,6 +32,7 @@ function jaccardSimilarity(setA, setB) {
 /**
  * Returns true if `tokenSet` is a fuzzy duplicate of any set in `seenTokenSets`.
  * Default threshold: 0.7 (70% token overlap = same story).
+ * O(n) scan over seenTokenSets — acceptable for MVP candidate pools (< 200 items per topic).
  */
 function isFuzzyDuplicateHeadline(tokenSet, seenTokenSets, threshold = 0.7) {
   for (const seen of seenTokenSets) {

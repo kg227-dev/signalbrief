@@ -49,4 +49,24 @@ function makeItem(headline, url, tag = "TECHNOLOGY") {
   console.log("dedupeCandidates distinct headlines all survive ✓");
 }
 
+// Verify dedupeCandidatesDetailed emits correct reason for fuzzy duplicates.
+const { selectItemsByPolicyDetailed } = require("./selection-domain-runtime");
+{
+  const items = [
+    makeItem("Apple Reports Record Q1 Revenue This Year", "https://a.com/1"),
+    makeItem("Apple Reports Record First Quarter Revenue This Year", "https://b.com/2"),
+  ];
+  const result = selectItemsByPolicyDetailed(items, {
+    maxItems: 10,
+    maxItemsPerTag: 10,
+    customTags: [],
+    maxCustomItems: 0,
+    tagPriority: {},
+    maxItemsPerSourceDomain: 5,
+  });
+  const dupRejection = result.rejected.find((r) => r.reason === "selection_duplicate_headline");
+  assert(dupRejection, "dedupeCandidatesDetailed should emit selection_duplicate_headline for fuzzy dup");
+  console.log("dedupeCandidatesDetailed rejection reason ✓");
+}
+
 console.log("All selection-domain fuzzy dedup tests passed ✓");

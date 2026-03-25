@@ -150,19 +150,11 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const perTopicSelected = [];
     let totalDiscoveryCapped = 0;
     for (const [topicTag, topicItems] of byTag.entries()) {
-      // Build tiered pool: prefer 0-24h, backfill 24-48h, then 48h+ as last resort.
+      // Build tiered pool: tier1 (0-24h) first for freshness preference, then tier2, then tier3.
+      // Pass the full ordered pool to selectItems so its source-domain cap can pick from the
+      // widest possible set rather than a pre-truncated slice.
       const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
-      const tieredPool = [];
-      for (const tier of [tier1, tier2, tier3]) {
-        for (const item of tier) {
-          if (tieredPool.length >= itemsPerTopic) break;
-          tieredPool.push(item);
-        }
-        if (tieredPool.length >= itemsPerTopic) break;
-      }
-      if (tieredPool.length < itemsPerTopic) {
-        log(`⚠️ Topic ${topicTag}: only ${tieredPool.length}/${itemsPerTopic} items available after freshness-tier fallback (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length})`);
-      }
+      const tieredPool = [...tier1, ...tier2, ...tier3];
 
       const topicPool = selectItems(tieredPool, {
         maxItems: itemsPerTopic,
@@ -172,6 +164,11 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         tagPriority,
         maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
       });
+
+      if (topicPool.length < itemsPerTopic) {
+        log(`⚠️ Topic ${topicTag}: only ${topicPool.length}/${itemsPerTopic} items selected (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length}, pool=${tieredPool.length})`);
+      }
+
       let discoveryCount = 0;
       for (const item of topicPool) {
         const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").toLowerCase();

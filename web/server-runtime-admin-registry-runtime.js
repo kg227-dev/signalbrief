@@ -73,6 +73,8 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadRetrievalEvalStatus,
     digestAuditDir,
     digestTuningPath,
+    editorialOverridesPath,
+    todayStr,
     formatEtDateKey,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
@@ -147,6 +149,8 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadRetrievalEvalStatus,
     digestAuditDir,
     digestTuningPath,
+    editorialOverridesPath,
+    todayStr,
     fs,
     path,
     formatEtDateKey,

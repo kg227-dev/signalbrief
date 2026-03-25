@@ -74,6 +74,11 @@ const {
   const { ok: emptyOk } = validateDigestTuning({});
   assert.strictEqual(emptyOk, true, "empty object is valid");
 
+  // String where number expected is rejected
+  const { ok: strOk, errors: strErrors } = validateDigestTuning({ maxAgeHours: "36" });
+  assert.strictEqual(strOk, false, "string maxAgeHours fails strict validation");
+  assert.ok(strErrors.some((e) => e.includes("maxAgeHours")), "error mentions field name");
+
   console.log("validateDigestTuning ✓");
 }
 
@@ -96,6 +101,9 @@ const {
   // Empty tuning returns base unchanged (deep equal)
   const unmodified = mergeDigestTuning(base, {});
   assert.deepStrictEqual(unmodified, base, "empty tuning → base unchanged");
+
+  // Empty tuning returns a copy, not the same reference
+  assert.notStrictEqual(mergeDigestTuning(base, {}), base, "empty tuning → new object (not same ref)");
 
   // Null/undefined tuning returns base
   const fromNull = mergeDigestTuning(base, null);

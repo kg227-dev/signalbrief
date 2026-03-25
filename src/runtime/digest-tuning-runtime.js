@@ -71,9 +71,13 @@ function validateDigestTuning(tuning) {
     const value = tuning[key];
 
     if (NUMERIC_KEYS.has(key)) {
-      const n = Number(value);
-      if (!Number.isFinite(n) || n < 0) {
-        errors.push(`"${key}" must be a non-negative finite number, got: ${JSON.stringify(value)}`);
+      if (typeof value !== "number") {
+        errors.push(`"${key}" must be a number, got: ${JSON.stringify(value)}`);
+      } else {
+        const n = value;
+        if (!Number.isFinite(n) || n < 0) {
+          errors.push(`"${key}" must be a non-negative finite number, got: ${JSON.stringify(value)}`);
+        }
       }
       continue;
     }
@@ -112,7 +116,7 @@ function validateDigestTuning(tuning) {
 function mergeDigestTuning(base, tuning) {
   const safeBase = (base && typeof base === "object" && !Array.isArray(base)) ? base : {};
   const safeTuning = (tuning && typeof tuning === "object" && !Array.isArray(tuning)) ? tuning : {};
-  if (Object.keys(safeTuning).length === 0) return safeBase;
+  if (Object.keys(safeTuning).length === 0) return { ...safeBase };
 
   const merged = { ...safeBase };
   for (const key of ALLOWED_TUNING_KEYS) {

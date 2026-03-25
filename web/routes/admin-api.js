@@ -9,6 +9,7 @@ const { handleAdminSourceRegistryRoutes } = require("./admin-api-source-registry
 const { handleAdminRetrievalEvalRoutes } = require("./admin-api-retrieval-eval-runtime");
 const { handleAdminDigestAuditRoutes } = require("./admin-api-digest-audit-runtime");
 const { handleAdminSourceHealthRoutes } = require("./admin-api-source-health-runtime");
+const { handleAdminDigestTuningRoutes } = require("./admin-api-digest-tuning-runtime");
 
 function createAdminApiRouteHandler(deps) {
   return async function handleAdminApiRoutes(ctx) {
@@ -26,6 +27,7 @@ function createAdminApiRouteHandler(deps) {
     if (await handleAdminRetrievalEvalRoutes(ctx, deps)) return true;
     if (await handleAdminDigestAuditRoutes(ctx, deps)) return true;
     if (await handleAdminSourceHealthRoutes(ctx, deps)) return true;
+    if (await handleAdminDigestTuningRoutes(ctx, deps)) return true;
     if (await handleAdminUserRoutes(ctx, deps)) return true;
     if (await handleAdminBulkRoute(ctx, deps)) return true;
     if (await handleAdminMessageRoute(ctx, deps)) return true;

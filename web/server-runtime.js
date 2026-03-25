@@ -433,6 +433,7 @@ const {
   loadRetrievalEvalStatus: () => adminRetrievalEvalRuntime.loadStatus(),
   getAdminActor,
   digestAuditDir: runtimePaths.digestAuditDir,
+  digestTuningPath: path.join(runtimePaths.dataDir, "digest-tuning.json"),
   formatEtDateKey: toEtDateKey,
 });
 const handleDomainRoute = createRouteBootstrapHandler({

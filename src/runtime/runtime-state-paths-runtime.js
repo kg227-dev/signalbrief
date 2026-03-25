@@ -129,6 +129,14 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.digestAuditDir || readEnvValue(env, "SIGNALBRIEF_DIGEST_AUDIT_DIR"),
     path.join(dataDir, "digest-audit")
   );
+  const digestTuningPath = resolveOptionalPath(
+    options.digestTuningPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_TUNING_PATH"),
+    path.join(dataDir, "digest-tuning.json")
+  );
+  const editorialOverridesPath = resolveOptionalPath(
+    options.editorialOverridesPath || readEnvValue(env, "SIGNALBRIEF_EDITORIAL_OVERRIDES_PATH"),
+    path.join(dataDir, "editorial-overrides.json")
+  );
 
   return {
     appRoot,
@@ -156,6 +164,8 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     incidentStorePath,
     recoveryQueuePath,
     digestAuditDir,
+    digestTuningPath,
+    editorialOverridesPath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };

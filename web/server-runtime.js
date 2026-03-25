@@ -433,8 +433,8 @@ const {
   loadRetrievalEvalStatus: () => adminRetrievalEvalRuntime.loadStatus(),
   getAdminActor,
   digestAuditDir: runtimePaths.digestAuditDir,
-  digestTuningPath: path.join(runtimePaths.dataDir, "digest-tuning.json"),
-  editorialOverridesPath: path.join(runtimePaths.dataDir, "editorial-overrides.json"),
+  digestTuningPath: runtimePaths.digestTuningPath,
+  editorialOverridesPath: runtimePaths.editorialOverridesPath,
   todayStr: new Date().toISOString().slice(0, 10),
   formatEtDateKey: toEtDateKey,
 });

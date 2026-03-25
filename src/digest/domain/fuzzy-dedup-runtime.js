@@ -73,7 +73,7 @@ function classifyStoryRelationship(item, pastItems, followUpThreshold = 0.7, con
     if (pastTokens.size === 0) continue;
     const similarity = jaccardSimilarity(itemTokens, pastTokens);
     if (similarity > maxSimilarity) maxSimilarity = similarity;
-    // Short-circuit: once we exceed the highest threshold, no need to scan further
+    // Short-circuit: once we reach or exceed the continuation threshold, no need to scan further
     if (maxSimilarity >= continuationThreshold) break;
   }
 

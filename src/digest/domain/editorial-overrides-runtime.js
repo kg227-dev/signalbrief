@@ -53,7 +53,8 @@ function loadEditorialOverrides(overridesPath, fs) {
 function computePruneCutoff(todayStr) {
   const d = new Date(todayStr);
   if (isNaN(d.getTime())) return "1970-01-01";
-  d.setDate(d.getDate() - PRUNE_DAYS_OLD);
+  // Use UTC methods so the cutoff is timezone-independent (YYYY-MM-DD strings are UTC dates)
+  d.setUTCDate(d.getUTCDate() - PRUNE_DAYS_OLD);
   return d.toISOString().slice(0, 10);
 }
 
@@ -84,10 +85,13 @@ function pruneStaleEntries(entries, todayStr) {
  * @param {typeof import('path')} path
  */
 function saveEditorialOverrides(overridesPath, overrides, todayStr, fs, path) {
+  const safeOverrides = (overrides && typeof overrides === "object" && !Array.isArray(overrides))
+    ? overrides
+    : {};
   const safe = {
-    pins: pruneStaleEntries(overrides.pins, todayStr),
-    excludes: pruneStaleEntries(overrides.excludes, todayStr),
-    source_suppressions: pruneStaleEntries(overrides.source_suppressions, todayStr),
+    pins: pruneStaleEntries(safeOverrides.pins, todayStr),
+    excludes: pruneStaleEntries(safeOverrides.excludes, todayStr),
+    source_suppressions: pruneStaleEntries(safeOverrides.source_suppressions, todayStr),
   };
   const dir = path.dirname(String(overridesPath || ""));
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

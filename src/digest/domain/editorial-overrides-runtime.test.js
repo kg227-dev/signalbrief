@@ -48,16 +48,19 @@ const overridesPath = path.join(tmpDir, "editorial-overrides.json");
 
 // --- pruneStaleEntries ---
 {
+  const SEVEN_DAYS_AGO = "2026-03-17"; // exactly 7 days before TODAY=2026-03-24
   const entries = [
-    { url: "a", date: TODAY },          // active: today
-    { url: "b", date: YESTERDAY },      // active: yesterday (within 7 days)
-    { url: "c", date: EIGHT_DAYS_AGO }, // stale: 8 days ago
-    { url: "d", date: TOMORROW },       // active: tomorrow (future pin)
+    { url: "a", date: TODAY },           // active: today
+    { url: "b", date: YESTERDAY },       // active: yesterday (within 7 days)
+    { url: "c", date: EIGHT_DAYS_AGO },  // stale: 8 days ago (> 7 days)
+    { url: "d", date: TOMORROW },        // active: tomorrow (future pin)
+    { url: "e", date: SEVEN_DAYS_AGO },  // boundary: exactly 7 days ago → kept
   ];
   const pruned = pruneStaleEntries(entries, TODAY);
-  assert.strictEqual(pruned.length, 3, "stale entry pruned");
+  assert.strictEqual(pruned.length, 4, "only 8-day-old entry pruned");
   assert.ok(!pruned.some((e) => e.url === "c"), "8-day-old entry removed");
   assert.ok(pruned.some((e) => e.url === "d"), "future entry kept");
+  assert.ok(pruned.some((e) => e.url === "e"), "exactly-7-day-old entry kept (boundary)");
   console.log("pruneStaleEntries ✓");
 }
 

@@ -115,6 +115,7 @@ const {
   isDomainSuppressed,
   getPinsForDate,
 } = require("../digest/domain/editorial-overrides-runtime");
+const { classifyStoryRelationship } = require("../digest/domain/fuzzy-dedup-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -979,6 +980,7 @@ async function main() {
     isUrlExcluded,
     isDomainSuppressed,
     getPinsForDate,
+    classifyStoryRelationship,
   });
   const {
     selected,

@@ -47,6 +47,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     buildRepetitionNote,
     emitDigestIncident,
     articleAgeTooOld,
+    classifyStoryRelationship,
     loadEditorialOverrides,
     editorialOverridesPath,
     isUrlExcluded,
@@ -187,6 +188,44 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       ? buildRepetitionNote(historyResult.streaks, historyResult.suppressedCount)
       : "";
 
+    // Cross-day story relationship annotation (§2.3)
+    // Uses the same archive window as history suppression.
+    // Continuation items are removed; follow_up items are annotated and kept.
+    let annotatedItems = dedupedItems;
+    let continuationRemovedCount = 0;
+    let followUpCount = 0;
+
+    if (typeof classifyStoryRelationship === "function") {
+      // Build a flat list of past headlines from the archive-by-date result.
+      const pastItems = [];
+      for (const dateEntry of (Array.isArray(archiveByDate) ? archiveByDate : [])) {
+        if (Array.isArray(dateEntry?.items)) {
+          for (const archiveItem of dateEntry.items) {
+            if (archiveItem?.headline) pastItems.push(archiveItem);
+          }
+        }
+      }
+
+      const classified = [];
+      for (const item of dedupedItems) {
+        const relationship = classifyStoryRelationship(item, pastItems);
+        if (relationship === "continuation") {
+          continuationRemovedCount += 1;
+          // Skip: same story, no meaningful update
+          continue;
+        }
+        classified.push({ ...item, _story_relationship: relationship });
+        if (relationship === "follow_up") followUpCount += 1;
+      }
+      annotatedItems = classified;
+
+      if (continuationRemovedCount > 0) {
+        log(`Story classification: removed ${continuationRemovedCount} continuation item(s), ${followUpCount} follow_up item(s) passed through`);
+      }
+    }
+
+    const scoringInput = annotatedItems;
+
     const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
     const maxCustomItems = computeMaxCustomItems({
       configuredMaxCustom,
@@ -202,7 +241,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       ? paramScoringConfig
       : (CONFIG.digest?.scoring || {});
     const nowMs = Date.now();
-    const scoredItems = scoreCandidates(dedupedItems, { scoringConfig, nowMs });
+    const scoredItems = scoreCandidates(scoringInput, { scoringConfig, nowMs });
     if (scoredItems.length > 0) {
       const topScore = scoredItems[0]?._score?.toFixed(3) ?? "?";
       const bottomScore = scoredItems[scoredItems.length - 1]?._score?.toFixed(3) ?? "?";
@@ -327,6 +366,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         history_suppressed_count: Math.max(0, Number(historyResult.suppressedCount || 0)),
         history_lookback_days: historyLookbackDays,
         history_streaks_detected: historyResult.streaks.length,
+        story_relationship_continuation_removed: continuationRemovedCount || 0,
+        story_relationship_follow_up_count: followUpCount || 0,
         score_top: scoredItems[0]?._score ?? null,
         score_bottom: scoredItems.length > 0 ? scoredItems[scoredItems.length - 1]?._score ?? null : null,
         scored_candidates: scoredItems.map((item) => ({
@@ -338,6 +379,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
           _score: item?._score ?? null,
           _score_components: item?._score_components ?? null,
+          _story_relationship: item?._story_relationship ?? "new",
         })),
       },
     };

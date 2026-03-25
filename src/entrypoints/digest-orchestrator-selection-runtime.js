@@ -59,9 +59,14 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       digestDateKey,
       dueUsersCount,
       standardFetchCallsPlanned,
+      scoringConfig: paramScoringConfig,
     } = params;
 
-    const crossDayDedupDays = Math.max(1, Number(CONFIG.digest.crossDayDedupDays || 3));
+    const crossDayDedupDays = Math.max(1, Number(
+      (paramScoringConfig && paramScoringConfig.crossDayDedupDays != null)
+        ? paramScoringConfig.crossDayDedupDays
+        : (CONFIG.digest.crossDayDedupDays || 3)
+    ));
     const digestPolicies = createDigestPolicies(CONFIG.digest || {});
     const rankingPolicy = digestPolicies.rankingPolicy;
     const depthPolicy = digestPolicies.depthPolicy;
@@ -90,7 +95,11 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
     // Longitudinal history filter: suppress same storylines seen in past 7 days
     // unless the item introduces new entities or content flags (materially new).
-    const historyLookbackDays = Math.max(4, Number(CONFIG.digest?.historyLookbackDays || 7));
+    const historyLookbackDays = Math.max(4, Number(
+      (paramScoringConfig && paramScoringConfig.historyLookbackDays != null)
+        ? paramScoringConfig.historyLookbackDays
+        : (CONFIG.digest?.historyLookbackDays || 7)
+    ));
     const archiveByDate = typeof loadRecentArchiveByDate === "function"
       ? loadRecentArchiveByDate(historyLookbackDays)
       : [];
@@ -123,7 +132,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
     // Scored items are sorted by _score descending so the selection policy
     // always sees the highest-scoring items first.
-    const scoringConfig = CONFIG.digest?.scoring || {};
+    const scoringConfig = paramScoringConfig && typeof paramScoringConfig === "object"
+      ? paramScoringConfig
+      : (CONFIG.digest?.scoring || {});
     const nowMs = Date.now();
     const scoredItems = scoreCandidates(dedupedItems, { scoringConfig, nowMs });
     if (scoredItems.length > 0) {
@@ -162,7 +173,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         customTags: [],
         maxCustomItems: 0,
         tagPriority,
-        maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
+        maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
+          ? paramScoringConfig.maxItemsPerSourceDomain
+          : CONFIG.digest.maxItemsPerSourceDomain,
       });
 
       if (topicPool.length < itemsPerTopic) {
@@ -198,7 +211,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           customTags: [],
           maxCustomItems: 0,
           tagPriority,
-          maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
+          maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
+            ? paramScoringConfig.maxItemsPerSourceDomain
+            : CONFIG.digest.maxItemsPerSourceDomain,
         });
         log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
         await emitDigestIncident(

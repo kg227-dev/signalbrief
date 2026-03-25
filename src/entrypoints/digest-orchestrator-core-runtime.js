@@ -108,6 +108,7 @@ const { createStandardTopicBrokerRuntime } = require("../runtime/standard-topic-
 const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestrator-spend-guard-runtime");
 const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orchestrator-circuit-breaker-runtime");
 const { createDigestOrchestratorAdmissionGateRuntime } = require("./digest-orchestrator-admission-gate-runtime");
+const { loadDigestTuning, mergeDigestTuning } = require("../runtime/digest-tuning-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -124,6 +125,7 @@ const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
 const SPEND_GUARD_STATE = RUNTIME_PATHS.spendGuardStatePath;
 const CIRCUIT_BREAKER_STATE = RUNTIME_PATHS.circuitBreakerStatePath;
 const INCIDENT_STORE = RUNTIME_PATHS.incidentStorePath;
+const DIGEST_TUNING_PATH = path.join(RUNTIME_PATHS.dataDir || path.join(APP_ROOT, "data"), "digest-tuning.json");
 const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP_USD || "1.00");
 const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
 const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
@@ -894,6 +896,11 @@ async function main() {
   if (sourceRegistry && sourceRegistry.domains && Object.keys(sourceRegistry.domains).length > 0) {
     log(`[source-policy] ${Object.keys(sourceRegistry.domains).length} admin source override(s) applied`);
   }
+  const rawTuning = loadDigestTuning(DIGEST_TUNING_PATH, fs);
+  const mergedScoringConfig = mergeDigestTuning(CONFIG.digest?.scoring || {}, rawTuning);
+  if (Object.keys(rawTuning).length > 0) {
+    log(`[digest-tuning] overrides active: ${Object.keys(rawTuning).join(", ")}`);
+  }
   const preferredSourceRegistry = preferredSourceRegistryRuntime.loadPreferredSourceRegistry();
   setPreferredSourceRegistry(preferredSourceRegistry);
   const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
@@ -977,6 +984,7 @@ async function main() {
     digestDateKey,
     dueUsersCount: dueUsers.length,
     standardFetchCallsPlanned,
+    scoringConfig: mergedScoringConfig,
   });
 
   writeDigestAuditLog({

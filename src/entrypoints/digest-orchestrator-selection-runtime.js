@@ -47,11 +47,15 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     buildRepetitionNote,
     emitDigestIncident,
     articleAgeTooOld,
+    loadEditorialOverrides,
+    editorialOverridesPath,
+    isUrlExcluded,
+    isDomainSuppressed,
+    getPinsForDate,
   } = deps;
 
   async function selectForEnrichment(params) {
     const {
-      allItems,
       selectionTarget,
       customTags,
       tagPriority,
@@ -61,6 +65,68 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       standardFetchCallsPlanned,
       scoringConfig: paramScoringConfig,
     } = params;
+    let allItems = params.allItems; // must be let — editorial override block reassigns it below
+
+    const todayStr = String(digestDateKey || "").slice(0, 10);
+
+    // Apply editorial overrides: excludes, domain suppressions, and pins.
+    let editorialOverrides = { pins: [], excludes: [], source_suppressions: [] };
+    if (typeof loadEditorialOverrides === "function" && editorialOverridesPath) {
+      editorialOverrides = loadEditorialOverrides(editorialOverridesPath);
+    }
+
+    // Remove excluded URLs
+    const excludedCount = allItems.filter((item) =>
+      isUrlExcluded(String(item?.url || ""), editorialOverrides.excludes, todayStr)
+    ).length;
+    if (excludedCount > 0) {
+      log(`Editorial overrides: excluded ${excludedCount} item(s) by URL`);
+    }
+    allItems = allItems.filter((item) =>
+      !isUrlExcluded(String(item?.url || ""), editorialOverrides.excludes, todayStr)
+    );
+
+    // Remove domain-suppressed items
+    const suppressedCount = allItems.filter((item) => {
+      const domain = String(item?.source_domain || item?.source || "").toLowerCase();
+      return isDomainSuppressed(domain, editorialOverrides.source_suppressions, todayStr);
+    }).length;
+    if (suppressedCount > 0) {
+      log(`Editorial overrides: suppressed ${suppressedCount} item(s) by source domain`);
+    }
+    allItems = allItems.filter((item) => {
+      const domain = String(item?.source_domain || item?.source || "").toLowerCase();
+      return !isDomainSuppressed(domain, editorialOverrides.source_suppressions, todayStr);
+    });
+
+    // Inject pinned items (mark them so selection policy keeps them)
+    const activePins = typeof getPinsForDate === "function"
+      ? getPinsForDate(editorialOverrides.pins, todayStr)
+      : [];
+    if (activePins.length > 0) {
+      const existingUrls = new Set(allItems.map((item) => String(item?.url || "").trim()));
+      let injectedCount = 0;
+      for (const pin of activePins) {
+        const pinUrl = String(pin?.url || "").trim();
+        if (!pinUrl || existingUrls.has(pinUrl)) continue;
+        // Inject as a high-priority synthetic item so it survives scoring
+        allItems.push({
+          url: pinUrl,
+          headline: pin.note || `Pinned: ${pinUrl}`,
+          tag: String(pin.topic || "").trim().toUpperCase() || "__pinned__",
+          _editorial_pin: true,
+          _score: 1.0, // ensures it is not filtered by score
+          source: "editorial-pin",
+          source_domain: "editorial-pin",
+          source_tier: 1,
+        });
+        existingUrls.add(pinUrl);
+        injectedCount += 1;
+      }
+      if (injectedCount > 0) {
+        log(`Editorial overrides: injected ${injectedCount} pinned item(s)`);
+      }
+    }
 
     const crossDayDedupDays = Math.max(1, Number(
       (paramScoringConfig && paramScoringConfig.crossDayDedupDays != null)

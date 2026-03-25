@@ -109,6 +109,12 @@ const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestr
 const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orchestrator-circuit-breaker-runtime");
 const { createDigestOrchestratorAdmissionGateRuntime } = require("./digest-orchestrator-admission-gate-runtime");
 const { loadDigestTuning, mergeDigestTuning } = require("../runtime/digest-tuning-runtime");
+const {
+  loadEditorialOverrides,
+  isUrlExcluded,
+  isDomainSuppressed,
+  getPinsForDate,
+} = require("../digest/domain/editorial-overrides-runtime");
 
 const digestStore = createStore();
 const { initStore, readUser, writeUser, allUsers } = digestStore;
@@ -126,6 +132,7 @@ const SPEND_GUARD_STATE = RUNTIME_PATHS.spendGuardStatePath;
 const CIRCUIT_BREAKER_STATE = RUNTIME_PATHS.circuitBreakerStatePath;
 const INCIDENT_STORE = RUNTIME_PATHS.incidentStorePath;
 const DIGEST_TUNING_PATH = path.join(RUNTIME_PATHS.dataDir || path.join(APP_ROOT, "data"), "digest-tuning.json");
+const EDITORIAL_OVERRIDES_PATH = path.join(RUNTIME_PATHS.dataDir || path.join(APP_ROOT, "data"), "editorial-overrides.json");
 const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP_USD || "1.00");
 const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
 const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
@@ -966,6 +973,12 @@ async function main() {
     buildRepetitionNote,
     emitDigestIncident,
     articleAgeTooOld,
+    // editorial overrides
+    loadEditorialOverrides: (p) => loadEditorialOverrides(p, fs),
+    editorialOverridesPath: EDITORIAL_OVERRIDES_PATH,
+    isUrlExcluded,
+    isDomainSuppressed,
+    getPinsForDate,
   });
   const {
     selected,

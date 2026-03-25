@@ -87,4 +87,23 @@ const {
   console.log("aggregateSourceHealth warning ✓");
 }
 
+// Warning fires even when discovery items exist but rss+official are zero
+{
+  const discoveryOnlyDays = Array.from({ length: 4 }, (_, i) => ({
+    date_et: `2026-03-${20 + i}`,
+    topics: {
+      ENERGY: {
+        candidates: [
+          { lane: "perplexity_discovery", source: "example.com", selected: true },
+        ],
+      },
+    },
+  }));
+  const result = aggregateSourceHealth(discoveryOnlyDays);
+  const warn = result.warnings.find((w) => w.topic === "ENERGY");
+  assert(warn, "ENERGY should warn even when discovery items exist but no rss/official");
+  assert(warn.message.includes("rss/official"), `warning message should mention rss/official: ${warn.message}`);
+  console.log("aggregateSourceHealth discovery-only warning ✓");
+}
+
 console.log("All source-health tests passed ✓");

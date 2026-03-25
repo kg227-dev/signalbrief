@@ -59,33 +59,44 @@ function aggregateSourceHealth(auditDocs) {
         topicStats[tag] = {
           lane_totals: { rss: 0, official: 0, discovery: 0, unknown: 0 },
           miss_days: 0,
+          no_broker_days: 0,
           source_domain_set: new Set(),
         };
       }
       const candidates = Array.isArray(topicData?.candidates) ? topicData.candidates : [];
       if (candidates.length === 0) {
         topicStats[tag].miss_days += 1;
+        topicStats[tag].no_broker_days += 1;
         continue;
       }
+      let dayBrokerCount = 0;
       for (const c of candidates) {
         const lane = classifyLane(c?.lane);
         topicStats[tag].lane_totals[lane] = (topicStats[tag].lane_totals[lane] || 0) + 1;
         globalTotals[lane] = (globalTotals[lane] || 0) + 1;
-        if (c?.source) topicStats[tag].source_domain_set.add(String(c.source));
+        if (c?.source) {
+          let domain = String(c.source).toLowerCase();
+          // Strip scheme and path if it looks like a URL
+          try { domain = new URL(domain).hostname; } catch (_) { /* not a URL, use as-is */ }
+          topicStats[tag].source_domain_set.add(domain);
+        }
+        if (lane === "rss" || lane === "official") dayBrokerCount += 1;
       }
+      if (dayBrokerCount === 0) topicStats[tag].no_broker_days += 1;
     }
   }
 
-  // Build warnings: topic missed >= 3 of the covered days.
+  // Build warnings: topic had zero rss+official items on >= 3 of the covered days.
   const MISS_WARNING_THRESHOLD = 3;
   const warnings = [];
   for (const [tag, stats] of Object.entries(topicStats)) {
-    if (stats.miss_days >= MISS_WARNING_THRESHOLD) {
+    if (stats.no_broker_days >= MISS_WARNING_THRESHOLD) {
       warnings.push({
         topic: tag,
+        no_broker_days: stats.no_broker_days,
         miss_days: stats.miss_days,
         days_covered: docs.length,
-        message: `Topic ${tag} had zero items on ${stats.miss_days}/${docs.length} days — possible source miss`,
+        message: `Topic ${tag} had zero rss/official items on ${stats.no_broker_days}/${docs.length} days — possible source miss`,
       });
     }
   }

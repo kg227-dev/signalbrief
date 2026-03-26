@@ -33,16 +33,15 @@ function computeMaxCustomItems({ configuredMaxCustom, selectionTarget, customTag
 }
 
 function createDigestOrchestratorSelectionRuntime(deps) {
-  const {
-    CONFIG,
-    log,
-    createDigestPolicies,
-    dedupAgainstRecentArchives,
-    buildRecentRepeatIndex,
-    selectItems,
-    loadRecentArchiveItems,
-    loadRecentArchiveByDate,
-    buildRepeatHistory,
+    const {
+      CONFIG,
+      log,
+      createDigestPolicies,
+      dedupAgainstRecentArchives,
+      buildRecentRepeatIndex,
+      selectItems,
+      loadRecentArchiveByDate,
+      buildRepeatHistory,
     filterItemsAgainstHistory,
     buildRepetitionNote,
     emitDigestIncident,
@@ -142,8 +141,10 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       targetCount: selectionTarget,
       minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || depthPolicy.defaultItemCount || 5)),
     });
-    const scheduledDefaultMaxAgeHours = runMode === "scheduled" ? 48 : 72;
-    const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || scheduledDefaultMaxAgeHours);
+    const configuredMaxAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 48);
+    const maxArticleAgeHours = Number.isFinite(configuredMaxAgeHours)
+      ? Math.min(48, Math.max(1, configuredMaxAgeHours))
+      : 48;
     const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;
     const freshItems = dedupRes.items.filter((item) => !ageFilter(item, maxArticleAgeHours));
     const staleRemoved = dedupRes.items.length - freshItems.length;
@@ -307,37 +308,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     }
 
     if (selected.length === 0) {
-      const fallbackPool = loadRecentArchiveItems(5);
-      if (fallbackPool.length > 0) {
-        const scoredFallback = scoreCandidates(fallbackPool, { scoringConfig, nowMs });
-        selected = selectItems(scoredFallback, {
-          maxItems: selectionTarget,
-          maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
-          customTags: [],
-          maxCustomItems: 0,
-          tagPriority,
-          maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
-            ? paramScoringConfig.maxItemsPerSourceDomain
-            : CONFIG.digest.maxItemsPerSourceDomain,
-        });
-        log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
-        await emitDigestIncident(
-          "archive-fallback-engaged",
-          `Live fetch produced zero selectable items; archive fallback selected ${selected.length}`,
-          {
-            mode: runMode,
-            due_users: dueUsersCount,
-            standard_topics: standardFetchCallsPlanned,
-            selected_items: selected.length,
-          }
-        );
-      }
-    }
-
-    if (selected.length === 0) {
       await emitDigestIncident(
         "no-selectable-items",
-        "No selectable items after archive fallback; digest run aborted",
+        "No selectable live items; digest run aborted",
         {
           mode: runMode,
           due_users: dueUsersCount,
@@ -345,7 +318,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           selected_items: 0,
         }
       );
-      throw new Error("No items available from live fetch or archive fallback; digest aborted");
+      throw new Error("No live items available after freshness and selection filters; digest aborted");
     }
 
     log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);

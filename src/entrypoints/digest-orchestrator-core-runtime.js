@@ -963,7 +963,6 @@ async function main() {
     dedupAgainstRecentArchives,
     buildRecentRepeatIndex,
     selectItems,
-    loadRecentArchiveItems,
     loadRecentArchiveByDate,
     buildRepeatHistory,
     filterItemsAgainstHistory,

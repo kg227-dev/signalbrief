@@ -18,13 +18,8 @@ const TERMINAL_RETRY_OUTCOMES = new Set([
 
 function hasScheduledDeliveryChannel(user = {}) {
   const prefs = user.preferences || {};
-  const hasTelegram = !!(
-    user.chatId
-    && !String(user.chatId).startsWith("email-")
-    && prefs.telegram_enabled !== false
-  );
   const hasEmail = !!(user.email && prefs.email_enabled !== false);
-  return hasTelegram || hasEmail;
+  return hasEmail;
 }
 
 function isTerminalRetryOutcome(outcome) {
@@ -70,7 +65,7 @@ function resolveDueUsers(deps) {
 
   let dueUsers;
   if (targetChatId) {
-    dueUsers = allActive.filter((user) => user.chatId === targetChatId);
+    dueUsers = allActive.filter((user) => user.chatId === targetChatId && hasScheduledDeliveryChannel(user));
   } else {
     const todayDOW = Number.isInteger(etNow.todayDOW) ? etNow.todayDOW : now.getDay();
     const catchupWindowMinutes = Math.max(

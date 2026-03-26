@@ -367,7 +367,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       log(`  [pre-sort] ${userItems.map((item) => `${item.tag}(${item.baseScore})`).join(", ")}`);
     }
 
-    userItems = applyTopicRelevanceScores(userItems, user.topics || [], weights, {
+    userItems = applyTopicRelevanceScores(userItems, user.topics || [], {}, {
       specialistMode,
       repeatPenalty,
       isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
@@ -520,7 +520,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         .filter((item) => Number(item?.strategic_value || 0) >= (minStrategicValue * 0.9))
         .sort((a, b) => b.relevanceScore - a.relevanceScore);
       if (emergencyPool.length === 0 && !wasFiltered && !customPrecisionMode) {
-        emergencyPool = applyTopicRelevanceScores(enriched, user.topics || [], weights, {
+        emergencyPool = applyTopicRelevanceScores(enriched, user.topics || [], {}, {
           specialistMode: false,
           repeatPenalty,
           isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),

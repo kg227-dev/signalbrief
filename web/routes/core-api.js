@@ -13,18 +13,6 @@ function sanitizeStringArray(values) {
     .filter(Boolean);
 }
 
-function sanitizeBookmarks(bookmarks) {
-  if (!Array.isArray(bookmarks)) return [];
-  return bookmarks
-    .filter((row) => row && typeof row === "object")
-    .map((row) => ({
-      url: String(row.url || "").trim(),
-      title: String(row.title || "").trim(),
-      date: String(row.date || "").trim(),
-      tag: String(row.tag || "").trim(),
-    }))
-    .filter((row) => row.url);
-}
 
 function sanitizePreferences(preferences) {
   if (!preferences || typeof preferences !== "object" || Array.isArray(preferences)) return {};
@@ -37,12 +25,7 @@ function sanitizePreferences(preferences) {
       .map((value) => Number(value))
       .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
   }
-  if (preferences.items_per_digest != null) {
-    const parsedItems = Number(preferences.items_per_digest);
-    if (Number.isInteger(parsedItems) && parsedItems > 0) out.items_per_digest = parsedItems;
-  }
   if (preferences.email_enabled != null) out.email_enabled = normalizeBooleanLike(preferences.email_enabled);
-  if (preferences.telegram_enabled != null) out.telegram_enabled = normalizeBooleanLike(preferences.telegram_enabled);
   if (preferences.timezone != null) out.timezone = String(preferences.timezone || "").trim();
   if (preferences.consultant_lens_mode != null) out.consultant_lens_mode = normalizeBooleanLike(preferences.consultant_lens_mode);
   return out;
@@ -60,18 +43,6 @@ function normalizeBooleanLike(value) {
   return Boolean(value);
 }
 
-function sanitizeTopicWeights(topicWeights) {
-  if (!topicWeights || typeof topicWeights !== "object" || Array.isArray(topicWeights)) return {};
-  const out = {};
-  for (const [key, value] of Object.entries(topicWeights)) {
-    const tag = String(key || "").trim();
-    if (!tag) continue;
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) continue;
-    out[tag] = numeric;
-  }
-  return out;
-}
 
 function sanitizeSourcePreferences(sp) {
   const normList = (arr) => Array.isArray(arr)
@@ -97,9 +68,7 @@ function buildPublicUserRecord(user) {
     topics: sanitizeStringArray(user.topics),
     custom_keywords: sanitizeStringArray(user.custom_keywords),
     watchlist: sanitizeStringArray(user.watchlist),
-    bookmarks: sanitizeBookmarks(user.bookmarks),
     preferences: sanitizePreferences(user.preferences),
-    topic_weights: sanitizeTopicWeights(user.topic_weights),
     source_preferences: sanitizeSourcePreferences(user.source_preferences),
   };
 }

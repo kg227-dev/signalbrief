@@ -1,5 +1,8 @@
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+
 function createAdminRouteDependencies({ deps, sharedHandlers }) {
   const {
     json,
@@ -68,6 +71,11 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadRetrievalEvalRuns,
     loadRetrievalEvalRun,
     loadRetrievalEvalStatus,
+    digestAuditDir,
+    digestTuningPath,
+    editorialOverridesPath,
+    todayStr,
+    formatEtDateKey,
   } = deps;
   const { handleAdminRunDigest } = sharedHandlers;
 
@@ -139,6 +147,13 @@ function createAdminRouteDependencies({ deps, sharedHandlers }) {
     loadRetrievalEvalRuns,
     loadRetrievalEvalRun,
     loadRetrievalEvalStatus,
+    digestAuditDir,
+    digestTuningPath,
+    editorialOverridesPath,
+    todayStr,
+    fs,
+    path,
+    formatEtDateKey,
   };
 }
 

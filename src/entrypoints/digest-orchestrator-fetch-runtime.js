@@ -6,6 +6,10 @@ const {
   mergeConversionFunnel,
 } = require("../digest/runtime/digest-data-fetch-items-runtime");
 
+// Topics with at least this many broker (RSS/official) candidates skip Perplexity entirely.
+// Set at 2× the per-topic selection target so we always have a full candidate pool without AI search.
+const BROKER_SATURATION_THRESHOLD = 10;
+
 const DEFAULT_SEARCH_BUDGET = Object.freeze({
   scheduled: Object.freeze({
     soft_calls: 24,
@@ -23,33 +27,19 @@ const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
 const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
-const ALL_STANDARD_TOPIC_TAGS = new Set([
-  "HEALTHCARE",
-  "FINANCIAL SERVICES",
-  "PE×M&A",
-  "ENERGY",
-  "CONSUMER",
-  "LIFE SCIENCES",
-  "TECHNOLOGY",
-  "INDUSTRIALS",
-  "REAL ESTATE",
-  "PUBLIC SECTOR",
-  "AI×TECH",
-  "STRATEGY",
-  "POLICY×REGULATORY",
-  "SUSTAINABILITY",
-  "DIGITAL",
-  "M&A ADVISORY",
-  "TALENT",
-]);
+// MVP topic set. POLICY×REGULATORY dropped as standalone — regulatory items surface
+// through sector official sources. CONSUMER & RETAIL and INDUSTRIALS added.
 const PHASE1_STANDARD_TOPIC_TAGS = new Set([
   "HEALTHCARE",
   "LIFE SCIENCES",
   "TECHNOLOGY",
   "ENERGY",
   "FINANCIAL SERVICES",
-  "POLICY×REGULATORY",
+  "CONSUMER & RETAIL",
+  "INDUSTRIALS",
 ]);
+// Alias — all standard-run paths use the same MVP set, preventing drift.
+const ALL_STANDARD_TOPIC_TAGS = PHASE1_STANDARD_TOPIC_TAGS;
 const PHASE1_FOCUS_STANDARD_TOPIC_TAGS = new Set([
   "TECHNOLOGY",
   "ENERGY",
@@ -86,11 +76,11 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "oil gas LNG refinery energy markets capex strategy last 48 hours",
     "transformer transmission data center load energy reliability last 48 hours",
   ]),
-  CONSUMER: Object.freeze([
+  "CONSUMER & RETAIL": Object.freeze([
     "retail earnings pricing promotion store traffic consumer demand Reuters WSJ last 48 hours",
     "consumer brand strategy supply chain tariff pricing last 48 hours",
     "ecommerce marketplace retail media grocery apparel last 48 hours",
-    "restaurant grocery apparel retail restructuring last 48 hours",
+    "restaurant grocery apparel retail restructuring antitrust FTC last 48 hours",
   ]),
   "LIFE SCIENCES": Object.freeze([
     "FDA approval clinical trial pharma licensing biotech STAT Fierce last 48 hours",
@@ -170,20 +160,20 @@ const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
   starlink: Object.freeze(["TECHNOLOGY", "PUBLIC SECTOR"]),
 });
 const TRACKED_DEEP_STANDARD_TAGS = new Set([
-  "STRATEGY",
   "HEALTHCARE",
-  "ENERGY",
   "LIFE SCIENCES",
   "TECHNOLOGY",
-  "POLICY×REGULATORY",
-  "SUSTAINABILITY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
+  "CONSUMER & RETAIL",
+  "INDUSTRIALS",
 ]);
 const FULL_EXHAUST_STANDARD_TAGS = new Set([
-  "STRATEGY",
   "HEALTHCARE",
   "LIFE SCIENCES",
   "TECHNOLOGY",
-  "POLICY×REGULATORY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
 ]);
 const TRACKED_DEEP_CUSTOM_SLUGS = new Set([
   "custom_nvidia",
@@ -1524,7 +1514,35 @@ function createDigestOrchestratorFetchRuntime(deps) {
       markBudgetStop(budgetTracker, "hard_cap_reached");
     }
 
-    await runScheduledBatch(allowedPhase1States, (state) => {
+    // Phase 0 (broker-first): Run RSS/official broker before Perplexity so direct-feed
+    // candidates are available before any AI search calls are made.
+    // Topics that reach BROKER_SATURATION_THRESHOLD candidates skip Perplexity entirely.
+    let brokerDiagnostics = null;
+    if (standardTopicBroker && standardStates.length > 0) {
+      const brokerResult = await standardTopicBroker.fetchBrokerCandidates({
+        topicStates: standardStates,
+        retrievedAt: new Date().toISOString(),
+        maxAgeHours: Number(digestConfig.maxArticleAgeHours || (targetChatId ? 72 : 48)),
+      });
+      brokerDiagnostics = brokerResult?.diagnostics || null;
+      for (const state of standardStates) {
+        const tag = String(state?.topic?.tag || "").trim().toUpperCase();
+        const brokerItems = Array.isArray(brokerResult?.topicItems?.[tag]) ? brokerResult.topicItems[tag] : [];
+        if (brokerItems.length > 0) {
+          mergeBrokerItemsIntoState(state, brokerItems, normalizeUrlForDedup, itemEligibilityFn, annotateFetched);
+        }
+      }
+      const brokerSaturated = standardStates.filter((s) => Number(s.brokerItemCount || 0) >= BROKER_SATURATION_THRESHOLD);
+      if (brokerSaturated.length > 0) {
+        logger(`Broker-first: ${brokerSaturated.length} topic(s) reached saturation threshold (${BROKER_SATURATION_THRESHOLD}), skipping Perplexity: ${brokerSaturated.map((s) => s.topic.tag).join(", ")}`);
+      }
+    }
+    // Filter Perplexity phase1 to topics that are not already broker-saturated.
+    const perplexityEligiblePhase1States = allowedPhase1States.filter(
+      (state) => Number(state.brokerItemCount || 0) < BROKER_SATURATION_THRESHOLD
+    );
+
+    await runScheduledBatch(perplexityEligiblePhase1States, (state) => {
       if ((state.preferredDomains || []).length > 0) {
         return buildPreferredInvocation(state, state.nextPreferredQueryIndex);
       }
@@ -1746,22 +1764,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const customFetchCalls = customStates.reduce((sum, state) => {
       return sum + Number(state?.apiCalls || 0);
     }, 0);
-    let brokerDiagnostics = null;
-    if (standardTopicBroker && standardStates.length > 0) {
-      const brokerResult = await standardTopicBroker.fetchBrokerCandidates({
-        topicStates: standardStates,
-        retrievedAt: new Date().toISOString(),
-        maxAgeHours: Number(digestConfig.maxArticleAgeHours || (targetChatId ? 72 : 48)),
-      });
-      brokerDiagnostics = brokerResult?.diagnostics || null;
-      for (const state of standardStates) {
-        const tag = String(state?.topic?.tag || "").trim().toUpperCase();
-        const brokerItems = Array.isArray(brokerResult?.topicItems?.[tag]) ? brokerResult.topicItems[tag] : [];
-        if (brokerItems.length > 0) {
-          mergeBrokerItemsIntoState(state, brokerItems, normalizeUrlForDedup, itemEligibilityFn, annotateFetched);
-        }
-      }
-    }
+    // brokerDiagnostics was set in Phase 0 (broker-first block above).
     const standardItems = standardStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
     const customItems = customStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
     let allItems = customItems.concat(standardItems);

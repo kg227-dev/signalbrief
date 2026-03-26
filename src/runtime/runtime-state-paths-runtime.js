@@ -125,6 +125,18 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.recoveryQueuePath || readEnvValue(env, "SIGNALBRIEF_RECOVERY_QUEUE_PATH"),
     path.join(dataDir, "recovery-queue.json")
   );
+  const digestAuditDir = resolveOptionalPath(
+    options.digestAuditDir || readEnvValue(env, "SIGNALBRIEF_DIGEST_AUDIT_DIR"),
+    path.join(dataDir, "digest-audit")
+  );
+  const digestTuningPath = resolveOptionalPath(
+    options.digestTuningPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_TUNING_PATH"),
+    path.join(dataDir, "digest-tuning.json")
+  );
+  const editorialOverridesPath = resolveOptionalPath(
+    options.editorialOverridesPath || readEnvValue(env, "SIGNALBRIEF_EDITORIAL_OVERRIDES_PATH"),
+    path.join(dataDir, "editorial-overrides.json")
+  );
 
   return {
     appRoot,
@@ -151,6 +163,9 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     circuitBreakerStatePath,
     incidentStorePath,
     recoveryQueuePath,
+    digestAuditDir,
+    digestTuningPath,
+    editorialOverridesPath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
   };
@@ -287,6 +302,9 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "circuitBreakerStatePath", path: paths.circuitBreakerStatePath, kind: "file" },
     { key: "incidentStorePath", path: paths.incidentStorePath, kind: "file" },
     { key: "recoveryQueuePath", path: paths.recoveryQueuePath, kind: "file" },
+    { key: "digestAuditDir", path: paths.digestAuditDir, kind: "dir" },
+    { key: "digestTuningPath", path: paths.digestTuningPath, kind: "file" },
+    { key: "editorialOverridesPath", path: paths.editorialOverridesPath, kind: "file" },
   ];
 }
 

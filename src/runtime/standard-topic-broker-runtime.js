@@ -8,13 +8,16 @@ const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
+// MVP topic set: 7 topics. POLICY×REGULATORY dropped as standalone; regulatory items
+// surface through sector-specific official sources tagged to their relevant topics.
 const PHASE1_TOPIC_TAGS = new Set([
   "HEALTHCARE",
   "LIFE SCIENCES",
   "TECHNOLOGY",
   "ENERGY",
   "FINANCIAL SERVICES",
-  "POLICY×REGULATORY",
+  "CONSUMER & RETAIL",
+  "INDUSTRIALS",
 ]);
 const ALLOWED_LANES = new Set(["perplexity_discovery", "publisher_feed", "official"]);
 const ALLOWED_SOURCE_KINDS = new Set(["reported_media", "trade_specialist", "primary_official"]);
@@ -266,9 +269,15 @@ function sanitizeSource(source) {
   if (!id || !ALLOWED_LANES.has(lane) || !ALLOWED_SOURCE_KINDS.has(sourceKind) || !ALLOWED_PARSERS.has(parser) || !ALLOWED_CONTENT_KINDS.has(contentKind) || !endpoint || topicTags.length <= 0) {
     return null;
   }
+  // Tier: 1=gold (always trusted), 2=good (reliable trade/official), 3=supplemental.
+  // Used by the scoring formula: source_tier weight 0.35.
+  const tierRaw = Number(entry.tier);
+  const tier = (tierRaw === 1 || tierRaw === 2 || tierRaw === 3) ? tierRaw : 2;
+
   return {
     id,
     enabled: entry.enabled !== false,
+    tier,
     lane,
     topic_tags: topicTags,
     family,
@@ -607,7 +616,11 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       source_type: String(source?.source_kind || "").trim().toLowerCase(),
       source_policy: "preferred",
       source_authority: Number(baseAuthority.toFixed(3)),
-      source_tier: String(source?.lane || "").trim() === "official" ? "strong" : "strong",
+      // source_tier carries the numeric tier (1/2/3) from the registry.
+      // Used by scoring formula. Official sources default to tier 1 if not specified.
+      source_tier: Number(source?.tier) === 1 || Number(source?.tier) === 2 || Number(source?.tier) === 3
+        ? Number(source.tier)
+        : (String(source?.lane || "").trim() === "official" ? 1 : 2),
       content_kind: String(source?.content_kind || "article").trim().toLowerCase(),
       broker_source_id: source?.id || null,
       broker_source_family: source?.family || null,

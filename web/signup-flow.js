@@ -8,7 +8,6 @@
   var currentStep = 0;
   var direction = 1; // 1 = forward, -1 = backward
   var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  var MAX_CUSTOM = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
 
   var requestHelpers = typeof IndexHelpers.createRequestHelpers === "function"
     ? IndexHelpers.createRequestHelpers()
@@ -53,15 +52,6 @@
     return Array.from(document.querySelectorAll(".topic-chip.selected"))
       .map(function(c) { return c.dataset.topic; })
       .filter(Boolean);
-  }
-
-  function isCustomTopic(topic) {
-    if (typeof Prefs.isCustomTopic === "function") return Prefs.isCustomTopic(topic);
-    return String(topic || "").startsWith("custom_");
-  }
-
-  function customCount() {
-    return selectedTopicKeys().filter(isCustomTopic).length;
   }
 
   /* ── Dark mode ── */
@@ -192,9 +182,7 @@
   async function advanceStep0() {
     clearError(0);
     clearFieldError("email-error");
-    clearFieldError("telegram-error");
     setInputError("email", false);
-    setInputError("telegram", false);
 
     var name = (byId("name").value || "").trim();
     var email = (byId("email").value || "").trim();
@@ -206,15 +194,12 @@
     if (btn) { btn.disabled = true; btn.textContent = "Checking\u2026"; }
 
     try {
-      var telegram = (byId("telegram").value || "").trim();
       var response = await fetch("/api/check-availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email, telegram: telegram || null }),
+        body: JSON.stringify({ email: email }),
       });
       var result = response.ok ? await response.json() : {};
-
-      var hasConflict = false;
 
       if (result.emailTaken) {
         setInputError("email", true);
@@ -227,16 +212,7 @@
           var capturedEmail = email;
           sendBtn.addEventListener("click", function() { sendMagicLinkInline(capturedEmail); });
         }
-        hasConflict = true;
-      }
-
-      if (result.telegramTaken) {
-        setInputError("telegram", true);
-        showFieldError("telegram-error", "That Telegram username is already linked to another account.");
-        hasConflict = true;
-      }
-
-      if (!hasConflict) {
+      } else {
         goToStep(1);
       }
     } catch (err) {
@@ -270,6 +246,7 @@
     }
 
     function addGroup(label, topics, chipClass) {
+      if (!topics.length) return; // skip empty groups (no capabilities in MVP)
       var heading = document.createElement("div");
       heading.className = "topic-group-label";
       heading.textContent = label;
@@ -288,8 +265,8 @@
       grid.appendChild(wrap);
     }
 
-    addGroup("Industries", industries, "topic-chip-industry");
-    addGroup("Capabilities", capabilities, "topic-chip-capability");
+    addGroup("Sectors", industries, "topic-chip-industry");
+    if (capabilities.length) addGroup("Capabilities", capabilities, "topic-chip-capability");
   }
 
   function toggleTopic(chip) {
@@ -299,15 +276,6 @@
     if (isSelected) {
       chip.classList.remove("selected");
       if (prefState) prefState.removeTopic(topic);
-      // Remove custom chip entirely
-      if (isCustomTopic(topic)) {
-        chip.remove();
-        var customGrid = byId("customChipsGrid");
-        var customSection = byId("customGroupSection");
-        if (customSection && customGrid && customGrid.children.length === 0) {
-          customSection.style.display = "none";
-        }
-      }
     } else {
       chip.classList.add("selected");
       if (prefState) prefState.addTopic(topic);
@@ -316,81 +284,17 @@
   }
 
   function updateTopicFeedback() {
+    // No custom keywords in MVP — feedback is only shown when < 2 topics selected
     var fb = byId("topicFeedback");
     if (!fb) return;
-    var cc = customCount();
-    if (cc >= MAX_CUSTOM) {
-      fb.textContent = "You can track up to " + MAX_CUSTOM + " custom keywords.";
+    var count = selectedTopicKeys().length;
+    if (count > 0 && count < 2) {
+      fb.textContent = "Select at least 2 sectors to continue.";
       fb.className = "topic-feedback visible";
     } else {
       fb.textContent = "";
       fb.className = "topic-feedback";
     }
-  }
-
-  function addCustomTopic() {
-    var input = byId("customTopic");
-    var raw = (input.value || "").trim();
-    if (!raw) return;
-
-    if (customCount() >= MAX_CUSTOM) {
-      var fb = byId("topicFeedback");
-      if (fb) {
-        fb.textContent = "Maximum " + MAX_CUSTOM + " custom keywords reached.";
-        fb.className = "topic-feedback visible error";
-      }
-      return;
-    }
-
-    var key = typeof Prefs.topicKeyFromInput === "function"
-      ? Prefs.topicKeyFromInput(raw, { matchDefault: true })
-      : "custom_" + raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
-    if (!key) return;
-
-    // Check duplicates
-    var existing = document.querySelector('.topic-chip[data-topic="' + key + '"]');
-    if (existing) {
-      if (!existing.classList.contains("selected")) {
-        existing.classList.add("selected");
-        if (prefState) prefState.addTopic(key);
-      }
-      input.value = "";
-      updateTopicFeedback();
-      return;
-    }
-
-    // Check if it matched a default topic
-    var defaults = Array.isArray(Prefs.DEFAULT_TOPICS) ? Prefs.DEFAULT_TOPICS : [];
-    if (defaults.includes(key)) {
-      var defChip = document.querySelector('.topic-chip[data-topic="' + key + '"]');
-      if (defChip && !defChip.classList.contains("selected")) {
-        defChip.classList.add("selected");
-        if (prefState) prefState.addTopic(key);
-      }
-      input.value = "";
-      updateTopicFeedback();
-      return;
-    }
-
-    // Create custom chip
-    var label = typeof Prefs.topicDisplayLabel === "function" ? Prefs.topicDisplayLabel(key) : raw;
-    var chip = document.createElement("div");
-    chip.className = "topic-chip topic-chip-custom selected";
-    chip.dataset.topic = key;
-    chip.innerHTML = '<span class="check"></span> ' + label;
-    chip.addEventListener("click", function() { toggleTopic(chip); });
-
-    // Insert into dedicated custom chips container
-    var customSection = byId("customGroupSection");
-    var customGrid = byId("customChipsGrid");
-    if (customSection) customSection.style.display = "block";
-    if (customGrid) customGrid.appendChild(chip);
-    else if (byId("topicGrid")) byId("topicGrid").appendChild(chip);
-    if (prefState) prefState.addTopic(key);
-
-    input.value = "";
-    updateTopicFeedback();
   }
 
   /* ── Depth ── */
@@ -452,16 +356,6 @@
     if (wk) wk.addEventListener("click", function() { setDayCircles([1,2,3,4,5]); });
     if (ev) ev.addEventListener("click", function() { setDayCircles([0,1,2,3,4,5,6]); });
 
-    // Size toggle
-    var pills = document.querySelectorAll(".size-pill");
-    pills.forEach(function(pill) {
-      pill.addEventListener("click", function() {
-        pills.forEach(function(p) { p.classList.remove("selected"); });
-        pill.classList.add("selected");
-        if (prefState) prefState.setItemsPerDigest(Number(pill.dataset.size));
-      });
-    });
-
     // Delivery time
     var timeSelect = byId("deliveryTime");
     if (timeSelect) {
@@ -496,9 +390,6 @@
     var isEvery = days.length === 7;
     var daysText = isEvery ? "Every day" : (isWeekdays ? "Weekdays" : dayLabels.join(", "));
 
-    var sizePill = document.querySelector(".size-pill.selected");
-    var itemsText = sizePill ? sizePill.dataset.size + " items" : "5 items";
-
     card.innerHTML =
       '<div class="review-row"><span class="review-label">Name</span><span class="review-value">' + escapeHtml(name) + '</span></div>' +
       '<div class="review-row"><span class="review-label">Email</span><span class="review-value">' + escapeHtml(email) + '</span></div>' +
@@ -506,7 +397,7 @@
       '<div class="review-row"><span class="review-label">Depth</span><span class="review-value">' + escapeHtml(depthLabel) + '</span></div>' +
       '<div class="review-row"><span class="review-label">Delivery</span><span class="review-value">' + escapeHtml(timeLabel) + '</span></div>' +
       '<div class="review-row"><span class="review-label">Days</span><span class="review-value">' + escapeHtml(daysText) + '</span></div>' +
-      '<div class="review-row"><span class="review-label">Items</span><span class="review-value">' + escapeHtml(itemsText) + '</span></div>';
+      '<div class="review-row"><span class="review-label">Items per topic</span><span class="review-value">5 signals</span></div>';
   }
 
   function escapeHtml(str) {
@@ -523,7 +414,6 @@
 
     var name = (byId("name").value || "").trim();
     var email = (byId("email").value || "").trim();
-    var telegram = (byId("telegram").value || "").trim();
     var topics = selectedTopicKeys();
     var deliveryTime = (byId("deliveryTime").value || "07:00");
     var days = getSelectedDays();
@@ -531,8 +421,6 @@
 
     var depthEl = document.querySelector(".depth-card.selected");
     var depth = depthEl ? depthEl.dataset.depth : "headline_plus_why";
-    var sizePill = document.querySelector(".size-pill.selected");
-    var itemsPerDigest = sizePill ? Number(sizePill.dataset.size) : 5;
 
     // Sync prefState
     if (prefState) {
@@ -540,7 +428,7 @@
       prefState.setDepth(depth);
       prefState.setDeliveryTime(deliveryTime);
       prefState.setDays(days);
-      prefState.setItemsPerDigest(itemsPerDigest);
+      prefState.setItemsPerDigest(5); // MVP: always 5
     }
 
     var payload;
@@ -549,7 +437,7 @@
         state: prefState,
         name: name,
         email: email,
-        telegram: telegram,
+        telegram: null,
         referralToken: referralToken,
       });
     } else {
@@ -558,13 +446,12 @@
       payload = {
         name: name,
         email: email,
-        telegram: telegram.replace(/^@+/, "") || null,
         topics: topics,
         depth: depth,
         delivery_time: deliveryTime,
         frequency: freq,
         days_of_week: days,
-        items_per_digest: itemsPerDigest,
+        items_per_digest: 5,
         referral_token: referralToken || null,
       };
     }
@@ -656,17 +543,8 @@
       })(j);
     }
 
-    // Custom topic
-    var addBtn = byId("addCustomBtn");
-    if (addBtn) addBtn.addEventListener("click", addCustomTopic);
-
-    var customInput = byId("customTopic");
-    if (customInput) customInput.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") { e.preventDefault(); addCustomTopic(); }
-    });
-
     // Enter key to advance on step 0 inputs
-    ["name", "email", "telegram"].forEach(function(id) {
+    ["name", "email"].forEach(function(id) {
       var input = byId(id);
       if (input) input.addEventListener("keydown", function(e) {
         if (e.key === "Enter") { e.preventDefault(); advanceStep0(); }

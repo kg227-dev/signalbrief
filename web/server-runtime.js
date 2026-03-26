@@ -432,6 +432,11 @@ const {
   loadRetrievalEvalRun: (runId) => adminRetrievalEvalRuntime.loadRun(runId),
   loadRetrievalEvalStatus: () => adminRetrievalEvalRuntime.loadStatus(),
   getAdminActor,
+  digestAuditDir: runtimePaths.digestAuditDir,
+  digestTuningPath: runtimePaths.digestTuningPath,
+  editorialOverridesPath: runtimePaths.editorialOverridesPath,
+  todayStr: new Date().toISOString().slice(0, 10),
+  formatEtDateKey: toEtDateKey,
 });
 const handleDomainRoute = createRouteBootstrapHandler({
   handleCoreApiRoute,

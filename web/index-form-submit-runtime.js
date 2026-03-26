@@ -93,7 +93,7 @@
         showSubmitError("Please select at least 2 topics.");
         return;
       }
-      const maxCustomKeywords = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+      const maxCustomKeywords = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
       const customCount = topics.filter((topic) => (
         typeof Prefs.isCustomTopic === "function"
           ? Prefs.isCustomTopic(topic)

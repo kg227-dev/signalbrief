@@ -12,7 +12,7 @@ const darkModeHelpers = typeof IndexHelpersRuntime.createDarkModeHelpers === "fu
   : null;
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
 const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
-const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+const MAX_CUSTOM_KEYWORDS = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",

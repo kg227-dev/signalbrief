@@ -75,30 +75,6 @@ body {
   margin-bottom: 14px;
 }
 
-.mode-toggle {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #F3F4F6;
-  padding: 3px;
-  margin-bottom: 14px;
-}
-.mode-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.mode-btn.active {
-  background: #FFFFFF;
-  color: var(--text);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-}
-
 .search-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -278,25 +254,6 @@ body {
   color: var(--text-light);
   white-space: nowrap;
 }
-.bookmark-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: #9CA3AF;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.bookmark-btn.active {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
-}
 .signal-headline {
   font-size: 17px;
   font-weight: 600;
@@ -382,14 +339,6 @@ mark {
   font-size: 14px;
   line-height: 1.6;
 }
-
-.toast {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #B91C1C;
-  display: none;
-}
-.toast.visible { display: block; }
 
 /* Gate */
 .gate-view { display: none; }
@@ -489,8 +438,6 @@ body.dark {
 body.dark .gate-card { background: var(--card); }
 body.dark .search-input { background: var(--card); color: var(--text); }
 body.dark .sort-select { background: var(--card); color: var(--text); }
-body.dark .mode-toggle { background: #2a2622; }
-body.dark .mode-btn.active { background: #3a3630; color: var(--text); }
 body.dark .panel { background: var(--card); border-color: var(--border); }
 #darkToggle {
   position: fixed; top: 16px; right: 16px; z-index: 999;
@@ -566,11 +513,6 @@ body.dark .panel { background: var(--card); border-color: var(--border); }
 
   <div id="mainView" class="view-main">
     <div class="controls panel">
-      <div class="mode-toggle" role="tablist" aria-label="Feed mode">
-        <button type="button" class="mode-btn active" data-mode="all">All signals</button>
-        <button type="button" class="mode-btn" data-mode="bookmarks">My bookmarks (<span id="bookmarkTabCount">0</span>)</button>
-      </div>
-
       <div class="search-row">
         <div class="search-wrap">
           <input id="searchInput" class="search-input" type="text" placeholder="Search headlines, summaries, and analysis…" autocomplete="off">
@@ -618,7 +560,6 @@ body.dark .panel { background: var(--card); border-color: var(--border); }
         </div>
       </div>
 
-      <div id="actionToast" class="toast"></div>
     </div>
 
     <div id="resultsFeed" class="results-feed"></div>
@@ -631,12 +572,10 @@ body.dark .panel { background: var(--card); border-color: var(--border); }
 const state = {
   token: null,
   allItems: [],
-  bookmarks: new Set(),
   expanded: new Set(),
   searchText: "",
   sort: "newest",
   pageSize: "25",
-  mode: "all",
   dateRange: "all",
   selectedTags: new Set(),
   selectedSources: new Set(),
@@ -776,31 +715,6 @@ function highlightHtml(html, query) {
   return template.innerHTML;
 }
 
-function toast(message) {
-  const el = document.getElementById("actionToast");
-  if (!el) return;
-  if (!message) {
-    el.classList.remove("visible");
-    el.textContent = "";
-    return;
-  }
-  el.textContent = message;
-  el.classList.add("visible");
-  setTimeout(() => {
-    if (el.textContent === message) toast("");
-  }, 2200);
-}
-
-function updateBookmarkTab() {
-  const archiveUrls = new Set(
-    state.allItems
-      .map((item) => normalizeUrl(item && item.url))
-      .filter(Boolean)
-  );
-  const count = Array.from(state.bookmarks).filter((url) => archiveUrls.has(url)).length;
-  document.getElementById("bookmarkTabCount").textContent = String(count);
-}
-
 function buildFacetCounts() {
   const tagMap = new Map();
   const sourceMap = new Map();
@@ -902,9 +816,6 @@ function matchesDateRange(item) {
 function applyFilters() {
   const query = state.searchText.trim().toLowerCase();
   const filtered = state.allItems.filter((item) => {
-    const bookmarked = state.bookmarks.has(normalizeUrl(item.url));
-    if (state.mode === "bookmarks" && !bookmarked) return false;
-
     if (query) {
       const haystack = [
         item.headline,
@@ -960,15 +871,6 @@ function renderMeta() {
 
 function renderEmptyState() {
   const feed = document.getElementById("resultsFeed");
-  if (state.mode === "bookmarks" && state.bookmarks.size === 0) {
-    feed.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-title">No bookmarks yet</div>
-        <p class="empty-sub">You haven't bookmarked any signals yet. Hit 🔖 on any item to save it for later.</p>
-      </div>`;
-    return;
-  }
-
   if (state.allItems.length === 0) {
     feed.innerHTML = `
       <div class="empty-state">
@@ -999,7 +901,6 @@ function renderResults() {
   feed.innerHTML = state.visibleItems.map((item, idx) => {
     const key = makeItemKey(item);
     state.keyToItem.set(key, item);
-    const bookmarked = state.bookmarks.has(normalizeUrl(item.url));
     const expanded = state.expanded.has(key);
 
     const safeWim = sanitizeWimHtml(item.wim || "");
@@ -1015,7 +916,6 @@ function renderResults() {
           <span class="${tagClasses.join(" ")}">${esc(item.tag || "UNTAGGED")}</span>
           <div class="signal-top-right">
             <span class="signal-date">${esc(formatDateShort(item.date))}</span>
-            <button type="button" class="bookmark-btn${bookmarked ? " active" : ""}" data-action="bookmark" data-key="${esc(key)}" aria-pressed="${bookmarked ? "true" : "false"}">🔖</button>
           </div>
         </div>
         <h3 class="signal-headline">${highlightText(item.headline, query)}</h3>
@@ -1038,70 +938,6 @@ function renderResults() {
 function renderAll() {
   applyFilters();
   renderResults();
-  updateBookmarkTab();
-}
-
-async function persistBookmark(action, item) {
-  const payload = JSON.stringify({
-    token: state.token,
-    action,
-    item: {
-      date: item.date,
-      headline: item.headline,
-      url: item.url,
-      tag: item.tag,
-      source: item.source,
-    },
-  });
-
-  const endpoints = ["/api/bookmarks", "/api/bookmarks/"];
-  let lastError = null;
-
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-
-      const text = await res.text();
-      let body = {};
-      try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
-
-      if (res.ok && !body.error) return;
-      lastError = new Error(body.error || (res.status === 404 ? "bookmark route unavailable" : "Bookmark update failed"));
-
-      // If the first endpoint 404s, try the trailing-slash variant before failing.
-      if (res.status === 404) continue;
-      throw lastError;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error("Bookmark update failed");
-}
-
-async function toggleBookmark(key) {
-  const item = state.keyToItem.get(key);
-  if (!item || !item.url) return;
-  const normalized = normalizeUrl(item.url);
-  const currently = state.bookmarks.has(normalized);
-
-  if (currently) state.bookmarks.delete(normalized);
-  else state.bookmarks.add(normalized);
-
-  renderAll();
-
-  try {
-    await persistBookmark(currently ? "remove" : "add", item);
-  } catch (err) {
-    if (currently) state.bookmarks.add(normalized);
-    else state.bookmarks.delete(normalized);
-    renderAll();
-    toast(err.message || "Could not update bookmark");
-  }
 }
 
 function toggleAnalysis(key) {
@@ -1151,16 +987,6 @@ function bindEvents() {
     renderAll();
   });
 
-  document.querySelectorAll(".mode-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.mode = btn.dataset.mode === "bookmarks" ? "bookmarks" : "all";
-      document.querySelectorAll(".mode-btn").forEach((node) => {
-        node.classList.toggle("active", node === btn);
-      });
-      renderAll();
-    });
-  });
-
   document.getElementById("dateFilters").addEventListener("click", (event) => {
     const btn = event.target.closest("[data-range]");
     if (!btn) return;
@@ -1191,11 +1017,6 @@ function bindEvents() {
     const analysisBtn = event.target.closest("[data-action='analysis']");
     if (analysisBtn) {
       toggleAnalysis(analysisBtn.dataset.key || "");
-      return;
-    }
-    const bookmarkBtn = event.target.closest("[data-action='bookmark']");
-    if (bookmarkBtn) {
-      toggleBookmark(bookmarkBtn.dataset.key || "");
     }
   });
 
@@ -1443,12 +1264,7 @@ async function init() {
       ? `${possessiveLabel(firstName)} Signal Search`
       : "Your Signal Search";
   }
-  const userBookmarks = Array.isArray(userData.bookmarks) ? userData.bookmarks : [];
   state.customTagKeys = buildCustomTopicTagSet(userData);
-  userBookmarks.forEach((b) => {
-    const normalized = normalizeUrl(b && b.url);
-    if (normalized) state.bookmarks.add(normalized);
-  });
 
   buildFacetCounts();
   renderTagFilters();

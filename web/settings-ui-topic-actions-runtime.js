@@ -71,33 +71,12 @@
       updateSelectedSummary();
     }
 
-    function renderChip(topic, selected, weight) {
+    function renderChip(topic, selected) {
       const chip = document.createElement("div");
       const custom = isCustomTopic(topic);
       chip.className = `chip${selected ? " selected" : ""}${custom ? " chip-custom" : ""}`;
       chip.dataset.topic = topic;
       chip.innerHTML = `<span class="chip-check">✓</span> ${topicDisplayLabel(topic)}`;
-
-      if (typeof weight === "number" && Math.abs(weight) >= 1) {
-        const badge = document.createElement("button");
-        badge.type = "button";
-        badge.className = weight >= 1 ? "weight-badge weight-badge--up" : "weight-badge weight-badge--down";
-        badge.textContent = weight >= 1 ? "↑" : "↓";
-        badge.title = "Click to reset this topic's weight";
-        badge.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const token = globalScope._signalBriefToken;
-          if (!token) return;
-          fetch("/api/settings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, topic_weights: { [topic]: 0 } }),
-          }).then(() => {
-            badge.remove();
-          }).catch(() => {});
-        });
-        chip.appendChild(badge);
-      }
 
       chip.addEventListener("click", () => {
         if (!prefState) return;
@@ -117,27 +96,26 @@
       return el;
     }
 
-    function renderChips(userTopics, topicWeights) {
+    function renderChips(userTopics) {
       const container = byId("topicGrid");
       if (!container || !prefState) return;
 
       const normalizedUserTopics = Array.isArray(userTopics) ? userTopics.map(String) : [];
-      const weights = (topicWeights && typeof topicWeights === "object" && !Array.isArray(topicWeights)) ? topicWeights : {};
       prefState.setTopics(normalizedUserTopics);
       container.innerHTML = "";
 
       container.appendChild(renderGroupLabel("Industries"));
       INDUSTRY_TOPICS.forEach((topic) => {
-        container.appendChild(renderChip(topic, prefState.hasTopic(topic), weights[topic]));
+        container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
       });
 
       container.appendChild(renderGroupLabel("Capabilities"));
       CAPABILITY_TOPICS.forEach((topic) => {
-        container.appendChild(renderChip(topic, prefState.hasTopic(topic), weights[topic]));
+        container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
       });
 
       prefState.getTopics().filter(isCustomTopic).forEach((topic) => {
-        container.appendChild(renderChip(topic, true, weights[topic]));
+        container.appendChild(renderChip(topic, true));
       });
 
       updateTopicNote();

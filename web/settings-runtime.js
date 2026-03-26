@@ -13,7 +13,7 @@ const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS)
 const DEFAULT_TOPICS = Array.isArray(Prefs.DEFAULT_TOPICS)
   ? Prefs.DEFAULT_TOPICS
   : [];
-const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+const MAX_CUSTOM_KEYWORDS = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
 
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({

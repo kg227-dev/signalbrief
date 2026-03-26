@@ -36,9 +36,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     loadRecentSentDigests,
     loadAllCurrentRecords,
     digestRetryStateRuntime,
-    sendTelegram,
-    formatTelegram,
-    buildDigestInlineKeyboard,
     generateLeadSubjectLine,
     generateEditorialNote,
     buildEmail,
@@ -682,45 +679,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
           });
-        }
-
-        if (user.chatId && !user.chatId.startsWith("email-") && prefs.telegram_enabled !== false) {
-          attemptedChannelCount += 1;
-          const userTelegram = formatTelegram(deliveryItems, shortDate, user, {
-            digestQuality,
-            learningSummary,
-            publicDigestUrl,
-          });
-          const userKeyboard = buildDigestInlineKeyboard(deliveryItems);
-          try {
-            await sendTelegram(userTelegram, user.chatId, { reply_markup: userKeyboard });
-            const eventOutcome = appendEngagementEventChecked({
-              event_type: "digest_sent",
-              event_key: `digest_sent:${userDigestId}:${deliveryMode}:v${deliveryRecordVersion}:telegram`,
-              date_et: digestDateKey,
-              user_chat_id: String(user.chatId),
-              user_email: user.email || null,
-              digest_id: userDigestId,
-              run_id: runId,
-              channel: "telegram",
-              source: deliveryEventSource,
-              metadata: {
-                item_count: deliveryItems.length,
-                depth,
-                delivery_mode: deliveryMode,
-                delivery_version: deliveryRecordVersion,
-                quality_score: digestQuality.score,
-                quality_band: digestQuality.band,
-                quality_components: digestQuality.components,
-                items: eventItems,
-              },
-            }, { scope: "digest", context: `digest_sent:telegram:${user.email || user.chatId}`, log });
-            if (!eventOutcome.ok) engagementWriteFailures += 1;
-            delivered = true;
-            deliveredChannels.push("telegram");
-          } catch (err) {
-            log(`⚠️ Telegram delivery failed for ${user.email || user.chatId}: ${err.message}`);
-          }
         }
 
         if (user.email && prefs.email_enabled !== false) {

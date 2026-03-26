@@ -2,8 +2,6 @@ const { normalizeUserRecord } = require("../../src/platform/store");
 const { normalizeTopicsForUserInput } = require("./topic-normalization-runtime");
 
 const WEEKDAY_DAYS = Object.freeze([1, 2, 3, 4, 5]);
-const ITEMS_PER_DIGEST_MIN = 5;
-const ITEMS_PER_DIGEST_MAX = 5; // MVP: always 5
 
 function deriveFrequencyFromDays(days) {
   if (!Array.isArray(days) || days.length === 0) return "daily_weekday";
@@ -12,19 +10,6 @@ function deriveFrequencyFromDays(days) {
     return "daily_weekday";
   }
   return "custom";
-}
-
-function normalizeItemsPerDigest(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return { ok: false, error: "preferences.items_per_digest must be a positive number" };
-  }
-
-  // Settings UI exposes 5 and 10; normalize API writes to the same supported buckets.
-  const bounded = Math.min(ITEMS_PER_DIGEST_MAX, Math.max(ITEMS_PER_DIGEST_MIN, parsed));
-  const midpoint = (ITEMS_PER_DIGEST_MIN + ITEMS_PER_DIGEST_MAX) / 2;
-  const normalized = bounded <= midpoint ? ITEMS_PER_DIGEST_MIN : ITEMS_PER_DIGEST_MAX;
-  return { ok: true, itemsPerDigest: normalized };
 }
 
 function normalizeDaysOfWeek(value) {
@@ -76,15 +61,6 @@ function sanitizePreferencesPatch(rawPreferences) {
       continue;
     }
 
-    if (key === "items_per_digest") {
-      const itemsResult = normalizeItemsPerDigest(value);
-      if (!itemsResult.ok) {
-        return itemsResult;
-      }
-      patch.items_per_digest = itemsResult.itemsPerDigest;
-      continue;
-    }
-
     if (key === "days_of_week") {
       const daysResult = normalizeDaysOfWeek(value);
       if (!daysResult.ok) {
@@ -101,9 +77,6 @@ function sanitizePreferencesPatch(rawPreferences) {
       patch[key] = value;
       continue;
     }
-
-    // telegram_enabled: silently accepted but ignored for email-only MVP
-    if (key === "telegram_enabled") continue;
 
     return { ok: false, error: `preferences.${key} is not allowed` };
   }
@@ -170,26 +143,7 @@ function createSettingsHandler({
       safeBody.topics = topicsResult.topics;
     }
 
-    if (safeBody.topic_weights != null) {
-      const tw = safeBody.topic_weights;
-      if (typeof tw !== "object" || Array.isArray(tw)) {
-        return json(res, { error: "topic_weights must be an object" }, 400);
-      }
-      const patch = {};
-      for (const [key, val] of Object.entries(tw)) {
-        const tag = String(key || "").trim();
-        if (!tag) continue;
-        const n = Number(val);
-        patch[tag] = Number.isFinite(n) ? Math.max(-5, Math.min(5, n)) : 0;
-      }
-      // Merge patch: 0 = remove key, otherwise set value
-      const merged = { ...(existing.topic_weights || {}) };
-      for (const [tag, val] of Object.entries(patch)) {
-        if (val === 0) delete merged[tag];
-        else merged[tag] = val;
-      }
-      safeBody.topic_weights = merged;
-    }
+    delete safeBody.topic_weights; // deprecated — ignored in email-only MVP
 
     if (safeBody.source_preferences != null) {
       const sp = safeBody.source_preferences;

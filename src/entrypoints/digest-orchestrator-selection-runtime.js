@@ -142,7 +142,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       targetCount: selectionTarget,
       minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || depthPolicy.defaultItemCount || 5)),
     });
-    const scheduledDefaultMaxAgeHours = runMode === "scheduled" ? 48 : 72;
+    const scheduledDefaultMaxAgeHours = 48; // email-only MVP: universal 48h max age regardless of run mode
     const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || scheduledDefaultMaxAgeHours);
     const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;
     const freshItems = dedupRes.items.filter((item) => !ageFilter(item, maxArticleAgeHours));
@@ -307,29 +307,30 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     }
 
     if (selected.length === 0) {
+      if (runMode === "scheduled") {
+        await emitDigestIncident(
+          "no-live-items-scheduled",
+          "Scheduled run produced zero live selectable items; aborting (no archive rescue on scheduled runs)",
+          { mode: runMode, due_users: dueUsersCount, standard_topics: standardFetchCallsPlanned }
+        );
+        throw new Error("No live items on scheduled run; digest aborted (no archive rescue)");
+      }
+      // Non-scheduled (manual/on-demand) runs may still use archive fallback.
       const fallbackPool = loadRecentArchiveItems(5);
       if (fallbackPool.length > 0) {
-        const scoredFallback = scoreCandidates(fallbackPool, { scoringConfig, nowMs });
-        selected = selectItems(scoredFallback, {
+        selected = selectItems(fallbackPool, {
           maxItems: selectionTarget,
           maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
           customTags: [],
           maxCustomItems: 0,
           tagPriority,
-          maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
-            ? paramScoringConfig.maxItemsPerSourceDomain
-            : CONFIG.digest.maxItemsPerSourceDomain,
+          maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
         });
         log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
         await emitDigestIncident(
           "archive-fallback-engaged",
           `Live fetch produced zero selectable items; archive fallback selected ${selected.length}`,
-          {
-            mode: runMode,
-            due_users: dueUsersCount,
-            standard_topics: standardFetchCallsPlanned,
-            selected_items: selected.length,
-          }
+          { mode: runMode, due_users: dueUsersCount, standard_topics: standardFetchCallsPlanned, selected_items: selected.length }
         );
       }
     }

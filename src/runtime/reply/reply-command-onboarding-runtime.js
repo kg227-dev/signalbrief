@@ -69,7 +69,7 @@ function createOnboardingCommandHandlers(deps) {
         const wasInactive = (match.status || USER_STATUS.ACTIVE) !== USER_STATUS.ACTIVE;
         const refreshed = refreshActiveTelegramUser(chatId, match);
         const lead = wasInactive ? "✅ Re-activated and linked." : "✅ Already linked.";
-        await send(chatId, `${lead} Your digest arrives at *${formatDeliveryTime(refreshed.preferences)}* on weekdays.\n\n💾 save [#] · 📊 more/less [topic] · ⚙️ /settings`);
+        await send(chatId, `${lead} Your digest arrives at *${formatDeliveryTime(refreshed.preferences)}* on weekdays by email.\n\nUse ⚙️ /settings to manage your topics and delivery time.`);
         return;
       }
 
@@ -83,7 +83,7 @@ function createOnboardingCommandHandlers(deps) {
       const refreshed = refreshActiveTelegramUser(chatId, user);
       if (refreshed.digests_received > 0) {
         const intro = wasInactive ? "✅ You're active again." : "Welcome back!";
-        await send(chatId, `${intro} You've received *${refreshed.digests_received}* digests so far.\n\nUse /settings to update your preferences or /bookmarks to see saved items.`);
+        await send(chatId, `${intro} You've received *${refreshed.digests_received}* digests so far.\n\nUse /settings to update your preferences.`);
         return;
       }
       await send(
@@ -97,7 +97,7 @@ function createOnboardingCommandHandlers(deps) {
     }
 
     if (user.digests_received > 0) {
-      await send(chatId, `Welcome back! You've received *${user.digests_received}* digests so far.\n\nUse /settings to update your preferences or /bookmarks to see saved items.`);
+      await send(chatId, `Welcome back! You've received *${user.digests_received}* digests so far.\n\nUse /settings to update your preferences.`);
       return;
     }
 
@@ -138,7 +138,7 @@ function createOnboardingCommandHandlers(deps) {
       await send(
         chatId,
         `✅ *Linked, ${firstName}!* Your existing account is now connected to Telegram.\n\n`
-          + `Digest arrives at *${formatDeliveryTime(existing.preferences)}*. Or:\n⚡ /digest · 💾 save [#] · ⚙️ /settings`,
+          + `Digest arrives at *${formatDeliveryTime(existing.preferences)}* by email.\nUse ⚙️ /settings to manage your topics and delivery time.`,
       );
       return;
     }
@@ -195,7 +195,7 @@ function createOnboardingCommandHandlers(deps) {
       "✅ *You're in!*\n\n"
         + "Sending your first digest now — 7 signals across strategy, AI, and business.\n\n"
         + `🔗 [Manage preferences](${settingsUrl})\n\n`
-        + "💾 save [#] · 📊 more/less [topic] · ⚙️ /settings",
+        + "Email-only MVP mode is active. Use ⚙️ /settings to manage your topics and delivery time.",
     );
   }
 

@@ -5,6 +5,7 @@ const path = require("path");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
+const { normalizeTopicToken } = require("../digest/domain/topic-domain-runtime");
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
@@ -158,6 +159,187 @@ function normalizeFeedLink(rawValue, baseUrl) {
 
 function normalizeTopicTag(value) {
   return String(value || "").trim().toUpperCase();
+}
+
+const BROKER_TOPIC_KEYWORDS = Object.freeze({
+  [normalizeTopicToken("HEALTHCARE")]: Object.freeze([
+    "healthcare",
+    "hospital",
+    "health system",
+    "medicare",
+    "medicaid",
+    "payer",
+    "provider",
+    "physician",
+    "clinic",
+    "patient",
+    "care delivery",
+    "reimbursement",
+    "medical device",
+  ]),
+  [normalizeTopicToken("LIFE SCIENCES")]: Object.freeze([
+    "life sciences",
+    "biotech",
+    "biopharma",
+    "pharma",
+    "pharmaceutical",
+    "drug",
+    "therapy",
+    "therapeutic",
+    "clinical trial",
+    "trial",
+    "phase 1",
+    "phase 2",
+    "phase 3",
+    "biologic",
+    "molecule",
+  ]),
+  [normalizeTopicToken("TECHNOLOGY")]: Object.freeze([
+    "technology",
+    "software",
+    "artificial intelligence",
+    "ai",
+    "semiconductor",
+    "chip",
+    "cloud",
+    "cyber",
+    "privacy",
+    "data",
+    "platform",
+    "app",
+    "digital",
+    "saas",
+  ]),
+  [normalizeTopicToken("ENERGY")]: Object.freeze([
+    "energy",
+    "oil",
+    "gas",
+    "utility",
+    "utilities",
+    "power",
+    "grid",
+    "solar",
+    "wind",
+    "battery",
+    "transmission",
+    "pipeline",
+    "renewable",
+    "nuclear",
+    "electricity",
+  ]),
+  [normalizeTopicToken("FINANCIAL SERVICES")]: Object.freeze([
+    "financial services",
+    "bank",
+    "banking",
+    "lender",
+    "lending",
+    "credit",
+    "payments",
+    "payment",
+    "capital markets",
+    "securities",
+    "asset manager",
+    "fintech",
+    "insurance",
+    "brokerage",
+    "consumer lending",
+    "private equity",
+  ]),
+  [normalizeTopicToken("CONSUMER & RETAIL")]: Object.freeze([
+    "consumer",
+    "retail",
+    "retailer",
+    "grocery",
+    "restaurant",
+    "ecommerce",
+    "e commerce",
+    "apparel",
+    "beauty",
+    "brand",
+    "shopper",
+    "checkout",
+    "loyalty program",
+    "marketplace",
+    "pricing",
+  ]),
+  [normalizeTopicToken("INDUSTRIALS")]: Object.freeze([
+    "industrial",
+    "manufacturing",
+    "factory",
+    "logistics",
+    "freight",
+    "transportation",
+    "aerospace",
+    "defense",
+    "auto",
+    "automotive",
+    "airline",
+    "rail",
+    "supply chain",
+  ]),
+});
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasBrokerWordBoundary(text, token) {
+  const haystack = String(text || "").trim();
+  const needle = String(token || "").trim();
+  if (!haystack || !needle) return false;
+  return new RegExp(`(?:^|\\s)${escapeRegExp(needle)}(?:\\s|$)`, "i").test(haystack);
+}
+
+function matchesBrokerKeyword(text, keyword) {
+  const normalizedKeyword = normalizeTopicToken(keyword);
+  if (!normalizedKeyword) return false;
+  if (String(text || "").includes(normalizedKeyword)) return true;
+  const tokens = normalizedKeyword.split(" ").filter(Boolean);
+  return tokens.length > 1 && tokens.every((token) => hasBrokerWordBoundary(text, token));
+}
+
+function scoreBestFitTopicTag(topicTag, text) {
+  const topicToken = normalizeTopicToken(topicTag);
+  if (!topicToken || !text) return 0;
+
+  let score = 0;
+  if (String(text).includes(topicToken)) score += 8;
+
+  for (const token of topicToken.split(" ").filter(Boolean)) {
+    if (token.length <= 2 && !["ai"].includes(token)) continue;
+    if (hasBrokerWordBoundary(text, token)) score += 2;
+  }
+
+  const keywords = BROKER_TOPIC_KEYWORDS[topicToken] || [];
+  for (const keyword of keywords) {
+    if (!matchesBrokerKeyword(text, keyword)) continue;
+    score += normalizeTopicToken(keyword).includes(" ") ? 4 : 3;
+  }
+
+  return score;
+}
+
+function chooseBestFitTopicTag(topicTags, item = {}) {
+  const candidates = Array.from(new Set((Array.isArray(topicTags) ? topicTags : []).map(normalizeTopicTag).filter(Boolean)));
+  if (candidates.length <= 1) return candidates[0] || "";
+
+  const text = normalizeTopicToken([
+    item?.headline,
+    item?.summary,
+    item?.canonical_url,
+    item?.url,
+  ].filter(Boolean).join(" "));
+
+  let bestTag = candidates[0];
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const score = scoreBestFitTopicTag(candidate, text);
+    if (score > bestScore) {
+      bestTag = candidate;
+      bestScore = score;
+    }
+  }
+  return bestTag;
 }
 
 function safeJsonParse(rawValue) {
@@ -630,13 +812,13 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       diagnostics.stale_count += 1;
       continue;
     }
-    for (const tag of (Array.isArray(source?.topic_tags) ? source.topic_tags : [])) {
-      items.push({
-        ...itemBase,
-        tag,
-      });
-      diagnostics.retained_count += 1;
-    }
+    const bestFitTag = chooseBestFitTopicTag(source?.topic_tags, itemBase);
+    if (!bestFitTag) continue;
+    items.push({
+      ...itemBase,
+      tag: bestFitTag,
+    });
+    diagnostics.retained_count += 1;
   }
   return {
     items,

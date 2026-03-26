@@ -447,7 +447,7 @@ async function testFetchDropsAmbiguousSameHostMismatch() {
   assert.strictEqual(result.items.length, 0);
 }
 
-async function testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsNothing() {
+async function testStandardTopicsDoNotRetainThinSearchMetadataWithoutResolvedEvidence() {
   const fetchRuntime = createDigestDataFetchRuntime({
     CONFIG: {
       keys: { perplexity: "test-key" },
@@ -490,11 +490,9 @@ async function testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsN
     },
   });
 
-  assert.strictEqual(result.items.length, 1);
-  assert.strictEqual(result.items[0].retrieval_from_search_evidence, true);
-  assert.strictEqual(result.items[0].url, "https://techcrunch.com/2026/03/22/ai-chip-demand-is-reshaping-data-center-strategy/");
-  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_candidate_count, 2);
-  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_retained_count, 1);
+  assert.strictEqual(result.items.length, 0);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_candidate_count, 0);
+  assert.strictEqual(result.diagnostics.conversion_funnel.search_evidence_retained_count, 0);
 }
 
 async function testStandardTopicsResolveTrustedEvidenceUrlsDirectlyWhenSearchMetadataIsThin() {
@@ -628,7 +626,7 @@ async function testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProvid
   await testBroadOnlyModeSkipsSearchFilter();
   await testFetchReplacesUnsupportedSlugWithSingleEvidenceUrl();
   await testFetchDropsAmbiguousSameHostMismatch();
-  await testStandardTopicsRescueTrustedSearchEvidenceWhenProviderReturnsNothing();
+  await testStandardTopicsDoNotRetainThinSearchMetadataWithoutResolvedEvidence();
   await testStandardTopicsResolveTrustedEvidenceUrlsDirectlyWhenSearchMetadataIsThin();
   await testStandardTopicsPreferFreshTrustedSearchEvidenceOverStaleProviderItems();
 })().catch((error) => {

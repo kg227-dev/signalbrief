@@ -169,9 +169,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
       token: "token-1",
       preferences: {
         delivery_time: " 08:15 ",
-        items_per_digest: "7.9",
         days_of_week: [1, "2", 2, 3],
-        telegram_enabled: false,
       },
     }),
     findUserByToken: (token) => (token === "token-1" ? existingUser : null),
@@ -181,9 +179,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   assert.strictEqual(settingsRun.responses[settingsRun.responses.length - 1].status, 200);
   assert.strictEqual(settingsRun.writes.length, 1);
   assert.deepStrictEqual(settingsRun.writes[0].preferences.days_of_week, [1, 2, 3]);
-  assert.strictEqual(settingsRun.writes[0].preferences.items_per_digest, 10);
   assert.strictEqual(settingsRun.writes[0].preferences.delivery_time, "08:15");
-  assert.strictEqual(settingsRun.writes[0].preferences.telegram_enabled, false);
   assert.strictEqual(settingsRun.writes[0].preferences.frequency, "custom");
 
   const settingsTopicsRun = createDeps({

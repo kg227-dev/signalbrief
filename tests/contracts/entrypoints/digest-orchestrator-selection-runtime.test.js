@@ -52,19 +52,39 @@ assertModuleExports(() => runtime, TARGET_REL);
       urlKeys: new Set(["u"]),
       headlineKeys: new Set(),
     }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({
+      items: items.slice(),
+      suppressedCount: 0,
+      suppressedFrequentCount: 0,
+      streaks: [],
+    }),
+    buildRepetitionNote: () => "Repeat handling active",
     selectItems: (items) => items.slice(0, 2),
-    loadRecentArchiveItems: () => [],
     emitDigestIncident: async (...args) => {
       incidents.push(args);
     },
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
   });
 
   const selectedOut = await selectionRuntime.selectForEnrichment({
-    allItems: [{ id: 1 }, { id: 2 }, { id: 3 }],
+    allItems: [
+      { id: 1, url: "https://example.com/1", published_date: "2026-03-26T10:00:00.000Z" },
+      { id: 2, url: "https://example.com/2", published_date: "2026-03-26T09:00:00.000Z" },
+      { id: 3, url: "https://example.com/3", published_date: "2026-03-26T08:00:00.000Z" },
+    ],
     selectionTarget: 5,
     customTags: ["GLP-1"],
-    tagPriority: { strategy: 1 },
+    tagPriority: { technology: 1 },
     runMode: "scheduled",
+    digestDateKey: "2026-03-26",
     dueUsersCount: 2,
     standardFetchCallsPlanned: 17,
   });
@@ -78,42 +98,6 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.ok(logs.some((line) => line.includes("Cross-day dedup removed")));
   assert.ok(logs.some((line) => line.includes("Freshness penalty active")));
   assert.strictEqual(incidents.length, 0);
-
-  const fallbackIncidents = [];
-  const fallbackRuntime = createDigestOrchestratorSelectionRuntime({
-    CONFIG: {
-      digest: {
-        crossDayDedupDays: 3,
-        minBackfillItemsAfterDedup: 3,
-        maxItemsPerTag: 2,
-        maxItemsPerSourceDomain: 2,
-      },
-    },
-    log: () => {},
-    createDigestPolicies: () => ({
-      rankingPolicy: { repeatPenalty: 0, minBaseScoreForFinal: 6.5 },
-      depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
-    }),
-    dedupAgainstRecentArchives: (items) => ({ items: items.slice(), removed: 0, archive_days_used: 3, backfilled: 0 }),
-    buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
-    selectItems: (items) => (items.some((row) => row.from === "fallback") ? items.slice(0, 1) : []),
-    loadRecentArchiveItems: () => [{ from: "fallback" }, { from: "fallback" }],
-    emitDigestIncident: async (type) => {
-      fallbackIncidents.push(type);
-    },
-  });
-
-  const fallbackOut = await fallbackRuntime.selectForEnrichment({
-    allItems: [{ from: "live" }],
-    selectionTarget: 3,
-    customTags: [],
-    tagPriority: {},
-    runMode: "scheduled",
-    dueUsersCount: 1,
-    standardFetchCallsPlanned: 17,
-  });
-  assert.strictEqual(fallbackOut.selected.length, 1);
-  assert.deepStrictEqual(fallbackIncidents, ["archive-fallback-engaged"]);
 
   const failIncidents = [];
   const failRuntime = createDigestOrchestratorSelectionRuntime({
@@ -132,11 +116,21 @@ assertModuleExports(() => runtime, TARGET_REL);
     }),
     dedupAgainstRecentArchives: () => ({ items: [], removed: 0, archive_days_used: 3, backfilled: 0 }),
     buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: () => ({ items: [], suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
     selectItems: () => [],
-    loadRecentArchiveItems: () => [],
     emitDigestIncident: async (type) => {
       failIncidents.push(type);
     },
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
   });
 
   await assert.rejects(
@@ -146,10 +140,11 @@ assertModuleExports(() => runtime, TARGET_REL);
       customTags: [],
       tagPriority: {},
       runMode: "scheduled",
+      digestDateKey: "2026-03-26",
       dueUsersCount: 1,
       standardFetchCallsPlanned: 17,
     }),
-    /No items available from live fetch or archive fallback/
+    /No live items available after freshness and selection filters; digest aborted/
   );
   assert.deepStrictEqual(failIncidents, ["no-selectable-items"]);
 })();

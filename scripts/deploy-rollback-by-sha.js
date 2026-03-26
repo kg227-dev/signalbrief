@@ -29,7 +29,7 @@ function printHelp() {
       "  --artifact-name <file.json>             Explicit artifact name",
       "  --host <host> --user <user> --key <key>",
       "  --remote-dir <dir> --remote-tmp-dir <dir>",
-      "  --services \"web bot worker\"",
+      "  --services \"web worker\"",
       "  --skip-build --skip-remote-verify --skip-public-verify",
       "  --verify-attempts <n> --verify-delay-ms <ms>",
       "  --emergency-source-build                Use legacy source-build rollback path",

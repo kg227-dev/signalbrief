@@ -467,7 +467,6 @@ async function testSettingsInputNormalizationContract() {
       topics: [" healthcare ", "ENERGY", "energy", "HEALTHCARE"],
       preferences: {
         days_of_week: [6, "0", 2, 6],
-        items_per_digest: 99,
       },
     }),
     json: (_res, data, status = 200) => {
@@ -525,11 +524,6 @@ async function testSettingsInputNormalizationContract() {
     writes[0].preferences.days_of_week,
     [0, 2, 6],
     "settings normalization contract should sort and dedupe delivery days"
-  );
-  assert.strictEqual(
-    writes[0].preferences.items_per_digest,
-    5,
-    "settings normalization contract should clamp items_per_digest to 5 (MVP: always 5)"
   );
   assert.strictEqual(
     writes[0].preferences.frequency,

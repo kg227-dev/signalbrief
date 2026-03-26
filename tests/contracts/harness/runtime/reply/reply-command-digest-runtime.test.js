@@ -14,7 +14,7 @@ const runtime = require(TARGET_PATH);
 const { createDigestCommandHandler } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
-async function testCooldownResponseAndTriggerOptions() {
+async function testEmailOnlyMvpDisablesTriggering() {
   const sent = [];
   const triggerCalls = [];
   const state = {
@@ -38,10 +38,11 @@ async function testCooldownResponseAndTriggerOptions() {
   });
 
   await handler.handleDigest("123");
-  assert.strictEqual(triggerCalls.length, 1);
-  assert.strictEqual(triggerCalls[0].enforceOnDemandCooldown, true, "/digest should enforce persistent cooldown");
-  assert.ok(sent[0].includes("Pulling your digest now"), "handler should acknowledge requested digest");
-  assert.ok(sent[sent.length - 1].includes("Try again in 2 mins"), "cooldown response should include remaining minutes");
+  assert.strictEqual(triggerCalls.length, 0, "email-only MVP should not trigger targeted Telegram digest runs");
+  assert.ok(
+    sent[0].includes("Email-only MVP mode is active"),
+    "handler should explain that Telegram on-demand digests are disabled"
+  );
   assert.strictEqual(state.digestInflight.size, 0, "inflight set should be cleared after response");
 }
 
@@ -70,12 +71,16 @@ async function testInFlightGuardAndSuccessPath() {
 
   state.digestInflight.clear();
   await handler.handleDigest("123");
-  assert.strictEqual(triggerCalls, 1, "successful path should trigger digest runner");
+  assert.strictEqual(triggerCalls, 0, "email-only MVP should not trigger the digest runner after inflight clears");
+  assert.ok(
+    sent[sent.length - 1].includes("Email-only MVP mode is active"),
+    "post-inflight response should still explain the email-only behavior"
+  );
   assert.strictEqual(state.digestInflight.size, 0, "inflight state should be cleared on success");
 }
 
 (async () => {
-  await testCooldownResponseAndTriggerOptions();
+  await testEmailOnlyMvpDisablesTriggering();
   await testInFlightGuardAndSuccessPath();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

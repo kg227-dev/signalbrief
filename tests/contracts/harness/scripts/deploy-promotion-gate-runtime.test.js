@@ -52,7 +52,7 @@ try {
     sha: "abc1234",
     host: "10.0.0.2",
     publicUrl: "https://staging.getsignalbrief.com",
-    services: ["web", "bot", "worker"],
+    services: ["web", "worker"],
     publicVerificationPassed: true,
     completedAt,
   }, { artifactPath });

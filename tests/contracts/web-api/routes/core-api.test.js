@@ -144,8 +144,16 @@ async function invoke(handler, { method, pathname, search = "" }) {
     const body = JSON.parse(res.body);
     assert.strictEqual(body.chatId, "123");
     assert.strictEqual(body.email, "user@example.com");
-    assert.strictEqual(body.preferences.items_per_digest, 7);
-    assert.strictEqual(body.topic_weights["AI×TECH"], 2);
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(body.preferences, "items_per_digest"),
+      false,
+      "public user record should not expose deprecated items_per_digest"
+    );
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(body, "topic_weights"),
+      false,
+      "public user record should not expose deprecated topic weights"
+    );
     assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "token"), false);
     assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "admin"), false);
   }
@@ -171,7 +179,11 @@ async function invoke(handler, { method, pathname, search = "" }) {
     assert.strictEqual(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.strictEqual(body.preferences.email_enabled, false);
-    assert.strictEqual(body.preferences.telegram_enabled, false);
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(body.preferences, "telegram_enabled"),
+      false,
+      "public user record should not expose deprecated telegram_enabled"
+    );
     assert.strictEqual(body.preferences.consultant_lens_mode, true);
   }
 

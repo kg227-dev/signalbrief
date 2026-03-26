@@ -9,16 +9,12 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 const source = fs.readFileSync(TARGET_PATH, "utf8");
 
 assert.ok(
-  /bot:\n[\s\S]*depends_on:\n[\s\S]*web:\n[\s\S]*condition: service_healthy/m.test(source),
-  "bot should wait for healthy web service before start"
-);
-assert.ok(
   /worker:\n[\s\S]*depends_on:\n[\s\S]*web:\n[\s\S]*condition: service_healthy/m.test(source),
   "worker should wait for healthy web service before start"
 );
 assert.ok(
-  /bot:\n[\s\S]*healthcheck:[\s\S]*bot-server\.js/m.test(source),
-  "bot should define an explicit process healthcheck"
+  !/^\s{2}bot:\s*$/m.test(source),
+  "email-only MVP compose should not define a bot service"
 );
 assert.ok(
   /worker:\n[\s\S]*healthcheck:[\s\S]*scheduler-heartbeat\.json/m.test(source),

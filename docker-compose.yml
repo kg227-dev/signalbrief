@@ -32,36 +32,6 @@ services:
       retries: 3
       start_period: 15s
 
-  bot:
-    <<: *app-image
-    command: ["node", "src/entrypoints/bot-server.js"]
-    env_file:
-      - .env
-    environment:
-      - NODE_ENV=production
-      - SIGNALBRIEF_STORE_BACKEND=${SIGNALBRIEF_STORE_BACKEND:-file}
-      - SIGNALBRIEF_SQLITE_PATH=${SIGNALBRIEF_SQLITE_PATH:-/app/data/signalbrief.sqlite}
-      - SIGNALBRIEF_STORE_CANARY_CHAT_IDS=${SIGNALBRIEF_STORE_CANARY_CHAT_IDS:-}
-      - SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES=${SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES:-1}
-    volumes:
-      - ./config.json:/app/config.json:ro
-      - ./data:/app/data
-      - ./archive:/app/archive
-    init: true
-    depends_on:
-      web:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >
-          node -e "const fs=require('fs');const cmd=fs.readFileSync('/proc/1/cmdline','utf8');process.exit(cmd.includes('src/entrypoints/bot-server.js')?0:1);"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
   worker:
     <<: *app-image
     command: ["node", "src/entrypoints/scheduler-worker.js"]

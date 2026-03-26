@@ -950,7 +950,7 @@ async function main() {
         "  --registry-user <registry-user>",
         "  --archive-sha <commit-sha> (legacy alias for --deploy-sha)",
         "  --target-env <production|staging>",
-        "  --services \"web bot worker\"",
+        "  --services \"web worker\"",
         "  --staging-artifact-path <path>",
         "  --staging-artifact-max-age-minutes <n>",
         "  --release-windows-et <spec>",
@@ -1008,7 +1008,7 @@ async function main() {
     DEFAULT_STAGING_ARTIFACT_MAX_AGE_MINUTES
   );
 
-  const serviceListRaw = readOption(options, "services") || process.env.DEPLOY_SERVICES || "web bot worker";
+  const serviceListRaw = readOption(options, "services") || process.env.DEPLOY_SERVICES || "web worker";
   const services = parseServiceList(serviceListRaw);
   if (services.length === 0) fail("no deploy services provided");
 

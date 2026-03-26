@@ -24,22 +24,22 @@ assertModuleExports(() => runtime, TARGET_REL);
       { tag: "HEALTHCARE", queries: ["a", "b"] },
       { tag: "LIFE SCIENCES", queries: ["c", "d"] },
       { tag: "TECHNOLOGY", queries: ["e", "f"] },
-      { tag: "STRATEGY", queries: ["g", "h"] },
-      { tag: "POLICY×REGULATORY", queries: ["i", "j"] },
-      { tag: "ENERGY", queries: ["k", "l"] },
+      { tag: "FINANCIAL SERVICES", queries: ["g", "h"] },
+      { tag: "ENERGY", queries: ["i", "j"] },
+      { tag: "CONSUMER & RETAIL", queries: ["k", "l"] },
     ],
     dueUsers: [
-      { topics: ["HEALTHCARE", "STRATEGY"] },
+      { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
       { topics: ["LIFE SCIENCES", "HEALTHCARE"] },
-      { topics: ["TECHNOLOGY", "AI×TECH"] },
-      { topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"] },
+      { topics: ["TECHNOLOGY", "INDUSTRIALS"] },
+      { topics: ["ENERGY", "CONSUMER & RETAIL"] },
     ],
     runMode: "standard_core",
     log: () => {},
   });
   assert.deepStrictEqual(
     focusedTopics.map((topic) => topic.tag),
-    ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "STRATEGY", "POLICY×REGULATORY"]
+    ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "FINANCIAL SERVICES", "ENERGY"]
   );
 
   const standardTopicRunTopics = resolveTopicsToFetch({
@@ -47,21 +47,21 @@ assertModuleExports(() => runtime, TARGET_REL);
       { tag: "HEALTHCARE", queries: ["a", "b"] },
       { tag: "FINANCIAL SERVICES", queries: ["c", "d"] },
       { tag: "TECHNOLOGY", queries: ["e", "f"] },
-      { tag: "AI×TECH", queries: ["g", "h"] },
-      { tag: "TALENT", queries: ["i", "j"] },
+      { tag: "CONSUMER & RETAIL", queries: ["g", "h"] },
+      { tag: "INDUSTRIALS", queries: ["i", "j"] },
     ],
     dueUsers: [
-      { topics: ["HEALTHCARE", "STRATEGY"] },
-      { topics: ["FINANCIAL SERVICES", "M&A ADVISORY"] },
-      { topics: ["TECHNOLOGY", "AI×TECH"] },
-      { topics: ["TALENT", "PUBLIC SECTOR"] },
+      { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
+      { topics: ["FINANCIAL SERVICES", "INDUSTRIALS"] },
+      { topics: ["TECHNOLOGY", "CONSUMER & RETAIL"] },
+      { topics: ["INDUSTRIALS", "CONSUMER & RETAIL"] },
     ],
     runMode: "standard_topics",
     log: () => {},
   });
   assert.deepStrictEqual(
     standardTopicRunTopics.map((topic) => topic.tag),
-    ["HEALTHCARE", "FINANCIAL SERVICES", "TECHNOLOGY", "AI×TECH", "TALENT"]
+    ["HEALTHCARE", "FINANCIAL SERVICES", "TECHNOLOGY", "CONSUMER & RETAIL", "INDUSTRIALS"]
   );
 
   const standardPhase1Topics = resolveTopicsToFetch({
@@ -71,24 +71,23 @@ assertModuleExports(() => runtime, TARGET_REL);
       { tag: "ENERGY", queries: ["e", "f"] },
       { tag: "LIFE SCIENCES", queries: ["g", "h"] },
       { tag: "TECHNOLOGY", queries: ["i", "j"] },
-      { tag: "POLICY×REGULATORY", queries: ["k", "l"] },
-      { tag: "AI×TECH", queries: ["m", "n"] },
-      { tag: "STRATEGY", queries: ["o", "p"] },
+      { tag: "CONSUMER & RETAIL", queries: ["k", "l"] },
+      { tag: "INDUSTRIALS", queries: ["m", "n"] },
     ],
     dueUsers: [
-      { topics: ["HEALTHCARE", "STRATEGY"] },
-      { topics: ["FINANCIAL SERVICES", "M&A ADVISORY"] },
+      { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
+      { topics: ["FINANCIAL SERVICES", "INDUSTRIALS"] },
       { topics: ["ENERGY", "SUSTAINABILITY"] },
       { topics: ["LIFE SCIENCES", "HEALTHCARE"] },
-      { topics: ["TECHNOLOGY", "AI×TECH"] },
-      { topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"] },
+      { topics: ["TECHNOLOGY", "CONSUMER & RETAIL"] },
+      { topics: ["CONSUMER & RETAIL", "INDUSTRIALS"] },
     ],
     runMode: "standard_phase1",
     log: () => {},
   });
   assert.deepStrictEqual(
     standardPhase1Topics.map((topic) => topic.tag),
-    ["HEALTHCARE", "FINANCIAL SERVICES", "ENERGY", "LIFE SCIENCES", "TECHNOLOGY", "POLICY×REGULATORY"]
+    ["HEALTHCARE", "FINANCIAL SERVICES", "ENERGY", "LIFE SCIENCES", "TECHNOLOGY", "CONSUMER & RETAIL", "INDUSTRIALS"]
   );
 
   const uncappedCustomHeavy = resolveCustomTopicSlugs({
@@ -113,8 +112,8 @@ assertModuleExports(() => runtime, TARGET_REL);
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
       topics: [
-        { tag: "AI×TECH", queries: ["a"] },
-        { tag: "STRATEGY", queries: ["b"] },
+        { tag: "TECHNOLOGY", queries: ["a"] },
+        { tag: "FINANCIAL SERVICES", queries: ["b"] },
       ],
       digest: {
         itemCount: 7,
@@ -145,8 +144,8 @@ assertModuleExports(() => runtime, TARGET_REL);
       return {
         apiCalls: 1,
         items: [
-          { headline: `${topic.tag} standard one`, tag: topic.tag, source: topic.tag === "AI×TECH" ? "theinformation.com" : "wsj.com" },
-          { headline: `${topic.tag} standard two`, tag: topic.tag, source: topic.tag === "AI×TECH" ? "reuters.com" : "wsj.com" },
+          { headline: `${topic.tag} standard one`, tag: topic.tag, source: topic.tag === "TECHNOLOGY" ? "theinformation.com" : "wsj.com" },
+          { headline: `${topic.tag} standard two`, tag: topic.tag, source: topic.tag === "TECHNOLOGY" ? "reuters.com" : "wsj.com" },
         ],
         diagnostics: {
           provider: "perplexity",
@@ -154,8 +153,8 @@ assertModuleExports(() => runtime, TARGET_REL);
           preferred_fallback_triggered: false,
           preferred_pass_item_count: 2,
           broad_pass_item_count: 0,
-          search_result_domains: topic.tag === "AI×TECH" ? ["theinformation.com", "reuters.com"] : ["wsj.com", "reuters.com"],
-          preferred_search_result_domains: topic.tag === "AI×TECH" ? ["theinformation.com"] : ["wsj.com"],
+          search_result_domains: topic.tag === "TECHNOLOGY" ? ["theinformation.com", "reuters.com"] : ["wsj.com", "reuters.com"],
+          preferred_search_result_domains: topic.tag === "TECHNOLOGY" ? ["theinformation.com"] : ["wsj.com"],
           preferred_search_result_hit_count: 1,
           preferred_search_results_without_preferred_item: false,
         },
@@ -163,10 +162,10 @@ assertModuleExports(() => runtime, TARGET_REL);
     },
     buildPreferredDomainShortlist: ({ topicTag, dueUserTopics }) => {
       shortlistCalls.push({ topicTag, dueUserTopics });
-      if (String(topicTag).toUpperCase() === "AI×TECH") {
+      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
         return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
       }
-      if (String(topicTag).toUpperCase() === "STRATEGY") {
+      if (String(topicTag).toUpperCase() === "FINANCIAL SERVICES") {
         return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
       }
       if (String(topicTag).toUpperCase() === "LIFE SCIENCES") {
@@ -184,7 +183,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const fetched = await fetchRuntime.orchestrateFetch({
     dueUsers: [
       {
-        topics: ["AI×TECH", "custom_glp_1"],
+        topics: ["TECHNOLOGY", "custom_glp_1"],
         preferences: { items_per_digest: 10 },
       },
     ],
@@ -200,7 +199,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(fetched.customFetchCalls, 2);
   assert.deepStrictEqual(
     fetchCalls.map(({ topic }) => topic.tag),
-    ["AI×TECH", "STRATEGY", "GLP 1"]
+    ["TECHNOLOGY", "FINANCIAL SERVICES", "GLP 1"]
   );
   assert.deepStrictEqual(
     fetchCalls[0].opts.retrievalPlan.preferred_domains,
@@ -217,7 +216,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(shortlistCalls.length, 3);
   assert.strictEqual(shortlistCalls[2].topicTag, "LIFE SCIENCES");
   assert.strictEqual(shortlistCalls[2].dueUserTopics.includes("LIFE SCIENCES"), true);
-  assert.strictEqual(fetched.tagPriority["ai×tech"], 1);
+  assert.strictEqual(fetched.tagPriority.technology, 1);
   assert.strictEqual(fetched.tagPriority.custom_glp_1, 1);
   assert.strictEqual(Array.isArray(fetched.allItems), true);
   assert.deepStrictEqual(
@@ -333,8 +332,8 @@ assertModuleExports(() => runtime, TARGET_REL);
   const budgetRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
       topics: [
-        { tag: "AI×TECH", queries: ["a1", "a2"] },
-        { tag: "STRATEGY", queries: ["b1", "b2"] },
+        { tag: "TECHNOLOGY", queries: ["a1", "a2"] },
+        { tag: "FINANCIAL SERVICES", queries: ["b1", "b2"] },
         { tag: "ENERGY", queries: ["c1", "c2"] },
         { tag: "HEALTHCARE", queries: ["d1", "d2"] },
       ],
@@ -371,13 +370,13 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   const budgetedResult = await budgetRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["AI×TECH", "STRATEGY"], preferences: {} }],
+    dueUsers: [{ topics: ["TECHNOLOGY", "FINANCIAL SERVICES"], preferences: {} }],
     targetChatId: "123",
     runMode: "targeted",
   });
   assert.strictEqual(budgetedResult.standardFetchCallsPlanned, 3);
   assert.strictEqual(budgetedResult.standardFetchCalls, 3);
-  assert.deepStrictEqual(budgetedFetchCalls, ["AI×TECH", "STRATEGY", "ENERGY"]);
+  assert.deepStrictEqual(budgetedFetchCalls, ["TECHNOLOGY", "FINANCIAL SERVICES", "ENERGY"]);
   assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_calls_used, 3);
   assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_exhausted, true);
   assert.strictEqual(budgetedResult.fetchDiagnostics.budget_stop_reason, "hard_cap_reached");
@@ -598,7 +597,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const emptyIncidents = [];
   const emptyRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "STRATEGY", queries: ["b"] }],
+      topics: [{ tag: "FINANCIAL SERVICES", queries: ["b"] }],
       digest: {
         itemCount: 7,
       },
@@ -614,7 +613,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   const emptyResult = await emptyRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["STRATEGY"], preferences: {} }],
+    dueUsers: [{ topics: ["FINANCIAL SERVICES"], preferences: {} }],
     targetChatId: null,
     runMode: "scheduled",
   });
@@ -625,15 +624,15 @@ assertModuleExports(() => runtime, TARGET_REL);
   const degradedRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
       topics: [
-        { tag: "AI×TECH", queries: ["a"] },
-        { tag: "CONSUMER", queries: ["b"] },
+        { tag: "TECHNOLOGY", queries: ["a"] },
+        { tag: "CONSUMER & RETAIL", queries: ["b"] },
       ],
       digest: { itemCount: 7 },
     },
     log: () => {},
     normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
     fetchTopicNews: async (topic) => {
-      if (topic.tag === "AI×TECH") {
+      if (topic.tag === "TECHNOLOGY") {
         return {
           apiCalls: 1,
           items: [{ headline: "AI story", tag: topic.tag }],
@@ -668,7 +667,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   const degradedResult = await degradedRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["AI×TECH", "CONSUMER"], preferences: {} }],
+    dueUsers: [{ topics: ["TECHNOLOGY", "CONSUMER & RETAIL"], preferences: {} }],
     targetChatId: null,
     runMode: "scheduled",
   });
@@ -684,7 +683,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const retryCalls = [];
   const retryRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "CONSUMER", queries: ["q1", "q2", "q3"] }],
+      topics: [{ tag: "CONSUMER & RETAIL", queries: ["q1", "q2", "q3"] }],
       digest: {
         itemCount: 7,
         search_budget: {
@@ -729,7 +728,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
 
   const retryResult = await retryRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["CONSUMER"], preferences: {} }],
+    dueUsers: [{ topics: ["CONSUMER & RETAIL"], preferences: {} }],
     targetChatId: null,
     runMode: "scheduled",
   });
@@ -795,7 +794,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const customRetryCalls = [];
   const customRetryRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "STRATEGY", queries: ["standard-q1"] }],
+      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1"] }],
       digest: {
         itemCount: 5,
         search_budget: {
@@ -832,7 +831,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       };
     },
     buildPreferredDomainShortlist: ({ topicTag }) => {
-      if (String(topicTag).toUpperCase() === "AI×TECH") {
+      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
         return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
       }
       return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
@@ -844,8 +843,8 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   const customRetryResult = await customRetryRuntime.orchestrateFetch({
     dueUsers: [
-      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
-      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
     ],
     targetChatId: null,
     runMode: "scheduled",
@@ -860,7 +859,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const customDeepRetryCalls = [];
   const customDeepRetryRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "STRATEGY", queries: ["standard-q1"] }],
+      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1"] }],
       digest: {
         itemCount: 5,
         search_budget: {
@@ -897,7 +896,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       };
     },
     buildPreferredDomainShortlist: ({ topicTag }) => {
-      if (String(topicTag).toUpperCase() === "AI×TECH") {
+      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
         return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
       }
       return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
@@ -909,8 +908,8 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   const customDeepRetryResult = await customDeepRetryRuntime.orchestrateFetch({
     dueUsers: [
-      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
-      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
     ],
     targetChatId: null,
     runMode: "scheduled",
@@ -990,8 +989,8 @@ assertModuleExports(() => runtime, TARGET_REL);
     const concurrencyRuntime = createDigestOrchestratorFetchRuntime({
       CONFIG: {
         topics: [
-          { tag: "AI×TECH", queries: ["a"] },
-          { tag: "STRATEGY", queries: ["b"] },
+          { tag: "TECHNOLOGY", queries: ["a"] },
+          { tag: "FINANCIAL SERVICES", queries: ["b"] },
           { tag: "ENERGY", queries: ["c"] },
           { tag: "HEALTHCARE", queries: ["d"] },
         ],
@@ -1016,7 +1015,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     });
 
     const concurrencyResult = await concurrencyRuntime.orchestrateFetch({
-      dueUsers: [{ topics: ["AI×TECH"], preferences: {} }],
+      dueUsers: [{ topics: ["TECHNOLOGY"], preferences: {} }],
       targetChatId: null,
       runMode: "scheduled",
     });
@@ -1030,7 +1029,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const customHeavyCalls = [];
   const customHeavyRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "STRATEGY", queries: ["standard-q1", "standard-q2"] }],
+      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1", "standard-q2"] }],
       digest: {
         itemCount: 5,
         search_budget: {
@@ -1074,10 +1073,10 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   const customHeavyResult = await customHeavyRuntime.orchestrateFetch({
     dueUsers: [
-      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
-      { topics: ["STRATEGY", "custom_glp_1"], preferences: {} },
-      { topics: ["STRATEGY", "custom_agentic_ai"], preferences: {} },
-      { topics: ["STRATEGY", "custom_cbam"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_glp_1"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_agentic_ai"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_cbam"], preferences: {} },
     ],
     targetChatId: null,
     runMode: "scheduled",
@@ -1097,7 +1096,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   const customHeavyDeepCalls = [];
   const customHeavyDeepRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "STRATEGY", queries: ["standard-q1"] }],
+      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1"] }],
       digest: {
         itemCount: 5,
         search_budget: {
@@ -1140,7 +1139,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       };
     },
     buildPreferredDomainShortlist: ({ topicTag }) => {
-      if (String(topicTag).toUpperCase() === "AI×TECH") {
+      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
         return { domains: ["semianalysis.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
       }
       return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
@@ -1157,10 +1156,10 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   const customHeavyDeepResult = await customHeavyDeepRuntime.orchestrateFetch({
     dueUsers: [
-      { topics: ["STRATEGY", "custom_nvidia"], preferences: {} },
-      { topics: ["STRATEGY", "custom_glp_1"], preferences: {} },
-      { topics: ["STRATEGY", "custom_agentic_ai"], preferences: {} },
-      { topics: ["STRATEGY", "custom_semicap"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_glp_1"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_agentic_ai"], preferences: {} },
+      { topics: ["FINANCIAL SERVICES", "custom_semicap"], preferences: {} },
     ],
     targetChatId: null,
     runMode: "scheduled",

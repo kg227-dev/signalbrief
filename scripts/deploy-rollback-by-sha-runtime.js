@@ -83,7 +83,7 @@ function resolveRollbackByShaOptions(argv, env = process.env, baseDir = ROOT) {
     || String(env.DEPLOY_PUBLIC_URL || "").trim()
     || DEFAULT_PUBLIC_URL;
 
-  const serviceListRaw = readOption(options, "services") || String(env.DEPLOY_SERVICES || "").trim() || "web bot worker";
+  const serviceListRaw = readOption(options, "services") || String(env.DEPLOY_SERVICES || "").trim() || "web worker";
   const services = parseServiceList(serviceListRaw);
 
   return {

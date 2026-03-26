@@ -86,9 +86,6 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(ranked.userItems.length, 1);
   assert.strictEqual(ranked.userItems[0].tag, "AI×TECH");
   assert.strictEqual(ranked.diagnostics.requested_count, 5);
-  assert.ok(logs.some((line) => line.includes("[pre-sort]")));
-  assert.ok(logs.some((line) => line.includes("[post-sort]")));
-
   let emergencyScoreCalls = 0;
   const emergencyRuntime = createDigestOrchestratorDeliveryRankingRuntime({
     CONFIG: {

@@ -72,9 +72,19 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
     }),
     dedupAgainstRecentArchives: (items) => ({ items, removed: 0, archive_days_used: 3, backfilled: 0 }),
     buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items, suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
     selectItems: (items) => items.slice(0, 1),
-    loadRecentArchiveItems: () => [],
     emitDigestIncident: async () => {},
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/seams-runtime-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
   });
 
   const selectionOut = await selectionRuntime.selectForEnrichment({

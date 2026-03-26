@@ -5,7 +5,7 @@ const { execSync, spawnSync } = require("child_process");
 const http = require("http");
 const https = require("https");
 
-const REQUIRED_SERVICES = ["web", "bot", "worker"];
+const REQUIRED_SERVICES = ["web", "worker"];
 const HEALTH_URL = process.env.SCHEDULER_HEALTH_URL || "http://127.0.0.1:3003/api/health/scheduler";
 const HEALTH_TIMEOUT_MS = Math.max(1000, Number(process.env.SCHEDULER_HEALTH_TIMEOUT_MS || 5000));
 const HEALTH_RETRIES = Math.max(1, Number(process.env.SCHEDULER_HEALTH_RETRIES || 10));
@@ -145,9 +145,9 @@ function collectFailureDiagnostics() {
     blocks.push(String(psRes.stderr || psRes.stdout || "").trim());
   }
 
-  const logsRes = runCommand(`docker compose logs --no-color --tail=${FAIL_LOG_TAIL_LINES} web bot worker`);
+  const logsRes = runCommand(`docker compose logs --no-color --tail=${FAIL_LOG_TAIL_LINES} web worker`);
   if (logsRes.ok) {
-    blocks.push(`--- docker compose logs --tail=${FAIL_LOG_TAIL_LINES} (web bot worker) ---`);
+    blocks.push(`--- docker compose logs --tail=${FAIL_LOG_TAIL_LINES} (web worker) ---`);
     blocks.push(String(logsRes.stdout || "").trim());
   } else {
     blocks.push("--- docker compose logs (failed) ---");

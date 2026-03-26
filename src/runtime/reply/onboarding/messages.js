@@ -10,8 +10,8 @@ function linkSuccessMessage(updatedUser, formatDeliveryTime) {
   const firstName = (updatedUser.name || "").split(" ")[0] || "there";
   return (
     `✅ *Verified, ${firstName}!* Telegram is now linked to your SignalBrief account.\n\n`
-    + `Digest arrives at *${formatDeliveryTime(updatedUser.preferences)}*. Or get one now:\n\n`
-    + "⚡ /digest · 💾 save [#] · 📊 more/less [topic] · ⚙️ /settings"
+    + `Digest arrives at *${formatDeliveryTime(updatedUser.preferences)}* by email.\n\n`
+    + "Use ⚙️ /settings if you need to change topics or delivery time."
   );
 }
 

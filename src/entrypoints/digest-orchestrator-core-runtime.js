@@ -25,7 +25,6 @@ const {
   getDigestLockOwnerStatus,
 } = require("../platform/scheduler");
 const { computeDigestQualityScore } = require("../domains/digest");
-const { applyAutoTopicLearning } = require("../domains/personalization");
 const {
   applyEntityCoverageCap,
   buildRecentEntityHistory,
@@ -483,10 +482,6 @@ function buildCustomRescueItemsFromStandard(...args) {
 
 function escapeHtml(...args) {
   return getDigestFormattingRuntime().escapeHtml(...args);
-}
-
-function buildLearningSummary(...args) {
-  return getDigestFormattingRuntime().buildLearningSummary(...args);
 }
 
 function formatTelegram(...args) {
@@ -1050,9 +1045,7 @@ async function main() {
   const deliveryRuntime = createDigestOrchestratorDeliveryRuntime({
     CONFIG,
     log,
-    applyAutoTopicLearning,
     writeUser,
-    buildLearningSummary,
     filterItemsByTopics,
     applyTopicRelevanceScores,
     buildRecentEntityHistory,
@@ -1070,9 +1063,6 @@ async function main() {
     loadRecentSentDigests: (...args) => digestDeliveryRecordRuntime.loadRecentSentDigests(...args),
     loadAllCurrentRecords: (...args) => digestDeliveryRecordRuntime.loadAllCurrentRecords(...args),
     digestRetryStateRuntime: getDigestRetryStateRuntime(),
-    sendTelegram,
-    formatTelegram,
-    buildDigestInlineKeyboard,
     generateLeadSubjectLine,
     generateEditorialNote,
     buildEmail,

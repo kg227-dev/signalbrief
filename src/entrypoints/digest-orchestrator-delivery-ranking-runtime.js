@@ -322,7 +322,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       captureDiagnostics,
     } = params;
 
-    const prefs = user.preferences || {};
     const sourcePrefs = user.source_preferences || {};
     const blockedSources = new Set(Array.isArray(sourcePrefs.blocked_sources) ? sourcePrefs.blocked_sources : []);
     const trustedSources = new Set(Array.isArray(sourcePrefs.trusted_sources) ? sourcePrefs.trusted_sources : []);
@@ -360,14 +359,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       ))
     );
 
-    const weights = user.topic_weights || {};
-    const hasWeights = Object.values(weights).some((value) => value !== 0);
-    if (hasWeights) {
-      log(`  [weights] ${user.email || user.chatId}: ${JSON.stringify(weights)}`);
-      log(`  [pre-sort] ${userItems.map((item) => `${item.tag}(${item.baseScore})`).join(", ")}`);
-    }
-
-    userItems = applyTopicRelevanceScores(userItems, user.topics || [], weights, {
+    userItems = applyTopicRelevanceScores(userItems, user.topics || [], {}, {
       specialistMode,
       repeatPenalty,
       isRecentRepeat: (item) => isRecentRepeatItem(item, repeatIndex),
@@ -387,10 +379,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     if (trace) appendStageTrace(trace, beforeEntityCap, userItems, "entity_cap", "removed_by_entity_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "entity_cap", "entity_cap_applied"));
 
-    const requestedCount = Math.max(
-      Number(DELIVERY_POLICY.target_item_count || 5),
-      Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5)
-    );
+    const requestedCount = Math.max(1, Number(DELIVERY_POLICY.target_item_count || 5));
     const candidatePoolTargetCount = Math.max(
       requestedCount,
       Number(DELIVERY_POLICY.candidate_pool_target_count || requestedCount)
@@ -479,10 +468,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       userItems = userItems.filter((item) => !item?.hard_exclude);
     }
     if (trace) trace.snapshots.push(snapshotStage(userItems, "final_quality_gate", "excluded_by_final_quality_threshold"));
-
-    if (hasWeights) {
-      log(`  [post-sort] ${userItems.map((item) => `${item.tag}(${item.relevanceScore})`).join(", ")}`);
-    }
 
     userItems = applyTopFitCoverageFloor(userItems, candidatePoolTargetCount, Number(CONFIG.digest.minTopFitItems || 3));
     userItems = reserveCustomKeywordSlot(userItems, candidatePoolTargetCount, customKeywords);

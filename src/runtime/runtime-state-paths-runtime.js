@@ -303,6 +303,8 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "incidentStorePath", path: paths.incidentStorePath, kind: "file" },
     { key: "recoveryQueuePath", path: paths.recoveryQueuePath, kind: "file" },
     { key: "digestAuditDir", path: paths.digestAuditDir, kind: "dir" },
+    { key: "digestTuningPath", path: paths.digestTuningPath, kind: "file" },
+    { key: "editorialOverridesPath", path: paths.editorialOverridesPath, kind: "file" },
   ];
 }
 

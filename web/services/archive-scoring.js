@@ -1,6 +1,5 @@
 const {
   computeTopicMatch,
-  matchWeightToTag,
   normalizeMatchText,
   normalizeTopicToken,
   topicsRelated,
@@ -23,11 +22,10 @@ function archiveTopicMatch(itemTag, itemHeadline, itemSummary, userTopics) {
   return 3;
 }
 
-function archiveRelevanceScore(item, userTopics, topicWeights) {
+function archiveRelevanceScore(item, userTopics) {
   const base = typeof item?.baseScore === "number" ? item.baseScore : 5;
   const topicMatch = archiveTopicMatch(item?.tag, item?.headline, item?.summary, userTopics);
-  const weightBonus = matchWeightToTag(item?.tag, topicWeights) * 0.5;
-  const raw = base * 0.6 + topicMatch * 0.4 + weightBonus;
+  const raw = base * 0.6 + topicMatch * 0.4;
   return Math.min(10, Math.max(0, Math.round(raw * 10) / 10));
 }
 

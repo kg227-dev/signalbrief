@@ -83,7 +83,6 @@
     getSelectedDepth,
     getSelectedDays,
     getDaysFrequency,
-    getItemsPerDigest,
     debugEnabled = false,
   }) {
     const handleFormSubmit = typeof SubmitRuntime.createFormSubmitHandler === "function"
@@ -100,7 +99,6 @@
           getSelectedDepth,
           getSelectedDays,
           getDaysFrequency,
-          getItemsPerDigest,
           debugEnabled,
         })
       : async function missingSubmitRuntime(event) {

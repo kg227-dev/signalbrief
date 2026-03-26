@@ -17,7 +17,6 @@ const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
       daysOfWeek: [],
-      itemsPerDigest: 5,
       deliveryTime: "07:00",
     })
   : null;
@@ -253,21 +252,6 @@ function initDepthSelector(initialDepth) {
   if (fallback) setSelectedDepth(fallback);
 }
 
-// -- Size toggle (2-pill) ----------------------------------------------------
-function selectItemsPerDigest(sizePill) {
-  const itemsPerDigest = Number(sizePill?.dataset?.size || 5);
-  document.querySelectorAll(".size-pill").forEach((pill) => {
-    pill.classList.toggle("selected", pill === sizePill);
-  });
-  if (prefState) prefState.setItemsPerDigest(itemsPerDigest);
-}
-
-function getItemsPerDigest() {
-  if (prefState) return prefState.getItemsPerDigest();
-  const selected = document.querySelector(".size-pill.selected");
-  return selected ? parseInt(selected.dataset.size, 10) : 5;
-}
-
 // -- Day circles --------------------------------------------------------------
 function syncDayPresets() {
   const days = prefState
@@ -338,7 +322,6 @@ const indexForm = typeof IndexFormRuntime.createIndexFormContext === "function"
       getSelectedDepth,
       getSelectedDays,
       getDaysFrequency,
-      getItemsPerDigest,
       debugEnabled: DEBUG_UI,
     })
   : null;
@@ -463,9 +446,6 @@ initDarkModeState();
   }
 
   prefState.setTopics([]);
-
-  const selectedSize = document.querySelector(".size-pill.selected");
-  if (selectedSize) prefState.setItemsPerDigest(selectedSize.dataset.size);
 
   const deliverySelect = document.getElementById("deliveryTime");
   if (deliverySelect) {

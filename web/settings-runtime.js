@@ -19,7 +19,6 @@ const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
       daysOfWeek: [],
-      itemsPerDigest: 5,
       deliveryTime: "07:00",
     })
   : null;
@@ -219,13 +218,6 @@ function bindSaveHandler(effectiveToken, user) {
 
     try {
       prefState.setDeliveryTime(byId("deliveryTime").value || "07:00");
-      prefState.setItemsPerDigest(byId("itemsPerDigest").value || "5");
-
-      const telegramEnabled = !!(
-        user.chatId
-        && !String(user.chatId).startsWith("email-")
-        && (user.preferences || {}).telegram_enabled !== false
-      );
 
       const ui = getSettingsUi();
       const payload = typeof Prefs.buildSettingsPayload === "function"
@@ -233,22 +225,17 @@ function bindSaveHandler(effectiveToken, user) {
             state: prefState,
             token: effectiveToken,
             name: byId("name").value.trim(),
-            telegram: byId("telegram").value,
-            telegramEnabled,
           })
         : {
             token: effectiveToken,
             name: byId("name").value.trim(),
-            telegram: byId("telegram").value.replace("@", "").trim() || null,
             topics: prefState.getTopics(),
             preferences: {
               depth: prefState.getDepth(),
               delivery_time: byId("deliveryTime").value,
               frequency: ui ? ui.getSettingsFrequency() : "custom",
               days_of_week: ui ? ui.getSettingsDays() : [],
-              items_per_digest: parseInt(byId("itemsPerDigest").value, 10),
               email_enabled: true,
-              telegram_enabled: telegramEnabled,
             },
           };
 

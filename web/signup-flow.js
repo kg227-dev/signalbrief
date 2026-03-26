@@ -17,7 +17,6 @@
     ? Prefs.createPreferenceState({
         depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
         daysOfWeek: [],
-        itemsPerDigest: 5,
         deliveryTime: "07:00",
       })
     : null;
@@ -428,7 +427,6 @@
       prefState.setDepth(depth);
       prefState.setDeliveryTime(deliveryTime);
       prefState.setDays(days);
-      prefState.setItemsPerDigest(5); // MVP: always 5
     }
 
     var payload;
@@ -437,7 +435,6 @@
         state: prefState,
         name: name,
         email: email,
-        telegram: null,
         referralToken: referralToken,
       });
     } else {
@@ -451,7 +448,6 @@
         delivery_time: deliveryTime,
         frequency: freq,
         days_of_week: days,
-        items_per_digest: 5,
         referral_token: referralToken || null,
       };
     }

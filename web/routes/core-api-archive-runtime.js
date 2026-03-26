@@ -7,7 +7,7 @@ const {
 } = require("../services/archive-digest-stats-runtime");
 const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/digest-item-ordering-runtime");
 
-function mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore) {
+function mapArchiveItem(item, userTopics, archiveRelevanceScore) {
   return {
     tag: item?.tag || "",
     headline: item?.headline || "",
@@ -18,14 +18,14 @@ function mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore) {
     url: item?.url || "",
     source: item?.source || "",
     baseScore: typeof item?.baseScore === "number" ? item.baseScore : null,
-    relevanceScore: archiveRelevanceScore(item, userTopics, topicWeights),
+    relevanceScore: archiveRelevanceScore(item, userTopics),
   };
 }
 
-function buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, topicWeights, archiveRelevanceScore) {
+function buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, archiveRelevanceScore) {
   const items = sortDigestItemsByScoreDescending(
     (Array.isArray(snapshot?.items) ? snapshot.items : [])
-      .map((item) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore))
+      .map((item) => mapArchiveItem(item, userTopics, archiveRelevanceScore))
   );
   return {
     date: snapshot?.date_et || dateKey,
@@ -179,7 +179,6 @@ function handleArchiveAllRoute(ctx, deps) {
   }
 
   const userTopics = Array.isArray(user.topics) ? user.topics : [];
-  const topicWeights = user.topic_weights || {};
   const items = [];
   let digestCount = 0;
 
@@ -187,7 +186,7 @@ function handleArchiveAllRoute(ctx, deps) {
     try {
       const snapshot = loadDeliveredSnapshotForDate(user, dateKey, deps);
       if (snapshot) {
-        const snapshotDigest = buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, topicWeights, archiveRelevanceScore);
+        const snapshotDigest = buildArchiveDigestFromSnapshot(dateKey, snapshot, userTopics, archiveRelevanceScore);
         if (snapshotDigest.items.length === 0) continue;
         digestCount++;
         snapshotDigest.items.forEach((item, idx) => {
@@ -206,7 +205,7 @@ function handleArchiveAllRoute(ctx, deps) {
       const digest = JSON.parse(fs.readFileSync(digestPath, "utf8"));
       const deliveredDigestItems = sortDigestItemsByScoreDescending(
         resolveDeliveredDigestItems(dateKey, digest.items, deliveredItemsByDate)
-          .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore))
+          .map(({ item }) => mapArchiveItem(item, userTopics, archiveRelevanceScore))
       );
       if (deliveredDigestItems.length === 0) continue;
       digestCount++;
@@ -298,9 +297,8 @@ function handleArchiveDateRoute(ctx, deps) {
 
   try {
     const userTopics = Array.isArray(user.topics) ? user.topics : [];
-    const topicWeights = user.topic_weights || {};
     if (snapshot) {
-      const snapshotDigest = buildArchiveDigestFromSnapshot(rawDate, snapshot, userTopics, topicWeights, archiveRelevanceScore);
+      const snapshotDigest = buildArchiveDigestFromSnapshot(rawDate, snapshot, userTopics, archiveRelevanceScore);
       recordLegacyArchiveUsage(req, "/api/archive/:date", "served", {
         date: rawDate,
         user_chat_id: String(user.chatId || ""),
@@ -312,7 +310,7 @@ function handleArchiveDateRoute(ctx, deps) {
     const deliveredItemsByDate = buildDeliveredItemsByDate(user, deps);
     raw.items = sortDigestItemsByScoreDescending(
       resolveDeliveredDigestItems(rawDate, raw.items, deliveredItemsByDate)
-        .map(({ item }) => mapArchiveItem(item, userTopics, topicWeights, archiveRelevanceScore))
+        .map(({ item }) => mapArchiveItem(item, userTopics, archiveRelevanceScore))
     );
     recordLegacyArchiveUsage(req, "/api/archive/:date", "served", {
       date: rawDate,

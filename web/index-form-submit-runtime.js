@@ -39,25 +39,21 @@
   function buildFallbackPayload({
     name,
     email,
-    telegram,
     topics,
     deliveryTime,
     days,
     referralToken,
     getSelectedDepth,
     getDaysFrequency,
-    getItemsPerDigest,
   }) {
     return {
       name,
       email,
-      telegram: String(telegram || "").trim().replace(/^@+/, "") || null,
       topics,
       depth: typeof getSelectedDepth === "function" ? getSelectedDepth() : "headline_plus_why",
       delivery_time: deliveryTime,
       frequency: typeof getDaysFrequency === "function" ? getDaysFrequency() : "custom",
       days_of_week: days,
-      items_per_digest: typeof getItemsPerDigest === "function" ? getItemsPerDigest() : 5,
       referral_token: referralToken || null,
     };
   }
@@ -81,7 +77,6 @@
     getSelectedDepth,
     getSelectedDays,
     getDaysFrequency,
-    getItemsPerDigest,
     debugEnabled,
   }) {
     return async function handleFormSubmit(event) {
@@ -125,7 +120,6 @@
       const submitBtn = document.querySelector(".submit-btn");
       setSubmitButtonState(submitBtn, true);
 
-      const telegram = byId("telegram")?.value || "";
       const deliveryTime = byId("deliveryTime")?.value || "07:00";
       const referralToken = (new URLSearchParams(globalScope.location.search).get("ref") || "").trim();
 
@@ -134,7 +128,6 @@
         if (typeof getSelectedDepth === "function") prefState.setDepth(getSelectedDepth());
         prefState.setDeliveryTime(deliveryTime);
         prefState.setDays(days);
-        if (typeof getItemsPerDigest === "function") prefState.setItemsPerDigest(getItemsPerDigest());
       }
 
       const payload = (prefState && typeof Prefs.buildSignupPayload === "function")
@@ -142,20 +135,17 @@
             state: prefState,
             name,
             email,
-            telegram,
             referralToken,
           })
         : buildFallbackPayload({
             name,
             email,
-            telegram,
             topics,
             deliveryTime,
             days,
             referralToken,
             getSelectedDepth,
             getDaysFrequency,
-            getItemsPerDigest,
           });
 
       try {

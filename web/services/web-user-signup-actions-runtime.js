@@ -17,7 +17,6 @@ function parseSignupInput({
     delivery_time,
     frequency,
     days_of_week,
-    items_per_digest,
   } = body || {};
 
   const emailNorm = String(email || "").toLowerCase().trim();
@@ -63,7 +62,6 @@ function parseSignupInput({
       delivery_time,
       frequency,
       days_of_week,
-      items_per_digest,
     },
   };
 }

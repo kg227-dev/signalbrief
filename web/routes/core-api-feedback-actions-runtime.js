@@ -2,26 +2,11 @@
 
 const VALID_FEEDBACK_TYPES = ["positive", "negative", "repetitive", "weak_source", "not_relevant"];
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, Number(value) || 0));
-}
-
 function resolveDigestItem(user, itemIndex) {
   const idx = Number(itemIndex);
   if (!Number.isFinite(idx) || idx < 1) return null;
   const items = Array.isArray(user.last_digest_items) ? user.last_digest_items : [];
   return items[idx - 1] || null;
-}
-
-function applyTopicWeightNudge(user, item, delta) {
-  const tag = String(item?.tag || "").trim();
-  if (!tag) return null;
-  if (!user.topic_weights || typeof user.topic_weights !== "object") user.topic_weights = {};
-  const prev = Number(user.topic_weights[tag] || 0);
-  const next = clamp(prev + delta, -5, 5);
-  if (next === prev) return null;
-  user.topic_weights[tag] = next;
-  return { tag, prev, next, delta: next - prev };
 }
 
 function applyRepetitionSuppression(user, item) {
@@ -106,22 +91,19 @@ async function handleCoreFeedbackRoute(ctx, deps) {
   // Resolve the digest item from the user's last digest
   const item = resolveDigestItem(user, itemIndex);
   const effectMeta = {};
+  let userChanged = false;
 
   if (item) {
-    if (feedbackType === "positive") {
-      const nudge = applyTopicWeightNudge(user, item, 1);
-      if (nudge) effectMeta.topic_weight = nudge;
-    } else if (feedbackType === "negative" || feedbackType === "not_relevant") {
-      const nudge = applyTopicWeightNudge(user, item, -1);
-      if (nudge) effectMeta.topic_weight = nudge;
-    } else if (feedbackType === "repetitive") {
+    if (feedbackType === "repetitive") {
       const suppressed = applyRepetitionSuppression(user, item);
       effectMeta.suppressed = suppressed;
+      userChanged = suppressed;
     } else if (feedbackType === "weak_source") {
       const blocked = applySourceBlock(user, item);
       effectMeta.source_blocked = blocked;
+      userChanged = blocked;
     }
-    writeUser(user.chatId, user);
+    if (userChanged) writeUser(user.chatId, user);
   }
 
   const fullDigestId = typeof buildDigestId === "function" && digestId

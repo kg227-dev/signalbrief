@@ -633,6 +633,7 @@ function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectio
     const filePath = path.join(DIGEST_AUDIT_DIR, `${digestDateKey}.json`);
     fs.writeFileSync(filePath, JSON.stringify(auditDoc, null, 2), "utf8");
   } catch (err) {
+    if (runMode === "scheduled") throw err; // mandatory for scheduled runs — operator must know
     log(`Audit log write failed (non-fatal): ${String(err?.message || err)}`);
   }
 }

@@ -3,7 +3,7 @@
 const { scoreCandidates } = require("../domains/scoring/score-candidate");
 
 function computeItemAgeHours(item, nowMs) {
-  const ts = item?.published_at || item?.date || item?.timestamp;
+  const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
   if (!ts) return Infinity;
   const ms = typeof ts === "number" ? ts : new Date(ts).getTime();
   if (!Number.isFinite(ms)) return Infinity;

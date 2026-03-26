@@ -2,56 +2,162 @@
   "_comment": "SignalBrief MVP — Source Registry v2. 7 MVP topics. Each source has tier: 1=gold, 2=good, 3=supplemental. POLICY×REGULATORY disabled as standalone topic; its cross-sector official sources reassigned.",
   "version": 2,
   "lanes": {
-    "perplexity_discovery": { "enabled": true },
-    "publisher_feed": { "enabled": true },
-    "official": { "enabled": true }
+    "perplexity_discovery": {
+      "enabled": true
+    },
+    "publisher_feed": {
+      "enabled": true
+    },
+    "official": {
+      "enabled": true
+    }
   },
   "topics": {
-    "HEALTHCARE": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
-    "LIFE SCIENCES": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
-    "TECHNOLOGY": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
-    "ENERGY": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
-    "FINANCIAL SERVICES": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
-    "CONSUMER & RETAIL": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
-    "INDUSTRIALS": { "enabled": true, "lanes": { "publisher_feed": true, "official": true } },
+    "HEALTHCARE": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
+    "LIFE SCIENCES": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
+    "TECHNOLOGY": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
+    "ENERGY": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
+    "FINANCIAL SERVICES": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
+    "CONSUMER & RETAIL": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
+    "INDUSTRIALS": {
+      "enabled": true,
+      "lanes": {
+        "publisher_feed": true,
+        "official": true
+      }
+    },
     "POLICY×REGULATORY": {
       "_comment": "Dropped as standalone topic per MVP reset. Regulatory items surface through relevant sector official sources.",
       "enabled": false,
-      "lanes": { "publisher_feed": false, "official": false }
+      "lanes": {
+        "publisher_feed": false,
+        "official": false
+      }
     }
   },
   "families": {
-    "healthcare_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "healthcare_official": { "lane": "official", "source_family": "official" },
-    "life_sciences_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "life_sciences_official": { "lane": "official", "source_family": "official" },
-    "technology_reported": { "lane": "publisher_feed", "source_family": "reported" },
-    "technology_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "technology_official": { "lane": "official", "source_family": "official" },
-    "energy_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "energy_official": { "lane": "official", "source_family": "official" },
-    "financial_reported": { "lane": "publisher_feed", "source_family": "reported" },
-    "financial_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "financial_official": { "lane": "official", "source_family": "official" },
-    "consumer_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "consumer_official": { "lane": "official", "source_family": "official" },
-    "industrials_specialist": { "lane": "publisher_feed", "source_family": "specialist" },
-    "industrials_official": { "lane": "official", "source_family": "official" },
-    "cross_sector_official": { "lane": "official", "source_family": "official" }
+    "healthcare_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "healthcare_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "life_sciences_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "life_sciences_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "technology_reported": {
+      "lane": "publisher_feed",
+      "source_family": "reported"
+    },
+    "technology_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "technology_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "energy_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "energy_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "financial_reported": {
+      "lane": "publisher_feed",
+      "source_family": "reported"
+    },
+    "financial_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "financial_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "consumer_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "consumer_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "industrials_specialist": {
+      "lane": "publisher_feed",
+      "source_family": "specialist"
+    },
+    "industrials_official": {
+      "lane": "official",
+      "source_family": "official"
+    },
+    "cross_sector_official": {
+      "lane": "official",
+      "source_family": "official"
+    }
   },
   "sources": [
-
     {
       "_comment": "STAT News — gold standard for health/pharma/biotech journalism. Cross-tagged to both healthcare and life sciences.",
       "id": "healthcare_stat",
       "enabled": true,
       "tier": 1,
       "lane": "publisher_feed",
-      "topic_tags": ["HEALTHCARE", "LIFE SCIENCES"],
+      "topic_tags": [
+        "HEALTHCARE",
+        "LIFE SCIENCES"
+      ],
       "family": "healthcare_specialist",
       "source_kind": "reported_media",
       "source_family": "specialist",
-      "domains": ["statnews.com"],
+      "domains": [
+        "statnews.com"
+      ],
       "endpoint": "https://www.statnews.com/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -62,11 +168,15 @@
       "enabled": true,
       "tier": 1,
       "lane": "publisher_feed",
-      "topic_tags": ["HEALTHCARE"],
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
       "family": "healthcare_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["modernhealthcare.com"],
+      "domains": [
+        "modernhealthcare.com"
+      ],
       "endpoint": "https://www.modernhealthcare.com/rss",
       "parser": "rss",
       "content_kind": "article"
@@ -77,12 +187,35 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["HEALTHCARE"],
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
       "family": "healthcare_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["beckershospitalreview.com"],
+      "domains": [
+        "beckershospitalreview.com"
+      ],
       "endpoint": "https://www.beckershospitalreview.com/rss_feed.xml",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Fierce Healthcare — hospital operations, health plans, telehealth, policy.",
+      "id": "healthcare_fiercehealthcare",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
+      "family": "healthcare_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "fiercehealthcare.com"
+      ],
+      "endpoint": "https://www.fiercehealthcare.com/rss/xml",
       "parser": "rss",
       "content_kind": "article"
     },
@@ -92,15 +225,29 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["HEALTHCARE"],
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
       "family": "healthcare_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["fda.gov"],
+      "domains": [
+        "fda.gov"
+      ],
       "endpoint": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["approval", "approved", "warning", "guidance", "rule", "enforcement", "clearance", "authorized", "settlement"]
+      "title_include_patterns": [
+        "approval",
+        "approved",
+        "warning",
+        "guidance",
+        "rule",
+        "enforcement",
+        "clearance",
+        "authorized",
+        "settlement"
+      ]
     },
     {
       "_comment": "CMS Newsroom — primary official for Medicare, Medicaid, ACA payment rules.",
@@ -108,15 +255,28 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["HEALTHCARE"],
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
       "family": "healthcare_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["cms.gov"],
+      "domains": [
+        "cms.gov"
+      ],
       "endpoint": "https://www.cms.gov/newsroom/rss-feeds",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["final rule", "proposed rule", "payment", "coverage", "guidance", "announcement", "medicare", "medicaid"]
+      "title_include_patterns": [
+        "final rule",
+        "proposed rule",
+        "payment",
+        "coverage",
+        "guidance",
+        "announcement",
+        "medicare",
+        "medicaid"
+      ]
     },
     {
       "_comment": "FDA MedWatch — drug safety alerts, recalls, adverse events.",
@@ -124,28 +284,43 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["HEALTHCARE"],
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
       "family": "healthcare_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["fda.gov"],
+      "domains": [
+        "fda.gov"
+      ],
       "endpoint": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/medwatch/rss.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["alert", "warning", "safety", "recall", "adverse", "device", "drug"]
+      "title_include_patterns": [
+        "alert",
+        "warning",
+        "safety",
+        "recall",
+        "adverse",
+        "device",
+        "drug"
+      ]
     },
-
     {
       "_comment": "FierceBiotech — strong biotech/drug development trade coverage.",
       "id": "life_fiercebiotech",
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["fiercebiotech.com"],
+      "domains": [
+        "fiercebiotech.com"
+      ],
       "endpoint": "https://www.fiercebiotech.com/rss/xml",
       "parser": "rss",
       "content_kind": "article"
@@ -156,11 +331,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["fiercepharma.com"],
+      "domains": [
+        "fiercepharma.com"
+      ],
       "endpoint": "https://www.fiercepharma.com/rss/xml",
       "parser": "rss",
       "content_kind": "article"
@@ -171,11 +350,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["endpoints.news"],
+      "domains": [
+        "endpoints.news"
+      ],
       "endpoint": "https://endpoints.news/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -186,16 +369,22 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["biopharmadive.com"],
+      "domains": [
+        "biopharmadive.com"
+      ],
       "endpoint": "https://www.biopharmadive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "BioSpace — job board + news, lower editorial signal. Disabled by default.",
@@ -203,11 +392,15 @@
       "enabled": false,
       "tier": 3,
       "lane": "publisher_feed",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["biospace.com"],
+      "domains": [
+        "biospace.com"
+      ],
       "endpoint": "https://www.biospace.com/rss-feeds.rss",
       "parser": "rss",
       "content_kind": "article"
@@ -218,15 +411,30 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["ema.europa.eu"],
+      "domains": [
+        "ema.europa.eu"
+      ],
       "endpoint": "https://www.ema.europa.eu/en/new-human-medicine-new.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["opinion", "recommended", "authorisation", "authorized", "approval", "safety", "guidance", "committee", "clinical", "epar"]
+      "title_include_patterns": [
+        "opinion",
+        "recommended",
+        "authorisation",
+        "authorized",
+        "approval",
+        "safety",
+        "guidance",
+        "committee",
+        "clinical",
+        "epar"
+      ]
     },
     {
       "_comment": "FDA Drugs RSS — drug approvals, clinical holds, label changes.",
@@ -234,15 +442,29 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["fda.gov"],
+      "domains": [
+        "fda.gov"
+      ],
       "endpoint": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/drugs/rss.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["approval", "approved", "clinical", "trial", "warning", "guidance", "label", "drug", "biologics"]
+      "title_include_patterns": [
+        "approval",
+        "approved",
+        "clinical",
+        "trial",
+        "warning",
+        "guidance",
+        "label",
+        "drug",
+        "biologics"
+      ]
     },
     {
       "_comment": "FDA Biologics RSS — biologic and cell/gene therapy approvals.",
@@ -250,28 +472,45 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["LIFE SCIENCES"],
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
       "family": "life_sciences_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["fda.gov"],
+      "domains": [
+        "fda.gov"
+      ],
       "endpoint": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/biologics/rss.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["approval", "approved", "clinical", "trial", "warning", "guidance", "biologics", "vaccine", "cell therapy"]
+      "title_include_patterns": [
+        "approval",
+        "approved",
+        "clinical",
+        "trial",
+        "warning",
+        "guidance",
+        "biologics",
+        "vaccine",
+        "cell therapy"
+      ]
     },
-
     {
       "_comment": "TechCrunch — broad tech startup/enterprise news.",
       "id": "technology_techcrunch",
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["techcrunch.com"],
+      "domains": [
+        "techcrunch.com"
+      ],
       "endpoint": "https://techcrunch.com/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -282,11 +521,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["arstechnica.com"],
+      "domains": [
+        "arstechnica.com"
+      ],
       "endpoint": "https://feeds.arstechnica.com/arstechnica/index",
       "parser": "rss",
       "content_kind": "article"
@@ -297,11 +540,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["theverge.com"],
+      "domains": [
+        "theverge.com"
+      ],
       "endpoint": "https://www.theverge.com/rss/index.xml",
       "parser": "rss",
       "content_kind": "article"
@@ -312,12 +559,35 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["wired.com"],
+      "domains": [
+        "wired.com"
+      ],
       "endpoint": "https://www.wired.com/feed/rss",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "MIT Technology Review — deep tech journalism, AI, biotech, energy, computing.",
+      "id": "technology_mit_review",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
+      "family": "technology_reported",
+      "source_kind": "reported_media",
+      "source_family": "reported",
+      "domains": [
+        "technologyreview.com"
+      ],
+      "endpoint": "https://www.technologyreview.com/feed/",
       "parser": "rss",
       "content_kind": "article"
     },
@@ -327,11 +597,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["theregister.com"],
+      "domains": [
+        "theregister.com"
+      ],
       "endpoint": "https://www.theregister.com/headlines.atom",
       "parser": "atom",
       "content_kind": "article"
@@ -342,15 +616,27 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["nist.gov"],
+      "domains": [
+        "nist.gov"
+      ],
       "endpoint": "https://www.nist.gov/news-events/news/rss.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["guidance", "framework", "standard", "cyber", "security", "artificial intelligence", "semiconductor"]
+      "title_include_patterns": [
+        "guidance",
+        "framework",
+        "standard",
+        "cyber",
+        "security",
+        "artificial intelligence",
+        "semiconductor"
+      ]
     },
     {
       "_comment": "BIS — export controls, entity list, semiconductor/AI enforcement.",
@@ -358,33 +644,51 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["TECHNOLOGY"],
+      "topic_tags": [
+        "TECHNOLOGY"
+      ],
       "family": "technology_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["bis.gov"],
+      "domains": [
+        "bis.gov"
+      ],
       "endpoint": "https://media.bis.gov/news-updates/search?content_type=press_release&created=All&field_countries=All&field_learn_support_topics=All&field_news_updates_topic=All&news_search_query=&sort_by=created&sort_order=DESC",
       "parser": "html_date_index",
       "content_kind": "official_document",
-      "title_include_patterns": ["export", "control", "enforcement", "settlement", "semiconductor", "entity list", "ai", "technology"]
+      "title_include_patterns": [
+        "export",
+        "control",
+        "enforcement",
+        "settlement",
+        "semiconductor",
+        "entity list",
+        "ai",
+        "technology"
+      ]
     },
-
     {
       "_comment": "Canary Media — clean energy, renewables, climate transition.",
       "id": "energy_canary",
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["ENERGY"],
+      "topic_tags": [
+        "ENERGY"
+      ],
       "family": "energy_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["canarymedia.com"],
+      "domains": [
+        "canarymedia.com"
+      ],
       "endpoint": "https://www.canarymedia.com/rss.rss",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Utility Dive — electric utility, grid, storage, regulatory coverage.",
@@ -392,16 +696,41 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["ENERGY"],
+      "topic_tags": [
+        "ENERGY"
+      ],
       "family": "energy_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["utilitydive.com"],
+      "domains": [
+        "utilitydive.com"
+      ],
       "endpoint": "https://www.utilitydive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
+    },
+    {
+      "_comment": "CleanTechnica — EV, solar, wind, clean energy transition coverage.",
+      "id": "energy_cleantechnica",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "ENERGY"
+      ],
+      "family": "energy_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "cleantechnica.com"
+      ],
+      "endpoint": "https://cleantechnica.com/feed/",
+      "parser": "rss",
+      "content_kind": "article"
     },
     {
       "_comment": "Power Magazine — power generation industry news, plant operations.",
@@ -409,11 +738,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["ENERGY"],
+      "topic_tags": [
+        "ENERGY"
+      ],
       "family": "energy_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["powermag.com"],
+      "domains": [
+        "powermag.com"
+      ],
       "endpoint": "https://www.powermag.com/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -424,15 +757,28 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["ENERGY"],
+      "topic_tags": [
+        "ENERGY"
+      ],
       "family": "energy_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["ferc.gov"],
+      "domains": [
+        "ferc.gov"
+      ],
       "endpoint": "https://www.ferc.gov/news-events/news/news-releases",
       "parser": "html_date_index",
       "content_kind": "official_document",
-      "title_include_patterns": ["order", "report", "rule", "interconnection", "transmission", "capacity", "reliability", "market"]
+      "title_include_patterns": [
+        "order",
+        "report",
+        "rule",
+        "interconnection",
+        "transmission",
+        "capacity",
+        "reliability",
+        "market"
+      ]
     },
     {
       "_comment": "EIA Today in Energy — daily energy market data and analysis.",
@@ -440,15 +786,28 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["ENERGY"],
+      "topic_tags": [
+        "ENERGY"
+      ],
       "family": "energy_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["eia.gov"],
+      "domains": [
+        "eia.gov"
+      ],
       "endpoint": "https://www.eia.gov/rss/todayinenergy.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["power", "electricity", "grid", "natural gas", "oil", "refinery", "renewable", "storage"]
+      "title_include_patterns": [
+        "power",
+        "electricity",
+        "grid",
+        "natural gas",
+        "oil",
+        "refinery",
+        "renewable",
+        "storage"
+      ]
     },
     {
       "_comment": "EIA Press Releases — official energy statistics and market outlook reports.",
@@ -456,28 +815,44 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["ENERGY"],
+      "topic_tags": [
+        "ENERGY"
+      ],
       "family": "energy_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["eia.gov"],
+      "domains": [
+        "eia.gov"
+      ],
       "endpoint": "https://www.eia.gov/rss/press_rss.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["electricity", "grid", "power", "natural gas", "oil", "storage", "renewable", "lng"]
+      "title_include_patterns": [
+        "electricity",
+        "grid",
+        "power",
+        "natural gas",
+        "oil",
+        "storage",
+        "renewable",
+        "lng"
+      ]
     },
-
     {
       "_comment": "American Banker — gold standard for banking, lending, payments coverage.",
       "id": "financial_american_banker",
       "enabled": true,
       "tier": 1,
       "lane": "publisher_feed",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["americanbanker.com"],
+      "domains": [
+        "americanbanker.com"
+      ],
       "endpoint": "https://www.americanbanker.com/feed.rss",
       "parser": "rss",
       "content_kind": "article",
@@ -489,16 +864,61 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["bankingdive.com"],
+      "domains": [
+        "bankingdive.com"
+      ],
       "endpoint": "https://www.bankingdive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
+    },
+    {
+      "_comment": "WSJ Markets — Wall Street Journal markets and finance RSS.",
+      "id": "financial_wsj_markets",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
+      "family": "financial_reported",
+      "source_kind": "reported_media",
+      "source_family": "reported",
+      "domains": [
+        "wsj.com"
+      ],
+      "endpoint": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Reuters Business News — timed out during verification; enable after confirming endpoint.",
+      "id": "financial_reuters_business",
+      "enabled": false,
+      "note": "feed url unverified — check before enabling",
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
+      "family": "financial_reported",
+      "source_kind": "reported_media",
+      "source_family": "reported",
+      "domains": [
+        "reuters.com"
+      ],
+      "endpoint": "https://feeds.reuters.com/reuters/businessNews",
+      "parser": "rss",
+      "content_kind": "article"
     },
     {
       "_comment": "Pensions & Investments — institutional asset management, pension fund strategy.",
@@ -506,11 +926,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["pionline.com"],
+      "domains": [
+        "pionline.com"
+      ],
       "endpoint": "https://www.pionline.com/rss",
       "parser": "rss",
       "content_kind": "article"
@@ -521,15 +945,29 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["federalreserve.gov"],
+      "domains": [
+        "federalreserve.gov"
+      ],
       "endpoint": "https://www.federalreserve.gov/feeds/press_all.xml",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["statement", "capital", "proposal", "rule", "supervision", "liquidity", "bank", "payment", "enforcement"]
+      "title_include_patterns": [
+        "statement",
+        "capital",
+        "proposal",
+        "rule",
+        "supervision",
+        "liquidity",
+        "bank",
+        "payment",
+        "enforcement"
+      ]
     },
     {
       "_comment": "OCC — national bank supervision, enforcement actions, charters. Re-enabled for MVP.",
@@ -537,15 +975,27 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["occ.treas.gov"],
+      "domains": [
+        "occ.treas.gov"
+      ],
       "endpoint": "https://www.occ.treas.gov/news-issuances/news-releases/index-news-releases.html",
       "parser": "html_date_index",
       "content_kind": "official_document",
-      "title_include_patterns": ["bank", "bulletin", "rule", "enforcement", "consent", "capital", "supervision"]
+      "title_include_patterns": [
+        "bank",
+        "bulletin",
+        "rule",
+        "enforcement",
+        "consent",
+        "capital",
+        "supervision"
+      ]
     },
     {
       "_comment": "SEC — securities enforcement, rulemaking, fund disclosures.",
@@ -553,33 +1003,53 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["sec.gov"],
+      "domains": [
+        "sec.gov"
+      ],
       "endpoint": "https://www.sec.gov/news/pressreleases.rss",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["charges", "settlement", "proposal", "rule", "disclosure", "adopt", "filing", "fund", "adviser", "dealer"]
+      "title_include_patterns": [
+        "charges",
+        "settlement",
+        "proposal",
+        "rule",
+        "disclosure",
+        "adopt",
+        "filing",
+        "fund",
+        "adviser",
+        "dealer"
+      ]
     },
-
     {
       "_comment": "Retail Dive — retail strategy, e-commerce, store operations. Industry Dive network.",
       "id": "consumer_retail_dive",
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["retaildive.com"],
+      "domains": [
+        "retaildive.com"
+      ],
       "endpoint": "https://www.retaildive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Modern Retail — DTC brands, omnichannel strategy, consumer brands.",
@@ -587,11 +1057,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["modernretail.co"],
+      "domains": [
+        "modernretail.co"
+      ],
       "endpoint": "https://www.modernretail.co/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -602,16 +1076,22 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["fooddive.com"],
+      "domains": [
+        "fooddive.com"
+      ],
       "endpoint": "https://www.fooddive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Consumer Goods Technology — CPG brand strategy, retail technology, supply chain.",
@@ -619,11 +1099,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["consumergoods.com"],
+      "domains": [
+        "consumergoods.com"
+      ],
       "endpoint": "https://www.consumergoods.com/rss.xml",
       "parser": "rss",
       "content_kind": "article"
@@ -634,11 +1118,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["progressivegrocer.com"],
+      "domains": [
+        "progressivegrocer.com"
+      ],
       "endpoint": "https://progressivegrocer.com/rss.xml",
       "parser": "rss",
       "content_kind": "article"
@@ -649,33 +1137,51 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["cpsc.gov"],
+      "domains": [
+        "cpsc.gov"
+      ],
       "endpoint": "https://www.cpsc.gov/Newsroom/News-Releases/rss",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["recall", "warning", "hazard", "safety", "alert", "ban", "fine", "enforcement"]
+      "title_include_patterns": [
+        "recall",
+        "warning",
+        "hazard",
+        "safety",
+        "alert",
+        "ban",
+        "fine",
+        "enforcement"
+      ]
     },
-
     {
       "_comment": "Grocery Dive — grocery retail, food service, consumer staples strategy. Industry Dive network.",
       "id": "consumer_grocery_dive",
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["grocerydive.com"],
+      "domains": [
+        "grocerydive.com"
+      ],
       "endpoint": "https://www.grocerydive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Restaurant Business — foodservice chains, operator strategy, menu trends.",
@@ -683,32 +1189,41 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["CONSUMER & RETAIL"],
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
       "family": "consumer_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["restaurantbusinessonline.com"],
+      "domains": [
+        "restaurantbusinessonline.com"
+      ],
       "endpoint": "https://www.restaurantbusinessonline.com/feed",
       "parser": "rss",
       "content_kind": "article"
     },
-
     {
       "_comment": "Manufacturing Dive — factory, production, operations, reshoring. Industry Dive network.",
       "id": "industrials_manufacturing_dive",
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["manufacturingdive.com"],
+      "domains": [
+        "manufacturingdive.com"
+      ],
       "endpoint": "https://www.manufacturingdive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Supply Chain Dive — logistics, procurement, inventory, supplier strategy. Industry Dive network.",
@@ -716,16 +1231,22 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["supplychaindive.com"],
+      "domains": [
+        "supplychaindive.com"
+      ],
       "endpoint": "https://www.supplychaindive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
-      "url_exclude_patterns": ["/spons/"]
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Industry Week — manufacturing strategy, automation, workforce. Verify feed URL.",
@@ -733,11 +1254,15 @@
       "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["industryweek.com"],
+      "domains": [
+        "industryweek.com"
+      ],
       "endpoint": "https://www.industryweek.com/rss",
       "parser": "rss",
       "content_kind": "article"
@@ -748,11 +1273,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["freightwaves.com"],
+      "domains": [
+        "freightwaves.com"
+      ],
       "endpoint": "https://www.freightwaves.com/news/rss",
       "parser": "rss",
       "content_kind": "article"
@@ -763,11 +1292,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["defensenews.com"],
+      "domains": [
+        "defensenews.com"
+      ],
       "endpoint": "https://www.defensenews.com/arc/outboundfeeds/rss/",
       "parser": "rss",
       "content_kind": "article"
@@ -778,11 +1311,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["aerospace-technology.com"],
+      "domains": [
+        "aerospace-technology.com"
+      ],
       "endpoint": "https://www.aerospace-technology.com/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -793,11 +1330,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["constructiondive.com"],
+      "domains": [
+        "constructiondive.com"
+      ],
       "endpoint": "https://www.constructiondive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article"
@@ -808,11 +1349,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["logisticsmgmt.com"],
+      "domains": [
+        "logisticsmgmt.com"
+      ],
       "endpoint": "https://www.logisticsmgmt.com/rss/all",
       "parser": "rss",
       "content_kind": "article"
@@ -823,11 +1368,15 @@
       "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_specialist",
       "source_kind": "trade_specialist",
       "source_family": "specialist",
-      "domains": ["sae.org"],
+      "domains": [
+        "sae.org"
+      ],
       "endpoint": "https://www.sae.org/news/rss",
       "parser": "rss",
       "content_kind": "article"
@@ -838,32 +1387,61 @@
       "enabled": false,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["INDUSTRIALS"],
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
       "family": "industrials_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["osha.gov"],
+      "domains": [
+        "osha.gov"
+      ],
       "endpoint": "https://www.osha.gov/news/newsreleases/national/rss",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["enforcement", "citation", "fine", "standard", "rule", "hazard", "safety", "recall", "inspection"]
+      "title_include_patterns": [
+        "enforcement",
+        "citation",
+        "fine",
+        "standard",
+        "rule",
+        "hazard",
+        "safety",
+        "recall",
+        "inspection"
+      ]
     },
-
     {
       "_comment": "Federal Register — cross-sector regulatory rulemaking. Now tagged to financial, healthcare, and energy sectors. Disabled govexec/federalnews which were general government-ops content.",
       "id": "policy_federal_register",
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES", "HEALTHCARE", "ENERGY"],
+      "topic_tags": [
+        "FINANCIAL SERVICES",
+        "HEALTHCARE",
+        "ENERGY"
+      ],
       "family": "cross_sector_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["federalregister.gov"],
+      "domains": [
+        "federalregister.gov"
+      ],
       "endpoint": "https://www.federalregister.gov/api/v1/documents.json?per_page=20&order=newest",
       "parser": "federal_register_api",
       "content_kind": "official_document",
-      "title_include_patterns": ["rule", "proposed", "guidance", "notice", "enforcement", "order", "trade", "compliance", "sanction"]
+      "title_include_patterns": [
+        "rule",
+        "proposed",
+        "guidance",
+        "notice",
+        "enforcement",
+        "order",
+        "trade",
+        "compliance",
+        "sanction"
+      ]
     },
     {
       "_comment": "FTC — antitrust, consumer protection, merger enforcement. Cross-tagged to financial, technology, consumer.",
@@ -871,15 +1449,32 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES", "TECHNOLOGY", "CONSUMER & RETAIL"],
+      "topic_tags": [
+        "FINANCIAL SERVICES",
+        "TECHNOLOGY",
+        "CONSUMER & RETAIL"
+      ],
       "family": "cross_sector_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["ftc.gov"],
+      "domains": [
+        "ftc.gov"
+      ],
       "endpoint": "https://www.ftc.gov/news-events/news/press-releases",
       "parser": "html_date_index",
       "content_kind": "official_document",
-      "title_include_patterns": ["antitrust", "consumer", "rule", "proposed", "settlement", "enforcement", "competition", "merger", "privacy", "data"]
+      "title_include_patterns": [
+        "antitrust",
+        "consumer",
+        "rule",
+        "proposed",
+        "settlement",
+        "enforcement",
+        "competition",
+        "merger",
+        "privacy",
+        "data"
+      ]
     },
     {
       "_comment": "DOJ Antitrust Division — merger reviews, criminal antitrust. Cross-tagged to financial and technology.",
@@ -887,15 +1482,28 @@
       "enabled": true,
       "tier": 1,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES", "TECHNOLOGY"],
+      "topic_tags": [
+        "FINANCIAL SERVICES",
+        "TECHNOLOGY"
+      ],
       "family": "cross_sector_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["justice.gov"],
+      "domains": [
+        "justice.gov"
+      ],
       "endpoint": "https://www.justice.gov/news/rss?type%5B0%5D=press_release&field_component=376&search_api_language=en&show_public_archived=0&require_all=0",
       "parser": "rss",
       "content_kind": "official_document",
-      "title_include_patterns": ["antitrust", "competition", "merger", "settlement", "enforcement", "complaint", "acquisition"]
+      "title_include_patterns": [
+        "antitrust",
+        "competition",
+        "merger",
+        "settlement",
+        "enforcement",
+        "complaint",
+        "acquisition"
+      ]
     },
     {
       "_comment": "GovExec — government operations news. Disabled: content is government-ops focused, not sector-relevant for MVP.",
@@ -903,11 +1511,15 @@
       "enabled": false,
       "tier": 3,
       "lane": "publisher_feed",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["govexec.com"],
+      "domains": [
+        "govexec.com"
+      ],
       "endpoint": "https://www.govexec.com/rss/all/",
       "parser": "rss",
       "content_kind": "article"
@@ -918,11 +1530,15 @@
       "enabled": false,
       "tier": 3,
       "lane": "publisher_feed",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_reported",
       "source_kind": "reported_media",
       "source_family": "reported",
-      "domains": ["federalnewsnetwork.com"],
+      "domains": [
+        "federalnewsnetwork.com"
+      ],
       "endpoint": "https://federalnewsnetwork.com/feed/",
       "parser": "rss",
       "content_kind": "article"
@@ -933,16 +1549,26 @@
       "enabled": false,
       "tier": 3,
       "lane": "official",
-      "topic_tags": ["FINANCIAL SERVICES"],
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
       "family": "financial_official",
       "source_kind": "primary_official",
       "source_family": "official",
-      "domains": ["govinfo.gov"],
+      "domains": [
+        "govinfo.gov"
+      ],
       "endpoint": "https://www.govinfo.gov/feeds",
       "parser": "html_date_index",
       "content_kind": "official_document",
-      "title_include_patterns": ["rule", "guidance", "report", "notice", "regulation", "agency"]
+      "title_include_patterns": [
+        "rule",
+        "guidance",
+        "report",
+        "notice",
+        "regulation",
+        "agency"
+      ]
     }
-
   ]
 }

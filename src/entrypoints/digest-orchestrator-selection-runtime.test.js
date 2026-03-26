@@ -1,48 +1,127 @@
 "use strict";
 const assert = require("assert");
+const { createDigestOrchestratorSelectionRuntime } = require("./digest-orchestrator-selection-runtime");
+const { articleAgeTooOld } = require("../digest/runtime/digest-data-fetch-items-runtime");
 
-// Pure unit test of the freshness-tier splitting helpers that will be exported.
-let splitByFreshnessTiers;
-try {
-  ({ splitByFreshnessTiers } = require("./digest-orchestrator-selection-runtime"));
-} catch (_) {
-  // will fail at export assertion below
+function makeDeps(overrides = {}) {
+  return {
+    CONFIG: { digest: { crossDayDedupDays: 3, maxItemsPerTag: 5, maxItemsPerSourceDomain: 2 } },
+    log: () => {},
+    createDigestPolicies: () => ({ rankingPolicy: { repeatPenalty: 0 }, depthPolicy: { defaultItemCount: 5 } }),
+    dedupAgainstRecentArchives: (items) => ({ items, removed: 0, backfilled: 0, archive_days_used: 3 }),
+    buildRecentRepeatIndex: () => ({ urlKeys: new Set(), headlineKeys: new Set(), days: 3 }),
+    selectItems: (items, opts) => items.slice(0, opts.maxItems),
+    loadRecentArchiveItems: () => [],
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items, suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
+    emitDigestIncident: async () => {},
+    articleAgeTooOld,
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: null,
+    ...overrides,
+  };
 }
 
-assert(typeof splitByFreshnessTiers === "function",
-  "splitByFreshnessTiers must be exported from digest-orchestrator-selection-runtime");
-
-const NOW = Date.now();
-const h = (hours) => NOW - hours * 60 * 60 * 1000;
-
-function makeItem(tag, headline, ageHours) {
-  return { tag, headline, url: `https://x.com/${headline}`, published_at: h(ageHours) };
+// Use real published_date timestamps because articleAgeTooOld reads item.published_date
+function itemAgedHours(ageHours, tag, url) {
+  const ts = new Date(Date.now() - ageHours * 3600 * 1000).toISOString();
+  return { tag, url, headline: `Item from ${url}`, published_date: ts };
 }
 
-// Tier splitting: items at 0h, 20h, 30h, 50h
-{
-  const items = [
-    makeItem("TECHNOLOGY", "headline-0h", 0),
-    makeItem("TECHNOLOGY", "headline-20h", 20),
-    makeItem("TECHNOLOGY", "headline-30h", 30),
-    makeItem("TECHNOLOGY", "headline-50h", 50),
-  ];
-  const { tier1, tier2, tier3 } = splitByFreshnessTiers(items, NOW);
-  assert.strictEqual(tier1.length, 2, "tier1 (0-24h): 2 items");
-  assert.strictEqual(tier2.length, 1, "tier2 (24-48h): 1 item");
-  assert.strictEqual(tier3.length, 1, "tier3 (48h+): 1 item");
-  console.log("splitByFreshnessTiers ✓");
+const tests = [];
+let passed = 0;
+let failed = 0;
+
+async function run() {
+  // Test 1: targeted run uses 48h gate (60h item rejected even in targeted mode)
+  try {
+    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps());
+    const stale = itemAgedHours(60, "TECHNOLOGY", "https://a.com/1");
+    const fresh = itemAgedHours(10, "TECHNOLOGY", "https://a.com/2");
+    const result = await runtime.selectForEnrichment({
+      allItems: [stale, fresh],
+      selectionTarget: 5,
+      customTags: [],
+      tagPriority: {},
+      runMode: "targeted",
+      digestDateKey: "2026-03-25",
+      dueUsersCount: 1,
+      standardFetchCallsPlanned: 2,
+    });
+    assert.ok(!result.selected.some(i => i.url === stale.url), "60h item should be rejected in targeted mode");
+    assert.ok(result.selected.some(i => i.url === fresh.url), "10h item should be kept in targeted mode");
+    console.log("✓ Test 1: targeted 48h gate");
+    passed++;
+  } catch(e) {
+    console.error("✗ Test 1:", e.message);
+    failed++;
+  }
+
+  // Test 2: scheduled run with empty live + empty archive throws
+  try {
+    const incidents = [];
+    const deps = makeDeps({
+      emitDigestIncident: async (type) => { incidents.push(type); },
+      selectItems: () => [],
+      loadRecentArchiveItems: () => [],
+    });
+    let threw = false;
+    try {
+      await createDigestOrchestratorSelectionRuntime(deps).selectForEnrichment({
+        allItems: [], selectionTarget: 5, customTags: [], tagPriority: {},
+        runMode: "scheduled", digestDateKey: "2026-03-25", dueUsersCount: 1, standardFetchCallsPlanned: 2,
+      });
+    } catch(err) {
+      threw = true;
+      assert.ok(err.message.includes("aborted"), `Expected 'aborted' in error, got: ${err.message}`);
+    }
+    assert.ok(threw, "Should have thrown");
+    console.log("✓ Test 2: empty scheduled run throws");
+    passed++;
+  } catch(e) {
+    console.error("✗ Test 2:", e.message);
+    failed++;
+  }
+
+  // Test 3: scheduled run with archive available still throws (no rescue)
+  try {
+    const incidents = [];
+    const archiveItems = [itemAgedHours(10, "TECHNOLOGY", "https://archive.com/1")];
+    let liveCalled = false;
+    const deps = makeDeps({
+      emitDigestIncident: async (type) => { incidents.push(type); },
+      selectItems: (pool) => {
+        if (!liveCalled) { liveCalled = true; return []; }
+        return pool;
+      },
+      loadRecentArchiveItems: () => archiveItems,
+    });
+    let threw = false;
+    try {
+      await createDigestOrchestratorSelectionRuntime(deps).selectForEnrichment({
+        allItems: [], selectionTarget: 5, customTags: [], tagPriority: {},
+        runMode: "scheduled", digestDateKey: "2026-03-25", dueUsersCount: 1, standardFetchCallsPlanned: 2,
+      });
+    } catch(err) {
+      threw = true;
+      assert.ok(err.message.includes("aborted"), `Expected 'aborted', got: ${err.message}`);
+    }
+    assert.ok(threw, "Should have thrown");
+    assert.ok(incidents.includes("no-live-items-scheduled"), `Expected incident 'no-live-items-scheduled', got: ${JSON.stringify(incidents)}`);
+    console.log("✓ Test 3: scheduled run refuses archive rescue");
+    passed++;
+  } catch(e) {
+    console.error("✗ Test 3:", e.message);
+    failed++;
+  }
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
 }
 
-// Items with no timestamp go to tier3
-{
-  const items = [makeItem("TECHNOLOGY", "no-ts", 0)];
-  items[0].published_at = undefined;
-  const { tier1, tier2, tier3 } = splitByFreshnessTiers(items, NOW);
-  assert.strictEqual(tier1.length, 0);
-  assert.strictEqual(tier2.length, 0);
-  assert.strictEqual(tier3.length, 1, "missing timestamp → tier3");
-  console.log("missing timestamp → tier3 ✓");
-}
-
-console.log("All selection guarantee tests passed ✓");
+run();

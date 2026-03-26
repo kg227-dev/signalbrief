@@ -32,6 +32,17 @@ const RSS_ITEM_PATTERN = /<item\b[\s\S]*?<\/item>/gi;
 const ATOM_ENTRY_PATTERN = /<entry\b[\s\S]*?<\/entry>/gi;
 const ATOM_LINK_PATTERN = /<link\b[^>]*href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/gi;
 
+/**
+ * Pick one canonical topic for an article.
+ * Uses topic_tags[0] — callers should list tags in priority order.
+ * @param {string[]} topicTags
+ * @returns {string|null}
+ */
+function assignCanonicalTopic(topicTags) {
+  if (!Array.isArray(topicTags) || topicTags.length === 0) return null;
+  return topicTags[0];
+}
+
 function normalizeWhitespace(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
@@ -630,11 +641,9 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       diagnostics.stale_count += 1;
       continue;
     }
-    for (const tag of (Array.isArray(source?.topic_tags) ? source.topic_tags : [])) {
-      items.push({
-        ...itemBase,
-        tag,
-      });
+    const canonicalTag = assignCanonicalTopic(Array.isArray(source?.topic_tags) ? source.topic_tags : []);
+    if (canonicalTag) {
+      items.push({ ...itemBase, tag: canonicalTag });
       diagnostics.retained_count += 1;
     }
   }
@@ -813,6 +822,7 @@ function createStandardTopicBrokerRuntime(options = {}) {
 }
 
 module.exports = {
+  assignCanonicalTopic,
   createStandardTopicBrokerRuntime,
   sanitizeBrokerConfig,
 };

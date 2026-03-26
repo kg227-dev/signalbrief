@@ -9,7 +9,7 @@
     DEFAULT_TOPICS,
     showError,
   }) {
-    const maxCustomKeywords = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+    const maxCustomKeywords = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
 
     function isCustomTopic(topic) {
       if (typeof Prefs.isCustomTopic === "function") return Prefs.isCustomTopic(topic);

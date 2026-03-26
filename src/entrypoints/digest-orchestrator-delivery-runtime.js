@@ -11,16 +11,14 @@ const {
   getCustomTopicMetadata,
   isRetryEligibleFailureClass,
   listTrustedOnlyCustomKeywords,
-  selectDeliveryItems,
+  selectTopicBuckets,
 } = require("../runtime/digest-delivery-policy-runtime");
 
 function createDigestOrchestratorDeliveryRuntime(deps) {
   const {
     CONFIG,
     log,
-    applyAutoTopicLearning,
     writeUser,
-    buildLearningSummary,
     filterItemsByTopics,
     applyTopicRelevanceScores,
     buildRecentEntityHistory,
@@ -367,29 +365,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               : Math.max(1, Number(CONFIG.digest.perUserEntityHistoryDigests || 3)),
           })
           : [];
-        const autoLearning = applyAutoTopicLearning(user, {
-          events: engagementEvents,
-          now,
-          date_key: digestDateKey,
-          run_id: runId,
-        });
-        const autoLearningEventFailures = Math.max(0, Number(autoLearning.event_write_failures || 0));
-        if (autoLearningEventFailures > 0) {
-          log(`⚠️ [auto-learning] ${user.email || user.chatId}: engagement event write failures=${autoLearningEventFailures}`);
-        }
-        if (autoLearning.changed) {
-          writeUser(user.chatId, user);
-          const changes = autoLearning.adjustments
-            .map((adjustment) => `${adjustment.topic}:${adjustment.prev}->${adjustment.next}`)
-            .join(", ");
-          log(`  [auto-learning] ${user.email || user.chatId}: ${changes} (events=${autoLearning.processed_events})`);
-        }
-        const baseLearning = autoLearning.changed
-          ? buildLearningSummary(autoLearning.adjustments, 2)
-          : "";
-        const learningSummary = [baseLearning, String(repetitionNote || "").trim()]
-          .filter(Boolean)
-          .join(" · ");
+        const learningSummary = String(repetitionNote || "").trim();
 
         const ranked = rankingRuntime.rankAndSuppressUserItems({
           user,
@@ -413,14 +389,23 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           .filter((topic) => String(topic || "").startsWith("custom_"))
           .map((topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").trim())
           .filter(Boolean);
-        lowerConfidenceAssist7dCount = loadRecentLowerConfidenceAssistCount(userId, now.toISOString());
-        const trustedOnlyCustomKeywords = selectTrustedOnlyKeywords(userCustomKeywords);
-        deliverySelection = selectDeliveryItems(userItems, {
-          attemptCount,
-          nowIso: now.toISOString(),
-          customKeywords: userCustomKeywords,
-          lowerConfidenceAssistCount: lowerConfidenceAssist7dCount,
-        });
+        lowerConfidenceAssist7dCount = 0; // email-only MVP: confidence-tier tracking removed
+        const subscribedStandardTopics = (Array.isArray(user.topics) ? user.topics : [])
+          .filter((t) => !String(t || "").startsWith("custom_"));
+        const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, 5);
+        const bucketItems = Object.values(topicBuckets).flat();
+        deliverySelection = {
+          items: bucketItems,
+          delivery_eligible: bucketItems.length > 0,
+          high_confidence_available_count: bucketItems.length,
+          lower_confidence_available_count: 0,
+          high_confidence_count: bucketItems.length,
+          lower_confidence_count: 0,
+          lower_confidence_used: false,
+          lower_confidence_cap_reached: false,
+          annotations: [],
+          topic_buckets: topicBuckets,
+        };
         const candidateDisplayItems = sortDigestItemsByScoreDescending(applyDigestDepth(userItems, depth));
         const previousDigestItems = Array.isArray(user.last_digest_items) ? user.last_digest_items : [];
         const candidateDigestQuality = computeDigestQualityScore({

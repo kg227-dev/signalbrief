@@ -165,7 +165,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       chatId: "email-user",
       email: "sorted@example.com",
       token: "tok-1",
-      topics: ["TECHNOLOGY"],
+      topics: ["SUSTAINABILITY", "ENERGY", "AI×TECH", "TECHNOLOGY", "POLICY×REGULATORY"],
       preferences: {
         depth: "headline_plus_why",
         email_enabled: true,

@@ -320,6 +320,34 @@ function deriveInternalThinnessLabel(params = {}) {
   return "product_underdelivery";
 }
 
+/**
+ * Group items into per-topic buckets, each capped at `itemsPerTopic`,
+ * sorted descending by relevanceScore. Only topics in subscribedTopics included.
+ *
+ * @param {Array} items
+ * @param {string[]} subscribedTopics
+ * @param {number} itemsPerTopic — default 5
+ * @returns {{ [topic: string]: Array }}
+ */
+function selectTopicBuckets(items, subscribedTopics, itemsPerTopic = 5) {
+  const topicSet = new Set(Array.isArray(subscribedTopics) ? subscribedTopics : []);
+  const buckets = {};
+  for (const topic of topicSet) {
+    buckets[topic] = [];
+  }
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const tag = String(item?.tag || "").trim();
+    if (!topicSet.has(tag)) continue;
+    buckets[tag].push(item);
+  }
+  for (const topic of Object.keys(buckets)) {
+    buckets[topic] = buckets[topic]
+      .sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0))
+      .slice(0, itemsPerTopic);
+  }
+  return buckets;
+}
+
 module.exports = {
   DELIVERY_POLICY,
   TRANSIENT_FAILURE_CLASSES,
@@ -337,4 +365,5 @@ module.exports = {
   matchedTopicClassesForItem,
   normalizeCustomTopicKey,
   selectDeliveryItems,
+  selectTopicBuckets,
 };

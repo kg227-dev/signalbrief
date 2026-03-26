@@ -11,7 +11,7 @@ const {
   getCustomTopicMetadata,
   isRetryEligibleFailureClass,
   listTrustedOnlyCustomKeywords,
-  selectDeliveryItems,
+  selectTopicBuckets,
 } = require("../runtime/digest-delivery-policy-runtime");
 
 function createDigestOrchestratorDeliveryRuntime(deps) {
@@ -386,14 +386,23 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           .filter((topic) => String(topic || "").startsWith("custom_"))
           .map((topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").trim())
           .filter(Boolean);
-        lowerConfidenceAssist7dCount = loadRecentLowerConfidenceAssistCount(userId, now.toISOString());
-        const trustedOnlyCustomKeywords = selectTrustedOnlyKeywords(userCustomKeywords);
-        deliverySelection = selectDeliveryItems(userItems, {
-          attemptCount,
-          nowIso: now.toISOString(),
-          customKeywords: userCustomKeywords,
-          lowerConfidenceAssistCount: lowerConfidenceAssist7dCount,
-        });
+        lowerConfidenceAssist7dCount = 0; // email-only MVP: confidence-tier tracking removed
+        const subscribedStandardTopics = (Array.isArray(user.topics) ? user.topics : [])
+          .filter((t) => !String(t || "").startsWith("custom_"));
+        const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, 5);
+        const bucketItems = Object.values(topicBuckets).flat();
+        deliverySelection = {
+          items: bucketItems,
+          delivery_eligible: bucketItems.length > 0,
+          high_confidence_available_count: bucketItems.length,
+          lower_confidence_available_count: 0,
+          high_confidence_count: bucketItems.length,
+          lower_confidence_count: 0,
+          lower_confidence_used: false,
+          lower_confidence_cap_reached: false,
+          annotations: [],
+          topic_buckets: topicBuckets,
+        };
         const candidateDisplayItems = sortDigestItemsByScoreDescending(applyDigestDepth(userItems, depth));
         const previousDigestItems = Array.isArray(user.last_digest_items) ? user.last_digest_items : [];
         const candidateDigestQuality = computeDigestQualityScore({

@@ -733,6 +733,11 @@ async function main() {
   const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
   const suppressWelcome = args.includes("--suppressWelcome");
   const runMode = targetChatId ? "targeted" : "scheduled";
+  if (runMode === "targeted") {
+    log("Targeted/on-demand digest mode is disabled in email-only MVP");
+    logEvent("info", "digest.run.skipped", { provider: "orchestrator", outcome: "targeted_mode_disabled", mode: runMode });
+    process.exit(0);
+  }
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
   setDigestLoggerContext({
     run_id: runId,

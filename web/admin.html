@@ -435,13 +435,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .warn-badge { font-size:11px; font-weight:700; color:var(--yellow); }
 .missed-flag { color:var(--yellow); font-size:12px; font-weight:600; }
 
-/* Topic weights pill */
-.weights-pill {
-  display:inline-block; font-size:11px; font-weight:600; font-family:ui-monospace,monospace;
-  background:#EFF6FF; color:var(--accent); padding:2px 7px; border-radius:100px;
-  margin-left:6px; cursor:default; white-space:nowrap;
-}
-
 /* Send digest button (inline in roster) */
 .send-btn {
   font-size:11px; font-weight:600; padding:4px 10px; border-radius:6px;
@@ -929,7 +922,6 @@ body.dark .btn-secondary:hover { background:var(--accent-light); }
 body.dark .table-action-link { background:var(--card); color:var(--accent); }
 body.dark .table-action-link:hover { background:var(--accent-light); }
 body.dark .expand-btn { background:var(--card); }
-body.dark .weights-pill { background:rgba(107,139,214,0.15); color:var(--accent); }
 body.dark .modal-feedback.ok { background:#0a2a1a; color:#6ee7a0; border-color:#065F46; }
 body.dark .modal-feedback.err { background:#2a0a0a; color:#fca5a5; border-color:#991B1B; }
 body.dark .failed-delivery-row { background:var(--card); }
@@ -2573,20 +2565,6 @@ async function apiFetchJson(url, options = {}, maxRetries = 2) {
   return { ok: false, status: 0, data: { error: "Request failed" }, attempts: maxRetries + 1 };
 }
 
-// ── Topic weights summary string ───────────────────────────────────────────────
-function weightsSummary(weights) {
-  if (!weights || !Object.keys(weights).length) return "";
-  return Object.entries(weights)
-    .filter(([, v]) => v !== 0)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])) // highest magnitude first
-    .slice(0, 3) // cap at 3 for space
-    .map(([k, v]) => {
-      const label = k.replace(/^custom_/,"").replace(/_/g," ").split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ").slice(0, 10);
-      return `${label} ${v > 0 ? "+" : ""}${v}`;
-    })
-    .join(" · ");
-}
-
 // ── Per-user send tools (digest + custom message) ─────────────────────────────
 function getSendCapabilities(user) {
   const canDigest = user.status === "active" && !!user.chat_id;
@@ -3570,7 +3548,6 @@ function renderSubscriberDrawer(u) {
     `${u.email_enabled ? "✅" : "⛔"} Email ${u.email_enabled ? "enabled" : "disabled"}`,
     `${u.telegram_enabled ? "✅" : "⛔"} Telegram ${u.telegram_enabled ? "enabled" : "disabled"}`,
   ];
-  const wSummary = weightsSummary(u.topic_weights || {});
   const previewHtml = preview.length
     ? `<div class="drawer-preview-list">${preview.map((p, i) => {
       const label = `[${p.tag || "news"}] ${p.headline || ""}`.trim();
@@ -3615,9 +3592,7 @@ function renderSubscriberDrawer(u) {
             <div class="drawer-list-row"><span class="drawer-list-label">Schedule</span><span class="drawer-list-value">${esc(u.days_label || "—")} · ${esc(u.delivery_time || "—")}</span></div>
             <div class="drawer-list-row"><span class="drawer-list-label">Timezone</span><span class="drawer-list-value mono">${esc(u.timezone || "America/New_York")}</span></div>
             <div class="drawer-list-row"><span class="drawer-list-label">Depth</span><span class="drawer-list-value">${esc(u.depth || "Deep")}</span></div>
-            <div class="drawer-list-row"><span class="drawer-list-label">Items / digest</span><span class="drawer-list-value">${esc(u.items_per_digest || 5)}</span></div>
             <div class="drawer-list-row"><span class="drawer-list-label">Channels</span><span class="drawer-list-value">${esc(channels.join(" · "))}</span></div>
-            <div class="drawer-list-row"><span class="drawer-list-label">Topic tuning</span><span class="drawer-list-value">${esc(wSummary || "None")}</span></div>
           </div>
         </div>
         <div class="drawer-card">
@@ -3658,10 +3633,6 @@ function renderSubscriberTable(roster) {
     const emailKey = String(u.email || "").toLowerCase().trim();
     const isExpanded = emailKey && expandedSubscriberEmail === emailKey;
     const topicsCell = renderTopicChips(u.topics_raw || [], 4);
-    const wSummary = weightsSummary(u.topic_weights || {});
-    const weightsPill = wSummary
-      ? `<span class="weights-pill" title="Personalization: ${esc(wSummary)}">${esc(wSummary)}</span>`
-      : "";
     const lastDig = u.last_digest || "—";
     const missedHtml = u.days_missed >= 2
       ? ` <span class="missed-flag" title="Missed ${u.days_missed} scheduled delivery day${u.days_missed > 1 ? "s" : ""}">⚠️</span>`
@@ -3684,7 +3655,7 @@ function renderSubscriberTable(roster) {
           <div class="subscriber-sub">${esc(u.days_label || "—")} · ${esc(u.timezone || "America/New_York")}</div>
         </td>
         <td class="mono" style="white-space:normal;line-height:1.4;">${esc(u.next_delivery_et || "—")}</td>
-        <td class="topics-cell">${topicsCell}${weightsPill ? `<div style="margin-top:6px;">${weightsPill}</div>` : ""}</td>
+        <td class="topics-cell">${topicsCell}</td>
         <td>
           <div style="font-weight:700;">${u.digests || 0}</div>
           <div class="subscriber-sub mono">${esc(lastDig)}${missedHtml}</div>
@@ -3708,7 +3679,6 @@ function downloadScheduleCsv() {
     "delivery_days",
     "delivery_time",
     "timezone",
-    "items_per_digest",
     "depth",
     "topics",
     "digests",
@@ -3722,7 +3692,6 @@ function downloadScheduleCsv() {
     u.days_label || "",
     u.delivery_time || "",
     u.timezone || "America/New_York",
-    u.items_per_digest || 5,
     u.depth || "",
     u.topics_list || "",
     u.digests || 0,

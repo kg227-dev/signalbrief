@@ -43,7 +43,7 @@ const testConfig = {
     timezone: "America/New_York",
   },
   digest: {
-    itemCount: 7,
+    itemCount: 5,
     maxItemsPerTag: 2,
     lookbackHours: 48,
   },
@@ -61,9 +61,6 @@ const testConfig = {
   keys: {
     perplexity: "config-perplexity",
     anthropic: "config-anthropic",
-    googleRefreshToken: "",
-    googleClientId: "",
-    googleClientSecret: "",
     resendApiKey: "",
     fromEmail: "digest@example.com",
     fromName: "SignalBrief",

@@ -69,32 +69,6 @@ function createCostRunsReader({ fs, costLogPath }) {
   };
 }
 
-function createLegacyArchiveUsageRecorder({
-  fs,
-  path,
-  archiveLegacyUsageLog,
-  getRequestHost,
-  getClientIp,
-}) {
-  return function recordLegacyArchiveUsage(req, endpoint, outcome, metadata = {}) {
-    appendJsonLineLog({
-      fs,
-      path,
-      filePath: archiveLegacyUsageLog,
-      entry: {
-        ts_utc: new Date().toISOString(),
-        endpoint,
-        outcome,
-        method: req.method,
-        host: getRequestHost(req),
-        ip: getClientIp(req),
-        metadata: metadata && typeof metadata === "object" ? metadata : {},
-      },
-      label: "archive-legacy-usage",
-    });
-  };
-}
-
 function createAdminAuditLoggers({
   fs,
   path,
@@ -150,7 +124,6 @@ function createAdminAuditLoggers({
 
 module.exports = {
   createCostRunsReader,
-  createLegacyArchiveUsageRecorder,
   createAdminAuditLoggers,
   isScheduledRunRecord,
 };

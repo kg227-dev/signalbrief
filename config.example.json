@@ -120,9 +120,6 @@
     "resendApiKey": "",
     "fromEmail": "digest@getsignalbrief.com",
     "fromName": "SignalBrief",
-    "unsubscribeSigningSecret": "",
-    "googleRefreshToken": "",
-    "googleClientId": "",
-    "googleClientSecret": ""
+    "unsubscribeSigningSecret": ""
   }
 }

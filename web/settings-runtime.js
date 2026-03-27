@@ -7,9 +7,6 @@ const SettingsUiRuntime = globalScope.SignalBriefSettingsUiRuntime || {};
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS)
   ? Prefs.INDUSTRY_TOPICS
   : [];
-const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS)
-  ? Prefs.CAPABILITY_TOPICS
-  : [];
 const DEFAULT_TOPICS = Array.isArray(Prefs.DEFAULT_TOPICS)
   ? Prefs.DEFAULT_TOPICS
   : [];
@@ -60,7 +57,6 @@ function getSettingsUi() {
     prefState,
     byId,
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     showError,
     showBanner,

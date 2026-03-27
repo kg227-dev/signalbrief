@@ -15,26 +15,22 @@
     return out;
   }
 
-  function buildTopicCatalogSnapshot({ industryTopics, capabilityTopics, defaultTopics }) {
+  function buildTopicCatalogSnapshot({ industryTopics, defaultTopics }) {
     return {
       industries: industryTopics.slice(),
-      capabilities: capabilityTopics.slice(),
       topics: defaultTopics.slice(),
     };
   }
 
-  function deriveTopicCatalog(payload, { fallbackIndustries, fallbackCapabilities }) {
+  function deriveTopicCatalog(payload, { fallbackIndustries }) {
     const industries = sanitizeTopicList(payload && payload.industries);
-    const capabilities = sanitizeTopicList(payload && payload.capabilities);
     const defaults = sanitizeTopicList(payload && payload.topics);
 
     const nextIndustries = industries.length ? industries : fallbackIndustries;
-    const nextCapabilities = capabilities.length ? capabilities : fallbackCapabilities;
-    const nextDefaults = defaults.length ? defaults : [...nextIndustries, ...nextCapabilities];
+    const nextDefaults = defaults.length ? defaults : [...nextIndustries];
 
     return {
       industries: nextIndustries,
-      capabilities: nextCapabilities,
       topics: nextDefaults,
     };
   }

@@ -5,7 +5,6 @@
     prefState,
     byId,
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     showError,
   }) {
@@ -98,11 +97,6 @@
 
       container.appendChild(renderGroupLabel("Industries"));
       INDUSTRY_TOPICS.forEach((topic) => {
-        container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
-      });
-
-      container.appendChild(renderGroupLabel("Capabilities"));
-      CAPABILITY_TOPICS.forEach((topic) => {
         container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
       });
 

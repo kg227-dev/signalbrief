@@ -14,11 +14,8 @@
     "INDUSTRIALS",
   ];
 
-  const FALLBACK_CAPABILITY_TOPICS = [];
-
   const INDUSTRY_TOPICS = [...FALLBACK_INDUSTRY_TOPICS];
-  const CAPABILITY_TOPICS = [...FALLBACK_CAPABILITY_TOPICS];
-  const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+  const DEFAULT_TOPICS = [...INDUSTRY_TOPICS];
   const MAX_CUSTOM_KEYWORDS = 0;
 
   const TOPIC_LABELS = {
@@ -40,24 +37,20 @@
 
   const buildTopicCatalogSnapshot = typeof topicRuntime.buildTopicCatalogSnapshot === "function"
     ? topicRuntime.buildTopicCatalogSnapshot
-    : ({ industryTopics, capabilityTopics, defaultTopics }) => ({
+    : ({ industryTopics, defaultTopics }) => ({
       industries: industryTopics.slice(),
-      capabilities: capabilityTopics.slice(),
       topics: defaultTopics.slice(),
     });
 
   const deriveTopicCatalog = typeof topicRuntime.deriveTopicCatalog === "function"
     ? topicRuntime.deriveTopicCatalog
-    : (payload, { fallbackIndustries, fallbackCapabilities }) => {
+    : (payload, { fallbackIndustries }) => {
       const industries = Array.isArray(payload?.industries) ? payload.industries.map(String).filter(Boolean) : [];
-      const capabilities = Array.isArray(payload?.capabilities) ? payload.capabilities.map(String).filter(Boolean) : [];
       const topics = Array.isArray(payload?.topics) ? payload.topics.map(String).filter(Boolean) : [];
       const nextIndustries = industries.length ? industries : fallbackIndustries;
-      const nextCapabilities = capabilities.length ? capabilities : fallbackCapabilities;
       return {
         industries: nextIndustries,
-        capabilities: nextCapabilities,
-        topics: topics.length ? topics : [...nextIndustries, ...nextCapabilities],
+        topics: topics.length ? topics : [...nextIndustries],
       };
     };
 
@@ -130,7 +123,6 @@
   function getTopicCatalog() {
     return buildTopicCatalogSnapshot({
       industryTopics: INDUSTRY_TOPICS,
-      capabilityTopics: CAPABILITY_TOPICS,
       defaultTopics: DEFAULT_TOPICS,
     });
   }
@@ -138,10 +130,8 @@
   function setTopicCatalog(payload = {}) {
     const nextCatalog = deriveTopicCatalog(payload, {
       fallbackIndustries: FALLBACK_INDUSTRY_TOPICS,
-      fallbackCapabilities: FALLBACK_CAPABILITY_TOPICS,
     });
     replaceArray(INDUSTRY_TOPICS, nextCatalog.industries);
-    replaceArray(CAPABILITY_TOPICS, nextCatalog.capabilities);
     replaceArray(DEFAULT_TOPICS, nextCatalog.topics);
     topicCatalogLoaded = true;
     return getTopicCatalog();
@@ -194,7 +184,6 @@
 
   globalScope.SignalBriefPrefsRuntime = {
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
     TOPIC_LABELS,

@@ -59,22 +59,15 @@ function createCoreApiRouteHandler(deps) {
     json,
     DEFAULT_TOPICS,
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     digestRunStatus,
     getCachedOrRefreshSchedulerHeartbeat,
     findUserByToken,
     handleSignup,
     handleSettings,
-    ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC,
-    getArchiveLegacyDeprecationDeadlineUtc,
     requestSchedulerWorkerRestart,
     forkSchedulerWorker,
     getRuntimeStateHealth,
   } = deps;
-
-  const resolveArchiveLegacyDeprecationDeadlineUtc = typeof getArchiveLegacyDeprecationDeadlineUtc === "function"
-    ? getArchiveLegacyDeprecationDeadlineUtc
-    : () => ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC;
 
   return async function handleCoreApiRoutes(ctx) {
     const { req, res, url, pathname } = ctx;
@@ -131,7 +124,7 @@ function createCoreApiRouteHandler(deps) {
     }
 
     if (pathname === "/api/topics" && req.method === "GET") {
-      json(res, { topics: DEFAULT_TOPICS, industries: INDUSTRY_TOPICS, capabilities: CAPABILITY_TOPICS });
+      json(res, { topics: DEFAULT_TOPICS, industries: INDUSTRY_TOPICS });
       return true;
     }
 
@@ -162,10 +155,7 @@ function createCoreApiRouteHandler(deps) {
 
     if (await handleCoreUnsubscribeRoutes(ctx, deps)) return true;
 
-    const archiveRouteResult = await handleCoreArchiveRoutes(ctx, {
-      ...deps,
-      ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC: resolveArchiveLegacyDeprecationDeadlineUtc(),
-    });
+    const archiveRouteResult = await handleCoreArchiveRoutes(ctx, deps);
     if (archiveRouteResult !== false) return archiveRouteResult;
 
     if (await handleCoreEngagementRoutes(ctx, deps)) return true;

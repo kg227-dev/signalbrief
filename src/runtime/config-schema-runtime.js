@@ -95,7 +95,11 @@ function validateConfigSchema(config) {
 
   const digest = config.digest;
   if (expectObject(errors, "digest", digest)) {
-    expectPositiveInteger(errors, "digest.itemCount", digest.itemCount, { min: 1, max: 20 });
+    if (expectPositiveInteger(errors, "digest.itemCount", digest.itemCount, { min: 5, max: 5 })) {
+      if (Number(digest.itemCount) !== 5) {
+        pushError(errors, "digest.itemCount", "must equal 5 for the reduced-scope MVP");
+      }
+    }
     if (digest.maxItemsPerTag != null) {
       expectPositiveInteger(errors, "digest.maxItemsPerTag", digest.maxItemsPerTag, { min: 1, max: 10 });
     }
@@ -140,9 +144,6 @@ function validateConfigSchema(config) {
     [
       "perplexity",
       "anthropic",
-      "googleRefreshToken",
-      "googleClientId",
-      "googleClientSecret",
       "resendApiKey",
       "unsubscribeSigningSecret",
       "fromEmail",

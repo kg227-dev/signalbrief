@@ -18,7 +18,6 @@ const files = {
   schedulerHeartbeatFile: path.join(tempDir, "scheduler-heartbeat.json"),
   adminMessageLog: path.join(tempDir, "admin-message-log.json"),
   adminActionLog: path.join(tempDir, "admin-action-log.json"),
-  archiveLegacyUsageLog: path.join(tempDir, "archive-legacy-usage.jsonl"),
 };
 
 function buildService(opts = {}) {
@@ -36,23 +35,11 @@ function buildService(opts = {}) {
     loaders: {
       loadEngagementEvents: () => [],
     },
-    flags: {
-      archiveLegacyDeprecationDeadlineUtc: opts.archiveLegacyDeprecationDeadlineUtc || (() => "2099-01-01T00:00:00Z"),
-    },
   });
 }
 
-const priorForce = process.env.ARCHIVE_LEGACY_FORCE_ENABLE;
 try {
   const service = buildService();
-  assert.strictEqual(service.isLegacyArchiveEndpointEnabled(), true, "future deprecation date should stay enabled");
-
-  const retiredService = buildService({ archiveLegacyDeprecationDeadlineUtc: () => "2000-01-01T00:00:00Z" });
-  assert.strictEqual(retiredService.isLegacyArchiveEndpointEnabled(), false, "past deprecation date should disable endpoint");
-
-  process.env.ARCHIVE_LEGACY_FORCE_ENABLE = "1";
-  assert.strictEqual(retiredService.isLegacyArchiveEndpointEnabled(), true, "force-enable env flag should override deprecation deadline");
-  process.env.ARCHIVE_LEGACY_FORCE_ENABLE = priorForce;
 
   fs.writeFileSync(
     files.costLogPath,
@@ -88,7 +75,5 @@ try {
   assert.strictEqual(actionRows[0].actor, "admin@example.com");
   assert.strictEqual(actionRows[0].action, "bulk_pause");
 } finally {
-  if (priorForce == null) delete process.env.ARCHIVE_LEGACY_FORCE_ENABLE;
-  else process.env.ARCHIVE_LEGACY_FORCE_ENABLE = priorForce;
   fs.rmSync(tempDir, { recursive: true, force: true });
 }

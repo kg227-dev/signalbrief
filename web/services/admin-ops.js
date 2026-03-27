@@ -9,7 +9,6 @@ const {
 } = require("./admin-ops-utils");
 const {
   createCostRunsReader,
-  createLegacyArchiveUsageRecorder,
   createAdminAuditLoggers,
 } = require("./admin-ops-io");
 const {
@@ -17,19 +16,11 @@ const {
 } = require("./admin-ops-analytics");
 const { createSchedulerHeartbeatAccessor } = require("./admin-ops-scheduler");
 
-function isLegacyArchiveEndpointEnabled(archiveLegacyDeprecationDeadlineUtc) {
-  if (String(process.env.ARCHIVE_LEGACY_FORCE_ENABLE || "") === "1") return true;
-  const ts = Date.parse(String(archiveLegacyDeprecationDeadlineUtc || ""));
-  if (!Number.isFinite(ts)) return true;
-  return Date.now() < ts;
-}
-
 function createAdminOpsService({
   runtime,
   files,
   requestContext,
   loaders,
-  flags = {},
 }) {
   const { fs, path } = runtime;
   const {
@@ -37,19 +28,11 @@ function createAdminOpsService({
     schedulerHeartbeatFile,
     adminMessageLog,
     adminActionLog,
-    archiveLegacyUsageLog,
   } = files;
   const {
-    getRequestHost,
-    getClientIp,
     getAdminActor,
   } = requestContext;
-  const { loadEngagementEvents } = loaders;
-  const { archiveLegacyDeprecationDeadlineUtc } = flags;
-
-  const resolveArchiveLegacyDeprecationDeadline = typeof archiveLegacyDeprecationDeadlineUtc === "function"
-    ? archiveLegacyDeprecationDeadlineUtc
-    : () => archiveLegacyDeprecationDeadlineUtc;
+  void loaders;
   const resolveSchedulerHeartbeatFile = typeof schedulerHeartbeatFile === "function"
     ? schedulerHeartbeatFile
     : () => schedulerHeartbeatFile;
@@ -57,13 +40,6 @@ function createAdminOpsService({
   const heartbeatAccessor = createSchedulerHeartbeatAccessor({
     fs,
     getSchedulerHeartbeatFile: resolveSchedulerHeartbeatFile,
-  });
-  const recordLegacyArchiveUsage = createLegacyArchiveUsageRecorder({
-    fs,
-    path,
-    archiveLegacyUsageLog,
-    getRequestHost,
-    getClientIp,
   });
   const {
     logAdminMessageEvent,
@@ -81,8 +57,6 @@ function createAdminOpsService({
   }
 
   return {
-    isLegacyArchiveEndpointEnabled: () => isLegacyArchiveEndpointEnabled(resolveArchiveLegacyDeprecationDeadline()),
-    recordLegacyArchiveUsage,
     readJsonLineLog,
     parseIsoTs,
     computeFeedbackTrend: (users) => computeFeedbackTrend(users, { parseIsoTs, toNumericOrNull }),

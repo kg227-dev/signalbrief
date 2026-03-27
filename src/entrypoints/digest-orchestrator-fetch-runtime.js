@@ -1366,7 +1366,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
   async function orchestrateFetch({ dueUsers, runMode }) {
     const digestConfig = CONFIG?.digest || {};
     const aggressiveStandardRun = isAggressiveStandardRun(runMode);
-    const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 7));
+    const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 5));
     const tagPriority = buildTagPriority(dueUsers, topicNormalizer);
     const dueUserTopics = flattenDueUserTopics(dueUsers);
     const allStandardTags = buildAllStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());

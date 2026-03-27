@@ -68,14 +68,12 @@ const {
   getServerPort,
   getBaseUrl,
   getTrustedCorsOrigins,
-  getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
   getWebAssetVersion,
 } = require("./server-runtime-env-runtime");
 const {
   INDUSTRY_TOPICS,
-  CAPABILITY_TOPICS,
   DEFAULT_TOPICS,
   MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
@@ -145,7 +143,6 @@ const ADMIN_MESSAGE_LOG = runtimePaths.adminMessageLogPath;
 const ADMIN_ACTION_LOG = runtimePaths.adminActionLogPath;
 const DIGEST_INCIDENT_LOG = runtimePaths.digestIncidentLogPath;
 const COST_LOG_PATH = runtimePaths.costLogPath;
-const ARCHIVE_LEGACY_USAGE_LOG = runtimePaths.archiveLegacyUsageLogPath;
 const SCHEDULER_CONTROL_FILE = runtimePaths.schedulerControlPath;
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
@@ -217,8 +214,6 @@ function appendSandboxCostLog(entry) {
 }
 
 const {
-  isLegacyArchiveEndpointEnabled,
-  recordLegacyArchiveUsage,
   readJsonLineLog,
   parseIsoTs,
   computeFeedbackTrend,
@@ -239,7 +234,6 @@ const {
     schedulerHeartbeatFile: getSchedulerHeartbeatFile,
     adminMessageLog: ADMIN_MESSAGE_LOG,
     adminActionLog: ADMIN_ACTION_LOG,
-    archiveLegacyUsageLog: ARCHIVE_LEGACY_USAGE_LOG,
   },
   requestContext: {
     getRequestHost,
@@ -248,9 +242,6 @@ const {
   },
   loaders: {
     loadEngagementEvents,
-  },
-  flags: {
-    archiveLegacyDeprecationDeadlineUtc: getArchiveLegacyDeprecationDeadlineUtc,
   },
 });
 const sendMagicLinkEmail = createSendMagicLinkEmail({
@@ -349,12 +340,8 @@ const {
   getAdminActor,
   logAdminActionEvent,
   INDUSTRY_TOPICS,
-  CAPABILITY_TOPICS,
   digestRunStatus,
   getCachedOrRefreshSchedulerHeartbeat,
-  isLegacyArchiveEndpointEnabled,
-  recordLegacyArchiveUsage,
-  getArchiveLegacyDeprecationDeadlineUtc,
   readArchiveFilesForDir,
   getAllowedArchiveDatesForUser,
   archiveRelevanceScore,

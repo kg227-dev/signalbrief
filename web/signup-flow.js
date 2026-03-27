@@ -239,8 +239,6 @@
     if (!grid) return;
 
     var industries = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
-    var capabilities = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
-
     function topicLabel(topic) {
       return typeof Prefs.topicDisplayLabel === "function" ? Prefs.topicDisplayLabel(topic) : topic;
     }
@@ -266,7 +264,6 @@
     }
 
     addGroup("Sectors", industries, "topic-chip-industry");
-    if (capabilities.length) addGroup("Capabilities", capabilities, "topic-chip-capability");
   }
 
   function toggleTopic(chip) {

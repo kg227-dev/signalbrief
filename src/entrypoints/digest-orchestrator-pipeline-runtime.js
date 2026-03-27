@@ -18,7 +18,7 @@ function createDigestOrchestratorPipelineRuntime(deps) {
   function selectItems(allItems, opts = {}) {
     const CONFIG = getConfig();
     return selectDigestItems(allItems, {
-      maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
+      maxItems: opts.maxItems || CONFIG.digest.itemCount || 5,
       maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
       maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
       tagPriority: opts.tagPriority,
@@ -32,7 +32,7 @@ function createDigestOrchestratorPipelineRuntime(deps) {
   function selectItemsDetailed(allItems, opts = {}) {
     const CONFIG = getConfig();
     return selectDigestItemsDetailed(allItems, {
-      maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
+      maxItems: opts.maxItems || CONFIG.digest.itemCount || 5,
       maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
       maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
       tagPriority: opts.tagPriority,

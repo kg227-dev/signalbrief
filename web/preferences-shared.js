@@ -13,16 +13,12 @@
     "CONSUMER & RETAIL",
     "INDUSTRIALS",
   ];
-  const FALLBACK_CAPABILITY_TOPICS = [];
   const INDUSTRY_TOPICS = Array.isArray(runtime.INDUSTRY_TOPICS)
     ? runtime.INDUSTRY_TOPICS
     : FALLBACK_INDUSTRY_TOPICS;
-  const CAPABILITY_TOPICS = Array.isArray(runtime.CAPABILITY_TOPICS)
-    ? runtime.CAPABILITY_TOPICS
-    : FALLBACK_CAPABILITY_TOPICS;
   const DEFAULT_TOPICS = Array.isArray(runtime.DEFAULT_TOPICS)
     ? runtime.DEFAULT_TOPICS
-    : [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
+    : [...INDUSTRY_TOPICS];
   const MAX_CUSTOM_KEYWORDS = 0;
   const TOPIC_LABELS = runtime.TOPIC_LABELS && typeof runtime.TOPIC_LABELS === "object"
     ? runtime.TOPIC_LABELS
@@ -105,7 +101,6 @@
   function getTopicCatalogFallback() {
     return {
       industries: INDUSTRY_TOPICS.slice(),
-      capabilities: CAPABILITY_TOPICS.slice(),
       topics: DEFAULT_TOPICS.slice(),
     };
   }
@@ -179,7 +174,6 @@
 
   globalScope.SignalBriefPrefs = {
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
     TOPIC_LABELS,

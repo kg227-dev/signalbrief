@@ -1,12 +1,11 @@
 {
   "name": "signalbrief",
   "version": "1.0.0",
-  "description": "AI-curated daily news digest for healthcare strategy professionals",
+  "description": "Email-only sector digest for operators, founders, and investors",
   "main": "src/entrypoints/digest.js",
   "scripts": {
     "start": "node src/entrypoints/digest.js",
     "web": "node web/server.js",
-    "bot": "node src/entrypoints/bot-server.js",
     "worker": "node src/entrypoints/scheduler-worker.js",
     "check:module-linkage": "node scripts/check-module-linkage.mjs",
     "smoke:worker": "node scripts/smoke-worker.js",

@@ -11,7 +11,6 @@ const darkModeHelpers = typeof IndexHelpersRuntime.createDarkModeHelpers === "fu
   ? IndexHelpersRuntime.createDarkModeHelpers({ debugEnabled: DEBUG_UI })
   : null;
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
-const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
@@ -39,7 +38,6 @@ function renderTopicCatalog() {
 
   if (typeof IndexHelpersRuntime.appendTopicGroup === "function") {
     IndexHelpersRuntime.appendTopicGroup(topicGrid, "Industries", INDUSTRY_TOPICS, topicDisplayLabel, toggleTopic);
-    IndexHelpersRuntime.appendTopicGroup(topicGrid, "Capabilities", CAPABILITY_TOPICS, topicDisplayLabel, toggleTopic);
   }
 }
 

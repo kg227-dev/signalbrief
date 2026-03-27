@@ -43,7 +43,6 @@ function baseDeps(overrides = {}) {
     json,
     DEFAULT_TOPICS: ["AI×TECH"],
     INDUSTRY_TOPICS: ["HEALTHCARE"],
-    CAPABILITY_TOPICS: ["AI×TECH"],
     digestRunStatus: () => ({ running: false, state: "absent", lock: {} }),
     getCachedOrRefreshSchedulerHeartbeat: () => ({
       available: true,
@@ -66,9 +65,6 @@ function baseDeps(overrides = {}) {
     handleSettings: async () => {},
     allUsers: () => [],
     writeUser: () => {},
-    isLegacyArchiveEndpointEnabled: () => true,
-    recordLegacyArchiveUsage: () => {},
-    getArchiveLegacyDeprecationDeadlineUtc: () => "2026-06-30T00:00:00Z",
     readArchiveFiles: () => [],
     getAllowedArchiveDates: () => new Set(),
     archiveRelevanceScore: () => 0,
@@ -104,6 +100,7 @@ async function invoke(handler, { method, pathname, search = "" }) {
     assert.strictEqual(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.deepStrictEqual(body.topics, ["AI×TECH"]);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "capabilities"), false);
   }
 
   {
@@ -277,7 +274,7 @@ async function invoke(handler, { method, pathname, search = "" }) {
       sendMagicLinkEmail: async (user) => {
         sendCount += 1;
         assert.strictEqual(user.email, "user@example.com");
-        return { ok: true, via: "gmail" };
+        return { ok: true, via: "resend" };
       },
     }));
     const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
@@ -309,7 +306,7 @@ async function invoke(handler, { method, pathname, search = "" }) {
       requireJsonBody: async () => ({ email: "user@example.com" }),
       allUsers: () => [{ email: "user@example.com", token: "token-123" }],
       sendMagicLinkEmail: async () => {
-        throw new Error("gmail send failed");
+        throw new Error("resend send failed");
       },
     }));
     const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });

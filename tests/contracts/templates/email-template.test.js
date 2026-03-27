@@ -19,3 +19,11 @@ assert.ok(
   html.includes(".wrapper { padding: 28px 12px; }"),
   "email template should trim wrapper side padding"
 );
+assert.ok(
+  html.includes("Daily sector briefings by email"),
+  "email template should use the reduced-scope email-only tagline"
+);
+assert.ok(
+  !html.includes("Daily intelligence for strategy professionals"),
+  "email template should not keep the legacy strategy-professional footer copy"
+);

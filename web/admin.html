@@ -483,8 +483,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .modal-mode-btn:disabled { opacity:0.5; cursor:not-allowed; }
 .modal-panel { border:1px solid var(--border-subtle); border-radius:10px; padding:12px; background:rgba(0,0,0,0.01); margin-bottom:10px; }
 .modal-help { font-size:12px; color:var(--text-secondary); line-height:1.45; }
-.modal-channels { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; font-size:13px; color:var(--text-2); }
-.modal-channels label { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2); }
 .modal-input, .modal-textarea {
   width:100%; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; color:var(--text);
   padding:9px 11px; font-size:13px; outline:none; margin-top:6px;
@@ -1339,9 +1337,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     <div class="modal-panel">
       <div class="modal-help" style="margin-bottom:10px;">
         Email-only MVP mode is active. This sends a direct email message, not a targeted digest.
-      </div>
-      <div class="modal-channels">
-        <label><input type="checkbox" id="sendViaEmail" onchange="syncSendModalState()"> Email</label>
       </div>
       <div id="sendChannelHint" class="modal-help" style="margin-bottom:10px;"></div>
       <div class="modal-field">
@@ -2323,7 +2318,7 @@ function renderAdminMessages(entries) {
       : `<span style="color:var(--red);font-weight:700;">failed</span>`;
     const target = e.target_email
       ? `<a href="/admin/user?email=${encodeURIComponent(e.target_email)}" target="_blank" style="color:var(--accent);text-decoration:none;">${esc(e.target_email_masked || e.target_email)}</a>`
-      : (e.target_chat_id ? `<span class="mono">${esc(e.target_chat_id)}</span>` : "—");
+      : "—";
     const notes = (e.errors && e.errors.length)
       ? esc(e.errors.join(" | "))
       : (e.message_preview ? esc(e.message_preview) : "—");
@@ -2562,10 +2557,8 @@ function setSendModalFeedback(type, text) {
 function syncSendModalState() {
   if (!sendModalUser) return;
   const caps = getSendCapabilities(sendModalUser);
-  const emailCb = document.getElementById("sendViaEmail");
   const body = document.getElementById("sendCustomBody").value.trim();
-  const hasChannel = emailCb.checked && caps.canEmailMessage;
-  const canSend = caps.canAnyMessage && hasChannel && body.length > 0;
+  const canSend = caps.canEmailMessage && body.length > 0;
   document.getElementById("sendModalSubmit").disabled = !canSend;
 }
 
@@ -2576,13 +2569,10 @@ function openSendModal(email, chatId) {
   const caps = getSendCapabilities(user);
 
   document.getElementById("sendModalTitle").textContent = `Send to ${user.name || user.email || user.chat_id}`;
-  const emailCb = document.getElementById("sendViaEmail");
   const hint = document.getElementById("sendChannelHint");
-  emailCb.checked = caps.canEmailMessage;
-  emailCb.disabled = !caps.canEmailMessage;
   document.getElementById("sendCustomSubject").value = "Quick note from SignalBrief";
   document.getElementById("sendCustomBody").value = "";
-  hint.textContent = caps.canEmailMessage ? "Email ready" : "Email unavailable";
+  hint.textContent = caps.canEmailMessage ? "Email delivery ready" : "Email unavailable for this user";
 
   document.getElementById("sendModal").style.display = "flex";
   document.getElementById("sendModalSubmit").textContent = "Send Message";
@@ -2607,13 +2597,10 @@ async function submitSendModal() {
   const userEmailKey = String(sendModalUser.email || "").toLowerCase().trim();
 
   try {
-    const channels = [];
-    if (document.getElementById("sendViaEmail").checked) channels.push("email");
     const body = document.getElementById("sendCustomBody").value.trim();
     const subject = document.getElementById("sendCustomSubject").value.trim();
     const payload = JSON.stringify({
       email: sendModalUser.email,
-      channels,
       subject,
       message: body,
     });
@@ -3525,7 +3512,7 @@ function renderTestDigestStatus(status) {
       btn.disabled = true;
       btn.textContent = "🧪 Running test digest…";
     }
-    msg.textContent = `Running for chat ${status.target_chat_id || "—"}...`;
+    msg.textContent = "Running requested test digest…";
     msg.style.color = "var(--accent)";
     msg.style.display = "block";
     return;

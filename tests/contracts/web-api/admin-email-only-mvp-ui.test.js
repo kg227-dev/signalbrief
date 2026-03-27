@@ -24,6 +24,7 @@ for (const removedSnippet of [
   "function resendFailedDelivery(",
   "function resendFailedDeliveries(",
   'id="sendModeDigestBtn"',
+  'id="sendViaEmail"',
   "function runDigestForChat(",
   "function setSendMode(",
   "Digest now</button>",

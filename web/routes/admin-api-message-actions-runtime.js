@@ -2,9 +2,6 @@ function normalizeAdminMessageBody(body, summarizeMessage, hashText) {
   const email = String(body.email || "").toLowerCase().trim();
   const message = String(body.message || "").trim();
   const subject = String(body.subject || "Message from SignalBrief").trim().slice(0, 140) || "Message from SignalBrief";
-  const channels = Array.isArray(body.channels)
-    ? body.channels.map((channel) => String(channel).toLowerCase().trim()).filter(Boolean)
-    : [];
   const messagePreview = summarizeMessage(message);
   const payloadHash = hashText(message);
 
@@ -12,20 +9,15 @@ function normalizeAdminMessageBody(body, summarizeMessage, hashText) {
     email,
     message,
     subject,
-    channels,
     messagePreview,
     payloadHash,
   };
 }
 
-function validateAdminMessageRequest({ email, message, channels }) {
+function validateAdminMessageRequest({ email, message }) {
   if (!email) return "email required";
   if (message.length < 2) return "message too short";
   if (message.length > 4000) return "message too long (max 4000 chars)";
-  if (!channels.length) return "select at least one channel";
-  if (channels.some((channel) => channel !== "email")) {
-    return "telegram messaging is disabled in the reduced-scope email-only MVP";
-  }
   return null;
 }
 
@@ -33,7 +25,6 @@ function buildAdminMessageAuditWriter({
   req,
   logAdminMessageEvent,
   email,
-  channels,
   subject,
   message,
   messagePreview,
@@ -43,7 +34,7 @@ function buildAdminMessageAuditWriter({
     logAdminMessageEvent(req, {
       action: "message_user",
       target_email: email || null,
-      requested_channels: channels,
+      requested_channels: ["email"],
       sent_channels: Array.isArray(extra.sent_channels) ? extra.sent_channels : [],
       subject,
       message_length: message.length,
@@ -55,11 +46,11 @@ function buildAdminMessageAuditWriter({
   };
 }
 
-function resolveUserChannelReadiness(user, channels) {
+function resolveUserChannelReadiness(user) {
   const prefs = user.preferences || {};
   const emailReady = !!user.email && prefs.email_enabled !== false;
   return {
-    wantsEmail: channels.includes("email"),
+    wantsEmail: true,
     emailReady,
   };
 }
@@ -68,11 +59,10 @@ async function deliverAdminMessage({
   user,
   message,
   subject,
-  channels,
   escapeHtml,
   sendEmail,
 }) {
-  const readiness = resolveUserChannelReadiness(user, channels);
+  const readiness = resolveUserChannelReadiness(user);
   const sent = { email: false };
   const errors = [];
 
@@ -124,13 +114,11 @@ async function processAdminMessageRequest({ ctx, deps }) {
     email,
     message,
     subject,
-    channels,
   } = requestData;
   const writeAudit = buildAdminMessageAuditWriter({
     req: ctx.req,
     logAdminMessageEvent,
     email,
-    channels,
     subject,
     message,
     messagePreview: requestData.messagePreview,
@@ -155,7 +143,6 @@ async function processAdminMessageRequest({ ctx, deps }) {
     user,
     message,
     subject,
-    channels,
     escapeHtml,
     sendEmail,
   });

@@ -66,8 +66,8 @@
 | `routes/admin-api-users-actions-runtime.js` | Action implementations for user management: update delivery time, set status (active/paused/unsubscribed), delete user, trigger digest run, restart scheduler worker. | Mutates user store; emits admin action log entries | `../services/web-user-admin-runtime` (via deps) |
 | `routes/admin-api-bulk-runtime.js` | `POST /api/admin/bulk-action` — applies a bulk action (e.g., pause, send magic link) to a filtered list of users. | JSON `{ affected, skipped }` | `./admin-api-bulk-actions-runtime` |
 | `routes/admin-api-bulk-actions-runtime.js` | Defines and applies bulk action types: validates emails, plans affected entries, applies mutations with audit logging. | Mutates user store; logs bulk admin actions | User store and `logAdminActionEvent` (via deps) |
-| `routes/admin-api-message-runtime.js` | `POST /api/admin/message-user` — dispatches an admin message (email or Telegram) to a specific user. | JSON `{ ok }`; email or Telegram message sent | `./admin-api-message-actions-runtime` |
-| `routes/admin-api-message-actions-runtime.js` | Processes the message request: resolves target user, chooses email vs Telegram channel, logs the message event. | Email via Resend API or message via Telegram API; admin message log entry | `../services/admin-ops-io` (via deps) |
+| `routes/admin-api-message-runtime.js` | `POST /api/admin/message-user` — dispatches an admin email to a specific user. | JSON `{ ok }`; email sent | `./admin-api-message-actions-runtime` |
+| `routes/admin-api-message-actions-runtime.js` | Processes the message request: resolves target user, sends email, and logs the admin message event. | Email via Resend API; admin message log entry | `../services/admin-ops-io` (via deps) |
 | `routes/admin-api-sandbox-runtime.js` | `POST /api/admin/sandbox/estimate`, `POST /api/admin/sandbox/run` — estimates and executes a sandbox digest pipeline run. | JSON estimate or pipeline result; sandbox cost log entry | `../../src/sandbox-pipeline-runtime` (via deps) |
 
 ---

@@ -134,11 +134,11 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 | Settings UI | 2 | Settings UI runtime and settings UI topic actions runtime | `web/settings-ui-runtime.js`, `web/settings-ui-topic-actions-runtime.js` |
 | Web index | 1 | Web index export surface | `web/index.js` |
 
-### Route handler tests — `tests/contracts/web-api/routes/` (10 files)
+### Route handler tests — `tests/contracts/web-api/routes/` (11 files)
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `web-api/routes/` | 10 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, engagement, health, unsubscribe, source registry, and legacy bookmark-removal routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js` |
+| `web-api/routes/` | 11 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, engagement, health, unsubscribe, source registry, admin email messaging, and legacy bookmark-removal routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js`, `web/routes/admin-api-message-actions-runtime.js` |
 
 ### Service tests — `tests/contracts/web-api/services/` (15 files)
 

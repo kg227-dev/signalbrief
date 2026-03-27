@@ -7,7 +7,6 @@ function mapAdminMessages({ readJsonLineLog, adminMessageLog, maskEmail }) {
     action: message.action || "message_user",
     target_email: message.target_email || null,
     target_email_masked: maskEmail(message.target_email || ""),
-    target_chat_id: message.target_chat_id || null,
     requested_channels: Array.isArray(message.requested_channels) ? message.requested_channels : [],
     sent_channels: Array.isArray(message.sent_channels) ? message.sent_channels : [],
     success: !!message.success,

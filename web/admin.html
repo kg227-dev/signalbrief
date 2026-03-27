@@ -970,7 +970,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="card">
           <div class="card-label">Users reached</div>
           <div class="card-value" id="monthUsers">—</div>
-          <div class="card-sub" id="monthOnDemand">— on-demand</div>
+          <div class="card-sub" id="monthOnDemand">— scheduled path</div>
         </div>
       </div>
     </div>
@@ -1136,7 +1136,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="section-title" style="margin:0 0 2px;">Failed deliveries (today)</div>
         <div id="failedDeliverySummary" class="table-meta" style="margin:0;">No failed deliveries in today's scheduled runs.</div>
       </div>
-      <button id="resendAllFailedBtn" class="btn-secondary" onclick="resendFailedDeliveries()" disabled>Resend failed users</button>
     </div>
     <div id="failedDeliveryList" class="failed-delivery-list"></div>
   </div>
@@ -2373,11 +2372,9 @@ function countActiveTelegramUsers(roster) {
 let latestRoster = [];
 let latestRuns = [];
 let latestHealth = null;
-let latestFailedDeliveries = [];
 let latestSourceRegistryOverview = null;
 let autoRefreshTimer = null;
 let loadInFlight = false;
-let resendAllInFlight = false;
 const AUTO_REFRESH_MS = 30000;
 let sendModalUser = null;
 let sendMode = "digest";
@@ -3068,41 +3065,26 @@ function buildFailedDeliveryRows(roster, runs) {
 
   return Array.from(latestOutcomeByUser.values())
     .filter((row) => row.status === "failed" && row.fromScheduled)
-    .map((row) => {
-      const resendChatId = row.user ? String(row.user.chat_id || "").trim() : "";
-      const canResend = !!(resendChatId && row.user && row.user.status === "active");
-      return {
-        ...row,
-        resendChatId,
-        canResend,
-      };
-    });
+    .map((row) => ({ ...row }));
 }
 
 function renderFailedDeliveries(roster, runs) {
   const panel = document.getElementById("failedDeliveryPanel");
   const summary = document.getElementById("failedDeliverySummary");
   const list = document.getElementById("failedDeliveryList");
-  const resendAllBtn = document.getElementById("resendAllFailedBtn");
-  if (!panel || !summary || !list || !resendAllBtn) return;
+  if (!panel || !summary || !list) return;
 
   const failedRows = buildFailedDeliveryRows(roster, runs);
-  latestFailedDeliveries = failedRows;
 
   if (!failedRows.length) {
     panel.style.display = "none";
     list.innerHTML = "";
     summary.textContent = "No failed deliveries in today's scheduled runs.";
-    resendAllBtn.disabled = true;
-    resendAllBtn.textContent = "Resend failed users";
     return;
   }
 
   panel.style.display = "";
-  const resendable = failedRows.filter((row) => row.canResend);
-  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs${resendable.length ? ` · ${resendable.length} ready to resend` : ""}.`;
-  resendAllBtn.disabled = resendAllInFlight || resendable.length === 0;
-  resendAllBtn.textContent = resendAllInFlight ? "Resending..." : "Resend failed users";
+  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs. Targeted resend is removed in the email-only MVP; fix the cause and use the next scheduled run or a full rerun.`;
 
   list.innerHTML = failedRows.map((row) => {
     const displayName = row.user
@@ -3115,117 +3097,17 @@ function renderFailedDeliveries(roster, runs) {
     const deliveryTarget = email
       ? esc(email)
       : (row.user && row.user.chat_id ? `<span class="mono">${esc(row.user.chat_id)}</span>` : `<span class="mono">${esc(row.runId || "unknown")}</span>`);
-    const reason = row.canResend
-      ? ""
-      : (row.user ? `Cannot resend while user is ${row.user.status || "inactive"}.` : "Cannot resend: user no longer exists in roster.");
     return `
       <div class="failed-delivery-row">
         <div class="failed-delivery-main">
           <div class="failed-delivery-name">${userLink}</div>
           <div class="failed-delivery-meta">${deliveryTarget} · failed ${esc(row.runAtLabel || "today")}</div>
           <div class="failed-delivery-error">${esc(row.error || "Delivery failed")}</div>
-          ${reason ? `<div class="failed-delivery-meta">${esc(reason)}</div>` : ""}
-        </div>
-        <div class="failed-delivery-actions">
-          <button
-            class="schedule-set-btn"
-            onclick='resendFailedDelivery(${JSON.stringify(row.resendChatId || "")}, ${JSON.stringify(row.emailKey || "")}, this)'
-            ${row.canResend && !resendAllInFlight ? "" : "disabled"}
-          >
-            resend
-          </button>
+          <div class="failed-delivery-meta">Targeted resend disabled in the reduced-scope MVP. Fix the cause, then rely on the next scheduled run or trigger a full rerun.</div>
         </div>
       </div>
     `;
   }).join("");
-}
-
-async function resendFailedDelivery(chatId, emailKey, triggerBtn) {
-  if (resendAllInFlight) return;
-  const targetChatId = String(chatId || "").trim();
-  const normalizedEmail = normalizeEmailKey(emailKey || "");
-  if (!targetChatId) {
-    showToast("err", "No resend target found for this row.");
-    return;
-  }
-  const user = findRosterUser(normalizedEmail, targetChatId);
-  const label = user ? (user.name || user.email || user.chat_id) : targetChatId;
-  const accepted = await openConfirmModal(
-    "Resend failed delivery",
-    `Resend today's digest to ${label}?`,
-    "Resend"
-  );
-  if (!accepted) return;
-
-  const btn = triggerBtn && triggerBtn.tagName ? triggerBtn : null;
-  const prevText = btn ? btn.textContent : "";
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "sending...";
-  }
-
-  try {
-    const { ok, data, status } = await runDigestForChat(targetChatId);
-    if (!ok || !data.success) {
-      const errMsg = data.error || `Resend failed (HTTP ${status})`;
-      showToast("err", errMsg);
-      if (normalizedEmail) setRowActionStatus(normalizedEmail, "err", `Resend failed: ${errMsg}`);
-      return;
-    }
-    showToast("ok", data.message || `Digest resent to ${label}`);
-    if (normalizedEmail) setRowActionStatus(normalizedEmail, "ok", "Digest resent");
-    await load(true);
-  } catch (e) {
-    const errMsg = e.message || "Network error during resend";
-    showToast("err", errMsg);
-    if (normalizedEmail) setRowActionStatus(normalizedEmail, "err", errMsg);
-  } finally {
-    if (btn && document.body.contains(btn)) {
-      btn.disabled = false;
-      btn.textContent = prevText || "resend";
-    }
-  }
-}
-
-async function resendFailedDeliveries() {
-  if (resendAllInFlight) return;
-  const queue = (latestFailedDeliveries || []).filter((row) => row.canResend && row.resendChatId);
-  if (!queue.length) {
-    showToast("warn", "No failed users are currently eligible for resend.");
-    return;
-  }
-  const accepted = await openConfirmModal(
-    "Resend failed users",
-    `Resend today's digest to ${queue.length} failed user${queue.length === 1 ? "" : "s"} now?`,
-    "Resend all"
-  );
-  if (!accepted) return;
-
-  resendAllInFlight = true;
-  renderFailedDeliveries(latestRoster || [], latestRuns || []);
-  let sent = 0;
-  let failed = 0;
-  try {
-    for (const row of queue) {
-      const result = await runDigestForChat(row.resendChatId);
-      if (result.ok && result.data && result.data.success) {
-        sent += 1;
-        if (row.emailKey) setRowActionStatus(row.emailKey, "ok", "Digest resent");
-      } else {
-        failed += 1;
-        const errMsg = (result.data && result.data.error) ? result.data.error : `HTTP ${result.status}`;
-        if (row.emailKey) setRowActionStatus(row.emailKey, "err", `Resend failed: ${errMsg}`);
-      }
-      await sleep(140);
-    }
-  } finally {
-    resendAllInFlight = false;
-    renderFailedDeliveries(latestRoster || [], latestRuns || []);
-  }
-
-  if (sent > 0) showToast("ok", `Resent ${sent} user${sent === 1 ? "" : "s"}.`);
-  if (failed > 0) showToast("err", `${failed} resend${failed === 1 ? "" : "s"} failed.`);
-  await load(true);
 }
 
 function toggleScheduleDay(dateKey) {
@@ -4061,7 +3943,7 @@ async function load(silent = false) {
     document.getElementById("monthDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${monthDelivered}</a>`;
     document.getElementById("monthDigestsSub").innerHTML =
-      `<strong>${summary.month_on_demand}</strong> on-demand runs`;
+      `<strong>${Math.max(0, Number(summary.month_runs || 0) - Number(summary.month_on_demand || 0))}</strong> scheduled runs`;
     document.getElementById("allTimeDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${allTimeDelivered}</a>`;
     document.getElementById("allTimeDigestsSub").innerHTML =
@@ -4077,10 +3959,10 @@ async function load(silent = false) {
     document.getElementById("monthUsers").innerHTML =
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${monthUniqueUsers}</a>`;
     document.getElementById("monthOnDemand").innerHTML =
-      `<strong>${monthDeliveries}</strong> deliveries · <strong>${summary.month_on_demand}</strong> on-demand runs`;
+      `<strong>${monthDeliveries}</strong> deliveries · email-only scheduled path`;
     document.getElementById("costLast7d").textContent = fmt$(summary.trailing_7d_cost);
     document.getElementById("costLast7dSub").innerHTML =
-      `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_on_demand_runs || 0}</strong> on-demand · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries`;
+      `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries`;
     document.getElementById("costNext7d").textContent = fmt$(summary.projected_7d_cost);
     document.getElementById("costNext7dSub").innerHTML =
       `<strong>${summary.projected_7d_runs || 0}</strong> scheduled runs · <strong>${summary.projected_7d_deliveries || 0}</strong> projected deliveries · scheduled baseline only`;

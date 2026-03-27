@@ -29,8 +29,6 @@ const { computeQualityTrend } = require("../src/domains/digest");
 const { createDigestDeliveryRecordRuntime } = require("../src/domains/digest");
 const {
   digestRunStatus,
-  queueDigestTrigger,
-  runDigestTrigger,
   startDigestTrigger,
 } = require("../src/jobs/digest-runner-runtime");
 const {
@@ -337,8 +335,6 @@ const {
   deleteUser,
   sendReferralThankYou,
   sendWelcomeEmail,
-  queueDigestTrigger,
-  runDigestTrigger,
   startDigestTrigger,
   getBaseUrl,
   DEFAULT_TOPICS,

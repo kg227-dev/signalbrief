@@ -9,7 +9,6 @@ function createAdminRunDigestHandler({
   isAdminAuthed,
   requireJsonBody,
   allUsers,
-  runDigestTrigger,
   startDigestTrigger,
   logAdminActionEvent,
 }) {
@@ -27,7 +26,6 @@ function createAdminRunDigestHandler({
         json,
         allUsers,
         targetChatId,
-        runDigestTrigger,
         logAdminActionEvent,
       });
     }

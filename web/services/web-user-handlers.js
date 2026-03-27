@@ -16,7 +16,6 @@ function createWebUserHandlers(deps) {
     writeUser,
     sendReferralThankYou,
     sendWelcomeEmail,
-    runDigestTrigger,
     startDigestTrigger,
     BASE_URL,
     getBaseUrl,
@@ -78,7 +77,6 @@ function createWebUserHandlers(deps) {
     isAdminAuthed,
     requireJsonBody,
     allUsers,
-    runDigestTrigger,
     startDigestTrigger,
     logAdminActionEvent,
   });

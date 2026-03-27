@@ -8,6 +8,8 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   "SCHEDULER_HEALTH_RETRIES",
+  "--container-mode",
+  "Container mode: skipping docker compose host checks",
   "--expected-store-backend",
   "--expected-sqlite-path",
   "expected store backend",

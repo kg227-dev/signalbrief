@@ -13,6 +13,8 @@ const HEALTH_RETRY_DELAY_MS = Math.max(250, Number(process.env.SCHEDULER_HEALTH_
 const FAIL_LOG_TAIL_LINES = Math.max(20, Number(process.env.VERIFY_FAIL_LOG_TAIL_LINES || 120));
 const CANARY_CMD = process.env.DIGEST_CANARY_CMD || "node src/entrypoints/digest.js --dry-run";
 const SKIP_CANARY = process.argv.includes("--skip-canary");
+const CONTAINER_MODE = process.argv.includes("--container-mode")
+  || ["1", "true", "yes", "on"].includes(String(process.env.VERIFY_RUNTIME_CONTAINER_MODE || "").trim().toLowerCase());
 const EXPECTED_STORE_BACKEND = resolveCliOption("--expected-store-backend")
   || process.env.EXPECTED_STORE_BACKEND
   || "";
@@ -135,6 +137,7 @@ function serviceStateSnapshot(rows) {
 }
 
 function collectFailureDiagnostics() {
+  if (CONTAINER_MODE) return "";
   const blocks = [];
   const psRes = runCommand("docker compose ps");
   if (psRes.ok) {
@@ -188,62 +191,66 @@ async function probeSchedulerHealth({ url, timeoutMs, retries, retryDelayMs }) {
 }
 
 async function main() {
-  log("Checking compose service definitions");
-  const declaredRes = runCommand("docker compose config --services");
-  if (!declaredRes.ok) {
-    fail("unable to read docker compose services", declaredRes.stderr || declaredRes.stdout);
-  }
-  const declaredServices = declaredRes.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const missingDeclared = REQUIRED_SERVICES.filter((service) => !declaredServices.includes(service));
-  if (missingDeclared.length > 0) {
-    fail(
-      `missing required services in compose: ${missingDeclared.join(", ")}`,
-      `declared services: ${declaredServices.join(", ")}`
-    );
-  }
-
-  log("Checking required services are running");
-  const psRes = runCommand("docker compose ps --format json");
-  if (!psRes.ok) {
-    fail("unable to inspect docker compose process state", psRes.stderr || psRes.stdout);
-  }
-
   let rows = [];
-  try {
-    rows = parseComposePsRows(psRes.stdout);
-  } catch (error) {
-    fail("unable to parse docker compose process output", error.message);
-  }
-
-  const rowsByService = new Map();
-  for (const row of rows) {
-    const name = rowServiceName(row);
-    if (!name) continue;
-    rowsByService.set(name, row);
-  }
-
-  const notRunning = [];
-  for (const service of REQUIRED_SERVICES) {
-    const row = rowsByService.get(service);
-    if (!row) {
-      notRunning.push(`${service} (missing)`);
-      continue;
+  if (CONTAINER_MODE) {
+    log("Container mode: skipping docker compose host checks");
+  } else {
+    log("Checking compose service definitions");
+    const declaredRes = runCommand("docker compose config --services");
+    if (!declaredRes.ok) {
+      fail("unable to read docker compose services", declaredRes.stderr || declaredRes.stdout);
     }
-    const state = rowState(row);
-    if (!state.includes("running")) {
-      notRunning.push(`${service} (${state || "unknown"})`);
+    const declaredServices = declaredRes.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const missingDeclared = REQUIRED_SERVICES.filter((service) => !declaredServices.includes(service));
+    if (missingDeclared.length > 0) {
+      fail(
+        `missing required services in compose: ${missingDeclared.join(", ")}`,
+        `declared services: ${declaredServices.join(", ")}`
+      );
     }
-  }
 
-  if (notRunning.length > 0) {
-    const detail = [
-      `snapshot: ${serviceStateSnapshot(rows)}`,
-      collectFailureDiagnostics(),
-    ].join("\n");
-    fail(`required services not running: ${notRunning.join(", ")}`, detail);
+    log("Checking required services are running");
+    const psRes = runCommand("docker compose ps --format json");
+    if (!psRes.ok) {
+      fail("unable to inspect docker compose process state", psRes.stderr || psRes.stdout);
+    }
+
+    try {
+      rows = parseComposePsRows(psRes.stdout);
+    } catch (error) {
+      fail("unable to parse docker compose process output", error.message);
+    }
+
+    const rowsByService = new Map();
+    for (const row of rows) {
+      const name = rowServiceName(row);
+      if (!name) continue;
+      rowsByService.set(name, row);
+    }
+
+    const notRunning = [];
+    for (const service of REQUIRED_SERVICES) {
+      const row = rowsByService.get(service);
+      if (!row) {
+        notRunning.push(`${service} (missing)`);
+        continue;
+      }
+      const state = rowState(row);
+      if (!state.includes("running")) {
+        notRunning.push(`${service} (${state || "unknown"})`);
+      }
+    }
+
+    if (notRunning.length > 0) {
+      const detail = [
+        `snapshot: ${serviceStateSnapshot(rows)}`,
+        collectFailureDiagnostics(),
+      ].filter(Boolean).join("\n");
+      fail(`required services not running: ${notRunning.join(", ")}`, detail);
+    }
   }
 
   const healthProbe = await probeSchedulerHealth({
@@ -258,7 +265,7 @@ async function main() {
       ? JSON.stringify(response.data, null, 2)
       : "<no JSON response>";
     const detail = [
-      `snapshot: ${serviceStateSnapshot(rows)}`,
+      CONTAINER_MODE ? "" : `snapshot: ${serviceStateSnapshot(rows)}`,
       healthProbe.lastError ? `health request error: ${healthProbe.lastError.message}` : "",
       `last health response status: ${Number(response?.status || 0)}`,
       `last health response body: ${responseBody}`,
@@ -270,9 +277,9 @@ async function main() {
   const healthResponse = healthProbe.response;
   if (!healthResponse.data || typeof healthResponse.data !== "object") {
     const detail = [
-      `snapshot: ${serviceStateSnapshot(rows)}`,
+      CONTAINER_MODE ? "" : `snapshot: ${serviceStateSnapshot(rows)}`,
       collectFailureDiagnostics(),
-    ].join("\n");
+    ].filter(Boolean).join("\n");
     fail("scheduler health response is malformed", detail);
   }
   if (healthResponse.status !== 200 || healthResponse.data.ok !== true) {

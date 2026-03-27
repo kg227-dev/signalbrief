@@ -102,8 +102,8 @@ const FULL_EXHAUST_STANDARD_TAGS = new Set([
   "FINANCIAL SERVICES",
 ]);
 
-function resolveSelectionTarget(dueUsers, defaultItemCount = 7) {
-  return Math.max(1, Number(defaultItemCount || 5));
+function resolveSelectionTarget(dueUsers, defaultItemCount = 5) {
+  return 5;
 }
 
 function buildTagPriority(dueUsers, normalizeTopicToken) {

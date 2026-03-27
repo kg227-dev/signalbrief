@@ -13,6 +13,7 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
   createDigestOrchestratorFetchRuntime,
+  resolveSelectionTarget,
   resolveTopicsToFetch,
   resolveDiscoveryCandidateCapCount,
   resolveMaxDiscoveryCandidateShare,
@@ -20,6 +21,8 @@ const {
 assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
+  assert.strictEqual(resolveSelectionTarget([], 7), 5);
+  assert.strictEqual(resolveSelectionTarget([], 5), 5);
   assert.strictEqual(resolveMaxDiscoveryCandidateShare({}), 0.2);
   assert.strictEqual(resolveMaxDiscoveryCandidateShare({ maxDiscoveryCandidateShare: 0.35 }), 0.35);
   assert.strictEqual(resolveDiscoveryCandidateCapCount(8, 0.2), 2);

@@ -22,10 +22,49 @@ function sortedKeys(obj) {
     },
     log: () => {},
     normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic) => ({
+    fetchTopicNews: async () => ({
       apiCalls: 1,
-      items: [{ tag: topic.tag, headline: `${topic.tag} headline`, baseScore: 7.5 }],
+      items: [],
+      diagnostics: {
+        provider: "perplexity",
+        successful_calls: 1,
+        failed_calls: 0,
+        transport_errors: 0,
+        status_counts: {},
+      },
     }),
+    standardTopicBrokerRuntime: {
+      fetchBrokerCandidates: async () => ({
+        topicItems: {
+          TECHNOLOGY: [{
+            tag: "TECHNOLOGY",
+            headline: "TECHNOLOGY headline",
+            baseScore: 7.5,
+            summary: "Summary",
+            url: "https://example.com/technology",
+            canonical_url: "https://example.com/technology",
+            source: "example.com",
+            source_domain: "example.com",
+            published_date: "2026-03-27T10:00:00.000Z",
+            retrieval_origin: "broker_publisher_feed",
+            source_type: "reported_media",
+            source_tier: "strong",
+          }],
+        },
+        diagnostics: {
+          enabled: true,
+          config_source: "test",
+          active_path: "/tmp/test-broker.json",
+          active_topic_tags: ["TECHNOLOGY"],
+          lane_counts: { publisher_feed: 1, official: 0 },
+          source_fetch_count: 1,
+          source_success_count: 1,
+          source_failure_count: 0,
+          source_diagnostics: [],
+          topic_diagnostics: {},
+        },
+      }),
+    },
     emitDigestIncident: async () => {},
   });
   const fetchOut = await fetchRuntime.orchestrateFetch({
@@ -74,6 +113,8 @@ function sortedKeys(obj) {
     isUrlExcluded: () => false,
     isDomainSuppressed: () => false,
     getPinsForDate: () => [],
+    annotateEditorialSignals: (items) => items.slice(),
+    buildStorylineCandidates: (items) => items.slice(),
   });
   const selectionOut = await selectionRuntime.selectForEnrichment({
     allItems: fetchOut.allItems,

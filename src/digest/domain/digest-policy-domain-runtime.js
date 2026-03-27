@@ -1,6 +1,6 @@
 function createSelectionPolicy(input = {}) {
   const src = input && typeof input === "object" ? input : {};
-  const maxItems = Math.max(1, Number(src.maxItems ?? src.itemCount ?? 7) || 7);
+  const maxItems = Math.max(1, Number(src.maxItems ?? src.itemCount ?? 5) || 5);
   const perTagCap = Math.max(1, Number(src.perTagCap ?? src.maxItemsPerTag ?? 2) || 2);
   const perSourceCandidate = Number(src.perSourceCap ?? src.maxItemsPerSourceDomain);
   const perSourceCap = Number.isFinite(perSourceCandidate) ? Math.max(1, perSourceCandidate) : Infinity;

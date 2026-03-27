@@ -95,7 +95,7 @@ function validateConfigSchema(config) {
 
   const digest = config.digest;
   if (expectObject(errors, "digest", digest)) {
-    expectPositiveInteger(errors, "digest.itemCount", digest.itemCount, { min: 1, max: 20 });
+    expectPositiveInteger(errors, "digest.itemCount", digest.itemCount, { min: 5, max: 5 });
     if (digest.maxItemsPerTag != null) {
       expectPositiveInteger(errors, "digest.maxItemsPerTag", digest.maxItemsPerTag, { min: 1, max: 10 });
     }

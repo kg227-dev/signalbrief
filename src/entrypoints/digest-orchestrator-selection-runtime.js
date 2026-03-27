@@ -21,7 +21,7 @@ function computeItemAgeHours(item, nowMs) {
 function splitByFreshnessTiers(items, nowMs) {
   const tier1 = []; // 0–24h: breaking / today
   const tier2 = []; // 24–48h: yesterday
-  const tier3 = []; // 48h+: analysis / commentary
+  const tier3 = []; // >48h: stale overflow, never eligible in the active MVP path
   for (const item of (Array.isArray(items) ? items : [])) {
     const age = computeItemAgeHours(item, nowMs);
     if (age <= 24) tier1.push(item);
@@ -29,6 +29,114 @@ function splitByFreshnessTiers(items, nowMs) {
     else tier3.push(item);
   }
   return { tier1, tier2, tier3 };
+}
+
+function isDiscoveryLaneItem(item) {
+  const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").trim().toLowerCase();
+  return origin.includes("discovery") || origin.includes("perplexity");
+}
+
+function isAnalysisOrCommentaryItem(item) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const originalityProfile = String(item?.originality_profile || "").trim().toLowerCase();
+  const contentFlags = Array.isArray(item?.content_flags) ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase()) : [];
+  const url = String(item?.url || "").trim().toLowerCase();
+  return sourceType === "analysis_blog"
+    || originalityProfile === "derived_synthesis"
+    || contentFlags.includes("generic_commentary")
+    || /\/opinions?\//.test(url)
+    || /\/analysis\//.test(url);
+}
+
+function buildTopicFallbackPools(topicItems, nowMs) {
+  const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
+  const eventTier1 = tier1.filter((item) => !isAnalysisOrCommentaryItem(item));
+  const eventTier2 = tier2.filter((item) => !isAnalysisOrCommentaryItem(item));
+  const commentaryPool = [...tier1, ...tier2].filter((item) => isAnalysisOrCommentaryItem(item));
+  return {
+    tier1,
+    tier2,
+    tier3,
+    eventTier1,
+    eventTier2,
+    commentaryPool,
+  };
+}
+
+function selectTopicItemsWithFallback(params = {}) {
+  const {
+    topicItems,
+    itemsPerTopic,
+    maxItemsPerSourceDomain,
+    maxDiscoveryPerTopic,
+    nowMs,
+  } = params;
+
+  const targetCount = Math.max(1, Number(itemsPerTopic || 5));
+  const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 2));
+  const discoveryCap = Math.max(0, Number(maxDiscoveryPerTopic ?? 1));
+  const pools = buildTopicFallbackPools(topicItems, nowMs);
+  const selected = [];
+  const selectedSet = new Set();
+  const rejectionReasonByItem = new Map();
+  const domainCounts = Object.create(null);
+  let discoveryCount = 0;
+  let commentarySelectedCount = 0;
+
+  function recordRejection(item, reason) {
+    if (!item || selectedSet.has(item) || rejectionReasonByItem.has(item)) return;
+    rejectionReasonByItem.set(item, String(reason || "selection_not_selected"));
+  }
+
+  function attemptStage(items, stageName, { commentaryCap = 0 } = {}) {
+    for (const item of (Array.isArray(items) ? items : [])) {
+      if (!item || selectedSet.has(item)) continue;
+      const isCommentary = isAnalysisOrCommentaryItem(item);
+      if (commentaryCap > 0 && isCommentary && commentarySelectedCount >= commentaryCap) {
+        recordRejection(item, "selection_commentary_cap");
+        continue;
+      }
+
+      if (selected.length >= targetCount) {
+        recordRejection(item, "selection_pool_full");
+        continue;
+      }
+
+      const domain = String(item?.source_domain || item?.source || "unknown").trim().toLowerCase();
+      const domainCount = domainCounts[domain] || 0;
+      if (domainCount >= perSourceCap) {
+        recordRejection(item, `selection_source_cap (${domain}: ${domainCount}/${perSourceCap})`);
+        continue;
+      }
+
+      if (isDiscoveryLaneItem(item) && discoveryCount >= discoveryCap) {
+        recordRejection(item, "selection_discovery_cap");
+        continue;
+      }
+
+      selected.push(item);
+      selectedSet.add(item);
+      domainCounts[domain] = domainCount + 1;
+      if (isDiscoveryLaneItem(item)) discoveryCount += 1;
+      if (stageName === "commentary" && isCommentary) commentarySelectedCount += 1;
+    }
+  }
+
+  attemptStage(pools.eventTier1, "event_tier1");
+  if (selected.length < targetCount) attemptStage(pools.eventTier2, "event_tier2");
+  if (selected.length < targetCount) attemptStage(pools.commentaryPool, "commentary", { commentaryCap: 1 });
+
+  for (const item of (Array.isArray(topicItems) ? topicItems : [])) {
+    if (selectedSet.has(item)) continue;
+    recordRejection(item, "selection_not_selected");
+  }
+
+  return {
+    selected,
+    rejectionReasonByItem,
+    pools,
+    commentarySelectedCount,
+  };
 }
 
 function incrementCount(target, key) {
@@ -381,9 +489,12 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       log(`Scored ${scoredItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
     }
 
-    // MVP per-topic selection: group candidates by tag, select up to itemsPerTopic
-    // per topic, then cap discovery-origin (Perplexity) items to at most 1 per topic.
-    const itemsPerTopic = Math.max(1, Number(CONFIG.digest.itemCount || selectionTarget || 5));
+    // MVP per-topic selection: exactly 5 items per topic when the pool supports it.
+    // Fallback hierarchy stays inside the 48h cap:
+    // 1. event-driven items from the last 24h
+    // 2. event-driven items from 24–48h
+    // 3. at most one strong analysis/commentary item if still needed
+    const itemsPerTopic = 5;
     const maxDiscoveryPerTopic = Math.max(0, Number(CONFIG.digest.maxDiscoveryItemsPerTopic ?? 1));
 
     // Group scored+sorted candidates by topic tag.
@@ -394,62 +505,37 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       byTag.get(topicTag).push(item);
     }
 
-    // Select per topic with freshness-tier fallback, then apply discovery cap.
-    // Spec §2.5: prefer 0-24h items first, backfill 24-48h, then 48h+ as last resort.
+    // Select per topic with a controlled fallback hierarchy that never exceeds 48h.
     const perTopicSelected = [];
     let totalDiscoveryCapped = 0;
     const topicSelectionAudit = [];
     const selectionRejectionCounts = Object.create(null);
     for (const [topicTag, topicItems] of byTag.entries()) {
-      // Build tiered pool: tier1 (0-24h) first for freshness preference, then tier2, then tier3.
-      // Pass the full ordered pool to selectItems so its source-domain cap can pick from the
-      // widest possible set rather than a pre-truncated slice.
-      const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
-      const tieredPool = [...tier1, ...tier2, ...tier3];
-      const selectionPolicy = {
-        maxItems: itemsPerTopic,
-        maxItemsPerTag: itemsPerTopic,
-        tagPriority,
-        maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
-          ? paramScoringConfig.maxItemsPerSourceDomain
-          : CONFIG.digest.maxItemsPerSourceDomain,
-      };
+      const maxItemsPerSourceDomain = (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
+        ? paramScoringConfig.maxItemsPerSourceDomain
+        : CONFIG.digest.maxItemsPerSourceDomain;
+      const topicSelection = selectTopicItemsWithFallback({
+        topicItems,
+        itemsPerTopic,
+        maxItemsPerSourceDomain,
+        maxDiscoveryPerTopic,
+        nowMs,
+      });
+      const {
+        selected: topicAcceptedItems,
+        rejectionReasonByItem,
+        pools,
+        commentarySelectedCount,
+      } = topicSelection;
+      const { tier1, tier2, tier3, commentaryPool } = pools;
+      const tieredPool = [...tier1, ...tier2];
 
-      let topicPool = [];
-      let topicRejectedRows = [];
-      if (typeof selectItemsDetailed === "function") {
-        const detailedSelection = selectItemsDetailed(tieredPool, selectionPolicy) || {};
-        topicPool = Array.isArray(detailedSelection.selected) ? detailedSelection.selected : [];
-        topicRejectedRows = Array.isArray(detailedSelection.rejected) ? detailedSelection.rejected : [];
-      } else {
-        topicPool = selectItems(tieredPool, selectionPolicy);
-      }
-
-      if (topicPool.length < itemsPerTopic) {
-        log(`⚠️ Topic ${topicTag}: only ${topicPool.length}/${itemsPerTopic} items selected (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length}, pool=${tieredPool.length})`);
+      if (topicAcceptedItems.length < itemsPerTopic) {
+        log(`⚠️ Topic ${topicTag}: only ${topicAcceptedItems.length}/${itemsPerTopic} items selected (event_0_24=${pools.eventTier1.length}, event_24_48=${pools.eventTier2.length}, commentary=${commentaryPool.length}, stale=${tier3.length})`);
       }
 
-      const topicAcceptedItems = [];
-      const rejectionReasonByItem = new Map();
-      for (const row of topicRejectedRows) {
-        if (!row?.item) continue;
-        rejectionReasonByItem.set(row.item, String(row.reason || "selection_not_selected"));
-      }
-      let discoveryCount = 0;
-      for (const item of topicPool) {
-        const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").toLowerCase();
-        const isDiscovery = origin.includes("discovery") || origin.includes("perplexity");
-        if (isDiscovery) {
-          discoveryCount += 1;
-          if (discoveryCount > maxDiscoveryPerTopic) {
-            totalDiscoveryCapped += 1;
-            rejectionReasonByItem.set(item, "selection_discovery_cap");
-            continue;
-          }
-        }
-        topicAcceptedItems.push(item);
-        perTopicSelected.push(item);
-      }
+      totalDiscoveryCapped += Array.from(rejectionReasonByItem.values()).filter((reason) => reason === "selection_discovery_cap").length;
+      perTopicSelected.push(...topicAcceptedItems);
 
       const topicReasonCounts = Object.create(null);
       const selectedSet = new Set(topicAcceptedItems);
@@ -471,11 +557,17 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         tag: topicTag,
         total_candidates: tieredPool.length,
         selected_count: topicAcceptedItems.length,
-        rejected_count: Math.max(0, tieredPool.length - topicAcceptedItems.length),
+        rejected_count: Math.max(0, topicItems.length - topicAcceptedItems.length),
         tier_counts: {
           tier1: tier1.length,
           tier2: tier2.length,
           tier3: tier3.length,
+        },
+        fallback_stage_counts: {
+          event_tier1: pools.eventTier1.length,
+          event_tier2: pools.eventTier2.length,
+          commentary_candidates: commentaryPool.length,
+          commentary_selected: commentarySelectedCount,
         },
         lane_breakdown: topicLaneCounts,
         rejection_reason_counts: topicReasonCounts,

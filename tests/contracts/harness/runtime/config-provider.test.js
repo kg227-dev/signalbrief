@@ -43,7 +43,7 @@ const testConfig = {
     timezone: "America/New_York",
   },
   digest: {
-    itemCount: 5,
+    itemCount: 7,
     maxItemsPerTag: 2,
     lookbackHours: 48,
   },
@@ -79,6 +79,7 @@ try {
   assert.strictEqual(envOverridden.keys.perplexity, "env-perplexity-key", "env key should override config key");
   assert.strictEqual(envOverridden.admin.email, "env-admin@example.com", "env admin email should override config");
   assert.strictEqual(envOverridden.keys.anthropic, "config-anthropic", "non-overridden keys should remain from config");
+  assert.strictEqual(envOverridden.digest.itemCount, 5, "runtime config should normalize the MVP digest size to 5");
 
   process.env.SIGNALBRIEF_PERPLEXITY_API_KEY = "";
   process.env.SIGNALBRIEF_ADMIN_EMAIL = "";
@@ -86,6 +87,7 @@ try {
   const configOnly = loadConfig({ reload: true });
   assert.strictEqual(configOnly.keys.perplexity, "config-perplexity", "config value should be used when env override is absent");
   assert.strictEqual(configOnly.admin.email, "config-admin@example.com", "config admin email should be used when env override is absent");
+  assert.strictEqual(configOnly.digest.itemCount, 5, "legacy config itemCount should be coerced to the MVP fixed count");
 } finally {
   for (const key of envKeys) {
     const value = originalEnv.get(key);

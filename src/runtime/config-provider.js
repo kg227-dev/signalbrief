@@ -74,6 +74,17 @@ function applyEnvOverrides(config) {
   return resolved;
 }
 
+function normalizeMvpConfig(config) {
+  const resolved = JSON.parse(JSON.stringify(config));
+  if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+    if (!resolved.digest || typeof resolved.digest !== "object" || Array.isArray(resolved.digest)) {
+      resolved.digest = {};
+    }
+    resolved.digest.itemCount = 5;
+  }
+  return resolved;
+}
+
 function loadConfig(opts = {}) {
   if (!opts.reload && cachedConfig) return cachedConfig;
   const configPath = resolveConfigPath(opts.configPath);
@@ -96,7 +107,7 @@ function loadConfig(opts = {}) {
     throw configError("invalid_shape", configPath, new Error("config root must be an object"));
   }
 
-  const merged = applyEnvOverrides(parsed);
+  const merged = normalizeMvpConfig(applyEnvOverrides(parsed));
   const validation = validateConfigSchema(merged);
   if (!validation.ok) {
     throw configError("schema_failed", configPath, new Error(validation.errors.join("; ")));
@@ -113,4 +124,5 @@ module.exports = {
   applyEnvOverrides,
   loadConfig,
   validateConfigSchema,
+  normalizeMvpConfig,
 };

@@ -17,6 +17,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 (async () => {
   const sentEmailOrders = [];
   const snapshotOrders = [];
+  const recordPayloads = [];
   const qualityOrders = [];
 
   const deliveryRuntime = createDigestOrchestratorDeliveryRuntime({
@@ -130,6 +131,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     appendEngagementEventChecked: () => ({ ok: true }),
     beginDigestDeliveryRecord: () => ({ ok: true, skipped: false, version: 1, record: { version: 1 } }),
     updateDigestDeliveryRecord: (payload) => {
+      recordPayloads.push(payload);
       if (Array.isArray(payload?.items) && payload.items.length) {
         snapshotOrders.push(payload.items.map((item) => item.headline));
       }
@@ -238,6 +240,9 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   assert.strictEqual(result.failedUsers.length, 0);
   assert.strictEqual(result.deliveredUsers.length, 1);
+  assert.strictEqual(result.deliveredUsers[0].delivery_outcome, "delivered");
+  assert.strictEqual(result.deliveredUsers[0].selected_count, 5);
+  assert.strictEqual(result.deliveredUsers[0].available_count, 5);
   assert.deepStrictEqual(
     qualityOrders[0],
     ["Highest scored item", "Middle scored item", "Fourth scored item", "Lower scored item", "Fifth scored item"]
@@ -250,6 +255,16 @@ assertModuleExports(() => runtime, TARGET_REL);
     Array.isArray(order)
     && order.join("|") === "Highest scored item|Middle scored item|Fourth scored item|Lower scored item|Fifth scored item"
   )));
+  const sentRecord = recordPayloads.find((payload) => payload?.status === "sent");
+  assert.ok(sentRecord, "delivery runtime should write a sent delivery record");
+  assert.strictEqual(sentRecord.delivery_outcome, "delivered");
+  assert.strictEqual(sentRecord.selected_count, 5);
+  assert.strictEqual(sentRecord.available_count, 5);
+  assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "high_confidence_count"));
+  assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "lower_confidence_count"));
+  assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "lower_confidence_used"));
+  assert.ok(sentRecord.items.every((item) => !Object.prototype.hasOwnProperty.call(item, "delivery_confidence")));
+  assert.ok(sentRecord.items.every((item) => !Object.prototype.hasOwnProperty.call(item, "delivery_topic_classes")));
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

@@ -517,7 +517,8 @@ function inferRegistryFromImage(appImage) {
 }
 
 function packageWorkingTreeArchive(archivePath) {
-  run("tar", [
+  const tarArgs = [
+    ...resolveLocalTarCreateFlags(),
     "-czf",
     archivePath,
     "--exclude=.git",
@@ -530,7 +531,8 @@ function packageWorkingTreeArchive(archivePath) {
     "--exclude=tmp",
     "--exclude=.desloppify",
     ".",
-  ], {
+  ];
+  run("tar", tarArgs, {
     label: "pack",
     env: {
       COPYFILE_DISABLE: "1",
@@ -555,6 +557,7 @@ function packageCommitArchive(archivePath, archiveSha) {
     ], { label: "pack source" });
     run("tar", ["-xf", sourceTarPath, "-C", extractDir], { label: "pack extract" });
     run("tar", [
+      ...resolveLocalTarCreateFlags(),
       "-czf",
       archivePath,
       "--exclude=.git",
@@ -578,6 +581,11 @@ function packageCommitArchive(archivePath, archiveSha) {
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
+}
+
+function resolveLocalTarCreateFlags() {
+  if (process.platform !== "darwin") return [];
+  return ["--disable-copyfile", "--no-mac-metadata"];
 }
 
 function buildComposeServiceArgs(services) {

@@ -201,9 +201,10 @@ function ensureDigestRuntimeBootstrap() {
 }
 
 function buildPublicDigestUrl(dateKey) {
-  const key = String(dateKey || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return "";
-  return `${getBaseUrl()}/digest/${key}`;
+  // Reduced-scope MVP: subscriber archive links remain authenticated, but
+  // public share pages are no longer generated from the delivery path.
+  void dateKey;
+  return "";
 }
 
 // ET time helpers — imported from digest-orchestrator-time-runtime.js

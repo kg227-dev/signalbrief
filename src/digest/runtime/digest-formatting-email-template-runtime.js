@@ -11,8 +11,6 @@ function createDigestEmailTemplateRuntime() {
       .replace("{{EDITORIAL_NOTE}}", slots.editorialNote || "")
       .replace("{{SETTINGS_FOOTER}}", slots.settingsFooter || "")
       .replace(/\{\{BASE_URL\}\}/g, slots.baseUrl || "")
-      .replace(/\{\{PUBLIC_DIGEST_URL\}\}/g, slots.publicDigestUrl || "")
-      .replace(/\{\{PUBLIC_DIGEST_URL_ENCODED\}\}/g, slots.publicDigestUrlEncoded || "")
       .replace(/\{\{SETTINGS_TOKEN\}\}/g, slots.userToken || "")
       .replace(/\{\{CURRENT_DIGEST_DATE\}\}/g, slots.digestDateKey || "")
       .replace(

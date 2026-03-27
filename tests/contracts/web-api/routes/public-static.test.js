@@ -152,8 +152,7 @@ const deps = {
   assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
   assert.ok(res.body.includes("<loc>https://getsignalbrief.com/</loc>"));
   assert.ok(res.body.includes("<loc>https://getsignalbrief.com/signup</loc>"));
-  assert.ok(res.body.includes("<loc>https://getsignalbrief.com/digest/2026-03-15</loc>"));
-  assert.ok(res.body.includes("<lastmod>2026-03-14</lastmod>"));
+  assert.ok(!res.body.includes("/digest/2026-03-15"));
 }
 
 {
@@ -203,4 +202,32 @@ const deps = {
     ["Highest run item", "Lower run item"]
   );
   assert.strictEqual(renderedPayload.items[0].wim, "Run brief");
+}
+
+{
+  fs.writeFileSync(path.join(archiveDir, "2026-03-16.json"), JSON.stringify({
+    dateStr: "Monday, March 16, 2026",
+    quickScan: "Admin preview quick scan",
+    items: [{ headline: "Admin preview item", relevanceScore: 7.2 }],
+  }, null, 2));
+  let renderedPayload = null;
+  const handler = createPublicStaticRouteHandler({
+    ...deps,
+    readArchiveFiles: () => ["2026-03-16.json"],
+    isAdminAuthed: () => true,
+    renderPublicDigestPage: (payload) => {
+      renderedPayload = payload;
+      return "<html>admin-preview</html>";
+    },
+  });
+  const { handled, res } = invoke(handler, {
+    method: "GET",
+    pathname: "/digest/2026-03-16",
+  });
+  assert.strictEqual(handled, "<html>admin-preview</html>");
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Cache-Control"], "private, no-store");
+  assert.ok(renderedPayload);
+  assert.strictEqual(renderedPayload.dateLabel, "Monday, March 16, 2026");
+  assert.strictEqual(renderedPayload.isPersonalized, true);
 }

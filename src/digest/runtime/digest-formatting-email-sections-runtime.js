@@ -15,16 +15,16 @@ function createDigestEmailSectionsRuntime(deps) {
     <div style="font-size:14px;color:#166534;line-height:1.6;margin-bottom:20px;">Your first briefing is below — ${filterNote}. Here's what you're looking at:</div>
     <div style="font-size:13px;color:#374151;margin-bottom:20px;">
       <div style="margin-bottom:12px;">
-        <strong>📰 Headline + "Why it matters"</strong><br>
-        <span style="color:#6B7280;">Each signal includes a strategic analysis written for how consultants think about implications — not just what happened, but who feels it and what moves next.</span>
+        <strong>📰 The same core signals at every depth</strong><br>
+        <span style="color:#6B7280;">Scan, Brief, and Deep all use the same selected items. Your depth setting only changes how much context appears under each story.</span>
       </div>
       <div style="margin-bottom:12px;">
         <strong>🎯 Signal scores</strong> — shown as signal pills like <span style="display:inline-block;background:#ECFDF5;color:#065F46;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 5px rgba(16,185,129,0.35);vertical-align:middle;margin-right:5px;"></span>8.5</span><br>
         <span style="color:#6B7280;">Ranked 0–10 per story using topic fit, strategic value, source quality, novelty, and duplication penalties.</span>
       </div>
       <div>
-        <strong>⚙️ Personalized to your topics</strong><br>
-        <span style="color:#6B7280;">This digest is ${filterNote}. Tune anytime — email "more [topic]" or "less [topic]" to adjust what you see, or update your full preferences below.</span>
+        <strong>⚙️ Configured around your topics</strong><br>
+        <span style="color:#6B7280;">This digest is ${filterNote}. Update your topics, delivery schedule, or read depth anytime from settings below.</span>
       </div>
     </div>
     <a href="${BASE_URL}/settings?token=${userToken}" style="display:inline-block;background:#15803D;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:999px;">Update preferences →</a>

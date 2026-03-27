@@ -72,18 +72,8 @@ function normalizePublicBaseUrl(rawBaseUrl) {
   }
 }
 
-function buildSitemapXml({ baseUrl, archiveFiles }) {
+function buildSitemapXml({ baseUrl }) {
   const normalizedBaseUrl = normalizePublicBaseUrl(baseUrl);
-  const digestEntries = (Array.isArray(archiveFiles) ? archiveFiles : [])
-    .map((fileName) => String(fileName || "").replace(/\.json$/i, ""))
-    .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey))
-    .map((dateKey) => ({
-      loc: `${normalizedBaseUrl}/digest/${dateKey}`,
-      lastmod: dateKey,
-      changefreq: "daily",
-      priority: "0.7",
-    }));
-
   const entries = [
     {
       loc: `${normalizedBaseUrl}/`,
@@ -95,7 +85,6 @@ function buildSitemapXml({ baseUrl, archiveFiles }) {
       changefreq: "weekly",
       priority: "0.8",
     },
-    ...digestEntries,
   ];
 
   const urlRows = entries.map((entry) => {
@@ -170,7 +159,7 @@ function serveDigestPage(ctx, deps) {
   const {
     path, fs, APP_ROOT, archiveDir, readArchiveFiles, renderPublicDigestMissingPage,
     formatPublicDigestDateLabel, renderPublicDigestPage,
-    findUserByToken, loadLatestDigestSnapshot, loadDigestSnapshotByRunId,
+    findUserByToken, loadLatestDigestSnapshot, loadDigestSnapshotByRunId, isAdminAuthed,
   } = deps;
 
   if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
@@ -210,6 +199,10 @@ function serveDigestPage(ctx, deps) {
     return res.end(html);
   }
 
+  if (typeof isAdminAuthed !== "function" || !isAdminAuthed(req)) {
+    return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
+  }
+
   if (!fs.existsSync(archivePath)) {
     return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
@@ -223,11 +216,11 @@ function serveDigestPage(ctx, deps) {
       quickScan: parsed?.quickScan || "",
       items: sortDigestItemsByScoreDescending(Array.isArray(parsed?.items) ? parsed.items : []),
       refToken,
-      isPersonalized: false,
+      isPersonalized: true,
     });
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": "private, no-store",
     });
     return res.end(html);
   } catch {
@@ -239,14 +232,12 @@ function serveDigestPage(ctx, deps) {
 function serveSitemap(ctx, deps) {
   const { req, res, pathname } = ctx;
   const {
-    path, APP_ROOT, archiveDir, readArchiveFiles, getBaseUrl,
+    getBaseUrl,
   } = deps;
   if (req.method !== "GET" || pathname !== "/sitemap.xml") return false;
 
-  const resolvedArchiveDir = archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
   const xml = buildSitemapXml({
     baseUrl: typeof getBaseUrl === "function" ? getBaseUrl() : "https://getsignalbrief.com",
-    archiveFiles: readArchiveFiles(resolvedArchiveDir),
   });
   res.writeHead(200, {
     "Content-Type": "application/xml; charset=utf-8",

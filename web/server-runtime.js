@@ -42,7 +42,6 @@ const {
 } = require("../src/jobs/digest-runner-runtime");
 const {
   estimateCost: estimateSandboxCost,
-  runPipeline: runSandboxPipeline,
 } = require("../src/sandbox-pipeline-runtime");
 const {
   createAdminAuthSessionPolicy,
@@ -105,9 +104,7 @@ const {
 const { createSourceRegistryRuntime } = require("../src/runtime/source-policy-registry-runtime");
 const { createPreferredSourceRegistryRuntime } = require("../src/runtime/preferred-source-registry-runtime");
 const { createStandardTopicBrokerRuntime } = require("../src/runtime/standard-topic-broker-runtime");
-const { createRetrievalEvalStorageRuntime } = require("../src/eval/retrieval/storage-runtime");
 const { setAdminSourceRegistry } = require("../src/domains/digest");
-const { createAdminRetrievalEvalRuntime } = require("./services/admin-retrieval-eval-runtime");
 
 const webStore = createStore();
 const { initStore, readUser, writeUser, deleteUser, allUsers, generateToken, findUserByToken } = webStore;
@@ -180,16 +177,6 @@ const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
   standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
-const retrievalEvalStorageRuntime = createRetrievalEvalStorageRuntime({
-  fs,
-  path,
-  appRoot: APP_ROOT,
-});
-const adminRetrievalEvalRuntime = createAdminRetrievalEvalRuntime({
-  storage: retrievalEvalStorageRuntime,
-  fs,
-  appRoot: APP_ROOT,
-});
 setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistryRuntime.loadSourceRegistry()));
 const requestSchedulerWorkerRestart = createSchedulerWorkerRestartRequester({
   fs,
@@ -212,16 +199,6 @@ function forkSchedulerWorker() {
 const appendWebEngagementEvent = (payload, context) => (
   appendEngagementEventChecked(payload, { scope: "web", context })
 );
-
-function appendSandboxCostLog(entry) {
-  try {
-    const dir = path.dirname(COST_LOG_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(COST_LOG_PATH, `${JSON.stringify(entry)}\n`);
-  } catch (_e) {
-    // non-critical — sandbox cost logging failure should not break the response
-  }
-}
 
 const {
   readJsonLineLog,
@@ -668,9 +645,6 @@ const {
   computeNextDeliveryEt,
   formatDaysLabel,
   computeQualityTrend,
-  estimateSandboxCost,
-  runSandboxPipeline,
-  appendSandboxCostLog,
   requestSchedulerWorkerRestart,
   forkSchedulerWorker,
   getRuntimeStateHealth: () => runtimeStateInspector.getRuntimeStateHealth(),
@@ -699,9 +673,6 @@ const {
   resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
   resetSourceRegistryIdentityEntry: (identityKey, meta) => sourceRegistryRuntime.resetSourceRegistryIdentityEntry(identityKey, meta),
   setAdminSourceRegistry,
-  loadRetrievalEvalRuns: (limit) => adminRetrievalEvalRuntime.listRuns(limit),
-  loadRetrievalEvalRun: (runId) => adminRetrievalEvalRuntime.loadRun(runId),
-  loadRetrievalEvalStatus: () => adminRetrievalEvalRuntime.loadStatus(),
   getAdminActor,
   digestAuditDir: runtimePaths.digestAuditDir,
   digestTuningPath: runtimePaths.digestTuningPath,

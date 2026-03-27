@@ -134,6 +134,17 @@ async function invoke(handler, { method, pathname, search = "", headers = {} }) 
     });
     assert.strictEqual(handled, false);
   }
+
+  {
+    const handler = createAdminApiRouteHandler(baseDeps({
+      isAdminAuthed: () => true,
+    }));
+    const { handled } = await invoke(handler, {
+      method: "GET",
+      pathname: "/api/admin/retrieval-eval/status",
+    });
+    assert.strictEqual(handled, false);
+  }
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

@@ -39,7 +39,6 @@ const requiredPageSnippets = [
   "async function saveSourceRegistryDomain()",
   "async function resetSourceRegistryDomain()",
   "/api/admin/source-registry",
-  "/admin/sandbox",
 ];
 
 for (const snippet of requiredPageSnippets) {
@@ -49,7 +48,7 @@ for (const snippet of requiredPageSnippets) {
 }
 
 const adminSource = fs.readFileSync(path.join(process.cwd(), "web/admin.html"), "utf8");
-for (const snippet of ["/admin/sandbox", "/admin/source-registry", "function setSourceRegistryOverviewQuery(query)"]) {
+for (const snippet of ["/admin/source-registry", "function setSourceRegistryOverviewQuery(query)"]) {
   if (!adminSource.includes(snippet)) {
     throw new Error(`admin page nav is missing required snippet: ${snippet}`);
   }

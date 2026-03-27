@@ -99,6 +99,18 @@ const deps = {
 
 {
   const handler = createPublicStaticRouteHandler(deps);
+  const { handled } = invoke(handler, { method: "GET", pathname: "/admin/sandbox" });
+  assert.strictEqual(handled, false);
+}
+
+{
+  const handler = createPublicStaticRouteHandler(deps);
+  const { handled } = invoke(handler, { method: "GET", pathname: "/admin/retrieval-eval" });
+  assert.strictEqual(handled, false);
+}
+
+{
+  const handler = createPublicStaticRouteHandler(deps);
   const { handled, res } = invoke(handler, { method: "GET", pathname: "/digest" });
   assert.strictEqual(handled, "<html>missing:none</html>");
   assert.strictEqual(res.statusCode, 404);

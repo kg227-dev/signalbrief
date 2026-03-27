@@ -55,7 +55,7 @@
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `routes/admin-api.js` | Admin API router. Chains auth, stats, runtime-state, source-registry, user, bulk, message, and sandbox sub-handlers. | Exports: `createAdminApiRouteHandler`, `handleAdminApiRoutes` | `./admin-api-*-runtime` modules |
+| `routes/admin-api.js` | Admin API router. Chains auth, stats, runtime-state, source-registry, digest-audit, user, bulk, and message sub-handlers. Deprecated sandbox and retrieval-eval APIs are no longer mounted in the active path. | Exports: `createAdminApiRouteHandler`, `handleAdminApiRoutes` | `./admin-api-*-runtime` modules |
 | `routes/admin-api-auth-runtime.js` | `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/check`. Issues/clears session cookies; enforces login rate limits (5 attempts per 15 min per IP). | JSON auth response; `Set-Cookie` header | `./admin-auth` (via deps), `CONFIG` |
 | `routes/admin-api-stats-runtime.js` | `GET /api/admin/stats` — builds the full admin dashboard payload: scheduler heartbeat, digest runs, user roster, delivery stats, costs, referrals, engagement trend, feedback trend, quality metrics, and incidents. | JSON stats payload | `./admin-api-stats-actions-runtime`, `./admin-api-stats-payload-runtime` |
 | `routes/admin-api-stats-actions-runtime.js` | Helper actions for the stats route: `resolveSchedulerHeartbeatLoader`, `emitIgnoredBackfillSafe`, `buildAdminStatsPayload`. | Stats sub-payload builders | `../services/admin-stats-*`, `../services/admin-ops-scheduler` |
@@ -68,8 +68,6 @@
 | `routes/admin-api-bulk-actions-runtime.js` | Defines and applies bulk action types: validates emails, plans affected entries, applies mutations with audit logging. | Mutates user store; logs bulk admin actions | User store and `logAdminActionEvent` (via deps) |
 | `routes/admin-api-message-runtime.js` | `POST /api/admin/message-user` — dispatches an admin email to a specific user. | JSON `{ ok }`; email sent | `./admin-api-message-actions-runtime` |
 | `routes/admin-api-message-actions-runtime.js` | Processes the message request: resolves target user, sends email, and logs the admin message event. | Email via Resend API; admin message log entry | `../services/admin-ops-io` (via deps) |
-| `routes/admin-api-sandbox-runtime.js` | `POST /api/admin/sandbox/estimate`, `POST /api/admin/sandbox/run` — estimates and executes a sandbox digest pipeline run. | JSON estimate or pipeline result; sandbox cost log entry | `../../src/sandbox-pipeline-runtime` (via deps) |
-
 ---
 
 ## 5. Routes — Public Static
@@ -165,7 +163,6 @@ All files in this section are served as static assets and execute in the browser
 | `admin-source-registry.html` | Source policy registry admin page. Lists all known domains, allows viewing and editing per-domain trust/policy settings. | Source registry UI HTML | `style.css` |
 | `admin-user.html` | Per-user admin detail page. Shows user record, delivery schedule, digest history, engagement events, and audit log. | User detail UI HTML | `style.css` |
 | `archive.html` | Authenticated archive page. Displays the user's delivered digest history with per-item relevance scores, search, and filters. | Archive page HTML | `style.css`, `preferences-shared.js`, `preferences-state-*.js` |
-| `sandbox.html` | Admin sandbox page. Allows estimating and running sandbox digest pipelines (`POST /api/admin/sandbox/estimate`, `POST /api/admin/sandbox/run`). | Sandbox UI HTML | `style.css` |
 | `style.css` | Global stylesheet. Covers layout, typography, topic chips, progress indicators, admin tables, dark-mode variables, and responsive breakpoints. | CSS served at `/style.css` | None |
 | `robots.txt` | Crawler policy. Disallows `/admin`, `/api/`, `/settings`, `/archive`. Points to sitemap. | `text/plain` served at `/robots.txt` | None |
 

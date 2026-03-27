@@ -392,6 +392,93 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   font-size:12px;
   color:var(--text-2);
 }
+.digest-audit-controls {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.digest-audit-grid {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.digest-audit-card {
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:#fff;
+  padding:16px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.04);
+}
+.digest-audit-kpis {
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+  gap:10px;
+}
+.digest-audit-kpi {
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  padding:12px;
+  background:#F8FAFC;
+}
+.digest-audit-kpi-label {
+  font-size:11px;
+  color:var(--text-secondary);
+  margin-bottom:4px;
+}
+.digest-audit-kpi-value {
+  font-size:20px;
+  font-weight:700;
+  color:var(--text);
+}
+.digest-audit-topic-list {
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
+  gap:12px;
+}
+.digest-audit-topic {
+  border:1px solid var(--border-subtle);
+  border-radius:12px;
+  padding:14px;
+  background:#fff;
+}
+.digest-audit-topic-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.digest-audit-item-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.digest-audit-item {
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  padding:10px;
+  background:#F8FAFC;
+}
+.digest-audit-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.digest-audit-pill {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:3px 8px;
+  border-radius:999px;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  font-size:10px;
+  font-weight:700;
+  color:var(--text-secondary);
+  letter-spacing:0.03em;
+  text-transform:uppercase;
+}
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
 .topics-cell { white-space:normal; line-height:1.45; min-width:280px; max-width:460px; }
 .topics-cell-tight { white-space:normal; line-height:1.45; max-width:320px; }
@@ -891,6 +978,11 @@ body.dark .drawer-row td { background:rgba(255,255,255,0.02); }
 body.dark .drawer-card { background:var(--card); }
 body.dark .drawer-preview-item { background:var(--card); }
 body.dark .audit-item { background:var(--card); }
+body.dark .digest-audit-card { background:var(--card); }
+body.dark .digest-audit-kpi { background:rgba(255,255,255,0.03); }
+body.dark .digest-audit-topic { background:var(--card); }
+body.dark .digest-audit-item { background:rgba(255,255,255,0.03); }
+body.dark .digest-audit-pill { background:rgba(255,255,255,0.04); }
 body.dark .subscriber-row-main.expanded td { background:rgba(107,139,214,0.06); }
 body.dark .subscriber-row-main.expanded:hover td { background:rgba(107,139,214,0.08); }
 body.dark .modal-card { background:var(--card); box-shadow:0 16px 44px rgba(0,0,0,0.5); }
@@ -1108,6 +1200,23 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div id="testDigestMsg" style="font-size:12px;color:var(--text-secondary);display:none;text-align:right;"></div>
         <div id="opsActionMsg" class="ops-action-msg"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="section-head" id="digestAuditSection">
+    <div>
+      <div class="section-title" style="margin-bottom:0;">Digest audit</div>
+      <div class="section-subcopy">Inspect lane mix, selected items, and candidate rejections for any day.</div>
+    </div>
+    <div class="digest-audit-controls">
+      <input id="digestAuditDate" class="table-filter" type="date" onkeydown="if(event.key==='Enter'){event.preventDefault();loadDigestAudit();}">
+      <button class="btn-secondary" type="button" onclick="loadDigestAudit()">Load audit</button>
+    </div>
+  </div>
+  <div id="digestAuditMeta" class="table-meta" style="margin-bottom:10px;">Loading latest digest audit…</div>
+  <div id="digestAuditPanel" class="digest-audit-grid">
+    <div class="digest-audit-card">
+      <div class="empty">Loading digest audit…</div>
     </div>
   </div>
 
@@ -2104,6 +2213,216 @@ function formatEtDateTime(iso) {
   }
 }
 
+function getTodayEtDateKey() {
+  try {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function ensureDigestAuditDateInput() {
+  const input = document.getElementById("digestAuditDate");
+  if (!input) return "";
+  if (!input.value) input.value = getTodayEtDateKey();
+  return String(input.value || "").trim() || getTodayEtDateKey();
+}
+
+function formatPct(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? `${num.toFixed(1)}%` : "—";
+}
+
+function renderDigestAuditSummaryPill(label, value, tone = "var(--text-secondary)") {
+  return `<span class="digest-audit-pill" style="color:${tone};">${esc(label)}: ${esc(value)}</span>`;
+}
+
+function renderDigestAuditCandidate(candidate) {
+  const headline = esc(candidate?.headline || "Untitled");
+  const href = String(candidate?.url || "").trim();
+  const title = href
+    ? `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">${headline}</a>`
+    : `<span style="font-weight:600;">${headline}</span>`;
+  const source = candidate?.source ? `${candidate.source}` : "unknown";
+  const lane = candidate?.lane ? `${candidate.lane}` : "unknown";
+  const reason = candidate?.selection_reason ? String(candidate.selection_reason) : "selected";
+  const score = Number(candidate?._score);
+  const selected = candidate?.selected === true;
+  const scoreLabel = Number.isFinite(score) ? score.toFixed(3) : "—";
+  const tone = selected ? "var(--green)" : "var(--text-secondary)";
+  return `<div class="digest-audit-item">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="min-width:0;">
+        <div style="font-size:12px;line-height:1.45;">${title}</div>
+        <div class="subscriber-sub" style="margin-top:4px;">${esc(source)} · ${esc(lane)}</div>
+      </div>
+      <div class="mono" style="color:${tone};font-weight:700;">${scoreLabel}</div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:8px;">
+      ${renderDigestAuditSummaryPill(selected ? "Selected" : "Rejected", selected ? "yes" : "no", tone)}
+      ${renderDigestAuditSummaryPill("Reason", reason)}
+      ${candidate?.source_tier != null ? renderDigestAuditSummaryPill("Tier", String(candidate.source_tier)) : ""}
+    </div>
+  </div>`;
+}
+
+function renderDigestAuditTopic(tag, topic, fetchTopic) {
+  const selectedCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).filter((candidate) => candidate.selected === true);
+  const laneBreakdown = topic?.lane_breakdown || {};
+  const rejectionCounts = topic?.rejection_reason_counts || {};
+  const visibleCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).slice(0, 12);
+  const hiddenCount = Math.max(0, Number((topic?.candidates || []).length) - visibleCandidates.length);
+  const lanePills = Object.entries(laneBreakdown).map(([lane, count]) => renderDigestAuditSummaryPill(lane, String(count)));
+  const rejectionPills = Object.entries(rejectionCounts).map(([reason, count]) => renderDigestAuditSummaryPill(reason, String(count)));
+  const coverageStatus = String(fetchTopic?.coverage_status || "").trim() || "unknown";
+  const coverageTone = coverageStatus === "covered"
+    ? "var(--green)"
+    : coverageStatus.includes("thin")
+      ? "var(--yellow)"
+      : "var(--red)";
+  return `<div class="digest-audit-topic">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">${esc(tag)}</div>
+        <div class="subscriber-sub">${Number(topic?.selected_count || 0)}/${Number(topic?.total_candidates || 0)} selected · ${formatPct(fetchTopic?.discovery_candidate_share_pct || 0)} discovery candidates</div>
+      </div>
+      <div class="mono" style="color:${coverageTone};font-weight:700;">${esc(coverageStatus)}</div>
+    </div>
+    <div class="digest-audit-row" style="margin-bottom:10px;">
+      ${renderDigestAuditSummaryPill("Broker", `${Number(fetchTopic?.broker_item_count || 0)} kept`, "var(--green)")}
+      ${renderDigestAuditSummaryPill("Discovery", `${Number(fetchTopic?.discovery_item_count || 0)} kept`, "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Discovery capped", String(Number(fetchTopic?.discovery_capped_count || 0)), "var(--red)")}
+    </div>
+    ${lanePills.length ? `<div class="digest-audit-row" style="margin-bottom:10px;">${lanePills.join("")}</div>` : ""}
+    <div class="digest-audit-item-list">
+      ${selectedCandidates.length ? selectedCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No selected items captured for this topic.</div>`}
+    </div>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Candidate audit (${Number(topic?.total_candidates || 0)})</summary>
+      ${rejectionPills.length ? `<div class="digest-audit-row" style="margin-top:10px;">${rejectionPills.join("")}</div>` : ""}
+      <div class="digest-audit-item-list" style="margin-top:10px;">
+        ${visibleCandidates.length ? visibleCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No candidate detail captured.</div>`}
+      </div>
+      ${hiddenCount > 0 ? `<div class="subscriber-sub" style="margin-top:8px;">+${hiddenCount} more candidates in the audit log</div>` : ""}
+    </details>
+  </div>`;
+}
+
+function renderDigestAuditPanel() {
+  const meta = document.getElementById("digestAuditMeta");
+  const panel = document.getElementById("digestAuditPanel");
+  if (!meta || !panel) return;
+  const state = digestAuditState || {};
+  if (state.loading && !state.data) {
+    meta.textContent = `Loading digest audit for ${state.dateKey || ensureDigestAuditDateInput()}…`;
+    panel.innerHTML = `<div class="digest-audit-card"><div class="empty">Loading digest audit…</div></div>`;
+    return;
+  }
+  if (state.error && !state.data) {
+    const available = Array.isArray(state.availableDates) && state.availableDates.length
+      ? ` Available dates: ${state.availableDates.slice(0, 6).join(", ")}`
+      : "";
+    meta.textContent = `Digest audit unavailable for ${state.dateKey || ensureDigestAuditDateInput()}.`;
+    panel.innerHTML = `<div class="digest-audit-card"><div class="empty">${esc(state.error)}${esc(available)}</div></div>`;
+    return;
+  }
+  const data = state.data || {};
+  const summary = data.summary || {};
+  const fetch = data.fetch || {};
+  const fetchTopics = new Map((Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : []).map((topic) => [String(topic?.tag || "").trim().toUpperCase(), topic]));
+  const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
+  const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
+  const refreshingLabel = state.loading ? " · refreshing…" : "";
+  meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${refreshingLabel}`;
+  panel.innerHTML = `
+    <div class="digest-audit-card">
+      <div class="digest-audit-kpis">
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Candidates scored</div>
+          <div class="digest-audit-kpi-value">${Number(summary.total_candidates || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Items selected</div>
+          <div class="digest-audit-kpi-value">${Number(summary.total_selected || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Broker candidate share</div>
+          <div class="digest-audit-kpi-value" style="color:var(--green);">${formatPct(fetch.broker_candidate_share_pct || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Discovery candidate share</div>
+          <div class="digest-audit-kpi-value" style="color:${Number(fetch.discovery_candidate_share_pct || 0) > Number(fetch.max_discovery_candidate_share_pct || 20) ? "var(--red)" : "var(--yellow)"};">${formatPct(fetch.discovery_candidate_share_pct || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Discovery capped</div>
+          <div class="digest-audit-kpi-value">${Number(fetch.discovery_candidate_capped_count || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Target max discovery</div>
+          <div class="digest-audit-kpi-value">${formatPct(fetch.max_discovery_candidate_share_pct || 0)}</div>
+        </div>
+      </div>
+      <div class="digest-audit-row" style="margin-top:12px;">
+        ${renderDigestAuditSummaryPill("Archive dedup removed", String(Number(summary.dedup_removed || 0)))}
+        ${renderDigestAuditSummaryPill("History suppressed", String(Number(summary.history_suppressed || 0)))}
+        ${renderDigestAuditSummaryPill("Continuation removed", String(Number(summary.continuation_removed || 0)))}
+        ${renderDigestAuditSummaryPill("Selected discovery capped", String(Number(summary.discovery_capped || 0)))}
+      </div>
+    </div>
+    <div class="digest-audit-topic-list">
+      ${topics.length ? topics.map(([tag, topic]) => renderDigestAuditTopic(tag, topic, fetchTopics.get(tag))).join("") : `<div class="digest-audit-card"><div class="empty">No topic-level audit data captured for this day.</div></div>`}
+    </div>
+  `;
+}
+
+async function loadDigestAudit(silent = true) {
+  const dateKey = ensureDigestAuditDateInput();
+  digestAuditState = {
+    ...digestAuditState,
+    loading: true,
+    dateKey,
+    error: "",
+    availableDates: [],
+  };
+  renderDigestAuditPanel();
+  try {
+    const resp = await apiFetchJson(`/api/admin/digest-audit?date=${encodeURIComponent(dateKey)}`, {}, 1);
+    const data = resp.data || {};
+    if (!resp.ok || data.error) {
+      digestAuditState = {
+        ...digestAuditState,
+        loading: false,
+        data: null,
+        error: data.error === "not_found"
+          ? "No digest audit file exists for that date yet."
+          : (data.error || `Failed to load digest audit (HTTP ${resp.status})`),
+        availableDates: Array.isArray(data.available_dates) ? data.available_dates : [],
+      };
+      renderDigestAuditPanel();
+      if (!silent) showToast("err", digestAuditState.error);
+      return;
+    }
+    digestAuditState = {
+      loading: false,
+      dateKey,
+      data,
+      error: "",
+      availableDates: [],
+    };
+    renderDigestAuditPanel();
+  } catch (e) {
+    digestAuditState = {
+      ...digestAuditState,
+      loading: false,
+      data: null,
+      error: e.message || "Network error loading digest audit",
+      availableDates: [],
+    };
+    renderDigestAuditPanel();
+    if (!silent) showToast("err", digestAuditState.error);
+  }
+}
+
 function setOpsActionMessage(type, message) {
   const el = document.getElementById("opsActionMsg");
   if (!el) return;
@@ -2344,6 +2663,13 @@ let latestRoster = [];
 let latestRuns = [];
 let latestHealth = null;
 let latestSourceRegistryOverview = null;
+let digestAuditState = {
+  loading: false,
+  dateKey: "",
+  data: null,
+  error: "",
+  availableDates: [],
+};
 let autoRefreshTimer = null;
 let loadInFlight = false;
 const AUTO_REFRESH_MS = 30000;
@@ -3734,6 +4060,7 @@ async function load(silent = false) {
 	    renderAdminMessages(admin_messages || []);
 	    renderDigestInsights(digest_insights || {});
 	    renderExecutiveSummary(health || null);
+      await loadDigestAudit(true);
 
     if (summary.month_label) {
       document.getElementById("monthLabel").textContent = summary.month_label;
@@ -3982,6 +4309,7 @@ async function load(silent = false) {
 readSubscriberStateFromUrl();
 applySubscriberInputsFromState();
 updateSortIndicators();
+ensureDigestAuditDateInput();
 load();
 if (!autoRefreshTimer) {
   autoRefreshTimer = setInterval(() => {

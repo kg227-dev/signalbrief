@@ -322,9 +322,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       captureDiagnostics,
     } = params;
 
-    const sourcePrefs = user.source_preferences || {};
-    const blockedSources = new Set(Array.isArray(sourcePrefs.blocked_sources) ? sourcePrefs.blocked_sources : []);
-    const trustedSources = new Set(Array.isArray(sourcePrefs.trusted_sources) ? sourcePrefs.trusted_sources : []);
     const trace = captureDiagnostics === true
       ? {
         snapshots: [],
@@ -366,8 +363,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       sourceDomainForItem: parseSourceDomain,
       recentEntityCounts: recentHistory.entityCounts,
       recentStorylineKeys: recentHistory.storylineKeys,
-      blockedSources,
-      trustedSources,
       nowIso,
     });
     userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
@@ -512,8 +507,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           sourceDomainForItem: parseSourceDomain,
           recentEntityCounts: recentHistory.entityCounts,
           recentStorylineKeys: recentHistory.storylineKeys,
-          blockedSources,
-          trustedSources,
           nowIso,
         })
           .sort((a, b) => b.relevanceScore - a.relevanceScore)

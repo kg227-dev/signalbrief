@@ -31,7 +31,6 @@ const deps = {
   deleteUser: noop,
   sendReferralThankYou: noopAsync,
   sendWelcomeEmail: noopAsync,
-  queueDigestTrigger: noopAsync,
   runDigestTrigger: noopAsync,
   startDigestTrigger: noopAsync,
   getBaseUrl: () => "http://localhost:3003",

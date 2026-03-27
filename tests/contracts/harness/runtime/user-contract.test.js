@@ -25,6 +25,12 @@ const normalized = normalizeUserRecord({
   email: " USER@EXAMPLE.COM ",
   status: "PAUSED",
   token: "abc",
+  bookmarks: [{ url: "https://example.com" }],
+  custom_topics: ["custom_glp_1"],
+  source_preferences: { blocked_sources: ["bad.com"], trusted_sources: ["good.com"] },
+  topic_weights: { TECHNOLOGY: 3 },
+  telegram: { chat_id: "123" },
+  watchlist: ["NVIDIA"],
   topics: [" TECHNOLOGY ", "TECHNOLOGY", "custom_glp_1", ""],
   preferences: {
     delivery_time: " 08:15 ",

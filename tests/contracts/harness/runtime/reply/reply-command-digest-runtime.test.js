@@ -16,7 +16,6 @@ assertModuleExports(() => runtime, TARGET_REL);
 
 async function testEmailOnlyMvpDisablesTriggering() {
   const sent = [];
-  const triggerCalls = [];
   const state = {
     digestInflight: new Set(),
   };
@@ -27,18 +26,9 @@ async function testEmailOnlyMvpDisablesTriggering() {
     },
     allUsers: () => [{ chatId: "123", status: "active" }],
     USER_STATUS: { ACTIVE: "active" },
-    queueDigestTrigger: async (opts) => {
-      triggerCalls.push(opts);
-      return {
-        ok: false,
-        cooldown: true,
-        cooldownRemainingMs: 2 * 60 * 1000,
-      };
-    },
   });
 
   await handler.handleDigest("123");
-  assert.strictEqual(triggerCalls.length, 0, "email-only MVP should not trigger targeted Telegram digest runs");
   assert.ok(
     sent[0].includes("Email-only MVP mode is active"),
     "handler should explain that Telegram on-demand digests are disabled"
@@ -59,10 +49,6 @@ async function testInFlightGuardAndSuccessPath() {
     },
     allUsers: () => [{ chatId: "123", status: "active" }],
     USER_STATUS: { ACTIVE: "active" },
-    queueDigestTrigger: async () => {
-      triggerCalls += 1;
-      return { ok: true };
-    },
   });
 
   await handler.handleDigest("123");

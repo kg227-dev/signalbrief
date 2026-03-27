@@ -39,8 +39,8 @@ Long-running and spawned background work.
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `jobs/digest-runner-runtime.js` | Public facade for the digest job; adds `confirmQueuedRunStarted` on top of `digest-runner-core-runtime` | Re-exports all core symbols | `./digest-runner-core-runtime` |
-| `jobs/digest-runner-core-runtime.js` | Core digest-trigger logic: checks/clears stale locks, enqueues on-demand runs with cooldown enforcement, spawns `digest.js` as a child process | `{ ok, exitCode, signal, busy, lockUnhealthy, … }` | `node:fs`, `node:path`, `../runtime/digest-lock-runtime`, `./digest-runner-utils-runtime`, `./digest-runner-spawn-runtime`, `../runtime/runtime-state-paths-runtime` |
+| `jobs/digest-runner-runtime.js` | Public facade for the digest job runtime | Re-exports all core symbols | `./digest-runner-core-runtime` |
+| `jobs/digest-runner-core-runtime.js` | Core digest-trigger logic: checks/clears stale locks, starts or runs `digest.js`, and normalizes runner health outcomes for the scheduler/admin surfaces | `{ ok, exitCode, signal, busy, lockUnhealthy, … }` | `node:path`, `../runtime/digest-lock-runtime`, `./digest-runner-utils-runtime`, `./digest-runner-spawn-runtime`, `../runtime/runtime-state-paths-runtime` |
 | `jobs/digest-runner-spawn-runtime.js` | Spawns `digest.js` with sanitized args and trigger env vars; streams stdout/stderr to the caller; resolves when the child exits | Resolves `{ code, signal }` | `node:child_process` (`spawn`) |
 | `jobs/digest-runner-utils-runtime.js` | Tiny shared helpers: `toPositiveIntOrDefault`, `sleep` | Scalar values / Promise | None |
 | `jobs/reengagement-runtime.js` | Scans all active users for inactivity; sends day-4 nudge, day-8 warning, or auto-pauses after 10 days of no digests | Emails sent; user records updated; log written to `/tmp/signalbrief-reengagement.log` | `node:fs`, `../platform/store`, `../platform/mailer` |

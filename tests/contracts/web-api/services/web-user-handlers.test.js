@@ -30,7 +30,6 @@ function createDeps(overrides = {}) {
     },
     sendReferralThankYou: async () => {},
     sendWelcomeEmail: async () => {},
-    queueDigestTrigger: async () => ({ ok: true, code: "queued" }),
     runDigestTrigger: async () => ({ ok: true, status: "ok", raw: { run: { code: 0 } } }),
     startDigestTrigger: async () => ({ ok: true, status: "queued", raw: {} }),
     BASE_URL: "http://localhost:3003",

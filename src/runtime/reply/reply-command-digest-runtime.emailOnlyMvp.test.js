@@ -5,7 +5,6 @@ const assert = require("assert");
 const { createDigestCommandHandler } = require("./reply-command-digest-runtime");
 
 async function main() {
-  let queueCalls = 0;
   const sent = [];
 
   const handler = createDigestCommandHandler({
@@ -30,15 +29,10 @@ async function main() {
     USER_STATUS: {
       ACTIVE: "active",
     },
-    queueDigestTrigger() {
-      queueCalls += 1;
-      return Promise.resolve({ ok: true });
-    },
   });
 
   await handler.handleDigest("123");
 
-  assert.strictEqual(queueCalls, 0, "email-only MVP should not queue an on-demand Telegram digest");
   assert.strictEqual(sent.length, 1, "email-only MVP should send a single explanatory reply");
   assert.ok(
     sent[0].text.includes("Email-only MVP mode is active"),

@@ -129,12 +129,21 @@ function createDefaultUser(chatId, nowIso = new Date().toISOString()) {
 
 function normalizeUserRecord(input, opts = {}) {
   const raw = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const {
+    bookmarks: _bookmarks,
+    custom_topics: _customTopics,
+    source_preferences: _sourcePreferences,
+    topic_weights: _topicWeights,
+    telegram: _telegram,
+    watchlist: _watchlist,
+    ...safeRaw
+  } = raw;
   const chatId = normalizeString(opts.chatId || raw.chatId || "");
   const defaults = createDefaultUser(chatId || "unknown", opts.nowIso);
 
   return {
     ...defaults,
-    ...raw,
+    ...safeRaw,
     chatId: chatId || defaults.chatId,
     name: normalizeString(raw.name) || null,
     email: normalizeEmail(raw.email),

@@ -484,7 +484,6 @@ async function testSettingsInputNormalizationContract() {
     },
     sendReferralThankYou: async () => {},
     sendWelcomeEmail: async () => {},
-    queueDigestTrigger: async () => ({ ok: true }),
     runDigestTrigger: async () => ({ ok: true }),
     startDigestTrigger: async () => ({ ok: true }),
     BASE_URL: "http://localhost:3003",

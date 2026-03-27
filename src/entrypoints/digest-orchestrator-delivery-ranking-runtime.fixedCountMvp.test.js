@@ -5,6 +5,7 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require("./digest-orc
 
 const nowIso = "2026-03-25T12:00:00.000Z";
 let capturedWeights = null;
+let capturedOptions = null;
 
 const rankingRuntime = createDigestOrchestratorDeliveryRankingRuntime({
   CONFIG: {
@@ -29,8 +30,9 @@ const rankingRuntime = createDigestOrchestratorDeliveryRankingRuntime({
       standardTopicsLower: ["technology"],
     };
   },
-  applyTopicRelevanceScores(items, _topics, weights) {
+  applyTopicRelevanceScores(items, _topics, weights, opts) {
     capturedWeights = weights;
+    capturedOptions = opts;
     return items.map((item) => ({
       ...item,
       relevanceScore: Number(item.baseScore || 0) + 1,
@@ -87,7 +89,10 @@ const result = rankingRuntime.rankAndSuppressUserItems({
     preferences: {
       items_per_digest: 12,
     },
-    source_preferences: {},
+    source_preferences: {
+      blocked_sources: ["example.com"],
+      trusted_sources: ["example.com"],
+    },
   },
   enriched,
   repeatIndex: null,
@@ -104,6 +109,8 @@ const result = rankingRuntime.rankAndSuppressUserItems({
 });
 
 assert.ok(capturedWeights && Object.keys(capturedWeights).length === 0, "delivery ranking must ignore deprecated topic weights");
+assert.strictEqual(capturedOptions?.blockedSources, undefined, "delivery ranking must ignore deprecated source preference blocks");
+assert.strictEqual(capturedOptions?.trustedSources, undefined, "delivery ranking must ignore deprecated source preference trusts");
 assert.strictEqual(result.diagnostics.requested_count, 5, "delivery ranking must use the MVP fixed 5-item target");
 assert.strictEqual(result.diagnostics.candidate_pool_target_count, 7, "delivery ranking must keep the fixed candidate pool target");
 

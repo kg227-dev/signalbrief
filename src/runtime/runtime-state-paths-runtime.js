@@ -89,10 +89,6 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.digestRunLockPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_RUN_LOCK_PATH"),
     path.join(dataDir, "digest-run.lock")
   );
-  const digestOnDemandCooldownPath = resolveOptionalPath(
-    options.digestOnDemandCooldownPath || readEnvValue(env, "DIGEST_ON_DEMAND_COOLDOWN_FILE"),
-    path.join(dataDir, "digest-on-demand-cooldown.json")
-  );
   const domainStatsPath = resolveOptionalPath(
     options.domainStatsPath || readEnvValue(env, "SIGNALBRIEF_DOMAIN_STATS_PATH"),
     path.join(dataDir, "domain-stats.json")
@@ -154,7 +150,6 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     schedulerHeartbeatPath,
     schedulerControlPath,
     digestRunLockPath,
-    digestOnDemandCooldownPath,
     domainStatsPath,
     sourceRegistryPath,
     preferredSourcesPath,
@@ -209,7 +204,6 @@ function describeRuntimePathAlignment(runtimePaths) {
     deriveComponentRoot(paths.schedulerHeartbeatPath, dataRoot),
     deriveComponentRoot(paths.schedulerControlPath, dataRoot),
     deriveComponentRoot(paths.digestRunLockPath, dataRoot),
-    deriveComponentRoot(paths.digestOnDemandCooldownPath, dataRoot),
   ]);
 
   const componentRoots = {
@@ -293,7 +287,6 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "schedulerHeartbeatPath", path: paths.schedulerHeartbeatPath, kind: "file" },
     { key: "schedulerControlPath", path: paths.schedulerControlPath, kind: "file" },
     { key: "digestRunLockPath", path: paths.digestRunLockPath, kind: "file" },
-    { key: "digestOnDemandCooldownPath", path: paths.digestOnDemandCooldownPath, kind: "file" },
     { key: "domainStatsPath", path: paths.domainStatsPath, kind: "file" },
     { key: "sourceRegistryPath", path: paths.sourceRegistryPath, kind: "file" },
     { key: "preferredSourcesPath", path: paths.preferredSourcesPath, kind: "file" },

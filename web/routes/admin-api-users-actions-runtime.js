@@ -15,8 +15,8 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
         summary = "Resent settings link";
       } else if (action === "bulk_set_time" && details.to) {
         summary = `Set delivery time to ${details.to}`;
-      } else if (action === "run_digest_targeted") {
-        summary = row.success ? "Triggered digest run" : "Digest run failed";
+      } else if (action === "run_digest_targeted" || action === "run_digest_targeted_disabled") {
+        summary = "Targeted digest disabled (email-only MVP)";
       } else if (action === "restart_scheduler_worker") {
         summary = row.success ? "Requested scheduler worker restart" : "Scheduler worker restart failed";
       } else if (action === "set_user_status") {
@@ -46,7 +46,7 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
       action: "message_user",
       success: !!row.success,
       summary: row.success
-        ? `Message sent via ${(row.sent_channels || []).join(" + ") || "channel"}`
+        ? `Message sent via ${(row.sent_channels || []).join(" + ") || "email"}`
         : `Message failed: ${(row.errors || []).join(" | ") || "unknown error"}`,
       details: {
         requested_channels: Array.isArray(row.requested_channels) ? row.requested_channels : [],

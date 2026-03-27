@@ -24,8 +24,6 @@ function createAdminRunDigestHandler({
         req,
         res,
         json,
-        allUsers,
-        targetChatId,
         logAdminActionEvent,
       });
     }

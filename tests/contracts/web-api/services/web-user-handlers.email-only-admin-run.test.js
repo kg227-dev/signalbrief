@@ -50,7 +50,6 @@ function createDeps(overrides = {}) {
   {
     const { deps, responses } = createDeps({
       requireJsonBody: async () => ({ chatId: "chat-1" }),
-      allUsers: () => [{ chatId: "chat-1", email: "user@example.com", status: "active" }],
     });
     const handlers = createWebUserHandlers(deps);
     await handlers.handleAdminRunDigest({}, {});

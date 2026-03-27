@@ -26,6 +26,8 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     incidentStorePath,
     log,
     formatEtDateKey,
+    resolveOpsAlertTarget,
+    sendOpsAlert,
     resolveOpsChatId,
     sendTelegram,
     nowProvider = () => new Date(),
@@ -35,8 +37,12 @@ function createDigestOrchestratorIncidentRuntime(deps) {
   let _inMemoryStore = { version: 1, updated_at: "", incidents: {} };
 
   const logger = typeof log === "function" ? log : () => {};
-  const getOpsChatId = typeof resolveOpsChatId === "function" ? resolveOpsChatId : () => null;
-  const sendTelegramMessage = typeof sendTelegram === "function" ? sendTelegram : async () => {};
+  const getOpsAlertTarget = typeof resolveOpsAlertTarget === "function"
+    ? resolveOpsAlertTarget
+    : (typeof resolveOpsChatId === "function" ? resolveOpsChatId : () => null);
+  const sendOpsAlertMessage = typeof sendOpsAlert === "function"
+    ? sendOpsAlert
+    : (typeof sendTelegram === "function" ? sendTelegram : async () => {});
 
   function _atomicWriteJson(filePath, data) {
     const dir = path.dirname(filePath);
@@ -84,8 +90,8 @@ function createDigestOrchestratorIncidentRuntime(deps) {
   }
 
   async function _notifyTelegram(incident, transitionType, previousSeverity) {
-    const opsChatId = getOpsChatId();
-    if (!opsChatId) return;
+    const opsAlertTarget = getOpsAlertTarget();
+    if (!opsAlertTarget) return;
     let lines;
     if (transitionType === "OPEN") {
       lines = [
@@ -117,9 +123,9 @@ function createDigestOrchestratorIncidentRuntime(deps) {
       return;
     }
     try {
-      await sendTelegramMessage(lines.join("\n"), opsChatId);
+      await sendOpsAlertMessage(lines.join("\n"), opsAlertTarget);
     } catch (e) {
-      logger(`[warn] Incident Telegram send failed: ${e.message}`);
+      logger(`[warn] Incident ops alert send failed: ${e.message}`);
     }
   }
 

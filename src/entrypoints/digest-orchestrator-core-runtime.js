@@ -274,8 +274,8 @@ function getDigestOrchestratorIncidentRuntime() {
       incidentStorePath: INCIDENT_STORE,
       log,
       formatEtDateKey,
-      resolveOpsChatId: () => process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null,
-      sendTelegram,
+      resolveOpsAlertTarget: () => process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null,
+      sendOpsAlert,
     });
   }
   return digestOrchestratorIncidentRuntimeCache;
@@ -841,9 +841,9 @@ function prepareStorylinePool(...args) {
   return getPipelineRuntime().prepareStorylinePool(...args);
 }
 
-// ── 6. Send via SignalBrief bot ───────────────────────────────────────────────
+// ── 6. Send ops alerts via configured transport ───────────────────────────────
 
-async function sendTelegram(text, chatId, extra = {}) {
+async function sendOpsAlert(text, chatId, extra = {}) {
   const targetId = chatId || CONFIG.user.telegramChatId;
   logEvent("info", "digest.delivery.telegram", {
     user_id: String(targetId || ""),

@@ -1,40 +1,12 @@
-function logTargetedResult({
-  req,
-  logAdminActionEvent,
-  targetUser,
-  targetChatId,
-  success,
-  details,
-}) {
-  logAdminActionEvent(req, {
-    action: "run_digest_targeted",
-    target_email: targetUser.email || null,
-    target_chat_id: targetChatId,
-    success,
-    details: details || undefined,
-  });
-}
-
-function findTargetUser(allUsers, targetChatId) {
-  return allUsers().find((user) => String(user.chatId || "").trim() === targetChatId) || null;
-}
-
 async function handleTargetedDigestRun({
   req,
   res,
   json,
-  allUsers,
-  targetChatId,
   logAdminActionEvent,
 }) {
-  const targetUser = findTargetUser(allUsers, targetChatId);
-  if (!targetUser) return json(res, { error: `No user found for chatId ${targetChatId}` }, 404);
   const detail = "Targeted digests are disabled in the reduced-scope email-only MVP.";
-  logTargetedResult({
-    req,
-    logAdminActionEvent,
-    targetUser,
-    targetChatId,
+  logAdminActionEvent(req, {
+    action: "run_digest_targeted_disabled",
     success: false,
     details: { reason: "targeted_mode_disabled", detail },
   });

@@ -358,7 +358,6 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="action-bar-title">Admin actions</div>
       <div class="action-row">
         <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
-        <button type="button" class="btn btn-secondary" id="sendDigestBtn" disabled>Targeted digest disabled</button>
         <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
         <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
         <button type="button" class="btn btn-danger-soft" id="unsubBtn">Mark unsubscribed</button>
@@ -933,11 +932,6 @@ async function init() {
         else showError(data.error || 'Save failed.');
       } catch { showError('Network error.'); }
       btn.disabled = false; btn.textContent = 'Save preferences';
-    });
-
-    // --- Send digest now ---
-    document.getElementById('sendDigestBtn').addEventListener('click', async function() {
-      showBanner('❌ Targeted digests are disabled in the reduced-scope email-only MVP.', true);
     });
 
     // --- Resend settings link ---

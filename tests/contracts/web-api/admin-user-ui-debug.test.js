@@ -24,3 +24,13 @@ for (const snippet of requiredSnippets) {
     throw new Error(`admin user debug UI is missing required snippet: ${snippet}`);
   }
 }
+
+for (const removedSnippet of [
+  'id="sendDigestBtn"',
+  "Targeted digest disabled",
+  "Targeted digests are disabled in the reduced-scope email-only MVP.",
+]) {
+  if (source.includes(removedSnippet)) {
+    throw new Error(`admin user debug UI still contains removed snippet: ${removedSnippet}`);
+  }
+}

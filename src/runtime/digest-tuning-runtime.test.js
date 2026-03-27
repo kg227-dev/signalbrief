@@ -9,6 +9,7 @@ const {
   mergeDigestTuning,
   validateDigestTuning,
   ALLOWED_TUNING_KEYS,
+  LOCKED_TUNING_KEYS,
 } = require("./digest-tuning-runtime");
 
 // --- loadDigestTuning ---
@@ -29,7 +30,7 @@ const {
   const tuning = { maxAgeHours: 36, weights: { freshness: 0.4, source_tier: 0.3, lane_bonus: 0.15, novelty: 0.15 } };
   fs.writeFileSync(goodPath, JSON.stringify(tuning));
   const result = loadDigestTuning(goodPath, fs);
-  assert.strictEqual(result.maxAgeHours, 36, "maxAgeHours parsed correctly");
+  assert.strictEqual("maxAgeHours" in result, false, "locked maxAgeHours stripped on load");
   assert.strictEqual(result.weights.freshness, 0.4, "weights.freshness parsed correctly");
 
   // Returns {} when file contains a non-object root
@@ -44,7 +45,6 @@ const {
 // --- validateDigestTuning ---
 {
   const { ok, errors } = validateDigestTuning({
-    maxAgeHours: 36,
     maxItemsPerSourceDomain: 2,
     crossDayDedupDays: 3,
     historyLookbackDays: 7,
@@ -60,10 +60,10 @@ const {
   assert.strictEqual(badOk, false, "unknown key fails validation");
   assert.ok(badErrors.some((e) => e.includes("unknownKey")), "error mentions unknown key");
 
-  // Non-numeric maxAgeHours is rejected
-  const { ok: numOk, errors: numErrors } = validateDigestTuning({ maxAgeHours: "48h" });
-  assert.strictEqual(numOk, false, "string maxAgeHours fails");
-  assert.ok(numErrors.some((e) => e.includes("maxAgeHours")), "error mentions maxAgeHours");
+  // Locked maxAgeHours is rejected even if well-typed
+  const { ok: numOk, errors: numErrors } = validateDigestTuning({ maxAgeHours: 48 });
+  assert.strictEqual(numOk, false, "locked maxAgeHours fails");
+  assert.ok(numErrors.some((e) => e.includes("locked")), "error mentions locked contract");
 
   // Weights with out-of-range value is rejected
   const { ok: wOk, errors: wErrors } = validateDigestTuning({ weights: { freshness: 2.0, source_tier: 0.35, lane_bonus: 0.15, novelty: 0.15 } });
@@ -76,7 +76,7 @@ const {
 
   // String where number expected is rejected
   const { ok: strOk, errors: strErrors } = validateDigestTuning({ maxAgeHours: "36" });
-  assert.strictEqual(strOk, false, "string maxAgeHours fails strict validation");
+  assert.strictEqual(strOk, false, "string maxAgeHours still fails");
   assert.ok(strErrors.some((e) => e.includes("maxAgeHours")), "error mentions field name");
 
   console.log("validateDigestTuning ✓");
@@ -94,7 +94,7 @@ const {
 
   // Tuning overrides only the specified keys
   const merged = mergeDigestTuning(base, { maxAgeHours: 36, weights: { freshness: 0.5, source_tier: 0.3, lane_bonus: 0.1, novelty: 0.1 } });
-  assert.strictEqual(merged.maxAgeHours, 36, "maxAgeHours overridden");
+  assert.strictEqual(merged.maxAgeHours, 48, "locked maxAgeHours preserved from base");
   assert.strictEqual(merged.weights.freshness, 0.5, "weights overridden");
   assert.strictEqual(merged.maxItemsPerSourceDomain, 2, "unset key preserved from base");
 
@@ -115,9 +115,10 @@ const {
 // --- ALLOWED_TUNING_KEYS ---
 {
   assert.ok(Array.isArray(ALLOWED_TUNING_KEYS), "ALLOWED_TUNING_KEYS is an array");
-  assert.ok(ALLOWED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is allowed");
+  assert.ok(!ALLOWED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is no longer allowed");
   assert.ok(ALLOWED_TUNING_KEYS.includes("weights"), "weights is allowed");
   assert.ok(!ALLOWED_TUNING_KEYS.includes("keys"), "keys is not allowed (security)");
+  assert.ok(LOCKED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is explicitly locked");
   console.log("ALLOWED_TUNING_KEYS ✓");
 }
 

@@ -56,7 +56,7 @@ const tuningPath = path.join(tmpDir, "digest-tuning.json");
 
 // GET — existing file returns content
 {
-  const content = { maxAgeHours: 36 };
+  const content = { maxAgeHours: 36, crossDayDedupDays: 4 };
   fs.writeFileSync(tuningPath, JSON.stringify(content));
   const ctx = buildCtx("GET", "/api/admin/digest-tuning");
   const deps = buildDeps(tuningPath);
@@ -64,14 +64,16 @@ const tuningPath = path.join(tmpDir, "digest-tuning.json");
     const handled = await handleAdminDigestTuningRoutes(ctx, deps);
     assert.strictEqual(handled, true);
     const body = JSON.parse(ctx.res._body);
-    assert.strictEqual(body.tuning.maxAgeHours, 36, "content returned");
+    assert.strictEqual("maxAgeHours" in body.tuning, false, "locked maxAgeHours stripped from GET payload");
+    assert.strictEqual(body.tuning.crossDayDedupDays, 4, "allowed content returned");
+    assert.ok(Array.isArray(body.locked_keys) && body.locked_keys.includes("maxAgeHours"), "locked keys are exposed");
     console.log("GET existing file ✓");
   })().catch((e) => { console.error(e); process.exit(1); });
 }
 
 // PUT — valid update writes file
 {
-  const newTuning = { maxAgeHours: 48, crossDayDedupDays: 5 };
+  const newTuning = { crossDayDedupDays: 5 };
   const ctx = buildCtx("PUT", "/api/admin/digest-tuning", newTuning);
   const deps = buildDeps(tuningPath);
   (async () => {
@@ -80,9 +82,24 @@ const tuningPath = path.join(tmpDir, "digest-tuning.json");
     const body = JSON.parse(ctx.res._body);
     assert.strictEqual(body.ok, true, "PUT ok: true");
     const onDisk = JSON.parse(fs.readFileSync(tuningPath, "utf8"));
-    assert.strictEqual(onDisk.maxAgeHours, 48, "file written");
     assert.strictEqual(onDisk.crossDayDedupDays, 5, "crossDayDedupDays written");
     console.log("PUT valid → writes file ✓");
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
+
+// PUT — locked key rejected
+{
+  const badTuning = { maxAgeHours: 48 };
+  const ctx = buildCtx("PUT", "/api/admin/digest-tuning", badTuning);
+  const deps = buildDeps(tuningPath);
+  (async () => {
+    const handled = await handleAdminDigestTuningRoutes(ctx, deps);
+    assert.strictEqual(handled, true);
+    assert.strictEqual(ctx.res.statusCode, 400, "invalid tuning → 400");
+    const body = JSON.parse(ctx.res._body);
+    assert.strictEqual(body.ok, false, "ok: false");
+    assert.ok(body.errors.some((entry) => String(entry).includes("locked")), "locked-key message returned");
+    console.log("PUT locked key → 400 ✓");
   })().catch((e) => { console.error(e); process.exit(1); });
 }
 

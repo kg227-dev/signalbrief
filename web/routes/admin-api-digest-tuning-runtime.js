@@ -4,6 +4,7 @@ const {
   loadDigestTuning,
   validateDigestTuning,
   ALLOWED_TUNING_KEYS,
+  LOCKED_TUNING_KEYS,
 } = require("../../src/runtime/digest-tuning-runtime");
 
 /**
@@ -24,7 +25,7 @@ async function handleAdminDigestTuningRoutes(ctx, deps) {
 
   if (req.method === "GET") {
     const tuning = loadDigestTuning(String(digestTuningPath || ""), fs);
-    json(res, { ok: true, tuning, allowed_keys: ALLOWED_TUNING_KEYS });
+    json(res, { ok: true, tuning, allowed_keys: ALLOWED_TUNING_KEYS, locked_keys: LOCKED_TUNING_KEYS });
     return true;
   }
 

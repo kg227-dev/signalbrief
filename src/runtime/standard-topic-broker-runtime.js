@@ -384,7 +384,7 @@ function pickFirstDomain(domains, endpoint) {
   }
 }
 
-function readSanitizedJson(fs, filePath) {
+function readJson(fs, filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
@@ -966,24 +966,36 @@ function createStandardTopicBrokerRuntime(options = {}) {
   const bundledConfigPath = String(options.bundledStandardTopicBrokerSourcesPath || "").trim() || buildBundledConfigPath(options);
 
   function readConfigSnapshot() {
-    const runtimeConfig = readSanitizedJson(fs, runtimeConfigPath);
+    const runtimeConfig = readJson(fs, runtimeConfigPath);
     if (runtimeConfig) {
       return {
         source_mode: "runtime",
         active_path: runtimeConfigPath,
         runtime_path: runtimeConfigPath,
         bundled_path: bundledConfigPath,
+        raw_config: runtimeConfig,
         config: sanitizeBrokerConfig(runtimeConfig),
       };
     }
-    const bundledConfig = readSanitizedJson(fs, bundledConfigPath);
+    const bundledConfig = readJson(fs, bundledConfigPath);
     return {
       source_mode: "bundled",
       active_path: bundledConfigPath,
       runtime_path: runtimeConfigPath,
       bundled_path: bundledConfigPath,
+      raw_config: bundledConfig || {},
       config: sanitizeBrokerConfig(bundledConfig || {}),
     };
+  }
+
+  function ensureRuntimeConfigDir() {
+    const dir = path.dirname(runtimeConfigPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  }
+
+  function writeRawBrokerConfig(rawConfig) {
+    ensureRuntimeConfigDir();
+    fs.writeFileSync(runtimeConfigPath, `${JSON.stringify(rawConfig, null, 2)}\n`, "utf8");
   }
 
   function inspectStandardTopicBrokerConfig() {
@@ -992,6 +1004,104 @@ function createStandardTopicBrokerRuntime(options = {}) {
 
   function loadStandardTopicBrokerConfig() {
     return readConfigSnapshot().config;
+  }
+
+  function updateBrokerTopicConfig(input = {}) {
+    const topicTag = normalizeTopicTag(input?.topicTag || input?.topic);
+    if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) {
+      throw new Error("valid standard-topic broker topic required");
+    }
+
+    const snapshot = readConfigSnapshot();
+    const before = snapshot?.config?.topics?.[topicTag] || {
+      enabled: true,
+      lanes: {
+        publisher_feed: true,
+        official: true,
+      },
+    };
+    const rawConfig = snapshot?.raw_config && typeof snapshot.raw_config === "object"
+      ? { ...snapshot.raw_config }
+      : {};
+    const rawTopics = rawConfig.topics && typeof rawConfig.topics === "object"
+      ? { ...rawConfig.topics }
+      : {};
+    const rawTopic = rawTopics[topicTag] && typeof rawTopics[topicTag] === "object"
+      ? rawTopics[topicTag]
+      : {};
+    const rawLanes = rawTopic.lanes && typeof rawTopic.lanes === "object"
+      ? rawTopic.lanes
+      : {};
+
+    const nextEnabled = input?.enabled == null
+      ? before.enabled !== false
+      : input.enabled === true;
+    const nextPublisherFeedEnabled = input?.publisher_feed_enabled == null
+      ? before?.lanes?.publisher_feed !== false
+      : input.publisher_feed_enabled === true;
+    const nextOfficialEnabled = input?.official_enabled == null
+      ? before?.lanes?.official !== false
+      : input.official_enabled === true;
+
+    rawTopics[topicTag] = {
+      ...rawTopic,
+      enabled: nextEnabled,
+      lanes: {
+        ...rawLanes,
+        publisher_feed: nextPublisherFeedEnabled,
+        official: nextOfficialEnabled,
+      },
+    };
+    rawConfig.topics = rawTopics;
+
+    writeRawBrokerConfig(rawConfig);
+    const nextSnapshot = readConfigSnapshot();
+    return {
+      before,
+      after: nextSnapshot?.config?.topics?.[topicTag] || null,
+      snapshot: nextSnapshot,
+    };
+  }
+
+  function updateBrokerSourceConfig(input = {}) {
+    const sourceId = String(input?.sourceId || input?.source_id || "").trim();
+    if (!sourceId) throw new Error("valid broker source id required");
+
+    const nextTier = input?.tier == null ? null : Number(input.tier);
+    if (nextTier != null && nextTier !== 1 && nextTier !== 2 && nextTier !== 3) {
+      throw new Error("valid broker source tier required");
+    }
+
+    const snapshot = readConfigSnapshot();
+    const before = (Array.isArray(snapshot?.config?.sources) ? snapshot.config.sources : [])
+      .find((source) => String(source?.id || "").trim() === sourceId);
+    if (!before) throw new Error("broker source not found");
+
+    const rawConfig = snapshot?.raw_config && typeof snapshot.raw_config === "object"
+      ? { ...snapshot.raw_config }
+      : {};
+    const rawSources = Array.isArray(rawConfig.sources) ? rawConfig.sources.slice() : [];
+    const rawSourceIndex = rawSources.findIndex((source) => String(source?.id || "").trim() === sourceId);
+    if (rawSourceIndex === -1) throw new Error("broker source not found");
+    const rawSource = rawSources[rawSourceIndex] && typeof rawSources[rawSourceIndex] === "object"
+      ? rawSources[rawSourceIndex]
+      : {};
+
+    rawSources[rawSourceIndex] = {
+      ...rawSource,
+      enabled: input?.enabled == null ? before.enabled !== false : input.enabled === true,
+      tier: nextTier == null ? Number(before.tier || 2) : nextTier,
+    };
+    rawConfig.sources = rawSources;
+
+    writeRawBrokerConfig(rawConfig);
+    const nextSnapshot = readConfigSnapshot();
+    return {
+      before,
+      after: (Array.isArray(nextSnapshot?.config?.sources) ? nextSnapshot.config.sources : [])
+        .find((source) => String(source?.id || "").trim() === sourceId) || null,
+      snapshot: nextSnapshot,
+    };
   }
 
   function buildPreferredDomainShortlist(options = {}) {
@@ -1106,6 +1216,8 @@ function createStandardTopicBrokerRuntime(options = {}) {
   return {
     inspectStandardTopicBrokerConfig,
     loadStandardTopicBrokerConfig,
+    updateBrokerTopicConfig,
+    updateBrokerSourceConfig,
     buildPreferredDomainShortlist,
     buildPreferredSourceFamilyShortlists,
     fetchBrokerCandidates,

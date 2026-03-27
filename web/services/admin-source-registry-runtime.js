@@ -5,6 +5,7 @@ const {
   isWeakSourceItem,
   normalizeSourceDomain,
 } = require("../../src/digest/domain/storyline-domain-runtime");
+const { normalizeTopicToken } = require("../../src/digest/domain/topic-domain-runtime");
 const {
   inferSourceDomainFromIdentityKey,
   normalizeSourceIdentityKey,
@@ -514,6 +515,76 @@ function summarizePreferredSourceRegistry({
   };
 }
 
+function summarizeBrokerConfig(inspectStandardTopicBrokerConfig) {
+  const snapshot = typeof inspectStandardTopicBrokerConfig === "function"
+    ? inspectStandardTopicBrokerConfig()
+    : null;
+  const config = snapshot?.config;
+  if (!config || typeof config !== "object") return null;
+
+  const sources = (Array.isArray(config.sources) ? config.sources : [])
+    .map((source) => ({
+      id: String(source?.id || "").trim(),
+      enabled: source?.enabled !== false,
+      tier: Number(source?.tier || 2),
+      lane: String(source?.lane || "").trim(),
+      topic_tags: Array.isArray(source?.topic_tags) ? source.topic_tags.slice() : [],
+      topic_keys: (Array.isArray(source?.topic_tags) ? source.topic_tags : []).map((tag) => normalizeTopicToken(tag)),
+      domains: Array.isArray(source?.domains) ? source.domains.slice() : [],
+      source_kind: String(source?.source_kind || "").trim(),
+      source_family: String(source?.source_family || "").trim(),
+      endpoint: String(source?.endpoint || "").trim(),
+    }))
+    .filter((source) => source.id)
+    .sort((left, right) => {
+      const leftTopic = String(left.topic_tags[0] || "");
+      const rightTopic = String(right.topic_tags[0] || "");
+      return leftTopic.localeCompare(rightTopic)
+        || String(left.lane || "").localeCompare(String(right.lane || ""))
+        || String(left.id || "").localeCompare(String(right.id || ""));
+    });
+
+  const topics = Object.entries(config.topics && typeof config.topics === "object" ? config.topics : {})
+    .map(([topicTag, entry]) => {
+      const topicSources = sources.filter((source) => source.topic_tags.includes(topicTag));
+      const reportedDomains = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "publisher_feed")
+        .flatMap((source) => source.domains || [])));
+      const officialDomains = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "official")
+        .flatMap((source) => source.domains || [])));
+      return {
+        topic_tag: topicTag,
+        topic_key: normalizeTopicToken(topicTag),
+        enabled: entry?.enabled !== false,
+        lanes: {
+          publisher_feed: entry?.lanes?.publisher_feed !== false,
+          official: entry?.lanes?.official !== false,
+        },
+        source_count: topicSources.length,
+        enabled_source_count: topicSources.filter((source) => source.enabled !== false).length,
+        publisher_feed_source_count: topicSources.filter((source) => source.lane === "publisher_feed").length,
+        official_source_count: topicSources.filter((source) => source.lane === "official").length,
+        reported_domains: reportedDomains,
+        official_domains: officialDomains,
+      };
+    })
+    .sort((left, right) => String(left.topic_key || "").localeCompare(String(right.topic_key || "")));
+
+  return {
+    source_of_truth: "standard_topic_broker",
+    source_mode: String(snapshot?.source_mode || "runtime").trim() || "runtime",
+    active_path: String(snapshot?.active_path || "").trim() || null,
+    runtime_path: String(snapshot?.runtime_path || "").trim() || null,
+    bundled_path: String(snapshot?.bundled_path || "").trim() || null,
+    topic_count: topics.length,
+    source_count: sources.length,
+    enabled_source_count: sources.filter((source) => source.enabled !== false).length,
+    topics,
+    sources,
+  };
+}
+
 function summarizeSuggestedReason(metric, effectivePolicy) {
   if (effectivePolicy?.hard_block === true) return "Hard-blocked";
   if (effectivePolicy?.review_status === "unreviewed" && Number(metric?.send_count || 0) >= 2) {
@@ -593,6 +664,7 @@ function buildSourceRegistryOverview({
   loadSourceRegistry,
   loadPreferredSourceRegistry,
   inspectPreferredSourceRegistry,
+  inspectStandardTopicBrokerConfig,
   buildSourceRegistryMap,
   setAdminSourceRegistry,
   buildRecentDigestsExport,
@@ -620,6 +692,7 @@ function buildSourceRegistryOverview({
       preferredSourcesPath,
       bundledPreferredSourcesPath,
     }),
+    broker_config: summarizeBrokerConfig(inspectStandardTopicBrokerConfig),
     curation_queues: curationQueues,
     override_count: Object.keys(registry.domains || {}).length,
     suggestion_count: suggestions.length,
@@ -701,6 +774,7 @@ module.exports = {
   buildRecentDomainMetrics,
   buildCurationQueues,
   summarizePreferredSourceRegistry,
+  summarizeBrokerConfig,
   buildSourceRegistryDomainDetail,
   buildSourceRegistryOverview,
   buildSourceAuditEntries,

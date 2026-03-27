@@ -96,6 +96,7 @@ const {
 } = require("../src/runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../src/runtime/source-policy-registry-runtime");
 const { createPreferredSourceRegistryRuntime } = require("../src/runtime/preferred-source-registry-runtime");
+const { createStandardTopicBrokerRuntime } = require("../src/runtime/standard-topic-broker-runtime");
 const { createRetrievalEvalStorageRuntime } = require("../src/eval/retrieval/storage-runtime");
 const { setAdminSourceRegistry } = require("../src/domains/digest");
 const { createAdminRetrievalEvalRuntime } = require("./services/admin-retrieval-eval-runtime");
@@ -161,6 +162,14 @@ const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
   env: process.env,
   nodeEnv: process.env.NODE_ENV,
   preferredSourcesPath: runtimePaths.preferredSourcesPath,
+  standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
+  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
+});
+const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
+  fs,
+  appRoot: APP_ROOT,
+  env: process.env,
+  nodeEnv: process.env.NODE_ENV,
   standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
@@ -412,10 +421,13 @@ const {
   loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),
   loadPreferredSourceRegistry: () => preferredSourceRegistryRuntime.loadPreferredSourceRegistry(),
   inspectPreferredSourceRegistry: () => preferredSourceRegistryRuntime.inspectPreferredSourceRegistry(),
+  inspectStandardTopicBrokerConfig: () => standardTopicBrokerRuntime.inspectStandardTopicBrokerConfig(),
   buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
   listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),
   getSourceRegistryEntry: (domain) => sourceRegistryRuntime.getSourceRegistryEntry(domain),
   getSourceRegistryIdentityEntry: (identityKey) => sourceRegistryRuntime.getSourceRegistryIdentityEntry(identityKey),
+  updateBrokerTopicConfig: (input) => standardTopicBrokerRuntime.updateBrokerTopicConfig(input),
+  updateBrokerSourceConfig: (input) => standardTopicBrokerRuntime.updateBrokerSourceConfig(input),
   upsertSourceRegistryEntry: (input, meta) => sourceRegistryRuntime.upsertSourceRegistryEntry(input, meta),
   resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
   resetSourceRegistryIdentityEntry: (identityKey, meta) => sourceRegistryRuntime.resetSourceRegistryIdentityEntry(identityKey, meta),

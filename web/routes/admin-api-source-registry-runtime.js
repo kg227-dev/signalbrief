@@ -52,6 +52,36 @@ function sanitizeBody(body = {}) {
   };
 }
 
+function sanitizeBrokerTopicBody(body = {}) {
+  const topic = String(body?.topic || body?.topic_tag || "").trim().toUpperCase();
+  const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
+  const publisherFeedEnabled = typeof body?.publisher_feed_enabled === "boolean"
+    ? body.publisher_feed_enabled
+    : null;
+  const officialEnabled = typeof body?.official_enabled === "boolean"
+    ? body.official_enabled
+    : null;
+  return {
+    topic,
+    enabled,
+    publisher_feed_enabled: publisherFeedEnabled,
+    official_enabled: officialEnabled,
+  };
+}
+
+function sanitizeBrokerSourceBody(body = {}) {
+  const sourceId = String(body?.source_id || body?.sourceId || "").trim();
+  const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
+  const tier = body?.tier == null || body.tier === ""
+    ? null
+    : Number(body.tier);
+  return {
+    source_id: sourceId,
+    enabled,
+    tier: Number.isFinite(tier) ? tier : null,
+  };
+}
+
 function resolveInspectableDomain(domain, identityKey) {
   return normalizeSourcePolicyDomain(domain)
     || inferSourceDomainFromIdentityKey(identityKey)
@@ -68,6 +98,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     loadSourceRegistry,
     loadPreferredSourceRegistry,
     inspectPreferredSourceRegistry,
+    inspectStandardTopicBrokerConfig,
     buildSourceRegistryMap,
     setAdminSourceRegistry,
     buildRecentDigestsExport,
@@ -76,6 +107,8 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     sourceRegistryPath,
     preferredSourcesPath,
     bundledPreferredSourcesPath,
+    updateBrokerTopicConfig,
+    updateBrokerSourceConfig,
     upsertSourceRegistryEntry,
     resetSourceRegistryEntry,
     resetSourceRegistryIdentityEntry,
@@ -88,6 +121,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
       loadSourceRegistry,
       loadPreferredSourceRegistry,
       inspectPreferredSourceRegistry,
+      inspectStandardTopicBrokerConfig,
       buildSourceRegistryMap,
       setAdminSourceRegistry,
       buildRecentDigestsExport,
@@ -214,6 +248,74 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     }
   }
 
+  if (pathname === "/api/admin/source-registry/broker/topic" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return true;
+    const input = sanitizeBrokerTopicBody(body);
+    if (!input.topic) return json(res, { error: "valid topic required" }, 400);
+    if (input.enabled == null && input.publisher_feed_enabled == null && input.official_enabled == null) {
+      return json(res, { error: "at least one topic control is required" }, 400);
+    }
+    try {
+      const result = updateBrokerTopicConfig(input);
+      if (typeof logAdminActionEvent === "function") {
+        logAdminActionEvent(req, {
+          action: "broker_topic_update",
+          success: true,
+          details: {
+            topic: input.topic,
+            before: result.before,
+            after: result.after,
+          },
+        });
+      }
+      return json(res, {
+        success: true,
+        topic: input.topic,
+        before: result.before,
+        after: result.after,
+        broker_config: result.snapshot,
+      });
+    } catch (error) {
+      return json(res, { error: error?.message || "failed to update broker topic" }, 400);
+    }
+  }
+
+  if (pathname === "/api/admin/source-registry/broker/source" && req.method === "POST") {
+    if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
+    const body = await requireJsonBody(req, res);
+    if (body == null) return true;
+    const input = sanitizeBrokerSourceBody(body);
+    if (!input.source_id) return json(res, { error: "valid source_id required" }, 400);
+    if (input.enabled == null && input.tier == null) {
+      return json(res, { error: "enabled or tier update required" }, 400);
+    }
+    try {
+      const result = updateBrokerSourceConfig(input);
+      if (typeof logAdminActionEvent === "function") {
+        logAdminActionEvent(req, {
+          action: "broker_source_update",
+          success: true,
+          details: {
+            source_id: input.source_id,
+            before: result.before,
+            after: result.after,
+          },
+        });
+      }
+      return json(res, {
+        success: true,
+        source_id: input.source_id,
+        before: result.before,
+        after: result.after,
+        broker_config: result.snapshot,
+      });
+    } catch (error) {
+      return json(res, { error: error?.message || "failed to update broker source" }, 400);
+    }
+  }
+
   return false;
 }
 
@@ -221,4 +323,6 @@ module.exports = {
   handleAdminSourceRegistryRoutes,
   parseLimitParam,
   sanitizeBody,
+  sanitizeBrokerTopicBody,
+  sanitizeBrokerSourceBody,
 };

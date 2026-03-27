@@ -92,6 +92,44 @@ async function flushMicrotasks() {
   const elements = new Map(elementIds.map((id) => [id, createElement(id)]));
   const location = new URL("https://example.com/admin/source-registry");
   const fetchCalls = [];
+  const brokerOverview = {
+    source_mode: "runtime",
+    active_path: "/app/data/standard-topic-broker-sources.json",
+    runtime_path: "/app/data/standard-topic-broker-sources.json",
+    bundled_path: "/app/config/standard-topic-broker-sources.json",
+    topic_count: 1,
+    source_count: 1,
+    enabled_source_count: 1,
+    topics: [
+      {
+        topic_tag: "HEALTHCARE",
+        topic_key: "healthcare",
+        enabled: true,
+        lanes: {
+          publisher_feed: true,
+          official: true,
+        },
+        source_count: 1,
+        enabled_source_count: 1,
+        publisher_feed_source_count: 1,
+        official_source_count: 0,
+      },
+    ],
+    sources: [
+      {
+        id: "stat_rss",
+        enabled: true,
+        tier: 2,
+        lane: "publisher_feed",
+        topic_tags: ["HEALTHCARE"],
+        topic_keys: ["healthcare"],
+        domains: ["statnews.com"],
+        source_kind: "reported_media",
+        source_family: "specialist",
+        endpoint: "https://feeds.example.com/stat.xml",
+      },
+    ],
+  };
 
   const document = {
     body: {
@@ -130,10 +168,26 @@ async function flushMicrotasks() {
       setItem() {},
     },
     fetch: async (url) => {
-      const href = String(url);
+      const href = typeof url === "string" ? url : String(url?.url || "");
       fetchCalls.push(href);
       if (href === "/api/admin/check") {
         return jsonResponse({ authenticated: true });
+      }
+      if (href === "/api/admin/source-registry/broker/topic") {
+        brokerOverview.topics[0].enabled = false;
+        return jsonResponse({
+          success: true,
+          topic: "HEALTHCARE",
+          after: brokerOverview.topics[0],
+        });
+      }
+      if (href === "/api/admin/source-registry/broker/source") {
+        brokerOverview.sources[0].tier = 3;
+        return jsonResponse({
+          success: true,
+          source_id: "stat_rss",
+          after: brokerOverview.sources[0],
+        });
       }
       if (href.startsWith("/api/admin/source-registry/domain?")) {
         const parsed = new URL(href, "https://example.com");
@@ -317,6 +371,7 @@ async function flushMicrotasks() {
               },
             ],
           },
+          broker_config: brokerOverview,
         });
       }
       return jsonResponse({ error: `unexpected fetch: ${href}` }, 404);
@@ -417,6 +472,14 @@ async function flushMicrotasks() {
     "preferred sources panel should explain that standard-topic domains come from the broker config"
   );
   assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("MVP topic controls"),
+    "preferred sources panel should render broker topic controls"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Broker source controls"),
+    "preferred sources panel should render broker source controls"
+  );
+  assert.ok(
     elements.get("curationQueuesPanelBody").innerHTML.includes("Specialist candidates"),
     "curation queues should render the specialist queue"
   );
@@ -427,6 +490,26 @@ async function flushMicrotasks() {
   assert.ok(
     elements.get("curationQueuesPanelBody").innerHTML.includes("HEALTHCARE"),
     "curation queues should render topic coverage gaps"
+  );
+
+  fetchCalls.length = 0;
+  await context.toggleBrokerTopicEnabled("HEALTHCARE", false);
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/broker/topic"),
+    "topic toggle should hit the broker topic admin endpoint"
+  );
+
+  elements.set("brokerSourceTier-stat-rss", createElement("brokerSourceTier-stat-rss"));
+  elements.get("brokerSourceTier-stat-rss").value = "3";
+  fetchCalls.length = 0;
+  await context.saveBrokerSourceTier("stat_rss");
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/broker/source"),
+    "source tier save should hit the broker source admin endpoint"
   );
 
   context.renderSourceRegistrySuggestions({

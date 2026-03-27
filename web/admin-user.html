@@ -344,6 +344,7 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="action-bar-title">Admin actions</div>
       <div class="action-row">
         <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
+        <button type="button" class="btn btn-secondary" id="resendDigestBtn" style="display:none;">Resend latest digest</button>
         <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
         <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
         <button type="button" class="btn btn-danger-soft" id="unsubBtn">Mark unsubscribed</button>
@@ -376,6 +377,7 @@ let selectedTopics = new Set();
 let userToken = '';
 let userEmail = '';
 let userStatus = 'active';
+let currentAdminUser = null;
 
 function esc(s) {
   if (!s) return '';
@@ -737,6 +739,39 @@ async function logout() {
   window.location.href = '/admin/login';
 }
 
+async function resendStoredDigest(triggerEl = null, explicitDateKey = '') {
+  const targetDate = String(explicitDateKey || resolveLatestDigestDateKey(currentAdminUser)).trim();
+  if (!userEmail || !targetDate) {
+    showBanner('❌ No resendable digest snapshot found for this user', true);
+    return;
+  }
+  if (!confirm('Resend the stored ' + targetDate + ' digest snapshot to ' + userEmail + '?')) return;
+  const btn = triggerEl || document.getElementById('resendDigestBtn');
+  const prevLabel = btn ? btn.textContent : 'Resend latest digest';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Resending…';
+  }
+  try {
+    const r = await fetch('/api/admin/resend-digest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail, date_et: targetDate })
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || data.success !== true) {
+      throw new Error((data && data.error) || 'Failed to resend digest snapshot');
+    }
+    showBanner('✅ Stored digest snapshot resent to ' + userEmail);
+  } catch (err) {
+    showBanner('❌ ' + ((err && err.message) || 'Failed to resend digest snapshot'), true);
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
 async function init() {
   // Auth check
   try {
@@ -761,6 +796,7 @@ async function init() {
     userToken = user.token || '';
     userEmail = user.email || '';
     userStatus = user.status || 'active';
+    currentAdminUser = user;
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
@@ -774,6 +810,7 @@ async function init() {
       archiveQuickLink.style.display = 'inline-block';
     }
     const latestDigestQuickLink = document.getElementById('latestDigestQuickLink');
+    const resendDigestBtn = document.getElementById('resendDigestBtn');
     if (latestDigestQuickLink) {
       const digestDateKey = resolveLatestDigestDateKey(user);
       const latestDigestHref = digestDateKey ? buildAdminArchiveDigestHref(digestDateKey) : '';
@@ -782,6 +819,10 @@ async function init() {
         latestDigestQuickLink.style.display = 'inline-block';
       } else {
         latestDigestQuickLink.style.display = 'none';
+      }
+      if (resendDigestBtn) {
+        const canResend = Boolean(digestDateKey) && userStatus !== 'unsubscribed';
+        resendDigestBtn.style.display = canResend ? 'inline-flex' : 'none';
       }
     }
 
@@ -864,6 +905,13 @@ async function init() {
       btn.disabled = false; btn.textContent = 'Resend settings link';
     });
 
+    const resendDigestBtnEl = document.getElementById('resendDigestBtn');
+    if (resendDigestBtnEl) {
+      resendDigestBtnEl.addEventListener('click', function() {
+        resendStoredDigest(this);
+      });
+    }
+
     // --- Pause / Resume / Re-activate ---
     document.getElementById('pauseBtn').addEventListener('click', async function() {
       const btn = this;
@@ -892,8 +940,14 @@ async function init() {
         const data = await r.json();
         if (data.success) {
           userStatus = newStatus;
+          if (currentAdminUser && typeof currentAdminUser === 'object') currentAdminUser.status = newStatus;
           updatePauseBtn(userStatus);
           updateUnsubBtn(userStatus);
+          const resendDigestBtn = document.getElementById('resendDigestBtn');
+          if (resendDigestBtn) {
+            const digestDateKey = resolveLatestDigestDateKey(currentAdminUser);
+            resendDigestBtn.style.display = (digestDateKey && userStatus !== 'unsubscribed') ? 'inline-flex' : 'none';
+          }
           // Refresh meta bar status badge
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) {
@@ -926,8 +980,11 @@ async function init() {
         const data = await r.json();
         if (data.success) {
           userStatus = 'unsubscribed';
+          if (currentAdminUser && typeof currentAdminUser === 'object') currentAdminUser.status = 'unsubscribed';
           updatePauseBtn(userStatus);
           updateUnsubBtn(userStatus);
+          const resendDigestBtn = document.getElementById('resendDigestBtn');
+          if (resendDigestBtn) resendDigestBtn.style.display = 'none';
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) { badge.className = 'status-badge status-unsubscribed'; badge.textContent = 'unsubscribed'; }
           showBanner(`👋 ${data.message || 'Subscriber set to unsubscribed'}`);

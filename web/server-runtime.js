@@ -16,6 +16,7 @@ const {
   sendEmail,
   sendWelcomeEmail,
   sendReferralThankYou,
+  buildOpenTrackingPixel,
 } = require("../src/platform/mailer");
 const {
   appendEngagementEventChecked,
@@ -24,8 +25,12 @@ const {
   emitIgnoredEventsIfDue,
   loadEngagementEvents,
 } = require("../src/domains/engagement");
-const { computeQualityTrend } = require("../src/domains/digest");
-const { createDigestDeliveryRecordRuntime } = require("../src/domains/digest");
+const {
+  computeQualityTrend,
+  createDigestDeliveryRecordRuntime,
+  createDigestFormattingRuntime,
+  normalizeTopicToken,
+} = require("../src/domains/digest");
 const {
   digestRunStatus,
   startDigestTrigger,
@@ -254,6 +259,128 @@ const allowExampleSignups = (
   || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
 );
 
+let digestEmailTemplateCache = null;
+let digestFormattingRuntimeCache = null;
+
+function getDigestEmailTemplate() {
+  if (!digestEmailTemplateCache) {
+    digestEmailTemplateCache = fs.readFileSync(path.join(APP_ROOT, "templates/email.html"), "utf8");
+  }
+  return digestEmailTemplateCache;
+}
+
+function getDigestFormattingRuntime() {
+  if (!digestFormattingRuntimeCache) {
+    digestFormattingRuntimeCache = createDigestFormattingRuntime({
+      CONFIG,
+      EMAIL_TEMPLATE: getDigestEmailTemplate(),
+      BASE_URL: getBaseUrl(),
+      httpsPostWithRetry: async () => {
+        throw new Error("AI formatting is disabled for admin digest resend");
+      },
+      buildPublicDigestUrl: () => "",
+      normalizeTopicToken,
+    });
+  }
+  return digestFormattingRuntimeCache;
+}
+
+function formatDigestDateLabelFromKey(dateKey) {
+  const key = String(dateKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
+  const ts = Date.parse(`${key}T12:00:00.000Z`);
+  if (!Number.isFinite(ts)) return key;
+  return new Date(ts).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+}
+
+function buildFallbackQuickScan(items = []) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => String(item?.headline || "").trim())
+    .filter(Boolean)
+    .slice(0, 5)
+    .join(" · ");
+}
+
+function buildAdminDigestResendSubject(snapshot = {}, dateLabel = "") {
+  const headline = String(snapshot?.items?.[0]?.headline || "").trim().replace(/\s+/g, " ");
+  if (headline) {
+    const truncated = headline.length > 96 ? `${headline.slice(0, 93)}...` : headline;
+    return `SignalBrief: ${truncated}`;
+  }
+  return dateLabel ? `SignalBrief — ${dateLabel}` : "SignalBrief — Daily sector briefing";
+}
+
+async function resendDigestSnapshot({ user, snapshot }) {
+  const email = String(user?.email || "").trim();
+  if (!email) throw new Error("subscriber email is missing");
+
+  const items = Array.isArray(snapshot?.items) ? snapshot.items.slice() : [];
+  const selectedCount = Math.max(0, Number(snapshot?.selected_count || items.length));
+  const snapshotStatus = String(snapshot?.status || "").trim().toLowerCase();
+  const resendableStatuses = new Set(["sent", "failed", "selected", "sending"]);
+  if (!items.length || selectedCount < 5 || !resendableStatuses.has(snapshotStatus)) {
+    throw new Error("no resendable 5-item digest snapshot is available");
+  }
+
+  const digestDateKey = String(snapshot?.date_et || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(digestDateKey)) {
+    throw new Error("digest snapshot is missing a valid ET date");
+  }
+
+  const digestId = String(snapshot?.digest_id || "").trim() || buildDigestId(digestDateKey, user.chatId || email);
+  const depth = String(snapshot?.depth || user?.preferences?.depth || user?.depth || "headline_plus_why").trim() || "headline_plus_why";
+  const dateStr = String(snapshot?.date_str || "").trim() || formatDigestDateLabelFromKey(digestDateKey);
+  const quickScan = String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items);
+  const subject = buildAdminDigestResendSubject(snapshot, dateStr);
+
+  let html = getDigestFormattingRuntime().buildEmail(
+    items,
+    dateStr,
+    quickScan,
+    user?.token || "",
+    false,
+    false,
+    depth,
+    user,
+    digestDateKey,
+    digestId,
+    {
+      digestQuality: {
+        score: Number.isFinite(Number(snapshot?.quality_score)) ? Number(snapshot.quality_score) : null,
+        band: String(snapshot?.quality_band || "").trim() || null,
+      },
+      learningSummary: "",
+      publicDigestUrl: "",
+      editorialNote: "",
+    }
+  );
+
+  if (user?.token) {
+    const trackingPixel = buildOpenTrackingPixel(digestId, user.token, getBaseUrl());
+    html = /<\/body>/i.test(html)
+      ? html.replace(/<\/body>/i, `${trackingPixel}\n</body>`)
+      : `${html}\n${trackingPixel}`;
+  }
+
+  const result = await sendEmail(email, subject, html, user?.token || null);
+  if (!result || result.ok !== true) {
+    throw new Error(result?.error || "email delivery failed");
+  }
+
+  return {
+    subject,
+    item_count: items.length,
+    date_et: digestDateKey,
+    status: snapshotStatus,
+  };
+}
+
 const readArchiveFilesForDir = (archiveDir) => readArchiveFiles({
   fs,
   archiveDir,
@@ -361,8 +488,10 @@ const {
   checkSettingsRateLimit,
   checkLoginRate,
   countArchiveDigestsForUser: (...args) => archiveDigestStatsRuntime.countArchiveDigestsForUser(...args),
+  loadCurrentDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadCurrentDigestSnapshot(...args),
   loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),
   loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
+  resendDigestSnapshot,
   CONFIG,
   verifyAdminPassword,
   createAdminSession,

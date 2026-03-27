@@ -3287,6 +3287,7 @@ function buildFailedDeliveryRows(roster, runs) {
         runId: resolved.rawId,
         user: resolved.user,
         emailKey: resolved.emailKey,
+        dateKey: String(run.date || ""),
         runAtIso: run.run_at || null,
         runAtLabel,
       });
@@ -3302,6 +3303,7 @@ function buildFailedDeliveryRows(roster, runs) {
         user: resolved.user,
         emailKey: resolved.emailKey,
         error: String((entry && entry.error) || "Delivery failed"),
+        dateKey: String(run.date || ""),
         runAtIso: run.run_at || null,
         runAtLabel,
       });
@@ -3329,7 +3331,7 @@ function renderFailedDeliveries(roster, runs) {
   }
 
   panel.style.display = "";
-  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs. Targeted resend is removed in the email-only MVP; fix the cause and use the next scheduled run or a full rerun.`;
+  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs. If a full 5-item snapshot was captured, you can resend that exact stored digest without rerunning everyone.`;
 
   list.innerHTML = failedRows.map((row) => {
     const displayName = row.user
@@ -3348,7 +3350,8 @@ function renderFailedDeliveries(roster, runs) {
           <div class="failed-delivery-name">${userLink}</div>
           <div class="failed-delivery-meta">${deliveryTarget} · failed ${esc(row.runAtLabel || "today")}</div>
           <div class="failed-delivery-error">${esc(row.error || "Delivery failed")}</div>
-          <div class="failed-delivery-meta">Targeted resend disabled in the reduced-scope MVP. Fix the cause, then rely on the next scheduled run or trigger a full rerun.</div>
+          <div class="failed-delivery-meta">Stored snapshot resend is available when the failed run already captured a complete 5-item digest.</div>
+          ${email && row.dateKey ? `<div style="margin-top:8px;"><button type="button" class="btn btn-secondary" onclick="resendDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Resend stored digest</button></div>` : ''}
         </div>
       </div>
     `;
@@ -3973,6 +3976,54 @@ async function triggerFullDigest(triggerEl = null) {
     showToast("ok", msg);
   } catch (e) {
     const msg = e.message || "Network error starting full digest";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
+async function resendDigestSnapshotForUser(email, dateKey, triggerEl = null) {
+  const targetEmail = String(email || '').trim();
+  const targetDate = String(dateKey || '').trim();
+  if (!targetEmail || !targetDate) return;
+
+  const approved = await openConfirmModal(
+    "Resend stored digest snapshot?",
+    `This re-sends the saved ${targetDate} digest to ${targetEmail} without rerunning the full pipeline.`,
+    "Resend digest",
+  );
+  if (!approved) return;
+
+  const btn = triggerEl || null;
+  const prevLabel = btn ? btn.textContent : "Resend stored digest";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Resending…";
+  }
+  setOpsActionMessage("info", `Resending stored digest for ${targetEmail}…`);
+  try {
+    const resp = await apiFetchJson("/api/admin/resend-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail, date_et: targetDate }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to resend digest snapshot (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || "Stored digest snapshot resent";
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", `${msg} for ${targetEmail}`);
+  } catch (e) {
+    const msg = e.message || "Network error resending digest snapshot";
     setOpsActionMessage("err", `❌ ${msg}`);
     showToast("err", msg);
   } finally {

@@ -10,7 +10,10 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertModuleExports(() => require(TARGET_PATH), TARGET_REL);
 
-const { handleSetUserStatusRoute } = require(TARGET_PATH);
+const {
+  handleSetUserStatusRoute,
+  handleResendDigestRoute,
+} = require(TARGET_PATH);
 
 const source = fs.readFileSync(TARGET_PATH, "utf8");
 if (!source.includes('message: "Subscriber already deleted"')) {
@@ -27,6 +30,12 @@ if (!source.includes("archive_digest_count: archiveDigestCount")) {
 }
 if (!source.includes("recent_digests: recentDigestRows")) {
   throw new Error("user-by-email handler should expose recent digest outcomes for admin review");
+}
+if (!source.includes('action: "resend_digest_precise"')) {
+  throw new Error("admin user actions should audit precise digest resends");
+}
+if (!source.includes('message: "Stored digest snapshot resent"')) {
+  throw new Error("precise digest resend handler should return a clear success message");
 }
 
 function buildCtx(body) {
@@ -114,9 +123,95 @@ async function testUnsubscribeBacksUpChannels() {
   assert.ok(typeof writes[0].email_unsubscribed_at === "string" && writes[0].email_unsubscribed_at.length > 10);
 }
 
+async function testPreciseResendUsesStoredSnapshot() {
+  const actions = [];
+  const resendCalls = [];
+  const user = {
+    chatId: "123456",
+    email: "ops@example.com",
+    status: "active",
+    token: "tok-1",
+    preferences: {
+      depth: "headline_plus_why",
+    },
+  };
+  const snapshot = {
+    status: "failed",
+    date_et: "2026-03-27",
+    selected_count: 5,
+    items: Array.from({ length: 5 }, (_, index) => ({
+      headline: `Story ${index + 1}`,
+    })),
+  };
+  const ctx = buildCtx({ email: user.email, date_et: "2026-03-27" });
+  await handleResendDigestRoute({
+    ctx,
+    deps: {
+      json,
+      isAdminAuthed: () => true,
+      requireJsonBody: async () => ctx.body,
+      allUsers: () => [user],
+      loadCurrentDigestSnapshot: () => snapshot,
+      resendDigestSnapshot: async (input) => {
+        resendCalls.push(input);
+        return {
+          subject: "SignalBrief: Story 1",
+          item_count: 5,
+        };
+      },
+      logAdminActionEvent: (_req, entry) => actions.push(entry),
+    },
+  });
+
+  assert.strictEqual(ctx.res.statusCode, 200);
+  assert.strictEqual(ctx.res.body.success, true);
+  assert.strictEqual(ctx.res.body.message, "Stored digest snapshot resent");
+  assert.strictEqual(resendCalls.length, 1, "precise resend should call the resend runtime exactly once");
+  assert.strictEqual(resendCalls[0].user.email, user.email);
+  assert.strictEqual(resendCalls[0].snapshot, snapshot);
+  assert.strictEqual(actions[0].action, "resend_digest_precise");
+  assert.strictEqual(actions[0].success, true);
+}
+
+async function testPreciseResendRejectsThinSnapshot() {
+  const actions = [];
+  const user = {
+    chatId: "123456",
+    email: "ops@example.com",
+    status: "active",
+  };
+  const ctx = buildCtx({ email: user.email, date_et: "2026-03-27" });
+  await handleResendDigestRoute({
+    ctx,
+    deps: {
+      json,
+      isAdminAuthed: () => true,
+      requireJsonBody: async () => ctx.body,
+      allUsers: () => [user],
+      loadCurrentDigestSnapshot: () => ({
+        status: "failed",
+        date_et: "2026-03-27",
+        selected_count: 4,
+        items: Array.from({ length: 4 }, (_, index) => ({ headline: `Story ${index + 1}` })),
+      }),
+      resendDigestSnapshot: async () => {
+        throw new Error("should not be called");
+      },
+      logAdminActionEvent: (_req, entry) => actions.push(entry),
+    },
+  });
+
+  assert.strictEqual(ctx.res.statusCode, 409);
+  assert.strictEqual(ctx.res.body.error, "No resendable 5-item digest snapshot found for that user/date.");
+  assert.strictEqual(actions[0].action, "resend_digest_precise");
+  assert.strictEqual(actions[0].success, false);
+}
+
 Promise.resolve()
   .then(testResubscribeRestoresChannels)
   .then(testUnsubscribeBacksUpChannels)
+  .then(testPreciseResendUsesStoredSnapshot)
+  .then(testPreciseResendRejectsThinSnapshot)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

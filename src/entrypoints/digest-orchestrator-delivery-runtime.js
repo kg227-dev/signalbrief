@@ -332,6 +332,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       let digestQuality = { score: null, band: null, components: null };
       let attemptedChannelCount = 0;
       let requestedItemCount = DELIVERY_POLICY.target_item_count;
+      let depth = String(prefs?.depth || "full").trim() || "full";
       try {
         const recordStart = typeof beginDigestDeliveryRecord === "function"
           ? beginDigestDeliveryRecord({
@@ -355,7 +356,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         deliveryRecordVersion = Math.max(1, Number(recordStart?.version || recordStart?.record?.version || 1));
 
         const learningSummary = String(repetitionNote || "").trim();
-        const depth = prefs.depth || "full";
+        depth = String(prefs?.depth || "full").trim() || "full";
         const wasFiltered = false;
         const subscribedStandardTopics = getSubscribedStandardTopics(user);
         requestedItemCount = getRequestedItemCount(subscribedStandardTopics);
@@ -429,6 +430,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             status: "selected",
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             delivery_outcome: deliveryEligible ? "delivered" : null,
@@ -506,6 +508,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               source: deliveryEventSource,
               trigger: deliveryMode,
               status: "withheld",
+              depth,
               withheld_reason: failureClass,
               delivery_outcome: deliveryOutcome,
               retry_scheduled_for: retryScheduledFor,
@@ -564,6 +567,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               source: deliveryEventSource,
               trigger: deliveryMode,
               status: "withheld",
+              depth,
               withheld_reason: withholdReason,
               delivery_outcome: attemptCount > 1 ? "withheld_after_retry" : "withheld_after_retry_window",
               quality_score: digestQuality.score,
@@ -611,6 +615,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             sending_at: new Date().toISOString(),
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             delivery_outcome: "delivered",
@@ -707,6 +712,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             channels: deliveredChannels,
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             delivery_outcome: "delivered",
@@ -824,6 +830,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             internal_thinness_label: internalThinnessLabel,
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),

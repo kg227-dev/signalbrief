@@ -86,6 +86,7 @@ function createDigestDeliveryRecordRuntime(deps) {
       internal_thinness_label: String(input.internal_thinness_label || "").trim() || null,
       error: String(input.error || "").trim() || null,
       channels: Array.isArray(input.channels) ? input.channels.slice() : [],
+      depth: String(input.depth || "").trim() || null,
       date_str: String(input.date_str || "").trim() || null,
       quick_scan: String(input.quick_scan || "").trim() || null,
       quality_score: Number.isFinite(Number(input.quality_score)) ? Number(input.quality_score) : null,
@@ -273,6 +274,15 @@ function createDigestDeliveryRecordRuntime(deps) {
     return records[0] || null;
   }
 
+  function loadCurrentDigestSnapshot(userId, dateKey, mode = "scheduled") {
+    const targetDate = String(dateKey || "").trim();
+    const targetMode = String(mode || "scheduled").trim();
+    if (!targetDate || !targetMode) return null;
+    const record = readDigestRecord(userId, targetDate, targetMode);
+    if (!record?.current || typeof record.current !== "object") return null;
+    return normalizeVersionEntry(record.current);
+  }
+
   function loadDigestSnapshotByRunId(userId, dateKey, runId) {
     const targetDate = String(dateKey || "").trim();
     const targetRunId = String(runId || "").trim();
@@ -367,6 +377,7 @@ function createDigestDeliveryRecordRuntime(deps) {
     beginDigestDeliveryRecord,
     hasSentDigestRecord,
     loadAllCurrentRecords,
+    loadCurrentDigestSnapshot,
     loadDigestSnapshotByRunId,
     loadLatestDigestSnapshot,
     loadRecentSentDigests,

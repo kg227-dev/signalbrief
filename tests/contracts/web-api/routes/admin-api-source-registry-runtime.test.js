@@ -56,6 +56,15 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     loadPreferredSourceRegistry: () => ({
       version: 1,
       global: { reported: ["reuters.com"], official: ["sec.gov"] },
+      standard_topic_source: {
+        source_of_truth: "standard_topic_broker",
+        source_mode: "runtime",
+        active_path: "/tmp/standard-topic-broker-sources.json",
+        runtime_path: "/tmp/standard-topic-broker-sources.json",
+        bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+        topic_count: 7,
+        topic_keys: ["healthcare", "technology"],
+      },
       topics: {},
     }),
     buildSourceRegistryMap: (registry) => ({
@@ -125,6 +134,7 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.source_registry_path, "/tmp/source-registry.json");
     assert.strictEqual(payload.preferred_sources.path, "/tmp/preferred-sources.json");
+    assert.strictEqual(payload.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
   }
 
   {

@@ -187,6 +187,15 @@ const {
         reported: ["reuters.com"],
         official: ["sec.gov"],
       },
+      standard_topic_source: {
+        source_of_truth: "standard_topic_broker",
+        source_mode: "runtime",
+        active_path: "/tmp/standard-topic-broker-sources.json",
+        runtime_path: "/tmp/standard-topic-broker-sources.json",
+        bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+        topic_count: 7,
+        topic_keys: ["healthcare", "technology"],
+      },
       topics: {
         healthcare: {
           reported: ["statnews.com"],
@@ -215,6 +224,7 @@ const {
   assert.strictEqual(overview.preferred_sources.path, "/tmp/preferred-sources.json");
   assert.strictEqual(overview.preferred_sources.topic_count, 1);
   assert.strictEqual(overview.preferred_sources.total_unique_domains, 4);
+  assert.strictEqual(overview.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
   assert.strictEqual(overview.curation_queues.specialist_candidates[0].domain, "pharmavoice.com");
   assert.strictEqual(overview.curation_queues.derivative_winners[0].domain, "benzinga.com");
   assert.strictEqual(overview.curation_queues.platform_ambiguity[0].domain, "youtube.com");

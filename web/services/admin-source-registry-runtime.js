@@ -486,6 +486,7 @@ function summarizePreferredSourceRegistry({
     ...globalOfficial,
     ...topics.flatMap((entry) => [...entry.reported, ...entry.official]),
   ]);
+  const standardTopicSource = snapshot?.standard_topic_source || registry?.standard_topic_source || null;
   return {
     path: String(snapshot?.active_path || preferredSourcesPath || "").trim() || null,
     runtime_path: String(snapshot?.runtime_path || preferredSourcesPath || "").trim() || null,
@@ -500,6 +501,15 @@ function summarizePreferredSourceRegistry({
     topic_count: topics.length,
     total_unique_domains: uniqueDomains.size,
     topics,
+    standard_topic_source: standardTopicSource ? {
+      source_of_truth: String(standardTopicSource?.source_of_truth || "standard_topic_broker").trim() || "standard_topic_broker",
+      source_mode: String(standardTopicSource?.source_mode || "runtime").trim() || "runtime",
+      active_path: String(standardTopicSource?.active_path || "").trim() || null,
+      runtime_path: String(standardTopicSource?.runtime_path || "").trim() || null,
+      bundled_path: String(standardTopicSource?.bundled_path || "").trim() || null,
+      topic_count: Math.max(0, Number(standardTopicSource?.topic_count || 0)),
+      topic_keys: Array.isArray(standardTopicSource?.topic_keys) ? standardTopicSource.topic_keys : [],
+    } : null,
     raw_json: JSON.stringify(registry || {}, null, 2),
   };
 }

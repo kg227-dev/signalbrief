@@ -216,6 +216,23 @@ async function flushMicrotasks() {
             version: 1,
             total_unique_domains: 4,
             topic_count: 1,
+            standard_topic_source: {
+              source_of_truth: "standard_topic_broker",
+              source_mode: "runtime",
+              active_path: "/app/data/standard-topic-broker-sources.json",
+              runtime_path: "/app/data/standard-topic-broker-sources.json",
+              bundled_path: "/app/config/standard-topic-broker-sources.json",
+              topic_count: 7,
+              topic_keys: [
+                "consumer retail",
+                "energy",
+                "financial services",
+                "healthcare",
+                "industrials",
+                "life sciences",
+                "technology",
+              ],
+            },
             global: {
               reported: ["reuters.com"],
               official: ["sec.gov"],
@@ -384,12 +401,20 @@ async function flushMicrotasks() {
     "preferred sources config should render on the source governance page"
   );
   assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/data/standard-topic-broker-sources.json"),
+    "preferred sources panel should show the broker config as the standard-topic source of truth"
+  );
+  assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("statnews.com"),
     "preferred sources panel should render topic-specific domains"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("bundled fallback"),
     "preferred sources panel should explain when bundled fallback is active"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Standard-topic source of truth: broker config"),
+    "preferred sources panel should explain that standard-topic domains come from the broker config"
   );
   assert.ok(
     elements.get("curationQueuesPanelBody").innerHTML.includes("Specialist candidates"),

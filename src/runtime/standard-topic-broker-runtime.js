@@ -32,6 +32,13 @@ const ATTRIBUTE_PATTERN = /([a-zA-Z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)
 const RSS_ITEM_PATTERN = /<item\b[\s\S]*?<\/item>/gi;
 const ATOM_ENTRY_PATTERN = /<entry\b[\s\S]*?<\/entry>/gi;
 const ATOM_LINK_PATTERN = /<link\b[^>]*href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/gi;
+const BROKER_OFFICIAL_QUERY_HINT_PATTERN = /\b(rule|rules|rulemaking|filing|filings|approval|approves?|approved|agency|register|proposed|guidance|enforcement|regulation|regulatory|directive|law|laws|compliance)\b/i;
+const OFFICIAL_FRIENDLY_TOPIC_TAGS = new Set([
+  "HEALTHCARE",
+  "LIFE SCIENCES",
+  "FINANCIAL SERVICES",
+  "ENERGY",
+]);
 
 /**
  * Pick one canonical topic for an article.
@@ -403,6 +410,10 @@ function buildRuntimeConfigPath(options = {}) {
   }).standardTopicBrokerSourcesPath;
 }
 
+function brokerQueryLooksOfficial(queryText) {
+  return BROKER_OFFICIAL_QUERY_HINT_PATTERN.test(String(queryText || ""));
+}
+
 function sanitizeLaneMap(rawLanes = {}) {
   const out = {};
   for (const lane of ALLOWED_LANES) {
@@ -506,6 +517,87 @@ function sanitizeBrokerConfig(rawConfig = {}) {
     topics: sanitizeTopicMap(config.topics),
     families,
     sources,
+  };
+}
+
+function buildBrokerDomainList(config, topicTag, lane) {
+  const normalizedTopicTag = normalizeTopicTag(topicTag);
+  const normalizedLane = String(lane || "").trim();
+  if (!normalizedTopicTag || !PHASE1_TOPIC_TAGS.has(normalizedTopicTag)) return [];
+  if (!ALLOWED_LANES.has(normalizedLane)) return [];
+  if (!topicLaneEnabled(config, normalizedTopicTag, normalizedLane)) return [];
+  const domains = [];
+  const seen = new Set();
+  for (const source of (Array.isArray(config?.sources) ? config.sources : [])) {
+    if (source?.enabled === false) continue;
+    if (String(source?.lane || "").trim() !== normalizedLane) continue;
+    if (!(Array.isArray(source?.topic_tags) ? source.topic_tags : []).includes(normalizedTopicTag)) continue;
+    const candidates = [
+      ...(Array.isArray(source?.domains) ? source.domains : []),
+      pickFirstDomain(source?.domains, source?.endpoint),
+    ];
+    for (const candidate of candidates) {
+      const domain = normalizeSourcePolicyDomain(candidate);
+      if (!domain || seen.has(domain)) continue;
+      seen.add(domain);
+      domains.push(domain);
+    }
+  }
+  return domains;
+}
+
+function buildBrokerPreferredTopicEntriesFromConfig(configRaw) {
+  const config = sanitizeBrokerConfig(configRaw || {});
+  const topics = {};
+  for (const topicTag of PHASE1_TOPIC_TAGS) {
+    const reported = buildBrokerDomainList(config, topicTag, "publisher_feed");
+    const official = buildBrokerDomainList(config, topicTag, "official");
+    if (!reported.length && !official.length) continue;
+    topics[normalizeTopicToken(topicTag)] = {
+      reported,
+      official,
+    };
+  }
+  return topics;
+}
+
+function buildBrokerPreferredDomainShortlistFromConfig(config, options = {}) {
+  const topicTag = normalizeTopicTag(options?.topicTag);
+  if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) return null;
+  const maxDomains = Math.max(1, Number(options?.maxDomains || 20));
+  const officialDomains = buildBrokerDomainList(config, topicTag, "official");
+  const reportedDomains = buildBrokerDomainList(config, topicTag, "publisher_feed");
+  const officialFriendly = OFFICIAL_FRIENDLY_TOPIC_TAGS.has(topicTag) || brokerQueryLooksOfficial(options?.queryText);
+  const domains = officialFriendly
+    ? Array.from(new Set([...officialDomains, ...reportedDomains]))
+    : Array.from(new Set([...reportedDomains, ...officialDomains]));
+  return {
+    domains: domains.slice(0, maxDomains),
+    topic_keys: [normalizeTopicToken(topicTag)],
+    official_friendly: officialFriendly,
+    source_of_truth: "standard_topic_broker",
+  };
+}
+
+function buildBrokerPreferredSourceFamilyShortlistsFromConfig(config, options = {}) {
+  const topicTag = normalizeTopicTag(options?.topicTag);
+  if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) return null;
+  const maxDomains = Math.max(1, Number(options?.maxDomains || 20));
+  const reportedDomains = buildBrokerDomainList(config, topicTag, "publisher_feed").slice(0, maxDomains);
+  const officialDomains = buildBrokerDomainList(config, topicTag, "official").slice(0, maxDomains);
+  const officialFriendly = OFFICIAL_FRIENDLY_TOPIC_TAGS.has(topicTag) || brokerQueryLooksOfficial(options?.queryText);
+  const combinedDomains = officialFriendly
+    ? Array.from(new Set([...officialDomains, ...reportedDomains]))
+    : Array.from(new Set([...reportedDomains, ...officialDomains]));
+  return {
+    reported_domains: reportedDomains,
+    official_domains: officialDomains,
+    global_reported_domains: [],
+    global_official_domains: [],
+    combined_domains: combinedDomains.slice(0, maxDomains),
+    topic_keys: [normalizeTopicToken(topicTag)],
+    official_friendly: officialFriendly,
+    source_of_truth: "standard_topic_broker",
   };
 }
 
@@ -902,6 +994,14 @@ function createStandardTopicBrokerRuntime(options = {}) {
     return readConfigSnapshot().config;
   }
 
+  function buildPreferredDomainShortlist(options = {}) {
+    return buildBrokerPreferredDomainShortlistFromConfig(readConfigSnapshot().config, options);
+  }
+
+  function buildPreferredSourceFamilyShortlists(options = {}) {
+    return buildBrokerPreferredSourceFamilyShortlistsFromConfig(readConfigSnapshot().config, options);
+  }
+
   async function fetchBrokerCandidates(params = {}) {
     const configSnapshot = readConfigSnapshot();
     const config = configSnapshot.config;
@@ -1006,12 +1106,18 @@ function createStandardTopicBrokerRuntime(options = {}) {
   return {
     inspectStandardTopicBrokerConfig,
     loadStandardTopicBrokerConfig,
+    buildPreferredDomainShortlist,
+    buildPreferredSourceFamilyShortlists,
     fetchBrokerCandidates,
   };
 }
 
 module.exports = {
   assignCanonicalTopic,
+  brokerQueryLooksOfficial,
+  buildBrokerPreferredDomainShortlistFromConfig,
+  buildBrokerPreferredTopicEntriesFromConfig,
+  buildBrokerPreferredSourceFamilyShortlistsFromConfig,
   createStandardTopicBrokerRuntime,
   sanitizeBrokerConfig,
 };

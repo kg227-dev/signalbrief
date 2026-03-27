@@ -158,7 +158,12 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
 });
 const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
   fs,
+  appRoot: APP_ROOT,
+  env: process.env,
+  nodeEnv: process.env.NODE_ENV,
   preferredSourcesPath: runtimePaths.preferredSourcesPath,
+  standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
+  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
 const retrievalEvalStorageRuntime = createRetrievalEvalStorageRuntime({
   fs,

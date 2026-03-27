@@ -701,7 +701,12 @@ function createEvalServices() {
   });
   const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
     fs,
+    appRoot: runtimePaths.appRoot,
+    env: process.env,
+    nodeEnv: process.env.NODE_ENV,
     preferredSourcesPath: runtimePaths.preferredSourcesPath,
+    standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath: path.join(runtimePaths.appRoot, "config", "standard-topic-broker-sources.json"),
   });
   const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
     fs,

@@ -144,7 +144,12 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
 });
 const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
   fs,
+  appRoot: APP_ROOT,
+  env: process.env,
+  nodeEnv: process.env.NODE_ENV,
   preferredSourcesPath: RUNTIME_PATHS.preferredSourcesPath,
+  standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
+  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
 let configCache = null;
 let emailTemplateCache = null;
@@ -1098,6 +1103,16 @@ async function main() {
     bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
     log,
   });
+  function buildActivePreferredDomainShortlist(options = {}) {
+    const brokerShortlist = standardTopicBrokerRuntime?.buildPreferredDomainShortlist?.(options);
+    if (brokerShortlist && brokerShortlist.source_of_truth === "standard_topic_broker") return brokerShortlist;
+    return buildPreferredDomainShortlist(preferredSourceRegistry, options);
+  }
+  function buildActivePreferredSourceFamilyShortlists(options = {}) {
+    const brokerShortlists = standardTopicBrokerRuntime?.buildPreferredSourceFamilyShortlists?.(options);
+    if (brokerShortlists && brokerShortlists.source_of_truth === "standard_topic_broker") return brokerShortlists;
+    return preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options);
+  }
   const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
   if (learnedAdjustments.size > 0) {
     setLearnedDomainAdjustments(learnedAdjustments);
@@ -1108,8 +1123,8 @@ async function main() {
     log,
     normalizeTopicToken,
     fetchTopicNews,
-    buildPreferredDomainShortlist: (options) => buildPreferredDomainShortlist(preferredSourceRegistry, options),
-    buildPreferredSourceFamilyShortlists: (options) => preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options),
+    buildPreferredDomainShortlist: buildActivePreferredDomainShortlist,
+    buildPreferredSourceFamilyShortlists: buildActivePreferredSourceFamilyShortlists,
     buildCustomTopicQueries,
     buildCustomRescueItemsFromStandard,
     emitDigestIncident,

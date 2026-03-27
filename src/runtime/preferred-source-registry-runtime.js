@@ -4,6 +4,7 @@ const path = require("path");
 
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
+const { buildBrokerPreferredTopicEntriesFromConfig } = require("./standard-topic-broker-runtime");
 const {
   normalizeTopicToken,
   topicsRelated,
@@ -318,12 +319,34 @@ function mergePublisherTopicEntries(left = {}, right = {}) {
   };
 }
 
-function sanitizePreferredSourceRegistry(rawRegistry) {
+function sanitizePreferredSourceRegistry(rawRegistry, options = {}) {
   const registry = rawRegistry && typeof rawRegistry === "object" ? rawRegistry : {};
+  const embeddedStandardTopicSource = registry?.standard_topic_source
+    && typeof registry.standard_topic_source === "object"
+    ? registry.standard_topic_source
+    : null;
+  const embeddedStandardTopicKeys = Array.isArray(embeddedStandardTopicSource?.topic_keys)
+    ? registry.standard_topic_source.topic_keys
+    : [];
   const aliases = {
     ...sanitizePreferredAliases(BUILT_IN_PREFERRED_ALIASES),
     ...sanitizePreferredAliases(registry.aliases),
   };
+  const standardTopicSourceMapRaw = options?.standardTopicSourceMap
+    && typeof options.standardTopicSourceMap === "object"
+    && !Array.isArray(options.standardTopicSourceMap)
+    ? options.standardTopicSourceMap
+    : Object.fromEntries(
+      embeddedStandardTopicKeys
+        .map((topicKey) => [topicKey, registry?.topics?.[topicKey] || null])
+        .filter(([, entry]) => entry && typeof entry === "object")
+    );
+  const includeBuiltInStandardTopicSourceMap = options?.includeBuiltInStandardTopicSourceMap !== false
+    && !embeddedStandardTopicSource;
+  const standardTopicSourceMeta = options?.standardTopicSourceMeta
+    && typeof options.standardTopicSourceMeta === "object"
+    ? options.standardTopicSourceMeta
+    : embeddedStandardTopicSource;
   const topicsRaw = registry.topics && typeof registry.topics === "object" && !Array.isArray(registry.topics)
     ? registry.topics
     : {};
@@ -341,21 +364,40 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     },
     topics: {},
   };
+  const standardTopicEntries = {};
+  const standardTopicKeys = new Set();
+
+  for (const [rawTopicKey, rawEntry] of Object.entries(standardTopicSourceMapRaw)) {
+    const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
+    if (!topicKey) continue;
+    const sanitizedEntry = sanitizeTopicEntry(rawEntry);
+    if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
+    standardTopicEntries[topicKey] = mergeTopicEntries(standardTopicEntries[topicKey], sanitizedEntry);
+    standardTopicKeys.add(topicKey);
+  }
 
   for (const [rawTopicKey, rawEntry] of Object.entries(topicsRaw)) {
     const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
     if (!topicKey) continue;
+    if (standardTopicKeys.has(topicKey)) continue;
     const sanitizedEntry = sanitizeTopicEntry(rawEntry);
     if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
     topics[topicKey] = mergeTopicEntries(topics[topicKey], sanitizedEntry);
   }
 
-  for (const [rawTopicKey, rawEntry] of Object.entries(BUILT_IN_STANDARD_TOPIC_SOURCE_MAP)) {
-    const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
-    if (!topicKey) continue;
-    const sanitizedEntry = sanitizeTopicEntry(rawEntry);
-    if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
-    topics[topicKey] = mergeTopicEntries(topics[topicKey], sanitizedEntry);
+  if (includeBuiltInStandardTopicSourceMap) {
+    for (const [rawTopicKey, rawEntry] of Object.entries(BUILT_IN_STANDARD_TOPIC_SOURCE_MAP)) {
+      const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
+      if (!topicKey) continue;
+      if (standardTopicKeys.has(topicKey)) continue;
+      const sanitizedEntry = sanitizeTopicEntry(rawEntry);
+      if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
+      topics[topicKey] = mergeTopicEntries(topics[topicKey], sanitizedEntry);
+    }
+  }
+
+  for (const [topicKey, rawEntry] of Object.entries(standardTopicEntries)) {
+    topics[topicKey] = sanitizeTopicEntry(rawEntry);
   }
 
   for (const [rawTopicKey, rawEntry] of Object.entries(publisherTopicsRaw)) {
@@ -366,6 +408,18 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     publishers.topics[topicKey] = mergePublisherTopicEntries(publishers.topics[topicKey], sanitizedEntry);
   }
 
+  const standardTopicSource = standardTopicKeys.size > 0
+    ? {
+      source_of_truth: "standard_topic_broker",
+      source_mode: String(standardTopicSourceMeta?.source_mode || "runtime").trim() || "runtime",
+      active_path: String(standardTopicSourceMeta?.active_path || "").trim() || null,
+      runtime_path: String(standardTopicSourceMeta?.runtime_path || "").trim() || null,
+      bundled_path: String(standardTopicSourceMeta?.bundled_path || "").trim() || null,
+      topic_keys: Array.from(standardTopicKeys).sort((left, right) => left.localeCompare(right)),
+      topic_count: standardTopicKeys.size,
+    }
+    : null;
+
   return {
     version: DEFAULT_PREFERRED_SOURCES_VERSION,
     global: {
@@ -375,6 +429,7 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     topics,
     publishers,
     aliases,
+    standard_topic_source: standardTopicSource,
   };
 }
 
@@ -727,28 +782,77 @@ function matchPreferredSourceDomain(registryRaw, sourceDomain, topicTag, options
 
 function createPreferredSourceRegistryRuntime(options = {}) {
   const fs = options.fs || require("fs");
+  const runtimePaths = resolveSignalBriefRuntimePaths({
+    appRoot: options.appRoot,
+    env: options.env,
+    nodeEnv: options.nodeEnv,
+  });
   const bundledPreferredSourcesPath = String(options.bundledPreferredSourcesPath || "").trim() || path.resolve(
     options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
     "config",
     "preferred-sources.json"
   );
-  const preferredSourcesPath = String(options.preferredSourcesPath || "").trim() || resolveSignalBriefRuntimePaths({
-    appRoot: options.appRoot,
-    env: options.env,
-    nodeEnv: options.nodeEnv,
-  }).preferredSourcesPath;
+  const preferredSourcesPath = String(options.preferredSourcesPath || "").trim() || runtimePaths.preferredSourcesPath;
+  const bundledStandardTopicBrokerSourcesPath = String(options.bundledStandardTopicBrokerSourcesPath || "").trim() || path.resolve(
+    options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
+    "config",
+    "standard-topic-broker-sources.json"
+  );
+  const standardTopicBrokerSourcesPath = String(options.standardTopicBrokerSourcesPath || "").trim()
+    || runtimePaths.standardTopicBrokerSourcesPath;
 
-  function readSanitizedRegistry(filePath) {
+  function readJson(filePath) {
     try {
-      const raw = fs.readFileSync(filePath, "utf8");
-      return sanitizePreferredSourceRegistry(JSON.parse(raw));
+      return JSON.parse(fs.readFileSync(filePath, "utf8"));
     } catch {
       return null;
     }
   }
 
+  function inspectStandardTopicSourceOverlay() {
+    const runtimeConfig = readJson(standardTopicBrokerSourcesPath);
+    if (runtimeConfig) {
+      return {
+        source_of_truth: "standard_topic_broker",
+        source_mode: "runtime",
+        active_path: standardTopicBrokerSourcesPath,
+        runtime_path: standardTopicBrokerSourcesPath,
+        bundled_path: bundledStandardTopicBrokerSourcesPath,
+        topic_map: buildBrokerPreferredTopicEntriesFromConfig(runtimeConfig),
+      };
+    }
+
+    const bundledConfig = readJson(bundledStandardTopicBrokerSourcesPath);
+    if (bundledConfig) {
+      return {
+        source_of_truth: "standard_topic_broker",
+        source_mode: "bundled",
+        active_path: bundledStandardTopicBrokerSourcesPath,
+        runtime_path: standardTopicBrokerSourcesPath,
+        bundled_path: bundledStandardTopicBrokerSourcesPath,
+        topic_map: buildBrokerPreferredTopicEntriesFromConfig(bundledConfig),
+      };
+    }
+
+    return null;
+  }
+
+  function readSanitizedRegistry(filePath, sanitizeOptions = {}) {
+    const raw = readJson(filePath);
+    if (!raw) return null;
+    return sanitizePreferredSourceRegistry(raw, sanitizeOptions);
+  }
+
   function inspectPreferredSourceRegistry() {
-    const runtimeRegistry = readSanitizedRegistry(preferredSourcesPath);
+    const standardTopicSource = inspectStandardTopicSourceOverlay();
+    const sanitizeOptions = standardTopicSource
+      ? {
+        standardTopicSourceMap: standardTopicSource.topic_map,
+        standardTopicSourceMeta: standardTopicSource,
+        includeBuiltInStandardTopicSourceMap: false,
+      }
+      : {};
+    const runtimeRegistry = readSanitizedRegistry(preferredSourcesPath, sanitizeOptions);
     if (runtimeRegistry && !isPreferredRegistryEmpty(runtimeRegistry)) {
       return {
         registry: runtimeRegistry,
@@ -757,9 +861,10 @@ function createPreferredSourceRegistryRuntime(options = {}) {
         runtime_path: preferredSourcesPath,
         bundled_path: bundledPreferredSourcesPath,
         used_fallback: false,
+        standard_topic_source: runtimeRegistry.standard_topic_source || standardTopicSource,
       };
     }
-    const bundledRegistry = readSanitizedRegistry(bundledPreferredSourcesPath);
+    const bundledRegistry = readSanitizedRegistry(bundledPreferredSourcesPath, sanitizeOptions);
     if (bundledRegistry && !isPreferredRegistryEmpty(bundledRegistry)) {
       return {
         registry: bundledRegistry,
@@ -768,15 +873,17 @@ function createPreferredSourceRegistryRuntime(options = {}) {
         runtime_path: preferredSourcesPath,
         bundled_path: bundledPreferredSourcesPath,
         used_fallback: true,
+        standard_topic_source: bundledRegistry.standard_topic_source || standardTopicSource,
       };
     }
     return {
-      registry: sanitizePreferredSourceRegistry({}),
+      registry: sanitizePreferredSourceRegistry({}, sanitizeOptions),
       source_mode: "empty",
       active_path: preferredSourcesPath,
       runtime_path: preferredSourcesPath,
       bundled_path: bundledPreferredSourcesPath,
       used_fallback: runtimeRegistry == null,
+      standard_topic_source: standardTopicSource,
     };
   }
 
@@ -787,6 +894,8 @@ function createPreferredSourceRegistryRuntime(options = {}) {
   return {
     preferredSourcesPath,
     bundledPreferredSourcesPath,
+    standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath,
     buildPreferredSourceFamilyShortlists: (registry, options = {}) => buildPreferredSourceFamilyShortlists(registry, options),
     inspectPreferredSourceRegistry,
     loadPreferredSourceRegistry,

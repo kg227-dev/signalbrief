@@ -267,7 +267,7 @@ body.dark .modal-close { background:var(--card); }
     <div class="section-head">
       <div>
         <div class="section-title" style="margin-bottom:0;">Preferred source config</div>
-        <div class="section-subcopy">Read-only view of the active preferred-source registry used for retrieval-time biasing and preferred-source reranking. Runtime file wins when present; bundled seed is the fallback.</div>
+        <div class="section-subcopy">Read-only view of active source biasing. For the 7 MVP standard topics, broker config is the source of truth. The preferred-source registry now acts as a global and non-standard fallback overlay. Runtime file wins when present; bundled seed is the fallback.</div>
       </div>
     </div>
     <div id="preferredSourcesPanelBody" class="empty">Loading preferred-source config…</div>
@@ -435,9 +435,18 @@ function renderPreferredSourcesConfig(overview) {
   const sourceLabel = sourceMode === "bundled_fallback"
     ? "bundled fallback"
     : (sourceMode === "empty" ? "empty registry" : "runtime file");
+  const standardTopicSource = preferred?.standard_topic_source && typeof preferred.standard_topic_source === "object"
+    ? preferred.standard_topic_source
+    : null;
+  const standardTopicSourceMode = String(standardTopicSource?.source_mode || "runtime").trim();
+  const standardTopicSourceLabel = standardTopicSourceMode === "bundled"
+    ? "bundled broker config"
+    : "runtime broker config";
   container.innerHTML = `
-    <div class="table-meta">Active source: ${esc(sourceLabel)} · config file: ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics</div>
+    ${standardTopicSource ? `<div class="table-meta">Standard-topic source of truth: broker config · active source: ${esc(standardTopicSourceLabel)} · config file: ${standardTopicSource.active_path ? `<span class="mono">${esc(standardTopicSource.active_path)}</span>` : "not available"} · ${Math.max(0, Number(standardTopicSource.topic_count || 0))} MVP topics</div>` : ""}
+    <div class="table-meta">Preferred-source registry overlay: ${esc(sourceLabel)} · config file: ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics</div>
     ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime path <span class="mono">${esc(preferred.runtime_path)}</span> was empty or missing, so the bundled seed <span class="mono">${esc(preferred.bundled_path)}</span> is being used.</div>` : ""}
+    ${standardTopicSource ? `<div class="table-meta" style="margin-top:4px;">Standard-topic reported and official domains below are derived from the broker inventory. The preferred-source registry only contributes global defaults and any non-standard fallback topics still configured.</div>` : ""}
     <div class="preferred-summary-grid">
       <div class="explain-block">
         <div class="explain-label">Global reported core</div>

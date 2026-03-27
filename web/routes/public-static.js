@@ -1,5 +1,3 @@
-const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/digest-item-ordering-runtime");
-
 const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
 const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/sandbox", "/admin/source-registry", "/admin/retrieval-eval"]);
 const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/sandbox", "/admin/source-registry", "/admin/retrieval-eval"]);
@@ -103,48 +101,6 @@ function buildSitemapXml({ baseUrl }) {
     `</urlset>\n`;
 }
 
-function normalizeSnapshotItems(rawItems) {
-  return sortDigestItemsByScoreDescending(
-    (Array.isArray(rawItems) ? rawItems : [])
-      .filter((item) => item && typeof item === "object")
-      .map((item) => ({
-        ...item,
-        wim: item.wim || item.wim_brief || "",
-      }))
-  );
-}
-
-function resolvePersonalizedDigestSnapshot({
-  dateKey,
-  refToken,
-  runId,
-  findUserByToken,
-  loadLatestDigestSnapshot,
-  loadDigestSnapshotByRunId,
-}) {
-  const token = String(refToken || "").trim();
-  if (!token || typeof findUserByToken !== "function") return null;
-
-  const user = findUserByToken(token);
-  const userId = String(user?.chatId || "").trim();
-  if (!userId) return null;
-
-  let snapshot = null;
-  if (runId && typeof loadDigestSnapshotByRunId === "function") {
-    snapshot = loadDigestSnapshotByRunId(userId, dateKey, runId);
-  }
-  if (!snapshot && typeof loadLatestDigestSnapshot === "function") {
-    snapshot = loadLatestDigestSnapshot(userId, dateKey);
-  }
-  if (!snapshot) return null;
-
-  return {
-    dateLabel: String(snapshot.date_str || "").trim() || dateKey,
-    quickScan: String(snapshot.quick_scan || "").trim(),
-    items: normalizeSnapshotItems(snapshot.items),
-  };
-}
-
 function resolveDigestDateKey(pathname, archiveFiles) {
   const match = pathname.match(DIGEST_ROUTE_RE);
   if (!match) return null;
@@ -154,12 +110,22 @@ function resolveDigestDateKey(pathname, archiveFiles) {
   return null;
 }
 
+function buildArchiveRedirectUrl(dateKey, refToken) {
+  const params = new URLSearchParams();
+  params.set("token", String(refToken || "").trim());
+  params.set("date", String(dateKey || "").trim());
+  return `/archive?${params.toString()}`;
+}
+
+function buildAdminDigestAuditRedirectUrl(dateKey) {
+  return `/admin?digest_audit_date=${encodeURIComponent(String(dateKey || "").trim())}#digestAuditSection`;
+}
+
 function serveDigestPage(ctx, deps) {
   const { req, res, url, pathname } = ctx;
   const {
     path, fs, APP_ROOT, archiveDir, readArchiveFiles, renderPublicDigestMissingPage,
-    formatPublicDigestDateLabel, renderPublicDigestPage,
-    findUserByToken, loadLatestDigestSnapshot, loadDigestSnapshotByRunId, isAdminAuthed,
+    isAdminAuthed,
   } = deps;
 
   if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
@@ -173,60 +139,27 @@ function serveDigestPage(ctx, deps) {
 
   const archivePath = path.join(resolvedArchiveDir, `${dateKey}.json`);
   const refToken = url.searchParams.get("ref") || "";
-  const runId = url.searchParams.get("run") || "";
-  const personalizedSnapshot = resolvePersonalizedDigestSnapshot({
-    dateKey,
-    refToken,
-    runId,
-    findUserByToken,
-    loadLatestDigestSnapshot,
-    loadDigestSnapshotByRunId,
-  });
-
-  if (personalizedSnapshot) {
-    const html = renderPublicDigestPage({
-      dateKey,
-      dateLabel: personalizedSnapshot.dateLabel || formatPublicDigestDateLabel(dateKey),
-      quickScan: personalizedSnapshot.quickScan,
-      items: personalizedSnapshot.items,
-      refToken,
-      isPersonalized: true,
-    });
-    res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8",
+  if (refToken) {
+    res.writeHead(302, {
+      Location: buildArchiveRedirectUrl(dateKey, refToken),
       "Cache-Control": "private, no-store",
     });
-    return res.end(html);
+    return res.end();
   }
 
-  if (typeof isAdminAuthed !== "function" || !isAdminAuthed(req)) {
-    return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
+  if (typeof isAdminAuthed === "function" && isAdminAuthed(req)) {
+    res.writeHead(302, {
+      Location: buildAdminDigestAuditRedirectUrl(dateKey),
+      "Cache-Control": "private, no-store",
+    });
+    return res.end();
   }
 
   if (!fs.existsSync(archivePath)) {
     return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
 
-  try {
-    const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
-    const dateLabel = String(parsed?.dateStr || "").trim() || formatPublicDigestDateLabel(dateKey);
-    const html = renderPublicDigestPage({
-      dateKey,
-      dateLabel,
-      quickScan: parsed?.quickScan || "",
-      items: sortDigestItemsByScoreDescending(Array.isArray(parsed?.items) ? parsed.items : []),
-      refToken,
-      isPersonalized: true,
-    });
-    res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "private, no-store",
-    });
-    return res.end(html);
-  } catch {
-    res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(renderPublicDigestMissingPage(dateKey));
-  }
+  return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
 }
 
 function serveSitemap(ctx, deps) {

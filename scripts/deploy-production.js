@@ -585,7 +585,7 @@ function packageCommitArchive(archivePath, archiveSha) {
 
 function resolveLocalTarCreateFlags() {
   if (process.platform !== "darwin") return [];
-  return ["--disable-copyfile", "--no-mac-metadata"];
+  return ["--format", "ustar", "--disable-copyfile", "--no-mac-metadata"];
 }
 
 function buildComposeServiceArgs(services) {

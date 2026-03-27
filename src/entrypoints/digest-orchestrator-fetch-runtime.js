@@ -132,6 +132,14 @@ function resolveTopicsToFetch({ configTopics, dueUsers, runMode, log }) {
     };
   });
   const logger = typeof log === "function" ? log : () => {};
+  if (String(runMode || "").trim() === "admin_topic_audit_rerun") {
+    const focusedTags = new Set(
+      flattenDueUserTopics(dueUsers).map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+    );
+    const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));
+    logger(`Admin topic audit rerun: fetching ${focusedTopics.length}/${topics.length} topic(s) for ${Array.from(focusedTags).join(", ") || "none"}`);
+    return focusedTopics;
+  }
   if (String(runMode || "").trim() === "standard_core") {
     const focusedTags = buildFocusedStandardTagSet(dueUsers, (value) => String(value || "").trim().toUpperCase());
     const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));

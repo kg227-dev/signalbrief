@@ -206,6 +206,56 @@ function buildPublicDigestUrl(dateKey) {
   return "";
 }
 
+function parseCliOptionValue(args, name) {
+  const rows = Array.isArray(args) ? args : [];
+  const prefix = `${String(name || "").trim()}=`;
+  for (let index = 0; index < rows.length; index += 1) {
+    const current = String(rows[index] || "").trim();
+    if (!current) continue;
+    if (current === name) {
+      const next = String(rows[index + 1] || "").trim();
+      return next || "";
+    }
+    if (current.startsWith(prefix)) {
+      return current.slice(prefix.length).trim();
+    }
+  }
+  return "";
+}
+
+function normalizeAuditTopicTag(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeAuditDateKey(value) {
+  const normalized = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : "";
+}
+
+function parseDigestRunArgs(args = [], deps = {}) {
+  const formatDateKey = typeof deps.formatEtDateKey === "function"
+    ? deps.formatEtDateKey
+    : ((value) => String(value instanceof Date ? value.toISOString().slice(0, 10) : ""));
+  const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
+  const suppressWelcome = args.includes("--suppressWelcome");
+  const auditOnly = args.includes("--auditOnly");
+  const auditTopicTag = normalizeAuditTopicTag(parseCliOptionValue(args, "--auditTopic"));
+  const auditDateKey = normalizeAuditDateKey(parseCliOptionValue(args, "--auditDate"));
+  const todayEt = normalizeAuditDateKey(formatDateKey(new Date())) || formatEtDateKey(new Date());
+  const auditTopicRerun = auditOnly && !!auditTopicTag;
+  const runMode = auditTopicRerun ? "admin_topic_audit_rerun" : "scheduled";
+  return {
+    dryRun,
+    suppressWelcome,
+    auditOnly,
+    auditTopicTag,
+    auditDateKey,
+    todayEt,
+    auditTopicRerun,
+    runMode,
+  };
+}
+
 // ET time helpers — imported from digest-orchestrator-time-runtime.js
 
 // API cost estimates
@@ -714,71 +764,224 @@ function serializeBrokerDiagnostics(fetchDiagnostics) {
   };
 }
 
-function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics }) {
+function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics }) {
+  const selectedUrls = new Set(
+    (Array.isArray(selected) ? selected : []).map((item) => String(item?.url || "").trim()).filter(Boolean)
+  );
+  const topicSummaries = buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selectedUrls);
+  const globalLaneCounts = Object.create(null);
+  for (const topic of Object.values(topicSummaries)) {
+    for (const [lane, count] of Object.entries(topic.lane_breakdown || {})) {
+      globalLaneCounts[lane] = (globalLaneCounts[lane] || 0) + count;
+    }
+  }
+
+  return {
+    run_id: runId || null,
+    date_et: digestDateKey,
+    mode: runMode,
+    generated_at: new Date().toISOString(),
+    summary: {
+      total_candidates: Number(selectionDiagnostics?.candidate_pool_scored || 0),
+      total_selected: selectedUrls.size,
+      candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
+      candidate_pool_after_editorial: Number(selectionDiagnostics?.candidate_pool_after_editorial || 0),
+      candidate_pool_after_archive_dedup: Number(selectionDiagnostics?.candidate_pool_after_archive_dedup || 0),
+      candidate_pool_after_freshness: Number(selectionDiagnostics?.candidate_pool_after_freshness || 0),
+      candidate_pool_after_history: Number(selectionDiagnostics?.candidate_pool_after_history || 0),
+      candidate_pool_after_story_relationship: Number(selectionDiagnostics?.candidate_pool_after_story_relationship || 0),
+      candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
+      dedup_removed: Number(selectionDiagnostics?.archive_repeat_block_count || 0),
+      stale_removed: Number(selectionDiagnostics?.stale_removed_count || 0),
+      history_suppressed: Number(selectionDiagnostics?.history_suppressed_count || 0),
+      editorial_excluded: Number(selectionDiagnostics?.editorial_excluded_count || 0),
+      editorial_domain_suppressed: Number(selectionDiagnostics?.editorial_domain_suppressed_count || 0),
+      editorial_pins_injected: Number(selectionDiagnostics?.editorial_pin_count || 0),
+      continuation_removed: Number(selectionDiagnostics?.story_relationship_continuation_removed || 0),
+      follow_up_count: Number(selectionDiagnostics?.story_relationship_follow_up_count || 0),
+      discovery_capped: Number(selectionDiagnostics?.discovery_capped_count || 0),
+      selection_rejection_counts: sanitizeCountMap(selectionDiagnostics?.selection_rejection_counts),
+      score_top: selectionDiagnostics?.score_top ?? null,
+      score_bottom: selectionDiagnostics?.score_bottom ?? null,
+      global_lane_breakdown: globalLaneCounts,
+      broker_saturated_topics: Array.isArray(fetchDiagnostics?.topic_diagnostics)
+        ? fetchDiagnostics.topic_diagnostics.filter((topic) => Number(topic?.broker_item_count || 0) >= 10).length
+        : 0,
+    },
+    topics: topicSummaries,
+    fetch: {
+      broker_candidate_count: Number(fetchDiagnostics?.broker_candidate_count || 0),
+      discovery_candidate_count: Number(fetchDiagnostics?.discovery_candidate_count || 0),
+      discovery_candidate_cap_count: Number(fetchDiagnostics?.discovery_candidate_cap_count || 0),
+      discovery_candidate_capped_count: Number(fetchDiagnostics?.discovery_candidate_capped_count || 0),
+      broker_candidate_share_pct: Number(fetchDiagnostics?.broker_candidate_share_pct || 0),
+      discovery_candidate_share_pct: Number(fetchDiagnostics?.discovery_candidate_share_pct || 0),
+      max_discovery_candidate_share_pct: Number(fetchDiagnostics?.max_discovery_candidate_share_pct || 0),
+      retrieval_origin_counts: sanitizeCountMap(fetchDiagnostics?.retrieval_origin_counts),
+      topic_diagnostics: serializeFetchTopicDiagnostics(fetchDiagnostics),
+      standard_topic_broker: serializeBrokerDiagnostics(fetchDiagnostics),
+    },
+  };
+}
+
+function cloneJsonValue(value) {
+  if (value == null) return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function replaceTopicDiagnostic(topicDiagnostics, nextTopicDiagnostic) {
+  const diagnostics = Array.isArray(topicDiagnostics) ? topicDiagnostics.slice() : [];
+  const tag = String(nextTopicDiagnostic?.tag || "").trim().toUpperCase();
+  if (!tag) return diagnostics;
+  const filtered = diagnostics.filter((topic) => String(topic?.tag || "").trim().toUpperCase() !== tag);
+  filtered.push(nextTopicDiagnostic);
+  filtered.sort((left, right) => String(left?.tag || "").localeCompare(String(right?.tag || "")));
+  return filtered;
+}
+
+function recomputeDigestAuditRollups(auditDoc) {
+  const doc = auditDoc && typeof auditDoc === "object" ? auditDoc : {};
+  const topics = doc.topics && typeof doc.topics === "object" ? doc.topics : {};
+  const topicList = Object.values(topics);
+  const globalLaneBreakdown = Object.create(null);
+  const selectionRejectionCounts = Object.create(null);
+  let totalCandidates = 0;
+  let totalSelected = 0;
+
+  for (const topic of topicList) {
+    totalCandidates += Number(topic?.total_candidates || 0);
+    totalSelected += Number(topic?.selected_count || 0);
+    for (const [lane, count] of Object.entries(topic?.lane_breakdown || {})) {
+      globalLaneBreakdown[lane] = (globalLaneBreakdown[lane] || 0) + Number(count || 0);
+    }
+    for (const [reason, count] of Object.entries(topic?.rejection_reason_counts || {})) {
+      selectionRejectionCounts[reason] = (selectionRejectionCounts[reason] || 0) + Number(count || 0);
+    }
+  }
+
+  doc.summary = {
+    ...(doc.summary && typeof doc.summary === "object" ? doc.summary : {}),
+    total_candidates: totalCandidates,
+    total_selected: totalSelected,
+    global_lane_breakdown: globalLaneBreakdown,
+    selection_rejection_counts: selectionRejectionCounts,
+    discovery_capped: Number(selectionRejectionCounts.selection_discovery_cap || 0),
+  };
+
+  const fetch = doc.fetch && typeof doc.fetch === "object" ? doc.fetch : {};
+  const topicDiagnostics = Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : [];
+  const brokerCandidateCount = topicDiagnostics.reduce((sum, topic) => sum + Number(topic?.broker_item_count || 0), 0);
+  const discoveryCandidateCount = topicDiagnostics.reduce((sum, topic) => sum + Number(topic?.discovery_item_count || 0), 0);
+  const discoveryCandidateCappedCount = topicDiagnostics.reduce((sum, topic) => sum + Number(topic?.discovery_capped_count || 0), 0);
+  const totalCandidateCount = brokerCandidateCount + discoveryCandidateCount;
+  doc.fetch = {
+    ...fetch,
+    broker_candidate_count: brokerCandidateCount,
+    discovery_candidate_count: discoveryCandidateCount,
+    discovery_candidate_capped_count: discoveryCandidateCappedCount,
+    broker_candidate_share_pct: totalCandidateCount > 0
+      ? Number(((brokerCandidateCount / totalCandidateCount) * 100).toFixed(2))
+      : 0,
+    discovery_candidate_share_pct: totalCandidateCount > 0
+      ? Number(((discoveryCandidateCount / totalCandidateCount) * 100).toFixed(2))
+      : 0,
+  };
+  return doc;
+}
+
+function mergeTopicAuditDocument(existingDoc, freshDoc, mergeTopicTag) {
+  const tag = String(mergeTopicTag || "").trim().toUpperCase();
+  if (!tag) return freshDoc;
+  const merged = existingDoc && typeof existingDoc === "object"
+    ? cloneJsonValue(existingDoc)
+    : { date_et: freshDoc?.date_et || null, topics: {}, fetch: {}, summary: {} };
+  const freshTopic = freshDoc?.topics && typeof freshDoc.topics === "object"
+    ? (freshDoc.topics[tag] || null)
+    : null;
+  if (!freshTopic) return freshDoc;
+
+  merged.run_id = freshDoc?.run_id || merged.run_id || null;
+  merged.date_et = freshDoc?.date_et || merged.date_et || null;
+  merged.mode = freshDoc?.mode || merged.mode || null;
+  merged.generated_at = freshDoc?.generated_at || new Date().toISOString();
+  merged.topics = {
+    ...(merged.topics && typeof merged.topics === "object" ? merged.topics : {}),
+    [tag]: freshTopic,
+  };
+
+  const freshFetch = freshDoc?.fetch && typeof freshDoc.fetch === "object" ? freshDoc.fetch : {};
+  const existingFetch = merged.fetch && typeof merged.fetch === "object" ? merged.fetch : {};
+  const freshTopicDiagnostic = (Array.isArray(freshFetch.topic_diagnostics) ? freshFetch.topic_diagnostics : [])
+    .find((topic) => String(topic?.tag || "").trim().toUpperCase() === tag);
+  const existingBroker = existingFetch.standard_topic_broker && typeof existingFetch.standard_topic_broker === "object"
+    ? existingFetch.standard_topic_broker
+    : {};
+  const freshBroker = freshFetch.standard_topic_broker && typeof freshFetch.standard_topic_broker === "object"
+    ? freshFetch.standard_topic_broker
+    : {};
+  const freshBrokerTopicDiagnostic = (Array.isArray(freshBroker.topic_diagnostics) ? freshBroker.topic_diagnostics : [])
+    .find((topic) => String(topic?.tag || "").trim().toUpperCase() === tag);
+
+  merged.fetch = {
+    ...existingFetch,
+    max_discovery_candidate_share_pct: freshFetch.max_discovery_candidate_share_pct ?? existingFetch.max_discovery_candidate_share_pct ?? 0,
+    retrieval_origin_counts: sanitizeCountMap(existingFetch.retrieval_origin_counts),
+    topic_diagnostics: freshTopicDiagnostic
+      ? replaceTopicDiagnostic(existingFetch.topic_diagnostics, freshTopicDiagnostic)
+      : (Array.isArray(existingFetch.topic_diagnostics) ? existingFetch.topic_diagnostics : []),
+    standard_topic_broker: {
+      ...existingBroker,
+      topic_diagnostics: freshBrokerTopicDiagnostic
+        ? replaceTopicDiagnostic(existingBroker.topic_diagnostics, freshBrokerTopicDiagnostic)
+        : (Array.isArray(existingBroker.topic_diagnostics) ? existingBroker.topic_diagnostics : []),
+      last_topic_rerun: {
+        tag,
+        run_id: freshDoc?.run_id || null,
+        refreshed_at: freshDoc?.generated_at || new Date().toISOString(),
+      },
+    },
+  };
+
+  const priorRefreshes = Array.isArray(merged.partial_refreshes) ? merged.partial_refreshes : [];
+  const nextRefresh = {
+    tag,
+    mode: freshDoc?.mode || "admin_topic_audit_rerun",
+    run_id: freshDoc?.run_id || null,
+    refreshed_at: freshDoc?.generated_at || new Date().toISOString(),
+  };
+  merged.partial_refreshes = priorRefreshes
+    .filter((entry) => String(entry?.tag || "").trim().toUpperCase() !== tag)
+    .concat(nextRefresh)
+    .slice(-20);
+  merged.partial_refresh = nextRefresh;
+
+  return recomputeDigestAuditRollups(merged);
+}
+
+function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics, mergeTopicTag = "" }) {
   try {
     fs.mkdirSync(DIGEST_AUDIT_DIR, { recursive: true });
-    const selectedUrls = new Set(
-      (Array.isArray(selected) ? selected : []).map((item) => String(item?.url || "").trim()).filter(Boolean)
-    );
-    const topicSummaries = buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selectedUrls);
-
-    // Lane contribution totals across all topics.
-    const globalLaneCounts = Object.create(null);
-    for (const topic of Object.values(topicSummaries)) {
-      for (const [lane, count] of Object.entries(topic.lane_breakdown)) {
-        globalLaneCounts[lane] = (globalLaneCounts[lane] || 0) + count;
-      }
-    }
-
-    const auditDoc = {
-      run_id: runId || null,
-      date_et: digestDateKey,
-      mode: runMode,
-      generated_at: new Date().toISOString(),
-      summary: {
-        total_candidates: Number(selectionDiagnostics?.candidate_pool_scored || 0),
-        total_selected: selectedUrls.size,
-        candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
-        candidate_pool_after_editorial: Number(selectionDiagnostics?.candidate_pool_after_editorial || 0),
-        candidate_pool_after_archive_dedup: Number(selectionDiagnostics?.candidate_pool_after_archive_dedup || 0),
-        candidate_pool_after_freshness: Number(selectionDiagnostics?.candidate_pool_after_freshness || 0),
-        candidate_pool_after_history: Number(selectionDiagnostics?.candidate_pool_after_history || 0),
-        candidate_pool_after_story_relationship: Number(selectionDiagnostics?.candidate_pool_after_story_relationship || 0),
-        candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
-        dedup_removed: Number(selectionDiagnostics?.archive_repeat_block_count || 0),
-        stale_removed: Number(selectionDiagnostics?.stale_removed_count || 0),
-        history_suppressed: Number(selectionDiagnostics?.history_suppressed_count || 0),
-        editorial_excluded: Number(selectionDiagnostics?.editorial_excluded_count || 0),
-        editorial_domain_suppressed: Number(selectionDiagnostics?.editorial_domain_suppressed_count || 0),
-        editorial_pins_injected: Number(selectionDiagnostics?.editorial_pin_count || 0),
-        continuation_removed: Number(selectionDiagnostics?.story_relationship_continuation_removed || 0),
-        follow_up_count: Number(selectionDiagnostics?.story_relationship_follow_up_count || 0),
-        discovery_capped: Number(selectionDiagnostics?.discovery_capped_count || 0),
-        selection_rejection_counts: sanitizeCountMap(selectionDiagnostics?.selection_rejection_counts),
-        score_top: selectionDiagnostics?.score_top ?? null,
-        score_bottom: selectionDiagnostics?.score_bottom ?? null,
-        global_lane_breakdown: globalLaneCounts,
-        broker_saturated_topics: Array.isArray(fetchDiagnostics?.topic_diagnostics)
-          ? fetchDiagnostics.topic_diagnostics.filter((t) => Number(t?.broker_item_count || 0) >= 10).length
-          : 0,
-      },
-      topics: topicSummaries,
-      fetch: {
-        broker_candidate_count: Number(fetchDiagnostics?.broker_candidate_count || 0),
-        discovery_candidate_count: Number(fetchDiagnostics?.discovery_candidate_count || 0),
-        discovery_candidate_cap_count: Number(fetchDiagnostics?.discovery_candidate_cap_count || 0),
-        discovery_candidate_capped_count: Number(fetchDiagnostics?.discovery_candidate_capped_count || 0),
-        broker_candidate_share_pct: Number(fetchDiagnostics?.broker_candidate_share_pct || 0),
-        discovery_candidate_share_pct: Number(fetchDiagnostics?.discovery_candidate_share_pct || 0),
-        max_discovery_candidate_share_pct: Number(fetchDiagnostics?.max_discovery_candidate_share_pct || 0),
-        retrieval_origin_counts: sanitizeCountMap(fetchDiagnostics?.retrieval_origin_counts),
-        topic_diagnostics: serializeFetchTopicDiagnostics(fetchDiagnostics),
-        standard_topic_broker: serializeBrokerDiagnostics(fetchDiagnostics),
-      },
-    };
-
+    const auditDoc = buildDigestAuditDocument({
+      digestDateKey,
+      runId,
+      runMode,
+      selected,
+      selectionDiagnostics,
+      fetchDiagnostics,
+    });
+    const normalizedMergeTopicTag = String(mergeTopicTag || "").trim().toUpperCase();
     const filePath = path.join(DIGEST_AUDIT_DIR, `${digestDateKey}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(auditDoc, null, 2), "utf8");
+    let finalDoc = auditDoc;
+    if (normalizedMergeTopicTag) {
+      let existingDoc = null;
+      try {
+        existingDoc = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      finalDoc = mergeTopicAuditDocument(existingDoc, auditDoc, normalizedMergeTopicTag);
+    }
+    fs.writeFileSync(filePath, JSON.stringify(finalDoc, null, 2), "utf8");
   } catch (err) {
     if (runMode === "scheduled") throw err; // mandatory for scheduled runs — operator must know
     log(`Audit log write failed (non-fatal): ${String(err?.message || err)}`);
@@ -884,9 +1087,26 @@ async function sendEmail(toEmail, subject, html, token = null) {
 async function main() {
   ensureDigestRuntimeBootstrap();
   const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
-  const suppressWelcome = args.includes("--suppressWelcome");
-  const runMode = "scheduled";
+  const runOptions = parseDigestRunArgs(args, { formatEtDateKey });
+  const {
+    dryRun,
+    suppressWelcome,
+    runMode,
+    auditOnly,
+    auditTopicTag,
+    auditDateKey,
+    todayEt,
+    auditTopicRerun,
+  } = runOptions;
+  if (auditOnly && !auditTopicRerun) {
+    throw new Error("Audit-only digest runs require --auditTopic=TOPIC");
+  }
+  if (auditTopicRerun && !auditDateKey) {
+    throw new Error("Topic audit reruns require --auditDate=YYYY-MM-DD");
+  }
+  if (auditTopicRerun && auditDateKey !== todayEt) {
+    throw new Error(`Topic audit reruns only support today ET (${todayEt}) to avoid fake historical backfills`);
+  }
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
   setDigestLoggerContext({
     run_id: runId,
@@ -921,92 +1141,110 @@ async function main() {
     process.exit(4);
   }
 
-  // ── Check who's due BEFORE any API calls ──────────────────────────────────
-  const dueContext = resolveDueUsers({
-    allUsers,
-    USER_STATUS,
-    getEtNow,
-    getEtNowParts,
-    toEtDateString,
-    CONFIG,
-    log,
-    allowExampleEmails,
-    retryStateRuntime: getDigestRetryStateRuntime(),
-  });
-  const digestDateKey = String(dueContext?.todayET || "").trim() || formatEtDateKey(new Date());
-  let dueUsers = Array.isArray(dueContext?.dueUsers) ? dueContext.dueUsers.slice() : [];
+  let digestDateKey = auditTopicRerun ? auditDateKey : todayEt;
+  let dueUsers = [];
+  if (auditTopicRerun) {
+    dueUsers = [{
+      chatId: `audit:${auditTopicTag}:${digestDateKey}`,
+      email: "",
+      status: USER_STATUS.ACTIVE,
+      topics: [auditTopicTag],
+      preferences: {
+        email_enabled: false,
+        depth: "headline_plus_why",
+      },
+    }];
+    log(`=== SignalBrief topic audit rerun starting — ${auditTopicTag} (${digestDateKey}) ===`);
+  } else {
+    // ── Check who's due BEFORE any API calls ────────────────────────────────
+    const dueContext = resolveDueUsers({
+      allUsers,
+      USER_STATUS,
+      getEtNow,
+      getEtNowParts,
+      toEtDateString,
+      CONFIG,
+      log,
+      allowExampleEmails,
+      retryStateRuntime: getDigestRetryStateRuntime(),
+    });
+    digestDateKey = String(dueContext?.todayET || "").trim() || todayEt;
+    dueUsers = Array.isArray(dueContext?.dueUsers) ? dueContext.dueUsers.slice() : [];
 
-  if (dueUsers.length > 0) {
-    const digestDeliveryRecordRuntime = getDigestDeliveryRecordRuntime();
-    const preflight = filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime);
-    dueUsers = preflight.dueUsers;
-    if (preflight.skippedUsers.length > 0) {
-      const skippedList = preflight.skippedUsers
-        .map((user) => user?.email || user?.chatId)
-        .filter(Boolean)
-        .join(", ");
+    if (dueUsers.length > 0) {
+      const digestDeliveryRecordRuntime = getDigestDeliveryRecordRuntime();
+      const preflight = filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime);
+      dueUsers = preflight.dueUsers;
+      if (preflight.skippedUsers.length > 0) {
+        const skippedList = preflight.skippedUsers
+          .map((user) => user?.email || user?.chatId)
+          .filter(Boolean)
+          .join(", ");
+        logEvent("info", "digest.run.skipped", {
+          provider: "delivery-record",
+          outcome: "already_sent_prefilter",
+          skipped_users: preflight.skippedUsers.length,
+          date_et: digestDateKey,
+        });
+        log(`⏭️ Prefiltered ${preflight.skippedUsers.length} user(s) already sent for ${digestDateKey}${skippedList ? ` -> ${skippedList}` : ""}`);
+      }
+    }
+
+    if (dueUsers.length === 0) {
       logEvent("info", "digest.run.skipped", {
-        provider: "delivery-record",
-        outcome: "already_sent_prefilter",
-        skipped_users: preflight.skippedUsers.length,
-        date_et: digestDateKey,
+        provider: "scheduler",
+        outcome: "no_due_users",
       });
-      log(`⏭️ Prefiltered ${preflight.skippedUsers.length} user(s) already sent for ${digestDateKey}${skippedList ? ` -> ${skippedList}` : ""}`);
+      process.exit(0); // no users due this window
     }
   }
 
-  if (dueUsers.length === 0) {
-    logEvent("info", "digest.run.skipped", {
-      provider: "scheduler",
-      outcome: "no_due_users",
-    });
-    process.exit(0); // no users due this window
-  }
-
   // ── Pre-spend admission gate (scheduled runs only) ─────────────────────────
-  const spendGuard = getDigestOrchestratorSpendGuardRuntime();
-  const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
-  const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
-    circuitBreakerRuntime: circuitBreaker,
-    spendGuardRuntime: spendGuard,
-    rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
-    rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
-    dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
-    log,
-  });
-  const gate = admissionGate.checkScheduledAdmission({
-    dueUsers,
-    dateEt: digestDateKey,
-    retryStateRuntime: getDigestRetryStateRuntime(),
-  });
-  if (!gate.allowed) {
-    logEvent("warn", "digest.run.blocked", {
-      provider: "admission-gate",
-      outcome: gate.runValueState,
-      blocked_reason: gate.blockedReason,
-      due_users: dueUsers.length,
-      date_et: digestDateKey,
+  if (!auditOnly) {
+    const spendGuard = getDigestOrchestratorSpendGuardRuntime();
+    const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
+    const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
+      circuitBreakerRuntime: circuitBreaker,
+      spendGuardRuntime: spendGuard,
+      rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
+      rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
+      dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
+      log,
     });
-    log(`⛔ Admission gate blocked: ${gate.blockedReason} (${dueUsers.length} due user(s), date=${digestDateKey})`);
-    recordRunCost({
-      now: new Date(),
-      runId,
-      standardFetchCalls: 0,
-      claudeUsage: {},
+    const gate = admissionGate.checkScheduledAdmission({
       dueUsers,
-      deliveredUsers: [],
-      failedUsers: [],
-      publicDigestUrl: "",
-      runValueState: gate.runValueState,
-      blockedReason: gate.blockedReason,
+      dateEt: digestDateKey,
+      retryStateRuntime: getDigestRetryStateRuntime(),
     });
-    releaseDigestLock(runMode);
-    process.exit(0);
-  }
-  if (gate.eligibleUsers.length < dueUsers.length) {
-    const filtered = dueUsers.length - gate.eligibleUsers.length;
-    log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
-    dueUsers = gate.eligibleUsers;
+    if (!gate.allowed) {
+      logEvent("warn", "digest.run.blocked", {
+        provider: "admission-gate",
+        outcome: gate.runValueState,
+        blocked_reason: gate.blockedReason,
+        due_users: dueUsers.length,
+        date_et: digestDateKey,
+      });
+      log(`⛔ Admission gate blocked: ${gate.blockedReason} (${dueUsers.length} due user(s), date=${digestDateKey})`);
+      recordRunCost({
+        now: new Date(),
+        runId,
+        standardFetchCalls: 0,
+        claudeUsage: {},
+        dueUsers,
+        deliveredUsers: [],
+        failedUsers: [],
+        publicDigestUrl: "",
+        runValueState: gate.runValueState,
+        blockedReason: gate.blockedReason,
+      });
+      releaseDigestLock(runMode);
+      process.exit(0);
+    }
+    if (gate.eligibleUsers.length < dueUsers.length) {
+      const filtered = dueUsers.length - gate.eligibleUsers.length;
+      log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
+      dueUsers = gate.eligibleUsers;
+    }
   }
 
   if (dryRun) {
@@ -1020,7 +1258,9 @@ async function main() {
     process.exit(0);
   }
 
-  log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
+  if (!auditTopicRerun) {
+    log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
+  }
 
   const now = new Date();
   const triggerSource = String(process.env.SIGNALBRIEF_DIGEST_TRIGGER_SOURCE || "").trim();
@@ -1157,7 +1397,34 @@ async function main() {
     selected,
     selectionDiagnostics,
     fetchDiagnostics,
+    mergeTopicTag: auditTopicRerun ? auditTopicTag : "",
   });
+
+  if (auditOnly) {
+    recordRunCost({
+      now,
+      runId,
+      standardFetchCalls,
+      claudeUsage: {},
+      dueUsers: [],
+      deliveredUsers: [],
+      failedUsers: [],
+      publicDigestUrl: "",
+      runValueState: "admin_audit_rerun",
+      blockedReason: null,
+    });
+    logEvent("info", "digest.run.completed", {
+      provider: "orchestrator",
+      outcome: "audit_only",
+      due_users: 0,
+      delivered_users: 0,
+      failed_users: 0,
+      topic_tag: auditTopicTag,
+      date_et: digestDateKey,
+    });
+    log(`=== SignalBrief topic audit rerun complete — ${auditTopicTag} (${digestDateKey}) ===`);
+    return;
+  }
 
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
     enrichItems,
@@ -1444,6 +1711,7 @@ module.exports = {
   },
 
   // Entrypoint helpers
+  parseDigestRunArgs,
   main,
   runCli,
 };

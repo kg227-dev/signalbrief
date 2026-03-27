@@ -12,6 +12,9 @@ for (const snippet of [
   'id="digestAuditDate"',
   'id="digestAuditPanel"',
   "function loadDigestAudit(",
+  "function triggerTopicAuditRerun(",
+  "Rerun topic audit",
+  "today-only so the system never fakes a historical backfill",
   "Inspect lane mix, selected items, and candidate rejections for any day.",
   "No digest audit file exists for that date yet.",
 ]) {

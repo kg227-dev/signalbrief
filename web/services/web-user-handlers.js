@@ -25,6 +25,7 @@ function createWebUserHandlers(deps) {
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
+    formatEtDateKey,
   } = deps;
 
   const resolveBaseUrl = typeof getBaseUrl === "function"
@@ -79,6 +80,7 @@ function createWebUserHandlers(deps) {
     allUsers,
     startDigestTrigger,
     logAdminActionEvent,
+    formatEtDateKey,
   });
 
   return {

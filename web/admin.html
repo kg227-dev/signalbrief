@@ -1206,7 +1206,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
   <div class="section-head" id="digestAuditSection">
     <div>
       <div class="section-title" style="margin-bottom:0;">Digest audit</div>
-      <div class="section-subcopy">Inspect lane mix, selected items, and candidate rejections for any day.</div>
+      <div class="section-subcopy">Inspect lane mix, selected items, and candidate rejections for any day. Topic reruns are today-only so the system never fakes a historical backfill.</div>
     </div>
     <div class="digest-audit-controls">
       <input id="digestAuditDate" class="table-filter" type="date" onkeydown="if(event.key==='Enter'){event.preventDefault();loadDigestAudit();}">
@@ -2268,7 +2268,14 @@ function renderDigestAuditCandidate(candidate) {
   </div>`;
 }
 
-function renderDigestAuditTopic(tag, topic, fetchTopic) {
+function canRerunDigestAuditTopic(dateKey) {
+  return String(dateKey || "").trim() === getTodayEtDateKey();
+}
+
+function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
+  const dateKey = String(options?.dateKey || "").trim();
+  const canRerun = canRerunDigestAuditTopic(dateKey);
+  const topicArg = JSON.stringify(String(tag || ""));
   const selectedCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).filter((candidate) => candidate.selected === true);
   const laneBreakdown = topic?.lane_breakdown || {};
   const rejectionCounts = topic?.rejection_reason_counts || {};
@@ -2288,7 +2295,12 @@ function renderDigestAuditTopic(tag, topic, fetchTopic) {
         <div class="subscriber-main">${esc(tag)}</div>
         <div class="subscriber-sub">${Number(topic?.selected_count || 0)}/${Number(topic?.total_candidates || 0)} selected · ${formatPct(fetchTopic?.discovery_candidate_share_pct || 0)} discovery candidates</div>
       </div>
-      <div class="mono" style="color:${coverageTone};font-weight:700;">${esc(coverageStatus)}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+        <div class="mono" style="color:${coverageTone};font-weight:700;">${esc(coverageStatus)}</div>
+        ${canRerun
+          ? `<button type="button" class="btn-secondary" style="padding:7px 10px;font-size:12px;" onclick='triggerTopicAuditRerun(${topicArg}, this)'>Rerun topic audit</button>`
+          : `<span class="subscriber-sub">Today only</span>`}
+      </div>
     </div>
     <div class="digest-audit-row" style="margin-bottom:10px;">
       ${renderDigestAuditSummaryPill("Broker", `${Number(fetchTopic?.broker_item_count || 0)} kept`, "var(--green)")}
@@ -2335,7 +2347,13 @@ function renderDigestAuditPanel() {
   const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
   const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
   const refreshingLabel = state.loading ? " · refreshing…" : "";
-  meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${refreshingLabel}`;
+  const partialRefresh = data.partial_refresh && typeof data.partial_refresh === "object"
+    ? data.partial_refresh
+    : null;
+  const rerunLabel = partialRefresh && partialRefresh.tag
+    ? ` · last topic rerun ${partialRefresh.tag} at ${formatEtDateTime(partialRefresh.refreshed_at || data.generated_at || "")}`
+    : "";
+  meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${rerunLabel}${refreshingLabel}`;
   panel.innerHTML = `
     <div class="digest-audit-card">
       <div class="digest-audit-kpis">
@@ -2372,7 +2390,7 @@ function renderDigestAuditPanel() {
       </div>
     </div>
     <div class="digest-audit-topic-list">
-      ${topics.length ? topics.map(([tag, topic]) => renderDigestAuditTopic(tag, topic, fetchTopics.get(tag))).join("") : `<div class="digest-audit-card"><div class="empty">No topic-level audit data captured for this day.</div></div>`}
+      ${topics.length ? topics.map(([tag, topic]) => renderDigestAuditTopic(tag, topic, fetchTopics.get(tag), { dateKey: data.date_et || state.dateKey || "" })).join("") : `<div class="digest-audit-card"><div class="empty">No topic-level audit data captured for this day.</div></div>`}
     </div>
   `;
 }
@@ -2453,6 +2471,67 @@ function ceoCommandButtonId(commandId) {
   if (id === "run_full_digest") return "runFullDigestBtn";
   if (id === "restart_worker") return "restartWorkerBtn";
   return "";
+}
+
+async function triggerTopicAuditRerun(topicTag, triggerEl = null) {
+  const normalizedTag = String(topicTag || "").trim().toUpperCase();
+  const dateKey = String((digestAuditState?.data?.date_et) || digestAuditState?.dateKey || ensureDigestAuditDateInput()).trim();
+  const todayEt = getTodayEtDateKey();
+  if (!normalizedTag) return;
+  if (dateKey !== todayEt) {
+    const detail = `Topic audit reruns only support today ET (${todayEt}) to avoid fake historical backfills.`;
+    setOpsActionMessage("warn", `⚠️ ${detail}`);
+    showToast("err", detail);
+    return;
+  }
+
+  const approved = await openConfirmModal(
+    `Rerun ${normalizedTag} audit?`,
+    `This queues an audit-only rerun for ${normalizedTag} on ${dateKey}. It refreshes selection diagnostics for that topic only and does not resend email.`,
+    "Queue topic rerun",
+  );
+  if (!approved) return;
+
+  const btn = triggerEl || null;
+  const prevLabel = btn ? btn.textContent : "Rerun topic audit";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Queueing…";
+  }
+  setOpsActionMessage("info", `Queueing ${normalizedTag} audit rerun for ${dateKey}…`);
+  try {
+    const resp = await apiFetchJson("/api/admin/run-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scope: "topic_audit",
+        topic: normalizedTag,
+        date_et: dateKey,
+      }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to queue topic audit rerun (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || `Topic audit rerun queued for ${normalizedTag}`;
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", msg);
+    window.setTimeout(() => {
+      loadDigestAudit(true).catch(() => {});
+    }, 2500);
+  } catch (e) {
+    const msg = e.message || "Network error queueing topic audit rerun";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  }
 }
 
 function renderCeoCommandButtons(commands) {

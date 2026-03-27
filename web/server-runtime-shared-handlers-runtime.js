@@ -24,6 +24,7 @@ function createSharedRouteHandlers(deps) {
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
+    formatEtDateKey,
   } = deps;
 
   return createWebUserHandlers({
@@ -47,6 +48,7 @@ function createSharedRouteHandlers(deps) {
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
+    formatEtDateKey,
   });
 }
 

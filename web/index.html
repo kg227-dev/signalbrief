@@ -171,8 +171,12 @@ body.dark .dp-tag-finance { background: rgba(3,105,161,0.2); color: #7dd3fc; }
   padding: 0 40px;
   height: 56px;
   display: flex; align-items: center; justify-content: space-between;
+  opacity: 0; pointer-events: none;
+  transform: translateY(-8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
   box-shadow: var(--shadow-sm);
 }
+.sticky-nav.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .sticky-nav-brand {
   font-family: 'Playfair Display', Georgia, serif;
   font-size: 18px; font-weight: 400; color: var(--text);
@@ -841,22 +845,22 @@ body.dark .topics-custom-row {
 
   <!-- ── How It Works ── -->
   <section class="features-section" id="how-it-works" aria-label="How SignalBrief works">
-    <h2 class="features-heading">Intelligence built for strategy professionals</h2>
+    <h2 class="features-heading">A cleaner morning briefing</h2>
     <div class="features-grid">
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></div>
         <h3>Built on trusted trade and official sources</h3>
-        <p>Each morning, SignalBrief pulls from a maintained source registry across all 7 sectors and filters down to the stories that actually matter. No aggregator sludge, no filler.</p>
+        <p>Each morning, SignalBrief pulls from a maintained source registry across the 7 sectors and filters down to the stories that actually matter. No sludge, no filler.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></div>
         <h3>Ranked by what actually matters</h3>
-        <p>Every item is scored for source quality, freshness, and sector relevance. The most important signal in your sector reaches you first, not whatever got the most clicks.</p>
+        <p>Every item is scored for freshness, source quality, and sector relevance. The most important signal reaches you first, not whatever got the most clicks.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
         <h3>Ready in five minutes</h3>
-        <p>No noise, no infinite scroll. SignalBrief delivers a concise briefing you can scan in under a minute or read in more depth when you need the extra context.</p>
+        <p>No infinite scroll. SignalBrief gives you a concise briefing you can scan fast or read in more depth when you want the extra context.</p>
       </div>
     </div>
     <div class="features-about">
@@ -882,20 +886,20 @@ body.dark .topics-custom-row {
   <!-- ── Email Capture ── -->
   <section class="signup-section" id="signup">
     <h2>Get your daily signal</h2>
-    <p class="signup-sub">Free. Personalized. Cancel anytime.</p>
+    <p class="signup-sub">Free. Email only. Cancel anytime.</p>
     <form class="signup-form" id="signupForm">
       <input type="email" placeholder="you@company.com" id="signupEmail" required>
       <button type="submit">Subscribe</button>
     </form>
     <div class="signup-error" id="signupError"></div>
-    <p class="signup-note">Join strategy professionals who start their morning with SignalBrief.</p>
+    <p class="signup-note">Choose 1–3 sectors and start with tomorrow morning’s brief.</p>
   </section>
 
 </div>
 
 <!-- ── Footer ── -->
 <footer class="footer">
-  SignalBrief &middot; Daily intelligence for strategy professionals
+  SignalBrief &middot; Daily sector briefings by email
   <span style="margin-left:12px;"><a href="/admin/login">Admin</a></span>
 </footer>
 
@@ -918,6 +922,17 @@ body.dark .topics-custom-row {
     apply(isDark);
     try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
   };
+})();
+
+/* Sticky nav */
+(function() {
+  var nav = document.getElementById('stickyNav');
+  var heroCta = document.querySelector('.hero-cta');
+  if (!nav || !heroCta || !('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function(entries) {
+    nav.classList.toggle('visible', !entries[0].isIntersecting);
+  }, { threshold: 0 });
+  obs.observe(heroCta);
 })();
 
 

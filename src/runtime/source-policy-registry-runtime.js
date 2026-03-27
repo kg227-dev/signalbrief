@@ -271,18 +271,16 @@ function createSourceRegistryRuntime(options = {}) {
     nodeEnv: options.nodeEnv,
   });
   const explicitSourceRegistryPath = String(options.sourceRegistryPath || "").trim();
-  const standardTopicBrokerSourcesPath = String(options.standardTopicBrokerSourcesPath || "").trim()
+  const configuredBrokerPath = String(options.standardTopicBrokerSourcesPath || "").trim()
     || runtimePaths.standardTopicBrokerSourcesPath;
+  const standardTopicBrokerSourcesPath = explicitSourceRegistryPath || configuredBrokerPath;
   const bundledStandardTopicBrokerSourcesPath = String(options.bundledStandardTopicBrokerSourcesPath || "").trim()
     || path.resolve(
       options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
       "config",
       "standard-topic-broker-sources.json"
     );
-  const useStandaloneRegistry = Boolean(explicitSourceRegistryPath)
-    && !String(options.standardTopicBrokerSourcesPath || "").trim()
-    && !String(options.bundledStandardTopicBrokerSourcesPath || "").trim();
-  const sourceRegistryPath = useStandaloneRegistry ? explicitSourceRegistryPath : standardTopicBrokerSourcesPath;
+  const sourceRegistryPath = standardTopicBrokerSourcesPath;
 
   function buildEmptyRegistry() {
     return {
@@ -302,25 +300,23 @@ function createSourceRegistryRuntime(options = {}) {
   }
 
   function readActiveBrokerConfig() {
-    return readJson(standardTopicBrokerSourcesPath)
+    return readJson(sourceRegistryPath)
       || readJson(bundledStandardTopicBrokerSourcesPath)
       || null;
   }
 
   function extractGovernanceRegistry(config) {
     if (!config || typeof config !== "object") return buildEmptyRegistry();
+    if (config.governance && typeof config.governance === "object") {
+      return sanitizeRegistry(config.governance);
+    }
+    if ((config.domains && typeof config.domains === "object") || (config.identities && typeof config.identities === "object")) {
+      return sanitizeRegistry(config);
+    }
     return sanitizeRegistry(config.governance);
   }
 
   function loadSourceRegistry() {
-    if (useStandaloneRegistry) {
-      try {
-        const raw = fs.readFileSync(sourceRegistryPath, "utf8");
-        return sanitizeRegistry(JSON.parse(raw));
-      } catch {
-        return buildEmptyRegistry();
-      }
-    }
     return extractGovernanceRegistry(readActiveBrokerConfig());
   }
 
@@ -335,10 +331,6 @@ function createSourceRegistryRuntime(options = {}) {
     const sanitized = sanitizeRegistry(registry);
     const dir = path.dirname(sourceRegistryPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (useStandaloneRegistry) {
-      fs.writeFileSync(sourceRegistryPath, JSON.stringify(sanitized, null, 2), "utf8");
-      return sanitized;
-    }
     const baseConfig = readActiveBrokerConfig() || { version: 1, lanes: {}, topics: {}, families: {}, sources: [] };
     const nextConfig = {
       ...baseConfig,
@@ -459,7 +451,7 @@ function createSourceRegistryRuntime(options = {}) {
 
   return {
     sourceRegistryPath,
-    sourceOfTruth: useStandaloneRegistry ? "standalone_registry" : "standard_topic_broker",
+    sourceOfTruth: "standard_topic_broker",
     standardTopicBrokerSourcesPath,
     bundledStandardTopicBrokerSourcesPath,
     loadSourceRegistry,

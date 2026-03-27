@@ -85,17 +85,17 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.digestRunLockPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_RUN_LOCK_PATH"),
     path.join(dataDir, "digest-run.lock")
   );
+  const standardTopicBrokerSourcesPath = resolveOptionalPath(
+    options.standardTopicBrokerSourcesPath || readEnvValue(env, "SIGNALBRIEF_STANDARD_TOPIC_BROKER_SOURCES_PATH"),
+    path.join(dataDir, "standard-topic-broker-sources.json")
+  );
   const sourceRegistryPath = resolveOptionalPath(
     options.sourceRegistryPath || readEnvValue(env, "SIGNALBRIEF_SOURCE_REGISTRY_PATH"),
-    path.join(dataDir, "source-registry.json")
+    standardTopicBrokerSourcesPath
   );
   const preferredSourcesPath = resolveOptionalPath(
     options.preferredSourcesPath || readEnvValue(env, "SIGNALBRIEF_PREFERRED_SOURCES_PATH"),
     path.join(dataDir, "preferred-sources.json")
-  );
-  const standardTopicBrokerSourcesPath = resolveOptionalPath(
-    options.standardTopicBrokerSourcesPath || readEnvValue(env, "SIGNALBRIEF_STANDARD_TOPIC_BROKER_SOURCES_PATH"),
-    path.join(dataDir, "standard-topic-broker-sources.json")
   );
   const spendGuardStatePath = resolveOptionalPath(
     options.spendGuardStatePath || readEnvValue(env, "SIGNALBRIEF_SPEND_GUARD_STATE_PATH"),

@@ -46,7 +46,6 @@ import "../src/runtime/mailer/mailer-runtime.js";
 import "../src/runtime/quality-score.js";
 import "../src/runtime/url-normalization-runtime.js";
 import "../src/runtime/store.js";
-import "../src/sandbox-pipeline-runtime.js";
 import "../test-harness/cache/index.js";
 import "../test-harness/cache/cache-archive.js";
 import "../test-harness/cache/cache-budget.js";
@@ -169,7 +168,6 @@ export const dependencyLinks = [
   "src/runtime/quality-score.js",
   "src/runtime/url-normalization-runtime.js",
   "src/runtime/store.js",
-  "src/sandbox-pipeline-runtime.js",
   "test-harness/cache/index.js",
   "test-harness/cache/cache-archive.js",
   "test-harness/cache/cache-budget.js",

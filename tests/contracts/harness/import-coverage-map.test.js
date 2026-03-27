@@ -87,7 +87,6 @@ function coverageImportMap() {
     import("../../src/runtime/mailer-lifecycle-runtime.js");
     import("../../src/runtime/quality-score.js");
     import("../../src/runtime/store.js");
-    import("../../src/sandbox-pipeline-runtime.js");
     import("../../src/digest/domain/topic-domain-runtime.js");
     import("../../web/admin-auth.js");
     import("../../web/index.js");
@@ -168,7 +167,6 @@ function coverageImportMap() {
     import("../../web/routes/admin-api-auth-runtime.js");
     import("../../web/routes/admin-api-bulk-runtime.js");
     import("../../web/routes/admin-api-message-runtime.js");
-    import("../../web/routes/admin-api-sandbox-runtime.js");
     import("../../web/routes/admin-api-users-runtime.js");
     import("../../web/routes/core-api-archive-runtime.js");
     import("../../web/routes/core-api-bookmarks-runtime.js");

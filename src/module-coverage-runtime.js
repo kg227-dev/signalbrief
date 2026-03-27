@@ -16,7 +16,6 @@ const engagementEvents = require("../src/runtime/engagement/engagement-events-ru
 const mailer = require("../src/runtime/mailer/mailer-runtime");
 const qualityScore = require("../src/runtime/quality-score");
 const store = require("../src/runtime/store");
-const sandboxPipeline = require("../src/sandbox-pipeline-runtime");
 const cacheBudget = require("../test-harness/cache/cache-budget");
 const cacheClaude = require("../test-harness/cache/cache-claude");
 const cacheCommon = require("../test-harness/cache/cache-common");
@@ -143,7 +142,6 @@ const EXPORT_SHAPES = [
   ["src/runtime/mailer/mailer-runtime.js", mailer, ["sendEmail", "sendWelcomeEmail", "sendReferralThankYou"]],
   ["src/runtime/quality-score.js", qualityScore, ["computeDigestQualityScore", "qualityBand"]],
   ["src/runtime/store.js", store, ["createStore", "initStore", "readUser", "writeUser", "findUserByToken"]],
-  ["src/sandbox-pipeline-runtime.js", sandboxPipeline, ["estimateCost", "runPipeline"]],
 ];
 
 const LOADED_MODULES = [

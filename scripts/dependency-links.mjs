@@ -20,7 +20,6 @@ import "../src/runtime/mailer/lifecycle/welcome-sender.js";
 import "../src/runtime/mailer/mailer-runtime.js";
 import "../src/runtime/quality-score.js";
 import "../src/runtime/store.js";
-import "../src/sandbox-pipeline-runtime.js";
 import "../web/admin-auth.js";
 import "../web/preferences-runtime.js";
 import "../web/preferences-state-runtime.js";

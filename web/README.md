@@ -55,7 +55,7 @@
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `routes/admin-api.js` | Admin API router. Chains auth, stats, runtime-state, source-registry, digest-audit, user, bulk, and message sub-handlers. Deprecated sandbox and retrieval-eval APIs are no longer mounted in the active path. | Exports: `createAdminApiRouteHandler`, `handleAdminApiRoutes` | `./admin-api-*-runtime` modules |
+| `routes/admin-api.js` | Admin API router. Chains auth, stats, runtime-state, source-registry, digest-audit, user, bulk, and message sub-handlers for the active email-first MVP admin surface. | Exports: `createAdminApiRouteHandler`, `handleAdminApiRoutes` | `./admin-api-*-runtime` modules |
 | `routes/admin-api-auth-runtime.js` | `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/check`. Issues/clears session cookies; enforces login rate limits (5 attempts per 15 min per IP). | JSON auth response; `Set-Cookie` header | `./admin-auth` (via deps), `CONFIG` |
 | `routes/admin-api-stats-runtime.js` | `GET /api/admin/stats` — builds the full admin dashboard payload: scheduler heartbeat, digest runs, user roster, delivery stats, costs, referrals, engagement trend, feedback trend, quality metrics, and incidents. | JSON stats payload | `./admin-api-stats-actions-runtime`, `./admin-api-stats-payload-runtime` |
 | `routes/admin-api-stats-actions-runtime.js` | Helper actions for the stats route: `resolveSchedulerHeartbeatLoader`, `emitIgnoredBackfillSafe`, `buildAdminStatsPayload`. | Stats sub-payload builders | `../services/admin-stats-*`, `../services/admin-ops-scheduler` |

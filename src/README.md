@@ -235,5 +235,3 @@ Each `index.js` is the single authoritative import surface for a domain. Entrypo
 | `dependency-links-entry.mjs` | Bridge shim that imports `dependency-links.mjs`; used to anchor the graph from a single entry | Re-imports `./dependency-links.mjs` | `./dependency-links.mjs` |
 | `module-coverage-runtime.js` | Requires every key active-path module in-process and runs assertion-based smoke tests to confirm they export expected symbols; used in CI | Test pass/fail assertions via `node:assert` | `node:assert`, `node:child_process`, `node:fs`, `node:path`, key active-path `src/` modules |
 | `module-coverage.test.js` | Thin test-runner shim that delegates to `module-coverage-runtime` | Calls `runModuleCoverageTests()` | `./module-coverage-runtime` |
-| `sandbox-pipeline.js` | Shim; re-exports `sandbox-pipeline-runtime` | Sandbox pipeline surface | `./sandbox-pipeline-runtime` |
-| `sandbox-pipeline-runtime.js` | Dry-run pipeline for the admin sandbox tool: fetches, enriches, and formats a digest without sending email or persisting user state | Formatted email output objects | `node:crypto`, `./digest/application/digest-service-runtime`, `../domains/digest` |

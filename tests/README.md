@@ -105,8 +105,6 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 | `replay-eval.test.js` | Replay eval module export surface |
 | `replay-runtime.test.js` | Replay runtime module export surface |
 | `run-matrix.test.js` | Run-matrix script export surface |
-| `sandbox-pipeline.test.js` | Sandbox pipeline export surface |
-| `sandbox-pipeline-runtime.test.js` | Sandbox pipeline runtime export surface |
 
 ---
 

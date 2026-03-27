@@ -25,6 +25,10 @@ for (const snippet of requiredSnippets) {
   }
 }
 
+if (source.includes("/digest/")) {
+  throw new Error("admin user debug UI should not link back into /digest/:date from the active admin path");
+}
+
 for (const removedSnippet of [
   'id="sendDigestBtn"',
   "Targeted digest disabled",

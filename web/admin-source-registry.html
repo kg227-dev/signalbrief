@@ -266,11 +266,11 @@ body.dark .modal-close { background:var(--card); }
   <div class="card" style="margin-bottom:28px;">
     <div class="section-head">
       <div>
-        <div class="section-title" style="margin-bottom:0;">Preferred source config</div>
-        <div class="section-subcopy">Founder controls for the live broker-backed source inventory. For the 7 MVP standard topics, broker config is the source of truth. The preferred-source registry acts as a global and non-standard fallback overlay. Runtime file wins when present; bundled seed is the fallback.</div>
+        <div class="section-title" style="margin-bottom:0;">Broker source inventory</div>
+        <div class="section-subcopy">Founder controls for the live MVP broker-backed source inventory. Scheduled digest retrieval now reads broker config directly. The legacy preferred-source registry is retained for diagnostics only and no longer acts as a scheduled fetch overlay.</div>
       </div>
     </div>
-    <div id="preferredSourcesPanelBody" class="empty">Loading preferred-source config…</div>
+    <div id="preferredSourcesPanelBody" class="empty">Loading broker source inventory…</div>
   </div>
 
   <div class="card" style="margin-bottom:28px;">
@@ -529,68 +529,62 @@ function renderPreferredSourcesConfig(overview) {
   if (!container) return;
   const preferred = overview?.preferred_sources;
   const brokerConfig = overview?.broker_config;
-  if (!preferred || typeof preferred !== "object") {
-    container.innerHTML = `<div class="empty">Preferred-source config unavailable.</div>`;
+  if (!brokerConfig || typeof brokerConfig !== "object") {
+    container.innerHTML = `<div class="empty">Broker source inventory unavailable.</div>`;
     return;
   }
-  const topics = Array.isArray(preferred.topics) ? preferred.topics : [];
-  const sourceMode = String(preferred.source_mode || "runtime").trim();
-  const sourceLabel = sourceMode === "bundled_fallback"
-    ? "bundled fallback"
-    : (sourceMode === "empty" ? "empty registry" : "runtime file");
-  const standardTopicSource = preferred?.standard_topic_source && typeof preferred.standard_topic_source === "object"
-    ? preferred.standard_topic_source
-    : null;
-  const standardTopicSourceMode = String(standardTopicSource?.source_mode || "runtime").trim();
-  const standardTopicSourceLabel = standardTopicSourceMode === "bundled"
-    ? "bundled broker config"
-    : "runtime broker config";
-  const brokerSourceMode = String(brokerConfig?.source_mode || standardTopicSourceMode || "runtime").trim();
+  const brokerSourceMode = String(brokerConfig?.source_mode || "runtime").trim();
   const brokerSourceLabel = brokerSourceMode === "bundled"
     ? "bundled broker config"
     : "runtime broker config";
+  const preferredTopics = Array.isArray(preferred?.topics) ? preferred.topics : [];
+  const preferredSourceMode = String(preferred?.source_mode || "runtime").trim();
+  const preferredSourceLabel = preferredSourceMode === "bundled_fallback"
+    ? "bundled fallback"
+    : (preferredSourceMode === "empty" ? "empty registry" : "runtime file");
   container.innerHTML = `
-    ${standardTopicSource ? `<div class="table-meta">Standard-topic source of truth: broker config · active source: ${esc(standardTopicSourceLabel)} · config file: ${standardTopicSource.active_path ? `<span class="mono">${esc(standardTopicSource.active_path)}</span>` : "not available"} · ${Math.max(0, Number(standardTopicSource.topic_count || 0))} MVP topics</div>` : ""}
-    ${brokerConfig ? `<div class="table-meta" style="margin-top:4px;">Broker controls write to ${esc(brokerSourceLabel)} at ${brokerConfig.active_path ? `<span class="mono">${esc(brokerConfig.active_path)}</span>` : "not available"} · ${Math.max(0, Number(brokerConfig.enabled_source_count || 0))} active sources across ${Math.max(0, Number(brokerConfig.topic_count || 0))} topics</div>` : ""}
-    <div class="table-meta">Preferred-source registry overlay: ${esc(sourceLabel)} · config file: ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics</div>
-    ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime path <span class="mono">${esc(preferred.runtime_path)}</span> was empty or missing, so the bundled seed <span class="mono">${esc(preferred.bundled_path)}</span> is being used.</div>` : ""}
-    ${standardTopicSource ? `<div class="table-meta" style="margin-top:4px;">Standard-topic reported and official domains below are derived from the broker inventory. The preferred-source registry only contributes global defaults and any non-standard fallback topics still configured.</div>` : ""}
-    <div class="preferred-summary-grid">
-      <div class="explain-block">
-        <div class="explain-label">Global reported core</div>
-        <div class="explain-copy">Broad preferred reporting sources used to bias retrieval when topic-specific sources are sparse.</div>
-        ${renderPreferredDomainList(preferred?.global?.reported)}
-      </div>
-      <div class="explain-block">
-        <div class="explain-label">Global official / primary</div>
-        <div class="explain-copy">Official domains used when the topic or query is heavy on filings, rules, agencies, or primary documents.</div>
-        ${renderPreferredDomainList(preferred?.global?.official)}
-      </div>
-    </div>
-    <table class="preferred-topic-table">
-      <thead>
-        <tr>
-          <th>Topic</th>
-          <th>Reported</th>
-          <th>Official</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${topics.length ? topics.map((entry) => `
-          <tr>
-            <td style="width:18%;font-size:12px;font-weight:700;color:var(--text);">${esc(entry.topic || "unknown")}</td>
-            <td style="width:41%;">${renderPreferredDomainList(entry.reported)}</td>
-            <td style="width:41%;">${renderPreferredDomainList(entry.official)}</td>
-          </tr>
-        `).join("") : `<tr><td colspan="3" class="empty">No topic-specific preferred sources configured.</td></tr>`}
-      </tbody>
-    </table>
-    <details style="margin-top:12px;">
-      <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Raw JSON</summary>
-      <pre class="preferred-json mono">${esc(String(preferred.raw_json || "{}"))}</pre>
-    </details>
-    ${brokerConfig ? renderBrokerTopicControls(brokerConfig) : ""}
-    ${brokerConfig ? renderBrokerSourceControls(brokerConfig) : ""}`;
+    <div class="table-meta">Standard-topic source of truth: broker config.</div>
+    <div class="table-meta" style="margin-top:4px;">Broker controls write to ${esc(brokerSourceLabel)} at ${brokerConfig.active_path ? `<span class="mono">${esc(brokerConfig.active_path)}</span>` : "not available"} · ${Math.max(0, Number(brokerConfig.enabled_source_count || 0))} active sources across ${Math.max(0, Number(brokerConfig.topic_count || 0))} topics.</div>
+    <div class="table-meta" style="margin-top:4px;">Scheduled MVP fetch planning does not read the preferred-source registry anymore.</div>
+    ${renderBrokerTopicControls(brokerConfig)}
+    ${renderBrokerSourceControls(brokerConfig)}
+    ${preferred && typeof preferred === "object" ? `
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Legacy preferred-source registry (diagnostic only)</summary>
+        <div class="table-meta" style="margin-top:8px;">Deprecated registry source: ${esc(preferredSourceLabel)} · config file: ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics.</div>
+        ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime path <span class="mono">${esc(preferred.runtime_path)}</span> was empty or missing, so the bundled seed <span class="mono">${esc(preferred.bundled_path)}</span> is being used.</div>` : ""}
+        <div class="preferred-summary-grid" style="margin-top:10px;">
+          <div class="explain-block">
+            <div class="explain-label">Global reported core</div>
+            <div class="explain-copy">Retained for diagnostics and eval only.</div>
+            ${renderPreferredDomainList(preferred?.global?.reported)}
+          </div>
+          <div class="explain-block">
+            <div class="explain-label">Global official / primary</div>
+            <div class="explain-copy">Retained for diagnostics and eval only.</div>
+            ${renderPreferredDomainList(preferred?.global?.official)}
+          </div>
+        </div>
+        <table class="preferred-topic-table">
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th>Reported</th>
+              <th>Official</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${preferredTopics.length ? preferredTopics.map((entry) => `
+              <tr>
+                <td style="width:18%;font-size:12px;font-weight:700;color:var(--text);">${esc(entry.topic || "unknown")}</td>
+                <td style="width:41%;">${renderPreferredDomainList(entry.reported)}</td>
+                <td style="width:41%;">${renderPreferredDomainList(entry.official)}</td>
+              </tr>
+            `).join("") : `<tr><td colspan="3" class="empty">No topic-specific preferred sources configured.</td></tr>`}
+          </tbody>
+        </table>
+      </details>
+    ` : ""}`;
 }
 function renderCurationQueueDomainRows(rows, countKey, reasonLabel) {
   const entries = Array.isArray(rows) ? rows : [];

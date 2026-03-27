@@ -22,28 +22,35 @@ function parseDigestDateKey(digestId) {
   return match ? match[1] : "";
 }
 
-function buildDigestUrl(dateKey) {
+function buildAdminDigestAuditUrl(dateKey) {
   const key = String(dateKey || "").trim();
   if (!DATE_KEY_RE.test(key)) return "";
-  return `/digest/${encodeURIComponent(key)}`;
+  return `/admin?digest_audit_date=${encodeURIComponent(key)}#digestAuditSection`;
 }
 
-function buildPreferredDigestUrl({ digestDateKey, recipients, tokenByRecipient, runId }) {
-  const base = buildDigestUrl(digestDateKey);
-  if (!base) return "";
+function buildDigestUrl(dateKey) {
+  return buildAdminDigestAuditUrl(dateKey);
+}
+
+function buildPreferredDigestUrl({ digestDateKey, recipients, tokenByRecipient }) {
+  const key = String(digestDateKey || "").trim();
+  if (!DATE_KEY_RE.test(key)) return "";
 
   const params = new URLSearchParams();
-  const normalizedRunId = String(runId || "").trim();
-  if (normalizedRunId) params.set("run", normalizedRunId);
 
   if (recipients instanceof Set && recipients.size === 1) {
     const onlyRecipient = Array.from(recipients)[0];
     const token = String(tokenByRecipient?.get?.(onlyRecipient) || "").trim();
-    if (token) params.set("ref", token);
+    if (token) {
+      params.set("token", token);
+      params.set("date", key);
+      params.set("admin", "1");
+      params.set("admin_return", "/admin");
+    }
   }
 
-  if (params.size > 0) return `${base}?${params.toString()}`;
-  return base;
+  if (params.size > 0) return `/archive?${params.toString()}`;
+  return "";
 }
 
 function summarizeQuality(values) {
@@ -239,7 +246,7 @@ function buildRunEventIndex(events) {
     const digestDateKey = parseDigestDateKey(event?.digest_id);
     if (!entry.digestDateKey && digestDateKey) {
       entry.digestDateKey = digestDateKey;
-      entry.digestUrl = buildDigestUrl(digestDateKey);
+      entry.digestUrl = buildAdminDigestAuditUrl(digestDateKey);
     }
   }
   return index;
@@ -416,7 +423,6 @@ function enrichRunsWithDigestMetadata(runs, engagementEvents, opts = {}) {
         digestDateKey,
         recipients: perUserMeta.recipients,
         tokenByRecipient,
-        runId: matched?.runId || row.run_id,
       });
       if (preferredDigestUrl) {
         digestUrl = preferredDigestUrl;
@@ -451,4 +457,5 @@ module.exports = {
   parseRunIdMeta,
   parseDigestDateKey,
   buildDigestUrl,
+  buildAdminDigestAuditUrl,
 };

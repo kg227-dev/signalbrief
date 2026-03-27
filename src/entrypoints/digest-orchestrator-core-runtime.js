@@ -86,7 +86,6 @@ const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-pat
 const { createSourceRegistryRuntime } = require("../runtime/source-policy-registry-runtime");
 const {
   createPreferredSourceRegistryRuntime,
-  buildPreferredDomainShortlist,
 } = require("../runtime/preferred-source-registry-runtime");
 const { createStandardTopicBrokerRuntime } = require("../runtime/standard-topic-broker-runtime");
 const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestrator-spend-guard-runtime");
@@ -1059,13 +1058,27 @@ async function main() {
   });
   function buildActivePreferredDomainShortlist(options = {}) {
     const brokerShortlist = standardTopicBrokerRuntime?.buildPreferredDomainShortlist?.(options);
-    if (brokerShortlist && brokerShortlist.source_of_truth === "standard_topic_broker") return brokerShortlist;
-    return buildPreferredDomainShortlist(preferredSourceRegistry, options);
+    if (brokerShortlist) return brokerShortlist;
+    return {
+      source_of_truth: "standard_topic_broker",
+      domains: [],
+      topic_keys: [],
+      official_friendly: false,
+      active_path: null,
+    };
   }
   function buildActivePreferredSourceFamilyShortlists(options = {}) {
     const brokerShortlists = standardTopicBrokerRuntime?.buildPreferredSourceFamilyShortlists?.(options);
-    if (brokerShortlists && brokerShortlists.source_of_truth === "standard_topic_broker") return brokerShortlists;
-    return preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options);
+    if (brokerShortlists) return brokerShortlists;
+    return {
+      source_of_truth: "standard_topic_broker",
+      reported_domains: [],
+      official_domains: [],
+      combined_domains: [],
+      topic_keys: [],
+      official_friendly: false,
+      active_path: null,
+    };
   }
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG,

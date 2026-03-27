@@ -675,6 +675,15 @@ function buildRepeatEvidencePanel(details) {
   </details>`;
 }
 
+function buildAdminArchiveDigestHref(dateKey) {
+  const key = String(dateKey || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !userToken) return '';
+  const adminReturn = '/admin/user?email=' + encodeURIComponent(userEmail || '');
+  return '/archive?token=' + encodeURIComponent(userToken)
+    + '&date=' + encodeURIComponent(key)
+    + '&admin=1&admin_return=' + encodeURIComponent(adminReturn);
+}
+
 function buildDigestTimelinePanel(user) {
   const rows = Array.isArray(user?.recent_digests) ? user.recent_digests : [];
   if (!rows.length) return;
@@ -704,7 +713,7 @@ function buildDigestTimelinePanel(user) {
       .map((item) => esc(String(item?.headline || '').slice(0, 92)))
       .filter(Boolean)
       .join(' · ');
-    const digestHref = row.date_et ? `/digest/${encodeURIComponent(row.date_et)}${row.run_id ? `?run=${encodeURIComponent(row.run_id)}` : ''}` : '';
+    const digestHref = buildAdminArchiveDigestHref(row.date_et);
     return `
       <div class="digest-outcome-row">
         <div class="digest-outcome-head">
@@ -767,8 +776,9 @@ async function init() {
     const latestDigestQuickLink = document.getElementById('latestDigestQuickLink');
     if (latestDigestQuickLink) {
       const digestDateKey = resolveLatestDigestDateKey(user);
-      if (digestDateKey) {
-        latestDigestQuickLink.href = '/digest/' + encodeURIComponent(digestDateKey);
+      const latestDigestHref = digestDateKey ? buildAdminArchiveDigestHref(digestDateKey) : '';
+      if (latestDigestHref) {
+        latestDigestQuickLink.href = latestDigestHref;
         latestDigestQuickLink.style.display = 'inline-block';
       } else {
         latestDigestQuickLink.style.display = 'none';

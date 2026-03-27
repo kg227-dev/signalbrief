@@ -1603,7 +1603,9 @@ function resolveRunDigestHref(run) {
   const rawHref = String(run?.digest_url || "").trim();
   if (rawHref) return normalizeAdminActionHref(rawHref);
   const dateKey = String(run?.digest_date_key || run?.date || "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return `/digest/${encodeURIComponent(dateKey)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return `/admin?digest_audit_date=${encodeURIComponent(dateKey)}#digestAuditSection`;
+  }
   return "";
 }
 function renderRunDigestLink(run) {
@@ -4022,6 +4024,13 @@ async function load(silent = false) {
     if (!authResp.ok || !(authResp.data && authResp.data.authenticated)) {
       window.location.href = "/admin/login";
       return;
+    }
+
+    const pageParams = new URLSearchParams(window.location.search);
+    const digestAuditDateParam = String(pageParams.get("digest_audit_date") || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(digestAuditDateParam)) {
+      const digestAuditInput = document.getElementById("digestAuditDate");
+      if (digestAuditInput) digestAuditInput.value = digestAuditDateParam;
     }
 
     const now = new Date();

@@ -452,32 +452,32 @@ async function flushMicrotasks() {
     "overview reload should not reuse the inspect-domain value as a table filter"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
-    "preferred sources config should render on the source governance page"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Scheduled MVP fetch planning does not read the preferred-source registry anymore."),
+    "broker inventory panel should explain that scheduled MVP fetch no longer reads the preferred-source registry"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/data/standard-topic-broker-sources.json"),
-    "preferred sources panel should show the broker config as the standard-topic source of truth"
+    "broker inventory panel should show the live broker config path"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("statnews.com"),
-    "preferred sources panel should render topic-specific domains"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Legacy preferred-source registry (diagnostic only)"),
+    "broker inventory panel should demote the preferred-source registry to deprecated diagnostics"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("bundled fallback"),
-    "preferred sources panel should explain when bundled fallback is active"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
+    "deprecated preferred-source details should still expose the legacy registry path when present"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("Standard-topic source of truth: broker config"),
-    "preferred sources panel should explain that standard-topic domains come from the broker config"
+    "broker inventory panel should explain that standard-topic control comes from broker config"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("MVP topic controls"),
-    "preferred sources panel should render broker topic controls"
+    "broker inventory panel should render broker topic controls"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("Broker source controls"),
-    "preferred sources panel should render broker source controls"
+    "broker inventory panel should render broker source controls"
   );
   assert.ok(
     elements.get("curationQueuesPanelBody").innerHTML.includes("Specialist candidates"),

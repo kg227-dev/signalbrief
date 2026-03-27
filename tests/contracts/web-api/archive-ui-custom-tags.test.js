@@ -21,3 +21,13 @@ for (const snippet of removedSnippets) {
     throw new Error(`archive UI still carries removed custom-tag snippet: ${snippet}`);
   }
 }
+
+for (const requiredSnippet of [
+  'state.focusDateKey',
+  'params.get("date")',
+  "Focused on ${formatDateShort(state.focusDateKey)}",
+]) {
+  if (!source.includes(requiredSnippet)) {
+    throw new Error(`archive UI is missing focused-date archive support snippet: ${requiredSnippet}`);
+  }
+}

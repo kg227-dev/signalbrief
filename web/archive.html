@@ -559,6 +559,7 @@ const state = {
   sort: "newest",
   pageSize: "25",
   dateRange: "all",
+  focusDateKey: "",
   selectedTags: new Set(),
   selectedSources: new Set(),
   tagCounts: new Map(),
@@ -726,6 +727,9 @@ function getItemTimestamp(item) {
 }
 
 function matchesDateRange(item) {
+  if (state.focusDateKey) {
+    return String(item?.date || "").trim() === state.focusDateKey;
+  }
   if (state.dateRange === "all") return true;
   const itemTs = getItemTimestamp(item);
   if (!itemTs) return false;
@@ -812,7 +816,8 @@ function renderMeta() {
   const base = shown < total
     ? `Showing ${shown} of ${total} ${noun}`
     : `${total} ${noun}`;
-  const text = q ? `${base} matching '${q}'` : base;
+  const focus = state.focusDateKey ? ` from ${formatDateShort(state.focusDateKey)}` : "";
+  const text = q ? `${base}${focus} matching '${q}'` : `${base}${focus}`;
   document.getElementById("resultMeta").textContent = text;
 }
 
@@ -830,7 +835,9 @@ function renderEmptyState() {
   feed.innerHTML = `
     <div class="empty-state">
       <div class="empty-title">No matches</div>
-      <p class="empty-sub">No signals match your search. Try broader terms or clear your filters.</p>
+      <p class="empty-sub">${state.focusDateKey
+        ? `No signals were found for ${formatDateShort(state.focusDateKey)} with the current filters.`
+        : "No signals match your search. Try broader terms or clear your filters."}</p>
     </div>`;
 }
 
@@ -1082,6 +1089,8 @@ async function init() {
 
   const params = new URLSearchParams(window.location.search);
   state.token = params.get("token");
+  const focusDateParam = String(params.get("date") || "").trim();
+  state.focusDateKey = /^\d{4}-\d{2}-\d{2}$/.test(focusDateParam) ? focusDateParam : "";
   const emailHint = params.get("email");
   const isAdminView = params.get("admin") === "1";
   const primaryAction = document.getElementById("primaryActionLink");
@@ -1154,7 +1163,9 @@ async function init() {
 
   const digestCount = Number(archiveData.digestCount || 0);
   if (state.allItems.length > 0) {
-    document.getElementById("archiveSub").textContent = `${state.allItems.length} signals across ${digestCount} digest${digestCount === 1 ? "" : "s"}.`;
+    document.getElementById("archiveSub").textContent = state.focusDateKey
+      ? `${state.allItems.length} signals loaded. Focused on ${formatDateShort(state.focusDateKey)}.`
+      : `${state.allItems.length} signals across ${digestCount} digest${digestCount === 1 ? "" : "s"}.`;
   } else {
     document.getElementById("archiveSub").textContent = "No signals yet. Your future digests will appear here.";
   }

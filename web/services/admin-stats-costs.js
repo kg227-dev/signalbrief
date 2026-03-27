@@ -132,15 +132,11 @@ function buildProjectedWindowCostSummary({
   roster,
   nowParts,
   config,
-  estimateSandboxCost,
   days = 7,
 } = {}) {
   const slots = buildProjectedRunSlots(roster, { nowParts, days });
   const configTopics = Array.isArray(config?.topics) ? config.topics : [];
   const standardTopics = configTopics.map((topic) => topic?.tag).filter(Boolean);
-  const estimator = typeof estimateSandboxCost === "function"
-    ? estimateSandboxCost
-    : fallbackEstimateDigestCost;
 
   let totalCost = 0;
   let projectedDeliveries = 0;
@@ -148,7 +144,7 @@ function buildProjectedWindowCostSummary({
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
     const itemCount = 5;
-    const estimate = estimator({
+    const estimate = fallbackEstimateDigestCost({
       topics: standardTopics,
       itemCount,
     }) || { totalUsd: 0 };

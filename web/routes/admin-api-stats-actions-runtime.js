@@ -81,7 +81,6 @@ function buildAdminStatsPayload({
     computeQualityTrend,
     parseEtNowParts,
     CONFIG,
-    estimateSandboxCost,
     getRuntimeStateDiagnostics,
     buildRecentDigestsExport,
   } = deps;
@@ -183,7 +182,6 @@ function buildAdminStatsPayload({
     roster,
     nowParts,
     config: CONFIG,
-    estimateSandboxCost,
     days: 7,
   });
   const summary = buildSummaryPayload({

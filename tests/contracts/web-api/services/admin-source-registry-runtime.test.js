@@ -184,8 +184,8 @@ const {
     loadPreferredSourceRegistry: () => ({
       version: 1,
       global: {
-        reported: ["reuters.com"],
-        official: ["sec.gov"],
+        reported: [],
+        official: [],
       },
       standard_topic_source: {
         source_of_truth: "standard_topic_broker",
@@ -259,9 +259,9 @@ const {
   assert.strictEqual(overview.suggestions.length, 1);
   assert.strictEqual(overview.suggestions[0].domain, "benzinga.com");
   assert.strictEqual(overview.suggestions[0].effective_policy.hard_block, true);
-  assert.strictEqual(overview.preferred_sources.path, "/tmp/preferred-sources.json");
+  assert.strictEqual(overview.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
   assert.strictEqual(overview.preferred_sources.topic_count, 1);
-  assert.strictEqual(overview.preferred_sources.total_unique_domains, 4);
+  assert.strictEqual(overview.preferred_sources.total_unique_domains, 2);
   assert.strictEqual(overview.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
   assert.strictEqual(overview.broker_config.topic_count, 1);
   assert.strictEqual(overview.broker_config.enabled_source_count, 2);

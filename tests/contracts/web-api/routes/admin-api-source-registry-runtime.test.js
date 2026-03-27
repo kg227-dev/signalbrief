@@ -55,7 +55,7 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     loadSourceRegistry: () => ({ version: 1, updated_at: null, domains: {}, identities: {} }),
     loadPreferredSourceRegistry: () => ({
       version: 1,
-      global: { reported: ["reuters.com"], official: ["sec.gov"] },
+      global: { reported: [], official: [] },
       standard_topic_source: {
         source_of_truth: "standard_topic_broker",
         source_mode: "runtime",
@@ -196,7 +196,7 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.ok(handled);
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.source_registry_path, "/tmp/source-registry.json");
-    assert.strictEqual(payload.preferred_sources.path, "/tmp/preferred-sources.json");
+    assert.strictEqual(payload.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
     assert.strictEqual(payload.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
     assert.strictEqual(payload.broker_config.topic_count, 1);
     assert.strictEqual(payload.broker_config.sources[0].id, "stat_rss");

@@ -267,7 +267,7 @@ body.dark .modal-close { background:var(--card); }
     <div class="section-head">
       <div>
         <div class="section-title" style="margin-bottom:0;">Broker source inventory</div>
-        <div class="section-subcopy">Founder controls for the live MVP broker-backed source inventory. Scheduled digest retrieval now reads broker config directly. The legacy preferred-source registry is retained for diagnostics only and no longer acts as a scheduled fetch overlay.</div>
+        <div class="section-subcopy">Founder controls for the live MVP broker-backed source inventory. Shared preferred-source diagnostics are now derived from broker config, so the active path no longer carries a separate preferred-source control plane.</div>
       </div>
     </div>
     <div id="preferredSourcesPanelBody" class="empty">Loading broker source inventory…</div>
@@ -539,29 +539,31 @@ function renderPreferredSourcesConfig(overview) {
     : "runtime broker config";
   const preferredTopics = Array.isArray(preferred?.topics) ? preferred.topics : [];
   const preferredSourceMode = String(preferred?.source_mode || "runtime").trim();
-  const preferredSourceLabel = preferredSourceMode === "bundled_fallback"
-    ? "bundled fallback"
-    : (preferredSourceMode === "empty" ? "empty registry" : "runtime file");
+  const preferredSourceLabel = preferredSourceMode === "broker_bundled"
+    ? "bundled broker config (derived view)"
+    : (preferredSourceMode === "broker_runtime"
+      ? "runtime broker config (derived view)"
+      : "empty compatibility view");
   container.innerHTML = `
     <div class="table-meta">Standard-topic source of truth: broker config.</div>
     <div class="table-meta" style="margin-top:4px;">Broker controls write to ${esc(brokerSourceLabel)} at ${brokerConfig.active_path ? `<span class="mono">${esc(brokerConfig.active_path)}</span>` : "not available"} · ${Math.max(0, Number(brokerConfig.enabled_source_count || 0))} active sources across ${Math.max(0, Number(brokerConfig.topic_count || 0))} topics.</div>
-    <div class="table-meta" style="margin-top:4px;">Scheduled MVP fetch planning does not read the preferred-source registry anymore.</div>
+    <div class="table-meta" style="margin-top:4px;">Preferred-source compatibility signals are derived from broker config, so the active path has one live source control plane.</div>
     ${renderBrokerTopicControls(brokerConfig)}
     ${renderBrokerSourceControls(brokerConfig)}
     ${preferred && typeof preferred === "object" ? `
       <details style="margin-top:14px;">
-        <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Legacy preferred-source registry (diagnostic only)</summary>
-        <div class="table-meta" style="margin-top:8px;">Deprecated registry source: ${esc(preferredSourceLabel)} · config file: ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics.</div>
-        ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime path <span class="mono">${esc(preferred.runtime_path)}</span> was empty or missing, so the bundled seed <span class="mono">${esc(preferred.bundled_path)}</span> is being used.</div>` : ""}
+        <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Preferred-source compatibility view (broker-derived)</summary>
+        <div class="table-meta" style="margin-top:8px;">Shared scoring and diagnostics still consume this shape, but it is generated from ${esc(preferredSourceLabel)} at ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics.</div>
+        ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime broker path <span class="mono">${esc(preferred.runtime_path)}</span> was unavailable, so the bundled broker seed <span class="mono">${esc(preferred.bundled_path)}</span> is driving the compatibility view.</div>` : ""}
         <div class="preferred-summary-grid" style="margin-top:10px;">
           <div class="explain-block">
             <div class="explain-label">Global reported core</div>
-            <div class="explain-copy">Retained for diagnostics and eval only.</div>
+            <div class="explain-copy">Usually empty in the reduced-scope MVP because source control is topic-scoped in broker config.</div>
             ${renderPreferredDomainList(preferred?.global?.reported)}
           </div>
           <div class="explain-block">
             <div class="explain-label">Global official / primary</div>
-            <div class="explain-copy">Retained for diagnostics and eval only.</div>
+            <div class="explain-copy">Usually empty in the reduced-scope MVP because official coverage is attached to sector topics.</div>
             ${renderPreferredDomainList(preferred?.global?.official)}
           </div>
         </div>
@@ -580,7 +582,7 @@ function renderPreferredSourcesConfig(overview) {
                 <td style="width:41%;">${renderPreferredDomainList(entry.reported)}</td>
                 <td style="width:41%;">${renderPreferredDomainList(entry.official)}</td>
               </tr>
-            `).join("") : `<tr><td colspan="3" class="empty">No topic-specific preferred sources configured.</td></tr>`}
+            `).join("") : `<tr><td colspan="3" class="empty">No broker-derived preferred-source entries available.</td></tr>`}
           </tbody>
         </table>
       </details>

@@ -165,10 +165,13 @@ const registryRuntime = createPreferredSourceRegistryRuntime({
 });
 const registry = registryRuntime.loadPreferredSourceRegistry();
 
-assert.deepStrictEqual(registry.global.reported, ["reuters.com", "wsj.com"]);
-assert.ok(registry.topics["ai tech"].reported.includes("theinformation.com"));
-assert.ok(registry.topics["ai tech"].reported.includes("semianalysis.com"));
+assert.deepStrictEqual(registry.global.reported, []);
+assert.deepStrictEqual(registry.global.official, []);
+assert.ok(!registry.topics["ai tech"], "legacy preferred-source-only topics should not survive in the broker-derived registry");
+assert.ok(!registry.topics["policy regulatory"], "retired policy registry entries should not leak into the reduced-scope runtime");
 assert.ok(registry.topics.technology.reported.includes("techcrunch.com"));
+assert.ok(!registry.topics.technology.reported.includes("theinformation.com"));
+assert.ok(!registry.topics.technology.reported.includes("semianalysis.com"));
 assert.ok(registry.topics["financial services"].official.includes("federalreserve.gov"));
 assert.ok(registry.topics.healthcare.reported.includes("modernhealthcare.com"));
 assert.ok(!registry.topics.healthcare.reported.includes("statnews.com"));
@@ -182,19 +185,19 @@ const shortlist = buildPreferredDomainShortlist(registry, {
   queryText: "enterprise ai agents funding last 48 hours",
   maxDomains: 6,
 });
-assert.ok(shortlist.domains.includes("theinformation.com"));
-assert.ok(shortlist.domains.includes("semianalysis.com"));
 assert.ok(shortlist.domains.includes("techcrunch.com"));
 assert.ok(shortlist.domains.includes("sec.gov"));
+assert.ok(!shortlist.domains.includes("theinformation.com"));
+assert.ok(!shortlist.domains.includes("semianalysis.com"));
 
 const officialShortlist = buildPreferredDomainShortlist(registry, {
-  topicTag: "POLICY×REGULATORY",
-  dueUserTopics: ["POLICY×REGULATORY"],
+  topicTag: "TECHNOLOGY",
+  dueUserTopics: ["TECHNOLOGY"],
   queryText: "sec proposed disclosure rule guidance",
   maxDomains: 5,
 });
-assert.ok(officialShortlist.domains.includes("federalregister.gov"));
 assert.ok(officialShortlist.domains.includes("sec.gov"));
+assert.ok(officialShortlist.domains.includes("techcrunch.com"));
 
 const familyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   topicTag: "AI×TECH",
@@ -202,10 +205,10 @@ const familyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   queryText: "enterprise ai agents funding last 48 hours",
   maxDomains: 6,
 });
-assert.ok(familyShortlists.reported_domains.includes("theinformation.com"));
-assert.ok(familyShortlists.reported_domains.includes("semianalysis.com"));
 assert.ok(familyShortlists.reported_domains.includes("techcrunch.com"));
 assert.ok(familyShortlists.official_domains.includes("sec.gov"));
+assert.ok(!familyShortlists.reported_domains.includes("theinformation.com"));
+assert.ok(!familyShortlists.reported_domains.includes("semianalysis.com"));
 
 const policyFamilyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   topicTag: "POLICY×REGULATORY",
@@ -213,10 +216,8 @@ const policyFamilyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   queryText: "sec proposed disclosure rule guidance",
   maxDomains: 5,
 });
-assert.ok(policyFamilyShortlists.official_domains.includes("federalregister.gov"));
-assert.ok(policyFamilyShortlists.official_domains.includes("sec.gov"));
-assert.ok(policyFamilyShortlists.reported_domains.includes("reuters.com"));
-assert.ok(policyFamilyShortlists.reported_domains.includes("wsj.com"));
+assert.deepStrictEqual(policyFamilyShortlists.official_domains, []);
+assert.deepStrictEqual(policyFamilyShortlists.reported_domains, []);
 
 const inheritedMatch = matchPreferredSourceDomain(registry, "alerts.techcrunch.com", "TECHNOLOGY");
 assert.strictEqual(inheritedMatch.match, "topic_reported");
@@ -225,15 +226,15 @@ assert.strictEqual(inheritedMatch.matched_domain, "techcrunch.com");
 const publisherMatch = matchPreferredSourceDomain(registry, "youtube.com", "TECHNOLOGY", {
   sourceIdentityKey: "youtube:@insideboardroom",
 });
-assert.strictEqual(publisherMatch.match, "topic_reported");
-assert.strictEqual(publisherMatch.scope, "publisher");
-assert.strictEqual(publisherMatch.matched_identity, "youtube:@insideboardroom");
+assert.strictEqual(publisherMatch.match, "none");
+assert.strictEqual(publisherMatch.scope, "none");
+assert.strictEqual(publisherMatch.matched_identity, null);
 
 fs.writeFileSync(preferredSourcesPath, JSON.stringify({}, null, 2));
 const fallbackSnapshot = registryRuntime.inspectPreferredSourceRegistry();
-assert.strictEqual(fallbackSnapshot.source_mode, "runtime");
+assert.strictEqual(fallbackSnapshot.source_mode, "broker_runtime");
 assert.strictEqual(fallbackSnapshot.used_fallback, false);
-assert.strictEqual(fallbackSnapshot.active_path, preferredSourcesPath);
+assert.strictEqual(fallbackSnapshot.active_path, standardTopicBrokerSourcesPath);
 assert.ok(fallbackSnapshot.registry.topics.healthcare.reported.includes("modernhealthcare.com"));
 assert.strictEqual(fallbackSnapshot.standard_topic_source?.source_of_truth, "standard_topic_broker");
 

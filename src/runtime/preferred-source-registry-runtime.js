@@ -638,52 +638,31 @@ function createPreferredSourceRegistryRuntime(options = {}) {
     return null;
   }
 
-  function readSanitizedRegistry(filePath, sanitizeOptions = {}) {
-    const raw = readJson(filePath);
-    if (!raw) return null;
-    return sanitizePreferredSourceRegistry(raw, sanitizeOptions);
-  }
-
   function inspectPreferredSourceRegistry() {
     const standardTopicSource = inspectStandardTopicSourceOverlay();
-    const sanitizeOptions = standardTopicSource
-      ? {
+    if (standardTopicSource) {
+      const registry = sanitizePreferredSourceRegistry({}, {
         standardTopicSourceMap: standardTopicSource.topic_map,
         standardTopicSourceMeta: standardTopicSource,
-      }
-      : {};
-    const runtimeRegistry = readSanitizedRegistry(preferredSourcesPath, sanitizeOptions);
-    if (runtimeRegistry && !isPreferredRegistryEmpty(runtimeRegistry)) {
+      });
       return {
-        registry: runtimeRegistry,
-        source_mode: "runtime",
-        active_path: preferredSourcesPath,
-        runtime_path: preferredSourcesPath,
-        bundled_path: bundledPreferredSourcesPath,
-        used_fallback: false,
-        standard_topic_source: runtimeRegistry.standard_topic_source || standardTopicSource,
-      };
-    }
-    const bundledRegistry = readSanitizedRegistry(bundledPreferredSourcesPath, sanitizeOptions);
-    if (bundledRegistry && !isPreferredRegistryEmpty(bundledRegistry)) {
-      return {
-        registry: bundledRegistry,
-        source_mode: "bundled_fallback",
-        active_path: bundledPreferredSourcesPath,
-        runtime_path: preferredSourcesPath,
-        bundled_path: bundledPreferredSourcesPath,
-        used_fallback: true,
-        standard_topic_source: bundledRegistry.standard_topic_source || standardTopicSource,
+        registry,
+        source_mode: standardTopicSource.source_mode === "bundled" ? "broker_bundled" : "broker_runtime",
+        active_path: standardTopicSource.active_path,
+        runtime_path: standardTopicSource.runtime_path,
+        bundled_path: standardTopicSource.bundled_path,
+        used_fallback: standardTopicSource.source_mode === "bundled",
+        standard_topic_source: registry.standard_topic_source || standardTopicSource,
       };
     }
     return {
-      registry: sanitizePreferredSourceRegistry({}, sanitizeOptions),
+      registry: sanitizePreferredSourceRegistry({}),
       source_mode: "empty",
-      active_path: preferredSourcesPath,
-      runtime_path: preferredSourcesPath,
-      bundled_path: bundledPreferredSourcesPath,
-      used_fallback: runtimeRegistry == null,
-      standard_topic_source: standardTopicSource,
+      active_path: null,
+      runtime_path: standardTopicBrokerSourcesPath,
+      bundled_path: bundledStandardTopicBrokerSourcesPath,
+      used_fallback: false,
+      standard_topic_source: null,
     };
   }
 

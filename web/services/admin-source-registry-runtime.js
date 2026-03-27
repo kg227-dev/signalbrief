@@ -488,12 +488,19 @@ function summarizePreferredSourceRegistry({
     ...topics.flatMap((entry) => [...entry.reported, ...entry.official]),
   ]);
   const standardTopicSource = snapshot?.standard_topic_source || registry?.standard_topic_source || null;
+  const derivedFromBroker = standardTopicSource?.source_of_truth === "standard_topic_broker";
+  const resolvedSourceMode = String(
+    snapshot?.source_mode
+    || (derivedFromBroker
+      ? (String(standardTopicSource?.source_mode || "").trim() === "bundled" ? "broker_bundled" : "broker_runtime")
+      : "runtime")
+  ).trim() || "runtime";
   return {
-    path: String(snapshot?.active_path || preferredSourcesPath || "").trim() || null,
-    runtime_path: String(snapshot?.runtime_path || preferredSourcesPath || "").trim() || null,
-    bundled_path: String(snapshot?.bundled_path || bundledPreferredSourcesPath || "").trim() || null,
-    source_mode: String(snapshot?.source_mode || "runtime").trim() || "runtime",
-    used_fallback: snapshot?.used_fallback === true,
+    path: String(snapshot?.active_path || standardTopicSource?.active_path || preferredSourcesPath || "").trim() || null,
+    runtime_path: String(snapshot?.runtime_path || standardTopicSource?.runtime_path || preferredSourcesPath || "").trim() || null,
+    bundled_path: String(snapshot?.bundled_path || standardTopicSource?.bundled_path || bundledPreferredSourcesPath || "").trim() || null,
+    source_mode: resolvedSourceMode,
+    used_fallback: snapshot?.used_fallback === true || (resolvedSourceMode === "broker_bundled"),
     version: Number(registry?.version || 1),
     global: {
       reported: globalReported,

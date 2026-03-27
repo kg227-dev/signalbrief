@@ -262,13 +262,13 @@ async function flushMicrotasks() {
       if (href.startsWith("/api/admin/source-registry?")) {
         return jsonResponse({
           preferred_sources: {
-            path: "/app/config/preferred-sources.json",
-            runtime_path: "/app/data/preferred-sources.json",
-            bundled_path: "/app/config/preferred-sources.json",
-            source_mode: "bundled_fallback",
-            used_fallback: true,
+            path: "/app/data/standard-topic-broker-sources.json",
+            runtime_path: "/app/data/standard-topic-broker-sources.json",
+            bundled_path: "/app/config/standard-topic-broker-sources.json",
+            source_mode: "broker_runtime",
+            used_fallback: false,
             version: 1,
-            total_unique_domains: 4,
+            total_unique_domains: 2,
             topic_count: 1,
             standard_topic_source: {
               source_of_truth: "standard_topic_broker",
@@ -288,8 +288,8 @@ async function flushMicrotasks() {
               ],
             },
             global: {
-              reported: ["reuters.com"],
-              official: ["sec.gov"],
+              reported: [],
+              official: [],
             },
             topics: [
               {
@@ -301,8 +301,8 @@ async function flushMicrotasks() {
             raw_json: JSON.stringify({
               version: 1,
               global: {
-                reported: ["reuters.com"],
-                official: ["sec.gov"],
+                reported: [],
+                official: [],
               },
               topics: {
                 healthcare: {
@@ -452,20 +452,20 @@ async function flushMicrotasks() {
     "overview reload should not reuse the inspect-domain value as a table filter"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("Scheduled MVP fetch planning does not read the preferred-source registry anymore."),
-    "broker inventory panel should explain that scheduled MVP fetch no longer reads the preferred-source registry"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Preferred-source compatibility signals are derived from broker config, so the active path has one live source control plane."),
+    "broker inventory panel should explain that broker config is the only live source control plane"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/data/standard-topic-broker-sources.json"),
     "broker inventory panel should show the live broker config path"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("Legacy preferred-source registry (diagnostic only)"),
-    "broker inventory panel should demote the preferred-source registry to deprecated diagnostics"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Preferred-source compatibility view (broker-derived)"),
+    "broker inventory panel should describe the compatibility view as broker-derived"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
-    "deprecated preferred-source details should still expose the legacy registry path when present"
+    !elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
+    "broker inventory panel should stop exposing the retired preferred-sources file path"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("Standard-topic source of truth: broker config"),

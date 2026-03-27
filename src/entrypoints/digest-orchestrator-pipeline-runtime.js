@@ -4,6 +4,7 @@ const {
   applyStrategicQualityGate,
   buildStorylineCandidates,
   selectDigestItems,
+  selectDigestItemsDetailed,
 } = require("../domains/digest");
 
 function createDigestOrchestratorPipelineRuntime(deps) {
@@ -17,6 +18,22 @@ function createDigestOrchestratorPipelineRuntime(deps) {
   function selectItems(allItems, opts = {}) {
     const CONFIG = getConfig();
     return selectDigestItems(allItems, {
+      maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
+      maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
+      maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
+      customTags: opts.customTags || [],
+      tagPriority: opts.tagPriority,
+      maxCustomItems: opts.maxCustomItems,
+      normalizeUrl: normalizeUrlForDedup,
+      parseDomain: parseSourceDomain,
+      normalizeTopicToken,
+      isCandidate: (_item, ctx) => Boolean(ctx.headlineKey),
+    });
+  }
+
+  function selectItemsDetailed(allItems, opts = {}) {
+    const CONFIG = getConfig();
+    return selectDigestItemsDetailed(allItems, {
       maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
       maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
       maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
@@ -45,6 +62,7 @@ function createDigestOrchestratorPipelineRuntime(deps) {
 
   return {
     selectItems,
+    selectItemsDetailed,
     prepareStorylinePool,
   };
 }

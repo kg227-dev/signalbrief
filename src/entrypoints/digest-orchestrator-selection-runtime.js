@@ -32,16 +32,37 @@ function computeMaxCustomItems({ configuredMaxCustom, selectionTarget, customTag
     : defaultMaxCustom;
 }
 
+function incrementCount(target, key) {
+  const normalizedKey = String(key || "").trim() || "unknown";
+  target[normalizedKey] = (target[normalizedKey] || 0) + 1;
+}
+
+function toSelectionAuditCandidate(item, extras = {}) {
+  return {
+    tag: String(item?.tag || "").trim().toUpperCase() || null,
+    headline: String(item?.headline || "").slice(0, 160),
+    url: String(item?.url || ""),
+    source: String(item?.source || item?.source_domain || ""),
+    source_tier: item?.source_tier ?? null,
+    lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
+    _score: item?._score ?? null,
+    _score_components: item?._score_components ?? null,
+    _story_relationship: item?._story_relationship ?? "new",
+    ...extras,
+  };
+}
+
 function createDigestOrchestratorSelectionRuntime(deps) {
-    const {
-      CONFIG,
-      log,
-      createDigestPolicies,
-      dedupAgainstRecentArchives,
-      buildRecentRepeatIndex,
-      selectItems,
-      loadRecentArchiveByDate,
-      buildRepeatHistory,
+  const {
+    CONFIG,
+    log,
+    createDigestPolicies,
+    dedupAgainstRecentArchives,
+    buildRecentRepeatIndex,
+    selectItems,
+    selectItemsDetailed,
+    loadRecentArchiveByDate,
+    buildRepeatHistory,
     filterItemsAgainstHistory,
     buildRepetitionNote,
     emitDigestIncident,
@@ -66,6 +87,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       scoringConfig: paramScoringConfig,
     } = params;
     let allItems = params.allItems; // must be let — editorial override block reassigns it below
+    const rawCandidateCount = Array.isArray(allItems) ? allItems.length : 0;
 
     const todayStr = String(digestDateKey || "").slice(0, 10);
 
@@ -103,9 +125,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const activePins = typeof getPinsForDate === "function"
       ? getPinsForDate(editorialOverrides.pins, todayStr)
       : [];
+    let injectedPinCount = 0;
     if (activePins.length > 0) {
       const existingUrls = new Set(allItems.map((item) => String(item?.url || "").trim()));
-      let injectedCount = 0;
       for (const pin of activePins) {
         const pinUrl = String(pin?.url || "").trim();
         if (!pinUrl || existingUrls.has(pinUrl)) continue;
@@ -121,12 +143,13 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           source_tier: 1,
         });
         existingUrls.add(pinUrl);
-        injectedCount += 1;
+        injectedPinCount += 1;
       }
-      if (injectedCount > 0) {
-        log(`Editorial overrides: injected ${injectedCount} pinned item(s)`);
+      if (injectedPinCount > 0) {
+        log(`Editorial overrides: injected ${injectedPinCount} pinned item(s)`);
       }
     }
+    const candidatePoolAfterEditorial = Array.isArray(allItems) ? allItems.length : 0;
 
     const crossDayDedupDays = Math.max(1, Number(
       (paramScoringConfig && paramScoringConfig.crossDayDedupDays != null)
@@ -266,14 +289,15 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     // Spec §2.5: prefer 0-24h items first, backfill 24-48h, then 48h+ as last resort.
     const perTopicSelected = [];
     let totalDiscoveryCapped = 0;
+    const topicSelectionAudit = [];
+    const selectionRejectionCounts = Object.create(null);
     for (const [topicTag, topicItems] of byTag.entries()) {
       // Build tiered pool: tier1 (0-24h) first for freshness preference, then tier2, then tier3.
       // Pass the full ordered pool to selectItems so its source-domain cap can pick from the
       // widest possible set rather than a pre-truncated slice.
       const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
       const tieredPool = [...tier1, ...tier2, ...tier3];
-
-      const topicPool = selectItems(tieredPool, {
+      const selectionPolicy = {
         maxItems: itemsPerTopic,
         maxItemsPerTag: itemsPerTopic,
         customTags: [],
@@ -282,12 +306,28 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
           ? paramScoringConfig.maxItemsPerSourceDomain
           : CONFIG.digest.maxItemsPerSourceDomain,
-      });
+      };
+
+      let topicPool = [];
+      let topicRejectedRows = [];
+      if (typeof selectItemsDetailed === "function") {
+        const detailedSelection = selectItemsDetailed(tieredPool, selectionPolicy) || {};
+        topicPool = Array.isArray(detailedSelection.selected) ? detailedSelection.selected : [];
+        topicRejectedRows = Array.isArray(detailedSelection.rejected) ? detailedSelection.rejected : [];
+      } else {
+        topicPool = selectItems(tieredPool, selectionPolicy);
+      }
 
       if (topicPool.length < itemsPerTopic) {
         log(`⚠️ Topic ${topicTag}: only ${topicPool.length}/${itemsPerTopic} items selected (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length}, pool=${tieredPool.length})`);
       }
 
+      const topicAcceptedItems = [];
+      const rejectionReasonByItem = new Map();
+      for (const row of topicRejectedRows) {
+        if (!row?.item) continue;
+        rejectionReasonByItem.set(row.item, String(row.reason || "selection_not_selected"));
+      }
       let discoveryCount = 0;
       for (const item of topicPool) {
         const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").toLowerCase();
@@ -296,11 +336,44 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           discoveryCount += 1;
           if (discoveryCount > maxDiscoveryPerTopic) {
             totalDiscoveryCapped += 1;
+            rejectionReasonByItem.set(item, "selection_discovery_cap");
             continue;
           }
         }
+        topicAcceptedItems.push(item);
         perTopicSelected.push(item);
       }
+
+      const topicReasonCounts = Object.create(null);
+      const selectedSet = new Set(topicAcceptedItems);
+      const topicCandidates = tieredPool.map((item) => {
+        const selectedForTopic = selectedSet.has(item);
+        const selectionReason = selectedForTopic ? null : String(rejectionReasonByItem.get(item) || "selection_not_selected");
+        if (!selectedForTopic) incrementCount(topicReasonCounts, selectionReason);
+        return toSelectionAuditCandidate(item, {
+          selected: selectedForTopic,
+          selection_reason: selectionReason,
+        });
+      });
+      for (const [reason, count] of Object.entries(topicReasonCounts)) {
+        selectionRejectionCounts[reason] = (selectionRejectionCounts[reason] || 0) + count;
+      }
+      const topicLaneCounts = Object.create(null);
+      for (const item of tieredPool) incrementCount(topicLaneCounts, String(item?.retrieval_origin || item?.retrieval_lane || "unknown"));
+      topicSelectionAudit.push({
+        tag: topicTag,
+        total_candidates: tieredPool.length,
+        selected_count: topicAcceptedItems.length,
+        rejected_count: Math.max(0, tieredPool.length - topicAcceptedItems.length),
+        tier_counts: {
+          tier1: tier1.length,
+          tier2: tier2.length,
+          tier3: tier3.length,
+        },
+        lane_breakdown: topicLaneCounts,
+        rejection_reason_counts: topicReasonCounts,
+        candidates: topicCandidates,
+      });
     }
     let selected = perTopicSelected;
     if (totalDiscoveryCapped > 0) {
@@ -331,7 +404,12 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       depthPolicy,
       repetitionNote,
       selectionDiagnostics: {
-        candidate_pool_before_dedup: Array.isArray(allItems) ? allItems.length : 0,
+        candidate_pool_before_dedup: rawCandidateCount,
+        candidate_pool_after_editorial: candidatePoolAfterEditorial,
+        candidate_pool_after_archive_dedup: dedupRes.items.length,
+        candidate_pool_after_freshness: freshItems.length,
+        candidate_pool_after_history: dedupedItems.length,
+        candidate_pool_after_story_relationship: annotatedItems.length,
         candidate_pool_after_dedup: dedupedItems.length,
         candidate_pool_scored: scoredItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
@@ -341,19 +419,15 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         history_streaks_detected: historyResult.streaks.length,
         story_relationship_continuation_removed: continuationRemovedCount || 0,
         story_relationship_follow_up_count: followUpCount || 0,
+        editorial_excluded_count: excludedCount,
+        editorial_domain_suppressed_count: suppressedCount,
+        editorial_pin_count: injectedPinCount,
+        discovery_capped_count: totalDiscoveryCapped,
         score_top: scoredItems[0]?._score ?? null,
         score_bottom: scoredItems.length > 0 ? scoredItems[scoredItems.length - 1]?._score ?? null : null,
-        scored_candidates: scoredItems.map((item) => ({
-          tag: String(item?.tag || "").trim().toUpperCase() || null,
-          headline: String(item?.headline || "").slice(0, 80),
-          url: String(item?.url || ""),
-          source: String(item?.source || item?.source_domain || ""),
-          source_tier: item?.source_tier ?? null,
-          lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
-          _score: item?._score ?? null,
-          _score_components: item?._score_components ?? null,
-          _story_relationship: item?._story_relationship ?? "new",
-        })),
+        selection_rejection_counts: selectionRejectionCounts,
+        scored_candidates: scoredItems.map((item) => toSelectionAuditCandidate(item)),
+        topic_selection_audit: topicSelectionAudit,
       },
     };
   }

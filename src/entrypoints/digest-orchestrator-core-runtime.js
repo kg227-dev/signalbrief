@@ -554,45 +554,201 @@ function persistSharedArchive(...args) {
  * selection outcomes for any given digest day in under 60 seconds.
  * Errors are swallowed so a write failure never blocks digest delivery.
  */
+function sanitizeCountMap(rawCounts) {
+  const sanitized = Object.create(null);
+  const entries = rawCounts && typeof rawCounts === "object" ? Object.entries(rawCounts) : [];
+  for (const [key, value] of entries) {
+    const normalizedKey = String(key || "").trim();
+    const normalizedValue = Number(value);
+    if (!normalizedKey || !Number.isFinite(normalizedValue) || normalizedValue <= 0) continue;
+    sanitized[normalizedKey] = normalizedValue;
+  }
+  return sanitized;
+}
+
+function uniqTrimmed(values) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )).sort((left, right) => left.localeCompare(right));
+}
+
+function sanitizeAuditCandidate(candidate, selectedFallback = false) {
+  const selected = candidate?.selected === true || selectedFallback === true;
+  const selectionReason = selected
+    ? null
+    : String(candidate?.selection_reason || "selection_not_selected").trim() || "selection_not_selected";
+  return {
+    headline: String(candidate?.headline || "").slice(0, 160),
+    url: String(candidate?.url || ""),
+    source: String(candidate?.source || ""),
+    source_tier: candidate?.source_tier ?? null,
+    lane: String(candidate?.lane || ""),
+    _score: candidate?._score ?? null,
+    _score_components: candidate?._score_components ?? null,
+    _story_relationship: candidate?._story_relationship ?? "new",
+    selected,
+    selection_reason: selectionReason,
+  };
+}
+
+function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selectedUrls) {
+  const detailedTopics = Array.isArray(selectionDiagnostics?.topic_selection_audit)
+    ? selectionDiagnostics.topic_selection_audit
+    : [];
+  if (detailedTopics.length > 0) {
+    const summaries = Object.create(null);
+    for (const topic of detailedTopics) {
+      const tag = String(topic?.tag || "").trim().toUpperCase() || "__untagged__";
+      const candidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).map((candidate) => {
+        return sanitizeAuditCandidate(candidate, selectedUrls.has(String(candidate?.url || "").trim()));
+      });
+      const fallbackLaneCounts = Object.create(null);
+      const fallbackReasonCounts = Object.create(null);
+      for (const candidate of candidates) {
+        const lane = String(candidate?.lane || "unknown").trim() || "unknown";
+        fallbackLaneCounts[lane] = (fallbackLaneCounts[lane] || 0) + 1;
+        if (candidate.selected !== true) {
+          const reason = String(candidate?.selection_reason || "selection_not_selected").trim() || "selection_not_selected";
+          fallbackReasonCounts[reason] = (fallbackReasonCounts[reason] || 0) + 1;
+        }
+      }
+      summaries[tag] = {
+        total_candidates: Number(topic?.total_candidates || candidates.length),
+        selected_count: Number(topic?.selected_count || candidates.filter((candidate) => candidate.selected === true).length),
+        rejected_count: Number(topic?.rejected_count || Math.max(0, candidates.length - candidates.filter((candidate) => candidate.selected === true).length)),
+        tier_counts: sanitizeCountMap(topic?.tier_counts),
+        lane_breakdown: Object.keys(sanitizeCountMap(topic?.lane_breakdown)).length > 0
+          ? sanitizeCountMap(topic?.lane_breakdown)
+          : fallbackLaneCounts,
+        rejection_reason_counts: Object.keys(sanitizeCountMap(topic?.rejection_reason_counts)).length > 0
+          ? sanitizeCountMap(topic?.rejection_reason_counts)
+          : fallbackReasonCounts,
+        candidates,
+      };
+    }
+    return summaries;
+  }
+
+  const byTag = Object.create(null);
+  for (const candidate of (Array.isArray(selectionDiagnostics?.scored_candidates) ? selectionDiagnostics.scored_candidates : [])) {
+    const tag = String(candidate?.tag || "").trim().toUpperCase() || "__untagged__";
+    if (!byTag[tag]) byTag[tag] = [];
+    byTag[tag].push(sanitizeAuditCandidate(candidate, selectedUrls.has(String(candidate?.url || "").trim())));
+  }
+
+  const summaries = Object.create(null);
+  for (const [tag, candidates] of Object.entries(byTag)) {
+    const laneCounts = Object.create(null);
+    const rejectionReasonCounts = Object.create(null);
+    for (const candidate of candidates) {
+      const lane = String(candidate?.lane || "unknown").trim() || "unknown";
+      laneCounts[lane] = (laneCounts[lane] || 0) + 1;
+      if (candidate.selected !== true) {
+        const reason = String(candidate?.selection_reason || "selection_not_selected").trim() || "selection_not_selected";
+        rejectionReasonCounts[reason] = (rejectionReasonCounts[reason] || 0) + 1;
+      }
+    }
+    summaries[tag] = {
+      total_candidates: candidates.length,
+      selected_count: candidates.filter((candidate) => candidate.selected === true).length,
+      rejected_count: candidates.filter((candidate) => candidate.selected !== true).length,
+      tier_counts: {},
+      lane_breakdown: laneCounts,
+      rejection_reason_counts: rejectionReasonCounts,
+      candidates,
+    };
+  }
+  return summaries;
+}
+
+function serializeFetchTopicDiagnostics(fetchDiagnostics) {
+  return (Array.isArray(fetchDiagnostics?.topic_diagnostics) ? fetchDiagnostics.topic_diagnostics : []).map((topic) => ({
+    tag: String(topic?.tag || "").trim().toUpperCase() || null,
+    custom_slug: String(topic?.custom_slug || "").trim() || null,
+    is_custom: topic?.is_custom === true,
+    coverage_status: String(topic?.coverage_status || "").trim() || null,
+    unique_item_count: Number(topic?.unique_item_count || 0),
+    usable_item_count: Number(topic?.usable_item_count || 0),
+    query_count: Number(topic?.query_count || 0),
+    preferred_call_count: Number(topic?.preferred_call_count || 0),
+    broad_call_count: Number(topic?.broad_call_count || 0),
+    trusted_source_call_count: Number(topic?.trusted_source_call_count || 0),
+    trusted_official_call_count: Number(topic?.trusted_official_call_count || 0),
+    trusted_reported_call_count: Number(topic?.trusted_reported_call_count || 0),
+    broker_item_count: Number(topic?.broker_item_count || 0),
+    broker_official_item_count: Number(topic?.broker_official_item_count || 0),
+    broker_publisher_feed_item_count: Number(topic?.broker_publisher_feed_item_count || 0),
+    total_calls_scheduled: Number(topic?.total_calls_scheduled || 0),
+    status_counts: sanitizeCountMap(topic?.status_counts),
+    failed_calls: Number(topic?.failed_calls || 0),
+    transport_errors: Number(topic?.transport_errors || 0),
+    degraded: topic?.degraded === true,
+    last_error: String(topic?.last_error || "").trim() || null,
+  }));
+}
+
+function serializeBrokerDiagnostics(fetchDiagnostics) {
+  const broker = fetchDiagnostics?.standard_topic_broker;
+  if (!broker || typeof broker !== "object") {
+    return {
+      enabled: false,
+      config_source: "none",
+      active_topic_tags: [],
+      lane_counts: {},
+      source_fetch_count: 0,
+      source_success_count: 0,
+      source_failure_count: 0,
+      source_diagnostics: [],
+      topic_diagnostics: [],
+    };
+  }
+  return {
+    enabled: broker.enabled === true,
+    config_source: String(broker.config_source || "").trim() || "none",
+    active_topic_tags: uniqTrimmed(broker.active_topic_tags),
+    lane_counts: sanitizeCountMap(broker.lane_counts),
+    source_fetch_count: Number(broker.source_fetch_count || 0),
+    source_success_count: Number(broker.source_success_count || 0),
+    source_failure_count: Number(broker.source_failure_count || 0),
+    source_diagnostics: (Array.isArray(broker.source_diagnostics) ? broker.source_diagnostics : []).map((source) => ({
+      id: String(source?.id || "").trim() || null,
+      lane: String(source?.lane || "").trim() || null,
+      topic_tags: uniqTrimmed(source?.topic_tags),
+      endpoint: String(source?.endpoint || "").trim() || null,
+      ok: source?.ok === true,
+      status: Number(source?.status || 0),
+      parsed_count: Number(source?.parsed_count || 0),
+      retained_count: Number(source?.retained_count || 0),
+      stale_count: Number(source?.stale_count || 0),
+      non_article_count: Number(source?.non_article_count || 0),
+      validation_drop_count: Number(source?.validation_drop_count || 0),
+      error: String(source?.error || "").trim() || null,
+    })),
+    topic_diagnostics: (Array.isArray(broker.topic_diagnostics) ? broker.topic_diagnostics : []).map((topic) => ({
+      tag: String(topic?.tag || "").trim().toUpperCase() || null,
+      lane_counts: sanitizeCountMap(topic?.lane_counts),
+      source_counts: sanitizeCountMap(topic?.source_counts),
+      source_ids: uniqTrimmed(topic?.source_ids),
+      item_count: Number(topic?.item_count || 0),
+      article_item_count: Number(topic?.article_item_count || 0),
+      official_document_count: Number(topic?.official_document_count || 0),
+      errors: (Array.isArray(topic?.errors) ? topic.errors : []).map((error) => ({
+        source_id: String(error?.source_id || "").trim() || null,
+        error: String(error?.error || "").trim() || null,
+      })),
+    })),
+  };
+}
+
 function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics }) {
   try {
     fs.mkdirSync(DIGEST_AUDIT_DIR, { recursive: true });
     const selectedUrls = new Set(
       (Array.isArray(selected) ? selected : []).map((item) => String(item?.url || "").trim()).filter(Boolean)
     );
-
-    // Build per-topic candidate + selection breakdown.
-    const byTag = Object.create(null);
-    for (const c of (Array.isArray(selectionDiagnostics?.scored_candidates) ? selectionDiagnostics.scored_candidates : [])) {
-      const tag = String(c?.tag || "").trim().toUpperCase() || "__untagged__";
-      if (!byTag[tag]) byTag[tag] = [];
-      byTag[tag].push({
-        headline: c.headline,
-        url: c.url,
-        source: c.source,
-        source_tier: c.source_tier,
-        lane: c.lane,
-        _score: c._score,
-        _score_components: c._score_components,
-        selected: selectedUrls.has(c.url),
-      });
-    }
-
-    // Compute per-topic lane breakdown.
-    const topicSummaries = Object.create(null);
-    for (const [tag, candidates] of Object.entries(byTag)) {
-      const laneCounts = Object.create(null);
-      for (const c of candidates) {
-        const lane = String(c.lane || "unknown");
-        laneCounts[lane] = (laneCounts[lane] || 0) + 1;
-      }
-      topicSummaries[tag] = {
-        total_candidates: candidates.length,
-        selected_count: candidates.filter((c) => c.selected).length,
-        lane_breakdown: laneCounts,
-        candidates,
-      };
-    }
+    const topicSummaries = buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selectedUrls);
 
     // Lane contribution totals across all topics.
     const globalLaneCounts = Object.create(null);
@@ -611,10 +767,22 @@ function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectio
         total_candidates: Number(selectionDiagnostics?.candidate_pool_scored || 0),
         total_selected: selectedUrls.size,
         candidate_pool_before_dedup: Number(selectionDiagnostics?.candidate_pool_before_dedup || 0),
+        candidate_pool_after_editorial: Number(selectionDiagnostics?.candidate_pool_after_editorial || 0),
+        candidate_pool_after_archive_dedup: Number(selectionDiagnostics?.candidate_pool_after_archive_dedup || 0),
+        candidate_pool_after_freshness: Number(selectionDiagnostics?.candidate_pool_after_freshness || 0),
+        candidate_pool_after_history: Number(selectionDiagnostics?.candidate_pool_after_history || 0),
+        candidate_pool_after_story_relationship: Number(selectionDiagnostics?.candidate_pool_after_story_relationship || 0),
         candidate_pool_after_dedup: Number(selectionDiagnostics?.candidate_pool_after_dedup || 0),
         dedup_removed: Number(selectionDiagnostics?.archive_repeat_block_count || 0),
         stale_removed: Number(selectionDiagnostics?.stale_removed_count || 0),
         history_suppressed: Number(selectionDiagnostics?.history_suppressed_count || 0),
+        editorial_excluded: Number(selectionDiagnostics?.editorial_excluded_count || 0),
+        editorial_domain_suppressed: Number(selectionDiagnostics?.editorial_domain_suppressed_count || 0),
+        editorial_pins_injected: Number(selectionDiagnostics?.editorial_pin_count || 0),
+        continuation_removed: Number(selectionDiagnostics?.story_relationship_continuation_removed || 0),
+        follow_up_count: Number(selectionDiagnostics?.story_relationship_follow_up_count || 0),
+        discovery_capped: Number(selectionDiagnostics?.discovery_capped_count || 0),
+        selection_rejection_counts: sanitizeCountMap(selectionDiagnostics?.selection_rejection_counts),
         score_top: selectionDiagnostics?.score_top ?? null,
         score_bottom: selectionDiagnostics?.score_bottom ?? null,
         global_lane_breakdown: globalLaneCounts,
@@ -623,6 +791,10 @@ function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectio
           : 0,
       },
       topics: topicSummaries,
+      fetch: {
+        topic_diagnostics: serializeFetchTopicDiagnostics(fetchDiagnostics),
+        standard_topic_broker: serializeBrokerDiagnostics(fetchDiagnostics),
+      },
     };
 
     const filePath = path.join(DIGEST_AUDIT_DIR, `${digestDateKey}.json`);
@@ -654,6 +826,10 @@ function getPipelineRuntime() {
 
 function selectItems(...args) {
   return getPipelineRuntime().selectItems(...args);
+}
+
+function selectItemsDetailed(...args) {
+  return getPipelineRuntime().selectItemsDetailed(...args);
 }
 
 function prepareStorylinePool(...args) {
@@ -968,6 +1144,7 @@ async function main() {
     dedupAgainstRecentArchives,
     buildRecentRepeatIndex,
     selectItems,
+    selectItemsDetailed,
     loadRecentArchiveByDate,
     buildRepeatHistory,
     filterItemsAgainstHistory,
@@ -1282,6 +1459,7 @@ module.exports = {
   selectItems,
   dedupAgainstRecentArchives,
   buildRecentRepeatIndex,
+  writeDigestAuditLog,
 
   // Formatting
   formatTelegram,
@@ -1300,6 +1478,7 @@ module.exports = {
   // Helpers
   httpsPost,
   httpsPostWithRetry,
+  selectItemsDetailed,
   getEtNow,
   getEtNowParts,
   toEtDateString,

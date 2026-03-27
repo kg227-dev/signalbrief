@@ -62,6 +62,10 @@ assertModuleExports(() => runtime, TARGET_REL);
     }),
     buildRepetitionNote: () => "Repeat handling active",
     selectItems: (items) => items.slice(0, 2),
+    selectItemsDetailed: (items) => ({
+      selected: items.slice(0, 2),
+      rejected: items.slice(2).map((item) => ({ item, reason: "selection_not_selected" })),
+    }),
     emitDigestIncident: async (...args) => {
       incidents.push(args);
     },
@@ -95,6 +99,9 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(selectedOut.depthPolicy.defaultItemCount, 5);
   assert.strictEqual(selectedOut.selectionDiagnostics.candidate_pool_before_dedup, 3);
   assert.strictEqual(selectedOut.selectionDiagnostics.candidate_pool_after_dedup, 3);
+  assert.strictEqual(selectedOut.selectionDiagnostics.selection_rejection_counts.selection_not_selected, 1);
+  assert.strictEqual(selectedOut.selectionDiagnostics.topic_selection_audit.length, 1);
+  assert.strictEqual(selectedOut.selectionDiagnostics.topic_selection_audit[0].candidates.length, 3);
   assert.ok(logs.some((line) => line.includes("Cross-day dedup removed")));
   assert.ok(logs.some((line) => line.includes("Freshness penalty active")));
   assert.strictEqual(incidents.length, 0);

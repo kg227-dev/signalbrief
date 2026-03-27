@@ -11,6 +11,7 @@ function makeDeps(overrides = {}) {
     dedupAgainstRecentArchives: (items) => ({ items, removed: 0, backfilled: 0, archive_days_used: 3 }),
     buildRecentRepeatIndex: () => ({ urlKeys: new Set(), headlineKeys: new Set(), days: 3 }),
     selectItems: (items, opts) => items.slice(0, opts.maxItems),
+    selectItemsDetailed: null,
     loadRecentArchiveItems: () => [],
     loadRecentArchiveByDate: () => [],
     buildRepeatHistory: () => new Map(),
@@ -40,7 +41,12 @@ let failed = 0;
 async function run() {
   // Test 1: targeted run uses 48h gate (60h item rejected even in targeted mode)
   try {
-    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps());
+    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps({
+      selectItemsDetailed: (items, opts) => ({
+        selected: items.slice(0, opts.maxItems),
+        rejected: items.slice(opts.maxItems).map((item) => ({ item, reason: "selection_not_selected" })),
+      }),
+    }));
     const stale = itemAgedHours(60, "TECHNOLOGY", "https://a.com/1");
     const fresh = itemAgedHours(10, "TECHNOLOGY", "https://a.com/2");
     const result = await runtime.selectForEnrichment({
@@ -55,6 +61,7 @@ async function run() {
     });
     assert.ok(!result.selected.some(i => i.url === stale.url), "60h item should be rejected in targeted mode");
     assert.ok(result.selected.some(i => i.url === fresh.url), "10h item should be kept in targeted mode");
+    assert.ok(Array.isArray(result.selectionDiagnostics.topic_selection_audit), "topic_selection_audit should be present");
     console.log("✓ Test 1: targeted 48h gate");
     passed++;
   } catch(e) {
@@ -117,6 +124,44 @@ async function run() {
     passed++;
   } catch(e) {
     console.error("✗ Test 3:", e.message);
+    failed++;
+  }
+
+  // Test 4: topic selection audit persists per-item rejection reasons
+  try {
+    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps({
+      selectItemsDetailed: (items) => ({
+        selected: items.slice(0, 1),
+        rejected: items.slice(1).map((item, index) => ({
+          item,
+          reason: index === 0 ? "selection_source_cap" : "selection_not_selected",
+        })),
+      }),
+    }));
+    const result = await runtime.selectForEnrichment({
+      allItems: [
+        itemAgedHours(2, "TECHNOLOGY", "https://audit.example.com/1"),
+        itemAgedHours(3, "TECHNOLOGY", "https://audit.example.com/2"),
+        itemAgedHours(4, "TECHNOLOGY", "https://audit.example.com/3"),
+      ],
+      selectionTarget: 5,
+      customTags: [],
+      tagPriority: {},
+      runMode: "scheduled",
+      digestDateKey: "2026-03-25",
+      dueUsersCount: 1,
+      standardFetchCallsPlanned: 1,
+    });
+    const topicAudit = result.selectionDiagnostics.topic_selection_audit[0];
+    assert.strictEqual(topicAudit.selected_count, 1, "selected_count should reflect detailed selector output");
+    assert.strictEqual(topicAudit.rejection_reason_counts.selection_source_cap, 1, "should count source-cap rejection");
+    assert.strictEqual(topicAudit.rejection_reason_counts.selection_not_selected, 1, "should count not-selected rejection");
+    assert.strictEqual(topicAudit.candidates.filter((item) => item.selected === true).length, 1, "one candidate selected");
+    assert.strictEqual(topicAudit.candidates.filter((item) => item.selected !== true).length, 2, "two candidates rejected");
+    console.log("✓ Test 4: topic audit carries rejection reasons");
+    passed++;
+  } catch (e) {
+    console.error("✗ Test 4:", e.message);
     failed++;
   }
 

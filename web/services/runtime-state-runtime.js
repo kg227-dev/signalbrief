@@ -160,7 +160,6 @@ function createRuntimeStateInspector(deps) {
         adminActionLogPath: runtimePaths.adminActionLogPath,
         adminMessageLogPath: runtimePaths.adminMessageLogPath,
         digestIncidentLogPath: runtimePaths.digestIncidentLogPath,
-        archiveLegacyUsageLogPath: runtimePaths.archiveLegacyUsageLogPath,
         schedulerHeartbeatPath: runtimePaths.schedulerHeartbeatPath,
         schedulerControlPath: runtimePaths.schedulerControlPath,
         digestRunLockPath: runtimePaths.digestRunLockPath,

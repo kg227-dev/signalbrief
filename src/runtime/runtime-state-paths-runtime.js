@@ -73,10 +73,6 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.digestIncidentLogPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_INCIDENT_LOG_PATH"),
     path.join(dataDir, "digest-incident-log.jsonl")
   );
-  const archiveLegacyUsageLogPath = resolveOptionalPath(
-    options.archiveLegacyUsageLogPath || readEnvValue(env, "SIGNALBRIEF_ARCHIVE_LEGACY_USAGE_LOG_PATH"),
-    path.join(dataDir, "archive-legacy-usage.jsonl")
-  );
   const schedulerHeartbeatPath = resolveOptionalPath(
     options.schedulerHeartbeatPath || readEnvValue(env, "SCHEDULER_HEARTBEAT_FILE"),
     path.join(dataDir, "scheduler-heartbeat.json")
@@ -142,7 +138,6 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     adminActionLogPath,
     adminMessageLogPath,
     digestIncidentLogPath,
-    archiveLegacyUsageLogPath,
     schedulerHeartbeatPath,
     schedulerControlPath,
     digestRunLockPath,
@@ -193,7 +188,6 @@ function describeRuntimePathAlignment(runtimePaths) {
     deriveComponentRoot(paths.adminActionLogPath, dataRoot),
     deriveComponentRoot(paths.adminMessageLogPath, dataRoot),
     deriveComponentRoot(paths.digestIncidentLogPath, dataRoot),
-    deriveComponentRoot(paths.archiveLegacyUsageLogPath, dataRoot),
   ]);
   const schedulerRoots = uniqSorted([
     deriveComponentRoot(paths.schedulerHeartbeatPath, dataRoot),
@@ -275,7 +269,6 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "adminActionLogPath", path: paths.adminActionLogPath, kind: "file" },
     { key: "adminMessageLogPath", path: paths.adminMessageLogPath, kind: "file" },
     { key: "digestIncidentLogPath", path: paths.digestIncidentLogPath, kind: "file" },
-    { key: "archiveLegacyUsageLogPath", path: paths.archiveLegacyUsageLogPath, kind: "file" },
     { key: "schedulerHeartbeatPath", path: paths.schedulerHeartbeatPath, kind: "file" },
     { key: "schedulerControlPath", path: paths.schedulerControlPath, kind: "file" },
     { key: "digestRunLockPath", path: paths.digestRunLockPath, kind: "file" },

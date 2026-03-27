@@ -2,7 +2,6 @@
 
 const {
   INDUSTRY_TOPICS,
-  CAPABILITY_TOPICS,
 } = require("../../../test-harness/personas/persona-topics");
 const { normalizeTopicToken } = require("../../digest/domain/topic-domain-runtime");
 
@@ -97,15 +96,6 @@ function buildIndustryPersonas() {
   }));
 }
 
-function buildCapabilityPersonas() {
-  return CAPABILITY_TOPICS.map((topic) => buildVirtualUser({
-    id: `capability_${topicSlug(topic)}`,
-    label: topic,
-    group: "capability",
-    topics: [topic],
-  }));
-}
-
 function buildMixedPersonas() {
   return MIXED_PERSONAS.map((persona) => buildVirtualUser({
     id: persona.id,
@@ -128,10 +118,7 @@ function buildStandardPhase1FocusPersonas() {
 }
 
 function buildStandardTopicPersonas() {
-  return [
-    ...buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
-    ...buildCapabilityPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
-  ];
+  return buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" }));
 }
 
 function buildScenarioRoster(scenarioId) {
@@ -173,7 +160,6 @@ function buildScenarioMatrix(scenarios) {
 }
 
 module.exports = {
-  buildCapabilityPersonas,
   buildIndustryPersonas,
   buildMixedPersonas,
   buildStandardCorePersonas,

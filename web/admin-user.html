@@ -361,7 +361,6 @@ const INDUSTRY_TOPICS = [
   'HEALTHCARE','LIFE SCIENCES','TECHNOLOGY','ENERGY',
   'FINANCIAL SERVICES','CONSUMER & RETAIL','INDUSTRIALS',
 ];
-const CAPABILITY_TOPICS = [];
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS];
 const TOPIC_LABELS = {
   'HEALTHCARE':'Healthcare',
@@ -479,12 +478,6 @@ function renderChips(userTopics) {
   container.innerHTML = '';
   container.appendChild(renderGroupLabel('Industries'));
   INDUSTRY_TOPICS.forEach(t => {
-    const sel = userTopics.includes(t);
-    if (sel) selectedTopics.add(t);
-    container.appendChild(renderChip(t, sel));
-  });
-  container.appendChild(renderGroupLabel('Capabilities'));
-  CAPABILITY_TOPICS.forEach(t => {
     const sel = userTopics.includes(t);
     if (sel) selectedTopics.add(t);
     container.appendChild(renderChip(t, sel));

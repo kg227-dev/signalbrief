@@ -9,6 +9,6 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   "topicInputError",
-  "You're already tracking",
-  "matchDefault: true",
+  "You can select up to 3 topics.",
+  "topic-group-label",
 ]);

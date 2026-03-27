@@ -34,22 +34,28 @@ assert.strictEqual(
   "should match standard topic in all caps"
 );
 
-// custom topic slugification
+// custom topics are disabled unless explicitly allowed
 assert.strictEqual(
   canonicalizeTopicKey("Quantum Computing", DEFAULT_TOPICS),
-  "custom_quantum_computing",
-  "non-standard topic should become custom slug"
+  "",
+  "non-standard topic should be rejected when custom topics are disabled"
 );
 
 assert.strictEqual(
   canonicalizeTopicKey("custom_blockchain", DEFAULT_TOPICS),
-  "custom_blockchain",
-  "already-prefixed custom topic should normalize cleanly"
+  "",
+  "already-prefixed custom topic should be rejected when custom topics are disabled"
+);
+
+assert.strictEqual(
+  canonicalizeTopicKey("Quantum Computing", DEFAULT_TOPICS, { allowCustomTopics: true }),
+  "custom_quantum_computing",
+  "custom topic slugging still works when explicitly enabled"
 );
 
 // special characters stripped
 assert.strictEqual(
-  canonicalizeTopicKey("AI/ML & Robotics!!!", DEFAULT_TOPICS),
+  canonicalizeTopicKey("AI/ML & Robotics!!!", DEFAULT_TOPICS, { allowCustomTopics: true }),
   "custom_ai_ml_robotics",
   "special chars should be stripped and replaced with underscores"
 );
@@ -57,7 +63,7 @@ assert.strictEqual(
 // slug length capped
 {
   const longTopic = "a".repeat(100);
-  const result = canonicalizeTopicKey(longTopic, DEFAULT_TOPICS);
+  const result = canonicalizeTopicKey(longTopic, DEFAULT_TOPICS, { allowCustomTopics: true });
   assert.ok(result.startsWith("custom_"), "long topic should get custom_ prefix");
   const slugPart = result.replace(/^custom_/, "");
   assert.ok(slugPart.length <= MAX_CUSTOM_SLUG_LENGTH, `slug should be capped at ${MAX_CUSTOM_SLUG_LENGTH} chars`);
@@ -89,6 +95,16 @@ assert.strictEqual(
   assert.ok(result.error.includes("at least 2"));
 }
 
+// too many topics
+{
+  const result = normalizeTopicsForUserInput(
+    ["AI & Machine Learning", "Cybersecurity", "Climate & Energy", "Quantum Computing"],
+    { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxTopics: 3, maxCustomKeywords: 1 }
+  );
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.error.includes("no more than 3"));
+}
+
 // valid input with dedup
 {
   const result = normalizeTopicsForUserInput(
@@ -101,17 +117,17 @@ assert.strictEqual(
   assert.strictEqual(result.customCount, 0);
 }
 
-// custom keyword limit
+// custom topics rejected in reduced-scope mode
 {
   const result = normalizeTopicsForUserInput(
     ["AI & Machine Learning", "custom1", "custom2", "custom3", "custom4"],
-    { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxCustomKeywords: 3 }
+    { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxTopics: 8, maxCustomKeywords: 0 }
   );
   assert.strictEqual(result.ok, false);
-  assert.ok(result.error.includes("up to 3"), "should enforce custom keyword limit");
+  assert.ok(result.error.includes("disabled"), "reduced-scope MVP should reject custom topics");
 }
 
-// valid with custom keywords within limit
+// valid with custom keywords within limit when explicitly enabled
 {
   const result = normalizeTopicsForUserInput(
     ["AI & Machine Learning", "Quantum Computing", "Blockchain"],

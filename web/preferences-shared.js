@@ -178,7 +178,7 @@
     });
   }
 
-  function buildSignupPayload({ state, name, email, telegram, referralToken }) {
+  function buildSignupPayload({ state, name, email, referralToken }) {
     if (!buildSignupFactory) {
       throw new Error("SignalBriefPrefsStateRuntime.buildSignupPayload is required");
     }
@@ -186,13 +186,12 @@
       state,
       name,
       email,
-      telegram,
       referralToken,
       normalizeTelegram,
     });
   }
 
-  function buildSettingsPayload({ state, token, name, telegram, telegramEnabled }) {
+  function buildSettingsPayload({ state, token, name }) {
     if (!buildSettingsFactory) {
       throw new Error("SignalBriefPrefsStateRuntime.buildSettingsPayload is required");
     }
@@ -200,8 +199,6 @@
       state,
       token,
       name,
-      telegram,
-      telegramEnabled,
       normalizeTelegram,
     });
   }

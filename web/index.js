@@ -12,7 +12,6 @@ const darkModeHelpers = typeof IndexHelpersRuntime.createDarkModeHelpers === "fu
   : null;
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
 const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
-const MAX_CUSTOM_KEYWORDS = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
@@ -28,73 +27,9 @@ function selectedTopicKeys() {
     .filter(Boolean);
 }
 
-function findTopicChip(topic) {
-  return Array.from(document.querySelectorAll(".topic-chip")).find((chip) => chip.dataset.topic === topic) || null;
-}
-
-function isCustomTopic(topic) {
-  if (typeof Prefs.isCustomTopic === "function") return Prefs.isCustomTopic(topic);
-  return String(topic || "").startsWith("custom_");
-}
-
-function selectedCustomKeywordCount() {
-  return selectedTopicKeys().filter((topic) => isCustomTopic(topic)).length;
-}
-
-let customTopicFeedback = { message: "", tone: "" };
-
-function renderCustomTopicFeedback() {
-  const feedbackEl = document.getElementById("customTopicLimitMessage");
-  const input = document.getElementById("customTopic");
-  const maxReached = selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS;
-  const message = customTopicFeedback.message || (maxReached ? `You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.` : "");
-  const tone = customTopicFeedback.message ? customTopicFeedback.tone : (maxReached ? "info" : "");
-
-  if (feedbackEl) {
-    feedbackEl.textContent = message;
-    feedbackEl.classList.toggle("visible", !!message);
-    feedbackEl.classList.toggle("feedback-error", tone === "error");
-    feedbackEl.classList.toggle("feedback-info", tone === "info");
-  }
-
-  if (input) {
-    input.classList.toggle("input-error", tone === "error");
-    input.setAttribute("aria-invalid", tone === "error" ? "true" : "false");
-  }
-}
-
-function setCustomTopicFeedback(message, tone = "error") {
-  customTopicFeedback = {
-    message: String(message || "").trim(),
-    tone: message ? tone : "",
-  };
-  renderCustomTopicFeedback();
-}
-
-function clearCustomTopicFeedback() {
-  if (!customTopicFeedback.message) {
-    renderCustomTopicFeedback();
-    return;
-  }
-  customTopicFeedback = { message: "", tone: "" };
-  renderCustomTopicFeedback();
-}
-
-function syncCustomTopicLimitState() {
-  const customCount = selectedCustomKeywordCount();
-  const maxReached = customCount >= MAX_CUSTOM_KEYWORDS;
-
-  const addButton = document.getElementById("addCustomTopicBtn");
-  if (addButton) {
-    addButton.disabled = maxReached;
-    addButton.setAttribute("aria-disabled", maxReached ? "true" : "false");
-  }
-  renderCustomTopicFeedback();
-}
-
 function topicDisplayLabel(topic) {
   if (typeof Prefs.topicDisplayLabel === "function") return Prefs.topicDisplayLabel(topic);
-  return String(topic || "").replace(/^custom_/, "").replace(/_/g, " ");
+  return String(topic || "");
 }
 
 function renderTopicCatalog() {
@@ -127,97 +62,14 @@ function toggleTopic(topicChip) {
   const currentlySelected = prefState
     ? prefState.hasTopic(topic)
     : topicChip.classList.contains("selected");
-
-  if (!currentlySelected && isCustomTopic(topic) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
-    syncCustomTopicLimitState();
-    return;
-  }
+  if (!currentlySelected && selectedTopicKeys().length >= 3) return;
 
   const isSelected = prefState
     ? prefState.toggleTopic(topic)
     : !topicChip.classList.contains("selected");
 
   topicChip.classList.toggle("selected", isSelected);
-  clearCustomTopicFeedback();
   updateProgress();
-}
-
-function addCustomTopic() {
-  const input = document.getElementById("customTopic");
-  const value = String(input?.value || "").trim();
-  if (!value) return;
-
-  const topicKey = typeof Prefs.topicKeyFromInput === "function"
-    ? Prefs.topicKeyFromInput(value, { matchDefault: true })
-    : `custom_${value.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-
-  if (!topicKey) {
-    input.value = "";
-    clearCustomTopicFeedback();
-    return;
-  }
-
-  const existing = findTopicChip(topicKey);
-  if (existing) {
-    const existingSelected = prefState
-      ? prefState.hasTopic(topicKey)
-      : existing.classList.contains("selected");
-    if (existingSelected) {
-      const duplicateLabel = isCustomTopic(topicKey) ? value : topicDisplayLabel(topicKey);
-      setCustomTopicFeedback(`You're already tracking "${duplicateLabel}". Try a different topic.`);
-      input.focus();
-      input.select();
-      return;
-    }
-    if (isCustomTopic(topicKey) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
-      setCustomTopicFeedback(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
-      return;
-    }
-    if (prefState && !existingSelected) {
-      prefState.addTopic(topicKey);
-      existing.classList.add("selected");
-    } else if (!prefState && !existingSelected) {
-      existing.classList.add("selected");
-    }
-    input.value = "";
-    clearCustomTopicFeedback();
-    updateProgress();
-    return;
-  }
-
-  if (isCustomTopic(topicKey) && selectedCustomKeywordCount() >= MAX_CUSTOM_KEYWORDS) {
-    setCustomTopicFeedback(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
-    return;
-  }
-
-  const chip = document.createElement("div");
-  const chipLabel = isCustomTopic(topicKey) ? value : topicDisplayLabel(topicKey);
-  chip.className = "topic-chip topic-chip-custom selected";
-  chip.dataset.topic = topicKey;
-  chip.onclick = function onclick() { toggleTopic(chip); };
-  chip.innerHTML = `<span class="check"></span> ${chipLabel}`;
-
-  const topicGrid = document.getElementById("topicGrid");
-  if (topicGrid) topicGrid.appendChild(chip);
-
-  if (prefState) prefState.addTopic(topicKey);
-
-  input.value = "";
-  clearCustomTopicFeedback();
-  updateProgress();
-}
-
-const customTopicInput = document.getElementById("customTopic");
-if (customTopicInput) {
-  customTopicInput.addEventListener("keypress", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      addCustomTopic();
-    }
-  });
-  customTopicInput.addEventListener("input", () => {
-    clearCustomTopicFeedback();
-  });
 }
 
 function isElementVisible(el) {
@@ -353,7 +205,6 @@ function showLanding() {
 }
 
 function updateProgress() {
-  syncCustomTopicLimitState();
   if (indexForm && typeof indexForm.updateProgress === "function") {
     indexForm.updateProgress();
     return;
@@ -365,7 +216,7 @@ function updateProgress() {
   const dayCount = getSelectedDays().length;
   [
     ["prog-1", !!(name && email)],
-    ["prog-2", topicCount >= 2],
+    ["prog-2", topicCount >= 1 && topicCount <= 3],
     ["prog-3", !!depth],
     ["prog-4", dayCount > 0],
   ].forEach(([id, filled]) => {
@@ -379,8 +230,8 @@ function switchPreview(panel, btn) {
     indexForm.switchPreview(panel, btn);
     return;
   }
-  document.getElementById("prev-telegram").style.display = panel === "telegram" ? "block" : "none";
-  document.getElementById("prev-email").style.display = panel === "email" ? "block" : "none";
+  const emailPreview = document.getElementById("prev-email");
+  if (emailPreview) emailPreview.style.display = panel === "email" ? "block" : "none";
 }
 
 // -- Dark mode ----------------------------------------------------------------

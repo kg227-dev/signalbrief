@@ -11,24 +11,14 @@ function handleCheckAvailabilityRoute(ctx, deps) {
     if (!body) return true;
 
     const email = String(body.email || "").toLowerCase().trim();
-    const telegramRaw = body.telegram ? String(body.telegram).replace(/^@+/, "").trim() : null;
-    const telegram = telegramRaw ? telegramRaw.toLowerCase() : null;
-
     if (!email) {
-      json(res, { emailTaken: false, telegramTaken: false });
+      json(res, { emailTaken: false });
       return true;
     }
 
     const users = allUsers();
     const emailTaken = users.some((u) => (u.email || "").toLowerCase().trim() === email);
-    const telegramTaken = telegram
-      ? users.some((u) => {
-          const t = (u.telegram || "").toLowerCase().trim();
-          return t && t === telegram;
-        })
-      : false;
-
-    json(res, { emailTaken, telegramTaken });
+    json(res, { emailTaken });
     return true;
   })();
 }

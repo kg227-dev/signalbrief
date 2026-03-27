@@ -43,28 +43,24 @@ const projected = buildProjectedWindowCostSummary({
       status: "active",
       days_of_week: [1, 2, 3, 4, 5],
       delivery_time_raw: "07:00",
-      items_per_digest: 5,
       topics_raw: ["HEALTHCARE", "custom_pfizer"],
     },
     {
       status: "active",
       days_of_week: [1, 2, 3, 4, 5],
       delivery_time_raw: "21:30",
-      items_per_digest: 5,
       topics_raw: ["TECHNOLOGY"],
     },
     {
       status: "active",
       days_of_week: [0, 1, 2, 3, 4, 5, 6],
       delivery_time_raw: "07:00",
-      items_per_digest: 10,
       topics_raw: ["AI×TECH", "custom_microsoft"],
     },
     {
       status: "paused",
       days_of_week: [1, 2, 3, 4, 5],
       delivery_time_raw: "07:00",
-      items_per_digest: 10,
       topics_raw: ["custom_ignore_me"],
     },
   ],
@@ -82,6 +78,6 @@ const projected = buildProjectedWindowCostSummary({
 assert.strictEqual(projected.scheduled_runs, 11, "projection should batch users by ET date and delivery time");
 assert.strictEqual(projected.projected_deliveries, 15, "projection should count all future active deliveries in window");
 assert.strictEqual(projected.active_users, 3);
-assert.strictEqual(projected.total_cost, 0.615);
+assert.strictEqual(projected.total_cost, 0.385);
 assert.strictEqual(projected.projected_runs[0].date_et, "2026-03-16");
 assert.strictEqual(projected.projected_runs[0].delivery_time_raw, "21:30");

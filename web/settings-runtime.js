@@ -199,8 +199,13 @@ function bindSaveHandler(effectiveToken, user) {
   if (!saveBtn || !prefState) return;
 
   saveBtn.addEventListener("click", async () => {
-    if (prefState.getTopics().length < 2) {
-      showError("Please select at least 2 topics.");
+    const topicCount = prefState.getTopics().length;
+    if (topicCount < 1) {
+      showError("Please select at least 1 topic.");
+      return;
+    }
+    if (topicCount > 3) {
+      showError("Please select no more than 3 topics.");
       return;
     }
     const customCount = prefState.getTopics().filter((topic) => (
@@ -238,11 +243,6 @@ function bindSaveHandler(effectiveToken, user) {
               email_enabled: true,
             },
           };
-
-      const sourceState = globalScope._signalBriefSourceState;
-      if (sourceState && typeof sourceState.snapshot === "function") {
-        payload.source_preferences = sourceState.snapshot();
-      }
 
       const data = await fetchJsonStrict("/api/settings", {
         method: "POST",

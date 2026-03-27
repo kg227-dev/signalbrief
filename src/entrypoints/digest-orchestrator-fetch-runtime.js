@@ -187,13 +187,7 @@ const TRACKED_DEEP_CUSTOM_SLUGS = new Set([
 ]);
 
 function resolveSelectionTarget(dueUsers, defaultItemCount = 7) {
-  const requestedCounts = (Array.isArray(dueUsers) ? dueUsers : [])
-    .map((user) => Number(user?.preferences?.items_per_digest))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  return Math.max(
-    Number(defaultItemCount || 7),
-    requestedCounts.length ? Math.max(...requestedCounts) : 0
-  );
+  return Math.max(1, Number(defaultItemCount || 5));
 }
 
 function buildTagPriority(dueUsers, normalizeTopicToken) {

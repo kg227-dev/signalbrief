@@ -34,7 +34,6 @@ const STATIC_ROUTE_FILES = new Map([
   ["/settings-ui-topic-runtime.js", "settings-ui-topic-runtime.js"],
   ["/settings-ui-preferences-actions-runtime.js", "settings-ui-preferences-actions-runtime.js"],
   ["/settings-ui-preferences-runtime.js", "settings-ui-preferences-runtime.js"],
-  ["/settings-ui-sources-runtime.js", "settings-ui-sources-runtime.js"],
   ["/settings-ui-runtime.js", "settings-ui-runtime.js"],
   ["/settings-runtime.js", "settings-runtime.js"],
   ["/index-helpers-runtime.js", "index-helpers-runtime.js"],

@@ -11,7 +11,6 @@ function parseSignupInput({
   const {
     name,
     email,
-    telegram,
     topics,
     depth,
     delivery_time,
@@ -39,10 +38,14 @@ function parseSignupInput({
   if (!topicsList) {
     return { ok: false, status: 400, error: "topics must be an array" };
   }
+  if (body?.telegram != null) {
+    return { ok: false, status: 400, error: "telegram is not allowed in the reduced-scope MVP" };
+  }
 
   const normalizedTopicsResult = normalizeTopicsForUserInput(topicsList, {
     defaultTopics,
-    minRequired: 2,
+    minRequired: 1,
+    maxTopics: 3,
     maxCustomKeywords,
   });
   if (!normalizedTopicsResult.ok) {
@@ -55,7 +58,6 @@ function parseSignupInput({
     value: {
       name,
       emailNorm,
-      telegramClean: telegram ? String(telegram).replace(/^@+/, "").trim() : null,
       normalizedTopics,
       referralToken,
       depth,
@@ -107,7 +109,6 @@ function buildSignupUser({
   chatId,
   input,
   token,
-  defaultTopics,
   signupReferralSource,
 }) {
   const nowIso = new Date().toISOString();
@@ -121,9 +122,6 @@ function buildSignupUser({
     joined_at: nowIso,
     last_updated: nowIso,
     digests_received: 0,
-    bookmarks: [],
-    topic_weights: {},
-    custom_topics: [],
     signup_referral_source: signupReferralSource,
     digest_dates: [],
     last_digest_items: [],
@@ -132,22 +130,17 @@ function buildSignupUser({
       delivery_time: input.delivery_time || "07:00",
       frequency: input.frequency || "daily_weekday",
       days_of_week: Array.isArray(input.days_of_week) ? input.days_of_week : [1, 2, 3, 4, 5],
-      items_per_digest: 5, // MVP: always 5
       timezone: "America/New_York",
       email_enabled: true,
-      telegram_enabled: false, // MVP: email only
     },
   }, { chatId });
 }
 
 async function runSignupSideEffects({
   user,
-  chatId,
   referrerUser,
   sendReferralThankYou,
   sendWelcomeEmail,
-  queueDigestTrigger,
-  resolveBaseUrl,
 }) {
   const tasks = [];
 
@@ -163,22 +156,6 @@ async function runSignupSideEffects({
     sendWelcomeEmail(user)
       .then(() => null)
       .catch((err) => ({ code: "welcome_email_failed", detail: err.message || "unknown error" }))
-  );
-
-  tasks.push(
-    queueDigestTrigger({
-      source: "web:signup_welcome",
-      trigger: "signup_welcome",
-      chatId,
-      maxAdmissionWaitMs: 10 * 60 * 1000,
-      env: { BASE_URL: resolveBaseUrl() },
-    }).then((outcome) => {
-      if (outcome.ok) return null;
-      return {
-        code: "welcome_digest_trigger_failed",
-        detail: outcome.code || "unknown trigger status",
-      };
-    }).catch((err) => ({ code: "welcome_digest_trigger_failed", detail: err.message || "unknown error" }))
   );
 
   const settled = await Promise.all(tasks);

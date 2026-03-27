@@ -34,7 +34,7 @@ function createDeps(overrides = {}) {
     runDigestTrigger: async () => ({ ok: true, status: "ok", raw: { run: { code: 0 } } }),
     startDigestTrigger: async () => ({ ok: true, status: "queued", raw: {} }),
     BASE_URL: "http://localhost:3003",
-    DEFAULT_TOPICS: ["AI×TECH", "HEALTHCARE"],
+    DEFAULT_TOPICS: ["TECHNOLOGY", "HEALTHCARE"],
     PROTECTED_FIELDS: [],
     isAdminAuthed: () => false,
     logAdminActionEvent: () => {},
@@ -65,9 +65,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
       delivery_time: "07:00",
       frequency: "daily_weekday",
       days_of_week: [1, 2, 3, 4, 5],
-      items_per_digest: 5,
       email_enabled: true,
-      telegram_enabled: true,
     },
   };
   const { deps, responses } = createDeps({
@@ -100,8 +98,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
     requireJsonBody: async () => ({
       name: "A",
       email: "a@example.com",
-      topics: [" AI×TECH ", "AI×TECH", " HEALTHCARE "],
-      telegram: "",
+      topics: [" TECHNOLOGY ", "TECHNOLOGY", " HEALTHCARE "],
     }),
   });
   const handlers = createWebUserHandlers(deps);
@@ -113,15 +110,17 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   assert.strictEqual(last.data.success, true);
   assert.strictEqual(last.data.account_created, true);
   assert.strictEqual(writes.length, 1);
-  assert.deepStrictEqual(writes[0].topics, ["AI×TECH", "HEALTHCARE"]);
+  assert.deepStrictEqual(writes[0].topics, ["TECHNOLOGY", "HEALTHCARE"]);
 
   const degradedRun = createDeps({
     requireJsonBody: async () => ({
       name: "A",
       email: "degraded@example.com",
-      topics: ["AI×TECH", "HEALTHCARE"],
+      topics: ["TECHNOLOGY", "HEALTHCARE"],
     }),
-    queueDigestTrigger: async () => ({ ok: false, code: "busy" }),
+    sendWelcomeEmail: async () => {
+      throw new Error("smtp offline");
+    },
   });
   await createWebUserHandlers(degradedRun.deps).handleSignup({}, {});
   const degraded = degradedRun.responses[degradedRun.responses.length - 1];
@@ -130,7 +129,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   assert.strictEqual(degraded.data.account_created, true);
   assert.ok(Array.isArray(degraded.data.warnings));
   assert.strictEqual(degraded.data.warnings.length, 1);
-  assert.strictEqual(degraded.data.warnings[0].code, "welcome_digest_trigger_failed");
+  assert.strictEqual(degraded.data.warnings[0].code, "welcome_email_failed");
 
   await assertSettingsValidation(
     { token: "token-1", preferences: "bad-payload" },
@@ -159,9 +158,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
       delivery_time: "07:00",
       frequency: "daily_weekday",
       days_of_week: [1, 2, 3, 4, 5],
-      items_per_digest: 5,
       email_enabled: true,
-      telegram_enabled: true,
     },
   };
   const settingsRun = createDeps({
@@ -185,7 +182,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   const settingsTopicsRun = createDeps({
     requireJsonBody: async () => ({
       token: "token-1",
-      topics: [" ai×tech ", "custom_Cloud Security", "Cloud security", "AI×TECH"],
+      topics: [" technology ", " HEALTHCARE ", "TECHNOLOGY"],
     }),
     findUserByToken: (token) => (token === "token-1" ? existingUser : null),
     allUsers: () => [existingUser],
@@ -195,10 +192,6 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   assert.strictEqual(settingsTopicsRun.writes.length, 1);
   assert.deepStrictEqual(
     settingsTopicsRun.writes[0].topics,
-    ["AI×TECH", "custom_cloud_security"]
-  );
-  assert.deepStrictEqual(
-    settingsTopicsRun.writes[0].custom_topics,
-    ["custom_cloud_security"]
+    ["TECHNOLOGY", "HEALTHCARE"]
   );
 })();

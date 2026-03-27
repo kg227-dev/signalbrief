@@ -13,7 +13,6 @@ function sanitizeStringArray(values) {
     .filter(Boolean);
 }
 
-
 function sanitizePreferences(preferences) {
   if (!preferences || typeof preferences !== "object" || Array.isArray(preferences)) return {};
   const out = {};
@@ -43,33 +42,15 @@ function normalizeBooleanLike(value) {
   return Boolean(value);
 }
 
-
-function sanitizeSourcePreferences(sp) {
-  const normList = (arr) => Array.isArray(arr)
-    ? arr.map((d) => String(d || "").trim().toLowerCase()).filter((d) => d.length > 0 && d.length <= 120)
-    : [];
-  if (!sp || typeof sp !== "object" || Array.isArray(sp)) {
-    return { trusted_sources: [], blocked_sources: [] };
-  }
-  return {
-    trusted_sources: normList(sp.trusted_sources),
-    blocked_sources: normList(sp.blocked_sources),
-  };
-}
-
 function buildPublicUserRecord(user) {
   if (!user || typeof user !== "object" || Array.isArray(user)) return null;
   return {
     chatId: String(user.chatId || ""),
     email: String(user.email || ""),
-    telegram: String(user.telegram || ""),
     name: String(user.name || ""),
     status: String(user.status || "active"),
     topics: sanitizeStringArray(user.topics),
-    custom_keywords: sanitizeStringArray(user.custom_keywords),
-    watchlist: sanitizeStringArray(user.watchlist),
     preferences: sanitizePreferences(user.preferences),
-    source_preferences: sanitizeSourcePreferences(user.source_preferences),
   };
 }
 

@@ -58,7 +58,11 @@ async function runFeedback(feedbackType) {
     "positive feedback must not mutate deprecated topic weights"
   );
   assert.strictEqual(positive.writeCount, 0, "positive feedback must not persist a user mutation");
-  assert.deepStrictEqual(positive.responseBody, { ok: true, effects: {} }, "positive feedback should still succeed");
+  assert.deepStrictEqual(
+    positive.responseBody,
+    { ok: true, effects: { recorded: true } },
+    "positive feedback should still succeed without mutating user state"
+  );
   assert.strictEqual(positive.appendCount, 1, "positive feedback should still emit analytics");
 
   const negative = await runFeedback("negative");
@@ -70,12 +74,12 @@ async function runFeedback(feedbackType) {
   assert.strictEqual(negative.writeCount, 0, "negative feedback must not persist a user mutation");
 
   const repetitive = await runFeedback("repetitive");
-  assert.strictEqual(repetitive.writeCount, 1, "repetitive feedback should still persist suppression state");
-  assert.strictEqual(repetitive.responseBody.effects.suppressed, true, "repetitive feedback should report suppression");
+  assert.strictEqual(repetitive.writeCount, 0, "repetitive feedback must not persist suppression state in the reduced-scope MVP");
+  assert.deepStrictEqual(repetitive.responseBody.effects, { recorded: true }, "repetitive feedback should only record analytics");
 
   const weakSource = await runFeedback("weak_source");
-  assert.strictEqual(weakSource.writeCount, 1, "weak-source feedback should still persist source blocks");
-  assert.strictEqual(weakSource.responseBody.effects.source_blocked, true, "weak-source feedback should report blocking");
+  assert.strictEqual(weakSource.writeCount, 0, "weak-source feedback must not persist source blocks in the reduced-scope MVP");
+  assert.deepStrictEqual(weakSource.responseBody.effects, { recorded: true }, "weak-source feedback should only record analytics");
 
   console.log("core-api feedback no longer nudges topic weights ✓");
 })().catch((error) => {

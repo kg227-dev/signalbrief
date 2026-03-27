@@ -37,31 +37,6 @@ function normalizeDeliveryTimeRaw(deliveryTime) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function extractCustomKeywords(users, maxCustomFetchPerRun) {
-  const customTopicCounts = new Map();
-  for (const user of (Array.isArray(users) ? users : [])) {
-    for (const topic of (Array.isArray(user?.topics_raw) ? user.topics_raw : [])) {
-      const topicRaw = String(topic || "");
-      if (!topicRaw.startsWith("custom_")) continue;
-      customTopicCounts.set(topicRaw, (customTopicCounts.get(topicRaw) || 0) + 1);
-    }
-  }
-
-  const configuredMax = Number(maxCustomFetchPerRun);
-  const dynamicCap = Number.isFinite(configuredMax) && configuredMax > 0
-    ? configuredMax
-    : Math.min(18, Math.max(6, Math.ceil((((Array.isArray(users) ? users.length : 0) || 1)) / 4)));
-
-  return [...customTopicCounts.entries()]
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0]);
-    })
-    .slice(0, dynamicCap)
-    .map(([topic]) => String(topic).replace(/^custom_/, "").replace(/_/g, " ").trim())
-    .filter(Boolean);
-}
-
 function fallbackEstimateDigestCost({ topics, customKeywords, itemCount }) {
   const standardCalls = Array.isArray(topics) ? topics.length : 0;
   const customCalls = (Array.isArray(customKeywords) ? customKeywords.length : 0) * 3;
@@ -167,7 +142,6 @@ function buildProjectedWindowCostSummary({
   const slots = buildProjectedRunSlots(roster, { nowParts, days });
   const configTopics = Array.isArray(config?.topics) ? config.topics : [];
   const standardTopics = configTopics.map((topic) => topic?.tag).filter(Boolean);
-  const maxCustomFetchPerRun = config?.digest?.maxCustomFetchPerRun;
   const estimator = typeof estimateSandboxCost === "function"
     ? estimateSandboxCost
     : fallbackEstimateDigestCost;
@@ -177,14 +151,8 @@ function buildProjectedWindowCostSummary({
 
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
-    const customKeywords = extractCustomKeywords(users, maxCustomFetchPerRun);
-    const itemCount = Math.max(
-      5,
-      ...users.map((user) => {
-        const count = Number(user?.items_per_digest);
-        return Number.isFinite(count) && count > 0 ? count : 5;
-      })
-    );
+    const customKeywords = [];
+    const itemCount = 5;
     const estimate = estimator({
       topics: standardTopics,
       customKeywords,

@@ -39,7 +39,6 @@ assert.doesNotThrow(() => {
         frequency: "daily_weekday",
         days_of_week: [1, 2, 3, 4, 5],
       },
-      source_preferences: {},
     },
     statusBanner: "",
     loadingEl: { style: {} },

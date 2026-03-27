@@ -159,7 +159,6 @@ function buildAdminRosterEntry({
   const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
   const daysLabel = formatDaysLabel(allowedDays);
   const nextDelivery = user.status === "active" ? computeNextDeliveryEt(prefs) : null;
-  const tgLinked = !!(user.chatId && !user.chatId.startsWith("email-"));
   const adminUserPath = user.email ? `/admin/user?email=${encodeURIComponent(user.email)}` : null;
   const archivePath = buildArchivePath(user, adminUserPath);
   const settingsPath = buildSettingsPath(user, adminUserPath);
@@ -180,9 +179,7 @@ function buildAdminRosterEntry({
     digests_legacy: Math.max(0, Number(user.digests_received || 0)),
     last_digest: toETDate(effectiveLastDigestAt),
     last_scheduled_digest: toETDate(recentScheduledAt),
-    telegram: tgLinked,
     email_enabled: prefs.email_enabled !== false,
-    telegram_enabled: !!(prefs.telegram_enabled && tgLinked),
     topics: (user.topics || []).length,
     topics_raw: Array.isArray(user.topics) ? user.topics : [],
     topics_list: buildTopicsList(user.topics),

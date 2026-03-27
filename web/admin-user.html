@@ -264,13 +264,9 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
     <div class="form-card">
       <div class="card-title">Topics</div>
       <div class="card-heading">What they track</div>
-      <div class="section-subtitle">Minimum 2 required.</div>
+      <div class="section-subtitle">Pick 1 to 3 topics.</div>
       <div class="topic-grid" id="topicGrid"></div>
       <div class="topic-note" id="topicNote"></div>
-      <div class="custom-row">
-        <input type="text" id="customTopicInput" placeholder="Add a custom topic">
-        <button type="button" class="btn-add" id="addTopicBtn">+ Add</button>
-      </div>
     </div>
 
     <!-- Depth -->
@@ -362,7 +358,7 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="action-bar-title">Admin actions</div>
       <div class="action-row">
         <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
-        <button type="button" class="btn btn-secondary" id="sendDigestBtn">Send digest now</button>
+        <button type="button" class="btn btn-secondary" id="sendDigestBtn" disabled>Targeted digest disabled</button>
         <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
         <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
         <button type="button" class="btn btn-danger-soft" id="unsubBtn">Mark unsubscribed</button>
@@ -385,7 +381,7 @@ const CAPABILITY_TOPICS = [
   'DIGITAL','M&A ADVISORY','TALENT',
 ];
 const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-const MAX_CUSTOM_KEYWORDS = 3;
+const MAX_CUSTOM_KEYWORDS = 0;
 const TOPIC_LABELS = {
   'HEALTHCARE':'Healthcare','FINANCIAL SERVICES':'Financial Services','PE×M&A':'Private Equity & M&A',
   'ENERGY':'Energy','CONSUMER':'Consumer & Retail','LIFE SCIENCES':'Life Sciences',
@@ -469,12 +465,12 @@ function resolveLatestDigestDateKey(user) {
 
 function updateTopicNote() {
   const n = selectedTopics.size;
-  const custom = selectedCustomTopicCount();
   const el = document.getElementById('topicNote');
   if (!el) return;
-  const customPart = ' · custom ' + custom + '/' + MAX_CUSTOM_KEYWORDS;
-  el.textContent = n + ' selected' + customPart + (n < 2 ? ' — minimum 2 required' : '');
-  el.style.color = (n < 2 && n > 0) ? 'var(--red)' : 'var(--text-secondary)';
+  el.textContent = n < 1
+    ? n + ' selected — minimum 1 required'
+    : (n > 3 ? n + ' selected — reduce to 3' : n + ' selected');
+  el.style.color = (n === 0 || n > 3) ? 'var(--red)' : 'var(--text-secondary)';
 }
 
 function renderChip(topic, selected) {
@@ -487,8 +483,8 @@ function renderChip(topic, selected) {
       selectedTopics.delete(topic);
       chip.classList.remove('selected');
     } else {
-      if (isCustom(topic) && selectedCustomTopicCount() >= MAX_CUSTOM_KEYWORDS) {
-        showError('You can track up to ' + MAX_CUSTOM_KEYWORDS + ' custom keywords.');
+      if (selectedTopics.size >= 3) {
+        showError('Select no more than 3 topics.');
         return;
       }
       selectedTopics.add(topic);
@@ -889,25 +885,6 @@ async function init() {
 
     // Topics
     renderChips(user.topics || []);
-    document.getElementById('addTopicBtn').addEventListener('click', function() {
-      const input = document.getElementById('customTopicInput');
-      const val = input.value.trim();
-      if (!val || selectedTopics.has(val)) { input.value = ''; return; }
-      if (selectedCustomTopicCount() >= MAX_CUSTOM_KEYWORDS) {
-        showError('You can track up to ' + MAX_CUSTOM_KEYWORDS + ' custom keywords.');
-        return;
-      }
-      const chip = renderChip(val, true);
-      selectedTopics.add(val);
-      document.getElementById('topicGrid').appendChild(chip);
-      updateTopicNote();
-      showError('');
-      input.value = '';
-    });
-    document.getElementById('customTopicInput').addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addTopicBtn').click(); }
-    });
-
     // Depth
     const depth = (user.preferences || {}).depth || 'headline_plus_why';
     document.querySelectorAll('.depth-option').forEach(opt => {
@@ -929,7 +906,8 @@ async function init() {
 
     // --- Save preferences ---
     document.getElementById('saveBtn').addEventListener('click', async function() {
-      if (selectedTopics.size < 2) { showError('Select at least 2 topics.'); return; }
+      if (selectedTopics.size < 1) { showError('Select at least 1 topic.'); return; }
+      if (selectedTopics.size > 3) { showError('Select no more than 3 topics.'); return; }
       const btn = this;
       btn.disabled = true; btn.textContent = 'Saving…';
       showError('');
@@ -959,20 +937,7 @@ async function init() {
 
     // --- Send digest now ---
     document.getElementById('sendDigestBtn').addEventListener('click', async function() {
-      if (!user.chatId) { showBanner('❌ No chatId — cannot trigger digest', true); return; }
-      const btn = this;
-      btn.disabled = true; btn.textContent = 'Sending…';
-      try {
-        const r = await fetch('/api/admin/run-digest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: user.chatId })
-        });
-        const data = await r.json();
-        if (data.success) showBanner('✅ Digest triggered for ' + (user.name || userEmail));
-        else showBanner('❌ ' + (data.error || 'Failed'), true);
-      } catch { showBanner('❌ Network error', true); }
-      btn.disabled = false; btn.textContent = 'Send digest now';
+      showBanner('❌ Targeted digests are disabled in the reduced-scope email-only MVP.', true);
     });
 
     // --- Resend settings link ---

@@ -342,7 +342,11 @@ function selectTopicBuckets(items, subscribedTopics, itemsPerTopic = 5) {
   }
   for (const topic of Object.keys(buckets)) {
     buckets[topic] = buckets[topic]
-      .sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0))
+      .sort((a, b) => {
+        const aScore = Number(a?.relevanceScore ?? a?._score ?? a?.baseScore ?? 0);
+        const bScore = Number(b?.relevanceScore ?? b?._score ?? b?.baseScore ?? 0);
+        return bScore - aScore;
+      })
       .slice(0, itemsPerTopic);
   }
   return buckets;

@@ -1024,7 +1024,7 @@ async function main() {
     dueUsersCount: dueUsers.length,
   });
 
-  const storylinePool = prepareStorylinePool(enriched, selectionTarget);
+  const storylinePool = Array.isArray(enriched) ? enriched.slice() : [];
   fetchDiagnostics.final_selected_preferred_count = storylinePool.filter((item) => String(item?.preferred_source_match || "none") !== "none").length;
   fetchDiagnostics.preferred_displaced_weak_count = storylinePool.filter((item) => item?.won_by_preferred_substitute === true).length;
   fetchDiagnostics.derivative_suppressed_count = storylinePool.reduce((sum, item) => sum + Math.max(0, Number(item?.cluster_derivative_suppressed_count || 0)), 0);
@@ -1033,7 +1033,7 @@ async function main() {
   fetchDiagnostics.broader_retrieval_found_better_count = storylinePool.filter((item) => item?.broader_retrieval_found_better === true).length;
   fetchDiagnostics.coverage_gap_preferred_missing_count = storylinePool.filter((item) => String(item?.coverage_gap_status || "") === "preferred_missing").length;
   fetchDiagnostics.coverage_gap_preferred_weaker_count = storylinePool.filter((item) => String(item?.coverage_gap_status || "") === "preferred_exists_but_weaker").length;
-  log(`Storyline pool ready: ${storylinePool.length}/${enriched.length} candidate(s) retained after quality gate`);
+  log(`Delivery pool ready: ${storylinePool.length}/${enriched.length} selected candidate(s) retained for email delivery`);
 
   // Archive once per run (shared, date-keyed) before per-user filtering.
   persistSharedArchive({

@@ -141,7 +141,8 @@
       return true;
     }
     if (idx === 1) {
-      if (selectedTopicKeys().length < 2) { showError(1, "Please select at least 2 topics."); return false; }
+      if (selectedTopicKeys().length < 1) { showError(1, "Please select at least 1 topic."); return false; }
+      if (selectedTopicKeys().length > 3) { showError(1, "Please select no more than 3 topics."); return false; }
       return true;
     }
     if (idx === 2) {
@@ -276,19 +277,27 @@
       chip.classList.remove("selected");
       if (prefState) prefState.removeTopic(topic);
     } else {
+      if (selectedTopicKeys().length >= 3) {
+        updateTopicFeedback("Select up to 3 sectors.");
+        return;
+      }
       chip.classList.add("selected");
       if (prefState) prefState.addTopic(topic);
     }
     updateTopicFeedback();
   }
 
-  function updateTopicFeedback() {
-    // No custom keywords in MVP — feedback is only shown when < 2 topics selected
+  function updateTopicFeedback(message) {
     var fb = byId("topicFeedback");
     if (!fb) return;
+    if (message) {
+      fb.textContent = message;
+      fb.className = "topic-feedback visible";
+      return;
+    }
     var count = selectedTopicKeys().length;
-    if (count > 0 && count < 2) {
-      fb.textContent = "Select at least 2 sectors to continue.";
+    if (count === 0) {
+      fb.textContent = "Select at least 1 sector to continue.";
       fb.className = "topic-feedback visible";
     } else {
       fb.textContent = "";

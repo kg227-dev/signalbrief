@@ -96,7 +96,6 @@
     showBanner,
     renderChips,
     prefState,
-    sourceState,
   }) {
     loadingEl.style.display = "none";
     formEl.style.display = "block";
@@ -122,14 +121,6 @@
       renderDays,
     });
 
-    // Source preferences
-    const SourcesRuntime = globalScope.SignalBriefSettingsUiSourcesRuntime;
-    if (SourcesRuntime && typeof SourcesRuntime.createSourceState === "function") {
-      const ss = sourceState || SourcesRuntime.createSourceState(user.source_preferences || {});
-      SourcesRuntime.initSourcesUi(ss);
-      // Expose on globalScope so settings-runtime.js save handler can read it
-      globalScope._signalBriefSourceState = ss;
-    }
   }
 
   function renderUnsubscribedState(formEl) {

@@ -20,14 +20,12 @@ const PROTECTED_FIELDS = [
   "token",
   "joined_at",
   "digests_received",
-  "bookmarks",
   "last_digest_items",
   "last_digest_at",
   "digest_dates",
   "last_email_open_at",
   "email_opens_total",
   "reengagement_state",
-  "custom_topics",
   "signup_referral_source",
 ];
 

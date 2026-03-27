@@ -191,7 +191,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     runMode: "targeted",
   });
 
-  assert.strictEqual(fetched.selectionTarget, 10);
+  assert.strictEqual(fetched.selectionTarget, 7);
   // On-demand targeted runs now fetch ALL configured topics (not just user's)
   // to prevent thin digest pools from cross-day dedup decimation.
   assert.strictEqual(fetched.standardFetchCallsPlanned, 2);

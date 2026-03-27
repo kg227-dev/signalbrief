@@ -149,7 +149,7 @@ function buildAdminStatsPayload({
     recentDigestRows: recentDigests.rows,
   });
   const activeUsersCount = roster.filter((user) => user.status === "active").length;
-  const activeTelegramUsersCount = roster.filter((user) => user.status === "active" && user.telegram).length;
+  const activeTelegramUsersCount = 0;
   const monthUsersServedFromRoster = roster.filter((user) => user.last_digest && user.last_digest.startsWith(monthPrefix)).length;
 
   const deliveryWarnings = buildDeliveryWarnings(roster);

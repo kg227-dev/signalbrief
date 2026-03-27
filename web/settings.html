@@ -141,7 +141,7 @@
       <div class="section-header">
         <div class="section-num">Topics</div>
         <div class="section-title">What you track</div>
-        <div class="section-subtitle">Minimum 2 required.</div>
+        <div class="section-subtitle">Pick 1 to 3 topics.</div>
       </div>
       <div class="selected-summary" id="selectedSummary"></div>
       <div class="topic-grid" id="topicGrid"></div>
@@ -171,33 +171,6 @@
           <div class="depth-radio-dot"><div class="depth-radio-inner"></div></div>
           <div><div class="depth-label">Deep</div><div class="depth-desc">Headline + strategic "why it matters." 4-minute read.</div></div>
         </label>
-      </div>
-    </div>
-
-    <!-- Sources -->
-    <div class="section visible">
-      <div class="section-header">
-        <div class="section-num">Sources</div>
-        <div class="section-title">Source preferences</div>
-        <div class="section-subtitle">Boost sources you trust. Suppress ones you don't.</div>
-      </div>
-      <div class="field">
-        <label>Trusted sources <span class="optional">(prioritized in your digest)</span></label>
-        <div class="source-chips" id="trustedChips"></div>
-        <div class="custom-topic-row">
-          <input type="text" id="trustedSourceInput" placeholder="e.g. reuters.com">
-          <button type="button" class="btn-add-topic" id="addTrustedBtn">+ Trust</button>
-        </div>
-        <div class="source-error" id="trustedSourceError"></div>
-      </div>
-      <div class="field" style="margin-top:16px;">
-        <label>Blocked sources <span class="optional">(excluded from your digest)</span></label>
-        <div class="source-chips" id="blockedChips"></div>
-        <div class="custom-topic-row">
-          <input type="text" id="blockedSourceInput" placeholder="e.g. benzinga.com">
-          <button type="button" class="btn-add-topic" id="addBlockedBtn">+ Block</button>
-        </div>
-        <div class="source-error" id="blockedSourceError"></div>
       </div>
     </div>
 
@@ -336,7 +309,6 @@
 <script src="settings-ui-topic-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-ui-preferences-actions-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-ui-preferences-runtime.js?v=__ASSET_VERSION__"></script>
-<script src="settings-ui-sources-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-ui-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings-runtime.js?v=__ASSET_VERSION__"></script>
 <script src="settings.js?v=__ASSET_VERSION__"></script>

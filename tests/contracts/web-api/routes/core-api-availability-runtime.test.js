@@ -83,7 +83,7 @@ function parseBody(res) {
 }
 
 (async () => {
-  // 3. Empty email — returns both false
+  // 3. Empty email — returns emailTaken false
   {
     requireJsonBody._body = { email: "" };
     const ctx = buildCtx("POST", "/api/check-availability");
@@ -92,7 +92,6 @@ function parseBody(res) {
     assert.strictEqual(result, true, "should handle the route");
     const body = parseBody(ctx.res);
     assert.strictEqual(body.emailTaken, false);
-    assert.strictEqual(body.telegramTaken, false);
   }
 
   // 4. Email not taken — returns emailTaken: false
@@ -106,7 +105,6 @@ function parseBody(res) {
     assert.strictEqual(result, true);
     const body = parseBody(ctx.res);
     assert.strictEqual(body.emailTaken, false);
-    assert.strictEqual(body.telegramTaken, false);
   }
 
   // 5. Email taken — returns emailTaken: true (case-insensitive)
@@ -120,10 +118,9 @@ function parseBody(res) {
     assert.strictEqual(result, true);
     const body = parseBody(ctx.res);
     assert.strictEqual(body.emailTaken, true, "case-insensitive email match");
-    assert.strictEqual(body.telegramTaken, false);
   }
 
-  // 6. Telegram taken — returns telegramTaken: true (strips @, case-insensitive)
+  // 6. Telegram input is ignored in email-only MVP
   {
     requireJsonBody._body = { email: "new@example.com", telegram: "@MyHandle" };
     const ctx = buildCtx("POST", "/api/check-availability");
@@ -134,10 +131,10 @@ function parseBody(res) {
     assert.strictEqual(result, true);
     const body = parseBody(ctx.res);
     assert.strictEqual(body.emailTaken, false);
-    assert.strictEqual(body.telegramTaken, true, "case-insensitive telegram match strips @");
+    assert.deepStrictEqual(Object.keys(body), ["emailTaken"]);
   }
 
-  // 7. Both taken
+  // 7. Only email availability is reported
   {
     requireJsonBody._body = { email: "taken@example.com", telegram: "takenHandle" };
     const ctx = buildCtx("POST", "/api/check-availability");
@@ -148,10 +145,9 @@ function parseBody(res) {
     assert.strictEqual(result, true);
     const body = parseBody(ctx.res);
     assert.strictEqual(body.emailTaken, true);
-    assert.strictEqual(body.telegramTaken, true);
   }
 
-  // 8. No telegram field — telegramTaken always false
+  // 8. No telegram field — email only
   {
     requireJsonBody._body = { email: "new@example.com" };
     const ctx = buildCtx("POST", "/api/check-availability");
@@ -162,7 +158,7 @@ function parseBody(res) {
     assert.strictEqual(result, true);
     const body = parseBody(ctx.res);
     assert.strictEqual(body.emailTaken, false);
-    assert.strictEqual(body.telegramTaken, false, "no telegram in request means always false");
+    assert.deepStrictEqual(Object.keys(body), ["emailTaken"]);
   }
 
   process.stdout.write("[availability-runtime] all assertions passed\n");

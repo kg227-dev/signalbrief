@@ -134,7 +134,8 @@ function createSettingsHandler({
     if (safeBody.topics != null) {
       const topicsResult = normalizeTopicsForUserInput(safeBody.topics, {
         defaultTopics: DEFAULT_TOPICS,
-        minRequired: 2,
+        minRequired: 1,
+        maxTopics: 3,
         maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
       });
       if (!topicsResult.ok) {
@@ -143,34 +144,20 @@ function createSettingsHandler({
       safeBody.topics = topicsResult.topics;
     }
 
-    delete safeBody.topic_weights; // deprecated — ignored in email-only MVP
-
-    if (safeBody.source_preferences != null) {
-      const sp = safeBody.source_preferences;
-      if (typeof sp !== "object" || Array.isArray(sp)) {
-        return json(res, { error: "source_preferences must be an object" }, 400);
-      }
-      const normalizeDomainList = (arr, field) => {
-        if (!Array.isArray(arr)) return { ok: false, error: `source_preferences.${field} must be an array` };
-        const out = [];
-        for (const d of arr) {
-          const s = String(d || "").trim().toLowerCase().replace(/^www\./, "");
-          if (!s || s.length > 120) continue;
-          if (!/^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$/.test(s)) continue;
-          if (!out.includes(s)) out.push(s);
-        }
-        return { ok: true, value: out };
-      };
-      const t = normalizeDomainList(sp.trusted_sources || [], "trusted_sources");
-      if (!t.ok) return json(res, { error: t.error }, 400);
-      const b = normalizeDomainList(sp.blocked_sources || [], "blocked_sources");
-      if (!b.ok) return json(res, { error: b.error }, 400);
-      safeBody.source_preferences = { trusted_sources: t.value, blocked_sources: b.value };
+    if (safeBody.topic_weights != null) {
+      return json(res, { error: "topic_weights is not allowed in the reduced-scope MVP" }, 400);
     }
-
-    // Telegram field: silently accepted but not used for email-only MVP
+    if (safeBody.custom_keywords != null) {
+      return json(res, { error: "custom_keywords is not allowed in the reduced-scope MVP" }, 400);
+    }
+    if (safeBody.watchlist != null) {
+      return json(res, { error: "watchlist is not allowed in the reduced-scope MVP" }, 400);
+    }
+    if (safeBody.source_preferences != null) {
+      return json(res, { error: "source_preferences is not allowed in the reduced-scope MVP" }, 400);
+    }
     if (safeBody.telegram != null) {
-      delete safeBody.telegram;
+      return json(res, { error: "telegram is not allowed in the reduced-scope MVP" }, 400);
     }
 
     if (safeBody.email != null) {
@@ -195,10 +182,6 @@ function createSettingsHandler({
       preferences: { ...existing.preferences, ...safeBody.preferences },
       ...Object.fromEntries(PROTECTED_FIELDS.map((key) => [key, existing[key]])),
     }, { chatId: existing.chatId });
-
-    if (Array.isArray(updated.topics)) {
-      updated.custom_topics = updated.topics.filter((topic) => !DEFAULT_TOPICS.includes(topic));
-    }
 
     if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
       updated.email_unsubscribed_at = new Date().toISOString();

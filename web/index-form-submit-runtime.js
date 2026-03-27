@@ -84,8 +84,12 @@
       clearSubmitError();
 
       const topics = typeof selectedTopicKeys === "function" ? selectedTopicKeys() : [];
-      if (topics.length < 2) {
-        showSubmitError("Please select at least 2 topics.");
+      if (topics.length < 1) {
+        showSubmitError("Please select at least 1 topic.");
+        return;
+      }
+      if (topics.length > 3) {
+        showSubmitError("Please select no more than 3 topics.");
         return;
       }
       const maxCustomKeywords = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);

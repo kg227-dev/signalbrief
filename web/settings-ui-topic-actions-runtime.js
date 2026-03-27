@@ -9,30 +9,17 @@
     DEFAULT_TOPICS,
     showError,
   }) {
-    const maxCustomKeywords = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
-
-    function isCustomTopic(topic) {
-      if (typeof Prefs.isCustomTopic === "function") return Prefs.isCustomTopic(topic);
-      return !DEFAULT_TOPICS.includes(String(topic || ""));
-    }
-
     function topicDisplayLabel(topic) {
       if (typeof Prefs.topicDisplayLabel === "function") return Prefs.topicDisplayLabel(topic);
-      const key = String(topic || "");
-      return key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+      return String(topic || "");
     }
 
     function selectedTopicsList() {
       return prefState ? prefState.getTopics() : [];
     }
 
-    function selectedCustomKeywordCount() {
-      return selectedTopicsList().filter((topic) => isCustomTopic(topic)).length;
-    }
-
     function showTopicInputError(message) {
       const topicError = byId("topicInputError");
-      const customTopicInput = byId("customTopicInput");
       const nextMessage = String(message || "").trim();
 
       if (topicError) {
@@ -40,11 +27,6 @@
         topicError.classList.toggle("visible", !!nextMessage);
       } else if (typeof showError === "function") {
         showError(nextMessage);
-      }
-
-      if (customTopicInput) {
-        customTopicInput.classList.toggle("input-error", !!nextMessage);
-        customTopicInput.setAttribute("aria-invalid", nextMessage ? "true" : "false");
       }
     }
 
@@ -66,20 +48,30 @@
       const count = selectedTopicsList().length;
       const note = byId("topicMinNote");
       if (!note) return;
-      note.textContent = `${count} selected${count < 2 ? " — pick at least 2" : ""}`;
-      note.style.color = count > 0 && count < 2 ? "#DC2626" : "#6B7280";
+      if (count < 1) {
+        note.textContent = `${count} selected — pick at least 1`;
+      } else if (count > 3) {
+        note.textContent = `${count} selected — reduce to 3`;
+      } else {
+        note.textContent = `${count} selected`;
+      }
+      note.style.color = count === 0 || count > 3 ? "#DC2626" : "#6B7280";
       updateSelectedSummary();
     }
 
     function renderChip(topic, selected) {
       const chip = document.createElement("div");
-      const custom = isCustomTopic(topic);
-      chip.className = `chip${selected ? " selected" : ""}${custom ? " chip-custom" : ""}`;
+      chip.className = `chip${selected ? " selected" : ""}`;
       chip.dataset.topic = topic;
       chip.innerHTML = `<span class="chip-check">✓</span> ${topicDisplayLabel(topic)}`;
 
       chip.addEventListener("click", () => {
         if (!prefState) return;
+        if (!prefState.hasTopic(topic) && selectedTopicsList().length >= 3) {
+          showTopicInputError("You can select up to 3 topics.");
+          updateTopicNote();
+          return;
+        }
         const isSelected = prefState.toggleTopic(topic);
         chip.classList.toggle("selected", isSelected);
         showTopicInputError("");
@@ -114,85 +106,11 @@
         container.appendChild(renderChip(topic, prefState.hasTopic(topic)));
       });
 
-      prefState.getTopics().filter(isCustomTopic).forEach((topic) => {
-        container.appendChild(renderChip(topic, true));
-      });
-
       updateTopicNote();
     }
 
-    function findTopicChip(topic) {
-      return Array.from(document.querySelectorAll("#topicGrid [data-topic]"))
-        .find((chip) => chip.dataset.topic === topic) || null;
-    }
-
     function bindTopicHandlers() {
-      const addTopicBtn = byId("addTopicBtn");
-      const customTopicInput = byId("customTopicInput");
-      const topicGrid = byId("topicGrid");
-      if (!addTopicBtn || !customTopicInput || !topicGrid || !prefState) return;
-
-      addTopicBtn.addEventListener("click", () => {
-        const value = String(customTopicInput.value || "").trim();
-        if (!value) {
-          customTopicInput.value = "";
-          return;
-        }
-
-        const topicKey = typeof Prefs.topicKeyFromInput === "function"
-          ? Prefs.topicKeyFromInput(value, { matchDefault: true })
-          : `custom_${value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`;
-
-        if (!topicKey) {
-          customTopicInput.value = "";
-          return;
-        }
-
-        const existing = findTopicChip(topicKey);
-        if (existing) {
-          if (prefState.hasTopic(topicKey)) {
-            const duplicateLabel = isCustomTopic(topicKey) ? value : topicDisplayLabel(topicKey);
-            showTopicInputError(`You're already tracking "${duplicateLabel}". Try a different topic.`);
-            customTopicInput.focus();
-            customTopicInput.select();
-            return;
-          }
-          if (
-            isCustomTopic(topicKey)
-            && selectedCustomKeywordCount() >= maxCustomKeywords
-          ) {
-            showTopicInputError(`You can track up to ${maxCustomKeywords} custom keywords.`);
-            return;
-          }
-          prefState.addTopic(topicKey);
-          existing.classList.add("selected");
-          updateTopicNote();
-          customTopicInput.value = "";
-          showTopicInputError("");
-          return;
-        }
-
-        if (isCustomTopic(topicKey) && selectedCustomKeywordCount() >= maxCustomKeywords) {
-          showTopicInputError(`You can track up to ${maxCustomKeywords} custom keywords.`);
-          return;
-        }
-
-        prefState.addTopic(topicKey);
-        topicGrid.appendChild(renderChip(topicKey, true));
-        updateTopicNote();
-        customTopicInput.value = "";
-        showTopicInputError("");
-      });
-
-      customTopicInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          addTopicBtn.click();
-        }
-      });
-      customTopicInput.addEventListener("input", () => {
-        showTopicInputError("");
-      });
+      return undefined;
     }
 
     return {

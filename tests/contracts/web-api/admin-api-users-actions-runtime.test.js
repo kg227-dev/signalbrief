@@ -52,10 +52,8 @@ async function testResubscribeRestoresChannels() {
     email_unsubscribed_at: "2026-03-01T10:00:00.000Z",
     preferences: {
       email_enabled: false,
-      telegram_enabled: false,
       _pre_unsubscribe_channels: {
         email_enabled: true,
-        telegram_enabled: false,
       },
     },
   };
@@ -78,7 +76,7 @@ async function testResubscribeRestoresChannels() {
   assert.strictEqual(writes.length, 1, "resubscribe should persist exactly one update");
   assert.strictEqual(writes[0].payload.status, "active");
   assert.strictEqual(writes[0].payload.preferences.email_enabled, true);
-  assert.strictEqual(writes[0].payload.preferences.telegram_enabled, false);
+  assert.ok(!("telegram_enabled" in writes[0].payload.preferences), "resubscribe should not restore telegram in email-only MVP");
   assert.ok(!("_pre_unsubscribe_channels" in writes[0].payload.preferences), "resubscribe should clear backup channel state");
   assert.ok(!("email_unsubscribed_at" in writes[0].payload), "resubscribe should clear unsubscribe timestamp");
   assert.deepStrictEqual(writes[0].payload.reengagement_state, { reopened: true });
@@ -94,7 +92,6 @@ async function testUnsubscribeBacksUpChannels() {
     status: "active",
     preferences: {
       email_enabled: true,
-      telegram_enabled: true,
     },
   };
   const ctx = buildCtx({ email: user.email, status: "unsubscribed" });
@@ -114,10 +111,8 @@ async function testUnsubscribeBacksUpChannels() {
   assert.strictEqual(ctx.res.statusCode, 200);
   assert.strictEqual(writes.length, 1);
   assert.strictEqual(writes[0].preferences.email_enabled, false);
-  assert.strictEqual(writes[0].preferences.telegram_enabled, false);
   assert.deepStrictEqual(writes[0].preferences._pre_unsubscribe_channels, {
     email_enabled: true,
-    telegram_enabled: true,
   });
   assert.ok(typeof writes[0].email_unsubscribed_at === "string" && writes[0].email_unsubscribed_at.length > 10);
 }

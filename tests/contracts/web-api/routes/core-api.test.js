@@ -121,7 +121,6 @@ async function invoke(handler, { method, pathname, search = "" }) {
       findUserByToken: () => ({
         chatId: "123",
         email: "user@example.com",
-        telegram: "jarvis",
         name: "User Example",
         status: "active",
         topics: ["AI×TECH", "HEALTHCARE"],
@@ -144,6 +143,10 @@ async function invoke(handler, { method, pathname, search = "" }) {
     const body = JSON.parse(res.body);
     assert.strictEqual(body.chatId, "123");
     assert.strictEqual(body.email, "user@example.com");
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "telegram"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "custom_keywords"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "watchlist"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "source_preferences"), false);
     assert.strictEqual(
       Object.prototype.hasOwnProperty.call(body.preferences, "items_per_digest"),
       false,

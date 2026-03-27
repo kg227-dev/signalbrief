@@ -1005,7 +1005,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="card">
           <div class="card-label">Active subscribers</div>
           <div class="card-value" id="activeUsers">—</div>
-          <div class="card-sub" id="telegramUsers">— on Telegram</div>
+          <div class="card-sub" id="telegramUsers">Email-only MVP</div>
         </div>
       </div>
     </div>
@@ -1351,7 +1351,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     <div id="sendCustomPanel" class="modal-panel" style="display:none;">
       <div class="modal-channels">
         <label><input type="checkbox" id="sendViaEmail" onchange="syncSendModalState()"> Email</label>
-        <label><input type="checkbox" id="sendViaTelegram" onchange="syncSendModalState()"> Telegram</label>
       </div>
       <div id="sendChannelHint" class="modal-help" style="margin-bottom:10px;"></div>
       <div class="modal-field">
@@ -1475,27 +1474,9 @@ function renderTestTargets(roster) {
   const sel = document.getElementById("testDigestTarget");
   const btn = document.getElementById("testDigestBtn");
   if (!sel) return;
-  const prev = sel.value;
-  const targets = (roster || []).filter(u =>
-    u.status === "active" &&
-    u.chat_id &&
-    !String(u.chat_id).startsWith("email-")
-  );
-  if (!targets.length) {
-    sel.innerHTML = `<option value="">No Telegram-linked users</option>`;
-    sel.disabled = true;
-    if (btn) btn.disabled = true;
-    return;
-  }
-  sel.disabled = false;
-  if (btn) btn.disabled = false;
-  sel.innerHTML = targets.map(u => {
-    const label = `${u.name || "User"} · ${u.email || u.chat_id}`;
-    return `<option value="${esc(u.chat_id)}">${esc(label)}</option>`;
-  }).join("");
-  if (prev && targets.some(u => String(u.chat_id) === prev)) {
-    sel.value = prev;
-  }
+  sel.innerHTML = `<option value="">Targeted digests disabled in email-only MVP</option>`;
+  sel.disabled = true;
+  if (btn) btn.disabled = true;
 }
 function renderRunRecipients(run) {
   const recipients = Array.isArray(run?.per_user)
@@ -2387,7 +2368,7 @@ function countActiveUsers(roster) {
   return (roster || []).filter(u => u.status === "active").length;
 }
 function countActiveTelegramUsers(roster) {
-  return (roster || []).filter(u => u.status === "active" && u.telegram).length;
+  return 0;
 }
 let latestRoster = [];
 let latestRuns = [];
@@ -2567,24 +2548,22 @@ async function apiFetchJson(url, options = {}, maxRetries = 2) {
 
 // ── Per-user send tools (digest + custom message) ─────────────────────────────
 function getSendCapabilities(user) {
-  const canDigest = user.status === "active" && !!user.chat_id;
+  const canDigest = false;
   const canEmailMessage = !!user.email && user.email_enabled !== false;
-  const canTelegramMessage = !!(user.chat_id && !String(user.chat_id).startsWith("email-") && user.telegram_enabled);
   return {
     canDigest,
     canEmailMessage,
-    canTelegramMessage,
-    canAnyMessage: canEmailMessage || canTelegramMessage,
+    canTelegramMessage: false,
+    canAnyMessage: canEmailMessage,
   };
 }
 
 async function runDigestForChat(chatId) {
-  const resp = await apiFetchJson("/api/admin/run-digest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chatId }),
-  });
-  return { ok: resp.ok, data: resp.data, status: resp.status };
+  return {
+    ok: false,
+    status: 410,
+    data: { error: "Targeted digests are disabled in the reduced-scope email-only MVP." },
+  };
 }
 
 function findRosterUser(email, chatId) {
@@ -2630,9 +2609,8 @@ function syncSendModalState() {
   if (!sendModalUser) return;
   const caps = getSendCapabilities(sendModalUser);
   const emailCb = document.getElementById("sendViaEmail");
-  const tgCb = document.getElementById("sendViaTelegram");
   const body = document.getElementById("sendCustomBody").value.trim();
-  const hasChannel = (emailCb.checked && caps.canEmailMessage) || (tgCb.checked && caps.canTelegramMessage);
+  const hasChannel = emailCb.checked && caps.canEmailMessage;
   const canSend = sendMode === "digest"
     ? caps.canDigest
     : (caps.canAnyMessage && hasChannel && body.length > 0);
@@ -2647,18 +2625,12 @@ function openSendModal(email, chatId) {
 
   document.getElementById("sendModalTitle").textContent = `Send to ${user.name || user.email || user.chat_id}`;
   const emailCb = document.getElementById("sendViaEmail");
-  const tgCb = document.getElementById("sendViaTelegram");
   const hint = document.getElementById("sendChannelHint");
   emailCb.checked = caps.canEmailMessage;
   emailCb.disabled = !caps.canEmailMessage;
-  tgCb.checked = caps.canTelegramMessage;
-  tgCb.disabled = !caps.canTelegramMessage;
   document.getElementById("sendCustomSubject").value = "Quick note from SignalBrief";
   document.getElementById("sendCustomBody").value = "";
-  hint.textContent = [
-    caps.canEmailMessage ? "Email ready" : "Email unavailable",
-    caps.canTelegramMessage ? "Telegram ready" : "Telegram unavailable",
-  ].join(" · ");
+  hint.textContent = caps.canEmailMessage ? "Email ready" : "Email unavailable";
 
   document.getElementById("sendModal").style.display = "flex";
   setSendMode(caps.canDigest ? "digest" : "custom");
@@ -2697,7 +2669,6 @@ async function submitSendModal() {
 
     const channels = [];
     if (document.getElementById("sendViaEmail").checked) channels.push("email");
-    if (document.getElementById("sendViaTelegram").checked) channels.push("telegram");
     const body = document.getElementById("sendCustomBody").value.trim();
     const subject = document.getElementById("sendCustomSubject").value.trim();
     const payload = JSON.stringify({
@@ -3546,7 +3517,6 @@ function renderSubscriberDrawer(u) {
   const preview = Array.isArray(u.last_digest_preview) ? u.last_digest_preview : [];
   const channels = [
     `${u.email_enabled ? "✅" : "⛔"} Email ${u.email_enabled ? "enabled" : "disabled"}`,
-    `${u.telegram_enabled ? "✅" : "⛔"} Telegram ${u.telegram_enabled ? "enabled" : "disabled"}`,
   ];
   const previewHtml = preview.length
     ? `<div class="drawer-preview-list">${preview.map((p, i) => {
@@ -3909,55 +3879,8 @@ function renderDigestProgress(msg, stepIdx, elapsed) {
 }
 
 async function triggerTestDigest(triggerEl = null) {
-  const btn = triggerEl || document.getElementById("testDigestBtn");
-  const msg = document.getElementById("testDigestMsg");
-  const targetSel = document.getElementById("testDigestTarget");
-  const targetChatId = targetSel ? targetSel.value : "";
-  const targetLabel = (targetSel && targetSel.selectedOptions && targetSel.selectedOptions[0])
-    ? targetSel.selectedOptions[0].textContent
-    : targetChatId;
-  if (!targetChatId) {
-    renderTestDigestStatus({ state: "failed", message: "Choose a Telegram-linked test target first." });
-    return;
-  }
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "🧪 Running…";
-  }
-
-  let stepIdx = 0;
-  const t0 = Date.now();
-  renderDigestProgress(msg, 0, 0);
-  const progressTimer = setInterval(() => {
-    const elapsed = Date.now() - t0;
-    const nextStep = DIGEST_PROGRESS_STEPS[stepIdx + 1];
-    if (nextStep) {
-      const cumulativeDelay = DIGEST_PROGRESS_STEPS.slice(0, stepIdx + 2).reduce((s, st) => s + st.delayMs, 0);
-      if (elapsed >= cumulativeDelay) stepIdx = Math.min(stepIdx + 1, DIGEST_PROGRESS_STEPS.length - 1);
-    }
-    renderDigestProgress(msg, stepIdx, elapsed);
-  }, 500);
-
-  try {
-    const resp = await apiFetchJson("/api/admin/run-digest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId: targetChatId }),
-    });
-    clearInterval(progressTimer);
-    const data = resp.data;
-    if (!resp.ok || !data.success) {
-      renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${resp.status})` });
-      showToast("err", data.error || "Test digest failed");
-      return;
-    }
-    renderTestDigestStatus({ state: "success", message: data.message || `Digest sent to ${targetLabel}` });
-    showToast("ok", data.message || `Digest sent to ${targetLabel}`);
-  } catch (e) {
-    clearInterval(progressTimer);
-    renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
-    showToast("err", e.message || "Network error starting test digest");
-  }
+  renderTestDigestStatus({ state: "failed", message: "Targeted digests are disabled in the reduced-scope email-only MVP." });
+  showToast("err", "Targeted digests are disabled in the reduced-scope email-only MVP.");
 }
 
 async function logout() {
@@ -4164,11 +4087,10 @@ async function load(silent = false) {
 
     const totalUsers = roster ? roster.length : (summary.total_users || 0);
     const activeUsers = roster ? countActiveUsers(roster) : (summary.active_users || 0);
-    const activeTelegramUsers = roster ? countActiveTelegramUsers(roster) : (summary.active_tg_users || 0);
     document.getElementById("activeUsers").innerHTML =
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${activeUsers}</a>`;
     document.getElementById("telegramUsers").innerHTML =
-      `<strong>${activeTelegramUsers}</strong> active on Telegram · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
+      `Email-only MVP · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
 
     const openRate7d = Number(engagement && engagement.open_rate_7d || 0);
     const openRate30d = Number(engagement && engagement.open_rate_30d || 0);

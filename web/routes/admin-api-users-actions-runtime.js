@@ -254,10 +254,6 @@ function normalizeManagedStatus(rawStatus) {
 
 const PRE_UNSUBSCRIBE_CHANNELS_KEY = "_pre_unsubscribe_channels";
 
-function hasTelegramDeliveryIdentity(user) {
-  return !!(user?.chatId && !String(user.chatId).startsWith("email-"));
-}
-
 function deriveRestoredChannelPreferences(user, previousStatus) {
   const prefs = user && user.preferences && typeof user.preferences === "object"
     ? user.preferences
@@ -265,25 +261,21 @@ function deriveRestoredChannelPreferences(user, previousStatus) {
   const saved = prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY] && typeof prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY] === "object"
     ? prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY]
     : null;
-  const telegramLinked = hasTelegramDeliveryIdentity(user);
 
   if (saved) {
     return {
       email_enabled: saved.email_enabled === true && !!user?.email,
-      telegram_enabled: saved.telegram_enabled === true && telegramLinked,
     };
   }
 
   if (previousStatus === "paused") {
     return {
       email_enabled: !!user?.email,
-      telegram_enabled: telegramLinked && prefs.telegram_enabled !== false,
     };
   }
 
   return {
     email_enabled: !!user?.email,
-    telegram_enabled: telegramLinked,
   };
 }
 
@@ -311,15 +303,12 @@ function applyManagedStatus(user, nextStatus, opts = {}) {
   if (nextStatus === "unsubscribed") {
     updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY] = {
       email_enabled: updated.preferences.email_enabled !== false && !!user?.email,
-      telegram_enabled: updated.preferences.telegram_enabled !== false && hasTelegramDeliveryIdentity(user),
     };
     updated.email_unsubscribed_at = nowIso;
     updated.preferences.email_enabled = false;
-    updated.preferences.telegram_enabled = false;
   } else if (nextStatus === "active") {
     const restored = deriveRestoredChannelPreferences(user, previousStatus);
     updated.preferences.email_enabled = restored.email_enabled;
-    updated.preferences.telegram_enabled = restored.telegram_enabled;
     delete updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY];
     delete updated.email_unsubscribed_at;
     if (typeof opts.blankReengagementState === "function") {

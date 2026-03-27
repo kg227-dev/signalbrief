@@ -344,6 +344,7 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="action-bar-title">Admin actions</div>
       <div class="action-row">
         <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
+        <button type="button" class="btn btn-secondary" id="regenerateDigestBtn" style="display:none;">Regenerate summaries</button>
         <button type="button" class="btn btn-secondary" id="resendDigestBtn" style="display:none;">Resend latest digest</button>
         <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
         <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
@@ -739,6 +740,52 @@ async function logout() {
   window.location.href = '/admin/login';
 }
 
+function syncDigestActionButtons(user = currentAdminUser) {
+  const digestDateKey = resolveLatestDigestDateKey(user);
+  const resendDigestBtn = document.getElementById('resendDigestBtn');
+  const regenerateDigestBtn = document.getElementById('regenerateDigestBtn');
+  if (regenerateDigestBtn) {
+    regenerateDigestBtn.style.display = digestDateKey ? 'inline-flex' : 'none';
+  }
+  if (resendDigestBtn) {
+    const canResend = Boolean(digestDateKey) && userStatus !== 'unsubscribed';
+    resendDigestBtn.style.display = canResend ? 'inline-flex' : 'none';
+  }
+}
+
+async function regenerateStoredDigest(triggerEl = null, explicitDateKey = '') {
+  const targetDate = String(explicitDateKey || resolveLatestDigestDateKey(currentAdminUser)).trim();
+  if (!userEmail || !targetDate) {
+    showBanner('❌ No regenable digest snapshot found for this user', true);
+    return;
+  }
+  if (!confirm('Regenerate summaries for the stored ' + targetDate + ' digest snapshot for ' + userEmail + '?')) return;
+  const btn = triggerEl || document.getElementById('regenerateDigestBtn');
+  const prevLabel = btn ? btn.textContent : 'Regenerate summaries';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Regenerating…';
+  }
+  try {
+    const r = await fetch('/api/admin/regenerate-digest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail, date_et: targetDate })
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || data.success !== true) {
+      throw new Error((data && data.error) || 'Failed to regenerate digest summaries');
+    }
+    showBanner('✅ Stored digest summaries regenerated for ' + userEmail);
+  } catch (err) {
+    showBanner('❌ ' + ((err && err.message) || 'Failed to regenerate digest summaries'), true);
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
 async function resendStoredDigest(triggerEl = null, explicitDateKey = '') {
   const targetDate = String(explicitDateKey || resolveLatestDigestDateKey(currentAdminUser)).trim();
   if (!userEmail || !targetDate) {
@@ -810,7 +857,6 @@ async function init() {
       archiveQuickLink.style.display = 'inline-block';
     }
     const latestDigestQuickLink = document.getElementById('latestDigestQuickLink');
-    const resendDigestBtn = document.getElementById('resendDigestBtn');
     if (latestDigestQuickLink) {
       const digestDateKey = resolveLatestDigestDateKey(user);
       const latestDigestHref = digestDateKey ? buildAdminArchiveDigestHref(digestDateKey) : '';
@@ -820,11 +866,8 @@ async function init() {
       } else {
         latestDigestQuickLink.style.display = 'none';
       }
-      if (resendDigestBtn) {
-        const canResend = Boolean(digestDateKey) && userStatus !== 'unsubscribed';
-        resendDigestBtn.style.display = canResend ? 'inline-flex' : 'none';
-      }
     }
+    syncDigestActionButtons(user);
 
     buildMetaBar(user);
     buildLastDigestPanel(user);
@@ -905,6 +948,13 @@ async function init() {
       btn.disabled = false; btn.textContent = 'Resend settings link';
     });
 
+    const regenerateDigestBtnEl = document.getElementById('regenerateDigestBtn');
+    if (regenerateDigestBtnEl) {
+      regenerateDigestBtnEl.addEventListener('click', function() {
+        regenerateStoredDigest(this);
+      });
+    }
+
     const resendDigestBtnEl = document.getElementById('resendDigestBtn');
     if (resendDigestBtnEl) {
       resendDigestBtnEl.addEventListener('click', function() {
@@ -943,11 +993,7 @@ async function init() {
           if (currentAdminUser && typeof currentAdminUser === 'object') currentAdminUser.status = newStatus;
           updatePauseBtn(userStatus);
           updateUnsubBtn(userStatus);
-          const resendDigestBtn = document.getElementById('resendDigestBtn');
-          if (resendDigestBtn) {
-            const digestDateKey = resolveLatestDigestDateKey(currentAdminUser);
-            resendDigestBtn.style.display = (digestDateKey && userStatus !== 'unsubscribed') ? 'inline-flex' : 'none';
-          }
+          syncDigestActionButtons(currentAdminUser);
           // Refresh meta bar status badge
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) {
@@ -983,8 +1029,7 @@ async function init() {
           if (currentAdminUser && typeof currentAdminUser === 'object') currentAdminUser.status = 'unsubscribed';
           updatePauseBtn(userStatus);
           updateUnsubBtn(userStatus);
-          const resendDigestBtn = document.getElementById('resendDigestBtn');
-          if (resendDigestBtn) resendDigestBtn.style.display = 'none';
+          syncDigestActionButtons(currentAdminUser);
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) { badge.className = 'status-badge status-unsubscribed'; badge.textContent = 'unsubscribed'; }
           showBanner(`👋 ${data.message || 'Subscriber set to unsubscribed'}`);

@@ -18,6 +18,9 @@ const source = require("fs").readFileSync(TARGET_PATH, "utf8");
 if (!source.includes('pathname === "/api/admin/resend-digest" && req.method === "POST"')) {
   throw new Error("admin user routes should wire POST /api/admin/resend-digest");
 }
+if (!source.includes('pathname === "/api/admin/regenerate-digest" && req.method === "POST"')) {
+  throw new Error("admin user routes should wire POST /api/admin/regenerate-digest");
+}
 
 function buildMockRes() {
   return {
@@ -70,8 +73,14 @@ async function invoke({ method, pathname, body = null, deps = {} }) {
     handleAdminRunDigest: async () => {},
     requestSchedulerWorkerRestart: () => ({ ok: true }),
     loadLatestDigestSnapshot: () => null,
+    regenerateDigestSnapshot: async () => ({
+      subject: "SignalBrief: Story 1",
+      item_count: 5,
+      regenerated_at: "2026-03-27T12:00:00.000Z",
+    }),
     resendDigestSnapshot: async () => ({ subject: "SignalBrief: Story 1", item_count: 5 }),
     buildRecentDigestsExport: () => ({ rows: [] }),
+    getAdminActor: () => "qa-admin",
     ...deps,
   });
   return { handled, res };
@@ -102,6 +111,32 @@ async function invoke({ method, pathname, body = null, deps = {} }) {
     assert.strictEqual(handled, true);
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(JSON.parse(res.body).message, "Stored digest snapshot resent");
+  }
+
+  {
+    const user = {
+      chatId: "u-1",
+      email: "ops@example.com",
+      status: "paused",
+    };
+    const snapshot = {
+      status: "sent",
+      date_et: "2026-03-27",
+      selected_count: 5,
+      items: Array.from({ length: 5 }, (_, index) => ({ headline: `Story ${index + 1}` })),
+    };
+    const { handled, res } = await invoke({
+      method: "POST",
+      pathname: "/api/admin/regenerate-digest",
+      body: { email: user.email, date_et: "2026-03-27" },
+      deps: {
+        allUsers: () => [user],
+        loadCurrentDigestSnapshot: () => snapshot,
+      },
+    });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(JSON.parse(res.body).message, "Stored digest summaries regenerated");
   }
 
   {

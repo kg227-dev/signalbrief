@@ -7,10 +7,13 @@ const adminPage = fs.readFileSync(path.join(process.cwd(), "web/admin.html"), "u
 const adminUserPage = fs.readFileSync(path.join(process.cwd(), "web/admin-user.html"), "utf8");
 
 const requiredAdminSnippets = [
+  "async function regenerateDigestSnapshotForUser(email, dateKey, triggerEl = null)",
+  "/api/admin/regenerate-digest",
+  "Regenerate summaries",
   "async function resendDigestSnapshotForUser(email, dateKey, triggerEl = null)",
   "/api/admin/resend-digest",
   "Resend stored digest",
-  "Stored snapshot resend is available when the failed run already captured a complete 5-item digest.",
+  "Stored snapshot controls are available when the failed run already captured a complete 5-item digest.",
 ];
 
 for (const snippet of requiredAdminSnippets) {
@@ -24,6 +27,10 @@ if (adminPage.includes("Targeted resend disabled in the reduced-scope MVP.")) {
 }
 
 const requiredAdminUserSnippets = [
+  'id="regenerateDigestBtn"',
+  "async function regenerateStoredDigest(triggerEl = null, explicitDateKey = '')",
+  "/api/admin/regenerate-digest",
+  "Regenerate summaries",
   'id="resendDigestBtn"',
   "async function resendStoredDigest(triggerEl = null, explicitDateKey = '')",
   "/api/admin/resend-digest",

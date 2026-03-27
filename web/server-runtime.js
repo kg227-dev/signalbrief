@@ -1,4 +1,5 @@
 const fs = require("fs");
+const https = require("https");
 const os = require("os");
 const path = require("path");
 const childProcess = require("child_process");
@@ -27,10 +28,14 @@ const {
 } = require("../src/domains/engagement");
 const {
   computeQualityTrend,
+  createDigestDataRuntime,
   createDigestDeliveryRecordRuntime,
   createDigestFormattingRuntime,
   normalizeTopicToken,
 } = require("../src/domains/digest");
+const {
+  createDigestOrchestratorTransportRuntime,
+} = require("../src/entrypoints/digest-orchestrator-transport-runtime");
 const {
   digestRunStatus,
   startDigestTrigger,
@@ -261,6 +266,8 @@ const allowExampleSignups = (
 
 let digestEmailTemplateCache = null;
 let digestFormattingRuntimeCache = null;
+let digestDataRuntimeCache = null;
+let digestTransportRuntimeCache = null;
 
 function getDigestEmailTemplate() {
   if (!digestEmailTemplateCache) {
@@ -275,14 +282,39 @@ function getDigestFormattingRuntime() {
       CONFIG,
       EMAIL_TEMPLATE: getDigestEmailTemplate(),
       BASE_URL: getBaseUrl(),
-      httpsPostWithRetry: async () => {
-        throw new Error("AI formatting is disabled for admin digest resend");
-      },
+      httpsPostWithRetry,
       buildPublicDigestUrl: () => "",
       normalizeTopicToken,
     });
   }
   return digestFormattingRuntimeCache;
+}
+
+function getDigestTransportRuntime() {
+  if (!digestTransportRuntimeCache) {
+    digestTransportRuntimeCache = createDigestOrchestratorTransportRuntime({
+      https,
+      defaultTimeoutMs: 30_000,
+    });
+  }
+  return digestTransportRuntimeCache;
+}
+
+function httpsPostWithRetry(...args) {
+  return getDigestTransportRuntime().httpsPostWithRetry(...args);
+}
+
+function getDigestDataRuntime() {
+  if (!digestDataRuntimeCache) {
+    digestDataRuntimeCache = createDigestDataRuntime({
+      CONFIG,
+      log: (message) => webLogger.info("web.digest_snapshot_ai", { message: String(message || "") }),
+      httpsPostWithRetry,
+      normalizeUrlForDedup: (value) => String(value || "").trim(),
+      isFetchedItemEligible: () => true,
+    });
+  }
+  return digestDataRuntimeCache;
 }
 
 function formatDigestDateLabelFromKey(dateKey) {
@@ -301,7 +333,7 @@ function formatDigestDateLabelFromKey(dateKey) {
 
 function buildFallbackQuickScan(items = []) {
   return (Array.isArray(items) ? items : [])
-    .map((item) => String(item?.headline || "").trim())
+    .map((item) => String(item?.headline || "").split(":")[0].split("—")[0].trim())
     .filter(Boolean)
     .slice(0, 5)
     .join(" · ");
@@ -337,7 +369,8 @@ async function resendDigestSnapshot({ user, snapshot }) {
   const depth = String(snapshot?.depth || user?.preferences?.depth || user?.depth || "headline_plus_why").trim() || "headline_plus_why";
   const dateStr = String(snapshot?.date_str || "").trim() || formatDigestDateLabelFromKey(digestDateKey);
   const quickScan = String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items);
-  const subject = buildAdminDigestResendSubject(snapshot, dateStr);
+  const subject = String(snapshot?.subject_line || "").trim() || buildAdminDigestResendSubject(snapshot, dateStr);
+  const editorialNote = String(snapshot?.editorial_note || "").trim();
 
   let html = getDigestFormattingRuntime().buildEmail(
     items,
@@ -357,7 +390,7 @@ async function resendDigestSnapshot({ user, snapshot }) {
       },
       learningSummary: "",
       publicDigestUrl: "",
-      editorialNote: "",
+      editorialNote,
     }
   );
 
@@ -378,6 +411,123 @@ async function resendDigestSnapshot({ user, snapshot }) {
     item_count: items.length,
     date_et: digestDateKey,
     status: snapshotStatus,
+  };
+}
+
+async function regenerateDigestSnapshot({ user, snapshot, actor = "admin" }) {
+  const userId = String(user?.chatId || "").trim();
+  if (!userId) throw new Error("subscriber id is missing");
+
+  const items = Array.isArray(snapshot?.items) ? snapshot.items.slice() : [];
+  const selectedCount = Math.max(0, Number(snapshot?.selected_count || items.length));
+  const snapshotStatus = String(snapshot?.status || "").trim().toLowerCase();
+  const regenableStatuses = new Set(["sent", "failed", "selected", "sending"]);
+  if (!items.length || selectedCount < 5 || !regenableStatuses.has(snapshotStatus)) {
+    throw new Error("no regenable 5-item digest snapshot is available");
+  }
+
+  const digestDateKey = String(snapshot?.date_et || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(digestDateKey)) {
+    throw new Error("digest snapshot is missing a valid ET date");
+  }
+
+  const digestId = String(snapshot?.digest_id || "").trim() || buildDigestId(digestDateKey, userId);
+  const depth = String(snapshot?.depth || user?.preferences?.depth || user?.depth || "headline_plus_why").trim() || "headline_plus_why";
+  const dateStr = String(snapshot?.date_str || "").trim() || formatDigestDateLabelFromKey(digestDateKey);
+  const regenAt = new Date().toISOString();
+
+  const enrichment = await getDigestDataRuntime().enrichItems(items, {});
+  if (enrichment?.degraded === true) {
+    const reason = String(enrichment?.degradation?.reason || "unknown").trim() || "unknown";
+    throw new Error(`summary regeneration degraded (${reason}); snapshot left unchanged`);
+  }
+
+  const enrichedItems = Array.isArray(enrichment?.items) ? enrichment.items.slice() : [];
+  if (enrichedItems.length !== items.length || enrichedItems.length < 5) {
+    throw new Error("summary regeneration returned an invalid snapshot shape");
+  }
+
+  const quickScan = buildFallbackQuickScan(enrichedItems);
+  const digestDate = new Date(`${digestDateKey}T12:00:00.000Z`);
+  const subjectResult = await getDigestFormattingRuntime().generateLeadSubjectLine(enrichedItems[0] || null, digestDate);
+  const noteResult = await getDigestFormattingRuntime().generateEditorialNote(enrichedItems);
+  const subjectLine = String(subjectResult?.subject || "").trim() || buildAdminDigestResendSubject({ items: enrichedItems }, dateStr);
+  const editorialNote = String(noteResult?.note || "").trim();
+
+  const updateResult = digestDeliveryRecordRuntime.updateDigestDeliveryRecord({
+    digest_id: digestId,
+    user_id: userId,
+    date_et: digestDateKey,
+    mode: String(snapshot?.mode || "scheduled").trim() || "scheduled",
+    version: Math.max(1, Number(snapshot?.version || 1)),
+    run_id: String(snapshot?.run_id || "").trim() || null,
+    source: String(snapshot?.source || "").trim() || null,
+    trigger: String(snapshot?.trigger || "").trim() || null,
+    status: snapshotStatus,
+    selected_at: snapshot?.selected_at || null,
+    sending_at: snapshot?.sending_at || null,
+    sent_at: snapshot?.sent_at || null,
+    failed_at: snapshot?.failed_at || null,
+    delivery_outcome: snapshot?.delivery_outcome || null,
+    attempt_count: snapshot?.attempt_count || 0,
+    retry_scheduled_for: snapshot?.retry_scheduled_for || null,
+    error: snapshotStatus === "failed" ? String(snapshot?.error || "").trim() || null : null,
+    channels: Array.isArray(snapshot?.channels) ? snapshot.channels.slice() : [],
+    depth,
+    date_str: dateStr,
+    quick_scan: quickScan,
+    subject_line: subjectLine,
+    editorial_note: editorialNote,
+    regenerated_at: regenAt,
+    regenerated_by: String(actor || "admin").trim() || "admin",
+    quality_score: snapshot?.quality_score ?? null,
+    quality_band: snapshot?.quality_band ?? null,
+    requested_count: snapshot?.requested_count ?? null,
+    freshness_block_count: snapshot?.freshness_block_count ?? 0,
+    semantic_repeat_block_count: snapshot?.semantic_repeat_block_count ?? 0,
+    alternate_queries_used: snapshot?.alternate_queries_used ?? 0,
+    preferred_domains_count: snapshot?.preferred_domains_count ?? 0,
+    preferred_candidate_count: snapshot?.preferred_candidate_count ?? 0,
+    non_preferred_candidate_count: snapshot?.non_preferred_candidate_count ?? 0,
+    final_selected_preferred_count: snapshot?.final_selected_preferred_count ?? 0,
+    preferred_displaced_weak_count: snapshot?.preferred_displaced_weak_count ?? 0,
+    derivative_suppressed_count: snapshot?.derivative_suppressed_count ?? 0,
+    specialist_trade_beat_preferred_count: snapshot?.specialist_trade_beat_preferred_count ?? 0,
+    platform_identity_ambiguity_count: snapshot?.platform_identity_ambiguity_count ?? 0,
+    broader_retrieval_found_better_count: snapshot?.broader_retrieval_found_better_count ?? 0,
+    coverage_gap_preferred_missing_count: snapshot?.coverage_gap_preferred_missing_count ?? 0,
+    coverage_gap_preferred_weaker_count: snapshot?.coverage_gap_preferred_weaker_count ?? 0,
+    search_budget_soft_calls: snapshot?.search_budget_soft_calls ?? 0,
+    search_budget_hard_calls: snapshot?.search_budget_hard_calls ?? 0,
+    search_budget_calls_used: snapshot?.search_budget_calls_used ?? 0,
+    search_budget_exhausted: snapshot?.search_budget_exhausted === true,
+    broad_fallback_topics_used: snapshot?.broad_fallback_topics_used ?? 0,
+    zero_yield_retry_count: snapshot?.zero_yield_retry_count ?? 0,
+    budget_stop_reason: snapshot?.budget_stop_reason || null,
+    candidate_pool_before_dedup: snapshot?.candidate_pool_before_dedup ?? null,
+    candidate_pool_after_dedup: snapshot?.candidate_pool_after_dedup ?? null,
+    fallback_reason: snapshot?.fallback_reason || null,
+    refill_count: snapshot?.refill_count ?? 0,
+    thin_pool: snapshot?.thin_pool === true,
+    dominant_failure_mode: snapshot?.dominant_failure_mode || null,
+    selected_count: selectedCount,
+    available_count: snapshot?.available_count ?? selectedCount,
+    internal_thinness_label: snapshot?.internal_thinness_label || null,
+    withheld_reason: snapshot?.withheld_reason || null,
+    items: enrichedItems,
+  });
+
+  if (!updateResult?.ok) {
+    throw new Error(updateResult?.reason || "failed to persist regenerated digest snapshot");
+  }
+
+  return {
+    subject: subjectLine,
+    item_count: enrichedItems.length,
+    date_et: digestDateKey,
+    status: snapshotStatus,
+    regenerated_at: regenAt,
+    editorial_note: editorialNote,
   };
 }
 
@@ -491,6 +641,7 @@ const {
   loadCurrentDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadCurrentDigestSnapshot(...args),
   loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),
   loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
+  regenerateDigestSnapshot,
   resendDigestSnapshot,
   CONFIG,
   verifyAdminPassword,

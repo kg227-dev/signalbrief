@@ -4,6 +4,7 @@ const {
   handleUpdateDeliveryTimeRoute,
   handleSetUserStatusRoute,
   handleDeleteUserRoute,
+  handleRegenerateDigestRoute,
   handleResendDigestRoute,
   handleRestartSchedulerWorkerRoute,
 } = require("./admin-api-users-actions-runtime");
@@ -28,8 +29,10 @@ async function handleAdminUserRoutes(ctx, deps) {
     handleAdminRunDigest,
     requestSchedulerWorkerRestart,
     loadLatestDigestSnapshot,
+    regenerateDigestSnapshot,
     resendDigestSnapshot,
     buildRecentDigestsExport,
+    getAdminActor,
   } = deps;
 
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
@@ -48,6 +51,22 @@ async function handleAdminUserRoutes(ctx, deps) {
         loadCurrentDigestSnapshot,
         resendDigestSnapshot,
         logAdminActionEvent,
+      },
+    });
+  }
+
+  if (pathname === "/api/admin/regenerate-digest" && req.method === "POST") {
+    return handleRegenerateDigestRoute({
+      ctx,
+      deps: {
+        json,
+        isAdminAuthed,
+        requireJsonBody,
+        allUsers,
+        loadCurrentDigestSnapshot,
+        regenerateDigestSnapshot,
+        logAdminActionEvent,
+        getAdminActor,
       },
     });
   }

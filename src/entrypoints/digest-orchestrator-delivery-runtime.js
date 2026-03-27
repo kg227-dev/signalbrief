@@ -333,6 +333,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       let attemptedChannelCount = 0;
       let requestedItemCount = DELIVERY_POLICY.target_item_count;
       let depth = String(prefs?.depth || "full").trim() || "full";
+      let subjectLine = null;
+      let editorialNote = "";
       try {
         const recordStart = typeof beginDigestDeliveryRecord === "function"
           ? beginDigestDeliveryRecord({
@@ -637,6 +639,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           const noteResult = await generateEditorialNote(deliveryItems);
           claudeUsage.input_tokens += Number(noteResult?.usage?.input_tokens || 0);
           claudeUsage.output_tokens += Number(noteResult?.usage?.output_tokens || 0);
+          subjectLine = String(subjectResult?.subject || "").trim() || null;
+          editorialNote = String(noteResult?.note || "").trim();
 
           let userEmailHtml = buildEmail(
             deliveryItems,
@@ -653,7 +657,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               digestQuality,
               learningSummary,
               publicDigestUrl,
-              editorialNote: noteResult.note || "",
+              editorialNote,
             }
           );
           if (user.token) {
@@ -663,7 +667,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               : `${userEmailHtml}\n${trackingPixel}`;
           }
           try {
-            await sendEmail(user.email, subjectResult.subject, userEmailHtml, user.token || null);
+            await sendEmail(user.email, subjectLine || subjectResult.subject, userEmailHtml, user.token || null);
             const eventOutcome = appendEngagementEventChecked({
               event_type: "digest_sent",
               event_key: `digest_sent:${userDigestId}:${deliveryMode}:v${deliveryRecordVersion}:email`,
@@ -713,6 +717,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             date_str: dateStr,
             quick_scan: quickScan,
             depth,
+            subject_line: subjectLine,
+            editorial_note: editorialNote,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             delivery_outcome: "delivered",
@@ -831,6 +837,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             date_str: dateStr,
             quick_scan: quickScan,
             depth,
+            subject_line: subjectLine,
+            editorial_note: editorialNote,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),

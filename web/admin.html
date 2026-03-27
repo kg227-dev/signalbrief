@@ -3331,7 +3331,7 @@ function renderFailedDeliveries(roster, runs) {
   }
 
   panel.style.display = "";
-  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs. If a full 5-item snapshot was captured, you can resend that exact stored digest without rerunning everyone.`;
+  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs. If a full 5-item snapshot was captured, you can regenerate summaries on that exact digest and resend it without rerunning everyone.`;
 
   list.innerHTML = failedRows.map((row) => {
     const displayName = row.user
@@ -3350,8 +3350,8 @@ function renderFailedDeliveries(roster, runs) {
           <div class="failed-delivery-name">${userLink}</div>
           <div class="failed-delivery-meta">${deliveryTarget} · failed ${esc(row.runAtLabel || "today")}</div>
           <div class="failed-delivery-error">${esc(row.error || "Delivery failed")}</div>
-          <div class="failed-delivery-meta">Stored snapshot resend is available when the failed run already captured a complete 5-item digest.</div>
-          ${email && row.dateKey ? `<div style="margin-top:8px;"><button type="button" class="btn btn-secondary" onclick="resendDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Resend stored digest</button></div>` : ''}
+          <div class="failed-delivery-meta">Stored snapshot controls are available when the failed run already captured a complete 5-item digest.</div>
+          ${email && row.dateKey ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary" onclick="regenerateDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Regenerate summaries</button><button type="button" class="btn btn-secondary" onclick="resendDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Resend stored digest</button></div>` : ''}
         </div>
       </div>
     `;
@@ -3976,6 +3976,54 @@ async function triggerFullDigest(triggerEl = null) {
     showToast("ok", msg);
   } catch (e) {
     const msg = e.message || "Network error starting full digest";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
+async function regenerateDigestSnapshotForUser(email, dateKey, triggerEl = null) {
+  const targetEmail = String(email || '').trim();
+  const targetDate = String(dateKey || '').trim();
+  if (!targetEmail || !targetDate) return;
+
+  const approved = await openConfirmModal(
+    "Regenerate stored digest summaries?",
+    `This rewrites the saved ${targetDate} digest summaries for ${targetEmail} without changing story selection or sending email.`,
+    "Regenerate summaries",
+  );
+  if (!approved) return;
+
+  const btn = triggerEl || null;
+  const prevLabel = btn ? btn.textContent : "Regenerate summaries";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Regenerating…";
+  }
+  setOpsActionMessage("info", `Regenerating stored digest summaries for ${targetEmail}…`);
+  try {
+    const resp = await apiFetchJson("/api/admin/regenerate-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail, date_et: targetDate }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to regenerate digest summaries (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || "Stored digest summaries regenerated";
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", `${msg} for ${targetEmail}`);
+  } catch (e) {
+    const msg = e.message || "Network error regenerating digest summaries";
     setOpsActionMessage("err", `❌ ${msg}`);
     showToast("err", msg);
   } finally {

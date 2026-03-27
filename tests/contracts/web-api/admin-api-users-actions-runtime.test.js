@@ -12,6 +12,7 @@ assertModuleExports(() => require(TARGET_PATH), TARGET_REL);
 
 const {
   handleSetUserStatusRoute,
+  handleRegenerateDigestRoute,
   handleResendDigestRoute,
 } = require(TARGET_PATH);
 
@@ -36,6 +37,12 @@ if (!source.includes('action: "resend_digest_precise"')) {
 }
 if (!source.includes('message: "Stored digest snapshot resent"')) {
   throw new Error("precise digest resend handler should return a clear success message");
+}
+if (!source.includes('action: "regenerate_digest_summaries"')) {
+  throw new Error("admin user actions should audit digest summary regeneration");
+}
+if (!source.includes('message: "Stored digest summaries regenerated"')) {
+  throw new Error("digest summary regeneration handler should return a clear success message");
 }
 
 function buildCtx(body) {
@@ -207,11 +214,97 @@ async function testPreciseResendRejectsThinSnapshot() {
   assert.strictEqual(actions[0].success, false);
 }
 
+async function testRegenerateSummariesUsesStoredSnapshot() {
+  const actions = [];
+  const regenerateCalls = [];
+  const user = {
+    chatId: "123456",
+    email: "ops@example.com",
+    status: "paused",
+  };
+  const snapshot = {
+    status: "sent",
+    date_et: "2026-03-27",
+    selected_count: 5,
+    items: Array.from({ length: 5 }, (_, index) => ({
+      headline: `Story ${index + 1}`,
+    })),
+  };
+  const ctx = buildCtx({ email: user.email, date_et: "2026-03-27" });
+  await handleRegenerateDigestRoute({
+    ctx,
+    deps: {
+      json,
+      isAdminAuthed: () => true,
+      requireJsonBody: async () => ctx.body,
+      allUsers: () => [user],
+      loadCurrentDigestSnapshot: () => snapshot,
+      regenerateDigestSnapshot: async (input) => {
+        regenerateCalls.push(input);
+        return {
+          subject: "SignalBrief: Story 1",
+          item_count: 5,
+          regenerated_at: "2026-03-27T12:00:00.000Z",
+        };
+      },
+      logAdminActionEvent: (_req, entry) => actions.push(entry),
+      getAdminActor: () => "qa-admin",
+    },
+  });
+
+  assert.strictEqual(ctx.res.statusCode, 200);
+  assert.strictEqual(ctx.res.body.success, true);
+  assert.strictEqual(ctx.res.body.message, "Stored digest summaries regenerated");
+  assert.strictEqual(regenerateCalls.length, 1, "summary regeneration should call the regen runtime exactly once");
+  assert.strictEqual(regenerateCalls[0].user.email, user.email);
+  assert.strictEqual(regenerateCalls[0].snapshot, snapshot);
+  assert.strictEqual(regenerateCalls[0].actor, "qa-admin");
+  assert.strictEqual(actions[0].action, "regenerate_digest_summaries");
+  assert.strictEqual(actions[0].success, true);
+}
+
+async function testRegenerateSummariesRejectsThinSnapshot() {
+  const actions = [];
+  const user = {
+    chatId: "123456",
+    email: "ops@example.com",
+    status: "active",
+  };
+  const ctx = buildCtx({ email: user.email, date_et: "2026-03-27" });
+  await handleRegenerateDigestRoute({
+    ctx,
+    deps: {
+      json,
+      isAdminAuthed: () => true,
+      requireJsonBody: async () => ctx.body,
+      allUsers: () => [user],
+      loadCurrentDigestSnapshot: () => ({
+        status: "sent",
+        date_et: "2026-03-27",
+        selected_count: 4,
+        items: Array.from({ length: 4 }, (_, index) => ({ headline: `Story ${index + 1}` })),
+      }),
+      regenerateDigestSnapshot: async () => {
+        throw new Error("should not be called");
+      },
+      logAdminActionEvent: (_req, entry) => actions.push(entry),
+      getAdminActor: () => "qa-admin",
+    },
+  });
+
+  assert.strictEqual(ctx.res.statusCode, 409);
+  assert.strictEqual(ctx.res.body.error, "No regenable 5-item digest snapshot found for that user/date.");
+  assert.strictEqual(actions[0].action, "regenerate_digest_summaries");
+  assert.strictEqual(actions[0].success, false);
+}
+
 Promise.resolve()
   .then(testResubscribeRestoresChannels)
   .then(testUnsubscribeBacksUpChannels)
   .then(testPreciseResendUsesStoredSnapshot)
   .then(testPreciseResendRejectsThinSnapshot)
+  .then(testRegenerateSummariesUsesStoredSnapshot)
+  .then(testRegenerateSummariesRejectsThinSnapshot)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

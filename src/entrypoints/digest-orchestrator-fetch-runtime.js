@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeSourcePolicyDomain } = require("../runtime/source-policy-registry-runtime");
+const { scoreCandidate } = require("../domains/scoring/score-candidate");
 const {
   createConversionFunnel,
   mergeConversionFunnel,
@@ -20,6 +21,7 @@ const DEFAULT_MAX_FETCH_CONCURRENCY = 4;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
 const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
+const DEFAULT_MAX_DISCOVERY_CANDIDATE_SHARE = 0.2;
 const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
 // MVP topic set. Regulatory coverage surfaces under the closest sector topic
 // through sector official sources. CONSUMER & RETAIL and INDUSTRIALS added.
@@ -306,6 +308,185 @@ function countUsableItems(items, isFetchedItemEligible) {
   return (Array.isArray(items) ? items : []).reduce((sum, item) => {
     return sum + (eligibilityFn(item) !== false ? 1 : 0);
   }, 0);
+}
+
+function isBrokerRetrievalOrigin(value) {
+  const origin = String(value || "").trim().toLowerCase();
+  return origin === "broker_official" || origin === "broker_publisher_feed";
+}
+
+function isDiscoverySupplementItem(item) {
+  return !isBrokerRetrievalOrigin(item?.retrieval_origin || item?.retrieval_lane || "");
+}
+
+function resolveMaxDiscoveryCandidateShare(digestConfig) {
+  const configured = Number(digestConfig?.maxDiscoveryCandidateShare ?? DEFAULT_MAX_DISCOVERY_CANDIDATE_SHARE);
+  if (!Number.isFinite(configured)) return DEFAULT_MAX_DISCOVERY_CANDIDATE_SHARE;
+  return Math.max(0, Math.min(1, configured));
+}
+
+function resolveDiscoveryCandidateCapCount(backboneCount, maxShare) {
+  const normalizedBackboneCount = Math.max(0, Number(backboneCount || 0));
+  const normalizedMaxShare = Math.max(0, Math.min(1, Number(maxShare || 0)));
+  if (normalizedMaxShare >= 1) return Number.MAX_SAFE_INTEGER;
+  if (normalizedBackboneCount <= 0 || normalizedMaxShare <= 0) return 0;
+  return Math.max(0, Math.floor((normalizedBackboneCount * normalizedMaxShare) / (1 - normalizedMaxShare)));
+}
+
+function parsePublishedDateForSort(item) {
+  const value = Date.parse(String(item?.published_date || item?.publishedDate || item?.date || item?.timestamp || ""));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function buildStateCandidateInventory(state) {
+  const retrievalOriginCounts = {
+    preferred: 0,
+    broad: 0,
+    trusted_official: 0,
+    trusted_reported: 0,
+    broker_official: 0,
+    broker_publisher_feed: 0,
+  };
+  const retrievalSourceFamilyCounts = {
+    official: 0,
+    reported: 0,
+    specialist: 0,
+    corporate: 0,
+    other_unknown: 0,
+  };
+  let brokerItemCount = 0;
+  let brokerOfficialItemCount = 0;
+  let brokerPublisherFeedItemCount = 0;
+  let discoveryItemCount = 0;
+  const brokerSourceIds = [];
+  const brokerSourceIdSet = new Set();
+
+  for (const item of (Array.isArray(state?.items) ? state.items : [])) {
+    const originKey = String(item?.retrieval_origin || "").trim().toLowerCase() || "broad";
+    retrievalOriginCounts[originKey] = Number(retrievalOriginCounts[originKey] || 0) + 1;
+    const sourceFamily = String(item?.retrieval_source_family || "").trim() || classifyRetrievedSourceFamily(item, state);
+    retrievalSourceFamilyCounts[sourceFamily] = Number(retrievalSourceFamilyCounts[sourceFamily] || 0) + 1;
+    if (isBrokerRetrievalOrigin(originKey)) {
+      brokerItemCount += 1;
+      if (originKey === "broker_official") brokerOfficialItemCount += 1;
+      if (originKey === "broker_publisher_feed") brokerPublisherFeedItemCount += 1;
+      const sourceId = String(item?.broker_source_id || "").trim();
+      if (sourceId && !brokerSourceIdSet.has(sourceId)) {
+        brokerSourceIdSet.add(sourceId);
+        brokerSourceIds.push(sourceId);
+      }
+    } else {
+      discoveryItemCount += 1;
+    }
+  }
+
+  const totalCount = Math.max(0, Number((Array.isArray(state?.items) ? state.items.length : 0) || 0));
+  return {
+    totalCount,
+    brokerItemCount,
+    brokerOfficialItemCount,
+    brokerPublisherFeedItemCount,
+    discoveryItemCount,
+    discoveryCandidateSharePct: totalCount > 0 ? Number(((discoveryItemCount / totalCount) * 100).toFixed(2)) : 0,
+    brokerCandidateSharePct: totalCount > 0 ? Number(((brokerItemCount / totalCount) * 100).toFixed(2)) : 0,
+    retrievalOriginCounts,
+    retrievalSourceFamilyCounts,
+    brokerSourceIds,
+  };
+}
+
+function enforceDiscoveryCandidateShare(states, digestConfig, logger = () => {}) {
+  const topicStates = Array.isArray(states) ? states : [];
+  const maxDiscoveryShare = resolveMaxDiscoveryCandidateShare(digestConfig);
+  let brokerCandidateCount = 0;
+  const discoveryEntries = [];
+  for (const state of topicStates) {
+    state.discoveryCappedItemCount = 0;
+    for (const item of (Array.isArray(state?.items) ? state.items : [])) {
+      if (isDiscoverySupplementItem(item)) {
+        discoveryEntries.push({ state, item });
+      } else {
+        brokerCandidateCount += 1;
+      }
+    }
+  }
+
+  const discoveryCandidateCountBefore = discoveryEntries.length;
+  const allowedDiscoveryCandidateCount = resolveDiscoveryCandidateCapCount(brokerCandidateCount, maxDiscoveryShare);
+  if (discoveryCandidateCountBefore <= allowedDiscoveryCandidateCount) {
+    const totalCandidateCount = brokerCandidateCount + discoveryCandidateCountBefore;
+    return {
+      broker_candidate_count: brokerCandidateCount,
+      discovery_candidate_count_before: discoveryCandidateCountBefore,
+      discovery_candidate_count_after: discoveryCandidateCountBefore,
+      discovery_candidate_cap_count: allowedDiscoveryCandidateCount,
+      discovery_candidate_capped_count: 0,
+      discovery_candidate_share_pct: totalCandidateCount > 0
+        ? Number(((discoveryCandidateCountBefore / totalCandidateCount) * 100).toFixed(2))
+        : 0,
+      max_discovery_candidate_share_pct: Number((maxDiscoveryShare * 100).toFixed(2)),
+    };
+  }
+
+  const nowMs = Date.now();
+  const scoredEntries = discoveryEntries.map((entry, index) => {
+    const scored = scoreCandidate(entry.item, {
+      scoringConfig: digestConfig?.scoring || {},
+      nowMs,
+    });
+    return {
+      ...entry,
+      index,
+      score: Number(scored?._score || 0),
+      publishedMs: parsePublishedDateForSort(entry.item),
+      sourceAuthority: Number(entry.item?.source_authority || 0),
+    };
+  });
+  scoredEntries.sort((left, right) => {
+    if (right.score !== left.score) return right.score - left.score;
+    if (right.sourceAuthority !== left.sourceAuthority) return right.sourceAuthority - left.sourceAuthority;
+    if (right.publishedMs !== left.publishedMs) return right.publishedMs - left.publishedMs;
+    return left.index - right.index;
+  });
+
+  const retainedDiscoveryItems = new Set(
+    scoredEntries.slice(0, allowedDiscoveryCandidateCount).map((entry) => entry.item)
+  );
+
+  for (const state of topicStates) {
+    const keptItems = [];
+    let removedForState = 0;
+    for (const item of (Array.isArray(state?.items) ? state.items : [])) {
+      if (!isDiscoverySupplementItem(item) || retainedDiscoveryItems.has(item)) {
+        keptItems.push(item);
+      } else {
+        removedForState += 1;
+      }
+    }
+    state.items = keptItems;
+    state.discoveryCappedItemCount = removedForState;
+  }
+
+  const discoveryCandidateCountAfter = allowedDiscoveryCandidateCount;
+  const totalCandidateCount = brokerCandidateCount + discoveryCandidateCountAfter;
+  const discoveryCandidateSharePct = totalCandidateCount > 0
+    ? Number(((discoveryCandidateCountAfter / totalCandidateCount) * 100).toFixed(2))
+    : 0;
+  const discoveryCandidateCappedCount = Math.max(0, discoveryCandidateCountBefore - discoveryCandidateCountAfter);
+  logger(
+    `Discovery supplement cap retained ${discoveryCandidateCountAfter}/${discoveryCandidateCountBefore} discovery candidate(s) `
+    + `(${discoveryCandidateSharePct}% of ${totalCandidateCount} total; target <= ${(maxDiscoveryShare * 100).toFixed(0)}%)`
+  );
+
+  return {
+    broker_candidate_count: brokerCandidateCount,
+    discovery_candidate_count_before: discoveryCandidateCountBefore,
+    discovery_candidate_count_after: discoveryCandidateCountAfter,
+    discovery_candidate_cap_count: allowedDiscoveryCandidateCount,
+    discovery_candidate_capped_count: discoveryCandidateCappedCount,
+    discovery_candidate_share_pct: discoveryCandidateSharePct,
+    max_discovery_candidate_share_pct: Number((maxDiscoveryShare * 100).toFixed(2)),
+  };
 }
 
 function normalizeSourceTierForFetch(value) {
@@ -710,13 +891,17 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
     return classifyTopicCoverage(state).startsWith("provider_limited");
   }).length;
   const thinTopicCount = attemptedStates.filter((state) => classifyTopicCoverage(state).includes("thin")).length;
-  const retrievalOriginCounts = attemptedStates.reduce((combined, state) => ({
-    preferred: Number(combined.preferred || 0) + Number(state?.retrievalOriginCounts?.preferred || 0),
-    broad: Number(combined.broad || 0) + Number(state?.retrievalOriginCounts?.broad || 0),
-    trusted_official: Number(combined.trusted_official || 0) + Number(state?.retrievalOriginCounts?.trusted_official || 0),
-    trusted_reported: Number(combined.trusted_reported || 0) + Number(state?.retrievalOriginCounts?.trusted_reported || 0),
-    broker_official: Number(combined.broker_official || 0) + Number(state?.retrievalOriginCounts?.broker_official || 0),
-    broker_publisher_feed: Number(combined.broker_publisher_feed || 0) + Number(state?.retrievalOriginCounts?.broker_publisher_feed || 0),
+  const attemptedInventories = attemptedStates.map((state) => ({
+    state,
+    inventory: buildStateCandidateInventory(state),
+  }));
+  const retrievalOriginCounts = attemptedInventories.reduce((combined, { inventory }) => ({
+    preferred: Number(combined.preferred || 0) + Number(inventory?.retrievalOriginCounts?.preferred || 0),
+    broad: Number(combined.broad || 0) + Number(inventory?.retrievalOriginCounts?.broad || 0),
+    trusted_official: Number(combined.trusted_official || 0) + Number(inventory?.retrievalOriginCounts?.trusted_official || 0),
+    trusted_reported: Number(combined.trusted_reported || 0) + Number(inventory?.retrievalOriginCounts?.trusted_reported || 0),
+    broker_official: Number(combined.broker_official || 0) + Number(inventory?.retrievalOriginCounts?.broker_official || 0),
+    broker_publisher_feed: Number(combined.broker_publisher_feed || 0) + Number(inventory?.retrievalOriginCounts?.broker_publisher_feed || 0),
   }), {
     preferred: 0,
     broad: 0,
@@ -725,12 +910,12 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
     broker_official: 0,
     broker_publisher_feed: 0,
   });
-  const retrievalSourceFamilyCounts = attemptedStates.reduce((combined, state) => ({
-    official: Number(combined.official || 0) + Number(state?.retrievalSourceFamilyCounts?.official || 0),
-    reported: Number(combined.reported || 0) + Number(state?.retrievalSourceFamilyCounts?.reported || 0),
-    specialist: Number(combined.specialist || 0) + Number(state?.retrievalSourceFamilyCounts?.specialist || 0),
-    corporate: Number(combined.corporate || 0) + Number(state?.retrievalSourceFamilyCounts?.corporate || 0),
-    other_unknown: Number(combined.other_unknown || 0) + Number(state?.retrievalSourceFamilyCounts?.other_unknown || 0),
+  const retrievalSourceFamilyCounts = attemptedInventories.reduce((combined, { inventory }) => ({
+    official: Number(combined.official || 0) + Number(inventory?.retrievalSourceFamilyCounts?.official || 0),
+    reported: Number(combined.reported || 0) + Number(inventory?.retrievalSourceFamilyCounts?.reported || 0),
+    specialist: Number(combined.specialist || 0) + Number(inventory?.retrievalSourceFamilyCounts?.specialist || 0),
+    corporate: Number(combined.corporate || 0) + Number(inventory?.retrievalSourceFamilyCounts?.corporate || 0),
+    other_unknown: Number(combined.other_unknown || 0) + Number(inventory?.retrievalSourceFamilyCounts?.other_unknown || 0),
   }), {
     official: 0,
     reported: 0,
@@ -738,10 +923,15 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
     corporate: 0,
     other_unknown: 0,
   });
+  const brokerCandidateCount = attemptedInventories.reduce((sum, { inventory }) => sum + Number(inventory?.brokerItemCount || 0), 0);
+  const discoveryCandidateCount = attemptedInventories.reduce((sum, { inventory }) => sum + Number(inventory?.discoveryItemCount || 0), 0);
+  const discoveryCandidateCappedCount = attemptedStates.reduce((sum, state) => {
+    return sum + Math.max(0, Number(state?.discoveryCappedItemCount || 0));
+  }, 0);
   const conversionFunnel = attemptedStates.reduce((combined, state) => {
     return mergeConversionFunnel(combined, state?.conversionFunnel);
   }, createConversionFunnel());
-  const topicDiagnostics = attemptedStates.map((state) => ({
+  const topicDiagnostics = attemptedInventories.map(({ state, inventory }) => ({
     tag: state?.topic?.tag || null,
     preferred_topic_hints: Array.isArray(state?.topic?.preferred_topic_hints) ? state.topic.preferred_topic_hints.slice() : [],
     query_count: Array.isArray(state?.topic?.queries) ? state.topic.queries.length : 0,
@@ -754,12 +944,16 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
     trusted_source_call_count: Number(state?.trustedFamilyCallsMade || 0),
     trusted_official_call_count: Number(state?.trustedOfficialCallsMade || 0),
     trusted_reported_call_count: Number(state?.trustedReportedCallsMade || 0),
-    broker_item_count: Number(state?.brokerItemCount || 0),
-    broker_official_item_count: Number(state?.brokerOfficialItemCount || 0),
-    broker_publisher_feed_item_count: Number(state?.brokerPublisherFeedItemCount || 0),
-    broker_source_ids: Array.isArray(state?.brokerSourceIds) ? state.brokerSourceIds.slice() : [],
-    retrieval_origin_counts: { ...(state?.retrievalOriginCounts || {}) },
-    retrieval_source_family_counts: { ...(state?.retrievalSourceFamilyCounts || {}) },
+    broker_item_count: Number(inventory?.brokerItemCount || 0),
+    broker_official_item_count: Number(inventory?.brokerOfficialItemCount || 0),
+    broker_publisher_feed_item_count: Number(inventory?.brokerPublisherFeedItemCount || 0),
+    discovery_item_count: Number(inventory?.discoveryItemCount || 0),
+    discovery_capped_count: Math.max(0, Number(state?.discoveryCappedItemCount || 0)),
+    discovery_candidate_share_pct: Number(inventory?.discoveryCandidateSharePct || 0),
+    broker_candidate_share_pct: Number(inventory?.brokerCandidateSharePct || 0),
+    broker_source_ids: Array.isArray(inventory?.brokerSourceIds) ? inventory.brokerSourceIds.slice() : [],
+    retrieval_origin_counts: { ...(inventory?.retrievalOriginCounts || {}) },
+    retrieval_source_family_counts: { ...(inventory?.retrievalSourceFamilyCounts || {}) },
     next_preferred_query_index: Number(state?.nextPreferredQueryIndex || 0),
     next_broad_query_index: Number(state?.nextBroadQueryIndex || 0),
     next_trusted_family_index: Number(state?.nextTrustedFamilyIndex || 0),
@@ -791,6 +985,11 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
     preferred_domains_count: attemptedStates.reduce((sum, state) => sum + Number((state?.preferredDomains || []).length), 0),
     preferred_candidate_count: preferredCandidateCount,
     non_preferred_candidate_count: Math.max(0, totalItems - preferredCandidateCount),
+    broker_candidate_count: brokerCandidateCount,
+    discovery_candidate_count: discoveryCandidateCount,
+    discovery_candidate_share_pct: totalItems > 0 ? Number(((discoveryCandidateCount / totalItems) * 100).toFixed(2)) : 0,
+    broker_candidate_share_pct: totalItems > 0 ? Number(((brokerCandidateCount / totalItems) * 100).toFixed(2)) : 0,
+    discovery_candidate_capped_count: discoveryCandidateCappedCount,
     final_selected_preferred_count: 0,
     preferred_displaced_weak_count: 0,
     search_result_domains: searchResultDomains,
@@ -1406,12 +1605,15 @@ function createDigestOrchestratorFetchRuntime(deps) {
       return sum + Number(state?.apiCalls || 0);
     }, 0);
     // brokerDiagnostics was set in Phase 0 (broker-first block above).
+    const discoverySupplementDiagnostics = enforceDiscoveryCandidateShare(standardStates, digestConfig, logger);
     const standardItems = standardStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
     let allItems = standardItems.slice();
     const providerDiagnostics = summarizeProviderDiagnostics(standardStates);
     const fetchDiagnostics = buildFetchDiagnostics(standardStates, budgetTracker, maxFetchConcurrency, brokerDiagnostics);
+    fetchDiagnostics.discovery_candidate_cap_count = Number(discoverySupplementDiagnostics?.discovery_candidate_cap_count || 0);
+    fetchDiagnostics.max_discovery_candidate_share_pct = Number(discoverySupplementDiagnostics?.max_discovery_candidate_share_pct || 0);
 
-    logger(`Fetched ${allItems.length} raw items`);
+    logger(`Fetched ${allItems.length} retained candidate(s) after lane balancing`);
 
     const attemptedStandardStates = standardStates.filter((state) => Number(state?.totalCallsScheduled || 0) > 0);
     const allStandardEmpty = attemptedStandardStates.length > 0
@@ -1481,4 +1683,6 @@ module.exports = {
   resolveSelectionTarget,
   buildTagPriority,
   resolveTopicsToFetch,
+  resolveMaxDiscoveryCandidateShare,
+  resolveDiscoveryCandidateCapCount,
 };

@@ -14,10 +14,17 @@ const runtime = require(TARGET_PATH);
 const {
   createDigestOrchestratorFetchRuntime,
   resolveTopicsToFetch,
+  resolveDiscoveryCandidateCapCount,
+  resolveMaxDiscoveryCandidateShare,
 } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
+  assert.strictEqual(resolveMaxDiscoveryCandidateShare({}), 0.2);
+  assert.strictEqual(resolveMaxDiscoveryCandidateShare({ maxDiscoveryCandidateShare: 0.35 }), 0.35);
+  assert.strictEqual(resolveDiscoveryCandidateCapCount(8, 0.2), 2);
+  assert.strictEqual(resolveDiscoveryCandidateCapCount(0, 0.2), 0);
+
   const focusedTopics = resolveTopicsToFetch({
     configTopics: [
       { tag: "HEALTHCARE", queries: ["a", "b"] },
@@ -242,4 +249,96 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_calls_used, 3);
   assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_exhausted, true);
   assert.strictEqual(budgetedResult.fetchDiagnostics.budget_stop_reason, "hard_cap_reached");
+
+  const discoveryCapRuntime = createDigestOrchestratorFetchRuntime({
+    CONFIG: {
+      topics: [
+        { tag: "TECHNOLOGY", queries: ["a"] },
+      ],
+      digest: {
+        itemCount: 5,
+        maxDiscoveryCandidateShare: 0.2,
+      },
+    },
+    log: () => {},
+    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
+    fetchTopicNews: async (topic) => ({
+      apiCalls: 1,
+      items: [
+        { headline: `${topic.tag} discovery 1`, url: "https://discovery.example.com/1", tag: topic.tag, source: "discovery.example.com", source_domain: "discovery.example.com", published_date: "2026-03-27T10:00:00.000Z", source_tier: 2, source_authority: 0.7 },
+        { headline: `${topic.tag} discovery 2`, url: "https://discovery.example.com/2", tag: topic.tag, source: "discovery.example.com", source_domain: "discovery.example.com", published_date: "2026-03-27T09:00:00.000Z", source_tier: 2, source_authority: 0.65 },
+        { headline: `${topic.tag} discovery 3`, url: "https://discovery.example.com/3", tag: topic.tag, source: "discovery.example.com", source_domain: "discovery.example.com", published_date: "2026-03-27T08:00:00.000Z", source_tier: 2, source_authority: 0.6 },
+        { headline: `${topic.tag} discovery 4`, url: "https://discovery.example.com/4", tag: topic.tag, source: "discovery.example.com", source_domain: "discovery.example.com", published_date: "2026-03-27T07:00:00.000Z", source_tier: 3, source_authority: 0.5 },
+        { headline: `${topic.tag} discovery 5`, url: "https://discovery.example.com/5", tag: topic.tag, source: "discovery.example.com", source_domain: "discovery.example.com", published_date: "2026-03-27T06:00:00.000Z", source_tier: 3, source_authority: 0.4 },
+      ],
+      diagnostics: {
+        provider: "perplexity",
+        successful_calls: 1,
+        failed_calls: 0,
+        transport_errors: 0,
+        status_counts: {},
+      },
+    }),
+    standardTopicBrokerRuntime: {
+      fetchBrokerCandidates: async () => ({
+        topicItems: {
+          TECHNOLOGY: Array.from({ length: 8 }, (_, index) => ({
+            headline: `Technology feed ${index + 1}`,
+            url: `https://feed.example.com/${index + 1}`,
+            canonical_url: `https://feed.example.com/${index + 1}`,
+            published_date: `2026-03-27T0${Math.min(index, 9)}:00:00.000Z`,
+            tag: "TECHNOLOGY",
+            source: "feed.example.com",
+            source_domain: "feed.example.com",
+            source_policy: "preferred",
+            source_authority: 0.9,
+            source_type: "reported_media",
+            source_tier: 1,
+            content_kind: "article",
+            retrieval_origin: "broker_publisher_feed",
+            broker_source_id: "tech_feed",
+          })),
+        },
+        diagnostics: {
+          enabled: true,
+          config_source: "bundled",
+          active_path: "/tmp/broker.json",
+          active_topic_tags: ["TECHNOLOGY"],
+          lane_counts: { publisher_feed: 8, official: 0 },
+          source_fetch_count: 1,
+          source_success_count: 1,
+          source_failure_count: 0,
+          source_diagnostics: [{ id: "tech_feed", lane: "publisher_feed", retained_count: 8 }],
+          topic_diagnostics: {
+            TECHNOLOGY: {
+              tag: "TECHNOLOGY",
+              lane_counts: { publisher_feed: 8, official: 0 },
+              source_counts: { tech_feed: 8 },
+              source_ids: ["tech_feed"],
+              item_count: 8,
+              article_item_count: 8,
+              official_document_count: 0,
+              errors: [],
+            },
+          },
+        },
+      }),
+    },
+    emitDigestIncident: async () => {},
+  });
+
+  const discoveryCapped = await discoveryCapRuntime.orchestrateFetch({
+    dueUsers: [{ topics: ["TECHNOLOGY"] }],
+    runMode: "scheduled",
+  });
+  assert.strictEqual(discoveryCapped.allItems.length, 10);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.broker_candidate_count, 8);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.discovery_candidate_count, 2);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.discovery_candidate_capped_count, 3);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.discovery_candidate_cap_count, 2);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.discovery_candidate_share_pct, 20);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.max_discovery_candidate_share_pct, 20);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.topic_diagnostics[0].discovery_capped_count, 3);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.topic_diagnostics[0].discovery_item_count, 2);
+  assert.strictEqual(discoveryCapped.fetchDiagnostics.topic_diagnostics[0].discovery_candidate_share_pct, 20);
 })();

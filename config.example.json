@@ -9,6 +9,7 @@
     "itemCount": 5,
     "maxItemsPerTag": 2,
     "maxItemsPerSourceDomain": 2,
+    "maxDiscoveryCandidateShare": 0.2,
     "catchupWindowMinutes": 720,
     "crossDayDedupDays": 3,
     "crossDayRepeatPenalty": 0.8,

@@ -95,11 +95,26 @@ writeDigestAuditLog({
     ],
   },
   fetchDiagnostics: {
+    broker_candidate_count: 2,
+    discovery_candidate_count: 1,
+    discovery_candidate_cap_count: 1,
+    discovery_candidate_capped_count: 0,
+    broker_candidate_share_pct: 66.67,
+    discovery_candidate_share_pct: 33.33,
+    max_discovery_candidate_share_pct: 20,
+    retrieval_origin_counts: {
+      broker_publisher_feed: 2,
+      broad: 1,
+    },
     topic_diagnostics: [
       {
         tag: "TECHNOLOGY",
         coverage_status: "covered",
         broker_item_count: 2,
+        discovery_item_count: 1,
+        discovery_capped_count: 0,
+        discovery_candidate_share_pct: 33.33,
+        broker_candidate_share_pct: 66.67,
         failed_calls: 0,
         transport_errors: 0,
       },
@@ -164,6 +179,10 @@ assert.strictEqual(auditDoc.summary.candidate_pool_after_freshness, 4);
 assert.strictEqual(auditDoc.summary.selection_rejection_counts.selection_source_cap, 1);
 assert.strictEqual(auditDoc.topics.TECHNOLOGY.rejection_reason_counts.selection_not_selected, 1);
 assert.strictEqual(auditDoc.topics.TECHNOLOGY.candidates[1].selection_reason, "selection_source_cap");
+assert.strictEqual(auditDoc.fetch.discovery_candidate_count, 1);
+assert.strictEqual(auditDoc.fetch.max_discovery_candidate_share_pct, 20);
+assert.strictEqual(auditDoc.fetch.retrieval_origin_counts.broad, 1);
+assert.strictEqual(auditDoc.fetch.topic_diagnostics[0].discovery_candidate_share_pct, 33.33);
 assert.strictEqual(auditDoc.fetch.standard_topic_broker.source_diagnostics.length, 2);
 assert.strictEqual(auditDoc.fetch.standard_topic_broker.topic_diagnostics[0].errors.length, 1);
 

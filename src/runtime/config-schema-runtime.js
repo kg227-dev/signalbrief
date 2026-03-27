@@ -39,6 +39,19 @@ function expectPositiveInteger(errors, fieldPath, value, { min = 1, max = Number
   return true;
 }
 
+function expectNumberRange(errors, fieldPath, value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    pushError(errors, fieldPath, "must be a number");
+    return false;
+  }
+  if (parsed < min || parsed > max) {
+    pushError(errors, fieldPath, `must be between ${min} and ${max}`);
+    return false;
+  }
+  return true;
+}
+
 function validateTopicEntry(errors, topic, idx, seenTags) {
   const topicPath = `topics[${idx}]`;
   if (!expectObject(errors, topicPath, topic)) return;
@@ -88,6 +101,9 @@ function validateConfigSchema(config) {
     }
     if (digest.maxItemsPerSourceDomain != null) {
       expectPositiveInteger(errors, "digest.maxItemsPerSourceDomain", digest.maxItemsPerSourceDomain, { min: 1, max: 10 });
+    }
+    if (digest.maxDiscoveryCandidateShare != null) {
+      expectNumberRange(errors, "digest.maxDiscoveryCandidateShare", digest.maxDiscoveryCandidateShare, { min: 0, max: 1 });
     }
     if (digest.lookbackHours != null) {
       expectPositiveInteger(errors, "digest.lookbackHours", digest.lookbackHours, { min: 1, max: 168 });

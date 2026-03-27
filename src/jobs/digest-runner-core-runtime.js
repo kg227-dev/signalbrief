@@ -485,7 +485,6 @@ async function startDigestTrigger(opts = {}) {
   const result = await triggerDigest({
     source: opts.source,
     trigger: opts.trigger,
-    chatId: opts.chatId,
     suppressWelcome: !!opts.suppressWelcome,
     queue: false,
     maxAdmissionWaitMs: 0,
@@ -500,7 +499,6 @@ async function runDigestTrigger(opts = {}) {
   const result = await triggerDigest({
     source: opts.source,
     trigger: opts.trigger,
-    chatId: opts.chatId,
     suppressWelcome: !!opts.suppressWelcome,
     waitForExit: true,
     timeoutMs: opts.timeoutMs,

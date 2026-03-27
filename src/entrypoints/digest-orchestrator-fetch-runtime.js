@@ -15,19 +15,13 @@ const DEFAULT_SEARCH_BUDGET = Object.freeze({
     soft_calls: 24,
     hard_calls: 36,
   }),
-  on_demand: Object.freeze({
-    soft_calls: 6,
-    hard_calls: 9,
-  }),
-  custom_topic_reserve_calls: 3,
 });
 const DEFAULT_MAX_FETCH_CONCURRENCY = 4;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
 const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
-const DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS = 2;
 const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
-// MVP topic set. POLICY×REGULATORY dropped as standalone — regulatory items surface
+// MVP topic set. Regulatory coverage surfaces under the closest sector topic
 // through sector official sources. CONSUMER & RETAIL and INDUSTRIALS added.
 const PHASE1_STANDARD_TOPIC_TAGS = new Set([
   "HEALTHCARE",
@@ -46,12 +40,6 @@ const PHASE1_FOCUS_STANDARD_TOPIC_TAGS = new Set([
   "FINANCIAL SERVICES",
 ]);
 const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
-  STRATEGY: Object.freeze([
-    "corporate strategic review divestiture restructuring capital allocation Reuters Bloomberg FT WSJ last 48 hours",
-    "board strategic alternatives portfolio optimization spin off activist strategy last 48 hours",
-    "operating model transformation restructuring turnaround strategy Reuters FT last 48 hours",
-    "capital allocation portfolio pruning carve-out strategic reset last 48 hours",
-  ]),
   HEALTHCARE: Object.freeze([
     "hospital system merger acquisition payer provider strategy Reuters Modern Healthcare STAT last 48 hours",
     "Medicare Advantage payer provider value-based care CMS hospital strategy last 48 hours",
@@ -63,12 +51,6 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "Federal Reserve OCC FDIC CFPB bank supervision capital rule last 48 hours",
     "payments cards fintech bank partnership enforcement last 48 hours",
     "asset management insurance wealth regulation strategy last 48 hours",
-  ]),
-  "PE×M&A": Object.freeze([
-    "private equity leveraged buyout sale process sponsor-backed acquisition last 48 hours",
-    "M&A antitrust deal review sponsor-backed transaction FTC DOJ last 48 hours",
-    "PE exit continuation fund carve-out divestiture last 48 hours",
-    "deal financing private credit sponsor transaction last 48 hours",
   ]),
   ENERGY: Object.freeze([
     "utility grid transmission interconnection power demand policy Reuters Utility Dive FERC last 48 hours",
@@ -100,64 +82,6 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "factory capex industrial order book pricing last 48 hours",
     "procurement tariff trade industrial supply chain last 48 hours",
   ]),
-  "REAL ESTATE": Object.freeze([
-    "commercial real estate office multifamily industrial property financing last 48 hours",
-    "REIT earnings cap rates refinancing mortgage commercial property last 48 hours",
-    "housing affordability homebuilder mortgage zoning last 48 hours",
-    "data center real estate power land lease development last 48 hours",
-  ]),
-  "PUBLIC SECTOR": Object.freeze([
-    "federal budget procurement government contractor agency rulemaking last 48 hours",
-    "state local government procurement grants public sector technology last 48 hours",
-    "defense civilian agency modernization public sector last 48 hours",
-    "government shutdown budget appropriations oversight last 48 hours",
-  ]),
-  "AI×TECH": Object.freeze([
-    "AI model infrastructure enterprise deployment regulation Reuters FT last 48 hours",
-    "semiconductor AI accelerator data center export control last 48 hours",
-    "OpenAI Anthropic Microsoft Google enterprise AI product last 48 hours",
-    "AI governance copyright safety policy last 48 hours",
-  ]),
-  "POLICY×REGULATORY": Object.freeze([
-    "FTC DOJ antitrust trade tariff regulation business last 48 hours",
-    "SEC EPA FTC proposed rule enforcement business last 48 hours",
-    "sanctions export controls trade compliance policy last 48 hours",
-  ]),
-  SUSTAINABILITY: Object.freeze([
-    "SEC climate disclosure CBAM carbon markets corporate sustainability last 48 hours",
-    "power demand grid decarbonization clean energy policy last 48 hours",
-    "supply chain sustainability reporting emissions corporate investment last 48 hours",
-  ]),
-  DIGITAL: Object.freeze([
-    "enterprise software cloud modernization CIO digital transformation last 48 hours",
-    "ERP CRM workflow automation data platform strategy last 48 hours",
-    "digital transformation cybersecurity data migration tech debt last 48 hours",
-    "IT services consulting enterprise platform rollout last 48 hours",
-  ]),
-  "M&A ADVISORY": Object.freeze([
-    "deal advisory antitrust financing due diligence sponsor deal last 48 hours",
-    "merger review activism carve-out sale process last 48 hours",
-    "private equity exit strategic buyer deal advisory last 48 hours",
-    "cross-border M&A antitrust CFIUS financing last 48 hours",
-  ]),
-  TALENT: Object.freeze([
-    "labor market hiring layoffs workforce regulation immigration last 48 hours",
-    "pay transparency union labor compliance workforce strategy last 48 hours",
-    "talent retention HR tech workforce planning last 48 hours",
-    "workforce restructuring return to office labor rule last 48 hours",
-  ]),
-});
-const CUSTOM_TOPIC_SOURCE_HINTS = Object.freeze({
-  nvidia: Object.freeze(["AI×TECH", "TECHNOLOGY"]),
-  "glp 1": Object.freeze(["LIFE SCIENCES", "HEALTHCARE"]),
-  "agentic ai": Object.freeze(["AI×TECH", "TECHNOLOGY", "DIGITAL"]),
-  "sec rulemaking": Object.freeze(["POLICY×REGULATORY", "PUBLIC SECTOR"]),
-  cbam: Object.freeze(["SUSTAINABILITY", "POLICY×REGULATORY", "ENERGY"]),
-  "rate cuts": Object.freeze(["FINANCIAL SERVICES", "STRATEGY"]),
-  "grid infrastructure": Object.freeze(["ENERGY", "SUSTAINABILITY", "POLICY×REGULATORY", "PUBLIC SECTOR"]),
-  semicap: Object.freeze(["AI×TECH", "TECHNOLOGY"]),
-  "quantum computing": Object.freeze(["AI×TECH", "TECHNOLOGY"]),
-  starlink: Object.freeze(["TECHNOLOGY", "PUBLIC SECTOR"]),
 });
 const TRACKED_DEEP_STANDARD_TAGS = new Set([
   "HEALTHCARE",
@@ -174,16 +98,6 @@ const FULL_EXHAUST_STANDARD_TAGS = new Set([
   "TECHNOLOGY",
   "ENERGY",
   "FINANCIAL SERVICES",
-]);
-const TRACKED_DEEP_CUSTOM_SLUGS = new Set([
-  "custom_nvidia",
-  "custom_glp_1",
-  "custom_agentic_ai",
-  "custom_sec_rulemaking",
-  "custom_cbam",
-  "custom_rate_cuts",
-  "custom_grid_infrastructure",
-  "custom_semicap",
 ]);
 
 function resolveSelectionTarget(dueUsers, defaultItemCount = 7) {
@@ -205,7 +119,7 @@ function buildTagPriority(dueUsers, normalizeTopicToken) {
   return priority;
 }
 
-function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, runMode, log }) {
+function resolveTopicsToFetch({ configTopics, dueUsers, runMode, log }) {
   const topics = (Array.isArray(configTopics) ? configTopics : []).map((topic) => {
     const tag = String(topic?.tag || "").trim().toUpperCase();
     const overrideQueries = TRACKED_TOPIC_QUERY_OVERRIDES[tag];
@@ -238,94 +152,12 @@ function resolveTopicsToFetch({ configTopics, dueUsers, targetChatId, runMode, l
     logger(`Standard-only eval: fetching ${focusedTopics.length}/${topics.length} standard topic(s) for ${runMode}`);
     return focusedTopics;
   }
-  // Always fetch all configured topics — even for targeted on-demand runs.
-  // Narrowing to the user's subscribed topics produced thin raw pools that
-  // were decimated by cross-day dedup, resulting in 2-3 signal digests.
-  // Per-user topic filtering downstream handles relevance just fine.
-  if (targetChatId && Array.isArray(dueUsers) && dueUsers.length === 1) {
-    const userTopicCount = (Array.isArray(dueUsers[0]?.topics) ? dueUsers[0].topics : [])
-      .filter((topic) => !String(topic || "").startsWith("custom_")).length;
-    logger(`On-demand: fetching all ${topics.length} topic(s) (user subscribes to ${userTopicCount})`);
-  }
   return topics;
-}
-
-function resolveCustomTopicSlugs({ dueUsers, maxCustomFetchPerRun, log }) {
-  const logger = typeof log === "function" ? log : () => {};
-  const customTopicCounts = new Map();
-  const firstSeenIndex = new Map();
-  let cursor = 0;
-  let customUserCount = 0;
-  for (const user of (Array.isArray(dueUsers) ? dueUsers : [])) {
-    let userHasCustomTopic = false;
-    for (const topic of (Array.isArray(user?.topics) ? user.topics : [])) {
-      const topicRaw = String(topic || "");
-      if (!topicRaw.startsWith("custom_")) continue;
-      userHasCustomTopic = true;
-      if (!firstSeenIndex.has(topicRaw)) firstSeenIndex.set(topicRaw, cursor);
-      customTopicCounts.set(topicRaw, (customTopicCounts.get(topicRaw) || 0) + 1);
-      cursor += 1;
-    }
-    if (userHasCustomTopic) customUserCount += 1;
-  }
-
-  const configuredMax = Number(maxCustomFetchPerRun);
-  const totalDueUsers = Math.max(0, Array.isArray(dueUsers) ? dueUsers.length : 0);
-  const customHeavyRun = customTopicCounts.size > 0
-    && customUserCount >= Math.max(2, Math.ceil(totalDueUsers * 0.5));
-  const dynamicCap = Number.isFinite(configuredMax) && configuredMax > 0
-    ? configuredMax
-    : customHeavyRun
-      ? customTopicCounts.size
-      : Math.min(18, Math.max(6, Math.ceil((totalDueUsers || 1) / 4)));
-
-  const rankedCustomTopicSlugs = [...customTopicCounts.entries()]
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return (firstSeenIndex.get(a[0]) || 0) - (firstSeenIndex.get(b[0]) || 0);
-    })
-    .map(([slug]) => slug);
-  const customTopicSlugs = rankedCustomTopicSlugs.slice(0, dynamicCap);
-  if (rankedCustomTopicSlugs.length > customTopicSlugs.length) {
-    logger(`Custom topic fetch cap hit: ${customTopicSlugs.length}/${rankedCustomTopicSlugs.length} topics this run`);
-  }
-  return customTopicSlugs;
-}
-
-function normalizeCustomHintKey(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries) {
-  const queryBuilder = typeof buildCustomTopicQueries === "function"
-    ? buildCustomTopicQueries
-    : () => [];
-  return (Array.isArray(customTopicSlugs) ? customTopicSlugs : []).map((slug) => {
-    const keyword = String(slug || "").replace(/^custom_/, "").replace(/_/g, " ").trim();
-    const queries = queryBuilder(keyword);
-    const preferredTopicHints = Array.isArray(CUSTOM_TOPIC_SOURCE_HINTS[normalizeCustomHintKey(keyword)])
-      ? CUSTOM_TOPIC_SOURCE_HINTS[normalizeCustomHintKey(keyword)].slice()
-      : [];
-    return {
-      tag: keyword.toUpperCase(),
-      custom_slug: slug,
-      queries: Array.isArray(queries) && queries.length > 0
-        ? queries
-        : [`${keyword} business strategy developments last 48 hours`],
-      isCustom: true,
-      preferred_topic_hints: preferredTopicHints,
-    };
-  });
 }
 
 function isTrackedDeepCoverageState(state) {
   const tag = String(state?.topic?.tag || "").trim().toUpperCase();
-  const customSlug = String(state?.topic?.custom_slug || "").trim().toLowerCase();
-  return TRACKED_DEEP_STANDARD_TAGS.has(tag) || TRACKED_DEEP_CUSTOM_SLUGS.has(customSlug);
+  return TRACKED_DEEP_STANDARD_TAGS.has(tag);
 }
 
 function buildFocusedStandardTagSet(dueUsers = [], normalizeTopicToken = (value) => String(value || "").trim().toUpperCase()) {
@@ -401,9 +233,9 @@ function toBoundedInt(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER 
   return normalized;
 }
 
-function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0, dueUsers = [] } = {}) {
+function resolveSearchBudget(digestConfig) {
   const configured = digestConfig?.search_budget || {};
-  const modeKey = targetChatId ? "on_demand" : "scheduled";
+  const modeKey = "scheduled";
   const modeDefaults = DEFAULT_SEARCH_BUDGET[modeKey];
   const modeConfigured = configured?.[modeKey] || {};
   const hardCalls = toBoundedInt(modeConfigured?.hard_calls, modeDefaults.hard_calls, { min: 1, max: 200 });
@@ -411,60 +243,21 @@ function resolveSearchBudget(digestConfig, { targetChatId, customTopicCount = 0,
     hardCalls,
     toBoundedInt(modeConfigured?.soft_calls, modeDefaults.soft_calls, { min: 1, max: 200 })
   );
-  const customReserveBase = toBoundedInt(
-    configured?.custom_topic_reserve_calls,
-    DEFAULT_SEARCH_BUDGET.custom_topic_reserve_calls,
-    { min: 0, max: hardCalls }
-  );
-  const customTopicTotal = Math.max(0, Number(customTopicCount || 0));
-  const customUserCount = (Array.isArray(dueUsers) ? dueUsers : []).filter((user) => {
-    return (Array.isArray(user?.topics) ? user.topics : []).some((topic) => String(topic || "").startsWith("custom_"));
-  }).length;
-  const totalDueUsers = Math.max(0, Array.isArray(dueUsers) ? dueUsers.length : 0);
-  const customHeavyRun = customTopicTotal > 0
-    && customUserCount >= Math.max(2, Math.ceil(totalDueUsers * 0.5));
-  const customRetryReserve = customHeavyRun
-    ? Math.min(customTopicTotal, Math.max(0, Math.floor(hardCalls / 3)))
-    : 0;
-  const customDeepCoverageReserve = customHeavyRun
-    ? Math.min(Math.max(8, customTopicTotal * 2), Math.max(0, hardCalls - customTopicTotal - customRetryReserve))
-    : 0;
-  const customHeavyExtraDeepCalls = customHeavyRun
-    ? Math.min(
-      DEFAULT_CUSTOM_HEAVY_EXTRA_DEEP_CALLS,
-      Math.max(0, hardCalls - customTopicTotal - customRetryReserve - customDeepCoverageReserve)
-    )
-    : 0;
-  const reserveTarget = customHeavyRun
-    ? customTopicTotal + customRetryReserve + customDeepCoverageReserve + customHeavyExtraDeepCalls
-    : Math.min(customTopicTotal, customReserveBase);
-  const reserveCalls = Math.min(Math.max(0, reserveTarget), hardCalls);
   return {
     mode: modeKey,
     soft_calls: softCalls,
     hard_calls: hardCalls,
-    custom_topic_reserve_calls: reserveCalls,
-    custom_retry_reserve_calls: customRetryReserve,
-    custom_deep_coverage_reserve_calls: customDeepCoverageReserve,
-    custom_heavy_extra_deep_calls: customHeavyExtraDeepCalls,
-    custom_heavy_run: customHeavyRun,
-    custom_user_count: customUserCount,
-    due_user_count: totalDueUsers,
   };
 }
 
-function applyRunModeSearchBudgetOverrides(searchBudget, { runMode, standardTopicCount = 0, customTopicCount = 0 } = {}) {
+function applyRunModeSearchBudgetOverrides(searchBudget, { runMode, standardTopicCount = 0 } = {}) {
   const base = searchBudget && typeof searchBudget === "object" ? searchBudget : resolveSearchBudget({});
-  if (!isAggressiveStandardRun(runMode) || Number(customTopicCount || 0) > 0) return base;
+  if (!isAggressiveStandardRun(runMode)) return base;
   const standardCount = Math.max(0, Number(standardTopicCount || 0));
   return {
     ...base,
     soft_calls: Math.max(base.soft_calls, Math.min(96, (standardCount * 3) + 8)),
     hard_calls: Math.max(base.hard_calls, Math.min(120, (standardCount * 4) + 12)),
-    custom_topic_reserve_calls: 0,
-    custom_retry_reserve_calls: 0,
-    custom_deep_coverage_reserve_calls: 0,
-    custom_heavy_extra_deep_calls: 0,
   };
 }
 
@@ -733,9 +526,6 @@ function mergeBrokerItemsIntoState(state, items, normalizeUrlForDedup, isFetched
 function sortTopicStates(states) {
   return (Array.isArray(states) ? states.slice() : []).sort((left, right) => {
     if (right.priority !== left.priority) return right.priority - left.priority;
-    const leftCustom = left?.topic?.isCustom === true;
-    const rightCustom = right?.topic?.isCustom === true;
-    if (leftCustom !== rightCustom) return leftCustom ? 1 : -1;
     return left.originalIndex - right.originalIndex;
   });
 }
@@ -798,7 +588,7 @@ function canReceiveAdditionalRetry(state, isFetchedItemEligible) {
 }
 
 function hasWeakPreferredConversion(state, isFetchedItemEligible) {
-  if (!state || state?.topic?.isCustom === true) return false;
+  if (!state) return false;
   if (Number(state?.preferredCallsMade || 0) <= 0) return false;
   if (Number(state?.nextBroadQueryIndex || 0) >= Number(state?.topic?.queries?.length || 0)) return false;
   const usableCount = countUsableItems(state?.items, isFetchedItemEligible);
@@ -829,7 +619,7 @@ function shouldPreferBroadFallbackRetry(state, isFetchedItemEligible) {
 }
 
 function needsStandardTrustedSourcePass(state, annotateFetchedItems, isFetchedItemEligible) {
-  if (!state || state?.topic?.isCustom === true) return false;
+  if (!state) return false;
   if (!Array.isArray(state?.trustedFamilyQueue) || Number(state?.nextTrustedFamilyIndex || 0) >= state.trustedFamilyQueue.length) {
     return false;
   }
@@ -875,7 +665,6 @@ function classifyBroadDepthStopReason(state, budgetTracker) {
   if (state?.retryBlockReason === "topic_fit") return "retry_guard_zero_yield";
   if (budgetTracker?.stop_reason === "hard_cap_reached") return "global_search_budget_hard_cap";
   if (budgetTracker?.stop_reason === "soft_cap_reached") return "global_search_budget_soft_cap";
-  if (budgetTracker?.stop_reason === "custom_topic_reserve_exhausted") return "custom_reserve_preempted";
   return "unscheduled_remaining_queries";
 }
 
@@ -954,8 +743,6 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
   }, createConversionFunnel());
   const topicDiagnostics = attemptedStates.map((state) => ({
     tag: state?.topic?.tag || null,
-    custom_slug: state?.topic?.custom_slug || null,
-    is_custom: state?.topic?.isCustom === true,
     preferred_topic_hints: Array.isArray(state?.topic?.preferred_topic_hints) ? state.topic.preferred_topic_hints.slice() : [],
     query_count: Array.isArray(state?.topic?.queries) ? state.topic.queries.length : 0,
     unique_item_count: Array.isArray(state?.items) ? state.items.length : 0,
@@ -1075,8 +862,6 @@ function createDigestOrchestratorFetchRuntime(deps) {
     fetchTopicNews,
     buildPreferredDomainShortlist,
     buildPreferredSourceFamilyShortlists,
-    buildCustomTopicQueries,
-    buildCustomRescueItemsFromStandard,
     emitDigestIncident,
     normalizeUrlForDedup,
     isFetchedItemEligible,
@@ -1094,9 +879,6 @@ function createDigestOrchestratorFetchRuntime(deps) {
   const buildPreferredFamilyShortlists = typeof buildPreferredSourceFamilyShortlists === "function"
     ? buildPreferredSourceFamilyShortlists
     : null;
-  const buildRescueItems = typeof buildCustomRescueItemsFromStandard === "function"
-    ? buildCustomRescueItemsFromStandard
-    : () => [];
   const emitIncident = typeof emitDigestIncident === "function"
     ? emitDigestIncident
     : async () => false;
@@ -1382,7 +1164,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     };
   }
 
-  async function orchestrateFetch({ dueUsers, targetChatId, runMode }) {
+  async function orchestrateFetch({ dueUsers, runMode }) {
     const digestConfig = CONFIG?.digest || {};
     const aggressiveStandardRun = isAggressiveStandardRun(runMode);
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 7));
@@ -1395,32 +1177,18 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const topicsToFetch = resolveTopicsToFetch({
       configTopics: CONFIG?.topics,
       dueUsers,
-      targetChatId,
       runMode,
       log: logger,
     });
 
-    const customTopicSlugs = resolveCustomTopicSlugs({
-      dueUsers,
-      maxCustomFetchPerRun: digestConfig.maxCustomFetchPerRun,
-      log: logger,
-    });
-    const customFetchTargets = buildCustomFetchTargets(customTopicSlugs, buildCustomTopicQueries);
-    const customTags = customFetchTargets.map((target) => target.tag);
-    const searchBudget = resolveSearchBudget(digestConfig, {
-      targetChatId,
-      customTopicCount: customFetchTargets.length,
-      dueUsers,
-    });
+    const searchBudget = resolveSearchBudget(digestConfig);
     const adjustedSearchBudget = applyRunModeSearchBudgetOverrides(searchBudget, {
       runMode,
       standardTopicCount: topicsToFetch.length,
-      customTopicCount: customFetchTargets.length,
     });
     const budgetTracker = {
       soft_calls: adjustedSearchBudget.soft_calls,
       hard_calls: adjustedSearchBudget.hard_calls,
-      custom_topic_reserve_calls: adjustedSearchBudget.custom_topic_reserve_calls,
       calls_used: 0,
       exhausted: false,
       stop_reason: null,
@@ -1457,48 +1225,8 @@ function createDigestOrchestratorFetchRuntime(deps) {
         index
       );
     }));
-    const customStates = sortTopicStates(customFetchTargets.map((topic, index) => {
-      const shortlist = buildPreferredShortlist({
-        topicTag: Array.isArray(topic?.preferred_topic_hints) && topic.preferred_topic_hints.length > 0
-          ? topic.preferred_topic_hints[0]
-          : topic?.tag,
-        dueUserTopics: [
-          ...dueUserTopics,
-          ...(Array.isArray(topic?.preferred_topic_hints) ? topic.preferred_topic_hints : []),
-        ],
-        queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
-        maxDomains: 20,
-      });
-      const familyShortlists = buildPreferredFamilyShortlists
-        ? buildPreferredFamilyShortlists({
-          topicTag: Array.isArray(topic?.preferred_topic_hints) && topic.preferred_topic_hints.length > 0
-            ? topic.preferred_topic_hints[0]
-            : topic?.tag,
-          dueUserTopics: [
-            ...dueUserTopics,
-            ...(Array.isArray(topic?.preferred_topic_hints) ? topic.preferred_topic_hints : []),
-          ],
-          queryText: Array.isArray(topic?.queries) ? topic.queries[0] : "",
-          maxDomains: 20,
-        })
-        : {
-          reported_domains: [],
-          official_domains: [],
-          combined_domains: [],
-          topic_keys: Array.isArray(shortlist?.topic_keys) ? shortlist.topic_keys.slice() : [],
-          official_friendly: shortlist?.official_friendly === true,
-        };
-      return buildTopicState(
-        topic,
-        shortlist,
-        familyShortlists,
-        tagPriority[topicNormalizer(topic?.custom_slug)] || 1,
-        index
-      );
-    }));
-
-    const standardHardLimit = Math.max(0, budgetTracker.hard_calls - budgetTracker.custom_topic_reserve_calls);
-    const standardSoftLimit = Math.max(0, Math.min(standardHardLimit, budgetTracker.soft_calls - budgetTracker.custom_topic_reserve_calls));
+    const standardHardLimit = Math.max(0, budgetTracker.hard_calls);
+    const standardSoftLimit = Math.max(0, Math.min(standardHardLimit, budgetTracker.soft_calls));
 
     const standardPhase1States = standardStates.filter((state) => (
       Array.isArray(state?.topic?.queries) && state.topic.queries.length > 0
@@ -1516,7 +1244,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       const brokerResult = await standardTopicBroker.fetchBrokerCandidates({
         topicStates: standardStates,
         retrievedAt: new Date().toISOString(),
-        maxAgeHours: Number(digestConfig.maxArticleAgeHours || (targetChatId ? 72 : 48)),
+        maxAgeHours: Number(digestConfig.maxArticleAgeHours || 48),
       });
       brokerDiagnostics = brokerResult?.diagnostics || null;
       for (const state of standardStates) {
@@ -1545,84 +1273,6 @@ function createDigestOrchestratorFetchRuntime(deps) {
         broadFallback: false,
       });
     }, "standard:phase1", budgetTracker);
-
-    let customCallsUsed = countScheduledCalls(customStates);
-    let customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
-    const customPhase1States = customStates.slice(0, customReserveRemaining);
-    if (customStates.length > customPhase1States.length) {
-      markBudgetStop(budgetTracker, "custom_topic_reserve_exhausted");
-    }
-    if (customPhase1States.length > 0) {
-      logger(`Fetching ${customPhase1States.length} custom topic(s): ${customPhase1States.map((state) => state.topic.tag).join(", ")}`);
-      await runScheduledBatch(customPhase1States, (state) => {
-        if ((state.preferredDomains || []).length > 0) {
-          return buildPreferredInvocation(state, state.nextPreferredQueryIndex);
-        }
-        return buildBroadInvocation(state, state.nextBroadQueryIndex, {
-          countsAsRetry: false,
-          broadFallback: false,
-        });
-      }, "custom:phase1", budgetTracker);
-    }
-
-    customCallsUsed = countScheduledCalls(customStates);
-    customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
-    const customPhase2Eligible = sortRetryStates(customStates.filter((state) => {
-      const nextQueryIndex = (state.preferredDomains || []).length > 0
-        ? Number(state.nextPreferredQueryIndex || 0)
-        : Number(state.nextBroadQueryIndex || 0);
-      return Number(state.totalCallsScheduled || 0) > 0
-        && canReceiveAdditionalRetry(state, itemEligibilityFn)
-        && nextQueryIndex < Number(state?.topic?.queries?.length || 0);
-    }), itemEligibilityFn);
-    const customPhase2Slots = Math.min(
-      customReserveRemaining,
-      Math.max(0, Number(adjustedSearchBudget.custom_retry_reserve_calls || 0))
-    );
-    const customPhase2States = customPhase2Eligible.slice(0, customPhase2Slots);
-    if (customPhase2States.length > 0) {
-      await runScheduledBatch(customPhase2States, (state) => {
-        if (shouldPreferBroadFallbackRetry(state, itemEligibilityFn)) {
-          return buildBroadInvocation(state, state.nextBroadQueryIndex, {
-            countsAsRetry: true,
-            broadFallback: true,
-          });
-        }
-        if ((state.preferredDomains || []).length > 0) {
-          return buildPreferredInvocation(state, state.nextPreferredQueryIndex, { countsAsRetry: true });
-        }
-        return buildBroadInvocation(state, state.nextBroadQueryIndex, {
-          countsAsRetry: true,
-          broadFallback: false,
-        });
-      }, "custom:phase2", budgetTracker);
-    }
-    customCallsUsed = countScheduledCalls(customStates);
-    customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
-    let customDeepPhaseIndex = 3;
-    while (customReserveRemaining > 0) {
-      const customDeepEligible = sortDeepCoverageRetryStates(customStates.filter((state) => {
-        return Number(state.totalCallsScheduled || 0) > 0
-          && isTrackedDeepCoverageState(state)
-          && countUsableItems(state.items, itemEligibilityFn) <= 0
-          && state.broadFallbackUsed === true
-          && Number(state.nextBroadQueryIndex || 0) < Number(state?.topic?.queries?.length || 0)
-          && !hasBlockingProviderFailure(state);
-      }), itemEligibilityFn);
-      const customDeepStates = customDeepEligible.slice(0, customReserveRemaining);
-      if (customDeepEligible.length > customDeepStates.length) {
-        markBudgetStop(budgetTracker, "custom_topic_reserve_exhausted");
-      }
-      if (customDeepStates.length <= 0) break;
-      await runScheduledBatch(customDeepStates, (state) => buildBroadInvocation(
-        state,
-        state.nextBroadQueryIndex,
-        { countsAsRetry: true, broadFallback: true }
-      ), `custom:phase${customDeepPhaseIndex}`, budgetTracker);
-      customDeepPhaseIndex += 1;
-      customCallsUsed = countScheduledCalls(customStates);
-      customReserveRemaining = Math.max(0, budgetTracker.custom_topic_reserve_calls - customCallsUsed);
-    }
 
     const trackedStandardDeepStates = standardStates.filter(isTrackedDeepCoverageState).length;
     const standardTrustedSecondPassStates = standardStates.filter((state) => (
@@ -1755,15 +1405,11 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const standardFetchCalls = standardStates.reduce((sum, state) => {
       return sum + Number(state?.apiCalls || 0);
     }, 0);
-    const customFetchCalls = customStates.reduce((sum, state) => {
-      return sum + Number(state?.apiCalls || 0);
-    }, 0);
     // brokerDiagnostics was set in Phase 0 (broker-first block above).
     const standardItems = standardStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
-    const customItems = customStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
-    let allItems = customItems.concat(standardItems);
-    const providerDiagnostics = summarizeProviderDiagnostics([...standardStates, ...customStates]);
-    const fetchDiagnostics = buildFetchDiagnostics([...standardStates, ...customStates], budgetTracker, maxFetchConcurrency, brokerDiagnostics);
+    let allItems = standardItems.slice();
+    const providerDiagnostics = summarizeProviderDiagnostics(standardStates);
+    const fetchDiagnostics = buildFetchDiagnostics(standardStates, budgetTracker, maxFetchConcurrency, brokerDiagnostics);
 
     logger(`Fetched ${allItems.length} raw items`);
 
@@ -1781,18 +1427,6 @@ function createDigestOrchestratorFetchRuntime(deps) {
           selected_items: 0,
         }
       );
-    }
-
-    if (customItems.length > 0) {
-      logger(`Fetched ${customItems.length} custom topic item(s)`);
-      const customKeywords = customTopicSlugs
-        .map((slug) => topicNormalizer(String(slug || "").replace(/^custom_/, "").replace(/_/g, " ")))
-        .filter(Boolean);
-      const rescueItems = buildRescueItems(standardItems, customKeywords, allItems, 1);
-      if (rescueItems.length > 0) {
-        allItems = rescueItems.concat(allItems);
-        logger(`Custom keyword rescue added ${rescueItems.length} item(s) from standard pool`);
-      }
     }
 
     if (providerDiagnostics.degraded_topics > 0) {
@@ -1817,7 +1451,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     if (allItems.length === 0) {
       await emitIncident(
         "zero-raw-items",
-        "No raw items available after standard and custom fetches",
+        "No raw items available after standard fetches",
         {
           mode: runMode,
           due_users: Array.isArray(dueUsers) ? dueUsers.length : 0,
@@ -1831,10 +1465,8 @@ function createDigestOrchestratorFetchRuntime(deps) {
       selectionTarget,
       tagPriority,
       allItems,
-      customTags,
       standardFetchCallsPlanned,
       standardFetchCalls,
-      customFetchCalls,
       fetchDiagnostics,
     };
   }
@@ -1849,6 +1481,4 @@ module.exports = {
   resolveSelectionTarget,
   buildTagPriority,
   resolveTopicsToFetch,
-  resolveCustomTopicSlugs,
-  buildCustomFetchTargets,
 };

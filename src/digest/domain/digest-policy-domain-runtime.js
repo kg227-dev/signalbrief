@@ -4,25 +4,12 @@ function createSelectionPolicy(input = {}) {
   const perTagCap = Math.max(1, Number(src.perTagCap ?? src.maxItemsPerTag ?? 2) || 2);
   const perSourceCandidate = Number(src.perSourceCap ?? src.maxItemsPerSourceDomain);
   const perSourceCap = Number.isFinite(perSourceCandidate) ? Math.max(1, perSourceCandidate) : Infinity;
-  const customTagsRaw = src.customTagOrder
-    || (src.customTags instanceof Set ? [...src.customTags] : src.customTags)
-    || [];
-  const customTagOrder = [...new Set((Array.isArray(customTagsRaw) ? customTagsRaw : [])
-    .map((t) => String(t || "").toLowerCase().trim())
-    .filter(Boolean))];
   const tagPriority = src.tagPriority && typeof src.tagPriority === "object" ? src.tagPriority : {};
-  const explicitCustomCap = Number(src.maxCustomItems);
-  const maxCustomItems = Number.isFinite(explicitCustomCap)
-    ? Math.max(0, explicitCustomCap)
-    : (customTagOrder.length > 0 ? Math.max(1, Math.floor(maxItems * 0.4)) : Infinity);
   return {
     maxItems,
     perTagCap,
     perSourceCap,
-    customTagOrder,
-    customTags: new Set(customTagOrder),
     tagPriority,
-    maxCustomItems,
   };
 }
 

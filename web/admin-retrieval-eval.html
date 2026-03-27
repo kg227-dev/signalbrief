@@ -411,7 +411,7 @@
         .flatMap((scenario) => (scenario.summary?.topic_gap_audit || []).map((row) => ({
           ...row,
           scenario_label: scenario.label || scenario.id,
-          topic_label: row.custom_slug ? String(row.custom_slug).replace(/^custom_/, "").replace(/_/g, " ") : row.tag,
+          topic_label: row.tag,
         })))
         .sort((left, right) => {
           if (left.root_cause !== right.root_cause) return String(left.root_cause || "").localeCompare(String(right.root_cause || ""));

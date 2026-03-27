@@ -10,24 +10,18 @@ const {
   enrichItems,
   selectItems,
   dedupAgainstRecentArchives,
-  formatTelegram,
   buildEmail,
   escapeHtml,
   topicVisual,
   stripInlineHtml,
-  parseSourceDomain,
   CONFIG,
   MODEL_COSTS,
   SEARCH_COSTS,
 } = require("./digest/application/digest-service-runtime");
 
 const {
-  buildCustomTopicQueries,
   filterItemsByTopics,
-  applyTopicRelevanceScores,
   applyDigestDepth,
-  reserveCustomKeywordSlot,
-  normalizeTopicToken,
 } = require("./digest/domain/topic-domain-runtime");
 
 // ── In-memory cache for sandbox sessions ─────────────────────────────────────
@@ -46,20 +40,13 @@ function pruneCache() {
 function estimateCost(params) {
   const {
     topics = [],
-    customKeywords = [],
-    itemCount = 5,
     searchModel = "sonar",
     enrichmentModel = "claude-haiku-4-5",
   } = params;
+  const itemCount = 5;
 
-  // Perplexity calls: 1 per standard topic, up to 3 per custom keyword
   const standardCalls = topics.length;
-  let customCalls = 0;
-  for (const kw of customKeywords) {
-    const queries = buildCustomTopicQueries(kw);
-    customCalls += Math.min(3, Math.max(1, queries.length));
-  }
-  const totalCalls = standardCalls + customCalls;
+  const totalCalls = standardCalls;
   const searchCostPerCall = SEARCH_COSTS[searchModel] || 0.005;
   const perplexityCost = totalCalls * searchCostPerCall;
 
@@ -75,7 +62,6 @@ function estimateCost(params) {
     perplexity: {
       calls: totalCalls,
       standardCalls,
-      customCalls,
       costPerCall: searchCostPerCall,
       costUsd: parseFloat(perplexityCost.toFixed(5)),
     },
@@ -89,25 +75,16 @@ function estimateCost(params) {
   };
 }
 
-function buildFetchTargets(topics, customKeywords) {
+function buildFetchTargets(topics) {
   const fetchTargets = [];
   for (const topicTag of topics) {
     const configTopic = CONFIG.topics.find((topic) => topic.tag === topicTag);
     if (configTopic) fetchTargets.push(configTopic);
   }
-
-  for (const keyword of customKeywords) {
-    const queries = buildCustomTopicQueries(keyword);
-    fetchTargets.push({
-      tag: keyword.toUpperCase(),
-      queries: queries.length ? queries : [`${keyword} business strategy developments last 48 hours`],
-      isCustom: true,
-    });
-  }
   return fetchTargets;
 }
 
-async function getRawItemsForSession({ cachedSessionId, topics, customKeywords, searchModel }) {
+async function getRawItemsForSession({ cachedSessionId, topics, searchModel }) {
   if (cachedSessionId && SANDBOX_CACHE.has(cachedSessionId)) {
     return {
       sessionId: cachedSessionId,
@@ -119,7 +96,7 @@ async function getRawItemsForSession({ cachedSessionId, topics, customKeywords, 
 
   pruneCache();
   const sessionId = crypto.randomBytes(16).toString("hex");
-  const fetchTargets = buildFetchTargets(topics, customKeywords);
+  const fetchTargets = buildFetchTargets(topics);
   const results = await Promise.all(fetchTargets.map((target) => fetchTopicNews(target, { searchModel })));
   const fetchApiCalls = results.reduce((sum, result) => sum + Number(result?.apiCalls || 0), 0);
   const rawItems = results.flatMap((result) => (Array.isArray(result?.items) ? result.items : []));
@@ -131,13 +108,6 @@ async function getRawItemsForSession({ cachedSessionId, topics, customKeywords, 
     fetchApiCalls,
     fetchSkipped: false,
   };
-}
-
-function buildVirtualUserTopics(topics, customKeywords) {
-  return [
-    ...topics,
-    ...customKeywords.map((keyword) => `custom_${normalizeTopicToken(keyword).replace(/\s+/g, "_")}`),
-  ];
 }
 
 function buildQuickScanRows(items) {
@@ -202,23 +172,21 @@ function pickSerializableItems(items) {
   }));
 }
 
-async function runSelectionStage(rawItems, { itemCount, customKeywords, enrichmentModel }) {
+async function runSelectionStage(rawItems, { enrichmentModel }) {
   const stageTiming = {};
 
   const tDedup0 = Date.now();
   const dedupRes = dedupAgainstRecentArchives(rawItems, {
     days: 3,
-    targetCount: itemCount,
+    targetCount: 5,
     minBackfillItems: 3,
   });
   let items = dedupRes.items;
   stageTiming.dedupMs = Date.now() - tDedup0;
 
   const tSelect0 = Date.now();
-  const customTags = customKeywords.map((keyword) => keyword.toUpperCase());
   items = selectItems(items, {
-    maxItems: itemCount,
-    customTags,
+    maxItems: 5,
   });
   stageTiming.selectMs = Date.now() - tSelect0;
 
@@ -239,22 +207,13 @@ async function runSelectionStage(rawItems, { itemCount, customKeywords, enrichme
   };
 }
 
-function rankAndTrimItems(items, { topics, customKeywords, topicWeights, itemCount, depth }) {
+function rankAndTrimItems(items, { topics, depth }) {
   const tScore0 = Date.now();
-  const allUserTopics = buildVirtualUserTopics(topics, customKeywords);
-  const filteredResult = filterItemsByTopics(items, allUserTopics, { minItems: 3 });
-  let userItems = filteredResult.items;
-
-  userItems = applyTopicRelevanceScores(userItems, allUserTopics, topicWeights, {
-    specialistMode: false,
-    repeatPenalty: 0,
-    isRecentRepeat: () => false,
-    sourceDomainForItem: parseSourceDomain,
-  });
-  userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-  const normalizedKeywords = customKeywords.map(normalizeTopicToken).filter(Boolean);
-  userItems = reserveCustomKeywordSlot(userItems, itemCount, normalizedKeywords);
+  const filteredResult = filterItemsByTopics(items, topics, { minItems: 3 });
+  let userItems = filteredResult.items
+    .slice()
+    .sort((left, right) => Number(right.baseScore || 0) - Number(left.baseScore || 0))
+    .slice(0, 5);
   userItems = applyDigestDepth(userItems, depth);
 
   return {
@@ -273,13 +232,6 @@ function formatPipelineOutputs(userItems, depth) {
     year: "numeric",
     timeZone: "America/New_York",
   });
-  const shortDate = now.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "America/New_York",
-  });
-
-  const telegramText = formatTelegram(userItems, shortDate, { digests_received: 10 }, {});
   const quickScan = buildQuickScanRows(userItems);
   const emailHtml = buildEmail(
     userItems,
@@ -297,7 +249,6 @@ function formatPipelineOutputs(userItems, depth) {
 
   return {
     emailHtml,
-    telegramText,
     formatMs: Date.now() - tFormat0,
   };
 }
@@ -307,10 +258,7 @@ function formatPipelineOutputs(userItems, depth) {
 async function runPipeline(params) {
   const {
     topics = [],
-    customKeywords = [],
     depth = "headline_plus_why",
-    itemCount = 5,
-    topicWeights = {},
     searchModel = "sonar",
     enrichmentModel = "claude-haiku-4-5",
     cachedSessionId = null,
@@ -325,7 +273,7 @@ async function runPipeline(params) {
 
   // ── 1. Fetch (or use cache) ──────────────────────────────────────────────
   const tFetch0 = Date.now();
-  const fetchStage = await getRawItemsForSession({ cachedSessionId, topics, customKeywords, searchModel });
+  const fetchStage = await getRawItemsForSession({ cachedSessionId, topics, searchModel });
   sessionId = fetchStage.sessionId;
   rawItems = fetchStage.rawItems;
   fetchApiCalls = fetchStage.fetchApiCalls;
@@ -334,8 +282,6 @@ async function runPipeline(params) {
   timing.fetchMs = Date.now() - tFetch0;
 
   const selectionStage = await runSelectionStage(rawItems, {
-    itemCount,
-    customKeywords,
     enrichmentModel,
   });
   timing.dedupMs = selectionStage.stageTiming.dedupMs;
@@ -344,9 +290,6 @@ async function runPipeline(params) {
 
   const rankingStage = rankAndTrimItems(selectionStage.items, {
     topics,
-    customKeywords,
-    topicWeights,
-    itemCount,
     depth,
   });
   timing.scoreMs = rankingStage.scoreMs;
@@ -369,7 +312,6 @@ async function runPipeline(params) {
     fetchSkipped,
     items: pickSerializableItems(rankingStage.userItems),
     emailHtml: formatStage.emailHtml,
-    telegramText: formatStage.telegramText,
     cost,
     timing,
     dedup: {

@@ -18,19 +18,13 @@ const {
   applyDigestDepth,
   applyStrategicQualityGate,
   applyTopicRelevanceScores,
-  buildCustomTopicQueries,
   computeDigestQualityScore,
-  customKeywordMatches,
   filterItemsByTopics,
-  headlineFingerprint,
   isRepeatedItem,
-  normalizeMatchText,
   normalizeTopicToken,
   normalizeUrlForDedup,
-  reserveCustomKeywordSlot,
   selectDigestItemsDetailed,
   setAdminSourceRegistry,
-  setLearnedDomainAdjustments,
   setPreferredSourceRegistry,
   splitUserTopics,
 } = require("../../domains/digest");
@@ -38,12 +32,7 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require("../../entryp
 const { createDigestOrchestratorEnrichmentRuntime } = require("../../entrypoints/digest-orchestrator-enrichment-runtime");
 const { createDigestOrchestratorFetchRuntime } = require("../../entrypoints/digest-orchestrator-fetch-runtime");
 const { createDigestOrchestratorTransportRuntime } = require("../../entrypoints/digest-orchestrator-transport-runtime");
-const { computeMaxCustomItems } = require("../../entrypoints/digest-orchestrator-selection-runtime");
 const { articleAgeTooOld } = require("../../digest/runtime/digest-data-fetch-items-runtime");
-const {
-  computeLearnedAuthorityAdjustments,
-  loadDomainStats,
-} = require("../../digest/domain/domain-learning-runtime");
 const { loadConfig } = require("../../runtime/config-provider");
 const {
   createPreferredSourceRegistryRuntime,
@@ -56,7 +45,6 @@ const {
   DELIVERY_POLICY,
   classifyDeliveryConfidence,
   deriveInternalThinnessLabel,
-  listTrustedOnlyCustomKeywords,
   selectDeliveryItems,
 } = require("../../runtime/digest-delivery-policy-runtime");
 const { buildHistoricalComparison } = require("./historical-runtime");
@@ -442,7 +430,7 @@ function normalizeEvalTopicKey(value) {
 }
 
 function findMatchingPersonaResults(topicDiagnostic, personaResults = []) {
-  const key = normalizeEvalTopicKey(topicDiagnostic?.custom_slug || topicDiagnostic?.tag);
+  const key = normalizeEvalTopicKey(topicDiagnostic?.tag);
   if (!key) return [];
   return (Array.isArray(personaResults) ? personaResults : []).filter((row) => {
     const personaKey = normalizeEvalTopicKey(row?.persona_label || row?.persona_id);
@@ -453,7 +441,7 @@ function findMatchingPersonaResults(topicDiagnostic, personaResults = []) {
 function groupRejectedReasonsByTopic(rejected = []) {
   const grouped = {};
   for (const row of (Array.isArray(rejected) ? rejected : [])) {
-    const key = normalizeEvalTopicKey(row?.item?.custom_slug || row?.item?.tag);
+    const key = normalizeEvalTopicKey(row?.item?.tag);
     if (!key) continue;
     if (!grouped[key]) grouped[key] = {};
     const reason = String(row?.reason || "").trim() || "unknown";
@@ -517,9 +505,7 @@ function classifyTopicGapAudit({
     && Number(topic?.broad_call_count || 0) <= 0
     && Array.isArray(topic?.preferred_domains)
     && topic.preferred_domains.length > 0;
-  const offTopicQueryMiss = topic?.is_custom === true
-    && Number(topic?.unique_item_count || 0) > 0
-    && candidatePoolCount <= 0;
+  const offTopicQueryMiss = false;
   let rootCause = "covered";
   let failureReason = null;
   if (hasProviderFailure) {
@@ -534,9 +520,6 @@ function classifyTopicGapAudit({
   } else if (Number(topic?.unique_item_count || 0) <= 0 && Number(topic?.broad_call_count || 0) > 0 && hasRemainingBroadQueries) {
     rootCause = "query_plan_not_exhausted";
     failureReason = "unused_broad_queries";
-  } else if (offTopicQueryMiss) {
-    rootCause = "keyword_ambiguity_or_off_topic_query";
-    failureReason = "topic_filter_miss";
   } else if (Number(topic?.unique_item_count || 0) <= 0 && Number(topic?.broad_call_count || 0) > 0) {
     rootCause = "provider_no_recent_coverage";
     failureReason = "zero_yield_broad";
@@ -582,9 +565,6 @@ function classifyTopicGapAudit({
   } else if (rootCause === "query_plan_not_exhausted") {
     betterSourceOpportunity = "likely";
     betterSourceNote = "A broad fallback ran, but alternate broad queries were left unused.";
-  } else if (rootCause === "keyword_ambiguity_or_off_topic_query") {
-    betterSourceOpportunity = "likely";
-    betterSourceNote = "Items were retrieved, but none survived keyword/topic matching.";
   } else if (Number(topic?.preferred_search_result_hit_count || 0) > 0 && Number(topic?.preferred_item_count || 0) <= 0) {
     betterSourceOpportunity = "possible";
     betterSourceNote = "Preferred/trusted domains appeared in search results but did not convert into retained items.";
@@ -628,8 +608,6 @@ function classifyTopicGapAudit({
 
   return {
     tag: topic?.tag || null,
-    custom_slug: topic?.custom_slug || null,
-    is_custom: topic?.is_custom === true,
     raw_count: Number(topic?.unique_item_count || 0),
     cleaned_count: candidatePoolCount,
     final_count: finalCount,
@@ -678,7 +656,7 @@ function buildTopicGapAudit(globalResult, personaResults) {
   return topicDiagnostics.map((topicDiagnostic) => classifyTopicGapAudit({
     topicDiagnostic,
     matchingPersonaResults: findMatchingPersonaResults(topicDiagnostic, personaResults),
-    rejectionCounts: rejectedByTopic[normalizeEvalTopicKey(topicDiagnostic?.custom_slug || topicDiagnostic?.tag)] || {},
+    rejectionCounts: rejectedByTopic[normalizeEvalTopicKey(topicDiagnostic?.tag)] || {},
   }));
 }
 
@@ -697,7 +675,11 @@ function createEvalServices() {
   const sourceRegistryRuntime = createSourceRegistryRuntime({
     fs,
     path,
-    sourceRegistryPath: runtimePaths.sourceRegistryPath,
+    appRoot,
+    env: process.env,
+    nodeEnv: process.env.NODE_ENV,
+    standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath: path.join(runtimePaths.appRoot, "config", "standard-topic-broker-sources.json"),
   });
   const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
     fs,
@@ -754,9 +736,6 @@ function createEvalServices() {
     httpsPostWithRetry,
     buildPublicDigestUrl: () => "",
     normalizeTopicToken,
-    customKeywordMatches,
-    normalizeMatchText,
-    headlineFingerprint,
     normalizeUrlForDedup,
   });
   const deliveryRecordRuntime = createDigestDeliveryRecordRuntime({
@@ -776,7 +755,7 @@ function createEvalServices() {
     isRecentRepeatItem: archiveRuntime.isRecentRepeatItem,
     parseSourceDomain: archiveRuntime.parseSourceDomain,
     applyEntityCoverageCap,
-    reserveCustomKeywordSlot,
+    reserveCustomKeywordSlot: (items) => items,
   });
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
     enrichItems: dataRuntime.enrichItems,
@@ -817,10 +796,7 @@ function recordBudgetEvent(storage, budget, entry) {
 function computeScenarioCost(result = {}) {
   const fetchResult = result?.fetchResult || {};
   const enrichResult = result?.enrichResult || {};
-  const perplexityCost = (
-    Number(fetchResult.standardFetchCalls || 0)
-    + Number(fetchResult.customFetchCalls || 0)
-  ) * 0.005;
+  const perplexityCost = Number(fetchResult.standardFetchCalls || 0) * 0.005;
   const claudeCost = (
     (Number(enrichResult.claudeUsage?.input_tokens || 0) / 1_000_000) * 0.8
     + (Number(enrichResult.claudeUsage?.output_tokens || 0) / 1_000_000) * 4.0
@@ -833,20 +809,7 @@ function computeScenarioCost(result = {}) {
 }
 
 function resolveEvalSelectionTarget({ scenarioId, dueUsers, baseSelectionTarget }) {
-  const base = Math.max(1, Number(baseSelectionTarget || 0));
-  const users = Array.isArray(dueUsers) ? dueUsers : [];
-  const uniqueCustomTopics = new Set();
-  for (const user of users) {
-    for (const topic of (Array.isArray(user?.topics) ? user.topics : [])) {
-      const topicText = String(topic || "").trim().toLowerCase();
-      if (topicText.startsWith("custom_")) uniqueCustomTopics.add(topicText);
-    }
-  }
-  const customOnlyScenario = String(scenarioId || "").startsWith("custom_")
-    && users.length > 0
-    && users.every((user) => (Array.isArray(user?.topics) ? user.topics : []).some((topic) => String(topic || "").toLowerCase().startsWith("custom_")));
-  if (!customOnlyScenario) return base;
-  return Math.max(base, Math.min(14, uniqueCustomTopics.size));
+  return Math.max(1, Number(baseSelectionTarget || 0));
 }
 
 function buildGlobalSelection({
@@ -870,8 +833,6 @@ function buildGlobalSelection({
     fetchTopicNews: dataRuntime.fetchTopicNews,
     buildPreferredDomainShortlist: (options) => buildPreferredDomainShortlist(preferredSourceRegistry, options),
     buildPreferredSourceFamilyShortlists: (options) => preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options),
-    buildCustomTopicQueries,
-    buildCustomRescueItemsFromStandard: formattingRuntime.buildCustomRescueItemsFromStandard,
     emitDigestIncident: async () => false,
     normalizeUrlForDedup,
     isFetchedItemEligible: (item) => {
@@ -920,16 +881,9 @@ function buildGlobalSelection({
         item,
         reason: "archive_dedup",
       }));
-      const maxCustomItems = computeMaxCustomItems({
-        configuredMaxCustom: Number(CONFIG.digest.maxCustomItemsPerRun),
-        selectionTarget,
-        customTags: fetchResult.customTags,
-      });
       globalSelection = selectDigestItemsDetailed(freshItems, {
         maxItems: selectionTarget,
         maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
-        customTags: fetchResult.customTags,
-        maxCustomItems,
         tagPriority: fetchResult.tagPriority,
         maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
         normalizeUrl: normalizeUrlForDedup,
@@ -1007,40 +961,32 @@ function buildGlobalSelection({
 
 const SOURCE_FAMILY_AUDIT_TOPICS = Object.freeze([
   Object.freeze({
-    key: "grid infrastructure",
-    label: "grid infrastructure",
-    tag: "GRID INFRASTRUCTURE",
-    hints: ["ENERGY", "SUSTAINABILITY", "POLICY×REGULATORY", "PUBLIC SECTOR"],
-    query_override: [
-      "grid infrastructure transmission permitting interconnection regulator utility last 48 hours",
-      "transmission line permitting interconnection queue FERC utility buildout last 48 hours",
-      "power transformer utility equipment grid capex data center load last 48 hours",
-      "grid modernization transformer utility equipment transmission capex last 48 hours",
-    ],
-  }),
-  Object.freeze({
     key: "energy",
     label: "ENERGY",
     tag: "ENERGY",
-    hints: ["ENERGY", "SUSTAINABILITY"],
+    hints: ["ENERGY", "INDUSTRIALS"],
+    query_override: [
+      "energy utility generation transmission grid infrastructure last 48 hours",
+      "power market regulation utilities storage transmission projects last 48 hours",
+    ],
   }),
   Object.freeze({
-    key: "policy regulatory",
-    label: "POLICY×REGULATORY",
-    tag: "POLICY×REGULATORY",
-    hints: ["POLICY×REGULATORY", "PUBLIC SECTOR"],
+    key: "technology",
+    label: "TECHNOLOGY",
+    tag: "TECHNOLOGY",
+    hints: ["TECHNOLOGY"],
   }),
   Object.freeze({
-    key: "cbam",
-    label: "CBAM",
-    tag: "CBAM",
-    hints: ["SUSTAINABILITY", "POLICY×REGULATORY", "ENERGY"],
+    key: "healthcare",
+    label: "HEALTHCARE",
+    tag: "HEALTHCARE",
+    hints: ["HEALTHCARE", "LIFE SCIENCES"],
   }),
   Object.freeze({
-    key: "rate cuts",
-    label: "rate cuts",
-    tag: "RATE CUTS",
-    hints: ["FINANCIAL SERVICES", "STRATEGY"],
+    key: "financial services",
+    label: "FINANCIAL SERVICES",
+    tag: "FINANCIAL SERVICES",
+    hints: ["FINANCIAL SERVICES"],
   }),
 ]);
 
@@ -1048,7 +994,7 @@ function findTopicGapEntry(scenarios = [], topicKey = "") {
   const normalizedKey = normalizeEvalTopicKey(topicKey);
   for (const scenario of (Array.isArray(scenarios) ? scenarios : [])) {
     const gap = (Array.isArray(scenario?.summary?.topic_gap_audit) ? scenario.summary.topic_gap_audit : []).find((entry) => {
-      return normalizeEvalTopicKey(entry?.custom_slug || entry?.tag) === normalizedKey;
+      return normalizeEvalTopicKey(entry?.tag) === normalizedKey;
     });
     if (gap) return gap;
   }
@@ -1066,7 +1012,7 @@ async function runFocusedStrictProbe(services, topicConfig) {
     tag: topicConfig.tag,
     queries: Array.isArray(topicConfig.query_override) && topicConfig.query_override.length > 0
       ? topicConfig.query_override.slice()
-      : buildCustomTopicQueries(topicConfig.label),
+      : [`${topicConfig.label} business and market developments last 48 hours`],
   };
   const result = await services.dataRuntime.fetchTopicNews(topic, {
     retrievalPlan: {
@@ -1149,20 +1095,12 @@ async function buildWeakTopicArtifacts(services, scenarios = []) {
 
 function computePersonaRawBaseline(items, user, parseSourceDomain) {
   const topics = Array.isArray(user?.topics) ? user.topics : [];
-  const { customKeywords } = splitUserTopics(topics);
   const filteredResult = filterItemsByTopics(items, topics, {
     minItems: 1,
-    strictZeroFallback: customKeywords.length > 0 ? true : "specialist",
+    strictZeroFallback: "specialist",
   });
   let filtered = filteredResult.items;
-  if (customKeywords.length > 0) {
-    filtered = filtered.filter((item) => {
-      const tagNormalized = normalizeTopicToken(item?.tag || "");
-      const bodyText = normalizeMatchText(`${String(item?.headline || "")} ${String(item?.summary || "")}`);
-      return customKeywords.some((keyword) => customKeywordMatches(keyword, bodyText, tagNormalized));
-    });
-  }
-  const scored = applyTopicRelevanceScores(filtered, topics, user.topic_weights || {}, {
+  const scored = applyTopicRelevanceScores(filtered, topics, {}, {
     specialistMode: false,
     repeatPenalty: 0,
     isRecentRepeat: () => false,
@@ -1172,13 +1110,13 @@ function computePersonaRawBaseline(items, user, parseSourceDomain) {
     blockedSources: new Set(),
     trustedSources: new Set(),
   });
-  const requestedCount = Math.max(1, Number(user?.preferences?.items_per_digest || 5));
+  const requestedCount = 5;
   const rawBaselineItems = rankItemsBySourceScore(scored).slice(0, requestedCount);
   return {
     filtered,
     scored,
     requestedCount,
-    custom_keyword_count: customKeywords.length,
+    custom_keyword_count: 0,
     filter_mode: filteredResult.mode,
     rawBaselineItems,
     candidatePoolQuality: computeSetQuality(scored, { requestedCount }),
@@ -1187,21 +1125,16 @@ function computePersonaRawBaseline(items, user, parseSourceDomain) {
 }
 
 function buildDeliveryPolicyResult(user, rankedItems, nowIso) {
-  const customKeywords = (Array.isArray(user?.topics) ? user.topics : [])
-    .filter((topic) => String(topic || "").startsWith("custom_"))
-    .map((topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").trim())
-    .filter(Boolean);
-  const trustedOnlyKeywords = listTrustedOnlyCustomKeywords(customKeywords);
   const attempt1 = selectDeliveryItems(rankedItems, {
     attemptCount: 1,
     nowIso,
-    customKeywords,
+    customKeywords: [],
     lowerConfidenceAssistCount: 0,
   });
   const retry = selectDeliveryItems(rankedItems, {
     attemptCount: 2,
     nowIso,
-    customKeywords,
+    customKeywords: [],
     lowerConfidenceAssistCount: attempt1.lower_confidence_used ? 1 : 0,
   });
   let deliveryOutcome = "withheld_after_retry";
@@ -1222,7 +1155,7 @@ function buildDeliveryPolicyResult(user, rankedItems, nowIso) {
       availableCandidateCount: rankedItems.length,
       highConfidenceAvailableCount: attempt1.high_confidence_available_count,
     }),
-    trusted_only_custom_keywords: trustedOnlyKeywords,
+    trusted_only_custom_keywords: [],
     lower_confidence_used: deliveredItems.some((item) => item?.delivery_confidence === "lower"),
     product_underdelivery: !deliveryOutcome.startsWith("delivered"),
   };
@@ -1292,10 +1225,7 @@ function evaluatePersona({
       deliveryPolicy,
       requestedCount,
       rankedItems: ranking.userItems,
-      customKeywords: (Array.isArray(user?.topics) ? user.topics : [])
-        .filter((topic) => String(topic || "").startsWith("custom_"))
-        .map((topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").trim())
-        .filter(Boolean),
+      customKeywords: [],
       nowIso,
     });
     const selectionLift = Number((finalQuality.score - rawBaseline.rawBaselineQuality.score).toFixed(2));
@@ -1538,7 +1468,6 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
   if ((finalGateBreakdownCounts.score_threshold || 0) > 0) recommendations.push("Some topics are finding candidates that die on the final score/strategic thresholds; inspect whether those bars are now too tight for the 5-item promise.");
   if ((topicRootCauseCounts.preferred_only_query_design || 0) > 0) recommendations.push("Zero-yield preferred-domain topics are still missing broad fallback coverage; fix retry sequencing before adding more fallback.");
   if ((topicRootCauseCounts.query_plan_not_exhausted || 0) > 0) recommendations.push("Zero-yield topics still have unused alternate broad queries; one more broad pass is likely higher-leverage than looser fallback.");
-  if ((topicRootCauseCounts.keyword_ambiguity_or_off_topic_query || 0) > 0) recommendations.push("Broad custom keywords are retrieving off-topic items; tighten keyword/source hints rather than padding.");
   return {
     scenario_id: scenario.id,
     label: scenario.label,
@@ -1551,7 +1480,6 @@ function buildScenarioSummary(scenario, globalResult, personaResults) {
     storyline_pool_count: globalResult.storylinePool.length,
     fetch_calls: {
       standard: Number(globalResult.fetchResult.standardFetchCalls || 0),
-      custom: Number(globalResult.fetchResult.customFetchCalls || 0),
     },
     strongest_persona: strongest ? {
       id: strongest.persona_id,
@@ -1710,7 +1638,7 @@ async function runRetrievalEval(options = {}) {
     started_at: new Date().toISOString(),
     completed_at: null,
     delivery_disabled: true,
-    transport_channels_disabled: ["email", "telegram"],
+    transport_channels_disabled: ["email"],
     budget: cloneJson(budget),
     historical: null,
     dqs_formula: CURRENT_DQS_FORMULA,
@@ -1731,8 +1659,6 @@ async function runRetrievalEval(options = {}) {
   const preferredRegistry = services.preferredSourceRegistryRuntime.loadPreferredSourceRegistry();
   setAdminSourceRegistry(services.sourceRegistryRuntime.buildRegistryMap(sourceRegistry));
   setPreferredSourceRegistry(preferredRegistry);
-  const learnedAdjustments = computeLearnedAuthorityAdjustments(loadDomainStats());
-  if (learnedAdjustments.size > 0) setLearnedDomainAdjustments(learnedAdjustments);
 
   try {
     runRecord.historical = buildHistoricalComparison({
@@ -1794,7 +1720,6 @@ async function runRetrievalEval(options = {}) {
           purpose: scenario.id,
           cost_usd: scenarioCost.totalCost,
           standard_fetch_calls: Number(globalResult.fetchResult.standardFetchCalls || 0),
-          custom_fetch_calls: Number(globalResult.fetchResult.customFetchCalls || 0),
           claude_usage: globalResult.enrichResult.claudeUsage,
         });
 
@@ -1842,7 +1767,6 @@ async function runRetrievalEval(options = {}) {
             purpose: scenario.id,
             cost_usd: partialCost.totalCost,
             standard_fetch_calls: Number(partialResult?.fetchResult?.standardFetchCalls || 0),
-            custom_fetch_calls: Number(partialResult?.fetchResult?.customFetchCalls || 0),
             claude_usage: partialResult?.enrichResult?.claudeUsage || null,
             failed: true,
           });
@@ -1928,7 +1852,6 @@ async function runRetrievalEval(options = {}) {
     });
     throw error;
   } finally {
-    setLearnedDomainAdjustments(null);
     setPreferredSourceRegistry(null);
     setAdminSourceRegistry(null);
   }

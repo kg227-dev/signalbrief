@@ -14,8 +14,6 @@ const ENV_OVERRIDE_MAP = Object.freeze([
   { path: ["keys", "googleRefreshToken"], env: ["SIGNALBRIEF_GOOGLE_REFRESH_TOKEN", "GOOGLE_REFRESH_TOKEN"] },
   { path: ["keys", "googleClientId"], env: ["SIGNALBRIEF_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"] },
   { path: ["keys", "googleClientSecret"], env: ["SIGNALBRIEF_GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"] },
-  { path: ["keys", "telegramBotToken"], env: ["SIGNALBRIEF_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"] },
-  { path: ["keys", "signalBriefBotToken"], env: ["SIGNALBRIEF_SIGNALBRIEF_BOT_TOKEN", "SIGNALBRIEF_BOT_TOKEN"] },
   { path: ["keys", "resendApiKey"], env: ["SIGNALBRIEF_RESEND_API_KEY", "RESEND_API_KEY"] },
   { path: ["keys", "unsubscribeSigningSecret"], env: ["SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET", "UNSUBSCRIBE_SIGNING_SECRET"] },
   { path: ["keys", "fromEmail"], env: ["SIGNALBRIEF_FROM_EMAIL"] },

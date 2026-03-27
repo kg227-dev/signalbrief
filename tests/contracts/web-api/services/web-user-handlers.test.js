@@ -88,7 +88,7 @@ async function assertSettingsValidation(body, expectedStatus, expectedMessage) {
   );
 
   await assertSignupValidation(
-    { name: "A", email: "a@example.com", topics: ["AI×TECH", "   ", 42] },
+    { name: "A", email: "a@example.com", topics: ["TECHNOLOGY", "   ", 42] },
     400,
     "topics must contain non-empty strings"
   );

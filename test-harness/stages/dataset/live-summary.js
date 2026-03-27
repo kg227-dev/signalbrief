@@ -7,20 +7,8 @@ function summarizeStandardFetchTopics(rows) {
   }));
 }
 
-function summarizeCustomFetchTopics(rows) {
-  return rows.map((row) => ({
-    keyword: row.keyword,
-    tag: row.tag,
-    item_count: row.item_count,
-    from_cache: row.from_cache,
-    cache_file: row.cache_file,
-    skipped_cache_miss: Boolean(row.skipped_cache_miss),
-  }));
-}
-
 function buildLiveDatasetMetadata({
   standardRawItems,
-  customRawItems,
   dedupRes,
   selectedItems,
   selectionPolicy,
@@ -28,12 +16,10 @@ function buildLiveDatasetMetadata({
 }) {
   return {
     standard_raw_item_count: standardRawItems.length,
-    custom_raw_item_count: customRawItems.length,
     cross_day_dedup_removed: Number(dedupRes.removed || 0),
     cross_day_dedup_backfilled: Number(dedupRes.backfilled || 0),
     selected_item_count: selectedItems.length,
     selection_target: selectionPolicy.maxItems,
-    max_custom_items: selectionPolicy.maxCustomItems,
     max_items_per_source_domain: Number.isFinite(selectionPolicy.perSourceCap)
       ? selectionPolicy.perSourceCap
       : null,
@@ -47,7 +33,6 @@ function buildLiveDatasetResult({
   args,
   dateKey,
   standardItemsByTopic,
-  customItemsByTopic,
   allRawItems,
   dedupedRawItems,
   selectedItems,
@@ -59,7 +44,6 @@ function buildLiveDatasetResult({
     generated_at: new Date().toISOString(),
     date_key: dateKey,
     standard_fetch_topics: summarizeStandardFetchTopics(standardItemsByTopic),
-    custom_fetch_topics: summarizeCustomFetchTopics(customItemsByTopic),
     raw_items: allRawItems,
     raw_items_deduped: dedupedRawItems,
     selected_items: selectedItems,

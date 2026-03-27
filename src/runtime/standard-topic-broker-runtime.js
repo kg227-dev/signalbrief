@@ -9,7 +9,7 @@ const { normalizeTopicToken } = require("../digest/domain/topic-domain-runtime")
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
-// MVP topic set: 7 topics. POLICY×REGULATORY dropped as standalone; regulatory items
+// MVP topic set: 7 topics. Regulatory coverage now rolls into the closest sector topic;
 // surface through sector-specific official sources tagged to their relevant topics.
 const PHASE1_TOPIC_TAGS = new Set([
   "HEALTHCARE",

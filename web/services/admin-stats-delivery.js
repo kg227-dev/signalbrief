@@ -48,7 +48,6 @@ function getDeliveryMinutes(user) {
 
 function findLatestScheduledRun(runs) {
   return (Array.isArray(runs) ? runs : [])
-    .filter((run) => !run?.on_demand)
     .slice()
     .sort((a, b) => parseRunTsMs(b) - parseRunTsMs(a))[0] || null;
 }
@@ -100,7 +99,7 @@ function buildRecentIncidentSummary({ readJsonLineLog, digestIncidentLog, nowMs 
         mode,
       };
     })
-    .filter(({ tsMs, mode }) => Number.isFinite(tsMs) && (nowMs - tsMs) <= maxAgeMs && mode !== "targeted" && mode !== "on_demand")
+    .filter(({ tsMs, mode }) => Number.isFinite(tsMs) && (nowMs - tsMs) <= maxAgeMs && (!mode || mode === "scheduled"))
     .sort((a, b) => b.tsMs - a.tsMs);
 
   const latest = recent[0]?.entry || null;
@@ -173,9 +172,9 @@ function buildDeliveryOperationsSnapshot({
     ? latestScheduledRun.per_user.length
     : Number(latestScheduledRun?.users_served || 0);
   const failedUsers = failedRecipients.length || Math.max(0, Number(latestScheduledRun?.users_failed || 0));
-  const targetedUsers = Number(latestScheduledRun?.users_targeted);
-  const latestTargeted = Number.isFinite(targetedUsers)
-    ? targetedUsers
+  const dueUsers = Number(latestScheduledRun?.users_due);
+  const latestDue = Number.isFinite(dueUsers)
+    ? dueUsers
     : Math.max(0, deliveredUsers + failedUsers);
   const latestRunAt = latestScheduledRun?.run_at_et || latestScheduledRun?.run_at || null;
   const latestRunDate = String(latestScheduledRun?.date || "").trim();
@@ -194,7 +193,7 @@ function buildDeliveryOperationsSnapshot({
     latest_scheduled_run_date: latestRunDate || null,
     latest_scheduled_run_clean: latestRunClean,
     latest_scheduled_run_users_served: deliveredUsers,
-    latest_scheduled_run_users_targeted: latestTargeted,
+    latest_scheduled_run_users_due: latestDue,
     latest_scheduled_run_failed_users: failedUsers,
     latest_scheduled_run_failed_recipient_ids: failedRecipients.map((entry) => normalizeRecipientKey(entry.id)).filter(Boolean),
     active_recovery_queue: failedUsers,

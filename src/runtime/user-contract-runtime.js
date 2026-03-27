@@ -102,19 +102,6 @@ function createDefaultUser(chatId, nowIso = new Date().toISOString()) {
     digest_feedback: [],
     quality_history: [],
     last_quality_score: null,
-    auto_learning: {
-      enabled: true,
-      last_processed_ts: null,
-      last_checked_at: null,
-      last_applied_at: null,
-      total_auto_adjustments: 0,
-    },
-    reengagement_state: {
-      day4_sent_at: null,
-      day8_sent_at: null,
-      auto_paused_at: null,
-      reactivated_at: null,
-    },
     signup_referral_source: null,
     preferences: {
       delivery_time: "07:00",
@@ -136,6 +123,8 @@ function normalizeUserRecord(input, opts = {}) {
     topic_weights: _topicWeights,
     telegram: _telegram,
     watchlist: _watchlist,
+    auto_learning: _autoLearning,
+    reengagement_state: _reengagementState,
     ...safeRaw
   } = raw;
   const chatId = normalizeString(opts.chatId || raw.chatId || "");
@@ -156,14 +145,6 @@ function normalizeUserRecord(input, opts = {}) {
     last_digest_items: Array.isArray(raw.last_digest_items) ? raw.last_digest_items.filter((entry) => entry && typeof entry === "object") : [],
     digest_feedback: Array.isArray(raw.digest_feedback) ? raw.digest_feedback.filter((entry) => entry && typeof entry === "object") : [],
     quality_history: Array.isArray(raw.quality_history) ? raw.quality_history.filter((entry) => entry && typeof entry === "object") : [],
-    auto_learning: {
-      ...defaults.auto_learning,
-      ...(raw.auto_learning && typeof raw.auto_learning === "object" ? raw.auto_learning : {}),
-    },
-    reengagement_state: {
-      ...defaults.reengagement_state,
-      ...(raw.reengagement_state && typeof raw.reengagement_state === "object" ? raw.reengagement_state : {}),
-    },
     signup_referral_source: raw.signup_referral_source && typeof raw.signup_referral_source === "object"
       ? raw.signup_referral_source
       : null,

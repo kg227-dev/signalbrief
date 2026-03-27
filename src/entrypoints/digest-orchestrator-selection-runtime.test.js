@@ -39,7 +39,7 @@ let passed = 0;
 let failed = 0;
 
 async function run() {
-  // Test 1: targeted run uses 48h gate (60h item rejected even in targeted mode)
+  // Test 1: scheduled run uses the hard 48h gate.
   try {
     const runtime = createDigestOrchestratorSelectionRuntime(makeDeps({
       selectItemsDetailed: (items, opts) => ({
@@ -54,15 +54,15 @@ async function run() {
       selectionTarget: 5,
       customTags: [],
       tagPriority: {},
-      runMode: "targeted",
+      runMode: "scheduled",
       digestDateKey: "2026-03-25",
       dueUsersCount: 1,
       standardFetchCallsPlanned: 2,
     });
-    assert.ok(!result.selected.some(i => i.url === stale.url), "60h item should be rejected in targeted mode");
-    assert.ok(result.selected.some(i => i.url === fresh.url), "10h item should be kept in targeted mode");
+    assert.ok(!result.selected.some(i => i.url === stale.url), "60h item should be rejected in scheduled mode");
+    assert.ok(result.selected.some(i => i.url === fresh.url), "10h item should be kept in scheduled mode");
     assert.ok(Array.isArray(result.selectionDiagnostics.topic_selection_audit), "topic_selection_audit should be present");
-    console.log("✓ Test 1: targeted 48h gate");
+    console.log("✓ Test 1: scheduled 48h gate");
     passed++;
   } catch(e) {
     console.error("✗ Test 1:", e.message);

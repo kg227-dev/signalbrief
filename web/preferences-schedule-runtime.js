@@ -42,11 +42,6 @@
     return "custom";
   }
 
-  function normalizeTelegram(value) {
-    const raw = String(value || "").trim().replace(/^@+/, "");
-    return raw || null;
-  }
-
   globalScope.SignalBriefPrefsScheduleRuntime = {
     normalizeDay,
     normalizeDays,
@@ -54,6 +49,5 @@
     isEveryday,
     daysFromFrequency,
     frequencyFromDays,
-    normalizeTelegram,
   };
 })(window);

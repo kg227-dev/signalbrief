@@ -13,7 +13,7 @@ assertSourceIncludesFile(TARGET_PATH, [
   "createStructuredLogger",
   "digest.run.started",
   "digest.run.completed",
-  "digest.delivery.telegram",
+  "digest.delivery.ops_alert",
   "digest.delivery.email",
   "run_id",
   "provider",

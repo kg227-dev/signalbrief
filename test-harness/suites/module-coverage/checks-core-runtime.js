@@ -1,16 +1,14 @@
 const {
-  buildReengagementStateCheck,
-  buildDaysSinceCheck,
+  buildDefaultUserCheck,
   buildEngagementEventsCheck,
-  buildNormalizeIntentPayloadCheck,
+  buildNormalizeUserRecordCheck,
 } = require("./checks-runtime-cases");
 
 function buildRuntimeSafetyChecks(check) {
   return [
-    buildReengagementStateCheck(check),
-    buildDaysSinceCheck(check),
+    buildDefaultUserCheck(check),
     buildEngagementEventsCheck(check),
-    buildNormalizeIntentPayloadCheck(check),
+    buildNormalizeUserRecordCheck(check),
   ];
 }
 

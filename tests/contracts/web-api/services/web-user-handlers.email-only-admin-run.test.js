@@ -15,6 +15,7 @@ assertModuleExports(() => ({ createWebUserHandlers }), TARGET_REL);
 
 function createDeps(overrides = {}) {
   const responses = [];
+  const triggerCalls = [];
   return {
     deps: {
       requireJsonBody: async () => ({}),
@@ -32,7 +33,10 @@ function createDeps(overrides = {}) {
       writeUser: () => {},
       sendReferralThankYou: async () => {},
       sendWelcomeEmail: async () => {},
-      startDigestTrigger: async () => ({ status: "queued", raw: {} }),
+      startDigestTrigger: async (payload) => {
+        triggerCalls.push(payload);
+        return { status: "queued", raw: {} };
+      },
       BASE_URL: "http://localhost:3003",
       DEFAULT_TOPICS: ["TECHNOLOGY", "HEALTHCARE"],
       MAX_CUSTOM_KEYWORDS: 0,
@@ -43,20 +47,27 @@ function createDeps(overrides = {}) {
       ...overrides,
     },
     responses,
+    triggerCalls,
   };
 }
 
 (async () => {
   {
-    const { deps, responses } = createDeps({
+    const { deps, responses, triggerCalls } = createDeps({
       requireJsonBody: async () => ({ chatId: "chat-1" }),
     });
     const handlers = createWebUserHandlers(deps);
     await handlers.handleAdminRunDigest({}, {});
     const last = responses[responses.length - 1];
     assert.ok(last);
-    assert.strictEqual(last.status, 410);
-    assert.strictEqual(last.data.error, "Targeted digests are disabled in the reduced-scope email-only MVP.");
+    assert.strictEqual(last.status, 200);
+    assert.strictEqual(last.data.success, true);
+    assert.strictEqual(last.data.message, "Full scheduled digest run triggered");
+    assert.deepStrictEqual(triggerCalls[0], {
+      source: "web:scheduled_recovery",
+      trigger: "scheduled",
+      suppressWelcome: true,
+    });
   }
 
   {

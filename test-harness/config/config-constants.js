@@ -72,7 +72,6 @@ const SUITE_IDS = [
   "02-relevance-scoring",
   "03-analysis-quality",
   "04-diversity",
-  "05-custom-topics",
   "06-depth-control",
   "07-item-count",
   "08-cross-day-freshness",
@@ -82,10 +81,9 @@ const SUITE_IDS = [
 
 const COMPOSITE_WEIGHTS = {
   topic_matching: 0.25,
-  relevance_scoring: 0.2,
+  relevance_scoring: 0.25,
   analysis_quality: 0.3,
-  diversity: 0.15,
-  custom_topics: 0.1,
+  diversity: 0.2,
 };
 
 function toEtDateKey(date = new Date()) {

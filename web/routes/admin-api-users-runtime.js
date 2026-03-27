@@ -14,7 +14,6 @@ async function handleAdminUserRoutes(ctx, deps) {
     isAdminAuthed,
     requireJsonBody,
     allUsers,
-    getRecentAutoAdjustmentsForUser,
     countArchiveDigestsForUser,
     readJsonLineLog,
     ADMIN_ACTION_LOG,
@@ -23,7 +22,6 @@ async function handleAdminUserRoutes(ctx, deps) {
     writeUser,
     deleteUser,
     logAdminActionEvent,
-    blankReengagementState,
     formatTimeEt,
     handleAdminRunDigest,
     requestSchedulerWorkerRestart,
@@ -43,7 +41,6 @@ async function handleAdminUserRoutes(ctx, deps) {
         json,
         isAdminAuthed,
         allUsers,
-        getRecentAutoAdjustmentsForUser,
         countArchiveDigestsForUser,
         loadLatestDigestSnapshot,
         buildRecentDigestsExport,
@@ -90,7 +87,6 @@ async function handleAdminUserRoutes(ctx, deps) {
         allUsers,
         writeUser,
         logAdminActionEvent,
-        blankReengagementState,
       },
     });
   }

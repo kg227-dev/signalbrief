@@ -18,40 +18,30 @@ const {
   buildVirtualUser,
 } = runtime;
 
-const [standard, customRealistic, customAdversarial, standardCore, standardPhase1, standardPhase1Focus, standardTopics] = buildScenarioMatrix([
+const [standard, standardCore, standardPhase1, standardPhase1Focus, standardTopics] = buildScenarioMatrix([
   "standard_full",
-  "custom_realistic",
-  "custom_adversarial",
   "standard_core",
   "standard_phase1",
   "standard_phase1_focus",
   "standard_topics",
 ]);
 
-assert.strictEqual(standard.personaCount, 21);
+assert.strictEqual(standard.personaCount, 11);
 assert.ok(standard.dueUsers.some((user) => user.eval_group === "industry"));
-assert.ok(standard.dueUsers.some((user) => user.eval_group === "capability"));
 assert.ok(standard.dueUsers.some((user) => user.eval_group === "mixed_realistic"));
-
-assert.strictEqual(customRealistic.personaCount, 8);
-assert.ok(customRealistic.dueUsers.every((user) => user.topics.some((topic) => topic.startsWith("custom_"))));
-
-assert.strictEqual(customAdversarial.personaCount, 4);
-assert.ok(customAdversarial.dueUsers.every((user) => user.preferences.email_enabled === false));
-assert.ok(customAdversarial.dueUsers.every((user) => user.preferences.telegram_enabled === false));
 
 assert.strictEqual(standardCore.personaCount, 5);
 assert.ok(standardCore.dueUsers.every((user) => user.eval_group === "standard_core"));
 assert.deepStrictEqual(
   standardCore.dueUsers.map((user) => user.eval_label),
-  ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "STRATEGY", "POLICY×REGULATORY"]
+  ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"]
 );
 
-assert.strictEqual(standardPhase1.personaCount, 6);
+assert.strictEqual(standardPhase1.personaCount, 7);
 assert.ok(standardPhase1.dueUsers.every((user) => user.eval_group === "standard_phase1"));
 assert.deepStrictEqual(
   standardPhase1.dueUsers.map((user) => user.eval_label),
-  ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "POLICY×REGULATORY"]
+  ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "CONSUMER & RETAIL", "INDUSTRIALS"]
 );
 
 assert.strictEqual(standardPhase1Focus.personaCount, 3);
@@ -61,17 +51,17 @@ assert.deepStrictEqual(
   ["TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"]
 );
 
-assert.strictEqual(standardTopics.personaCount, 17);
+assert.strictEqual(standardTopics.personaCount, 7);
 assert.ok(standardTopics.dueUsers.every((user) => user.eval_group === "standard_topics"));
 
 const virtualUser = buildVirtualUser({
   id: "demo",
   label: "Demo User",
   group: "industry",
-  topics: ["HEALTHCARE", "STRATEGY"],
+  topics: ["HEALTHCARE", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"],
 });
 assert.strictEqual(virtualUser.chatId, "eval-demo");
-assert.deepStrictEqual(virtualUser.topics, ["HEALTHCARE", "STRATEGY"]);
-assert.strictEqual(virtualUser.preferences.items_per_digest, 5);
+assert.deepStrictEqual(virtualUser.topics, ["HEALTHCARE", "TECHNOLOGY", "ENERGY"]);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(virtualUser.preferences, "items_per_digest"), false);
 
 process.stdout.write("[retrieval-personas-runtime] all assertions passed\n");

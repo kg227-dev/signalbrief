@@ -1,18 +1,3 @@
-async function handleTargetedDigestRun({
-  req,
-  res,
-  json,
-  logAdminActionEvent,
-}) {
-  const detail = "Targeted digests are disabled in the reduced-scope email-only MVP.";
-  logAdminActionEvent(req, {
-    action: "run_digest_targeted_disabled",
-    success: false,
-    details: { reason: "targeted_mode_disabled", detail },
-  });
-  return json(res, { error: detail }, 410);
-}
-
 async function handleFullDigestRun({
   req,
   res,
@@ -21,8 +6,8 @@ async function handleFullDigestRun({
   logAdminActionEvent,
 }) {
   const outcome = await startDigestTrigger({
-    source: "web:admin_full",
-    trigger: "admin_full",
+    source: "web:scheduled_recovery",
+    trigger: "scheduled",
     suppressWelcome: true,
   });
   if (outcome.busy) {
@@ -62,6 +47,5 @@ async function handleFullDigestRun({
 }
 
 module.exports = {
-  handleTargetedDigestRun,
   handleFullDigestRun,
 };

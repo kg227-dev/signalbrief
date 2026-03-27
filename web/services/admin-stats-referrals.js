@@ -46,24 +46,6 @@ function countUsersByStatus(usersAll, status) {
   return usersAll.filter((user) => String(user?.status || "active") === status).length;
 }
 
-function countReengagementStage(usersAll, stage) {
-  return usersAll.filter((user) => {
-    if (String(user?.status || "active") !== "active") return false;
-    const state = user && typeof user.reengagement_state === "object" ? user.reengagement_state : {};
-    if (stage === "day4") return !!state.day4_sent_at && !state.day8_sent_at && !state.auto_paused_at;
-    if (stage === "day8") return !!state.day8_sent_at && !state.auto_paused_at;
-    return false;
-  }).length;
-}
-
-function countAutoPausedLast30d(usersAll, parseIsoTs, nowMs, dayMs) {
-  return usersAll.filter((user) => {
-    const state = user && typeof user.reengagement_state === "object" ? user.reengagement_state : {};
-    const ts = parseIsoTs(state.auto_paused_at);
-    return ts != null && ts >= (nowMs - (30 * dayMs));
-  }).length;
-}
-
 function buildEngagementMetrics({
   usersAll,
   referrals,
@@ -96,9 +78,6 @@ function buildEngagementMetrics({
   const totalActive = countUsersByStatus(usersAll, "active");
   const totalPaused = countUsersByStatus(usersAll, "paused");
   const totalUnsubscribed = countUsersByStatus(usersAll, "unsubscribed");
-  const inReengagementDay4 = countReengagementStage(usersAll, "day4");
-  const inReengagementDay8 = countReengagementStage(usersAll, "day8");
-  const autoPausedLast30d = countAutoPausedLast30d(usersAll, parseIsoTs, nowMs, dayMs);
 
   return {
     total_active: totalActive,
@@ -106,9 +85,6 @@ function buildEngagementMetrics({
     total_unsubscribed: totalUnsubscribed,
     open_rate_7d: openRate7d,
     open_rate_30d: openRate30d,
-    in_reengagement_day4: inReengagementDay4,
-    in_reengagement_day8: inReengagementDay8,
-    auto_paused_last_30d: autoPausedLast30d,
     referral_signups_total: referrals.length,
   };
 }

@@ -55,7 +55,6 @@ function baseDeps(overrides = {}) {
     getCachedOrRefreshSchedulerHeartbeat: () => null,
     readSchedulerHeartbeat: () => null,
     allUsers: () => [],
-    getRecentAutoAdjustmentsForUser: () => [],
     readJsonLineLog: () => [],
     ADMIN_ACTION_LOG: "/tmp/admin-action-log.json",
     ADMIN_MESSAGE_LOG: "/tmp/admin-message-log.json",

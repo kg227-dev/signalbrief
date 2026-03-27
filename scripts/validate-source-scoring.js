@@ -11,7 +11,7 @@
  * - benzinga.com             → weak tier (score ~0.22)
  * - reuters.com              → premium tier (score ~0.95)
  *
- * Also validates source_preferences scoring spread in annotateEditorialSignals.
+ * Also validates source-governance score spread in annotateEditorialSignals.
  *
  * Usage: node scripts/validate-source-scoring.js
  */
@@ -49,7 +49,7 @@ const cases = [
   },
   {
     domain: "lawrenceevans.com",
-    tag: "STRATEGY",
+    tag: "TECHNOLOGY",
     // Not a suspect domain by heuristic (no hyphens, .com TLD) — remains
     // unreviewed/review-state and drops via content quality gate.
     expectedTier: "unknown",
@@ -73,7 +73,7 @@ const cases = [
   },
   {
     domain: "esgtoday.com",
-    tag: "SUSTAINABILITY",
+    tag: "ENERGY",
     expectedTier: "strong",
     minAuthority: 0.75,
     label: "esgtoday.com → strong tier, authority ≥ 0.75",
@@ -137,7 +137,7 @@ const sampleItems = [
     url: "https://www.ciodive.com/news/sovereign-cloud-2026",
   },
   {
-    tag: "STRATEGY",
+    tag: "TECHNOLOGY",
     headline: "10 strategy frameworks every CXO must know",
     summary: "Lawrence Evans shares strategy insights for modern executives.",
     wim_brief: "Strategy frameworks for executives.",

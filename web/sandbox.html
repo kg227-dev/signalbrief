@@ -46,16 +46,6 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .topic-chip .check { width:14px; height:14px; border:1.5px solid var(--border); border-radius:50%; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease; flex-shrink:0; }
 .topic-chip.selected .check { background:var(--accent); border-color:var(--accent); }
 .topic-chip.selected .check::after { content:'✓'; color:#fff; font-size:9px; font-weight:700; }
-.topic-chip.custom-kw { border-color:rgba(217,119,6,0.35); color:#92400E; background:#FFFBEB; }
-.topic-chip.custom-kw.selected { border-color:#D97706; background:#D97706; color:#fff; }
-.topic-chip.custom-kw .remove-kw { cursor:pointer; font-size:14px; line-height:1; margin-left:2px; }
-
-/* Custom keyword input */
-.kw-input-row { display:flex; gap:6px; margin-top:8px; }
-.kw-input-row input { flex:1; padding:7px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; outline:none; }
-.kw-input-row input:focus { border-color:var(--accent); }
-.kw-input-row button { padding:7px 14px; border:none; border-radius:8px; background:var(--accent); color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
-
 /* Depth + items controls */
 .depth-options { display:flex; flex-direction:column; gap:6px; }
 .depth-option { display:flex; align-items:center; gap:10px; padding:10px 14px; border:1.5px solid var(--border); border-radius:10px; cursor:pointer; transition:all 0.15s ease; background:#fff; }
@@ -109,10 +99,6 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 
 /* Email preview iframe */
 .email-frame { width:100%; max-width:620px; margin:0 auto; display:block; border:1px solid var(--border); border-radius:8px; background:#EAECEF; min-height:500px; }
-
-/* Telegram preview */
-.tg-preview { background:#1E293B; border-radius:12px; padding:20px; max-width:620px; margin:0 auto; }
-.tg-preview pre { color:#E2E8F0; font-size:13px; line-height:1.65; white-space:pre-wrap; word-wrap:break-word; font-family:'Inter',monospace; margin:0; }
 
 /* Data table */
 .data-section { margin-top:20px; }
@@ -176,37 +162,6 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 /* Error bar */
 .error-bar { background:#FEE2E2; border:1px solid #FECACA; border-radius:10px; padding:12px 16px; font-size:13px; color:#991B1B; margin-bottom:16px; display:none; }
 
-/* ── Telegram preview ────────────────────────────────────────────────── */
-.tg-preview { background:#0E1621; border-radius:12px; padding:16px 12px; max-width:620px; margin:0 auto; }
-.tg-header { display:flex; align-items:center; gap:10px; padding:8px 12px 12px; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:12px; }
-.tg-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg, #2563EB, #7C3AED); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#fff; flex-shrink:0; }
-.tg-bot-name { font-size:13px; font-weight:600; color:#fff; }
-.tg-bot-label { font-size:10px; color:rgba(255,255,255,0.35); text-transform:uppercase; letter-spacing:0.05em; }
-
-.tg-bubble { background:#212D3B; border-radius:4px 12px 12px 12px; padding:10px 14px; margin:0 40px 3px 8px; }
-.tg-bubble:last-child { margin-bottom:0; }
-.tg-bubble.greeting { margin-bottom:10px; }
-.tg-bubble.item-bubble { margin-bottom:10px; }
-
-.tg-bubble .tg-title { font-size:14px; font-weight:700; color:#fff; line-height:1.45; }
-.tg-bubble .tg-subtitle { font-size:12px; color:rgba(255,255,255,0.5); font-style:italic; line-height:1.5; margin-top:2px; }
-.tg-bubble .tg-share { font-size:12px; color:#5B9BD5; margin-top:4px; }
-
-.tg-item-num { font-size:14px; margin-right:4px; }
-.tg-tag { font-size:12px; font-weight:700; color:#5B9BD5; letter-spacing:0.02em; }
-.tg-headline { font-size:13px; color:#E2E8F0; line-height:1.5; margin-top:2px; }
-.tg-wim { font-size:12px; color:rgba(255,255,255,0.55); font-style:italic; line-height:1.5; margin-top:4px; }
-.tg-source { font-size:12px; margin-top:4px; }
-.tg-source a { color:#5B9BD5; text-decoration:none; }
-.tg-source a:hover { text-decoration:underline; }
-.tg-why { font-size:11px; color:rgba(255,255,255,0.3); margin-top:3px; }
-
-.tg-footer { text-align:right; margin-top:1px; padding-right:4px; }
-.tg-time { font-size:10px; color:rgba(255,255,255,0.3); }
-
-.tg-actions { display:flex; flex-wrap:wrap; gap:4px; margin:4px 8px 8px; }
-.tg-action-btn { background:#212D3B; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:5px 10px; font-size:11px; color:#5B9BD5; cursor:default; }
-
 /* Dark toggle */
 #darkToggle {
   min-height:34px; width:42px; border-radius:999px;
@@ -226,8 +181,6 @@ body.dark {
 body.dark .topic-chip { background:var(--card); }
 body.dark .topic-chip:hover { background:var(--accent-light); }
 body.dark .topic-chip.selected { background:var(--accent-light); }
-body.dark .topic-chip.custom-kw { background:rgba(217,119,6,0.12); color:#d4a574; border-color:rgba(217,119,6,0.25); }
-body.dark .topic-chip.custom-kw.selected { background:#D97706; color:#fff; }
 body.dark .depth-option { background:var(--card); }
 body.dark .depth-option.selected { background:var(--accent-light); }
 body.dark .depth-option.selected .depth-radio { box-shadow:inset 0 0 0 3px var(--card); }
@@ -268,38 +221,14 @@ body.dark .left-panel { border-right-color:var(--border); }
       <!-- Topics -->
       <div class="section-group">
         <div class="section-label">Topics</div>
-        <div class="topic-group-label">Industries</div>
         <div class="topic-grid" id="industryChips">
           <div class="topic-chip" data-topic="HEALTHCARE" onclick="toggleChip(this)"><span class="check"></span> Healthcare</div>
-          <div class="topic-chip" data-topic="FINANCIAL SERVICES" onclick="toggleChip(this)"><span class="check"></span> Financial Services</div>
-          <div class="topic-chip" data-topic="PE×M&A" onclick="toggleChip(this)"><span class="check"></span> PE &amp; M&amp;A</div>
-          <div class="topic-chip" data-topic="ENERGY" onclick="toggleChip(this)"><span class="check"></span> Energy</div>
-          <div class="topic-chip" data-topic="CONSUMER" onclick="toggleChip(this)"><span class="check"></span> Consumer</div>
           <div class="topic-chip" data-topic="LIFE SCIENCES" onclick="toggleChip(this)"><span class="check"></span> Life Sciences</div>
           <div class="topic-chip" data-topic="TECHNOLOGY" onclick="toggleChip(this)"><span class="check"></span> Technology</div>
+          <div class="topic-chip" data-topic="ENERGY" onclick="toggleChip(this)"><span class="check"></span> Energy</div>
+          <div class="topic-chip" data-topic="FINANCIAL SERVICES" onclick="toggleChip(this)"><span class="check"></span> Financial Services</div>
+          <div class="topic-chip" data-topic="CONSUMER & RETAIL" onclick="toggleChip(this)"><span class="check"></span> Consumer &amp; Retail</div>
           <div class="topic-chip" data-topic="INDUSTRIALS" onclick="toggleChip(this)"><span class="check"></span> Industrials</div>
-          <div class="topic-chip" data-topic="REAL ESTATE" onclick="toggleChip(this)"><span class="check"></span> Real Estate</div>
-          <div class="topic-chip" data-topic="PUBLIC SECTOR" onclick="toggleChip(this)"><span class="check"></span> Public Sector</div>
-        </div>
-        <div class="topic-group-label" style="margin-top:14px;">Capabilities</div>
-        <div class="topic-grid" id="capChips">
-          <div class="topic-chip" data-topic="AI×TECH" onclick="toggleChip(this)"><span class="check"></span> AI &amp; Tech</div>
-          <div class="topic-chip" data-topic="STRATEGY" onclick="toggleChip(this)"><span class="check"></span> Strategy</div>
-          <div class="topic-chip" data-topic="POLICY×REGULATORY" onclick="toggleChip(this)"><span class="check"></span> Policy &amp; Regulatory</div>
-          <div class="topic-chip" data-topic="SUSTAINABILITY" onclick="toggleChip(this)"><span class="check"></span> Sustainability</div>
-          <div class="topic-chip" data-topic="DIGITAL" onclick="toggleChip(this)"><span class="check"></span> Digital</div>
-          <div class="topic-chip" data-topic="M&A ADVISORY" onclick="toggleChip(this)"><span class="check"></span> M&amp;A Advisory</div>
-          <div class="topic-chip" data-topic="TALENT" onclick="toggleChip(this)"><span class="check"></span> Talent</div>
-        </div>
-      </div>
-
-      <!-- Custom Keywords -->
-      <div class="section-group">
-        <div class="section-label">Custom Keywords</div>
-        <div class="topic-grid" id="customKwChips"></div>
-        <div class="kw-input-row">
-          <input type="text" id="kwInput" placeholder="e.g. GLP-1, Nvidia, DOGE" onkeydown="if(event.key==='Enter')addKw()">
-          <button onclick="addKw()">+ Add</button>
         </div>
       </div>
 
@@ -319,15 +248,6 @@ body.dark .left-panel { border-right-color:var(--border); }
             <div class="depth-radio"></div>
             <div><div class="depth-label">Deep</div><div class="depth-desc">Full "why it matters." 4 min.</div></div>
           </div>
-        </div>
-      </div>
-
-      <!-- Items per digest -->
-      <div class="section-group">
-        <div class="section-label">Items per Digest</div>
-        <div class="pill-row">
-          <div class="pill selected" data-count="5" onclick="setItemCount(this)">5 items</div>
-          <div class="pill" data-count="10" onclick="setItemCount(this)">10 items</div>
         </div>
       </div>
 
@@ -438,19 +358,7 @@ body.dark .left-panel { border-right-color:var(--border); }
       </div>
 
       <div id="outputArea" style="display:none;">
-        <!-- Format tabs -->
-        <div class="tab-row">
-          <button class="tab-btn active" onclick="switchTab('email')">Email Preview</button>
-          <button class="tab-btn" onclick="switchTab('telegram')">Telegram Preview</button>
-        </div>
-
-        <div class="tab-content active" id="tab-email">
-          <iframe class="email-frame" id="emailFrame" sandbox="allow-same-origin" title="Email preview"></iframe>
-        </div>
-
-        <div class="tab-content" id="tab-telegram">
-          <div class="tg-preview" id="tgPreview"></div>
-        </div>
+        <iframe class="email-frame" id="emailFrame" sandbox="allow-same-origin" title="Email preview"></iframe>
 
         <!-- Raw data table -->
         <div class="data-section">
@@ -486,42 +394,18 @@ if (localStorage.getItem('sb-dark') === '1') setDarkMode(true);
 
 // ── State ────────────────────────────────────────────────────────────────────
 let selectedTopics = [];
-let customKeywords = [];
 let selectedDepth = "headline_plus_why";
-let selectedItemCount = 5;
 let lastSessionId = null;
 let isRunning = false;
 let estimateTimer = null;
 
 // ── Topic chips ──────────────────────────────────────────────────────────────
 function toggleChip(el) {
+  const alreadySelected = el.classList.contains("selected");
+  if (!alreadySelected && selectedTopics.length >= 3) return;
   el.classList.toggle("selected");
-  selectedTopics = [...document.querySelectorAll(".topic-chip.selected:not(.custom-kw)")].map(c => c.dataset.topic);
+  selectedTopics = [...document.querySelectorAll(".topic-chip.selected")].map(c => c.dataset.topic);
   onPrefsChanged();
-}
-
-// ── Custom keywords ──────────────────────────────────────────────────────────
-function addKw() {
-  const input = document.getElementById("kwInput");
-  const kw = input.value.trim();
-  if (!kw || customKeywords.includes(kw)) return;
-  customKeywords.push(kw);
-  input.value = "";
-  renderKwChips();
-  onPrefsChanged();
-}
-
-function removeKw(idx) {
-  customKeywords.splice(idx, 1);
-  renderKwChips();
-  onPrefsChanged();
-}
-
-function renderKwChips() {
-  const container = document.getElementById("customKwChips");
-  container.innerHTML = customKeywords.map((kw, i) =>
-    `<div class="topic-chip custom-kw selected"><span class="check"></span> ${esc(kw)} <span class="remove-kw" onclick="removeKw(${i})">&times;</span></div>`
-  ).join("");
 }
 
 // ── Depth ────────────────────────────────────────────────────────────────────
@@ -529,14 +413,6 @@ function setDepth(el) {
   document.querySelectorAll(".depth-option").forEach(d => d.classList.remove("selected"));
   el.classList.add("selected");
   selectedDepth = el.dataset.depth;
-  onPrefsChanged();
-}
-
-// ── Item count ───────────────────────────────────────────────────────────────
-function setItemCount(el) {
-  document.querySelectorAll(".pill").forEach(p => p.classList.remove("selected"));
-  el.classList.add("selected");
-  selectedItemCount = parseInt(el.dataset.count, 10);
   onPrefsChanged();
 }
 
@@ -551,14 +427,14 @@ function toggleAdvanced() {
 // ── Prefs change handler (debounced estimate) ────────────────────────────────
 function onPrefsChanged() {
   const btn = document.getElementById("genBtn");
-  btn.disabled = selectedTopics.length < 2 && customKeywords.length === 0;
+  btn.disabled = selectedTopics.length < 1;
   clearTimeout(estimateTimer);
   estimateTimer = setTimeout(fetchEstimate, 300);
 }
 
 async function fetchEstimate() {
   const params = buildParams();
-  if (params.topics.length === 0 && params.customKeywords.length === 0) {
+  if (params.topics.length === 0) {
     document.getElementById("estTotal").textContent = "$0.00";
     document.getElementById("estDetail").textContent = "Select topics to see estimate";
     return;
@@ -584,10 +460,7 @@ async function fetchEstimate() {
 function buildParams() {
   return {
     topics: selectedTopics,
-    customKeywords,
     depth: selectedDepth,
-    itemCount: selectedItemCount,
-    topicWeights: {},
     searchModel: document.getElementById("searchModel").value,
     enrichmentModel: document.getElementById("enrichModel").value,
   };
@@ -737,165 +610,9 @@ async function runSandbox(useCache) {
     errorBar.style.display = "block";
   } finally {
     isRunning = false;
-    genBtn.disabled = selectedTopics.length < 2 && customKeywords.length === 0;
+    genBtn.disabled = selectedTopics.length < 1;
     genBtn.textContent = "Generate Digest";
   }
-}
-
-// ── Telegram parser — converts raw TG markdown to styled HTML bubbles ────────
-function renderTelegramPreview(raw) {
-  const container = document.getElementById("tgPreview");
-  if (!raw) { container.innerHTML = '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:40px;">No telegram output</div>'; return; }
-
-  const lines = raw.split("\n");
-  const bubbles = [];
-  let currentBubble = null;
-  const now = new Date();
-  const timeStr = now.getHours().toString().padStart(2,"0") + ":" + now.getMinutes().toString().padStart(2,"0");
-
-  // Number emoji pattern
-  const numEmoji = /^[1-9]\uFE0F?\u20E3|🔟/;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Skip empty lines — they're separators between items
-    if (!trimmed) {
-      if (currentBubble) { bubbles.push(currentBubble); currentBubble = null; }
-      continue;
-    }
-
-    // Header line (☀️ *SignalBrief — ...*)
-    if (trimmed.startsWith("\u2600")) {
-      currentBubble = { type: "greeting", lines: [trimmed] };
-      continue;
-    }
-
-    // Subtitle line (_Your daily signal..._)
-    if (currentBubble && currentBubble.type === "greeting" && trimmed.startsWith("_")) {
-      currentBubble.lines.push(trimmed);
-      continue;
-    }
-
-    // Quality/learning/share lines in greeting bubble
-    if (currentBubble && currentBubble.type === "greeting" && /^[🎯🧠🔗]/.test(trimmed)) {
-      currentBubble.lines.push(trimmed);
-      continue;
-    }
-
-    // News item line (1⃣ *[TAG]* headline)
-    if (numEmoji.test(trimmed)) {
-      if (currentBubble) bubbles.push(currentBubble);
-      currentBubble = { type: "item", lines: [trimmed] };
-      continue;
-    }
-
-    // Continuation lines for current bubble (WIM, source, why shown)
-    if (currentBubble) {
-      currentBubble.lines.push(trimmed);
-      continue;
-    }
-
-    // Footer / command menu lines
-    if (currentBubble) bubbles.push(currentBubble);
-    currentBubble = { type: "footer", lines: [trimmed] };
-  }
-  if (currentBubble) bubbles.push(currentBubble);
-
-  // Build HTML
-  let html = '';
-  // Chat header
-  html += '<div class="tg-header">';
-  html += '<div class="tg-avatar">SB</div>';
-  html += '<div><div class="tg-bot-name">SignalBrief Bot</div><div class="tg-bot-label">bot</div></div>';
-  html += '</div>';
-
-  for (const bubble of bubbles) {
-    if (bubble.type === "greeting") {
-      html += '<div class="tg-bubble greeting">';
-      for (const line of bubble.lines) {
-        html += '<div>' + formatTgLine(line) + '</div>';
-      }
-      html += '<div class="tg-footer"><span class="tg-time">' + timeStr + '</span></div>';
-      html += '</div>';
-    } else if (bubble.type === "item") {
-      html += '<div class="tg-bubble item-bubble">';
-      for (const line of bubble.lines) {
-        const trimmed = line.trim();
-        // Number + tag + headline
-        if (numEmoji.test(trimmed)) {
-          // Extract the emoji number
-          const numMatch = trimmed.match(/^((?:[1-9]\uFE0F?\u20E3|🔟)\s*)/);
-          const numPart = numMatch ? numMatch[1] : "";
-          const rest = trimmed.slice(numPart.length);
-          // Extract tag: *[TAG]* headline
-          const tagMatch = rest.match(/^\*\[([^\]]+)\]\*\s*(.*)/);
-          if (tagMatch) {
-            html += '<div><span class="tg-item-num">' + esc(numPart.trim()) + '</span> <span class="tg-tag">[' + esc(tagMatch[1]) + ']</span></div>';
-            html += '<div class="tg-headline">' + esc(tagMatch[2]) + '</div>';
-          } else {
-            html += '<div>' + formatTgLine(trimmed) + '</div>';
-          }
-        }
-        // WIM (italic _text_)
-        else if (trimmed.startsWith("_") && trimmed.endsWith("_")) {
-          html += '<div class="tg-wim">' + esc(trimmed.slice(1, -1)) + '</div>';
-        }
-        // Source link (→ [source](url))
-        else if (trimmed.startsWith("\u2192")) {
-          const linkMatch = trimmed.match(/→\s*\[([^\]]+)\]\(([^)]+)\)/);
-          if (linkMatch) {
-            html += '<div class="tg-source">→ <a href="' + esc(linkMatch[2]) + '" target="_blank" rel="noopener">' + esc(linkMatch[1]) + '</a></div>';
-          } else {
-            html += '<div class="tg-source">' + esc(trimmed) + '</div>';
-          }
-        }
-        // Why shown
-        else if (trimmed.startsWith("\u00B7 why")) {
-          html += '<div class="tg-why">' + esc(trimmed) + '</div>';
-        }
-        else {
-          html += '<div>' + formatTgLine(trimmed) + '</div>';
-        }
-      }
-      html += '<div class="tg-footer"><span class="tg-time">' + timeStr + '</span></div>';
-      html += '</div>';
-
-      // Inline action buttons per item
-      html += '<div class="tg-actions">';
-      html += '<span class="tg-action-btn">💾 Save</span>';
-      html += '<span class="tg-action-btn">➕ More</span>';
-      html += '<span class="tg-action-btn">➖ Less</span>';
-      html += '</div>';
-    } else if (bubble.type === "footer") {
-      html += '<div class="tg-bubble">';
-      for (const line of bubble.lines) {
-        html += '<div style="font-size:12px;color:rgba(255,255,255,0.4);">' + formatTgLine(line) + '</div>';
-      }
-      html += '</div>';
-      // Feedback row
-      html += '<div class="tg-actions">';
-      html += '<span class="tg-action-btn">🔥 Great</span>';
-      html += '<span class="tg-action-btn">👍 Fine</span>';
-      html += '<span class="tg-action-btn">👎 Meh</span>';
-      html += '</div>';
-    }
-  }
-
-  container.innerHTML = html;
-}
-
-// Format a single TG line — convert *bold*, _italic_, [text](url)
-function formatTgLine(line) {
-  let s = esc(line);
-  // Bold: *text*
-  s = s.replace(/\*([^*]+)\*/g, '<strong style="color:#fff;font-weight:700;">$1</strong>');
-  // Italic: _text_
-  s = s.replace(/_([^_]+)_/g, '<em style="color:rgba(255,255,255,0.6);">$1</em>');
-  // Links: [text](url)
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#5B9BD5;text-decoration:none;">$1</a>');
-  return s;
 }
 
 // ── Render output ────────────────────────────────────────────────────────────
@@ -917,9 +634,6 @@ function renderOutput(data) {
       frame.style.height = Math.max(500, h + 40) + "px";
     } catch (e) { frame.style.height = "800px"; }
   };
-
-  // Telegram preview — parsed into styled bubbles
-  renderTelegramPreview(data.telegramText);
 
   // Data table
   const tbody = document.getElementById("dataRows");
@@ -960,14 +674,6 @@ function renderOutput(data) {
   `;
 }
 
-// ── Tab switching ────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-  document.querySelector(`.tab-btn[onclick*="${name}"]`).classList.add("active");
-  document.getElementById(`tab-${name}`).classList.add("active");
-}
-
 // ── Data table toggle ────────────────────────────────────────────────────────
 function toggleData() {
   const body = document.getElementById("dataBody");
@@ -981,14 +687,14 @@ function toggleData() {
 function esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-// Pre-select first 5 topics
+// Pre-select first 3 topics
 (function init() {
-  const chips = document.querySelectorAll(".topic-chip:not(.custom-kw)");
+  const chips = document.querySelectorAll(".topic-chip");
   let count = 0;
   chips.forEach(chip => {
-    if (count < 5) { chip.classList.add("selected"); count++; }
+    if (count < 3) { chip.classList.add("selected"); count++; }
   });
-  selectedTopics = [...document.querySelectorAll(".topic-chip.selected:not(.custom-kw)")].map(c => c.dataset.topic);
+  selectedTopics = [...document.querySelectorAll(".topic-chip.selected")].map(c => c.dataset.topic);
   onPrefsChanged();
 })();
 

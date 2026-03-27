@@ -15,8 +15,8 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
         summary = "Resent settings link";
       } else if (action === "bulk_set_time" && details.to) {
         summary = `Set delivery time to ${details.to}`;
-      } else if (action === "run_digest_targeted" || action === "run_digest_targeted_disabled") {
-        summary = "Targeted digest disabled (email-only MVP)";
+      } else if (action.startsWith("run_digest_")) {
+        summary = "Legacy digest action ignored";
       } else if (action === "restart_scheduler_worker") {
         summary = row.success ? "Requested scheduler worker restart" : "Scheduler worker restart failed";
       } else if (action === "set_user_status") {
@@ -91,7 +91,6 @@ function handleUserByEmailRoute({ ctx, deps }) {
     json,
     isAdminAuthed,
     allUsers,
-    getRecentAutoAdjustmentsForUser,
     countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
     buildRecentDigestsExport,
@@ -106,10 +105,6 @@ function handleUserByEmailRoute({ ctx, deps }) {
     json(res, { error: "email required" }, 400);
     return true;
   }
-  const requestedAutoLimit = parseInt(url.searchParams.get("auto_limit"), 10);
-  const autoLimit = Number.isFinite(requestedAutoLimit)
-    ? Math.min(Math.max(requestedAutoLimit, 1), 20)
-    : 8;
   const lookup = emailParam.toLowerCase().trim();
   const adminUser = allUsers().find((user) => (user.email || "").toLowerCase().trim() === lookup);
   if (!adminUser) {
@@ -139,7 +134,6 @@ function handleUserByEmailRoute({ ctx, deps }) {
   json(res, {
     ...adminUser,
     archive_digest_count: archiveDigestCount,
-    auto_adjustments_recent: getRecentAutoAdjustmentsForUser(adminUser, autoLimit),
     latest_digest_record: latestDigestRecord,
     recent_digests: recentDigestRows,
   });
@@ -311,9 +305,6 @@ function applyManagedStatus(user, nextStatus, opts = {}) {
     updated.preferences.email_enabled = restored.email_enabled;
     delete updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY];
     delete updated.email_unsubscribed_at;
-    if (typeof opts.blankReengagementState === "function") {
-      updated.reengagement_state = opts.blankReengagementState();
-    }
   }
   return updated;
 }
@@ -327,7 +318,6 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
     allUsers,
     writeUser,
     logAdminActionEvent,
-    blankReengagementState,
   } = deps;
 
   if (!isAdminAuthed(req)) {
@@ -368,7 +358,6 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
 
   const updated = applyManagedStatus(user, nextStatus, {
     previousStatus,
-    blankReengagementState,
   });
   writeUser(user.chatId, updated);
   logAdminActionEvent(req, {

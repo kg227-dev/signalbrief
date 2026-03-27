@@ -384,19 +384,6 @@ input::placeholder { color: var(--text-light); }
 .preview-panel { display: none; }
 .preview-panel.active { display: block; }
 
-.preview-telegram {
-  background: #212121;
-  border-radius: 10px;
-  padding: 20px;
-  font-family: 'DM Sans', monospace;
-  font-size: 13px;
-  color: #e5e5e5;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-.preview-telegram .tg-bold { font-weight: 700; color: #fff; }
-.preview-telegram .tg-muted { color: #9CA3AF; font-style: italic; }
-
 .preview-email {
   border: 1.5px solid var(--border);
   border-radius: 10px;

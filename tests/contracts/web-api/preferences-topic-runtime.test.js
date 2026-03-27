@@ -48,6 +48,6 @@ assert.equal(
     defaultTopics: ["ENERGY"],
     topicLabels: { ENERGY: "Energy" },
   }),
-  "custom_glp_1",
-  "non-default labels should still become custom topics"
+  "",
+  "non-default labels should fail closed in the reduced-scope MVP"
 );

@@ -85,45 +85,6 @@ function computeFeedbackTrend(users, deps) {
   };
 }
 
-function getRecentAutoAdjustmentsForUser(user, deps, limit = 8) {
-  const { loadEngagementEvents, parseIsoTs, toNumericOrNull } = deps;
-  const maxRows = Math.min(Math.max(Number(limit) || 8, 1), 20);
-  const chatId = String(user?.chatId || "").trim();
-  const email = String(user?.email || "").toLowerCase().trim();
-  if (!chatId && !email) return [];
-
-  return loadEngagementEvents({ max_age_days: 120, dedupe: true })
-    .filter((ev) => String(ev?.event_type || "") === "topic_weight_adjusted")
-    .filter((ev) => String(ev?.topic?.mode || "").toLowerCase() === "auto")
-    .filter((ev) => {
-      const evChat = String(ev?.user_chat_id || "").trim();
-      if (chatId && evChat === chatId) return true;
-      const evEmail = String(ev?.user_email || "").toLowerCase().trim();
-      return !!(email && evEmail && evEmail === email);
-    })
-    .sort((a, b) => (parseIsoTs(b?.ts_utc) || 0) - (parseIsoTs(a?.ts_utc) || 0))
-    .slice(0, maxRows)
-    .map((ev) => {
-      const topic = ev?.topic && typeof ev.topic === "object" ? ev.topic : {};
-      const metadata = ev?.metadata && typeof ev.metadata === "object" ? ev.metadata : {};
-      return {
-        ts_utc: ev?.ts_utc || null,
-        date_et: ev?.date_et || null,
-        digest_id: ev?.digest_id || null,
-        topic_key: topic.key || null,
-        delta: toNumericOrNull(topic.delta),
-        mode: topic.mode || "auto",
-        reason: topic.reason || null,
-        net: toNumericOrNull(metadata.net),
-        count: toNumericOrNull(metadata.count),
-        clicked: toNumericOrNull(metadata.clicked),
-        saved: toNumericOrNull(metadata.saved),
-        ignored: toNumericOrNull(metadata.ignored),
-      };
-    });
-}
-
 module.exports = {
   computeFeedbackTrend,
-  getRecentAutoAdjustmentsForUser,
 };

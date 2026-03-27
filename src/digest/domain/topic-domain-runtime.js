@@ -429,7 +429,7 @@ function applyTopicRelevanceScores(items, userTopics, topicWeights = {}, opts = 
     const base = typeof item?.baseScore === "number" ? item.baseScore : 5.0;
     const tagWeight = matchWeightToTag(item?.tag, topicWeights);
     // Also check content_flags for negative weight matches (e.g. M&A items tagged as HEALTHCARE)
-    const FLAG_TO_WEIGHT_KEY = { "m_and_a": "M&A", "regulatory": "POLICY×REGULATORY" };
+    const FLAG_TO_WEIGHT_KEY = { "m_and_a": "M&A" };
     const contentFlags = Array.isArray(item?.content_flags) ? item.content_flags : [];
     const flagNegWeights = contentFlags
       .map((f) => matchWeightToTag(FLAG_TO_WEIGHT_KEY[f] || f, topicWeights))

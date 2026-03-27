@@ -1,5 +1,4 @@
 const {
-  handleTargetedDigestRun,
   handleFullDigestRun,
 } = require("./web-user-admin-actions-runtime");
 
@@ -17,16 +16,6 @@ function createAdminRunDigestHandler({
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const body = await requireJsonBody(req, res);
     if (body == null) return;
-
-    const targetChatId = body.chatId ? String(body.chatId).trim() : "";
-    if (targetChatId) {
-      return handleTargetedDigestRun({
-        req,
-        res,
-        json,
-        logAdminActionEvent,
-      });
-    }
 
     return handleFullDigestRun({
       req,

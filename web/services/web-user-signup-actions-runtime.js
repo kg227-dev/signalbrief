@@ -5,7 +5,6 @@ function parseSignupInput({
   body,
   normalizeReferralToken,
   defaultTopics = [],
-  maxCustomKeywords = 3,
   allowExampleEmails = true,
 }) {
   const {
@@ -46,7 +45,6 @@ function parseSignupInput({
     defaultTopics,
     minRequired: 1,
     maxTopics: 3,
-    maxCustomKeywords,
   });
   if (!normalizedTopicsResult.ok) {
     return { ok: false, status: 400, error: normalizedTopicsResult.error };

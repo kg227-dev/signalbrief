@@ -164,7 +164,6 @@ function createRuntimeStateInspector(deps) {
         schedulerHeartbeatPath: runtimePaths.schedulerHeartbeatPath,
         schedulerControlPath: runtimePaths.schedulerControlPath,
         digestRunLockPath: runtimePaths.digestRunLockPath,
-        domainStatsPath: runtimePaths.domainStatsPath,
         sourceRegistryPath: runtimePaths.sourceRegistryPath,
       },
       files,

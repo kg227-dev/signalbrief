@@ -14,12 +14,8 @@ function getPersonaSuiteScore(suite, personaId, fallback = null) {
   return fallback;
 }
 
-function hasCustomTopics(persona) {
-  return (persona.custom_topics || []).length > 0 || (persona.topics || []).some((topic) => String(topic).startsWith("custom_"));
-}
-
 function buildComponentRows(persona, suites) {
-  const components = [
+  return [
     {
       key: "topic_matching",
       label: "Topic Matching",
@@ -45,16 +41,6 @@ function buildComponentRows(persona, suites) {
       score: getPersonaSuiteScore(suites.diversitySuite, persona.id, 0),
     },
   ];
-
-  if (hasCustomTopics(persona)) {
-    components.push({
-      key: "custom_topics",
-      label: "Custom Topics",
-      weight: COMPOSITE_WEIGHTS.custom_topics,
-      score: getPersonaSuiteScore(suites.customSuite, persona.id, Number(suites.customSuite?.score || 0)),
-    });
-  }
-  return components;
 }
 
 function computePersonaComposite(components) {
@@ -86,7 +72,6 @@ async function runEndToEndSuite(context, suiteMeta) {
     relevanceSuite: suiteResultsById["02-relevance-scoring"],
     analysisSuite: suiteResultsById["03-analysis-quality"],
     diversitySuite: suiteResultsById["04-diversity"],
-    customSuite: suiteResultsById["05-custom-topics"],
   };
 
   const perPersona = {};

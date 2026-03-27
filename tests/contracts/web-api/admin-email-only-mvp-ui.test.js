@@ -11,8 +11,8 @@ for (const snippet of [
   "Targeted resend is removed in the email-only MVP;",
   "email-only scheduled path",
   "Targeted resend disabled in the reduced-scope MVP.",
-  "Email-only MVP mode is active. This sends a direct email message, not a targeted digest.",
-  "legacy manual",
+  "Email-only MVP mode is active. This sends a direct email message, not a digest.",
+  "fix the cause and use the next scheduled run or a full rerun.",
 ]) {
   if (!source.includes(snippet)) {
     throw new Error(`admin email-only MVP UI is missing required snippet: ${snippet}`);

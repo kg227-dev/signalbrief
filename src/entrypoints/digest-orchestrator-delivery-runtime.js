@@ -102,7 +102,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       delivery_confidence_label: String(item?.delivery_confidence_label || "").trim() || null,
       delivery_trusted_only_topic_hit: item?.delivery_trusted_only_topic_hit === true,
       delivery_topic_classes: Array.isArray(item?.delivery_topic_classes) ? item.delivery_topic_classes.slice() : [],
-      delivery_custom_keywords: Array.isArray(item?.delivery_custom_keywords) ? item.delivery_custom_keywords.slice() : [],
       score_breakdown: item?.score_breakdown && typeof item.score_breakdown === "object"
         ? { ...item.score_breakdown }
         : null,
@@ -297,9 +296,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       rankingPolicy,
       publicDigestUrl,
       suppressWelcome,
-      targetChatId,
       deliveryMode = "scheduled",
-      deliveryEventSource = targetChatId ? "on-demand" : "scheduled-job",
+      deliveryEventSource = "scheduled-job",
       claudeUsage,
       engagementEvents,
       runDiagnostics,
@@ -817,7 +815,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
         deliveredUsers.push({
           id: user.email || user.chatId,
-          on_demand: Boolean(targetChatId),
           digest_id: userDigestId,
           delivery_mode: deliveryMode,
           delivery_version: deliveryRecordVersion,
@@ -885,7 +882,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         failedUsers.push({
           id: user.email || user.chatId,
           error: err.message,
-          on_demand: Boolean(targetChatId),
           delivery_outcome: failureRetry?.deliveryOutcome || null,
           retry_scheduled_for: failureRetry?.retryScheduledFor || null,
         });

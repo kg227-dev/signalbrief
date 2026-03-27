@@ -188,20 +188,16 @@ async function main() {
     const primarySignup = {
       name: "Chaos User",
       email: `chaos+${uniqueSeed}@example.com`,
-      telegram: `chaos_${uniqueSeed}`.slice(0, 30),
-      topics: ["AI×TECH", "HEALTHCARE"],
+      topics: ["TECHNOLOGY", "HEALTHCARE"],
       delivery_time: "07:00",
       frequency: "daily_weekday",
-      items_per_digest: 5,
     };
     const secondarySignup = {
       name: "Conflict User",
       email: `conflict+${uniqueSeed}@example.com`,
-      telegram: `conflict_${uniqueSeed}`.slice(0, 30),
-      topics: ["AI×TECH", "STRATEGY"],
+      topics: ["FINANCIAL SERVICES", "ENERGY"],
       delivery_time: "08:00",
       frequency: "daily_weekday",
-      items_per_digest: 5,
     };
 
     let primaryToken = "";
@@ -288,18 +284,17 @@ async function main() {
       expectStatus(response, 400, "invalid email signup");
     });
 
-    await runCase("reject one-topic signup", async () => {
+    await runCase("allow one-topic signup", async () => {
       const response = await request(baseUrl, "/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...primarySignup,
           email: `short-topic+${uniqueSeed}@example.com`,
-          telegram: `short_${uniqueSeed}`.slice(0, 30),
-          topics: ["AI×TECH"],
+          topics: ["TECHNOLOGY"],
         }),
       });
-      expectStatus(response, 400, "one-topic signup");
+      expectStatus(response, [200, 202], "one-topic signup");
     });
 
     await runCase("reject non-array topics signup", async () => {
@@ -309,8 +304,7 @@ async function main() {
         body: JSON.stringify({
           ...primarySignup,
           email: `bad-topics+${uniqueSeed}@example.com`,
-          telegram: `bad_topics_${uniqueSeed}`.slice(0, 30),
-          topics: "AI×TECH",
+          topics: "TECHNOLOGY",
         }),
       });
       expectStatus(response, 400, "non-array topics signup");
@@ -369,28 +363,15 @@ async function main() {
       expectStatus(response, 409, "email conflict");
     });
 
-    await runCase("reject telegram conflict in settings", async () => {
-      const response = await request(baseUrl, "/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: primaryToken,
-          telegram: secondarySignup.telegram,
-        }),
-      });
-      expectStatus(response, 409, "telegram conflict");
-    });
-
     await runCase("apply valid settings patch", async () => {
       const response = await request(baseUrl, "/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token: primaryToken,
-          topics: ["AI×TECH", "STRATEGY", "Markets"],
+          topics: ["TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"],
           preferences: {
             days_of_week: [1, 3, 5],
-            items_per_digest: 9,
             timezone: "America/New_York",
             depth: "headline_plus_why",
           },
@@ -403,10 +384,9 @@ async function main() {
       const preferences = userResponse.data && userResponse.data.preferences;
       expect(
         Array.isArray(userResponse.data && userResponse.data.topics)
-          && userResponse.data.topics.includes("custom_markets"),
-        "updated topics should persist in canonical form"
+          && userResponse.data.topics.join(",") === "TECHNOLOGY,ENERGY,FINANCIAL SERVICES",
+        "updated topics should persist in canonical reduced-scope form"
       );
-      expect(preferences && preferences.items_per_digest === 10, "items_per_digest should normalize to 10");
       expect(preferences && preferences.frequency === "custom", "days_of_week patch should set frequency=custom");
     });
 

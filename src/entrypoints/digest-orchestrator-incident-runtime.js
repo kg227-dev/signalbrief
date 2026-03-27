@@ -28,8 +28,6 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     formatEtDateKey,
     resolveOpsAlertTarget,
     sendOpsAlert,
-    resolveOpsChatId,
-    sendTelegram,
     nowProvider = () => new Date(),
   } = deps || {};
 
@@ -39,10 +37,10 @@ function createDigestOrchestratorIncidentRuntime(deps) {
   const logger = typeof log === "function" ? log : () => {};
   const getOpsAlertTarget = typeof resolveOpsAlertTarget === "function"
     ? resolveOpsAlertTarget
-    : (typeof resolveOpsChatId === "function" ? resolveOpsChatId : () => null);
+    : () => null;
   const sendOpsAlertMessage = typeof sendOpsAlert === "function"
     ? sendOpsAlert
-    : (typeof sendTelegram === "function" ? sendTelegram : async () => {});
+    : async () => {};
 
   function _atomicWriteJson(filePath, data) {
     const dir = path.dirname(filePath);
@@ -89,7 +87,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     }
   }
 
-  async function _notifyTelegram(incident, transitionType, previousSeverity) {
+  async function _notifyOpsAlert(incident, transitionType, previousSeverity) {
     const opsAlertTarget = getOpsAlertTarget();
     if (!opsAlertTarget) return;
     let lines;
@@ -173,7 +171,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
         metadata: record.metadata,
       });
       _saveIncidentStore(store);
-      await _notifyTelegram(record, "OPEN", null);
+      await _notifyOpsAlert(record, "OPEN", null);
       record.notified_statuses.push("OPEN");
       _saveIncidentStore(store);
       return true;
@@ -211,7 +209,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     _saveIncidentStore(store);
 
     if (severityIncreased) {
-      await _notifyTelegram(existing, "ESCALATED", previousSeverity);
+      await _notifyOpsAlert(existing, "ESCALATED", previousSeverity);
       existing.notified_statuses.push("ESCALATED");
       _saveIncidentStore(store);
       return true;
@@ -227,7 +225,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     incident.status = INCIDENT_STATUS_RESOLVED;
     incident.last_seen = nowProvider().toISOString();
     _saveIncidentStore(store);
-    await _notifyTelegram(incident, "RESOLVED", null);
+    await _notifyOpsAlert(incident, "RESOLVED", null);
     incident.notified_statuses.push("RESOLVED");
     _saveIncidentStore(store);
     return true;

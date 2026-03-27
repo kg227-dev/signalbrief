@@ -21,9 +21,7 @@ function createDigestOrchestratorPipelineRuntime(deps) {
       maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
       maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
       maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
-      customTags: opts.customTags || [],
       tagPriority: opts.tagPriority,
-      maxCustomItems: opts.maxCustomItems,
       normalizeUrl: normalizeUrlForDedup,
       parseDomain: parseSourceDomain,
       normalizeTopicToken,
@@ -37,9 +35,7 @@ function createDigestOrchestratorPipelineRuntime(deps) {
       maxItems: opts.maxItems || CONFIG.digest.itemCount || 7,
       maxItemsPerTag: opts.maxItemsPerTag || CONFIG.digest.maxItemsPerTag || 2,
       maxItemsPerSourceDomain: opts.maxItemsPerSourceDomain || CONFIG.digest.maxItemsPerSourceDomain || 2,
-      customTags: opts.customTags || [],
       tagPriority: opts.tagPriority,
-      maxCustomItems: opts.maxCustomItems,
       normalizeUrl: normalizeUrlForDedup,
       parseDomain: parseSourceDomain,
       normalizeTopicToken,
@@ -67,21 +63,15 @@ function createDigestOrchestratorPipelineRuntime(deps) {
   };
 }
 
-function resolveDeliveryModeFromTrigger(triggerSource, targetChatId) {
+function resolveDeliveryModeFromTrigger(triggerSource) {
   const source = String(triggerSource || "").trim().toLowerCase();
-  if (!targetChatId) return "scheduled";
-  if (source.includes("telegram:on_demand")) return "on_demand";
   if (source.includes("signup_welcome")) return "welcome";
-  if (source.includes("admin_targeted")) return "manual";
-  if (source.includes("admin_full")) return "manual";
-  return "manual";
+  return "scheduled";
 }
 
 function resolveDeliveryEventSource(deliveryMode) {
-  if (deliveryMode === "scheduled") return "scheduled-job";
-  if (deliveryMode === "on_demand") return "on-demand";
   if (deliveryMode === "welcome") return "welcome-trigger";
-  return "manual-rerun";
+  return "scheduled-job";
 }
 
 function filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime) {

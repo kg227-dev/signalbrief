@@ -44,7 +44,6 @@ function createUnsubscribeActions(deps) {
     json,
     findUserByToken,
     writeUser,
-    blankReengagementState,
   } = deps;
 
   const resolveOneClickToken = buildResolveOneClickToken(findUserByToken);
@@ -116,7 +115,6 @@ function createUnsubscribeActions(deps) {
       ...user,
       status: USER_STATUS.ACTIVE,
       preferences: { ...(user.preferences || {}), email_enabled: true },
-      reengagement_state: blankReengagementState(),
       last_updated: new Date().toISOString(),
     };
     writeUser(user.chatId, updated);

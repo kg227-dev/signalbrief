@@ -3,14 +3,11 @@ const {
   normalizeTopicToken,
   topicsRelated,
   computeTopicMatch,
-  matchWeightToTag,
-  normalizeCustomKeyword,
   splitUserTopics,
   itemMatchesPersonaTopic,
   filterItemsByTopics,
   applyTopicRelevanceScores,
   applyDigestDepth,
-  reserveCustomKeywordSlot: reserveDigestCustomKeywordSlot,
   buildStorylineCandidates,
   applyStrategicQualityGate,
   applyEntityCoverageCap,
@@ -65,17 +62,13 @@ function applyDepth(items, depth) {
   return applyDigestDepth(items, depth);
 }
 
-function reserveCustomKeywordSlot(items, requestedCount, customKeywords = []) {
-  return reserveDigestCustomKeywordSlot(items, requestedCount, customKeywords);
-}
-
 function buildDigestForPersona(enrichedItems, persona, policyInput = {}) {
   const prefs = persona?.preferences || {};
   const { rankingPolicy, depthPolicy } = createDigestPolicies(policyInput);
   const storylinePool = applyStrategicQualityGate(
     buildStorylineCandidates(enrichedItems),
     {
-      minKeep: Math.max(1, Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5)),
+      minKeep: Math.max(1, Number(depthPolicy.defaultItemCount || 5)),
     }
   );
   const filterRes = filterItemsForPersona(
@@ -84,19 +77,18 @@ function buildDigestForPersona(enrichedItems, persona, policyInput = {}) {
     depthPolicy,
     "specialist"
   );
-  const customKeywords = filterRes.customKeywords || [];
   const specialistMode = !!filterRes.specialistMode;
 
   let scored = applyRelevanceScores(
     filterRes.items,
     persona?.topics || [],
-    persona?.topic_weights || {},
+    {},
     rankingPolicy,
     specialistMode
   );
   scored = scored.sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0));
 
-  const requested = Number(prefs.items_per_digest) || Number(depthPolicy.defaultItemCount) || 5;
+  const requested = Number(depthPolicy.defaultItemCount) || 5;
   const stronger = scored.filter((item) => (
     !item?.hard_exclude
     && Number(item?.strategic_value || 0) >= 0.34
@@ -107,10 +99,7 @@ function buildDigestForPersona(enrichedItems, persona, policyInput = {}) {
   scored = applyEntityCoverageCap(scored, 1);
 
   const preTrimCount = scored.length;
-  const trimmed = applyEntityCoverageCap(
-    reserveCustomKeywordSlot(scored, requested, customKeywords),
-    1
-  );
+  const trimmed = applyEntityCoverageCap(scored.slice(0, requested), 1);
   const preDepthItems = trimmed.map((i) => ({ ...i }));
   const depth = prefs.depth || "headline_plus_why";
   const finalItems = applyDepth(trimmed, depth);
@@ -178,12 +167,10 @@ module.exports = {
   selectItems,
   parseItemDomain,
   computeTopicMatch,
-  matchWeightToTag,
   applyRelevanceScores,
   splitUserTopics,
   itemMatchesPersonaTopic,
   filterItemsForPersona,
-  normalizeCustomKeyword,
   applyDepth,
   buildDigestForPersona,
   countAdjacencyViolations,

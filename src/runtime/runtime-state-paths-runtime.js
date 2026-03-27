@@ -89,10 +89,6 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.digestRunLockPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_RUN_LOCK_PATH"),
     path.join(dataDir, "digest-run.lock")
   );
-  const domainStatsPath = resolveOptionalPath(
-    options.domainStatsPath || readEnvValue(env, "SIGNALBRIEF_DOMAIN_STATS_PATH"),
-    path.join(dataDir, "domain-stats.json")
-  );
   const sourceRegistryPath = resolveOptionalPath(
     options.sourceRegistryPath || readEnvValue(env, "SIGNALBRIEF_SOURCE_REGISTRY_PATH"),
     path.join(dataDir, "source-registry.json")
@@ -150,7 +146,6 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     schedulerHeartbeatPath,
     schedulerControlPath,
     digestRunLockPath,
-    domainStatsPath,
     sourceRegistryPath,
     preferredSourcesPath,
     standardTopicBrokerSourcesPath,
@@ -212,7 +207,6 @@ function describeRuntimePathAlignment(runtimePaths) {
     archive: deriveComponentRoot(paths.archiveDir, dataRoot, { isDir: true }),
     digest_records: deriveComponentRoot(paths.digestRecordsDir, dataRoot, { isDir: true }),
     digest_retry_state: deriveComponentRoot(paths.digestRetryStatePath, dataRoot),
-    domain_stats: deriveComponentRoot(paths.domainStatsPath, dataRoot),
     source_registry: deriveComponentRoot(paths.sourceRegistryPath, dataRoot),
     preferred_sources: deriveComponentRoot(paths.preferredSourcesPath, dataRoot),
     standard_topic_broker_sources: deriveComponentRoot(paths.standardTopicBrokerSourcesPath, dataRoot),
@@ -229,7 +223,6 @@ function describeRuntimePathAlignment(runtimePaths) {
   if (componentRoots.archive !== dataRoot) divergentComponents.push("archive");
   if (componentRoots.digest_records !== dataRoot) divergentComponents.push("digest_records");
   if (componentRoots.digest_retry_state !== dataRoot) divergentComponents.push("digest_retry_state");
-  if (componentRoots.domain_stats !== dataRoot) divergentComponents.push("domain_stats");
   if (componentRoots.source_registry !== dataRoot) divergentComponents.push("source_registry");
   if (componentRoots.preferred_sources !== dataRoot) divergentComponents.push("preferred_sources");
   if (componentRoots.standard_topic_broker_sources !== dataRoot) divergentComponents.push("standard_topic_broker_sources");
@@ -252,7 +245,6 @@ function describeRuntimePathAlignment(runtimePaths) {
       archive_outside_data_root: componentRoots.archive !== dataRoot,
       digest_records_outside_data_root: componentRoots.digest_records !== dataRoot,
       digest_retry_state_outside_data_root: componentRoots.digest_retry_state !== dataRoot,
-      domain_stats_outside_data_root: componentRoots.domain_stats !== dataRoot,
       source_registry_outside_data_root: componentRoots.source_registry !== dataRoot,
       preferred_sources_outside_data_root: componentRoots.preferred_sources !== dataRoot,
       standard_topic_broker_sources_outside_data_root: componentRoots.standard_topic_broker_sources !== dataRoot,
@@ -287,7 +279,6 @@ function listRuntimeStateTargets(runtimePaths) {
     { key: "schedulerHeartbeatPath", path: paths.schedulerHeartbeatPath, kind: "file" },
     { key: "schedulerControlPath", path: paths.schedulerControlPath, kind: "file" },
     { key: "digestRunLockPath", path: paths.digestRunLockPath, kind: "file" },
-    { key: "domainStatsPath", path: paths.domainStatsPath, kind: "file" },
     { key: "sourceRegistryPath", path: paths.sourceRegistryPath, kind: "file" },
     { key: "preferredSourcesPath", path: paths.preferredSourcesPath, kind: "file" },
     { key: "standardTopicBrokerSourcesPath", path: paths.standardTopicBrokerSourcesPath, kind: "file" },

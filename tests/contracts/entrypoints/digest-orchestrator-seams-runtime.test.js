@@ -27,10 +27,9 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
 (async () => {
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "AI×TECH", queries: ["ai"] }],
+      topics: [{ tag: "TECHNOLOGY", queries: ["technology"] }],
       digest: {
         itemCount: 7,
-        maxCustomFetchPerRun: 5,
       },
     },
     log: () => {},
@@ -39,19 +38,16 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
       apiCalls: 1,
       items: [{ tag: topic.tag, headline: `${topic.tag} headline`, baseScore: 7.5 }],
     }),
-    buildCustomTopicQueries: (keyword) => [`${keyword} query`],
-    buildCustomRescueItemsFromStandard: () => [],
     emitDigestIncident: async () => {},
   });
 
   const fetchOut = await fetchRuntime.orchestrateFetch({
     dueUsers: [{
       chatId: "u1",
-      topics: ["AI×TECH"],
-      preferences: { items_per_digest: 5 },
+      topics: ["TECHNOLOGY"],
+      preferences: {},
     }],
-    targetChatId: "u1",
-    runMode: "targeted",
+    runMode: "scheduled",
   });
   assert.ok(fetchOut.allItems.length > 0, "fetch seam should produce candidate items");
 
@@ -62,7 +58,6 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
         minBackfillItemsAfterDedup: 3,
         maxItemsPerTag: 2,
         maxItemsPerSourceDomain: 2,
-        maxCustomItemsPerRun: 3,
       },
     },
     log: () => {},
@@ -90,9 +85,8 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
   const selectionOut = await selectionRuntime.selectForEnrichment({
     allItems: fetchOut.allItems,
     selectionTarget: fetchOut.selectionTarget,
-    customTags: fetchOut.customTags,
     tagPriority: fetchOut.tagPriority,
-    runMode: "targeted",
+    runMode: "scheduled",
     dueUsersCount: 1,
     standardFetchCallsPlanned: fetchOut.standardFetchCallsPlanned,
   });
@@ -133,9 +127,8 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
   const deliveryRankingOut = deliveryRankingRuntime.rankAndSuppressUserItems({
     user: {
       chatId: "u1",
-      topics: ["AI×TECH"],
-      preferences: { items_per_digest: 5 },
-      topic_weights: {},
+      topics: ["TECHNOLOGY"],
+      preferences: {},
     },
     enriched: enrichmentOut.enriched,
     repeatIndex: selectionOut.repeatIndex,

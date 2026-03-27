@@ -1,4 +1,4 @@
-// MVP topic set: 7 sectors. No capabilities group, no custom keywords.
+// MVP topic set: 7 sectors. No capabilities group and no free-form topic controls.
 const INDUSTRY_TOPICS = [
   "HEALTHCARE",
   "LIFE SCIENCES",
@@ -25,7 +25,6 @@ const PROTECTED_FIELDS = [
   "digest_dates",
   "last_email_open_at",
   "email_opens_total",
-  "reengagement_state",
   "signup_referral_source",
 ];
 

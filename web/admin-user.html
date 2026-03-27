@@ -76,11 +76,6 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 .chip.selected { background:var(--accent); border-color:var(--accent); color:#fff; }
 .chip-check { font-size:11px; opacity:0; }
 .chip.selected .chip-check { opacity:1; }
-.chip-custom { border-style:dashed; }
-.custom-row { display:flex; gap:8px; margin-top:10px; }
-.custom-row input { flex:1; }
-.btn-add { padding:9px 14px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; white-space:nowrap; }
-.btn-add:hover { background:#1D4ED8; }
 .topic-note { font-size:11px; color:var(--text-secondary); margin-top:4px; }
 
 /* Depth */
@@ -329,15 +324,6 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       </div>
     </div>
 
-    <!-- Auto-learning state -->
-    <div class="form-card" id="autoLearningCard" style="display:none;">
-      <div class="card-title">Auto learning</div>
-      <div class="card-heading">Feedback loop status</div>
-      <div id="autoLearningSummary" class="learning-summary"></div>
-      <div id="autoLearningList" class="adjustment-list"></div>
-      <div id="autoLearningEmpty" style="font-size:12px;color:var(--text-secondary);display:none;">No automatic adjustments yet. The model has not crossed thresholds for this user.</div>
-    </div>
-
     <!-- Last digest preview — shown only if user has last_digest_items -->
     <div class="form-card" id="lastDigestCard" style="display:none;">
       <div class="card-title">Last delivery</div>
@@ -372,22 +358,19 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 
 <script>
 const INDUSTRY_TOPICS = [
-  'HEALTHCARE','FINANCIAL SERVICES','PE×M&A','ENERGY','CONSUMER',
-  'LIFE SCIENCES','TECHNOLOGY','INDUSTRIALS','REAL ESTATE','PUBLIC SECTOR',
+  'HEALTHCARE','LIFE SCIENCES','TECHNOLOGY','ENERGY',
+  'FINANCIAL SERVICES','CONSUMER & RETAIL','INDUSTRIALS',
 ];
-const CAPABILITY_TOPICS = [
-  'AI×TECH','STRATEGY','POLICY×REGULATORY','SUSTAINABILITY',
-  'DIGITAL','M&A ADVISORY','TALENT',
-];
-const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-const MAX_CUSTOM_KEYWORDS = 0;
+const CAPABILITY_TOPICS = [];
+const DEFAULT_TOPICS = [...INDUSTRY_TOPICS];
 const TOPIC_LABELS = {
-  'HEALTHCARE':'Healthcare','FINANCIAL SERVICES':'Financial Services','PE×M&A':'Private Equity & M&A',
-  'ENERGY':'Energy','CONSUMER':'Consumer & Retail','LIFE SCIENCES':'Life Sciences',
-  'TECHNOLOGY':'Technology','INDUSTRIALS':'Industrials','REAL ESTATE':'Real Estate',
-  'PUBLIC SECTOR':'Public Sector','AI×TECH':'AI & Technology','STRATEGY':'Strategy',
-  'POLICY×REGULATORY':'Policy & Regulatory','SUSTAINABILITY':'Sustainability & ESG',
-  'DIGITAL':'Digital Transformation','M&A ADVISORY':'M&A Advisory','TALENT':'Talent & Workforce',
+  'HEALTHCARE':'Healthcare',
+  'LIFE SCIENCES':'Life Sciences',
+  'TECHNOLOGY':'Technology',
+  'ENERGY':'Energy',
+  'FINANCIAL SERVICES':'Financial Services',
+  'CONSUMER & RETAIL':'Consumer & Retail',
+  'INDUSTRIALS':'Industrials',
 };
 
 let selectedTopics = new Set();
@@ -401,18 +384,7 @@ function esc(s) {
 }
 
 function topicLabel(t) {
-  if (DEFAULT_TOPICS.includes(t)) return TOPIC_LABELS[t] || t;
-  return t.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-}
-
-function isCustom(t) { return !DEFAULT_TOPICS.includes(t); }
-
-function selectedCustomTopicCount() {
-  let count = 0;
-  selectedTopics.forEach((topic) => {
-    if (isCustom(topic)) count += 1;
-  });
-  return count;
+  return TOPIC_LABELS[t] || t;
 }
 
 function formatEtDateTime(iso) {
@@ -474,7 +446,7 @@ function updateTopicNote() {
 
 function renderChip(topic, selected) {
   const chip = document.createElement('div');
-  chip.className = 'chip' + (selected ? ' selected' : '') + (isCustom(topic) ? ' chip-custom' : '');
+  chip.className = 'chip' + (selected ? ' selected' : '');
   chip.dataset.topic = topic;
   chip.innerHTML = '<span class="chip-check">✓</span> ' + esc(topicLabel(topic));
   chip.addEventListener('click', function() {
@@ -633,69 +605,6 @@ function buildMetaBar(user) {
   document.getElementById('metaBar').innerHTML = items.map(i =>
     `<div class="meta-item"><div class="meta-label">${i.label}</div><div class="meta-value">${i.value}</div></div>`
   ).join('');
-}
-
-function buildAutoLearningPanel(user) {
-  const state = user.auto_learning && typeof user.auto_learning === 'object' ? user.auto_learning : null;
-  const recent = Array.isArray(user.auto_adjustments_recent) ? user.auto_adjustments_recent : [];
-  if (!state && !recent.length) return;
-
-  document.getElementById('autoLearningCard').style.display = '';
-  const summary = document.getElementById('autoLearningSummary');
-  const list = document.getElementById('autoLearningList');
-  const empty = document.getElementById('autoLearningEmpty');
-
-  const statusHtml = state && state.enabled === false
-    ? '<span style="color:var(--red);">disabled</span>'
-    : '<span style="color:var(--green);">enabled</span>';
-  const metrics = [
-    { label: 'Status', value: statusHtml },
-    { label: 'Total auto adjustments', value: esc(String(state?.total_auto_adjustments || 0)) },
-    { label: 'Last processed', value: esc(formatEtDateTime(state?.last_processed_ts)) },
-    { label: 'Last applied', value: esc(formatEtDateTime(state?.last_applied_at)) },
-    { label: 'Last checked', value: esc(formatEtDateTime(state?.last_checked_at)) },
-    { label: 'Lookback window', value: esc(String(state?.lookback_days || 14) + ' days') },
-  ];
-  summary.innerHTML = metrics.map((metric) => `
-    <div class="learning-metric">
-      <div class="learning-metric-label">${metric.label}</div>
-      <div class="learning-metric-value">${metric.value}</div>
-    </div>
-  `).join('');
-
-  if (!recent.length) {
-    list.innerHTML = '';
-    empty.style.display = '';
-    return;
-  }
-
-  empty.style.display = 'none';
-  list.innerHTML = recent.map((row) => {
-    const topic = topicLabel(String(row.topic_key || 'topic'));
-    const delta = Number(row.delta || 0);
-    const deltaClass = delta > 0 ? 'weight-up' : (delta < 0 ? 'weight-down' : '');
-    const deltaPrefix = delta > 0 ? '+' : '';
-    const net = Number.isFinite(Number(row.net)) ? Number(row.net) : 0;
-    const count = Number.isFinite(Number(row.count)) ? Number(row.count) : 0;
-    const saved = Number.isFinite(Number(row.saved)) ? Number(row.saved) : 0;
-    const clicked = Number.isFinite(Number(row.clicked)) ? Number(row.clicked) : 0;
-    const ignored = Number.isFinite(Number(row.ignored)) ? Number(row.ignored) : 0;
-    const whenLabel = row.ts_utc
-      ? formatEtDateTime(row.ts_utc)
-      : (row.date_et || '—');
-    return `
-      <div class="adjustment-row">
-        <div class="adjustment-main">
-          <div class="adjustment-topic">${esc(topic)}</div>
-          <div class="adjustment-meta">Signals: ${saved} saves · ${clicked} clicks · ${ignored} ignored · net ${net} across ${count} events</div>
-        </div>
-        <div class="adjustment-time">
-          <div class="adjustment-delta ${deltaClass}">${deltaPrefix}${delta}</div>
-          <div>${esc(whenLabel)}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
 }
 
 function buildLastDigestPanel(user) {
@@ -874,7 +783,6 @@ async function init() {
     }
 
     buildMetaBar(user);
-    buildAutoLearningPanel(user);
     buildLastDigestPanel(user);
     buildDigestTimelinePanel(user);
 

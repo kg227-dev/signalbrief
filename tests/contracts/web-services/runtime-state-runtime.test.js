@@ -47,7 +47,6 @@ const inspector = createRuntimeStateInspector({
     schedulerHeartbeatPath: path.join(process.cwd(), "data", "scheduler-heartbeat.json"),
     schedulerControlPath: path.join(process.cwd(), "data", "scheduler-control.json"),
     digestRunLockPath: path.join(process.cwd(), "data", "digest-run-lock.json"),
-    domainStatsPath: path.join(process.cwd(), "data", "domain-stats.json"),
     sourceRegistryPath: path.join(process.cwd(), "data", "source-registry.json"),
   },
   store: {
@@ -74,6 +73,11 @@ assert.strictEqual(
   Object.prototype.hasOwnProperty.call(diagnostics.paths, "digestOnDemandCooldownPath"),
   false,
   "runtime state diagnostics should not expose the removed on-demand cooldown file"
+);
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(diagnostics.paths, "domainStatsPath"),
+  false,
+  "runtime state diagnostics should not expose removed domain-learning state"
 );
 
 const health = inspector.getRuntimeStateHealth();

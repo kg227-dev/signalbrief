@@ -19,7 +19,7 @@
   const INDUSTRY_TOPICS = [...FALLBACK_INDUSTRY_TOPICS];
   const CAPABILITY_TOPICS = [...FALLBACK_CAPABILITY_TOPICS];
   const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-  const MAX_CUSTOM_KEYWORDS = 0; // MVP: no custom keywords
+  const MAX_CUSTOM_KEYWORDS = 0;
 
   const TOPIC_LABELS = {
     HEALTHCARE: "Healthcare",
@@ -61,15 +61,6 @@
       };
     };
 
-  const normalizeCustomTopicInput = typeof topicRuntime.normalizeCustomTopicInput === "function"
-    ? topicRuntime.normalizeCustomTopicInput
-    : (value) => {
-      const raw = String(value || "").trim();
-      if (!raw) return "";
-      const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-      return slug ? `custom_${slug}` : "";
-    };
-
   const topicKeyFromInputHelper = typeof topicRuntime.topicKeyFromInput === "function"
     ? topicRuntime.topicKeyFromInput
     : (value, opts = {}) => {
@@ -80,19 +71,8 @@
         const match = defaults.find((topic) => topic.toLowerCase() === raw.toLowerCase());
         if (match) return match;
       }
-      return normalizeCustomTopicInput(raw);
+      return "";
     };
-
-  const isCustomTopicHelper = typeof topicRuntime.isCustomTopic === "function"
-    ? topicRuntime.isCustomTopic
-    : (topic, opts = {}) => {
-      const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
-      return !defaults.includes(String(topic || ""));
-    };
-
-  const formatCustomLabel = typeof topicRuntime.formatCustomLabel === "function"
-    ? topicRuntime.formatCustomLabel
-    : (topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
   const topicDisplayLabelHelper = typeof topicRuntime.topicDisplayLabel === "function"
     ? topicRuntime.topicDisplayLabel
@@ -101,8 +81,7 @@
       const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
       const labels = opts.topicLabels && typeof opts.topicLabels === "object" ? opts.topicLabels : {};
       if (!key) return "";
-      if (defaults.includes(key)) return labels[key] || key;
-      return formatCustomLabel(key);
+      return defaults.includes(key) ? (labels[key] || key) : key;
     };
 
   const normalizeDay = typeof scheduleRuntime.normalizeDay === "function"
@@ -147,10 +126,6 @@
       if (normalized.length === 7) return "daily_all";
       return "custom";
     };
-
-  const normalizeTelegram = typeof scheduleRuntime.normalizeTelegram === "function"
-    ? scheduleRuntime.normalizeTelegram
-    : (value) => String(value || "").trim().replace(/^@+/, "") || null;
 
   function getTopicCatalog() {
     return buildTopicCatalogSnapshot({
@@ -210,10 +185,6 @@
     });
   }
 
-  function isCustomTopic(topic) {
-    return isCustomTopicHelper(topic, { defaultTopics: DEFAULT_TOPICS });
-  }
-
   function topicDisplayLabel(topic) {
     return topicDisplayLabelHelper(topic, {
       defaultTopics: DEFAULT_TOPICS,
@@ -232,15 +203,11 @@
     loadTopicCatalog,
     normalizeDay,
     normalizeDays,
-    normalizeCustomTopicInput,
     topicKeyFromInput,
-    isCustomTopic,
-    formatCustomLabel,
     topicDisplayLabel,
     isWeekdays,
     isEveryday,
     daysFromFrequency,
     frequencyFromDays,
-    normalizeTelegram,
   };
 })(window);

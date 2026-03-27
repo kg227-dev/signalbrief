@@ -14,7 +14,6 @@ const {
 } = require("./admin-ops-io");
 const {
   computeFeedbackTrend,
-  getRecentAutoAdjustmentsForUser,
 } = require("./admin-ops-analytics");
 const { createSchedulerHeartbeatAccessor } = require("./admin-ops-scheduler");
 
@@ -87,11 +86,6 @@ function createAdminOpsService({
     readJsonLineLog,
     parseIsoTs,
     computeFeedbackTrend: (users) => computeFeedbackTrend(users, { parseIsoTs, toNumericOrNull }),
-    getRecentAutoAdjustmentsForUser: (user, limit = 8) => getRecentAutoAdjustmentsForUser(
-      user,
-      { loadEngagementEvents, parseIsoTs, toNumericOrNull },
-      limit
-    ),
     loadCostRunsNewest,
     getCachedOrRefreshSchedulerHeartbeat: (now = Date.now()) => heartbeatAccessor.getCachedOrRefresh(now),
     maskEmail,

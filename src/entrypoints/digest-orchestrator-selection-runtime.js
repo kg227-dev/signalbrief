@@ -23,15 +23,6 @@ function splitByFreshnessTiers(items, nowMs) {
   return { tier1, tier2, tier3 };
 }
 
-function computeMaxCustomItems({ configuredMaxCustom, selectionTarget, customTags }) {
-  const defaultMaxCustom = (Array.isArray(customTags) && customTags.length > 0)
-    ? Math.max(1, Math.floor(selectionTarget * 0.4))
-    : 0;
-  return Number.isFinite(configuredMaxCustom) && configuredMaxCustom >= 0
-    ? configuredMaxCustom
-    : defaultMaxCustom;
-}
-
 function incrementCount(target, key) {
   const normalizedKey = String(key || "").trim() || "unknown";
   target[normalizedKey] = (target[normalizedKey] || 0) + 1;
@@ -78,7 +69,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
   async function selectForEnrichment(params) {
     const {
       selectionTarget,
-      customTags,
       tagPriority,
       runMode,
       digestDateKey,
@@ -250,13 +240,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
     const scoringInput = annotatedItems;
 
-    const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
-    const maxCustomItems = computeMaxCustomItems({
-      configuredMaxCustom,
-      selectionTarget,
-      customTags,
-    });
-
     // MVP transparent scoring: score every candidate before selection.
     // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
     // Scored items are sorted by _score descending so the selection policy
@@ -300,8 +283,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       const selectionPolicy = {
         maxItems: itemsPerTopic,
         maxItemsPerTag: itemsPerTopic,
-        customTags: [],
-        maxCustomItems: 0,
         tagPriority,
         maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
           ? paramScoringConfig.maxItemsPerSourceDomain
@@ -439,7 +420,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
 module.exports = {
   createDigestOrchestratorSelectionRuntime,
-  computeMaxCustomItems,
   computeItemAgeHours,
   splitByFreshnessTiers,
 };

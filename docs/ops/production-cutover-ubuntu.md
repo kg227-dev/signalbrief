@@ -8,11 +8,10 @@ Updated: 2026-03-06 (America/New_York)
 
 Move runtime off the local Mac so digest delivery does not depend on laptop sleep/wake state.
 
-Execution note (2026-03-06): completed in production with VM-hosted `web`/`bot`/`worker` and VM-hosted Cloudflare tunnel connector; local Mac runtime services are now rollback-only.
+Execution note (2026-03-06): completed in production with VM-hosted `web`/`worker` and VM-hosted Cloudflare tunnel connector; local Mac runtime services are now rollback-only.
 
 Target topology:
 - `web` container (`web/server.js`)
-- `bot` container (`src/entrypoints/bot-server.js`)
 - `worker` container (`src/entrypoints/scheduler-worker.js`)
 
 All share persisted volumes:
@@ -81,7 +80,7 @@ nano /opt/signalbrief/app/.env
 
 Minimum values:
 - `BASE_URL=https://getsignalbrief.com`
-- `OPS_ALERT_CHAT_ID=<your ops chat id>` (recommended)
+- `OPS_ALERT_EMAIL=<your ops alert inbox>` (recommended)
 - provider/admin secrets via `SIGNALBRIEF_*` env vars
 
 If you rely on `config.json` for non-secret overrides, copy it separately after `.env` is in place.
@@ -219,7 +218,6 @@ On Mac:
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-digest.plist || true
 launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-web.plist || true
-launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-bot.plist || true
 launchctl unload ~/Library/LaunchAgents/com.jarvis.signalbrief-tunnel.plist || true
 ```
 
@@ -230,7 +228,7 @@ Keep a one-day rollback window before deleting local files.
 If VM runtime fails:
 1. Restore Mac LaunchAgents.
 2. Re-point traffic/tunnel back to Mac.
-3. Trigger manual catch-up:
+3. Trigger a scheduled recovery run:
 
 ```bash
 cd /Users/kushgulati/Desktop/signalbrief

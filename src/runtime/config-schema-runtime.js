@@ -102,17 +102,6 @@ function validateConfigSchema(config) {
           expectPositiveInteger(errors, "digest.search_budget.scheduled.hard_calls", searchBudget.scheduled.hard_calls, { min: 1, max: 200 });
         }
       }
-      if (searchBudget.on_demand != null && expectObject(errors, "digest.search_budget.on_demand", searchBudget.on_demand)) {
-        if (searchBudget.on_demand.soft_calls != null) {
-          expectPositiveInteger(errors, "digest.search_budget.on_demand.soft_calls", searchBudget.on_demand.soft_calls, { min: 1, max: 200 });
-        }
-        if (searchBudget.on_demand.hard_calls != null) {
-          expectPositiveInteger(errors, "digest.search_budget.on_demand.hard_calls", searchBudget.on_demand.hard_calls, { min: 1, max: 200 });
-        }
-      }
-      if (searchBudget.custom_topic_reserve_calls != null) {
-        expectPositiveInteger(errors, "digest.search_budget.custom_topic_reserve_calls", searchBudget.custom_topic_reserve_calls, { min: 0, max: 200 });
-      }
     }
   }
 
@@ -138,8 +127,6 @@ function validateConfigSchema(config) {
       "googleRefreshToken",
       "googleClientId",
       "googleClientSecret",
-      "telegramBotToken",
-      "signalBriefBotToken",
       "resendApiKey",
       "unsubscribeSigningSecret",
       "fromEmail",

@@ -67,7 +67,6 @@ async function testResubscribeRestoresChannels() {
       allUsers: () => [user],
       writeUser: (chatId, payload) => writes.push({ chatId, payload }),
       logAdminActionEvent: (_req, entry) => actions.push(entry),
-      blankReengagementState: () => ({ reopened: true }),
     },
   });
 
@@ -79,7 +78,6 @@ async function testResubscribeRestoresChannels() {
   assert.ok(!("telegram_enabled" in writes[0].payload.preferences), "resubscribe should not restore telegram in email-only MVP");
   assert.ok(!("_pre_unsubscribe_channels" in writes[0].payload.preferences), "resubscribe should clear backup channel state");
   assert.ok(!("email_unsubscribed_at" in writes[0].payload), "resubscribe should clear unsubscribe timestamp");
-  assert.deepStrictEqual(writes[0].payload.reengagement_state, { reopened: true });
   assert.strictEqual(actions[0].details.from, "unsubscribed");
   assert.strictEqual(actions[0].details.to, "active");
 }
@@ -104,7 +102,6 @@ async function testUnsubscribeBacksUpChannels() {
       allUsers: () => [user],
       writeUser: (_chatId, payload) => writes.push(payload),
       logAdminActionEvent: () => {},
-      blankReengagementState: () => ({}),
     },
   });
 

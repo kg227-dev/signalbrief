@@ -49,24 +49,20 @@ assert.strictEqual(
 
 assert.strictEqual(
   canonicalizeTopicKey("Quantum Computing", DEFAULT_TOPICS, { allowCustomTopics: true }),
-  "custom_quantum_computing",
-  "custom topic slugging still works when explicitly enabled"
+  "",
+  "non-standard topic should still fail closed in the reduced-scope MVP"
 );
 
-// special characters stripped
 assert.strictEqual(
   canonicalizeTopicKey("AI/ML & Robotics!!!", DEFAULT_TOPICS, { allowCustomTopics: true }),
-  "custom_ai_ml_robotics",
-  "special chars should be stripped and replaced with underscores"
+  "",
+  "special-character inputs should not create custom topics"
 );
 
-// slug length capped
 {
   const longTopic = "a".repeat(100);
   const result = canonicalizeTopicKey(longTopic, DEFAULT_TOPICS, { allowCustomTopics: true });
-  assert.ok(result.startsWith("custom_"), "long topic should get custom_ prefix");
-  const slugPart = result.replace(/^custom_/, "");
-  assert.ok(slugPart.length <= MAX_CUSTOM_SLUG_LENGTH, `slug should be capped at ${MAX_CUSTOM_SLUG_LENGTH} chars`);
+  assert.strictEqual(result, "", `long non-standard topics should be rejected even with legacy flags (max slug ${MAX_CUSTOM_SLUG_LENGTH})`);
 }
 
 // --------------- normalizeTopicsForUserInput ---------------
@@ -98,8 +94,12 @@ assert.strictEqual(
 // too many topics
 {
   const result = normalizeTopicsForUserInput(
-    ["AI & Machine Learning", "Cybersecurity", "Climate & Energy", "Quantum Computing"],
-    { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxTopics: 3, maxCustomKeywords: 1 }
+    ["AI & Machine Learning", "Cybersecurity", "Climate & Energy", "Energy Storage"],
+    {
+      defaultTopics: [...DEFAULT_TOPICS, "Energy Storage"],
+      minRequired: 1,
+      maxTopics: 3,
+    }
   );
   assert.strictEqual(result.ok, false);
   assert.ok(result.error.includes("no more than 3"));
@@ -114,7 +114,7 @@ assert.strictEqual(
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.topics.length, 2, "duplicate should be deduped");
   assert.deepStrictEqual(result.topics, ["AI & Machine Learning", "Cybersecurity"]);
-  assert.strictEqual(result.customCount, 0);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(result, "customCount"), false);
 }
 
 // custom topics rejected in reduced-scope mode
@@ -124,18 +124,17 @@ assert.strictEqual(
     { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxTopics: 8, maxCustomKeywords: 0 }
   );
   assert.strictEqual(result.ok, false);
-  assert.ok(result.error.includes("disabled"), "reduced-scope MVP should reject custom topics");
+  assert.ok(result.error.includes("supported topic"), "reduced-scope MVP should reject custom topics");
 }
 
-// valid with custom keywords within limit when explicitly enabled
+// non-default topics fail closed even when legacy flags are present
 {
   const result = normalizeTopicsForUserInput(
     ["AI & Machine Learning", "Quantum Computing", "Blockchain"],
     { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxCustomKeywords: 3 }
   );
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.topics.length, 3);
-  assert.strictEqual(result.customCount, 2, "2 non-default topics should count as custom");
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.error.includes("supported topic"));
 }
 
 process.stdout.write("[topic-normalization-runtime] all assertions passed\n");

@@ -43,7 +43,6 @@ const { createRuntimeStateInspector } = require("./services/runtime-state-runtim
 const { createSchedulerWorkerRestartRequester } = require("./server-runtime-scheduler-control-runtime");
 const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
 const { createSignupRateLimiter, createMagicLinkRateLimiter, createSettingsRateLimiter } = require("./services/web-rate-limit");
-const { blankReengagementState, resetReengagementState } = require("./services/reengagement-state");
 const { archiveRelevanceScore } = require("./services/archive-scoring");
 const { createArchiveDigestStatsRuntime } = require("./services/archive-digest-stats-runtime");
 const {
@@ -150,7 +149,11 @@ const SCHEDULER_CONTROL_FILE = runtimePaths.schedulerControlPath;
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,
-  sourceRegistryPath: runtimePaths.sourceRegistryPath,
+  appRoot: APP_ROOT,
+  env: process.env,
+  nodeEnv: process.env.NODE_ENV,
+  standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
+  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
 const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
   fs,
@@ -210,7 +213,6 @@ const {
   readJsonLineLog,
   parseIsoTs,
   computeFeedbackTrend,
-  getRecentAutoAdjustmentsForUser,
   loadCostRunsNewest,
   getCachedOrRefreshSchedulerHeartbeat,
   maskEmail,
@@ -341,7 +343,6 @@ const {
   CAPABILITY_TOPICS,
   digestRunStatus,
   getCachedOrRefreshSchedulerHeartbeat,
-  blankReengagementState,
   isLegacyArchiveEndpointEnabled,
   recordLegacyArchiveUsage,
   getArchiveLegacyDeprecationDeadlineUtc,
@@ -356,7 +357,6 @@ const {
   buildDigestId,
   toEtDateKey,
   appendWebEngagementEvent,
-  resetReengagementState,
   sendTransparentGif,
   normalizeEngagementUrl,
   normalizeBookmarkUrl,
@@ -381,7 +381,6 @@ const {
   ADMIN_ACTION_LOG,
   DIGEST_INCIDENT_LOG,
   maskEmail,
-  getRecentAutoAdjustmentsForUser,
   normalizeDeliveryTimeInput,
   logAdminMessageEvent,
   summarizeMessage,
@@ -407,7 +406,7 @@ const {
   WEB_DIR,
   getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
   buildRecentDigestsExport,
-  sourceRegistryPath: runtimePaths.sourceRegistryPath,
+  sourceRegistryPath: sourceRegistryRuntime.sourceRegistryPath,
   preferredSourcesPath: runtimePaths.preferredSourcesPath,
   bundledPreferredSourcesPath: preferredSourceRegistryRuntime.bundledPreferredSourcesPath,
   loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),

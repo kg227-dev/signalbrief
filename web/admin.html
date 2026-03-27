@@ -406,11 +406,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .topic-chip-preset {
   background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE;
 }
-.topic-chip-custom {
-  background:#ECFDF5; color:#047857; border-color:#A7F3D0;
-}
 
-.badge-on-demand { font-size:10px; font-weight:700; color:#fff; background:#7C3AED; padding:2px 7px; border-radius:100px; letter-spacing:0.03em; }
 .badge-scheduled { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
 
 .cost-cell { font-family:ui-monospace,monospace; font-size:12px; font-weight:600; }
@@ -910,7 +906,6 @@ body.dark .toast.ok { background:#0a2a1a; color:#6ee7a0; border-color:#065F46; }
 body.dark .toast.err { background:#2a0a0a; color:#fca5a5; border-color:#991B1B; }
 body.dark .toast.warn { background:#2a1f0a; color:#fcd34d; border-color:#92400E; }
 body.dark .topic-chip-preset { background:rgba(107,139,214,0.15); color:#93b0e8; border-color:rgba(107,139,214,0.25); }
-body.dark .topic-chip-custom { background:rgba(16,163,87,0.12); color:#6ee7a0; border-color:rgba(16,163,87,0.25); }
 body.dark .send-btn { background:var(--card); color:var(--accent); }
 body.dark .send-btn:hover { background:var(--accent-light); }
 body.dark .danger-btn { background:rgba(185,28,28,0.12); color:#fca5a5; border-color:rgba(185,28,28,0.3); }
@@ -1019,11 +1014,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           <div class="card-label">Subscribers</div>
           <div class="card-value" id="engagementSubscribers">—</div>
           <div class="card-sub" id="engagementSubscribersSub">—</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Re-engagement pipeline</div>
-          <div class="card-value" id="engagementPipeline">—</div>
-          <div class="card-sub" id="engagementPipelineSub">—</div>
         </div>
         <div class="card">
           <div class="card-label">Referral signups</div>
@@ -1268,7 +1258,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <tr>
           <th title="The ET calendar date of the digest run.">Date (ET)</th>
           <th title="The ET time the run executed.">Time (ET)</th>
-          <th title="Scheduled is the normal automated run. On-demand is manually triggered.">Type</th>
+          <th title="All active digest runs use the scheduled email path.">Type</th>
           <th title="How many recipients were actually served in that run.">Users</th>
           <th title="Recipients who were served in the run.">Sent to</th>
           <th title="Claude token usage for the run: input tokens / output tokens.">Tokens (in / out)</th>
@@ -1311,7 +1301,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
       <thead>
         <tr>
           <th>User</th>
-          <th title="Includes scheduled, legacy manual, and retry runs (may exceed unique digest dates)">Runs (incl. retries)</th>
+          <th title="Includes scheduled runs and retries (may exceed unique digest dates)">Runs (incl. retries)</th>
           <th>Total cost</th>
           <th>Avg cost / run</th>
         </tr>
@@ -1336,7 +1326,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
 
     <div class="modal-panel">
       <div class="modal-help" style="margin-bottom:10px;">
-        Email-only MVP mode is active. This sends a direct email message, not a targeted digest.
+        Email-only MVP mode is active. This sends a direct email message, not a digest.
       </div>
       <div id="sendChannelHint" class="modal-help" style="margin-bottom:10px;"></div>
       <div class="modal-field">
@@ -1932,7 +1922,7 @@ function renderDigestQualityComponents(components) {
     { label: "ranking", value: fmtDebugNumber(components.relevance_fit, 0) },
     { label: "writeup", value: fmtDebugNumber(components.analysis_quality, 0) },
     { label: "freshness", value: fmtDebugNumber(components.freshness_diversity, 0) },
-    { label: "custom", value: fmtDebugNumber(components.custom_coverage, 0) },
+    { label: "narrative", value: fmtDebugNumber(components.narrative_uniqueness, 0) },
   ]);
 }
 function renderItemScoreBreakdown(breakdown) {
@@ -1962,7 +1952,7 @@ function summarizeDigestQuality(row, score) {
     { value: components.relevance_fit, strong: "good signal selection", weak: "weak signal selection" },
     { value: components.analysis_quality, strong: "clear writeups", weak: "weak writeups" },
     { value: components.freshness_diversity, strong: "fresh, non-repetitive coverage", weak: "repetitive or stale coverage" },
-    { value: components.custom_coverage, strong: "good custom-topic coverage", weak: "thin custom-topic coverage" },
+    { value: components.narrative_uniqueness, strong: "good storyline spread", weak: "too many overlapping angles" },
   ];
   checks.forEach((check) => {
     const state = qualityComponentState(check.value);
@@ -2084,7 +2074,7 @@ function renderRunDebugPanel(run) {
   </details>`;
 }
 function topicLabel(raw) {
-  return String(raw || "").replace(/^custom_/, "").replace(/_/g, " ");
+  return String(raw || "").replace(/_/g, " ");
 }
 function renderTopicChips(rawTopics, limit = Infinity) {
   const topics = Array.isArray(rawTopics) ? rawTopics.filter(Boolean) : [];
@@ -2092,10 +2082,7 @@ function renderTopicChips(rawTopics, limit = Infinity) {
   const max = Number.isFinite(limit) ? Math.max(0, limit) : topics.length;
   const visible = topics.slice(0, max);
   const hiddenCount = Math.max(0, topics.length - visible.length);
-  const chips = visible.map(t => {
-    const cls = String(t).startsWith("custom_") ? "topic-chip-custom" : "topic-chip-preset";
-    return `<span class="topic-chip ${cls}">${esc(topicLabel(t))}</span>`;
-  });
+  const chips = visible.map((t) => `<span class="topic-chip topic-chip-preset">${esc(topicLabel(t))}</span>`);
   if (hiddenCount > 0) {
     chips.push(`<span class="topic-chip topic-chip-preset">+${hiddenCount}</span>`);
   }
@@ -2962,7 +2949,7 @@ function buildFailedDeliveryRows(roster, runs) {
   const latestOutcomeByUser = new Map();
   for (const run of todayRuns) {
     const runAtLabel = run.run_at_et || formatEtDateTime(run.run_at);
-    const fromScheduled = !run.on_demand;
+    const fromScheduled = true;
     (Array.isArray(run.per_user) ? run.per_user : []).forEach((entry) => {
       const resolved = resolveRecipient(entry && entry.id);
       if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
@@ -3599,7 +3586,7 @@ async function restartSchedulerWorker(triggerEl = null) {
     const resp = await apiFetchJson("/api/admin/restart-scheduler-worker", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason: "manual_admin_recovery" }),
+      body: JSON.stringify({ reason: "scheduler_recovery_request" }),
     });
     const data = resp.data || {};
     if (!resp.ok || !data.success) {
@@ -3873,7 +3860,7 @@ async function load(silent = false) {
     document.getElementById("monthDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${monthDelivered}</a>`;
     document.getElementById("monthDigestsSub").innerHTML =
-      `<strong>${Math.max(0, Number(summary.month_runs || 0) - Number(summary.month_on_demand || 0))}</strong> scheduled runs`;
+      `<strong>${Math.max(0, Number(summary.month_runs || 0))}</strong> scheduled runs`;
     document.getElementById("allTimeDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${allTimeDelivered}</a>`;
     document.getElementById("allTimeDigestsSub").innerHTML =
@@ -3920,12 +3907,6 @@ async function load(silent = false) {
     document.getElementById("engagementSubscribers").textContent = `${activeCount} / ${pausedCount} / ${unsubCount}`;
     document.getElementById("engagementSubscribersSub").textContent = "active / paused / unsubscribed";
 
-    const day4 = Number(engagement && engagement.in_reengagement_day4 || 0);
-    const day8 = Number(engagement && engagement.in_reengagement_day8 || 0);
-    const pipelineTotal = day4 + day8;
-    document.getElementById("engagementPipeline").textContent = String(pipelineTotal);
-    document.getElementById("engagementPipelineSub").textContent = `day4: ${day4} · day8: ${day8}`;
-
     const referralSignups = Number(engagement && engagement.referral_signups_total || 0);
     document.getElementById("engagementReferrals").textContent = String(referralSignups);
     document.getElementById("engagementReferralsSub").textContent = "all-time attributed signups";
@@ -3936,9 +3917,7 @@ async function load(silent = false) {
       runsBody.innerHTML = `<tr><td colspan="9" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
     } else {
       runsBody.innerHTML = runs.map(r => {
-        const typeBadge = r.on_demand
-          ? `<span class="badge-on-demand">legacy manual</span>`
-          : `<span class="badge-scheduled">scheduled</span>`;
+        const typeBadge = `<span class="badge-scheduled">scheduled</span>`;
         const totalClass = costClass(r.total_cost_usd || 0);
         // Cost breakdown on hover
         const perpFmt  = r.perplexity_cost_usd != null ? `$${r.perplexity_cost_usd.toFixed(4)}` : "—";

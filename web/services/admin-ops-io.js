@@ -1,5 +1,28 @@
 const { appendJsonLineLog } = require("./admin-ops-utils");
 
+function isScheduledRunRecord(run) {
+  const row = run && typeof run === "object" ? run : {};
+  const normalizedMode = String(row.mode || "").trim().toLowerCase();
+  if (normalizedMode) return normalizedMode === "scheduled";
+  return row.on_demand !== true;
+}
+
+function normalizeHistoricalRunRecord(run) {
+  const row = run && typeof run === "object" ? run : {};
+  const legacyNonScheduled = !isScheduledRunRecord(row);
+  const deliveredUsers = Array.isArray(row.per_user) ? row.per_user.length : Number(row.users_served || 0);
+  const failedUsers = Array.isArray(row.per_user_failed) ? row.per_user_failed.length : Number(row.users_failed || 0);
+  const dueUsers = Number(row.users_due);
+  const legacyDueUsers = Number(row.users_targeted);
+  return {
+    ...row,
+    mode: legacyNonScheduled ? "legacy_non_scheduled" : "scheduled",
+    users_due: Number.isFinite(dueUsers)
+      ? dueUsers
+      : (Number.isFinite(legacyDueUsers) ? legacyDueUsers : Math.max(0, deliveredUsers + failedUsers)),
+  };
+}
+
 function createCostRunsReader({ fs, costLogPath }) {
   const cache = {
     mtimeMs: 0,
@@ -31,7 +54,7 @@ function createCostRunsReader({ fs, costLogPath }) {
       .filter(Boolean)
       .map((line) => {
         try {
-          return JSON.parse(line);
+          return normalizeHistoricalRunRecord(JSON.parse(line));
         } catch {
           return null;
         }
@@ -129,4 +152,5 @@ module.exports = {
   createCostRunsReader,
   createLegacyArchiveUsageRecorder,
   createAdminAuditLoggers,
+  isScheduledRunRecord,
 };

@@ -15,10 +15,9 @@ function sortedKeys(obj) {
 (async () => {
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "AI×TECH", queries: ["ai"] }],
+      topics: [{ tag: "TECHNOLOGY", queries: ["ai"] }],
       digest: {
-        itemCount: 7,
-        maxCustomFetchPerRun: 5,
+        itemCount: 5,
       },
     },
     log: () => {},
@@ -27,21 +26,16 @@ function sortedKeys(obj) {
       apiCalls: 1,
       items: [{ tag: topic.tag, headline: `${topic.tag} headline`, baseScore: 7.5 }],
     }),
-    buildCustomTopicQueries: (keyword) => [`${keyword} query`],
-    buildCustomRescueItemsFromStandard: () => [],
     emitDigestIncident: async () => {},
   });
   const fetchOut = await fetchRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["AI×TECH"], preferences: { items_per_digest: 5 } }],
-    targetChatId: "u1",
-    runMode: "targeted",
+    dueUsers: [{ topics: ["TECHNOLOGY"], preferences: {} }],
+    runMode: "scheduled",
   });
   assert.deepStrictEqual(
     sortedKeys(fetchOut),
     [
       "allItems",
-      "customFetchCalls",
-      "customTags",
       "fetchDiagnostics",
       "selectionTarget",
       "standardFetchCalls",
@@ -84,9 +78,8 @@ function sortedKeys(obj) {
   const selectionOut = await selectionRuntime.selectForEnrichment({
     allItems: fetchOut.allItems,
     selectionTarget: fetchOut.selectionTarget,
-    customTags: fetchOut.customTags,
     tagPriority: fetchOut.tagPriority,
-    runMode: "targeted",
+    runMode: "scheduled",
     dueUsersCount: 1,
     standardFetchCallsPlanned: fetchOut.standardFetchCallsPlanned,
   });
@@ -147,9 +140,8 @@ function sortedKeys(obj) {
   const deliveryOut = deliveryRankingRuntime.rankAndSuppressUserItems({
     user: {
       chatId: "u1",
-      topics: ["AI×TECH"],
-      preferences: { items_per_digest: 5 },
-      topic_weights: {},
+      topics: ["TECHNOLOGY"],
+      preferences: {},
     },
     enriched: enrichmentOut.enriched,
     repeatIndex: selectionOut.repeatIndex,

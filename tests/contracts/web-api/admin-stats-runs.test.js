@@ -71,7 +71,7 @@ const sampleEvents = [
     user_email: "beta@example.com",
     digest_id: "2026-03-11:email-beta",
     ts_utc: "2026-03-11T15:00:03.000Z",
-    channel: "telegram",
+    channel: "email",
     source: "scheduled-job",
     metadata: {
       quality_score: 79.8,
@@ -156,7 +156,8 @@ const singleRun = [
     date: "2026-03-11",
     run_at: "2026-03-11T23:09:31.148Z",
     run_at_et: "Mar 11, 7:09 PM",
-    on_demand: true,
+    on_demand: false,
+    run_id: "scheduled:2026-03-11T23-09-31-056Z",
     users_served: 1,
     per_user: [{ id: "alpha@example.com" }],
   },
@@ -164,7 +165,7 @@ const singleRun = [
 const singleEvents = [
   {
     event_type: "digest_sent",
-    run_id: "targeted:2026-03-11T23-09-31-056Z",
+    run_id: "scheduled:2026-03-11T23-09-31-056Z",
     user_email: "alpha@example.com",
     digest_id: "2026-03-11:email-alpha",
     metadata: { quality_score: 88.03 },
@@ -175,6 +176,6 @@ const enrichedSingle = enrichRunsWithDigestMetadata(singleRun, singleEvents, { r
 if (enrichedSingle[0].digest_quality_score !== 88) {
   throw new Error(`expected digest_quality_score=88, got ${String(enrichedSingle[0].digest_quality_score)}`);
 }
-if (enrichedSingle[0].digest_url !== "/digest/2026-03-11?run=targeted%3A2026-03-11T23-09-31-056Z&ref=token-alpha") {
+if (enrichedSingle[0].digest_url !== "/digest/2026-03-11?run=scheduled%3A2026-03-11T23-09-31-056Z&ref=token-alpha") {
   throw new Error(`expected token+run scoped digest_url, got ${String(enrichedSingle[0].digest_url)}`);
 }

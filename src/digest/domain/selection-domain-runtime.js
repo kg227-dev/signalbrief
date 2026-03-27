@@ -82,7 +82,6 @@ function createSelectionState() {
   return {
     tagCounts: Object.create(null),
     domainCounts: Object.create(null),
-    customCount: 0,
     selected: [],
   };
 }
@@ -92,9 +91,6 @@ function createUnderCapsFn(policy, adapterFns, state) {
     const tag = String(item?.tag || "");
     if (!tag) return false;
     if ((state.tagCounts[tag] || 0) >= policy.perTagCap) return false;
-    if (policy.customTags.size > 0 && policy.customTags.has(normalizeTag(tag)) && state.customCount >= policy.maxCustomItems) {
-      return false;
-    }
     const domain = adapterFns.parseDomain(item);
     if (Number.isFinite(policy.perSourceCap) && (state.domainCounts[domain] || 0) >= policy.perSourceCap) return false;
     return true;
@@ -105,7 +101,6 @@ function addSelectedItem(item, state, policy, adapterFns) {
   const domain = adapterFns.parseDomain(item);
   state.tagCounts[item.tag] = (state.tagCounts[item.tag] || 0) + 1;
   state.domainCounts[domain] = (state.domainCounts[domain] || 0) + 1;
-  if (policy.customTags.has(normalizeTag(item.tag))) state.customCount += 1;
   state.selected.push({ ...item, source_domain: item.source_domain || domain });
 }
 
@@ -144,16 +139,6 @@ function pickPoolIndex(pool, state, policy, adapterFns, underCaps, lastTag, allo
   return bestIdx;
 }
 
-function seedCustomTagSelection(pool, state, policy, underCaps, adapterFns) {
-  if (policy.customTagOrder.length === 0 || policy.maxCustomItems <= 0) return;
-  for (const customTag of policy.customTagOrder) {
-    if (state.selected.length >= policy.maxItems || state.customCount >= policy.maxCustomItems) break;
-    const idx = pool.findIndex((item) => normalizeTag(item?.tag) === customTag && underCaps(item));
-    if (idx === -1) continue;
-    addSelectedItem(pool.splice(idx, 1)[0], state, policy, adapterFns);
-  }
-}
-
 function selectItemsByPolicy(allItems, selectionPolicy = {}, adapters = {}) {
   const policy = createSelectionPolicy(selectionPolicy);
   const adapterFns = resolveAdapters(adapters);
@@ -161,8 +146,6 @@ function selectItemsByPolicy(allItems, selectionPolicy = {}, adapters = {}) {
   const pool = dedupeCandidates(sourceItems, adapterFns).slice();
   const state = createSelectionState();
   const underCaps = createUnderCapsFn(policy, adapterFns, state);
-
-  seedCustomTagSelection(pool, state, policy, underCaps, adapterFns);
 
   while (state.selected.length < policy.maxItems && pool.length > 0) {
     const lastTag = state.selected.length > 0 ? state.selected[state.selected.length - 1].tag : null;
@@ -187,11 +170,7 @@ function buildSelectionItemKey(item, adapterFns) {
 
 function summarizePoolRejectReason(item, policy, adapterFns, selectedState) {
   const tag = String(item?.tag || "");
-  const normalizedTag = normalizeTag(tag);
   const domain = adapterFns.parseDomain(item);
-  if (policy.customTags.size > 0 && policy.customTags.has(normalizedTag) && selectedState.customCount >= policy.maxCustomItems) {
-    return "selection_custom_cap";
-  }
   if ((selectedState.tagCounts[tag] || 0) >= policy.perTagCap) {
     return "selection_tag_cap";
   }
@@ -210,8 +189,6 @@ function selectItemsByPolicyDetailed(allItems, selectionPolicy = {}, adapters = 
   const poolSnapshot = pool.slice();
   const state = createSelectionState();
   const underCaps = createUnderCapsFn(policy, adapterFns, state);
-
-  seedCustomTagSelection(pool, state, policy, underCaps, adapterFns);
 
   while (state.selected.length < policy.maxItems && pool.length > 0) {
     const lastTag = state.selected.length > 0 ? state.selected[state.selected.length - 1].tag : null;

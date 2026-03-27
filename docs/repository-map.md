@@ -8,8 +8,8 @@ Use this document when you need to know where code should live or where to start
 
 | Path | Use it for |
 | --- | --- |
-| `src/entrypoints/` | runtime bootstraps for digest, worker, and bot processes |
-| `src/domains/` | stable domain-level imports for digest, reply, personalization, and engagement |
+| `src/entrypoints/` | runtime bootstraps for digest and worker processes |
+| `src/domains/` | stable domain-level imports for digest and engagement logic |
 | `src/platform/` | stable infrastructure imports for config, store, mailer, scheduler, and shared types |
 | `web/api/` | API route grouping boundaries |
 | `web/services/` | web business logic behind routes |
@@ -21,7 +21,7 @@ Use this document when you need to know where code should live or where to start
 | --- | --- |
 | `src/digest/` | digest policy and runtime implementation modules |
 | `src/runtime/` | compatibility runtime modules that still back parts of the app |
-| `src/jobs/` | background jobs such as reengagement |
+| `src/jobs/` | background job runtime for scheduled digest execution |
 | `web/server/` | web server composition helpers |
 | `web/routes/` | compatibility route modules still in use during migration |
 | `web/*.html`, `web/*.js`, `web/style.css` | static assets served directly in production |

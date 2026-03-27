@@ -287,7 +287,7 @@ function findBestRunEventEntry(run, runEventIndex, runRecipients) {
 
   const runMs = Date.parse(String(run?.run_at || ""));
   if (!Number.isFinite(runMs)) return null;
-  const runMode = run?.on_demand ? "targeted" : "scheduled";
+  const runMode = "scheduled";
   const usersServed = Math.max(0, Number(run?.users_served || 0));
 
   let best = null;

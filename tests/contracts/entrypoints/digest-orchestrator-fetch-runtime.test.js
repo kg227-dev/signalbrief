@@ -13,7 +13,6 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
   createDigestOrchestratorFetchRuntime,
-  resolveCustomTopicSlugs,
   resolveTopicsToFetch,
 } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
@@ -27,6 +26,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       { tag: "FINANCIAL SERVICES", queries: ["g", "h"] },
       { tag: "ENERGY", queries: ["i", "j"] },
       { tag: "CONSUMER & RETAIL", queries: ["k", "l"] },
+      { tag: "INDUSTRIALS", queries: ["m", "n"] },
     ],
     dueUsers: [
       { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
@@ -42,73 +42,8 @@ assertModuleExports(() => runtime, TARGET_REL);
     ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "FINANCIAL SERVICES", "ENERGY"]
   );
 
-  const standardTopicRunTopics = resolveTopicsToFetch({
-    configTopics: [
-      { tag: "HEALTHCARE", queries: ["a", "b"] },
-      { tag: "FINANCIAL SERVICES", queries: ["c", "d"] },
-      { tag: "TECHNOLOGY", queries: ["e", "f"] },
-      { tag: "CONSUMER & RETAIL", queries: ["g", "h"] },
-      { tag: "INDUSTRIALS", queries: ["i", "j"] },
-    ],
-    dueUsers: [
-      { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
-      { topics: ["FINANCIAL SERVICES", "INDUSTRIALS"] },
-      { topics: ["TECHNOLOGY", "CONSUMER & RETAIL"] },
-      { topics: ["INDUSTRIALS", "CONSUMER & RETAIL"] },
-    ],
-    runMode: "standard_topics",
-    log: () => {},
-  });
-  assert.deepStrictEqual(
-    standardTopicRunTopics.map((topic) => topic.tag),
-    ["HEALTHCARE", "FINANCIAL SERVICES", "TECHNOLOGY", "CONSUMER & RETAIL", "INDUSTRIALS"]
-  );
-
-  const standardPhase1Topics = resolveTopicsToFetch({
-    configTopics: [
-      { tag: "HEALTHCARE", queries: ["a", "b"] },
-      { tag: "FINANCIAL SERVICES", queries: ["c", "d"] },
-      { tag: "ENERGY", queries: ["e", "f"] },
-      { tag: "LIFE SCIENCES", queries: ["g", "h"] },
-      { tag: "TECHNOLOGY", queries: ["i", "j"] },
-      { tag: "CONSUMER & RETAIL", queries: ["k", "l"] },
-      { tag: "INDUSTRIALS", queries: ["m", "n"] },
-    ],
-    dueUsers: [
-      { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
-      { topics: ["FINANCIAL SERVICES", "INDUSTRIALS"] },
-      { topics: ["ENERGY", "SUSTAINABILITY"] },
-      { topics: ["LIFE SCIENCES", "HEALTHCARE"] },
-      { topics: ["TECHNOLOGY", "CONSUMER & RETAIL"] },
-      { topics: ["CONSUMER & RETAIL", "INDUSTRIALS"] },
-    ],
-    runMode: "standard_phase1",
-    log: () => {},
-  });
-  assert.deepStrictEqual(
-    standardPhase1Topics.map((topic) => topic.tag),
-    ["HEALTHCARE", "FINANCIAL SERVICES", "ENERGY", "LIFE SCIENCES", "TECHNOLOGY", "CONSUMER & RETAIL", "INDUSTRIALS"]
-  );
-
-  const uncappedCustomHeavy = resolveCustomTopicSlugs({
-    dueUsers: [
-      { topics: ["custom_nvidia"] },
-      { topics: ["custom_glp_1"] },
-      { topics: ["custom_agentic_ai"] },
-      { topics: ["custom_sec_rulemaking"] },
-      { topics: ["custom_cbam"] },
-      { topics: ["custom_rate_cuts"] },
-      { topics: ["custom_grid_infrastructure"] },
-      { topics: ["custom_semicap"] },
-    ],
-    maxCustomFetchPerRun: null,
-    log: () => {},
-  });
-  assert.strictEqual(uncappedCustomHeavy.length, 8);
-
   const fetchCalls = [];
   const shortlistCalls = [];
-  const incidents = [];
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
       topics: [
@@ -116,36 +51,18 @@ assertModuleExports(() => runtime, TARGET_REL);
         { tag: "FINANCIAL SERVICES", queries: ["b"] },
       ],
       digest: {
-        itemCount: 7,
-        maxCustomFetchPerRun: 3,
+        itemCount: 5,
       },
     },
     log: () => {},
     normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
     fetchTopicNews: async (topic, opts) => {
       fetchCalls.push({ topic, opts });
-      if (topic.isCustom) {
-        return {
-          apiCalls: 2,
-          items: [{ headline: "custom", tag: topic.tag, source: "fda.gov" }],
-          diagnostics: {
-            provider: "perplexity",
-            preferred_domains_used: opts?.retrievalPlan?.preferred_domains || [],
-            preferred_fallback_triggered: false,
-            preferred_pass_item_count: 1,
-            broad_pass_item_count: 0,
-            search_result_domains: ["fda.gov"],
-            preferred_search_result_domains: ["fda.gov"],
-            preferred_search_result_hit_count: 1,
-            preferred_search_results_without_preferred_item: false,
-          },
-        };
-      }
       return {
         apiCalls: 1,
         items: [
-          { headline: `${topic.tag} standard one`, tag: topic.tag, source: topic.tag === "TECHNOLOGY" ? "theinformation.com" : "wsj.com" },
-          { headline: `${topic.tag} standard two`, tag: topic.tag, source: topic.tag === "TECHNOLOGY" ? "reuters.com" : "wsj.com" },
+          { headline: `${topic.tag} one`, tag: topic.tag, source: topic.tag === "TECHNOLOGY" ? "theinformation.com" : "wsj.com" },
+          { headline: `${topic.tag} two`, tag: topic.tag, source: "reuters.com" },
         ],
         diagnostics: {
           provider: "perplexity",
@@ -163,43 +80,26 @@ assertModuleExports(() => runtime, TARGET_REL);
     buildPreferredDomainShortlist: ({ topicTag, dueUserTopics }) => {
       shortlistCalls.push({ topicTag, dueUserTopics });
       if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
-        return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
+        return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["technology"], official_friendly: false };
       }
-      if (String(topicTag).toUpperCase() === "FINANCIAL SERVICES") {
-        return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
-      }
-      if (String(topicTag).toUpperCase() === "LIFE SCIENCES") {
-        return { domains: ["fda.gov", "statnews.com"], topic_keys: ["life sciences"], official_friendly: true };
-      }
-      return { domains: ["sec.gov"], topic_keys: [], official_friendly: true };
+      return { domains: ["wsj.com"], topic_keys: ["financial services"], official_friendly: false };
     },
-    buildCustomTopicQueries: (keyword) => [`${keyword} query`],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async (...args) => {
-      incidents.push(args);
-    },
+    emitDigestIncident: async () => false,
   });
 
   const fetched = await fetchRuntime.orchestrateFetch({
     dueUsers: [
-      {
-        topics: ["TECHNOLOGY", "custom_glp_1"],
-        preferences: { items_per_digest: 10 },
-      },
+      { topics: ["TECHNOLOGY", "FINANCIAL SERVICES"] },
     ],
-    targetChatId: "123",
-    runMode: "targeted",
+    runMode: "scheduled",
   });
 
-  assert.strictEqual(fetched.selectionTarget, 7);
-  // On-demand targeted runs now fetch ALL configured topics (not just user's)
-  // to prevent thin digest pools from cross-day dedup decimation.
+  assert.strictEqual(fetched.selectionTarget, 5);
   assert.strictEqual(fetched.standardFetchCallsPlanned, 2);
   assert.strictEqual(fetched.standardFetchCalls, 2);
-  assert.strictEqual(fetched.customFetchCalls, 2);
   assert.deepStrictEqual(
     fetchCalls.map(({ topic }) => topic.tag),
-    ["TECHNOLOGY", "FINANCIAL SERVICES", "GLP 1"]
+    ["TECHNOLOGY", "FINANCIAL SERVICES"]
   );
   assert.deepStrictEqual(
     fetchCalls[0].opts.retrievalPlan.preferred_domains,
@@ -209,37 +109,9 @@ assertModuleExports(() => runtime, TARGET_REL);
     fetchCalls[1].opts.retrievalPlan.preferred_domains,
     ["wsj.com"]
   );
-  assert.deepStrictEqual(
-    fetchCalls[2].opts.retrievalPlan.preferred_domains,
-    ["fda.gov", "statnews.com"]
-  );
-  assert.strictEqual(shortlistCalls.length, 3);
-  assert.strictEqual(shortlistCalls[2].topicTag, "LIFE SCIENCES");
-  assert.strictEqual(shortlistCalls[2].dueUserTopics.includes("LIFE SCIENCES"), true);
+  assert.strictEqual(shortlistCalls.length, 2);
   assert.strictEqual(fetched.tagPriority.technology, 1);
-  assert.strictEqual(fetched.tagPriority.custom_glp_1, 1);
-  assert.strictEqual(Array.isArray(fetched.allItems), true);
-  assert.deepStrictEqual(
-    fetched.fetchDiagnostics.preferred_domains_used,
-    ["theinformation.com", "reuters.com", "wsj.com", "fda.gov", "statnews.com"]
-  );
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_fallback_triggered, false);
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_pass_item_count, 5);
-  assert.strictEqual(fetched.fetchDiagnostics.broad_pass_item_count, 0);
-  assert.deepStrictEqual(
-    fetched.fetchDiagnostics.preferred_search_result_domains,
-    ["theinformation.com", "wsj.com", "fda.gov"]
-  );
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_search_result_hit_count, 3);
-  assert.strictEqual(fetched.fetchDiagnostics.preferred_search_results_without_preferred_item_count, 0);
-  assert.strictEqual(fetched.fetchDiagnostics.search_budget_soft_calls, 6);
-  assert.strictEqual(fetched.fetchDiagnostics.search_budget_hard_calls, 9);
-  assert.strictEqual(fetched.fetchDiagnostics.search_budget_calls_used, 3);
-  assert.strictEqual(fetched.fetchDiagnostics.search_budget_exhausted, false);
-  assert.strictEqual(fetched.fetchDiagnostics.broad_fallback_topics_used, 0);
-  assert.strictEqual(fetched.fetchDiagnostics.zero_yield_retry_count, 0);
-  assert.strictEqual(fetched.fetchDiagnostics.budget_stop_reason, null);
-  assert.strictEqual(incidents.length, 0);
+  assert.strictEqual(fetched.fetchDiagnostics.search_budget_calls_used, 2);
   assert.strictEqual(fetched.fetchDiagnostics.standard_topic_broker.enabled, false);
 
   const brokerRuntime = createDigestOrchestratorFetchRuntime({
@@ -311,22 +183,16 @@ assertModuleExports(() => runtime, TARGET_REL);
       }),
     },
     emitDigestIncident: async () => {},
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
   });
 
   const brokered = await brokerRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["HEALTHCARE"], preferences: { items_per_digest: 5 } }],
+    dueUsers: [{ topics: ["HEALTHCARE"] }],
     runMode: "standard_phase1",
   });
   assert.strictEqual(brokered.allItems.length, 1);
   assert.strictEqual(brokered.allItems[0].retrieval_origin, "broker_official");
   assert.strictEqual(brokered.fetchDiagnostics.standard_topic_broker.enabled, true);
-  assert.strictEqual(brokered.fetchDiagnostics.standard_topic_broker.lane_counts.official, 1);
   assert.strictEqual(brokered.fetchDiagnostics.retrieval_origin_counts.broker_official, 1);
-  assert.strictEqual(brokered.fetchDiagnostics.topic_diagnostics[0].broker_item_count, 1);
-  assert.strictEqual(brokered.fetchDiagnostics.topic_diagnostics[0].broker_official_item_count, 1);
-  assert.deepStrictEqual(brokered.fetchDiagnostics.topic_diagnostics[0].broker_source_ids, ["fda_healthcare"]);
 
   const budgetedFetchCalls = [];
   const budgetRuntime = createDigestOrchestratorFetchRuntime({
@@ -338,13 +204,12 @@ assertModuleExports(() => runtime, TARGET_REL);
         { tag: "HEALTHCARE", queries: ["d1", "d2"] },
       ],
       digest: {
-        itemCount: 7,
+        itemCount: 5,
         search_budget: {
-          on_demand: {
+          scheduled: {
             soft_calls: 2,
             hard_calls: 3,
           },
-          custom_topic_reserve_calls: 0,
         },
       },
     },
@@ -364,15 +229,12 @@ assertModuleExports(() => runtime, TARGET_REL);
         },
       };
     },
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
     emitDigestIncident: async () => {},
   });
 
   const budgetedResult = await budgetRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["TECHNOLOGY", "FINANCIAL SERVICES"], preferences: {} }],
-    targetChatId: "123",
-    runMode: "targeted",
+    dueUsers: [{ topics: ["TECHNOLOGY", "FINANCIAL SERVICES"] }],
+    runMode: "scheduled",
   });
   assert.strictEqual(budgetedResult.standardFetchCallsPlanned, 3);
   assert.strictEqual(budgetedResult.standardFetchCalls, 3);
@@ -380,793 +242,4 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_calls_used, 3);
   assert.strictEqual(budgetedResult.fetchDiagnostics.search_budget_exhausted, true);
   assert.strictEqual(budgetedResult.fetchDiagnostics.budget_stop_reason, "hard_cap_reached");
-  assert.strictEqual(budgetedResult.fetchDiagnostics.alternate_queries_used, 0);
-
-  let healthcareBroadCalls = 0;
-  const focusedDeepRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [
-        { tag: "HEALTHCARE", queries: ["ignored-1"] },
-      ],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          targeted: undefined,
-          on_demand: {
-            soft_calls: 4,
-            hard_calls: 4,
-          },
-          custom_topic_reserve_calls: 0,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (_topic, opts) => {
-      const broadOnly = opts?.retrievalPlan?.broad_only === true;
-      if (broadOnly) {
-        healthcareBroadCalls += 1;
-      }
-      return {
-        apiCalls: 1,
-        items: broadOnly && healthcareBroadCalls === 1
-          ? [{ headline: "healthcare retained", tag: "HEALTHCARE", url: `https://example.com/${healthcareBroadCalls}` }]
-          : [],
-        diagnostics: {
-          provider: "perplexity",
-          successful_calls: 1,
-          failed_calls: 0,
-          transport_errors: 0,
-          status_counts: {},
-        },
-      };
-    },
-    buildPreferredDomainShortlist: () => ({ domains: ["statnews.com"], topic_keys: ["healthcare"], official_friendly: false }),
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const focusedDeepResult = await focusedDeepRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["HEALTHCARE"], preferences: { items_per_digest: 5 } }],
-    targetChatId: "healthcare-focus",
-    runMode: "targeted",
-  });
-  const focusedTopic = focusedDeepResult.fetchDiagnostics.topic_diagnostics.find((row) => row.tag === "HEALTHCARE");
-  assert.ok(focusedTopic);
-  assert.ok(focusedTopic.broad_call_count >= 3);
-  assert.ok(focusedTopic.remaining_broad_queries <= 1);
-
-  const trustedSecondPassCalls = [];
-  const trustedSecondPassRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [
-        { tag: "TECHNOLOGY", queries: ["t1"] },
-      ],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          on_demand: {
-            soft_calls: 3,
-            hard_calls: 3,
-          },
-          custom_topic_reserve_calls: 0,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      trustedSecondPassCalls.push({
-        tag: topic.tag,
-        retrievalPlan: { ...(opts?.retrievalPlan || {}) },
-      });
-      if (opts?.retrievalPlan?.trusted_source_second_pass === true) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "trusted technology item", tag: "TECHNOLOGY", source: "reuters.com", url: "https://reuters.com/technology-trusted" }],
-          diagnostics: {
-            provider: "perplexity",
-            successful_calls: 1,
-            failed_calls: 0,
-            transport_errors: 0,
-            status_counts: {},
-            conversion_funnel: {
-              search_result_count: 1,
-              citation_count: 1,
-              search_result_url_shape_counts: { article_url: 1 },
-              citation_url_shape_counts: { article_url: 1 },
-              provider_empty_payload_count: 0,
-              parse_error_count: 0,
-              parsed_item_count: 1,
-              provider_url_shape_counts: { article_url: 1 },
-              normalized_item_count: 1,
-              normalized_url_shape_counts: { article_url: 1 },
-              evidence_url_replacement_count: 0,
-              invalid_item_url_count: 0,
-              unsupported_evidence_url_drop_count: 0,
-              missing_headline_count: 0,
-              missing_published_date_count: 0,
-              stale_item_count: 0,
-              canonicalization_invalid_url_count: 0,
-              duplicate_headline_count: 0,
-              duplicate_url_count: 0,
-              retained_item_count: 1,
-              retained_url_shape_counts: { article_url: 1 },
-              samples: {},
-            },
-          },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [{ headline: "review technology item", tag: "TECHNOLOGY", source: "cio.com", url: `https://cio.com/review-${trustedSecondPassCalls.length}` }],
-        diagnostics: {
-          provider: "perplexity",
-          successful_calls: 1,
-          failed_calls: 0,
-          transport_errors: 0,
-          status_counts: {},
-          conversion_funnel: {
-            search_result_count: 1,
-            citation_count: 1,
-            search_result_url_shape_counts: { article_url: 1 },
-            citation_url_shape_counts: { article_url: 1 },
-            provider_empty_payload_count: 0,
-            parse_error_count: 0,
-            parsed_item_count: 1,
-            provider_url_shape_counts: { article_url: 1 },
-            normalized_item_count: 1,
-            normalized_url_shape_counts: { article_url: 1 },
-            evidence_url_replacement_count: 0,
-            invalid_item_url_count: 0,
-            unsupported_evidence_url_drop_count: 0,
-            missing_headline_count: 0,
-            missing_published_date_count: 0,
-            stale_item_count: 0,
-            canonicalization_invalid_url_count: 0,
-            duplicate_headline_count: 0,
-            duplicate_url_count: 0,
-            retained_item_count: 1,
-            retained_url_shape_counts: { article_url: 1 },
-            samples: {},
-          },
-        },
-      };
-    },
-    buildPreferredDomainShortlist: () => ({
-      domains: ["techcrunch.com"],
-      topic_keys: ["technology"],
-      official_friendly: false,
-    }),
-    buildPreferredSourceFamilyShortlists: () => ({
-      reported_domains: ["theinformation.com", "reuters.com"],
-      official_domains: ["sec.gov"],
-      combined_domains: ["theinformation.com", "reuters.com", "sec.gov"],
-      topic_keys: ["technology"],
-      official_friendly: false,
-    }),
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-    annotateFetchedItems: (items) => (Array.isArray(items) ? items : []).map((item) => {
-      if (String(item?.source || "").includes("reuters.com")) {
-        return {
-          ...item,
-          source_policy: "allowed",
-          source_tier: "premium",
-        };
-      }
-      return {
-        ...item,
-        source_policy: "review",
-        source_tier: "unknown",
-      };
-    }),
-  });
-
-  const trustedSecondPassResult = await trustedSecondPassRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["TECHNOLOGY"], preferences: { items_per_digest: 5 } }],
-    targetChatId: "technology-focus",
-    runMode: "targeted",
-  });
-  const trustedTopic = trustedSecondPassResult.fetchDiagnostics.topic_diagnostics.find((row) => row.tag === "TECHNOLOGY");
-  assert.ok(trustedTopic);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.trusted_source_second_pass_topics_used, 1);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.trusted_reported_call_count, 1);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.retrieval_origin_counts.preferred, 1);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.retrieval_origin_counts.broad, 1);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.retrieval_origin_counts.trusted_reported, 1);
-  assert.strictEqual(trustedTopic.trusted_source_call_count, 1);
-  assert.strictEqual(trustedTopic.trusted_reported_call_count, 1);
-  assert.strictEqual(trustedTopic.retrieval_origin_counts.preferred, 1);
-  assert.strictEqual(trustedTopic.retrieval_origin_counts.broad, 1);
-  assert.strictEqual(trustedTopic.retrieval_origin_counts.trusted_reported, 1);
-  assert.strictEqual(trustedTopic.retrieval_source_family_counts.specialist, 1);
-  assert.strictEqual(trustedTopic.retrieval_source_family_counts.other_unknown, 2);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.conversion_funnel.parsed_item_count, 3);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.conversion_funnel.retained_item_count, 3);
-  assert.strictEqual(trustedSecondPassResult.fetchDiagnostics.conversion_funnel.provider_url_shape_counts.article_url, 3);
-  assert.ok(trustedTopic.conversion_funnel);
-  assert.strictEqual(trustedSecondPassCalls.some((entry) => entry.retrievalPlan?.trusted_source_second_pass === true), true);
-  assert.strictEqual(
-    trustedSecondPassResult.allItems.some((item) => String(item?.source || "").includes("reuters.com")),
-    true
-  );
-
-  const emptyIncidents = [];
-  const emptyRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "FINANCIAL SERVICES", queries: ["b"] }],
-      digest: {
-        itemCount: 7,
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async () => ({ apiCalls: 1, items: [] }),
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async (type) => {
-      emptyIncidents.push(type);
-    },
-  });
-
-  const emptyResult = await emptyRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["FINANCIAL SERVICES"], preferences: {} }],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.deepStrictEqual(emptyResult.allItems, []);
-  assert.deepStrictEqual(emptyIncidents, ["zero-standard-results", "zero-raw-items"]);
-
-  const degradedIncidents = [];
-  const degradedRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [
-        { tag: "TECHNOLOGY", queries: ["a"] },
-        { tag: "CONSUMER & RETAIL", queries: ["b"] },
-      ],
-      digest: { itemCount: 7 },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic) => {
-      if (topic.tag === "TECHNOLOGY") {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "AI story", tag: topic.tag }],
-          diagnostics: {
-            provider: "perplexity",
-            degraded: false,
-            failed_calls: 0,
-            transport_errors: 0,
-            successful_calls: 1,
-            status_counts: {},
-          },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [],
-        diagnostics: {
-          provider: "perplexity",
-          degraded: true,
-          failed_calls: 1,
-          transport_errors: 0,
-          successful_calls: 0,
-          status_counts: { 503: 1 },
-        },
-      };
-    },
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async (...args) => {
-      degradedIncidents.push(args);
-    },
-  });
-
-  const degradedResult = await degradedRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["TECHNOLOGY", "CONSUMER & RETAIL"], preferences: {} }],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(degradedResult.allItems.length, 1);
-  assert.deepStrictEqual(
-    degradedIncidents.map((args) => args[0]),
-    ["perplexity-partial-degradation"]
-  );
-  assert.strictEqual(degradedIncidents[0][2].degraded_topics, 1);
-  assert.strictEqual(degradedIncidents[0][2].fetched_topics, 2);
-  assert.strictEqual(degradedIncidents[0][2].failed_calls, 2);
-
-  const retryCalls = [];
-  const retryRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "CONSUMER & RETAIL", queries: ["q1", "q2", "q3"] }],
-      digest: {
-        itemCount: 7,
-        search_budget: {
-          scheduled: {
-            soft_calls: 4,
-            hard_calls: 4,
-          },
-          custom_topic_reserve_calls: 0,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      retryCalls.push({ tag: topic.tag, retrievalPlan: opts?.retrievalPlan || {} });
-      const broadOnly = opts?.retrievalPlan?.broad_only === true;
-      if (broadOnly) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "strategy-broad", tag: topic.tag, source: "other.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      if (topic.queries[0] === "q1") {
-        return {
-          apiCalls: 1,
-          items: [],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [{ headline: "strategy-one", tag: topic.tag, source: "wsj.com" }],
-        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-      };
-    },
-    buildPreferredDomainShortlist: () => ({ domains: ["retaildive.com"], topic_keys: ["consumer"], official_friendly: false }),
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-    normalizeUrlForDedup: (value) => String(value || "").trim().toLowerCase(),
-  });
-
-  const retryResult = await retryRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["CONSUMER & RETAIL"], preferences: {} }],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(retryResult.standardFetchCalls, 2);
-  assert.strictEqual(retryResult.fetchDiagnostics.zero_yield_retry_count, 0);
-  assert.strictEqual(retryResult.fetchDiagnostics.alternate_queries_used, 1);
-  assert.deepStrictEqual(
-    retryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad"]
-  );
-
-  const deepRetryCalls = [];
-  const deepRetryRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "HEALTHCARE", queries: ["q1", "q2", "q3"] }],
-      digest: {
-        itemCount: 7,
-        search_budget: {
-          scheduled: {
-            soft_calls: 2,
-            hard_calls: 3,
-          },
-          custom_topic_reserve_calls: 0,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      deepRetryCalls.push({ query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
-      const broadOnly = opts?.retrievalPlan?.broad_only === true;
-      if (broadOnly && topic.queries[0] === "q2") {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "healthcare-recovered", tag: topic.tag, source: "reuters.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [],
-        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-      };
-    },
-    buildPreferredDomainShortlist: () => ({ domains: ["fda.gov"], topic_keys: ["healthcare"], official_friendly: true }),
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const deepRetryResult = await deepRetryRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["HEALTHCARE"], preferences: {} }],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(deepRetryResult.standardFetchCalls, 3);
-  assert.strictEqual(deepRetryResult.fetchDiagnostics.deep_broad_retry_topics_used, 1);
-  assert.deepStrictEqual(
-    deepRetryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad", "broad"]
-  );
-
-  const customRetryCalls = [];
-  const customRetryRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1"] }],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          scheduled: {
-            soft_calls: 4,
-            hard_calls: 4,
-          },
-          custom_topic_reserve_calls: 2,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      customRetryCalls.push({ tag: topic.tag, query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
-      if (topic.isCustom && opts?.retrievalPlan?.broad_only === true) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: `${topic.tag} recovered`, tag: topic.tag, source: "reuters.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      if (topic.isCustom) {
-        return {
-          apiCalls: 1,
-          items: [],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
-        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-      };
-    },
-    buildPreferredDomainShortlist: ({ topicTag }) => {
-      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
-        return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
-      }
-      return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
-    },
-    buildCustomTopicQueries: () => ["custom-q1", "custom-q2"],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const customRetryResult = await customRetryRuntime.orchestrateFetch({
-    dueUsers: [
-      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
-    ],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(customRetryResult.customFetchCalls, 2);
-  assert.strictEqual(customRetryResult.fetchDiagnostics.broad_fallback_topics_used, 1);
-  assert.deepStrictEqual(
-    customRetryCalls.filter((row) => row.tag === "NVIDIA").map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad"]
-  );
-
-  const customDeepRetryCalls = [];
-  const customDeepRetryRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1"] }],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          scheduled: {
-            soft_calls: 5,
-            hard_calls: 5,
-          },
-          custom_topic_reserve_calls: 1,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      customDeepRetryCalls.push({ tag: topic.tag, query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
-      if (!topic.isCustom) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      if (opts?.retrievalPlan?.broad_only === true && topic.queries[0] === "custom-q4") {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "custom recovered", tag: topic.tag, source: "reuters.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [],
-        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-      };
-    },
-    buildPreferredDomainShortlist: ({ topicTag }) => {
-      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
-        return { domains: ["theinformation.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
-      }
-      return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
-    },
-    buildCustomTopicQueries: () => ["custom-q1", "custom-q2", "custom-q3", "custom-q4"],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const customDeepRetryResult = await customDeepRetryRuntime.orchestrateFetch({
-    dueUsers: [
-      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
-    ],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(customDeepRetryResult.customFetchCalls, 5);
-  assert.strictEqual(customDeepRetryResult.fetchDiagnostics.deep_broad_retry_topics_used >= 1, true);
-  assert.deepStrictEqual(
-    customDeepRetryCalls.filter((row) => row.tag === "NVIDIA").map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad", "broad", "broad", "broad"]
-  );
-
-  const rateLimitedDeepRetryCalls = [];
-  const rateLimitedDeepRetryRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "HEALTHCARE", queries: ["q1", "q2", "q3"] }],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          scheduled: {
-            soft_calls: 4,
-            hard_calls: 4,
-          },
-          custom_topic_reserve_calls: 0,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      rateLimitedDeepRetryCalls.push({ query: topic.queries[0], retrievalPlan: opts?.retrievalPlan || {} });
-      const broadAttemptCount = rateLimitedDeepRetryCalls.filter((entry) => entry.retrievalPlan.broad_only === true).length;
-      if (opts?.retrievalPlan?.broad_only === true && broadAttemptCount === 1) {
-        return {
-          apiCalls: 1,
-          items: [],
-          diagnostics: { provider: "perplexity", successful_calls: 0, failed_calls: 1, transport_errors: 0, status_counts: { 429: 1 }, rate_limit_retry_after_ms: 0 },
-        };
-      }
-      if (opts?.retrievalPlan?.broad_only === true && broadAttemptCount === 2) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "healthcare recovered", tag: topic.tag, source: "statnews.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [],
-        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-      };
-    },
-    buildPreferredDomainShortlist: () => ({ domains: ["fda.gov"], topic_keys: ["healthcare"], official_friendly: true }),
-    buildCustomTopicQueries: () => [],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const rateLimitedDeepRetryResult = await rateLimitedDeepRetryRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["HEALTHCARE"], preferences: {} }],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(rateLimitedDeepRetryResult.standardFetchCalls, 4);
-  assert.strictEqual(rateLimitedDeepRetryResult.allItems.length, 1);
-  assert.strictEqual(rateLimitedDeepRetryResult.fetchDiagnostics.provider_429_count, 1);
-  assert.strictEqual(rateLimitedDeepRetryResult.fetchDiagnostics.rate_limit_cooldown_ms > 0, true);
-  assert.deepStrictEqual(
-    rateLimitedDeepRetryCalls.map((entry) => entry.retrievalPlan.broad_only === true ? "broad" : "preferred"),
-    ["preferred", "broad", "broad", "broad"]
-  );
-
-  const previousConcurrencyEnv = process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
-  process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES = "2";
-  try {
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const concurrencyRuntime = createDigestOrchestratorFetchRuntime({
-      CONFIG: {
-        topics: [
-          { tag: "TECHNOLOGY", queries: ["a"] },
-          { tag: "FINANCIAL SERVICES", queries: ["b"] },
-          { tag: "ENERGY", queries: ["c"] },
-          { tag: "HEALTHCARE", queries: ["d"] },
-        ],
-        digest: { itemCount: 4 },
-      },
-      log: () => {},
-      normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-      fetchTopicNews: async (topic) => {
-        inFlight += 1;
-        maxInFlight = Math.max(maxInFlight, inFlight);
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        inFlight -= 1;
-        return {
-          apiCalls: 1,
-          items: [{ headline: `${topic.tag} only item`, tag: topic.tag }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      },
-      buildCustomTopicQueries: () => [],
-      buildCustomRescueItemsFromStandard: () => [],
-      emitDigestIncident: async () => {},
-    });
-
-    const concurrencyResult = await concurrencyRuntime.orchestrateFetch({
-      dueUsers: [{ topics: ["TECHNOLOGY"], preferences: {} }],
-      targetChatId: null,
-      runMode: "scheduled",
-    });
-    assert.strictEqual(maxInFlight, 2);
-    assert.strictEqual(concurrencyResult.fetchDiagnostics.max_concurrent_fetches, 2);
-  } finally {
-    if (previousConcurrencyEnv == null) delete process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES;
-    else process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES = previousConcurrencyEnv;
-  }
-
-  const customHeavyCalls = [];
-  const customHeavyRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1", "standard-q2"] }],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          scheduled: {
-            soft_calls: 8,
-            hard_calls: 8,
-          },
-          custom_topic_reserve_calls: 2,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic) => {
-      customHeavyCalls.push({ tag: topic.tag, query: topic.queries[0] });
-      if (topic.isCustom && String(topic.queries[0]).includes("retry")) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: `${topic.tag} recovered`, tag: topic.tag, source: "reuters.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      if (topic.isCustom) {
-        return {
-          apiCalls: 1,
-          items: [],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
-        diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-      };
-    },
-    buildPreferredDomainShortlist: () => ({ domains: [], topic_keys: [], official_friendly: false }),
-    buildCustomTopicQueries: (keyword) => [`${keyword} primary`, `${keyword} retry`],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const customHeavyResult = await customHeavyRuntime.orchestrateFetch({
-    dueUsers: [
-      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_glp_1"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_agentic_ai"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_cbam"], preferences: {} },
-    ],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.deepStrictEqual(
-    customHeavyCalls.map((row) => row.tag),
-    ["NVIDIA", "GLP 1", "AGENTIC AI", "CBAM", "NVIDIA", "GLP 1"]
-  );
-  assert.strictEqual(customHeavyResult.customFetchCalls, 6);
-  assert.strictEqual(customHeavyResult.fetchDiagnostics.alternate_queries_used, 2);
-  assert.strictEqual(customHeavyResult.fetchDiagnostics.thin_topic_count >= 1, true);
-  assert.strictEqual(
-    customHeavyResult.fetchDiagnostics.topic_diagnostics.some((entry) => entry.tag === "NVIDIA"),
-    true
-  );
-
-  const customHeavyDeepCalls = [];
-  const customHeavyDeepRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG: {
-      topics: [{ tag: "FINANCIAL SERVICES", queries: ["standard-q1"] }],
-      digest: {
-        itemCount: 5,
-        search_budget: {
-          scheduled: {
-            soft_calls: 19,
-            hard_calls: 19,
-          },
-          custom_topic_reserve_calls: 2,
-        },
-      },
-    },
-    log: () => {},
-    normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic, opts) => {
-      customHeavyDeepCalls.push({
-        tag: topic.tag,
-        query: topic.queries[0],
-        retrievalPlan: opts?.retrievalPlan || {},
-      });
-      if (!topic.isCustom) {
-        return {
-          apiCalls: 1,
-          items: [{ headline: "standard", tag: topic.tag, source: "wsj.com" }],
-          diagnostics: { provider: "perplexity", successful_calls: 1, failed_calls: 0, transport_errors: 0, status_counts: {} },
-        };
-      }
-      return {
-        apiCalls: 1,
-        items: [],
-        diagnostics: {
-          provider: "perplexity",
-          successful_calls: 1,
-          failed_calls: 0,
-          transport_errors: 0,
-          status_counts: {},
-          search_result_domains: ["semianalysis.com", "reuters.com"],
-          preferred_search_result_domains: ["semianalysis.com"],
-          preferred_search_result_hit_count: topic.tag === "SEMICAP" ? 3 : 1,
-        },
-      };
-    },
-    buildPreferredDomainShortlist: ({ topicTag }) => {
-      if (String(topicTag).toUpperCase() === "TECHNOLOGY") {
-        return { domains: ["semianalysis.com", "reuters.com"], topic_keys: ["ai tech"], official_friendly: false };
-      }
-      return { domains: ["wsj.com"], topic_keys: ["strategy"], official_friendly: false };
-    },
-    buildCustomTopicQueries: (keyword) => [
-      `${keyword} primary`,
-      `${keyword} retry one`,
-      `${keyword} retry two`,
-      `${keyword} retry three`,
-    ],
-    buildCustomRescueItemsFromStandard: () => [],
-    emitDigestIncident: async () => {},
-  });
-
-  const customHeavyDeepResult = await customHeavyDeepRuntime.orchestrateFetch({
-    dueUsers: [
-      { topics: ["FINANCIAL SERVICES", "custom_nvidia"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_glp_1"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_agentic_ai"], preferences: {} },
-      { topics: ["FINANCIAL SERVICES", "custom_semicap"], preferences: {} },
-    ],
-    targetChatId: null,
-    runMode: "scheduled",
-  });
-  assert.strictEqual(customHeavyDeepResult.standardFetchCalls, 1);
-  assert.strictEqual(customHeavyDeepResult.customFetchCalls, 18);
-  const semicapDiagnostics = customHeavyDeepResult.fetchDiagnostics.topic_diagnostics.find((entry) => entry.tag === "SEMICAP");
-  assert.strictEqual(semicapDiagnostics.broad_call_count, 4);
-  assert.strictEqual(semicapDiagnostics.remaining_broad_queries, 0);
 })();

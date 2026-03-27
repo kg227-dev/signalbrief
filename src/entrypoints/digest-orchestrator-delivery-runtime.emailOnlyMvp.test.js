@@ -5,7 +5,6 @@ const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrat
 
 async function main() {
   let autoLearningCalls = 0;
-  let telegramCalls = 0;
   let emailCalls = 0;
   let writeCalls = 0;
 
@@ -108,16 +107,6 @@ async function main() {
         return true;
       },
     },
-    sendTelegram() {
-      telegramCalls += 1;
-      return Promise.resolve();
-    },
-    formatTelegram() {
-      throw new Error("Telegram formatting should not run in the email-only MVP path");
-    },
-    buildDigestInlineKeyboard() {
-      throw new Error("Telegram keyboard should not run in the email-only MVP path");
-    },
     generateLeadSubjectLine() {
       return Promise.resolve({ subject: "Test subject", usage: {} });
     },
@@ -208,7 +197,6 @@ async function main() {
   });
 
   assert.strictEqual(autoLearningCalls, 0, "delivery runtime must not run deprecated auto-learning on the active path");
-  assert.strictEqual(telegramCalls, 0, "delivery runtime must not send Telegram digests in the email-only MVP path");
   assert.strictEqual(emailCalls, 1, "delivery runtime must still send the email digest");
   assert.strictEqual(writeCalls, 1, "delivery runtime should still persist successful delivery state");
   assert.strictEqual(result.deliveredUsers.length, 1, "delivery runtime should report one delivered user");

@@ -29,13 +29,13 @@ const trailing = buildTrailingWindowCostSummary([
 
 assert.strictEqual(trailing.start_date_et, "2026-03-08");
 assert.strictEqual(trailing.end_date_et, "2026-03-14");
-assert.strictEqual(trailing.runs.length, 3, "trailing window should include only the last 7 ET dates");
-assert.strictEqual(trailing.total_cost, 0.19);
+assert.strictEqual(trailing.runs.length, 2, "trailing window should include only scheduled runs in the last 7 ET dates");
+assert.strictEqual(trailing.total_cost, 0.14);
 assert.strictEqual(trailing.scheduled_cost, 0.14);
-assert.strictEqual(trailing.on_demand_cost, 0.05);
 assert.strictEqual(trailing.scheduled_runs, 2);
-assert.strictEqual(trailing.on_demand_runs, 1);
-assert.strictEqual(trailing.deliveries, 4);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(trailing, "on_demand_cost"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(trailing, "on_demand_runs"), false);
+assert.strictEqual(trailing.deliveries, 3);
 
 const projected = buildProjectedWindowCostSummary({
   roster: [
@@ -43,7 +43,7 @@ const projected = buildProjectedWindowCostSummary({
       status: "active",
       days_of_week: [1, 2, 3, 4, 5],
       delivery_time_raw: "07:00",
-      topics_raw: ["HEALTHCARE", "custom_pfizer"],
+      topics_raw: ["HEALTHCARE"],
     },
     {
       status: "active",
@@ -55,22 +55,21 @@ const projected = buildProjectedWindowCostSummary({
       status: "active",
       days_of_week: [0, 1, 2, 3, 4, 5, 6],
       delivery_time_raw: "07:00",
-      topics_raw: ["AI×TECH", "custom_microsoft"],
+      topics_raw: ["TECHNOLOGY"],
     },
     {
       status: "paused",
       days_of_week: [1, 2, 3, 4, 5],
       delivery_time_raw: "07:00",
-      topics_raw: ["custom_ignore_me"],
+      topics_raw: ["ENERGY"],
     },
   ],
   nowParts: { year: 2026, month: 3, day: 16, hour: 9, minute: 0 },
   config: {
-    topics: [{ tag: "HEALTHCARE" }, { tag: "STRATEGY" }, { tag: "TECHNOLOGY" }],
-    digest: { maxCustomFetchPerRun: 6 },
+    topics: [{ tag: "HEALTHCARE" }, { tag: "FINANCIAL SERVICES" }, { tag: "TECHNOLOGY" }],
   },
-  estimateSandboxCost: ({ topics, customKeywords, itemCount }) => ({
-    totalUsd: parseFloat((topics.length * 0.01 + customKeywords.length * 0.02 + itemCount * 0.001).toFixed(5)),
+  estimateSandboxCost: ({ topics, itemCount }) => ({
+    totalUsd: parseFloat((topics.length * 0.01 + itemCount * 0.001).toFixed(5)),
   }),
   days: 7,
 });

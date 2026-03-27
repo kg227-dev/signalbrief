@@ -3,7 +3,7 @@ const path = require("path");
 
 const { ROOT_DIR, RUNS_DIR, readJson } = require("../config");
 
-const EVIDENCE_FILE_PATTERN = /\b(?:test-harness\/[^\s:]+\.js|src\/[^\s:]+\.js|web\/[^\s:]+(?:\.js|\.html)|digest\.js|reply-handler\.js|personalization\.js|engagement-events\.js|mailer\.js|scheduler-worker\.js|bot-server\.js)\b/gi;
+const EVIDENCE_FILE_PATTERN = /\b(?:test-harness\/[^\s:]+\.js|src\/[^\s:]+\.js|web\/[^\s:]+(?:\.js|\.html)|digest\.js|engagement-events\.js|mailer\.js|scheduler-worker\.js)\b/gi;
 
 function normalizeEvidenceFile(raw) {
   const rel = String(raw || "").trim().replace(/^[./]+/, "");
@@ -72,9 +72,6 @@ function detectOwner(files = []) {
   if (list.some((file) => file.includes("/test-harness/"))) return "harness";
   if (list.some((file) => file.includes("/web/"))) return "web";
   if (list.some((file) => file.includes("/src/entrypoints/digest.js") || file.endsWith("/digest.js"))) return "digest";
-  if (list.some((file) => file.includes("/src/runtime/reply/reply-handler-runtime.js") || file.endsWith("/reply-handler-runtime.js"))) {
-    return "reply-handler";
-  }
   return "runtime";
 }
 
@@ -84,8 +81,7 @@ function ownerFixHint(owner) {
     "harness-orchestration": "Fix harness and matrix control flow first, then rerun suites to re-rank downstream priorities.",
     harness: "Start with failing harness seam logic and evaluator contracts before changing production ranking heuristics.",
     web: "Address web API and UI contract seams first, then retest dependent digest workflows.",
-    digest: "Apply targeted digest pipeline fixes validated by failing suite evidence.",
-    "reply-handler": "Fix Telegram command lifecycle and state transitions before downstream scoring tweaks.",
+    digest: "Apply reduced-scope digest pipeline fixes validated by failing suite evidence.",
     runtime: "Use suite failure evidence to identify the failing seam owner, then implement the smallest cross-module contract fix.",
   };
   return hints[owner] || hints.runtime;

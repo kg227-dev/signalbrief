@@ -5,20 +5,13 @@ const marketing = require("../../../scripts/marketing-weekly-report");
 
 function buildTopicAndPipelineChecks(check) {
   return [
-    check("normalizeTopicToken strips custom_/symbol variants", () =>
-      topicUtils.normalizeTopicToken("custom_AI×TECH") === "ai tech"
-    ),
-    check("normalizeCustomKeyword converts custom slug", () =>
-      topicUtils.normalizeCustomKeyword("custom_glp_1") === "glp 1"
-    ),
-    check("topic alias map includes doge alias", () =>
-      Array.isArray(topicUtils.CUSTOM_TOPIC_ALIASES.doge)
-      && topicUtils.CUSTOM_TOPIC_ALIASES.doge.includes("dogecoin")
+    check("normalizeTopicToken strips custom_ prefixes", () =>
+      topicUtils.normalizeTopicToken("custom_TECHNOLOGY") === "technology"
     ),
     check("pipeline relevance wrapper matches shared topic-domain scorer", () => {
       const sampleItems = [
         {
-          tag: "AI×TECH",
+          tag: "TECHNOLOGY",
           headline: "OpenAI launches enterprise agent platform",
           summary: "Large enterprises are piloting AI agents in core workflows.",
           source: "example.com",
@@ -26,15 +19,14 @@ function buildTopicAndPipelineChecks(check) {
           baseScore: 8.1,
         },
       ];
-      const topics = ["AI×TECH", "custom_agentic_ai"];
-      const weights = { "AI×TECH": 2 };
-      const shared = topicDomain.applyTopicRelevanceScores(sampleItems, topics, weights, {
+      const topics = ["TECHNOLOGY"];
+      const shared = topicDomain.applyTopicRelevanceScores(sampleItems, topics, {}, {
         specialistMode: false,
         repeatPenalty: 0,
         isRecentRepeat: () => false,
         sourceDomainForItem: pipeline.parseItemDomain,
       });
-      const wrapped = pipeline.applyRelevanceScores(sampleItems, topics, weights, {
+      const wrapped = pipeline.applyRelevanceScores(sampleItems, topics, {}, {
         repeatPenalty: 0,
         repeatIndex: null,
       }, false);
@@ -42,10 +34,10 @@ function buildTopicAndPipelineChecks(check) {
     }),
     check("pipeline topic filter wrapper matches shared boundary", () => {
       const items = [
-        { tag: "AI×TECH", headline: "Agentic AI wins budget", summary: "Enterprise pilots expanded." },
+        { tag: "TECHNOLOGY", headline: "Agentic AI wins budget", summary: "Enterprise pilots expanded." },
         { tag: "HEALTHCARE", headline: "Hospital staffing update", summary: "Regional systems report shortages." },
       ];
-      const topics = ["AI×TECH"];
+      const topics = ["TECHNOLOGY"];
       const shared = topicDomain.filterItemsByTopics(items, topics, {
         minItems: 3,
         strictZeroFallback: "specialist",
@@ -55,7 +47,7 @@ function buildTopicAndPipelineChecks(check) {
         && wrapped.items.length === shared.items.length
         && wrapped.specialistMode === shared.specialistMode
         && Array.isArray(wrapped.standardTopicsLower)
-        && wrapped.standardTopicsLower.includes("ai tech");
+        && wrapped.standardTopicsLower.includes("technology");
     }),
     check("startOfWeekMonday aligns to Monday", () => {
       const wed = new Date(2026, 2, 4, 12, 0, 0, 0); // Mar 4, 2026 (Wed, local)

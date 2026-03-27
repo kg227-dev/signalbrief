@@ -10,7 +10,6 @@ function handleTrackingPixelRoute({ ctx, deps }) {
     buildDigestId,
     toEtDateKey,
     appendEngagementEventChecked,
-    resetReengagementState,
     sendTransparentGif,
     findUserByToken,
     writeUser,
@@ -44,9 +43,6 @@ function handleTrackingPixelRoute({ ctx, deps }) {
         ...user,
         last_email_open_at: nowIso,
         email_opens_total: Math.max(0, Number(user.email_opens_total || 0)) + 1,
-        reengagement_state: resetReengagementState(user, {
-          preserveAutoPaused: String(user.status || "").toLowerCase() === "paused",
-        }),
         last_updated: nowIso,
       };
       writeUser(user.chatId, updated);

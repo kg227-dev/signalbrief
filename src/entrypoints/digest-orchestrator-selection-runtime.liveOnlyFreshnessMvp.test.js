@@ -87,7 +87,7 @@ async function main() {
     runtime.selectForEnrichment({
       allItems: [{
         tag: "TECHNOLOGY",
-        headline: "Stale targeted item",
+        headline: "Stale scheduled item",
         summary: "Older than 48h and should be rejected even off-schedule.",
         url: "https://example.com/stale",
         source_domain: "example.com",
@@ -96,14 +96,14 @@ async function main() {
       selectionTarget: 5,
       customTags: [],
       tagPriority: ["TECHNOLOGY"],
-      runMode: "targeted",
+      runMode: "scheduled",
       digestDateKey: "2026-03-25",
       dueUsersCount: 1,
       standardFetchCallsPlanned: 1,
       scoringConfig: {},
     }),
     /No live items available after freshness and selection filters; digest aborted/,
-    "targeted runs must obey the hard 48h freshness cap and abort instead of falling back to archive content"
+    "scheduled runs must obey the hard 48h freshness cap and abort instead of falling back to archive content"
   );
 
   assert.strictEqual(archiveFallbackCalls, 0, "selection runtime must not use archive rescue fallback in the active path");

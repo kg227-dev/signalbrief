@@ -23,7 +23,7 @@
   const DEFAULT_TOPICS = Array.isArray(runtime.DEFAULT_TOPICS)
     ? runtime.DEFAULT_TOPICS
     : [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-  const MAX_CUSTOM_KEYWORDS = 0; // MVP: no custom keywords
+  const MAX_CUSTOM_KEYWORDS = 0;
   const TOPIC_LABELS = runtime.TOPIC_LABELS && typeof runtime.TOPIC_LABELS === "object"
     ? runtime.TOPIC_LABELS
     : {};
@@ -62,13 +62,6 @@
     return "custom";
   }
 
-  function normalizeCustomTopicInputFallback(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    return slug ? `custom_${slug}` : "";
-  }
-
   function topicKeyFromInputFallback(value, opts = {}) {
     const raw = String(value || "").trim();
     if (!raw) return "";
@@ -100,23 +93,13 @@
       });
       if (defaultMatch) return defaultMatch;
     }
-    return normalizeCustomTopicInputFallback(raw);
-  }
-
-  function isCustomTopicFallback(topic) {
-    return !DEFAULT_TOPICS.includes(String(topic || ""));
+    return "";
   }
 
   function topicDisplayLabelFallback(topic) {
     const key = String(topic || "");
     if (!key) return "";
-    if (DEFAULT_TOPICS.includes(key)) return TOPIC_LABELS[key] || key;
-    return key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  function normalizeTelegramFallback(value) {
-    const raw = String(value || "").trim().replace(/^@+/, "");
-    return raw || null;
+    return DEFAULT_TOPICS.includes(key) ? (TOPIC_LABELS[key] || key) : key;
   }
 
   function getTopicCatalogFallback() {
@@ -135,12 +118,7 @@
   const loadTopicCatalog = selectRuntimeFn(runtime.loadTopicCatalog, async () => getTopicCatalogFallback());
   const normalizeDay = selectRuntimeFn(runtime.normalizeDay, normalizeDayFallback);
   const normalizeDays = selectRuntimeFn(runtime.normalizeDays, normalizeDaysFallback);
-  const normalizeCustomTopicInput = selectRuntimeFn(
-    runtime.normalizeCustomTopicInput,
-    normalizeCustomTopicInputFallback
-  );
   const topicKeyFromInput = selectRuntimeFn(runtime.topicKeyFromInput, topicKeyFromInputFallback);
-  const isCustomTopic = selectRuntimeFn(runtime.isCustomTopic, isCustomTopicFallback);
   const topicDisplayLabel = selectRuntimeFn(runtime.topicDisplayLabel, topicDisplayLabelFallback);
   const daysFromFrequency = selectRuntimeFn(runtime.daysFromFrequency, daysFromFrequencyFallback);
   const frequencyFromDays = selectRuntimeFn(runtime.frequencyFromDays, frequencyFromDaysFallback);
@@ -152,8 +130,6 @@
     runtime.isEveryday,
     (days) => normalizeDaysFallback(days).length === 7
   );
-  const normalizeTelegram = selectRuntimeFn(runtime.normalizeTelegram, normalizeTelegramFallback);
-
   const createStateFactory = typeof stateRuntime.createPreferenceState === "function"
     ? stateRuntime.createPreferenceState
     : null;
@@ -187,7 +163,6 @@
       name,
       email,
       referralToken,
-      normalizeTelegram,
     });
   }
 
@@ -199,7 +174,6 @@
       state,
       token,
       name,
-      normalizeTelegram,
     });
   }
 
@@ -213,15 +187,12 @@
     getTopicCatalog,
     loadTopicCatalog,
     createPreferenceState,
-    normalizeCustomTopicInput,
     topicKeyFromInput,
     topicDisplayLabel,
-    isCustomTopic,
     isWeekdays,
     isEveryday,
     daysFromFrequency,
     frequencyFromDays,
-    normalizeTelegram,
     buildSignupPayload,
     buildSettingsPayload,
   };

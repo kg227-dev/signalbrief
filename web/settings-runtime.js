@@ -208,15 +208,6 @@ function bindSaveHandler(effectiveToken, user) {
       showError("Please select no more than 3 topics.");
       return;
     }
-    const customCount = prefState.getTopics().filter((topic) => (
-      typeof Prefs.isCustomTopic === "function"
-        ? Prefs.isCustomTopic(topic)
-        : !DEFAULT_TOPICS.includes(String(topic || ""))
-    )).length;
-    if (customCount > MAX_CUSTOM_KEYWORDS) {
-      showError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
-      return;
-    }
 
     saveBtn.disabled = true;
     saveBtn.textContent = "Saving…";

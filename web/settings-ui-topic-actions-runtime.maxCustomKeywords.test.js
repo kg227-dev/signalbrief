@@ -13,9 +13,9 @@ assert.ok(
   !src.includes("Math.max(1,"),
   "Math.max(1, ...) floor must be removed from maxCustomKeywords"
 );
-// The reduced-scope MVP should not keep custom keyword controls in the active settings UI.
+// The reduced-scope MVP should not keep free-form topic controls in the active settings UI.
 assert.ok(
   !src.includes("MAX_CUSTOM_KEYWORDS"),
-  "settings topic actions should not keep active custom keyword controls"
+  "settings topic actions should not keep active free-form topic controls"
 );
 console.log("MAX_CUSTOM_KEYWORDS floor removed ✓");

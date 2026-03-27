@@ -132,7 +132,7 @@ function getAllowedArchiveDates({
   }
 
   // Safety backfill: include most recent delivered digest date from last_digest_at.
-  // This covers cases where digest_dates missed a write on manual/on-demand sends.
+  // This covers cases where digest_dates missed a write on older legacy snapshots.
   const lastDigestDate = toEtDateKey(user.last_digest_at);
   if (lastDigestDate && !allowedList.includes(lastDigestDate)) {
     const lastFile = path.join(archiveDir, `${lastDigestDate}.json`);

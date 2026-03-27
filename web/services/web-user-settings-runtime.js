@@ -98,7 +98,6 @@ function createSettingsHandler({
   allUsers,
   writeUser,
   DEFAULT_TOPICS,
-  MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
 }) {
   return async function handleSettings(ctxOrReq, maybeRes) {
@@ -136,7 +135,6 @@ function createSettingsHandler({
         defaultTopics: DEFAULT_TOPICS,
         minRequired: 1,
         maxTopics: 3,
-        maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
       });
       if (!topicsResult.ok) {
         return json(res, { error: topicsResult.error }, 400);

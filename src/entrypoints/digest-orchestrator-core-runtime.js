@@ -2,7 +2,7 @@
 /**
  * SignalBrief — digest.js
  * Fetches news via Perplexity Sonar, summarizes via Claude,
- * delivers via Telegram + Gmail.
+ * delivers via email.
  */
 
 const fs = require("fs");
@@ -26,8 +26,6 @@ const {
 } = require("../platform/scheduler");
 const { computeDigestQualityScore } = require("../domains/digest");
 const {
-  applyEntityCoverageCap,
-  buildRecentEntityHistory,
   createDigestDeliveryRecordRuntime,
   createDigestPolicies,
 } = require("../domains/digest");
@@ -42,16 +40,9 @@ const {
   buildRepetitionNote,
 } = require("../domains/digest");
 const {
-  buildCustomTopicQueries,
-  customKeywordMatches,
-  filterItemsByTopics,
   annotateEditorialSignals,
-  applyTopicRelevanceScores,
   applyDigestDepth,
-  reserveCustomKeywordSlot,
-  normalizeMatchText,
   normalizeTopicToken,
-  topicsRelated,
 } = require("../domains/digest");
 const { parseSourceDomain: parseSourceDomainShared } = require("../domains/digest");
 const { createDigestFormattingRuntime } = require("../domains/digest");
@@ -88,13 +79,7 @@ const {
   toEtDateString,
   formatEtDateKey,
 } = require("./digest-orchestrator-time-runtime");
-const {
-  loadDomainStats,
-  saveDomainStats,
-  accumulateDomainStats,
-  computeLearnedAuthorityAdjustments,
-} = require("../digest/domain/domain-learning-runtime");
-const { setLearnedDomainAdjustments, setAdminSourceRegistry, setPreferredSourceRegistry } = require("../domains/digest");
+const { setAdminSourceRegistry, setPreferredSourceRegistry } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 const { createDigestRetryStateRuntime } = require("../runtime/digest-retry-state-runtime");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
@@ -140,7 +125,11 @@ const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_L
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,
-  sourceRegistryPath: RUNTIME_PATHS.sourceRegistryPath,
+  appRoot: APP_ROOT,
+  env: process.env,
+  nodeEnv: process.env.NODE_ENV,
+  standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
+  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
 const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
   fs,
@@ -274,7 +263,7 @@ function getDigestOrchestratorIncidentRuntime() {
       incidentStorePath: INCIDENT_STORE,
       log,
       formatEtDateKey,
-      resolveOpsAlertTarget: () => process.env.OPS_ALERT_CHAT_ID || CONFIG?.user?.telegramChatId || null,
+      resolveOpsAlertTarget: () => process.env.OPS_ALERT_EMAIL || CONFIG?.admin?.email || null,
       sendOpsAlert,
     });
   }
@@ -366,10 +355,6 @@ function getDigestFormattingRuntime() {
       httpsPostWithRetry,
       buildPublicDigestUrl,
       normalizeTopicToken,
-      customKeywordMatches,
-      normalizeMatchText,
-      headlineFingerprint,
-      normalizeUrlForDedup,
     });
   }
   return digestFormattingRuntimeCache;
@@ -481,20 +466,8 @@ function topicVisual(...args) {
   return getDigestFormattingRuntime().topicVisual(...args);
 }
 
-function buildCustomRescueItemsFromStandard(...args) {
-  return getDigestFormattingRuntime().buildCustomRescueItemsFromStandard(...args);
-}
-
 function escapeHtml(...args) {
   return getDigestFormattingRuntime().escapeHtml(...args);
-}
-
-function formatTelegram(...args) {
-  return getDigestFormattingRuntime().formatTelegram(...args);
-}
-
-function buildDigestInlineKeyboard(...args) {
-  return getDigestFormattingRuntime().buildDigestInlineKeyboard(...args);
 }
 
 function buildEmailHeaderMeta(...args) {
@@ -539,14 +512,6 @@ function dedupAgainstRecentArchives(...args) {
 
 function buildRecentRepeatIndex(...args) {
   return getDigestArchiveRuntime().buildRecentRepeatIndex(...args);
-}
-
-function isRecentRepeatItem(...args) {
-  return getDigestArchiveRuntime().isRecentRepeatItem(...args);
-}
-
-function suppressRecentlySentForUser(...args) {
-  return getDigestArchiveRuntime().suppressRecentlySentForUser(...args);
 }
 
 function persistSharedArchive(...args) {
@@ -671,8 +636,6 @@ function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selec
 function serializeFetchTopicDiagnostics(fetchDiagnostics) {
   return (Array.isArray(fetchDiagnostics?.topic_diagnostics) ? fetchDiagnostics.topic_diagnostics : []).map((topic) => ({
     tag: String(topic?.tag || "").trim().toUpperCase() || null,
-    custom_slug: String(topic?.custom_slug || "").trim() || null,
-    is_custom: topic?.is_custom === true,
     coverage_status: String(topic?.coverage_status || "").trim() || null,
     unique_item_count: Number(topic?.unique_item_count || 0),
     usable_item_count: Number(topic?.usable_item_count || 0),
@@ -843,36 +806,37 @@ function prepareStorylinePool(...args) {
 
 // ── 6. Send ops alerts via configured transport ───────────────────────────────
 
-async function sendOpsAlert(text, chatId, extra = {}) {
-  const targetId = chatId || CONFIG.user.telegramChatId;
-  logEvent("info", "digest.delivery.telegram", {
-    user_id: String(targetId || ""),
-    provider: "telegram",
+async function sendOpsAlert(text, targetEmail, extra = {}) {
+  const target = String(targetEmail || process.env.OPS_ALERT_EMAIL || CONFIG?.admin?.email || "").trim();
+  const message = String(text || "").trim();
+  if (!target || !message) return;
+  logEvent("info", "digest.delivery.ops_alert", {
+    user_id: target,
+    provider: "email",
     outcome: "attempt",
   });
-  const token = CONFIG.keys.signalBriefBotToken;
-  const res = await httpsPostWithRetry(
-    "api.telegram.org", `/bot${token}/sendMessage`,
-    { "Content-Type": "application/json" },
-    { chat_id: targetId, text, parse_mode: "Markdown", disable_web_page_preview: false, ...extra }
-  );
-  if (res.body?.ok) {
-    logEvent("info", "digest.delivery.telegram", {
-      user_id: String(targetId || ""),
-      provider: "telegram",
+  const subject = String(extra?.subject || "[SignalBrief] Digest incident").trim() || "[SignalBrief] Digest incident";
+  const html = [
+    "<div>",
+    "<p><strong>SignalBrief ops alert</strong></p>",
+    `<pre style="white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${escapeHtml(message)}</pre>`,
+    "</div>",
+  ].join("");
+  const result = await sendEmailViaMailer(target, subject, html);
+  if (result.ok) {
+    logEvent("info", "digest.delivery.ops_alert", {
+      user_id: target,
+      provider: String(result.via || "email"),
       outcome: "sent",
     });
     return;
   }
-  const detail = res.body?.description || JSON.stringify(res.body) || `status ${res.status}`;
-  logEvent("error", "digest.delivery.telegram", {
-    user_id: String(targetId || ""),
-    provider: "telegram",
+  logEvent("error", "digest.delivery.ops_alert", {
+    user_id: target,
+    provider: String(result.via || "email"),
     outcome: "failed",
-    detail,
-    status: Number(res.status || 0),
   });
-  throw new Error(`telegram send failed: ${detail}`);
+  throw new Error(`ops alert send failed via ${result.via || "mailer"}`);
 }
 
 // ── 7. Send Email (via mailer.js — Resend if configured, Gmail fallback) ──────
@@ -907,28 +871,20 @@ async function sendEmail(toEmail, subject, html, token = null) {
 
 async function main() {
   ensureDigestRuntimeBootstrap();
-  // Support --chatId flag for on-demand single-user delivery (/digest command)
   const args = process.argv.slice(2);
-  const chatIdIdx = args.indexOf("--chatId");
-  const targetChatId = chatIdIdx !== -1 ? args[chatIdIdx + 1] : null;
   const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
   const suppressWelcome = args.includes("--suppressWelcome");
-  const runMode = targetChatId ? "targeted" : "scheduled";
-  if (runMode === "targeted") {
-    log("Targeted/on-demand digest mode is disabled in email-only MVP");
-    logEvent("info", "digest.run.skipped", { provider: "orchestrator", outcome: "targeted_mode_disabled", mode: runMode });
-    process.exit(0);
-  }
+  const runMode = "scheduled";
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
   setDigestLoggerContext({
     run_id: runId,
-    user_id: targetChatId ? String(targetChatId) : null,
+    user_id: null,
   });
   logEvent("info", "digest.run.started", {
     provider: "orchestrator",
     outcome: "started",
     mode: runMode,
-    target_chat_id: targetChatId ? String(targetChatId) : null,
+    target_chat_id: null,
   });
   const allowExampleEmails = (
     String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
@@ -955,7 +911,6 @@ async function main() {
 
   // ── Check who's due BEFORE any API calls ──────────────────────────────────
   const dueContext = resolveDueUsers({
-    targetChatId,
     allUsers,
     USER_STATUS,
     getEtNow,
@@ -969,7 +924,7 @@ async function main() {
   const digestDateKey = String(dueContext?.todayET || "").trim() || formatEtDateKey(new Date());
   let dueUsers = Array.isArray(dueContext?.dueUsers) ? dueContext.dueUsers.slice() : [];
 
-  if (!targetChatId && dueUsers.length > 0) {
+  if (dueUsers.length > 0) {
     const digestDeliveryRecordRuntime = getDigestDeliveryRecordRuntime();
     const preflight = filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime);
     dueUsers = preflight.dueUsers;
@@ -989,14 +944,6 @@ async function main() {
   }
 
   if (dueUsers.length === 0) {
-    if (targetChatId) {
-      logEvent("warn", "digest.run.skipped", {
-        provider: "scheduler",
-        outcome: "target_not_due",
-      });
-      log(`No active user found for on-demand chatId ${targetChatId}`);
-      process.exit(2);
-    }
     logEvent("info", "digest.run.skipped", {
       provider: "scheduler",
       outcome: "no_due_users",
@@ -1005,53 +952,49 @@ async function main() {
   }
 
   // ── Pre-spend admission gate (scheduled runs only) ─────────────────────────
-  if (!targetChatId) {
-    const spendGuard = getDigestOrchestratorSpendGuardRuntime();
-    const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
-    const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
-      circuitBreakerRuntime: circuitBreaker,
-      spendGuardRuntime: spendGuard,
-      rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
-      rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
-      dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
-      log,
+  const spendGuard = getDigestOrchestratorSpendGuardRuntime();
+  const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
+  const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
+    circuitBreakerRuntime: circuitBreaker,
+    spendGuardRuntime: spendGuard,
+    rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
+    rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
+    dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
+    log,
+  });
+  const gate = admissionGate.checkScheduledAdmission({
+    dueUsers,
+    dateEt: digestDateKey,
+    retryStateRuntime: getDigestRetryStateRuntime(),
+  });
+  if (!gate.allowed) {
+    logEvent("warn", "digest.run.blocked", {
+      provider: "admission-gate",
+      outcome: gate.runValueState,
+      blocked_reason: gate.blockedReason,
+      due_users: dueUsers.length,
+      date_et: digestDateKey,
     });
-    const gate = admissionGate.checkScheduledAdmission({
+    log(`⛔ Admission gate blocked: ${gate.blockedReason} (${dueUsers.length} due user(s), date=${digestDateKey})`);
+    recordRunCost({
+      now: new Date(),
+      runId,
+      standardFetchCalls: 0,
+      claudeUsage: {},
       dueUsers,
-      dateEt: digestDateKey,
-      retryStateRuntime: getDigestRetryStateRuntime(),
+      deliveredUsers: [],
+      failedUsers: [],
+      publicDigestUrl: "",
+      runValueState: gate.runValueState,
+      blockedReason: gate.blockedReason,
     });
-    if (!gate.allowed) {
-      logEvent("warn", "digest.run.blocked", {
-        provider: "admission-gate",
-        outcome: gate.runValueState,
-        blocked_reason: gate.blockedReason,
-        due_users: dueUsers.length,
-        date_et: digestDateKey,
-      });
-      log(`⛔ Admission gate blocked: ${gate.blockedReason} (${dueUsers.length} due user(s), date=${digestDateKey})`);
-      recordRunCost({
-        now: new Date(),
-        runId,
-        targetChatId: null,
-        standardFetchCalls: 0,
-        customFetchCalls: 0,
-        claudeUsage: {},
-        dueUsers,
-        deliveredUsers: [],
-        failedUsers: [],
-        publicDigestUrl: "",
-        runValueState: gate.runValueState,
-        blockedReason: gate.blockedReason,
-      });
-      releaseDigestLock(runMode);
-      process.exit(0);
-    }
-    if (gate.eligibleUsers.length < dueUsers.length) {
-      const filtered = dueUsers.length - gate.eligibleUsers.length;
-      log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
-      dueUsers = gate.eligibleUsers;
-    }
+    releaseDigestLock(runMode);
+    process.exit(0);
+  }
+  if (gate.eligibleUsers.length < dueUsers.length) {
+    const filtered = dueUsers.length - gate.eligibleUsers.length;
+    log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
+    dueUsers = gate.eligibleUsers;
   }
 
   if (dryRun) {
@@ -1065,12 +1008,11 @@ async function main() {
     process.exit(0);
   }
 
-  if (targetChatId) log(`=== SignalBrief on-demand for ${targetChatId} ===`);
-  else log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
+  log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
 
   const now = new Date();
   const triggerSource = String(process.env.SIGNALBRIEF_DIGEST_TRIGGER_SOURCE || "").trim();
-  const deliveryMode = resolveDeliveryModeFromTrigger(triggerSource, targetChatId);
+  const deliveryMode = resolveDeliveryModeFromTrigger(triggerSource);
   const deliveryEventSource = resolveDeliveryEventSource(deliveryMode);
   const dateStr = now.toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -1080,7 +1022,6 @@ async function main() {
     month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
   });
   const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
-  const domainStats = loadDomainStats();
   const sourceRegistry = sourceRegistryRuntime.loadSourceRegistry();
   setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistry));
   if (sourceRegistry && sourceRegistry.domains && Object.keys(sourceRegistry.domains).length > 0) {
@@ -1113,11 +1054,6 @@ async function main() {
     if (brokerShortlists && brokerShortlists.source_of_truth === "standard_topic_broker") return brokerShortlists;
     return preferredSourceRegistryRuntime.buildPreferredSourceFamilyShortlists(preferredSourceRegistry, options);
   }
-  const learnedAdjustments = computeLearnedAuthorityAdjustments(domainStats);
-  if (learnedAdjustments.size > 0) {
-    setLearnedDomainAdjustments(learnedAdjustments);
-    log(`[domain-learning] ${learnedAdjustments.size} learned domain adjustment(s) applied`);
-  }
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG,
     log,
@@ -1125,8 +1061,6 @@ async function main() {
     fetchTopicNews,
     buildPreferredDomainShortlist: buildActivePreferredDomainShortlist,
     buildPreferredSourceFamilyShortlists: buildActivePreferredSourceFamilyShortlists,
-    buildCustomTopicQueries,
-    buildCustomRescueItemsFromStandard,
     emitDigestIncident,
     normalizeUrlForDedup,
     isFetchedItemEligible: (item) => {
@@ -1140,14 +1074,11 @@ async function main() {
     selectionTarget,
     tagPriority,
     allItems: fetchedItems,
-    customTags,
     standardFetchCallsPlanned,
     standardFetchCalls,
-    customFetchCalls,
     fetchDiagnostics,
   } = await fetchRuntime.orchestrateFetch({
     dueUsers,
-    targetChatId,
     runMode,
   });
   let allItems = fetchedItems;
@@ -1185,7 +1116,6 @@ async function main() {
   } = await selectionRuntime.selectForEnrichment({
     allItems,
     selectionTarget,
-    customTags,
     tagPriority,
     runMode,
     digestDateKey,
@@ -1232,7 +1162,6 @@ async function main() {
     now,
     enriched: storylinePool,
     dateStr,
-    targetChatId,
   });
 
   log(`Delivering to ${dueUsers.length} user(s)...`);
@@ -1242,14 +1171,7 @@ async function main() {
     CONFIG,
     log,
     writeUser,
-    filterItemsByTopics,
-    applyTopicRelevanceScores,
-    buildRecentEntityHistory,
-    suppressRecentlySentForUser,
-    isRecentRepeatItem,
     parseSourceDomain,
-    applyEntityCoverageCap,
-    reserveCustomKeywordSlot,
     applyDigestDepth,
     computeDigestQualityScore,
     buildDigestId,
@@ -1291,7 +1213,6 @@ async function main() {
       rankingPolicy,
       publicDigestUrl,
       suppressWelcome,
-      targetChatId,
       deliveryMode,
       deliveryEventSource,
       claudeUsage,
@@ -1336,14 +1257,14 @@ async function main() {
     failedUsers = deliveryResult.failedUsers;
 
     // ── Post-delivery: circuit breaker evaluation and spend recording ───────
-    if (!targetChatId && Array.isArray(failedUsers) && Array.isArray(deliveredUsers)) {
+    if (Array.isArray(failedUsers) && Array.isArray(deliveredUsers)) {
       const spendRuntime = getDigestOrchestratorSpendGuardRuntime();
       const cbRuntime = getDigestOrchestratorCircuitBreakerRuntime();
 
       // Record zero-value runs per user to spend guard
       if (failedUsers.length > 0) {
-        const zeroCostPerUser = standardFetchCalls > 0 || customFetchCalls > 0
-          ? ((standardFetchCalls + customFetchCalls) * 0.005) / failedUsers.length
+        const zeroCostPerUser = standardFetchCalls > 0
+          ? (standardFetchCalls * 0.005) / failedUsers.length
           : 0;
         for (const failed of failedUsers) {
           spendRuntime.recordZeroValueRun({
@@ -1403,24 +1324,12 @@ async function main() {
       }
     }
 
-    // Accumulate domain stats from delivered items for dynamic domain learning
-    try {
-      const deliveredItems = storylinePool;
-      const updatedStats = accumulateDomainStats(deliveredItems, domainStats);
-      saveDomainStats(updatedStats);
-    } catch (_err) {
-      // Non-critical — domain learning failure should not block digest
-    }
-    // Clear learned adjustments after run to avoid stale state
-    setLearnedDomainAdjustments(null);
     setPreferredSourceRegistry(null);
   } finally {
     recordRunCost({
       now,
       runId,
-      targetChatId,
       standardFetchCalls,
-      customFetchCalls,
       claudeUsage,
       dueUsers,
       deliveredUsers,
@@ -1437,16 +1346,6 @@ async function main() {
     failed_users: failedUsers.length,
   });
   log(`=== SignalBrief complete — ${deliveredUsers.length}/${dueUsers.length} user(s) delivered ===`);
-  if (targetChatId && deliveredUsers.length === 0) {
-    logEvent("warn", "digest.run.completed", {
-      provider: "orchestrator",
-      outcome: "target_delivery_missed",
-      due_users: dueUsers.length,
-      delivered_users: deliveredUsers.length,
-      failed_users: failedUsers.length,
-    });
-    process.exit(3);
-  }
 }
 
 function runCli() {
@@ -1477,7 +1376,6 @@ module.exports = {
   writeDigestAuditLog,
 
   // Formatting
-  formatTelegram,
   buildEmail,
   buildEmailHeaderMeta,
   renderDigestItemHtml,
@@ -1486,7 +1384,6 @@ module.exports = {
   topicVisual,
   scoreColor,
   stripInlineHtml,
-  buildDigestInlineKeyboard,
   generateLeadSubjectLine,
   generateEditorialNote,
 

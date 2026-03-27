@@ -393,9 +393,6 @@ async function sendEmail(to, subject, html, token = null) {
 const {
   sendWelcomeEmail,
   sendReferralThankYou,
-  sendReengagementDay4Email,
-  sendReengagementDay8Email,
-  sendAutoPauseConfirmationEmail,
 } = createLifecycleMailer({
   sendEmail,
   getBaseUrl,
@@ -408,9 +405,6 @@ module.exports = {
   sendEmail,
   sendWelcomeEmail,
   sendReferralThankYou,
-  sendReengagementDay4Email,
-  sendReengagementDay8Email,
-  sendAutoPauseConfirmationEmail,
   buildOpenTrackingPixel,
   signUnsubEmail,
   verifyUnsubEmailSignature,

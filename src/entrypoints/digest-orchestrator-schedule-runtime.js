@@ -34,7 +34,6 @@ function hasExhaustedScheduledRetryBudget(retryState) {
 
 function resolveDueUsers(deps) {
   const {
-    targetChatId,
     allUsers,
     USER_STATUS,
     getEtNow,
@@ -59,63 +58,58 @@ function resolveDueUsers(deps) {
     ? activeUsers
     : activeUsers.filter((user) => !/@example\.com$/i.test(String(user?.email || "").trim()));
   const blockedExampleCount = activeUsers.length - allActive.length;
-  if (blockedExampleCount > 0 && !targetChatId) {
+  if (blockedExampleCount > 0) {
     log(`[schedule] excluded ${blockedExampleCount} @example.com account(s) from production delivery`);
   }
 
-  let dueUsers;
-  if (targetChatId) {
-    dueUsers = allActive.filter((user) => user.chatId === targetChatId && hasScheduledDeliveryChannel(user));
-  } else {
-    const todayDOW = Number.isInteger(etNow.todayDOW) ? etNow.todayDOW : now.getDay();
-    const catchupWindowMinutes = Math.max(
-      30,
-      Number(CONFIG?.digest?.catchupWindowMinutes || 60)
-    );
-    dueUsers = allActive.filter((user) => {
-      const prefs = user.preferences || {};
-      const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
-        ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
-        : null;
-      if (!hasScheduledDeliveryChannel(user)) {
-        return false;
-      }
-      if (isTerminalRetryOutcome(retryState?.delivery_outcome)) {
-        return false;
-      }
-      if (hasExhaustedScheduledRetryBudget(retryState)) {
-        return false;
-      }
-      if (retryState?.underfill_reason
-        && NON_RETRYABLE_UNDERFILL_REASONS.has(String(retryState.underfill_reason))) {
-        return false;
-      }
-      if (retryState?.retry_pending === true) {
-        const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
-        if (Number.isFinite(nextRetryAt) && now.getTime() < nextRetryAt) return false;
-        return true;
-      }
-      const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
-      if (!allowedDays.includes(todayDOW)) return false;
-      if (toEtDateString(user.last_digest_at) === todayET) return false;
+  const todayDOW = Number.isInteger(etNow.todayDOW) ? etNow.todayDOW : now.getDay();
+  const catchupWindowMinutes = Math.max(
+    30,
+    Number(CONFIG?.digest?.catchupWindowMinutes || 60)
+  );
+  const dueUsers = allActive.filter((user) => {
+    const prefs = user.preferences || {};
+    const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
+      ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
+      : null;
+    if (!hasScheduledDeliveryChannel(user)) {
+      return false;
+    }
+    if (isTerminalRetryOutcome(retryState?.delivery_outcome)) {
+      return false;
+    }
+    if (hasExhaustedScheduledRetryBudget(retryState)) {
+      return false;
+    }
+    if (retryState?.underfill_reason
+      && NON_RETRYABLE_UNDERFILL_REASONS.has(String(retryState.underfill_reason))) {
+      return false;
+    }
+    if (retryState?.retry_pending === true) {
+      const nextRetryAt = Date.parse(String(retryState?.next_retry_at || ""));
+      if (Number.isFinite(nextRetryAt) && now.getTime() < nextRetryAt) return false;
+      return true;
+    }
+    const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
+    if (!allowedDays.includes(todayDOW)) return false;
+    if (toEtDateString(user.last_digest_at) === todayET) return false;
 
-      const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
-      const userMinutes = dh * 60 + dm;
-      let diff = nowMinutes - userMinutes;
-      if (diff < -(12 * 60)) diff += 24 * 60;
-      if (diff > (12 * 60)) diff -= 24 * 60;
-      return diff >= 0 && diff <= catchupWindowMinutes;
-    }).map((user) => {
-      const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
-        ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
-        : null;
-      return retryState
-        ? { ...user, __digest_retry: { ...retryState } }
-        : user;
-    });
-  }
+    const [dh, dm] = (prefs.delivery_time || "07:00").split(":").map(Number);
+    const userMinutes = dh * 60 + dm;
+    let diff = nowMinutes - userMinutes;
+    if (diff < -(12 * 60)) diff += 24 * 60;
+    if (diff > (12 * 60)) diff -= 24 * 60;
+    return diff >= 0 && diff <= catchupWindowMinutes;
+  }).map((user) => {
+    const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
+      ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
+      : null;
+    return retryState
+      ? { ...user, __digest_retry: { ...retryState } }
+      : user;
+  });
 
-  if (!targetChatId && allActive.length > 0) {
+  if (allActive.length > 0) {
     const parts = allActive.map((user) => {
       const prefs = user.preferences || {};
       const alreadyToday = toEtDateString(user.last_digest_at) === todayET;

@@ -22,7 +22,6 @@ function createSignupHandler({
   sendWelcomeEmail,
   resolveBaseUrl,
   DEFAULT_TOPICS,
-  MAX_CUSTOM_KEYWORDS,
   allowExampleEmails,
 }) {
   return async function handleSignup(ctxOrReq, maybeRes) {
@@ -34,7 +33,6 @@ function createSignupHandler({
       body,
       normalizeReferralToken,
       defaultTopics: DEFAULT_TOPICS,
-      maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
       allowExampleEmails,
     });
     if (!parsedInput.ok) return json(res, { error: parsedInput.error }, parsedInput.status);

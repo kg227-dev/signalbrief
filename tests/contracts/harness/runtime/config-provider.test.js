@@ -39,7 +39,6 @@ const tempConfigPath = path.join(tempDir, "config.test.json");
 const testConfig = {
   user: {
     email: "user@example.com",
-    telegramChatId: "12345",
     deliveryTime: "07:00",
     timezone: "America/New_York",
   },
@@ -65,8 +64,6 @@ const testConfig = {
     googleRefreshToken: "",
     googleClientId: "",
     googleClientSecret: "",
-    telegramBotToken: "",
-    signalBriefBotToken: "",
     resendApiKey: "",
     fromEmail: "digest@example.com",
     fromName: "SignalBrief",

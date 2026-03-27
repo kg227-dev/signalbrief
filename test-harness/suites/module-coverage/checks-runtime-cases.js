@@ -1,22 +1,19 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const reengagement = require("../../../src/jobs/reengagement-runtime");
 const engagementEvents = require("../../../src/runtime/engagement/engagement-events-runtime");
-const { normalizeIntentPayload } = require("../../../src/runtime/reply/intent-service");
+const { createDefaultUser, normalizeUserRecord } = require("../../../src/runtime/user-contract-runtime");
 
-function buildReengagementStateCheck(check) {
-  return check("reengagement state normalization fills missing fields", () => {
-    const state = reengagement.normalizeReengagementState({ day4_sent_at: "2026-03-01T00:00:00.000Z" });
-    return state.day4_sent_at && state.day8_sent_at === null && state.auto_paused_at === null && state.reactivated_at === null;
-  });
-}
-
-function buildDaysSinceCheck(check) {
-  return check("daysSince handles invalid input and floored day math", () => {
-    const invalid = reengagement.daysSince("bad-date", Date.parse("2026-03-06T12:00:00.000Z"));
-    const valid = reengagement.daysSince("2026-03-01T00:00:00.000Z", Date.parse("2026-03-06T12:00:00.000Z"));
-    return invalid === null && valid === 5;
+function buildDefaultUserCheck(check) {
+  return check("default user record stays email-only and reduced-scope", () => {
+    const user = createDefaultUser("user-1", "2026-03-01T00:00:00.000Z");
+    return (
+      user.chatId === "user-1"
+      && user.preferences.email_enabled === true
+      && Array.isArray(user.topics)
+      && Object.prototype.hasOwnProperty.call(user, "reengagement_state") === false
+      && Object.prototype.hasOwnProperty.call(user, "auto_learning") === false
+    );
   });
 }
 
@@ -75,35 +72,35 @@ function buildEngagementEventsCheck(check) {
   });
 }
 
-function buildNormalizeIntentPayloadCheck(check) {
-  return check("normalizeIntentPayload enforces action/items/topic/question shape", () => {
-    const save = normalizeIntentPayload({
-      action: "save",
-      items: [1, "x", -2, 1, 99, 3],
-      topic: { nope: true },
-      question: 42,
+function buildNormalizeUserRecordCheck(check) {
+  return check("normalizeUserRecord strips legacy Telegram and custom-topic fields", () => {
+    const user = normalizeUserRecord({
+      chatId: "user-1",
+      email: "user@example.com",
+      status: "active",
+      topics: ["TECHNOLOGY", "custom_ai"],
+      telegram: { chat_id: "12345" },
+      bookmarks: ["https://example.com/a"],
+      custom_topics: ["custom_ai"],
+      preferences: {
+        email_enabled: true,
+        telegram_enabled: true,
+        delivery_time: "07:00",
+      },
     });
-    const question = normalizeIntentPayload(
-      { action: "question", question: { nested: true } },
-      { fallbackQuestion: "what does this mean?" }
-    );
-    const badTopic = normalizeIntentPayload({ action: "topic_more", topic: "   " });
 
     return (
-      save.action === "save"
-      && JSON.stringify(save.items) === JSON.stringify([1, 3])
-      && save.topic === null
-      && save.question === null
-      && question.action === "question"
-      && question.question === "what does this mean?"
-      && badTopic.action === "unknown"
+      JSON.stringify(user.topics) === JSON.stringify(["TECHNOLOGY"])
+      && Object.prototype.hasOwnProperty.call(user, "telegram") === false
+      && Object.prototype.hasOwnProperty.call(user, "bookmarks") === false
+      && Object.prototype.hasOwnProperty.call(user, "custom_topics") === false
+      && Object.prototype.hasOwnProperty.call(user.preferences, "telegram_enabled") === false
     );
   });
 }
 
 module.exports = {
-  buildReengagementStateCheck,
-  buildDaysSinceCheck,
+  buildDefaultUserCheck,
   buildEngagementEventsCheck,
-  buildNormalizeIntentPayloadCheck,
+  buildNormalizeUserRecordCheck,
 };

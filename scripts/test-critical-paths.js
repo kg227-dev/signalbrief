@@ -3,7 +3,6 @@
 
 const assert = require("assert");
 const { spawnSync } = require("child_process");
-const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -79,7 +78,6 @@ function buildCoreDeps(overrides = {}) {
     handleSettings: () => ({ ok: true }),
     allUsers: () => [],
     writeUser: () => {},
-    blankReengagementState: () => ({ day4_sent_at: null, day8_sent_at: null, auto_paused_at: null, reactivated_at: null }),
     isLegacyArchiveEndpointEnabled: () => true,
     recordLegacyArchiveUsage: () => {},
     ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC: "2026-06-30T00:00:00Z",
@@ -93,7 +91,6 @@ function buildCoreDeps(overrides = {}) {
     buildDigestId: () => "digest-id",
     toEtDateKey: () => "2026-03-06",
     appendEngagementEventChecked: () => ({ ok: true }),
-    resetReengagementState: () => ({ day4_sent_at: null, day8_sent_at: null, auto_paused_at: null, reactivated_at: null }),
     sendTransparentGif: () => {},
     normalizeEngagementUrl: (value) => String(value || ""),
     requireJsonBody: async () => ({}),
@@ -268,7 +265,6 @@ function buildAdminDeps(overrides = {}) {
     }),
     readSchedulerHeartbeat: () => null,
     allUsers: () => [],
-    getRecentAutoAdjustmentsForUser: () => [],
     readJsonLineLog: () => [],
     ADMIN_ACTION_LOG: path.join(os.tmpdir(), "sb-admin-action-log.json"),
     ADMIN_MESSAGE_LOG: path.join(os.tmpdir(), "sb-admin-message-log.json"),
@@ -500,7 +496,6 @@ async function testSettingsInputNormalizationContract() {
       "digest_dates",
       "last_email_open_at",
       "email_opens_total",
-      "reengagement_state",
       "custom_topics",
       "signup_referral_source",
     ],
@@ -548,7 +543,7 @@ async function testConfigSchemaContract() {
   const invalid = {
     user: { email: "", deliveryTime: "7am", timezone: "" },
     digest: { itemCount: 0 },
-    topics: [{ tag: "AI×TECH", queries: [] }],
+    topics: [{ tag: "TECHNOLOGY", queries: [] }],
     admin: { email: "", salt: "", passwordHash: "" },
     keys: {},
   };
@@ -574,10 +569,6 @@ async function testMailerResultContract() {
   assert.strictEqual(emptySend.via, "none", "sendEmail missing recipient should report via=none");
   assert.strictEqual(emptySend.skipped, true, "sendEmail missing recipient should be marked skipped");
   assert.ok(typeof emptySend.error === "string" && emptySend.error.length > 0, "sendEmail should include an error message");
-
-  const day4 = await mailer.sendReengagementDay4Email({});
-  assert.strictEqual(day4.via, "none", "lifecycle mail skip should use same contract");
-  assert.strictEqual(day4.skipped, true, "lifecycle mail skip should be marked skipped");
 
   const welcome = await mailer.sendWelcomeEmail({
     name: "Contract Tester",
@@ -702,84 +693,6 @@ async function testAdminLocalBypassContract() {
   }
 }
 
-async function testReplyHandlerCommandFlow() {
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sb-critical-"));
-  const dataDir = path.join(tmpRoot, "data");
-  const transportLog = path.join(tmpRoot, "transport.log");
-  const settingsLinkValue = `critical-${crypto.randomUUID()}`;
-  const prevDataDir = process.env.SIGNALBRIEF_DATA_DIR;
-  const prevDryRun = process.env.SIGNALBRIEF_TRANSPORT_DRY_RUN;
-  const prevLogFile = process.env.SIGNALBRIEF_TRANSPORT_LOG_FILE;
-  const prevBaseUrl = process.env.BASE_URL;
-
-  try {
-    fs.mkdirSync(dataDir, { recursive: true });
-
-    process.env.SIGNALBRIEF_DATA_DIR = dataDir;
-    process.env.SIGNALBRIEF_TRANSPORT_DRY_RUN = "1";
-    process.env.SIGNALBRIEF_TRANSPORT_LOG_FILE = transportLog;
-    process.env.BASE_URL = process.env.BASE_URL || "http://localhost:3003";
-
-    store.resetStoreState({ dataDir, initialize: true });
-    store.writeUser("chat-critical", {
-      chatId: "chat-critical",
-      token: settingsLinkValue,
-      name: "Critical Tester",
-      email: "critical@example.com",
-      status: "active",
-      digests_received: 3,
-      bookmarks: [],
-      topic_weights: {},
-      custom_topics: [],
-      digest_dates: [],
-      last_digest_items: [],
-      preferences: {
-        delivery_time: "07:00",
-        frequency: "daily_weekday",
-        days_of_week: [1, 2, 3, 4, 5],
-        items_per_digest: 5,
-        timezone: "America/New_York",
-        email_enabled: true,
-        telegram_enabled: true,
-      },
-    });
-
-    const {
-      handleIncomingMessage,
-      resetReplyRuntimeState,
-    } = require("../src/runtime/reply/reply-handler-runtime");
-    resetReplyRuntimeState();
-    await handleIncomingMessage("/settings", "chat-critical");
-
-    const lines = fs.existsSync(transportLog)
-      ? fs.readFileSync(transportLog, "utf8").trim().split("\n").filter(Boolean)
-      : [];
-    assert.ok(lines.length > 0, "reply-handler should emit at least one transport call");
-    const sent = lines
-      .map((line) => {
-        try { return JSON.parse(line); } catch { return null; }
-      })
-      .filter(Boolean)
-      .find((entry) => entry.kind === "telegram" && entry.method === "sendMessage");
-    assert.ok(sent, "reply-handler should call Telegram sendMessage");
-    assert.strictEqual(String(sent.payload.chat_id), "chat-critical", "reply-handler should target the requested chat");
-    assert.ok(
-      String(sent.payload.text || "").includes(`/settings?token=${settingsLinkValue}`),
-      "reply-handler /settings should include personalized settings link"
-    );
-  } finally {
-    if (prevDataDir == null) delete process.env.SIGNALBRIEF_DATA_DIR;
-    else process.env.SIGNALBRIEF_DATA_DIR = prevDataDir;
-    if (prevDryRun == null) delete process.env.SIGNALBRIEF_TRANSPORT_DRY_RUN;
-    else process.env.SIGNALBRIEF_TRANSPORT_DRY_RUN = prevDryRun;
-    if (prevLogFile == null) delete process.env.SIGNALBRIEF_TRANSPORT_LOG_FILE;
-    else process.env.SIGNALBRIEF_TRANSPORT_LOG_FILE = prevLogFile;
-    if (prevBaseUrl == null) delete process.env.BASE_URL;
-    else process.env.BASE_URL = prevBaseUrl;
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
-  }
-}
-
 async function main() {
   await testDigestRunnerLockContract();
   log("PASS digest-runner lock contract");
@@ -810,9 +723,6 @@ async function main() {
 
   await testAdminLocalBypassContract();
   log("PASS admin local bypass contract");
-
-  await testReplyHandlerCommandFlow();
-  log("PASS reply-handler command flow");
 
   await testModuleCoverageContracts();
   log("PASS module coverage contracts");

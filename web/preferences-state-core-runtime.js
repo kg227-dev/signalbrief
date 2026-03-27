@@ -28,14 +28,6 @@
     return normalizeDaysFn(days).length === 7 ? "daily_all" : "daily_weekday";
   }
 
-  function resolveTelegramNormalizer(normalizeTelegram) {
-    if (typeof normalizeTelegram === "function") return normalizeTelegram;
-    return (value) => {
-      const raw = String(value || "").trim().replace(/^@+/, "");
-      return raw || null;
-    };
-  }
-
   function toPositiveInteger(value, fallback) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
@@ -84,7 +76,6 @@
     buildNormalizeDays,
     defaultDaysFromFrequency,
     defaultFrequencyFromDays,
-    resolveTelegramNormalizer,
     toPositiveInteger,
     createTopicState,
   };

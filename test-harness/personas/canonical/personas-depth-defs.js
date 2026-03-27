@@ -5,8 +5,8 @@ function buildDepthCanonicalPersonaSpecs() {
       name: "Depth Tester A",
       description: "Depth pair A (brief).",
       overrides: {
-        topics: ["AI×TECH", "STRATEGY", "TECHNOLOGY", "POLICY×REGULATORY"],
-        preferences: { depth: "headline_plus_oneliner", items_per_digest: 10 },
+        topics: ["TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"],
+        preferences: { depth: "headline_plus_oneliner" },
       },
     },
     {
@@ -14,8 +14,8 @@ function buildDepthCanonicalPersonaSpecs() {
       name: "Depth Tester B",
       description: "Depth pair B (deep).",
       overrides: {
-        topics: ["AI×TECH", "STRATEGY", "TECHNOLOGY", "POLICY×REGULATORY"],
-        preferences: { depth: "headline_plus_why", items_per_digest: 10 },
+        topics: ["TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"],
+        preferences: { depth: "headline_plus_why" },
       },
     },
   ];

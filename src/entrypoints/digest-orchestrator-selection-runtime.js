@@ -1,6 +1,14 @@
 "use strict";
 
+const {
+  annotateEditorialSignals: annotateEditorialSignalsDefault,
+  buildStorylineCandidates: buildStorylineCandidatesDefault,
+} = require("../domains/digest");
 const { scoreCandidates } = require("../domains/scoring/score-candidate");
+const {
+  assignCanonicalTopic: assignCanonicalTopicDefault,
+  scoreBestFitTopicTag: scoreBestFitTopicTagDefault,
+} = require("../runtime/standard-topic-broker-runtime");
 
 function computeItemAgeHours(item, nowMs) {
   const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
@@ -43,6 +51,103 @@ function toSelectionAuditCandidate(item, extras = {}) {
   };
 }
 
+function normalizeBestFitText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveConfiguredTopicTags(configTopics = []) {
+  return Array.from(new Set(
+    (Array.isArray(configTopics) ? configTopics : [])
+      .map((topic) => String(topic?.tag || "").trim().toUpperCase())
+      .filter(Boolean)
+  ));
+}
+
+function canonicalizeCandidateTopicTags(items = [], opts = {}) {
+  const candidates = Array.isArray(items) ? items : [];
+  const configTopicTags = resolveConfiguredTopicTags(opts.configTopics);
+  const assignCanonicalTopic = typeof opts.assignCanonicalTopic === "function"
+    ? opts.assignCanonicalTopic
+    : assignCanonicalTopicDefault;
+  const scoreBestFitTopicTag = typeof opts.scoreBestFitTopicTag === "function"
+    ? opts.scoreBestFitTopicTag
+    : scoreBestFitTopicTagDefault;
+  if (configTopicTags.length === 0 || typeof assignCanonicalTopic !== "function" || typeof scoreBestFitTopicTag !== "function") {
+    return { items: candidates.slice(), bestFitTopicReassignedCount: 0 };
+  }
+
+  let bestFitTopicReassignedCount = 0;
+  const canonicalized = candidates.map((item) => {
+    const originalTag = String(item?.tag || "").trim().toUpperCase();
+    const fitText = normalizeBestFitText([
+      item?.headline,
+      item?.summary,
+      item?.canonical_url,
+      item?.url,
+      ...(Array.isArray(item?.entity_keys) ? item.entity_keys : []),
+      ...(Array.isArray(item?.content_flags) ? item.content_flags : []),
+    ].filter(Boolean).join(" "));
+    if (!fitText) return item;
+    const bestTag = String(assignCanonicalTopic(configTopicTags, item) || "").trim().toUpperCase();
+    if (!bestTag) return item;
+    const bestScore = Number(scoreBestFitTopicTag(bestTag, fitText) || 0);
+    const currentScore = originalTag ? Number(scoreBestFitTopicTag(originalTag, fitText) || 0) : 0;
+    if (bestScore <= 0 || bestTag === originalTag || bestScore <= currentScore) return item;
+    bestFitTopicReassignedCount += 1;
+    return {
+      ...item,
+      tag: bestTag,
+      original_tag: item?.original_tag || originalTag || null,
+      canonical_topic_reassigned: true,
+    };
+  });
+
+  return {
+    items: canonicalized,
+    bestFitTopicReassignedCount,
+  };
+}
+
+function prepareSelectionCandidates(items = [], opts = {}) {
+  const candidates = Array.isArray(items) ? items.slice() : [];
+  const buildStorylineCandidates = typeof opts.buildStorylineCandidates === "function"
+    ? opts.buildStorylineCandidates
+    : buildStorylineCandidatesDefault;
+  const annotateEditorialSignals = typeof opts.annotateEditorialSignals === "function"
+    ? opts.annotateEditorialSignals
+    : annotateEditorialSignalsDefault;
+
+  let prepared = candidates;
+  let storylineClusterRemovedCount = 0;
+  if (typeof buildStorylineCandidates === "function" && prepared.length > 0) {
+    const clustered = buildStorylineCandidates(prepared);
+    if (Array.isArray(clustered) && clustered.length > 0) {
+      storylineClusterRemovedCount = Math.max(0, prepared.length - clustered.length);
+      prepared = clustered;
+    }
+  }
+
+  const canonicalized = canonicalizeCandidateTopicTags(prepared, opts);
+  prepared = canonicalized.items;
+
+  if (typeof annotateEditorialSignals === "function" && prepared.length > 0) {
+    const annotated = annotateEditorialSignals(prepared);
+    if (Array.isArray(annotated) && annotated.length === prepared.length) {
+      prepared = annotated;
+    }
+  }
+
+  return {
+    items: prepared,
+    storylineClusterRemovedCount,
+    bestFitTopicReassignedCount: canonicalized.bestFitTopicReassignedCount,
+  };
+}
+
 function createDigestOrchestratorSelectionRuntime(deps) {
   const {
     CONFIG,
@@ -64,6 +169,10 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     isUrlExcluded,
     isDomainSuppressed,
     getPinsForDate,
+    annotateEditorialSignals,
+    buildStorylineCandidates,
+    assignCanonicalTopic,
+    scoreBestFitTopicTag,
   } = deps;
 
   async function selectForEnrichment(params) {
@@ -140,6 +249,23 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       }
     }
     const candidatePoolAfterEditorial = Array.isArray(allItems) ? allItems.length : 0;
+    const preparedCandidates = prepareSelectionCandidates(allItems, {
+      configTopics: CONFIG.topics,
+      annotateEditorialSignals,
+      buildStorylineCandidates,
+      assignCanonicalTopic,
+      scoreBestFitTopicTag,
+    });
+    allItems = preparedCandidates.items;
+    const candidatePoolAfterPreparation = Array.isArray(allItems) ? allItems.length : 0;
+    const storylineClusterRemovedCount = Math.max(0, Number(preparedCandidates.storylineClusterRemovedCount || 0));
+    const bestFitTopicReassignedCount = Math.max(0, Number(preparedCandidates.bestFitTopicReassignedCount || 0));
+    if (storylineClusterRemovedCount > 0) {
+      log(`Storyline clustering collapsed ${storylineClusterRemovedCount} same-story candidate(s) before selection`);
+    }
+    if (bestFitTopicReassignedCount > 0) {
+      log(`Best-fit topic arbitration reassigned ${bestFitTopicReassignedCount} candidate(s) to a stronger topic`);
+    }
 
     const crossDayDedupDays = Math.max(1, Number(
       (paramScoringConfig && paramScoringConfig.crossDayDedupDays != null)
@@ -387,11 +513,14 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       selectionDiagnostics: {
         candidate_pool_before_dedup: rawCandidateCount,
         candidate_pool_after_editorial: candidatePoolAfterEditorial,
+        candidate_pool_after_preparation: candidatePoolAfterPreparation,
         candidate_pool_after_archive_dedup: dedupRes.items.length,
         candidate_pool_after_freshness: freshItems.length,
         candidate_pool_after_history: dedupedItems.length,
         candidate_pool_after_story_relationship: annotatedItems.length,
         candidate_pool_after_dedup: dedupedItems.length,
+        storyline_cluster_removed_count: storylineClusterRemovedCount,
+        best_fit_topic_reassigned_count: bestFitTopicReassignedCount,
         candidate_pool_scored: scoredItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
         stale_removed_count: Math.max(0, Number(staleRemoved || 0)),
@@ -420,6 +549,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
 module.exports = {
   createDigestOrchestratorSelectionRuntime,
+  canonicalizeCandidateTopicTags,
   computeItemAgeHours,
+  prepareSelectionCandidates,
   splitByFreshnessTiers,
 };

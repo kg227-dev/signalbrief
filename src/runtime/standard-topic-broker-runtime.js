@@ -1118,6 +1118,8 @@ module.exports = {
   buildBrokerPreferredDomainShortlistFromConfig,
   buildBrokerPreferredTopicEntriesFromConfig,
   buildBrokerPreferredSourceFamilyShortlistsFromConfig,
+  chooseBestFitTopicTag,
   createStandardTopicBrokerRuntime,
+  scoreBestFitTopicTag,
   sanitizeBrokerConfig,
 };

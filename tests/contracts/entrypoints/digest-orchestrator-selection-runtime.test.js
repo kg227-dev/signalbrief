@@ -11,7 +11,12 @@ const TARGET_REL = "src/entrypoints/digest-orchestrator-selection-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
-const { createDigestOrchestratorSelectionRuntime, splitByFreshnessTiers } = runtime;
+const {
+  canonicalizeCandidateTopicTags,
+  createDigestOrchestratorSelectionRuntime,
+  prepareSelectionCandidates,
+  splitByFreshnessTiers,
+} = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
@@ -24,10 +29,31 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(tiers.tier1.length, 1);
   assert.strictEqual(tiers.tier2.length, 1);
   assert.strictEqual(tiers.tier3.length, 1);
+  assert.strictEqual(typeof canonicalizeCandidateTopicTags, "function");
+  assert.strictEqual(typeof prepareSelectionCandidates, "function");
+
+  const prepared = prepareSelectionCandidates([
+    { tag: "TECHNOLOGY", headline: "Hospital software expansion", url: "https://example.com/topic-fit" },
+  ], {
+    configTopics: [{ tag: "HEALTHCARE" }, { tag: "TECHNOLOGY" }],
+    annotateEditorialSignals: (items) => items.map((item) => ({
+      ...item,
+      storyline_key: "hospital-software-expansion",
+      entity_keys: ["hospital"],
+      content_flags: ["commercial_partnership"],
+    })),
+    buildStorylineCandidates: (items) => items,
+    assignCanonicalTopic: () => "HEALTHCARE",
+    scoreBestFitTopicTag: (tag) => (tag === "HEALTHCARE" ? 8 : 1),
+  });
+  assert.strictEqual(prepared.items[0].tag, "HEALTHCARE");
+  assert.strictEqual(prepared.items[0].storyline_key, "hospital-software-expansion");
+  assert.strictEqual(prepared.bestFitTopicReassignedCount, 1);
 
   const incidents = [];
   const selectionRuntime = createDigestOrchestratorSelectionRuntime({
     CONFIG: {
+      topics: [{ tag: "HEALTHCARE" }, { tag: "TECHNOLOGY" }],
       digest: {
         itemCount: 5,
         crossDayDedupDays: 3,

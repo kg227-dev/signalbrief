@@ -5,11 +5,17 @@ const {
 
 function buildActiveTelegramUser(user) {
   const nowIso = new Date().toISOString();
+  const safeUser = user && typeof user === "object" ? user : {};
+  const { telegram, ...restUser } = safeUser;
+  const safePreferences = safeUser.preferences && typeof safeUser.preferences === "object"
+    ? safeUser.preferences
+    : {};
+  const { telegram_enabled, ...restPreferences } = safePreferences;
   return {
-    ...user,
+    ...restUser,
     status: USER_STATUS.ACTIVE,
-    joined_at: user.joined_at || nowIso,
-    preferences: { ...(user.preferences || {}), telegram_enabled: true },
+    joined_at: safeUser.joined_at || nowIso,
+    preferences: { ...restPreferences },
     last_updated: nowIso,
   };
 }

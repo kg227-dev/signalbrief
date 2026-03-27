@@ -1313,7 +1313,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
       <thead>
         <tr>
           <th>User</th>
-          <th title="Includes scheduled, on-demand, and retry runs (may exceed unique digest dates)">Runs (incl. retries)</th>
+          <th title="Includes scheduled, legacy manual, and retry runs (may exceed unique digest dates)">Runs (incl. retries)</th>
           <th>Total cost</th>
           <th>Avg cost / run</th>
         </tr>
@@ -1330,24 +1330,16 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
   <div class="modal-card">
     <div class="modal-head">
       <div>
-        <div class="modal-kicker">User send options</div>
-        <div class="modal-title" id="sendModalTitle">Send to user</div>
+        <div class="modal-kicker">User message</div>
+        <div class="modal-title" id="sendModalTitle">Send message to user</div>
       </div>
       <button class="modal-close" onclick="closeSendModal()" aria-label="Close">×</button>
     </div>
 
-    <div class="modal-mode-row">
-      <button id="sendModeDigestBtn" class="modal-mode-btn active" onclick="setSendMode('digest')">Digest now</button>
-      <button id="sendModeCustomBtn" class="modal-mode-btn" onclick="setSendMode('custom')">Custom message</button>
-    </div>
-
-    <div id="sendDigestPanel" class="modal-panel">
-      <div class="modal-help">
-        Sends a normal digest immediately using this user's configured channels and preferences.
+    <div class="modal-panel">
+      <div class="modal-help" style="margin-bottom:10px;">
+        Email-only MVP mode is active. This sends a direct email message, not a targeted digest.
       </div>
-    </div>
-
-    <div id="sendCustomPanel" class="modal-panel" style="display:none;">
       <div class="modal-channels">
         <label><input type="checkbox" id="sendViaEmail" onchange="syncSendModalState()"> Email</label>
       </div>
@@ -2377,7 +2369,6 @@ let autoRefreshTimer = null;
 let loadInFlight = false;
 const AUTO_REFRESH_MS = 30000;
 let sendModalUser = null;
-let sendMode = "digest";
 let deliveryTimeModalState = { email: "", current: "07:00", triggerBtn: null };
 let subscriberSearchQuery = "";
 let subscriberStatusFilter = "all";
@@ -2543,23 +2534,12 @@ async function apiFetchJson(url, options = {}, maxRetries = 2) {
   return { ok: false, status: 0, data: { error: "Request failed" }, attempts: maxRetries + 1 };
 }
 
-// ── Per-user send tools (digest + custom message) ─────────────────────────────
+// ── Per-user send tools (email-only MVP) ──────────────────────────────────────
 function getSendCapabilities(user) {
-  const canDigest = false;
   const canEmailMessage = !!user.email && user.email_enabled !== false;
   return {
-    canDigest,
     canEmailMessage,
-    canTelegramMessage: false,
     canAnyMessage: canEmailMessage,
-  };
-}
-
-async function runDigestForChat(chatId) {
-  return {
-    ok: false,
-    status: 410,
-    data: { error: "Targeted digests are disabled in the reduced-scope email-only MVP." },
   };
 }
 
@@ -2582,35 +2562,13 @@ function setSendModalFeedback(type, text) {
   box.textContent = text;
 }
 
-function setSendMode(mode) {
-  if (!sendModalUser) return;
-  const caps = getSendCapabilities(sendModalUser);
-  if (mode === "digest" && !caps.canDigest) mode = "custom";
-  if (mode === "custom" && !caps.canAnyMessage && caps.canDigest) mode = "digest";
-  sendMode = mode;
-
-  const digestBtn = document.getElementById("sendModeDigestBtn");
-  const customBtn = document.getElementById("sendModeCustomBtn");
-  digestBtn.classList.toggle("active", mode === "digest");
-  customBtn.classList.toggle("active", mode === "custom");
-  digestBtn.disabled = !caps.canDigest;
-  customBtn.disabled = !caps.canAnyMessage;
-  document.getElementById("sendDigestPanel").style.display = mode === "digest" ? "block" : "none";
-  document.getElementById("sendCustomPanel").style.display = mode === "custom" ? "block" : "none";
-  document.getElementById("sendModalSubmit").textContent = mode === "digest" ? "Send Digest" : "Send Message";
-  setSendModalFeedback(null, "");
-  syncSendModalState();
-}
-
 function syncSendModalState() {
   if (!sendModalUser) return;
   const caps = getSendCapabilities(sendModalUser);
   const emailCb = document.getElementById("sendViaEmail");
   const body = document.getElementById("sendCustomBody").value.trim();
   const hasChannel = emailCb.checked && caps.canEmailMessage;
-  const canSend = sendMode === "digest"
-    ? caps.canDigest
-    : (caps.canAnyMessage && hasChannel && body.length > 0);
+  const canSend = caps.canAnyMessage && hasChannel && body.length > 0;
   document.getElementById("sendModalSubmit").disabled = !canSend;
 }
 
@@ -2630,13 +2588,14 @@ function openSendModal(email, chatId) {
   hint.textContent = caps.canEmailMessage ? "Email ready" : "Email unavailable";
 
   document.getElementById("sendModal").style.display = "flex";
-  setSendMode(caps.canDigest ? "digest" : "custom");
+  document.getElementById("sendModalSubmit").textContent = "Send Message";
+  setSendModalFeedback(null, "");
+  syncSendModalState();
 }
 
 function closeSendModal() {
   document.getElementById("sendModal").style.display = "none";
   sendModalUser = null;
-  sendMode = "digest";
   setSendModalFeedback(null, "");
 }
 
@@ -2646,24 +2605,11 @@ async function submitSendModal() {
   const originalLabel = submitBtn.textContent;
   submitBtn.disabled = true;
   submitBtn.classList.add("loading");
-  submitBtn.textContent = sendMode === "digest" ? "Sending digest…" : "Sending…";
+  submitBtn.textContent = "Sending…";
   setSendModalFeedback(null, "");
   const userEmailKey = String(sendModalUser.email || "").toLowerCase().trim();
 
   try {
-    if (sendMode === "digest") {
-      const { ok, data } = await runDigestForChat(sendModalUser.chat_id);
-      if (!ok || !data.success) {
-        setSendModalFeedback("err", data.error || "Failed to trigger digest");
-        setRowActionStatus(userEmailKey, "err", data.error || "Digest trigger failed");
-      } else {
-        setSendModalFeedback("ok", data.message || "Digest triggered");
-        setRowActionStatus(userEmailKey, "ok", "Digest triggered");
-        showToast("ok", `Digest triggered for ${sendModalUser.name || sendModalUser.email || "user"}`);
-      }
-      return;
-    }
-
     const channels = [];
     if (document.getElementById("sendViaEmail").checked) channels.push("email");
     const body = document.getElementById("sendCustomBody").value.trim();
@@ -3416,7 +3362,7 @@ function renderSubscriberDrawer(u) {
   const archiveHref = normalizeAdminActionHref(u.archive_url);
   if (archiveHref) actionParts.push(`<a class="table-action-link" href="${esc(archiveHref)}" target="_blank" rel="noopener">view digests</a>`);
   const caps = getSendCapabilities(u);
-  if (caps.canDigest || caps.canAnyMessage) {
+  if (caps.canAnyMessage) {
     actionParts.push(`<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`);
   }
   const userStatus = normalizeUserStatus(u.status);
@@ -4007,7 +3953,7 @@ async function load(silent = false) {
     } else {
       runsBody.innerHTML = runs.map(r => {
         const typeBadge = r.on_demand
-          ? `<span class="badge-on-demand">on-demand</span>`
+          ? `<span class="badge-on-demand">legacy manual</span>`
           : `<span class="badge-scheduled">scheduled</span>`;
         const totalClass = costClass(r.total_cost_usd || 0);
         // Cost breakdown on hover

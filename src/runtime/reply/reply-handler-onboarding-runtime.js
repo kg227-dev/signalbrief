@@ -43,12 +43,18 @@ function createReplyOnboardingService(deps) {
 
   function relinkExistingUserToChat(existing, chatId) {
     const oldChatId = existing.chatId;
+    const safeExisting = existing && typeof existing === "object" ? existing : {};
+    const { telegram, ...restExisting } = safeExisting;
+    const safePreferences = safeExisting.preferences && typeof safeExisting.preferences === "object"
+      ? safeExisting.preferences
+      : {};
+    const { telegram_enabled, ...restPreferences } = safePreferences;
     const updated = {
-      ...existing,
+      ...restExisting,
       chatId,
       status: USER_STATUS.ACTIVE,
-      joined_at: existing.joined_at || new Date().toISOString(),
-      preferences: { ...(existing.preferences || {}), telegram_enabled: true },
+      joined_at: safeExisting.joined_at || new Date().toISOString(),
+      preferences: { ...restPreferences },
       last_updated: new Date().toISOString(),
     };
     writeUser(chatId, updated);

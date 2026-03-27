@@ -43,7 +43,6 @@ function buildAdminMessageAuditWriter({
     logAdminMessageEvent(req, {
       action: "message_user",
       target_email: email || null,
-      target_chat_id: extra.target_chat_id || null,
       requested_channels: channels,
       sent_channels: Array.isArray(extra.sent_channels) ? extra.sent_channels : [],
       subject,
@@ -163,7 +162,6 @@ async function processAdminMessageRequest({ ctx, deps }) {
   const sentChannels = summarizeSentChannels(sent);
   if (!sent.email) {
     writeAudit({
-      target_chat_id: user.chatId || null,
       sent_channels: sentChannels,
       success: false,
       errors,
@@ -173,7 +171,6 @@ async function processAdminMessageRequest({ ctx, deps }) {
   }
 
   writeAudit({
-    target_chat_id: user.chatId || null,
     sent_channels: sentChannels,
     success: true,
     errors,

@@ -1,7 +1,5 @@
 "use strict";
 
-const { queueDigestTrigger } = require("../../jobs/digest-runner-runtime");
-
 function createOnboardingCommandHandlers(deps) {
   const {
     send,
@@ -30,11 +28,17 @@ function createOnboardingCommandHandlers(deps) {
 
   function buildActiveTelegramUser(user) {
     const nowIso = new Date().toISOString();
+    const safeUser = user && typeof user === "object" ? user : {};
+    const { telegram, ...restUser } = safeUser;
+    const safePreferences = safeUser.preferences && typeof safeUser.preferences === "object"
+      ? safeUser.preferences
+      : {};
+    const { telegram_enabled, ...restPreferences } = safePreferences;
     return {
-      ...user,
+      ...restUser,
       status: USER_STATUS.ACTIVE,
-      joined_at: user.joined_at || nowIso,
-      preferences: { ...(user.preferences || {}), telegram_enabled: true },
+      joined_at: safeUser.joined_at || nowIso,
+      preferences: { ...restPreferences },
       last_updated: nowIso,
     };
   }
@@ -148,16 +152,12 @@ function createOnboardingCommandHandlers(deps) {
       chatId,
       email,
       name: email.split("@")[0],
-      telegram: null,
       token: userToken,
-      topics: (getConfig().topics || []).slice(0, 5).map((topic) => topic.tag),
+      topics: (getConfig().topics || []).slice(0, 3).map((topic) => topic.tag),
       status: USER_STATUS.ACTIVE,
       joined_at: new Date().toISOString(),
       last_updated: new Date().toISOString(),
       digests_received: 0,
-      bookmarks: [],
-      topic_weights: {},
-      custom_topics: [],
       digest_dates: [],
       last_digest_items: [],
       preferences: {
@@ -165,37 +165,21 @@ function createOnboardingCommandHandlers(deps) {
         delivery_time: "07:00",
         frequency: "daily_weekday",
         days_of_week: [1, 2, 3, 4, 5],
-        items_per_digest: 5,
         timezone: "America/New_York",
         email_enabled: true,
-        telegram_enabled: true,
       },
     };
     writeUser(chatId, user);
 
     sendWelcomeEmail(user).catch((error) => console.error("[welcome email]", error));
 
-    queueDigestTrigger({
-      source: "telegram:signup_welcome",
-      trigger: "telegram_signup_welcome",
-      chatId,
-      maxAdmissionWaitMs: 10 * 60 * 1000,
-      env: { BASE_URL: getBaseUrl() },
-    }).then((outcome) => {
-      if (!outcome.ok && isReplyHandlerDebug()) {
-        console.warn(`[reply-handler] welcome digest skipped for ${chatId}: ${outcome.code || "unknown"}`);
-      }
-    }).catch((error) => {
-      console.error(`[reply-handler] welcome digest failed for ${chatId}: ${error.message}`);
-    });
-
     const settingsUrl = `${getBaseUrl()}/settings?token=${userToken}`;
     await send(
       chatId,
       "✅ *You're in!*\n\n"
-        + "Sending your first digest now — 7 signals across strategy, AI, and business.\n\n"
+        + "Your account is set up. SignalBrief is email-only in the reduced-scope MVP, so your digest will arrive at your scheduled time.\n\n"
         + `🔗 [Manage preferences](${settingsUrl})\n\n`
-        + "Email-only MVP mode is active. Use ⚙️ /settings to manage your topics and delivery time.",
+        + "Use ⚙️ /settings to manage your topics and delivery time.",
     );
   }
 

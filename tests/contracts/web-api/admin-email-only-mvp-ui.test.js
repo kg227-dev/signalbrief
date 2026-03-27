@@ -11,6 +11,8 @@ for (const snippet of [
   "Targeted resend is removed in the email-only MVP;",
   "email-only scheduled path",
   "Targeted resend disabled in the reduced-scope MVP.",
+  "Email-only MVP mode is active. This sends a direct email message, not a targeted digest.",
+  "legacy manual",
 ]) {
   if (!source.includes(snippet)) {
     throw new Error(`admin email-only MVP UI is missing required snippet: ${snippet}`);
@@ -21,6 +23,10 @@ for (const removedSnippet of [
   'id="resendAllFailedBtn"',
   "function resendFailedDelivery(",
   "function resendFailedDeliveries(",
+  'id="sendModeDigestBtn"',
+  "function runDigestForChat(",
+  "function setSendMode(",
+  "Digest now</button>",
 ]) {
   if (source.includes(removedSnippet)) {
     throw new Error(`admin email-only MVP UI still contains removed snippet: ${removedSnippet}`);

@@ -191,44 +191,6 @@ function createSendMagicLinkEmail({ sendEmail, getBaseUrl }) {
   };
 }
 
-function createSendTelegramText({ https, getToken }) {
-  return function sendTelegramText(chatId, text) {
-    const token = getToken();
-    if (!token) return Promise.reject(new Error("Telegram bot token not configured"));
-    const body = JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    });
-    return new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: "api.telegram.org",
-        path: `/bot${token}/sendMessage`,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-      }, (response) => {
-        let out = "";
-        response.on("data", (chunk) => out += chunk);
-        response.on("end", () => {
-          try {
-            const data = JSON.parse(out || "{}");
-            if (!data.ok) return reject(new Error(data.description || "telegram send failed"));
-            resolve(data);
-          } catch {
-            reject(new Error("telegram response parse failed"));
-          }
-        });
-      });
-      req.on("error", reject);
-      req.write(body);
-      req.end();
-    });
-  };
-}
-
 module.exports = {
   toEtDateKey,
   decodeDigestIdParam,
@@ -237,5 +199,4 @@ module.exports = {
   getAllowedArchiveDates,
   normalizeBookmarkUrl,
   createSendMagicLinkEmail,
-  createSendTelegramText,
 };

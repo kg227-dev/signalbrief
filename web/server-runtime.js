@@ -1,4 +1,3 @@
-const https = require("https");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -90,7 +89,6 @@ const {
   getAllowedArchiveDates,
   normalizeBookmarkUrl,
   createSendMagicLinkEmail,
-  createSendTelegramText,
 } = require("./server-runtime-utils-runtime");
 const { createStructuredLogger } = require("../src/runtime/structured-logger-runtime");
 const {
@@ -249,11 +247,6 @@ const sendMagicLinkEmail = createSendMagicLinkEmail({
   getBaseUrl,
 });
 
-const sendTelegramText = createSendTelegramText({
-  https,
-  getToken: () => CONFIG.keys.signalBriefBotToken,
-});
-
 const allowExampleSignups = (
   String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
   || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
@@ -395,7 +388,6 @@ const {
   hashText,
   escapeHtml,
   sendEmail,
-  sendTelegramText,
   formatTimeEt,
   parseEtNowParts,
   computeNextDeliveryEt,

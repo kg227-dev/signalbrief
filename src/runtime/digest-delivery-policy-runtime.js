@@ -1,13 +1,21 @@
 "use strict";
 
-const {
-  customKeywordMatches,
-  getCustomTopicMetadata: getTopicMetadata,
-  normalizeTopicToken,
-} = require("../digest/domain/topic-domain-runtime");
-const {
-  isWeakSourceItem,
-} = require("../digest/domain/storyline-domain-runtime");
+let topicDomainRuntime = null;
+let storylineDomainRuntime = null;
+
+function loadTopicDomainRuntime() {
+  if (!topicDomainRuntime) {
+    topicDomainRuntime = require("../digest/domain/topic-domain-runtime");
+  }
+  return topicDomainRuntime;
+}
+
+function loadStorylineDomainRuntime() {
+  if (!storylineDomainRuntime) {
+    storylineDomainRuntime = require("../digest/domain/storyline-domain-runtime");
+  }
+  return storylineDomainRuntime;
+}
 
 const DELIVERY_POLICY = Object.freeze({
   target_item_count: 5,
@@ -61,10 +69,12 @@ function clamp(value, min, max) {
 }
 
 function normalizeCustomTopicKey(value) {
+  const { normalizeTopicToken } = loadTopicDomainRuntime();
   return normalizeTopicToken(String(value || "").replace(/^custom_/i, "").replace(/_/g, " "));
 }
 
 function getCustomTopicMetadata(keyword) {
+  const { getCustomTopicMetadata: getTopicMetadata } = loadTopicDomainRuntime();
   return getTopicMetadata(keyword);
 }
 
@@ -95,6 +105,7 @@ function isDisallowedSourceType(item) {
 }
 
 function matchesCustomKeyword(item, keyword) {
+  const { customKeywordMatches, normalizeTopicToken } = loadTopicDomainRuntime();
   const normalizedKeyword = normalizeCustomTopicKey(keyword);
   if (!normalizedKeyword) return false;
   const tagNormalized = normalizeTopicToken(item?.tag || "");
@@ -131,6 +142,7 @@ function matchedTopicClassesForItem(item, customKeywords = []) {
 }
 
 function passesCommonEligibility(item, nowIso) {
+  const { isWeakSourceItem } = loadStorylineDomainRuntime();
   const ageHours = ageHoursForItem(item, nowIso);
   const thresholds = DELIVERY_POLICY.thresholds;
   const topicMatch = Number(item?.topicMatch || 0);

@@ -9,9 +9,22 @@ const {
 
 const TARGET_REL = "src/runtime/digest-delivery-policy-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
+const TOPIC_DOMAIN_PATH = require.resolve(path.join(process.cwd(), "src/digest/domain/topic-domain-runtime.js"));
+const STORYLINE_DOMAIN_PATH = require.resolve(path.join(process.cwd(), "src/digest/domain/storyline-domain-runtime.js"));
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
+
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(require.cache, TOPIC_DOMAIN_PATH),
+  false,
+  "active delivery policy import should not eagerly load legacy topic-domain runtime"
+);
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(require.cache, STORYLINE_DOMAIN_PATH),
+  false,
+  "active delivery policy import should not eagerly load storyline-domain runtime"
+);
 
 const {
   DELIVERY_POLICY,

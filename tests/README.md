@@ -10,7 +10,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `entrypoints/` | 3 | Bot server, digest entrypoint, and scheduler worker startup contracts; checks exported function surfaces and guards against import-time side effects | `src/entrypoints/bot-server.js`, `src/entrypoints/digest.js`, `src/entrypoints/scheduler-worker.js` |
+| `entrypoints/` | 3 | Digest entrypoint, scheduler worker, and legacy bot compatibility startup contracts; checks exported function surfaces and guards against import-time side effects | `src/entrypoints/bot-server.js`, `src/entrypoints/digest.js`, `src/entrypoints/scheduler-worker.js` |
 | `entrypoints/` (runtime) | 2 | Digest data runtime and digest runtime module shapes | `src/digest/runtime/digest-data-runtime.js`, `src/entrypoints/digest-runtime.js` |
 | `entrypoints/` (orchestrator) | 16 | One file per orchestrator stage: archive, bootstrap, cost, delivery, delivery-ranking, enrichment, fetch, incident, lock, logging, parity-shape, prefilter, schedule, seams, selection, transport | `src/entrypoints/digest-orchestrator-*-runtime.js` |
 
@@ -40,7 +40,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `harness/digest/runtime/` | 8 | Export surfaces for data enrichment, fetch, fetch-request, delivery record, email item formatting, Telegram content formatting, item ordering, and repeat freshness runtimes | `src/digest/runtime/digest-data-enrich-runtime.js`, `digest-data-fetch-*.js`, `digest-delivery-record-runtime.js`, `digest-formatting-*.js`, `digest-item-ordering-runtime.js`, `repeat-freshness-runtime.js` |
+| `harness/digest/runtime/` | 8 | Export surfaces for data enrichment, fetch, fetch-request, delivery record, item ordering, repeat freshness, and email plus legacy Telegram formatting runtimes | `src/digest/runtime/digest-data-enrich-runtime.js`, `digest-data-fetch-*.js`, `digest-delivery-record-runtime.js`, `digest-formatting-*.js`, `digest-item-ordering-runtime.js`, `repeat-freshness-runtime.js` |
 
 ### Digest application tests — `tests/contracts/harness/digest/application/`
 
@@ -58,7 +58,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `harness/runtime/` | 20 | Core platform runtime module surfaces: config provider, digest lock, engagement events, mailer lifecycle, mailer, personalization, quality score, reply handler, runtime types, store adapters (file, SQLite, canary), store record, store (full behavioral contract), structured logger, user contract | `src/runtime/store.js`, `src/runtime/mailer/*.js`, `src/runtime/personalization/*.js`, `src/runtime/engagement/*.js`, `src/runtime/reply-handler-runtime.js`, `src/runtime/structured-logger-runtime.js` |
+| `harness/runtime/` | 20 | Core platform runtime module surfaces plus legacy compatibility modules: config provider, digest lock, engagement events, mailer lifecycle, mailer, personalization, quality score, reply handler, runtime types, store adapters (file, SQLite, canary), store record, store (full behavioral contract), structured logger, user contract | `src/runtime/store.js`, `src/runtime/mailer/*.js`, `src/runtime/personalization/*.js`, `src/runtime/engagement/*.js`, `src/runtime/reply-handler-runtime.js`, `src/runtime/structured-logger-runtime.js` |
 
 ### Reply handler tests — `tests/contracts/harness/runtime/reply/`
 
@@ -138,7 +138,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `web-api/routes/` | 10 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, bookmarks actions, engagement actions, health, unsubscribe actions, and source registry routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js` |
+| `web-api/routes/` | 10 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, engagement, health, unsubscribe, source registry, and legacy bookmark-removal routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js` |
 
 ### Service tests — `tests/contracts/web-api/services/` (15 files)
 

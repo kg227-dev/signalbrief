@@ -1005,7 +1005,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="card">
           <div class="card-label">Active subscribers</div>
           <div class="card-value" id="activeUsers">—</div>
-          <div class="card-sub" id="telegramUsers">Email-only MVP</div>
+          <div class="card-sub" id="subscriberFootnote">Email-only MVP</div>
         </div>
       </div>
     </div>
@@ -2357,9 +2357,6 @@ function setLastRefreshed(dateObj) {
 }
 function countActiveUsers(roster) {
   return (roster || []).filter(u => u.status === "active").length;
-}
-function countActiveTelegramUsers(roster) {
-  return 0;
 }
 let latestRoster = [];
 let latestRuns = [];
@@ -3917,7 +3914,7 @@ async function load(silent = false) {
     const activeUsers = roster ? countActiveUsers(roster) : (summary.active_users || 0);
     document.getElementById("activeUsers").innerHTML =
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${activeUsers}</a>`;
-    document.getElementById("telegramUsers").innerHTML =
+    document.getElementById("subscriberFootnote").innerHTML =
       `Email-only MVP · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
 
     const openRate7d = Number(engagement && engagement.open_rate_7d || 0);

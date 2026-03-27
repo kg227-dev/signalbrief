@@ -137,7 +137,6 @@ const summary = buildSummaryPayload({
   monthUniqueUsersLogSize: 2,
   roster: [{}, {}],
   activeUsersCount: 2,
-  activeTelegramUsersCount: 1,
   quality: {},
   feedbackTrend: {},
   trailing7dCost: {
@@ -164,3 +163,4 @@ assert.strictEqual(summary.trailing_7d_runs, 2);
 assert.strictEqual(summary.projected_7d_cost, 0.42);
 assert.strictEqual(summary.projected_7d_runs, 5);
 assert.strictEqual(summary.projected_7d_deliveries, 9);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(summary, "active_tg_users"), false);

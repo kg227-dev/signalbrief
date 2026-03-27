@@ -25,9 +25,7 @@ import "../src/digest/runtime/digest-formatting-email-template-runtime.js";
 import "../src/digest/runtime/digest-formatting-email-runtime.js";
 import "../src/digest/runtime/digest-item-ordering-runtime.js";
 import "../src/digest/runtime/digest-formatting-topic-runtime.js";
-import "../src/digest/runtime/digest-formatting-telegram-runtime.js";
 import "../src/dependency-links.mjs";
-import "../src/entrypoints/bot-server.js";
 import "../src/entrypoints/digest.js";
 import "../src/entrypoints/digest-orchestrator-archive-runtime.js";
 import "../src/entrypoints/digest-orchestrator-bootstrap-runtime.js";
@@ -49,17 +47,6 @@ import "../src/runtime/mailer/mailer-runtime.js";
 import "../src/runtime/personalization/personalization-runtime.js";
 import "../src/runtime/quality-score.js";
 import "../src/runtime/url-normalization-runtime.js";
-import "../src/runtime/reply/reply-handler-runtime.js";
-import "../src/runtime/reply/command-router.js";
-import "../src/runtime/reply/intent-service.js";
-import "../src/runtime/reply/onboarding/keys.js";
-import "../src/runtime/reply/onboarding/link-verification-flow.js";
-import "../src/runtime/reply/onboarding/messages.js";
-import "../src/runtime/reply/onboarding-service.js";
-import "../src/runtime/reply/onboarding-service-runtime.js";
-import "../src/runtime/reply/reply-logging-runtime.js";
-import "../src/runtime/reply/reply-session-runtime.js";
-import "../src/runtime/reply/transport.js";
 import "../src/runtime/store.js";
 import "../src/sandbox-pipeline-runtime.js";
 import "../test-harness/cache/index.js";
@@ -166,9 +153,7 @@ export const dependencyLinks = [
   "src/digest/runtime/digest-formatting-email-runtime.js",
   "src/digest/runtime/digest-item-ordering-runtime.js",
   "src/digest/runtime/digest-formatting-topic-runtime.js",
-  "src/digest/runtime/digest-formatting-telegram-runtime.js",
   "src/dependency-links.mjs",
-  "src/entrypoints/bot-server.js",
   "src/entrypoints/digest.js",
   "src/entrypoints/digest-orchestrator-archive-runtime.js",
   "src/entrypoints/digest-orchestrator-bootstrap-runtime.js",
@@ -190,17 +175,6 @@ export const dependencyLinks = [
   "src/runtime/personalization/personalization-runtime.js",
   "src/runtime/quality-score.js",
   "src/runtime/url-normalization-runtime.js",
-  "src/runtime/reply/reply-handler-runtime.js",
-  "src/runtime/reply/command-router.js",
-  "src/runtime/reply/intent-service.js",
-  "src/runtime/reply/onboarding/keys.js",
-  "src/runtime/reply/onboarding/link-verification-flow.js",
-  "src/runtime/reply/onboarding/messages.js",
-  "src/runtime/reply/onboarding-service.js",
-  "src/runtime/reply/onboarding-service-runtime.js",
-  "src/runtime/reply/reply-logging-runtime.js",
-  "src/runtime/reply/reply-session-runtime.js",
-  "src/runtime/reply/transport.js",
   "src/runtime/store.js",
   "src/sandbox-pipeline-runtime.js",
   "test-harness/cache/index.js",

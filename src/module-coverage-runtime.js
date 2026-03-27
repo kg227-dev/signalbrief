@@ -10,7 +10,6 @@ const digestRunner = require("./jobs/digest-runner-runtime");
 const reengagement = require("./jobs/reengagement-runtime");
 const marketingWeeklyReport = require("../scripts/marketing-weekly-report");
 const selectionDomain = require("./digest/domain/selection-domain-runtime");
-const botServerEntrypoint = require("../src/entrypoints/bot-server");
 const schedulerWorkerEntrypoint = require("../src/entrypoints/scheduler-worker");
 const digestEntrypoint = require("../src/entrypoints/digest");
 const configProvider = require("../src/runtime/config-provider");
@@ -18,12 +17,6 @@ const engagementEvents = require("../src/runtime/engagement/engagement-events-ru
 const mailer = require("../src/runtime/mailer/mailer-runtime");
 const personalization = require("../src/runtime/personalization/personalization-runtime");
 const qualityScore = require("../src/runtime/quality-score");
-const replyHandler = require("../src/runtime/reply/reply-handler-runtime");
-const intentService = require("../src/runtime/reply/intent-service");
-const onboardingService = require("../src/runtime/reply/onboarding-service");
-const replyLoggingRuntime = require("./runtime/reply/reply-logging-runtime");
-const replySessionRuntime = require("./runtime/reply/reply-session-runtime");
-const transport = require("../src/runtime/reply/transport");
 const store = require("../src/runtime/store");
 const sandboxPipeline = require("../src/sandbox-pipeline-runtime");
 const cacheBudget = require("../test-harness/cache/cache-budget");
@@ -147,7 +140,6 @@ const SOURCE_ONLY_TARGETS = [
 ];
 
 const EXPORT_SHAPES = [
-  ["src/entrypoints/bot-server.js", botServerEntrypoint, ["poll", "processUpdate", "answerCallbackQuery", "runLoop", "startBotServer"]],
   ["src/entrypoints/scheduler-worker.js", schedulerWorkerEntrypoint, ["runDigest", "writeHeartbeat", "startSchedulerWorker", "stopSchedulerWorker"]],
   ["src/entrypoints/digest.js", digestEntrypoint, ["fetchTopicNews", "enrichItems", "buildEmail", "scoreColor"]],
   ["src/runtime/config-provider.js", configProvider, ["CONFIG_PATH", "loadConfig"]],
@@ -155,22 +147,6 @@ const EXPORT_SHAPES = [
   ["src/runtime/mailer/mailer-runtime.js", mailer, ["sendEmail", "sendWelcomeEmail", "sendReengagementDay4Email"]],
   ["src/runtime/personalization/personalization-runtime.js", personalization, ["applyAutoTopicLearning"]],
   ["src/runtime/quality-score.js", qualityScore, ["computeDigestQualityScore", "qualityBand"]],
-  [
-    "src/runtime/reply/reply-handler-runtime.js",
-    replyHandler,
-    [
-      "createReplyState",
-      "resetReplyState",
-      "resetReplyRuntimeState",
-      "handleIncomingMessage",
-      "handleCallbackQuery",
-    ],
-  ],
-  ["src/runtime/reply/intent-service.js", intentService, ["createIntentService", "normalizeIntentPayload"]],
-  ["src/runtime/reply/onboarding-service.js", onboardingService, ["createOnboardingService"]],
-  ["src/runtime/reply/reply-logging-runtime.js", replyLoggingRuntime, ["createReplyLogger", "createReplyIntentTracer", "redactIntentForLogs"]],
-  ["src/runtime/reply/reply-session-runtime.js", replySessionRuntime, ["createReplyState", "createReplySessionController"]],
-  ["src/runtime/reply/transport.js", transport, ["httpsPost", "createTelegramTransport", "createAnthropicTransport"]],
   ["src/runtime/store.js", store, ["createStore", "initStore", "readUser", "writeUser", "findUserByToken"]],
   ["src/sandbox-pipeline-runtime.js", sandboxPipeline, ["estimateCost", "runPipeline"]],
 ];
@@ -201,8 +177,6 @@ const LOADED_MODULES = [
   ["test-harness/suites/end-to-end-runtime.js", harnessSuiteEndToEnd],
   ["test-harness/suites/relevance-scoring-runtime.js", harnessSuiteRelevanceScoring],
   ["src/digest/domain/topic-domain-runtime.js", topicDomain],
-  ["src/runtime/reply/reply-logging-runtime.js", replyLoggingRuntime],
-  ["src/runtime/reply/reply-session-runtime.js", replySessionRuntime],
   ["web/admin-auth.js", adminAuth],
   ["web/routes/admin-api.js", adminApiRoutes],
   ["web/routes/core-api.js", coreApiRoutes],

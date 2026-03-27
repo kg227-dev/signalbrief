@@ -12,18 +12,18 @@ Top-level process entry and the digest orchestrator broken into focused sub-modu
 |------|---------|--------|--------------|
 | `entrypoints/digest.js` | CLI entrypoint for the digest pipeline; delegates immediately to `digest-orchestrator-runtime` | Re-exports `digest-service-runtime` surface plus `main`/`runCli` | `./digest-orchestrator-runtime`, `../digest/application/digest-service-runtime` |
 | `entrypoints/digest-runtime.js` | Thin re-export shim keeping the legacy `digest-runtime` import path alive | Re-exports `digest-orchestrator-runtime` | `./digest-orchestrator-runtime` |
-| `entrypoints/bot-server.js` | Polling-first Telegram ingress worker; long-polls `getUpdates` and dispatches to `domains/reply` | Runs an infinite poll loop; process stays alive | `node:https`, `../platform/config`, `../platform/store`, `../domains/reply` |
+| `entrypoints/bot-server.js` | Legacy Telegram ingress worker retained for compatibility tests and archival reference; not part of the active email-only MVP runtime | Runs an infinite poll loop when invoked directly | `node:https`, `../platform/config`, `../platform/store`, `../domains/reply` |
 | `entrypoints/scheduler-worker.js` | Cron-style daemon that fires `digest-runner-runtime` on a configurable interval; writes a heartbeat file; handles restart requests via a control file | Heartbeat JSON at `schedulerHeartbeatPath`; exits `0` on restart request | `node:fs`, `node:path`, `../runtime/runtime-state-paths-runtime`, `../jobs/digest-runner-runtime`, `DIGEST_POLL_MS`, `DIGEST_RUN_ON_STARTUP`, `DIGEST_RUN_TIMEOUT_MS`, `DIGEST_WORKER_ARGS`, `DIGEST_STARTUP_DELAY_MS`, `DIGEST_LOCK_UNHEALTHY_BLOCK_THRESHOLD` |
 | `entrypoints/digest-orchestrator-runtime.js` | Root orchestrator facade; loads config and email template, asserts the pipeline seam, then delegates to `digest-orchestrator-core-runtime` | Re-exports all `core-runtime` symbols | `node:fs`, `node:path`, `../runtime/config-provider`, `../digest/application/digest-pipeline-seam-runtime`, `./digest-orchestrator-core-runtime`, `BASE_URL` |
-| `entrypoints/digest-orchestrator-core-runtime.js` | Wires all orchestrator sub-runtimes together; implements `main()` and `runCli()`; drives the full per-run pipeline (lock, bootstrap, schedule, fetch, select, enrich, delivery, archive, cost) | Digest emails + Telegram messages sent; archive written; exit code | All orchestrator sub-modules below; `../domains/*`, `../platform/*`, `../runtime/*` |
+| `entrypoints/digest-orchestrator-core-runtime.js` | Wires all orchestrator sub-runtimes together; implements `main()` and `runCli()`; drives the full per-run pipeline (lock, bootstrap, schedule, fetch, select, enrich, delivery, archive, cost) | Digest emails sent, archive written, optional ops incidents emitted; exit code | All orchestrator sub-modules below; `../domains/*`, `../platform/*`, `../runtime/*` |
 | `entrypoints/digest-orchestrator-archive-runtime.js` | Persists the shared enriched item list to the archive after a run | `quickScan` string; calls `saveToArchive` | Injected `saveToArchive` dep |
 | `entrypoints/digest-orchestrator-bootstrap-runtime.js` | One-time process setup: calls `initStore` and registers `exit`/signal handlers to release the digest lock | Side-effects only | Injected `initStore`, `releaseDigestLock` |
 | `entrypoints/digest-orchestrator-cost-runtime.js` | Calculates per-run API spend (Perplexity calls + Claude token usage) | `{ perplexityCalls, perplexityCost, claudeCost, totalCost }` | No external deps; constants `DEFAULT_PERPLEXITY_COST_PER_CALL`, `DEFAULT_CLAUDE_HAIKU_*` |
 | `entrypoints/digest-orchestrator-delivery-ranking-runtime.js` | Per-user item ranking: filters by topic, scores relevance, applies entity cap, enforces freshness, reorders by score | Ranked item array for each user | `../digest/runtime/repeat-freshness-runtime`, `../digest/domain/storyline-domain-runtime`, `../digest/runtime/digest-item-ordering-runtime` |
-| `entrypoints/digest-orchestrator-delivery-runtime.js` | Per-user delivery loop: runs ranking, builds email + Telegram payloads, sends both, records engagement, updates delivery records and user topic learning | Email + Telegram sent per user | `./digest-orchestrator-delivery-ranking-runtime`, `../digest/runtime/digest-item-ordering-runtime`, injected transport and formatting deps |
+| `entrypoints/digest-orchestrator-delivery-runtime.js` | Per-user delivery loop: runs ranking, builds email payloads, sends scheduled digests, records engagement, and updates delivery records | Email sent per user | `./digest-orchestrator-delivery-ranking-runtime`, `../digest/runtime/digest-item-ordering-runtime`, injected transport and formatting deps |
 | `entrypoints/digest-orchestrator-enrichment-runtime.js` | Calls `enrichItems` on selected candidates; emits a degradation incident if the AI provider downgrades | Enriched item array + `claudeUsage` token counts | Injected `enrichItems`, `emitDigestIncident` |
 | `entrypoints/digest-orchestrator-fetch-runtime.js` | Orchestrates Perplexity fetches for standard and custom topics; resolves preferred-domain shortlists; appends custom-keyword rescue items; aggregates fetch diagnostics | `{ selectionTarget, tagPriority, allItems, customTags, fetchDiagnostics, … }` | Injected `fetchTopicNews`, `buildPreferredDomainShortlist`, `buildCustomTopicQueries`, `emitDigestIncident` |
-| `entrypoints/digest-orchestrator-incident-runtime.js` | Appends JSONL incident log entries and optionally fires a Telegram alert to the ops chat | Side-effects: file append + optional Telegram message | `node:fs`, `node:path`, injected `sendTelegram`, `formatEtDateKey` |
+| `entrypoints/digest-orchestrator-incident-runtime.js` | Appends JSONL incident log entries and optionally fires an ops alert to the configured incident transport | Side-effects: file append + optional ops alert | `node:fs`, `node:path`, injected `sendTelegram`, `formatEtDateKey` |
 | `entrypoints/digest-orchestrator-lock-runtime.js` | Acquires and releases the run-level digest lock file; guards against concurrent digest processes | Lock file at `lockFilePath`; `lockOwned` flag | `node:fs`, `node:path`, `../runtime/digest-lock-runtime` (injected) |
 | `entrypoints/digest-orchestrator-pipeline-runtime.js` | Item selection and storyline pool helpers used inside the orchestrator core | `selectItems()` result; filtered storyline pool | `../domains/digest` |
 | `entrypoints/digest-orchestrator-schedule-runtime.js` | Resolves which users are due for a digest right now based on their delivery-time preferences and ET clock | Array of due user records | Injected `getEtNow`, `getEtNowParts`, `allUsers`, `USER_STATUS`, `CONFIG` |
@@ -117,19 +117,19 @@ Concrete I/O implementations for data fetching, enrichment, formatting, and arch
 | `digest/runtime/digest-formatting-topic-rescue-runtime.js` | Rescues items matching custom keywords from the standard pool when the custom-topic fetch is thin | Additional item array | Injected `normalizeTopicToken`, `customKeywordMatches`, `normalizeMatchText`, `headlineFingerprint`, `normalizeUrlForDedup` |
 | `digest/runtime/digest-formatting-topic-visual-runtime.js` | Maps topic tokens to emoji/color visual identifiers; formats topics for display | `{ topicVisual, formatTopicDisplay }` | `./digest-formatting-topic-display-runtime` |
 
-### Telegram
+### Legacy Telegram Formatting (not active MVP path)
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `digest/runtime/digest-formatting-telegram-runtime.js` | Assembles Telegram formatting runtime; re-exports `formatTelegram` and `buildDigestInlineKeyboard` | Runtime object | `./digest-formatting-telegram-content-runtime`, `./digest-formatting-telegram-keyboard-runtime` |
-| `digest/runtime/digest-formatting-telegram-content-runtime.js` | Renders the Telegram digest message text with numbered items, emoji labels, and a command menu | Markdown-formatted message string | None |
-| `digest/runtime/digest-formatting-telegram-keyboard-runtime.js` | Builds an inline keyboard with save/more/less buttons for each digest item | Telegram `inline_keyboard` array | None |
+| `digest/runtime/digest-formatting-telegram-runtime.js` | Legacy formatting facade retained for compatibility and sandbox previews; not used in scheduled email delivery | Runtime object | `./digest-formatting-telegram-content-runtime`, `./digest-formatting-telegram-keyboard-runtime` |
+| `digest/runtime/digest-formatting-telegram-content-runtime.js` | Legacy renderer for Telegram digest text with numbered items and command hints | Markdown-formatted message string | None |
+| `digest/runtime/digest-formatting-telegram-keyboard-runtime.js` | Legacy builder for Telegram inline keyboard payloads | Telegram `inline_keyboard` array | None |
 
 ### General
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `digest/runtime/digest-formatting-runtime.js` | Top-level formatting factory; wires AI, email, topic, and Telegram sub-runtimes together | `{ generateLeadSubjectLine, generateEditorialNote, buildEmail, formatTelegram, buildDigestInlineKeyboard, topicVisual, formatTopicDisplay, buildCustomRescueItemsFromStandard, buildLearningSummary, stripInlineHtml, escapeHtml }` | All four formatting sub-runtimes above |
+| `digest/runtime/digest-formatting-runtime.js` | Top-level formatting factory; wires AI, email, topic, and legacy Telegram formatting helpers together | `{ generateLeadSubjectLine, generateEditorialNote, buildEmail, formatTelegram, buildDigestInlineKeyboard, topicVisual, formatTopicDisplay, buildCustomRescueItemsFromStandard, buildLearningSummary, stripInlineHtml, escapeHtml }` | All four formatting sub-runtimes above |
 
 ### Archive / Delivery
 
@@ -229,29 +229,29 @@ Concrete implementations backing the platform facades. Do not import these direc
 |------|---------|--------|--------------|
 | `runtime/structured-logger-runtime.js` | Writes structured JSONL log lines with `ts_utc`, `service`, `event`, `level`, and arbitrary scalar fields; enforces reserved-field protection | JSONL to a writable stream or `node:fs` file | `node:fs` |
 
-### Reply Handler
+### Legacy Reply Handler (not active MVP path)
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `runtime/reply-handler.js` | Shim; re-exports `reply/reply-handler-runtime` | Reply surface | `./reply/reply-handler-runtime` |
-| `runtime/reply-handler-runtime.js` | Shim; re-exports `reply/reply-handler-runtime` | Reply surface | `./reply/reply-handler-runtime` |
-| `runtime/reply/reply-handler-runtime.js` | CLI entrypoint shim for the reply handler; also re-exports `reply-handler-core-runtime` | Runs `handleIncomingMessage` when invoked directly | `./reply-handler-core-runtime` |
-| `runtime/reply/reply-handler-core-runtime.js` | Wires store, config, transport, intent service, command router, session, and onboarding into a unified `handleIncomingMessage` / `handleCallbackQuery` surface | Telegram response sent; user state mutated | `../config-provider`, `./transport`, `./intent-service`, `./command-router`, `./reply-session-runtime`, `./info-handlers-runtime`, `./reply-command-handlers-runtime`, `./reply-handler-onboarding-runtime`, `./reply-handler-defaults-runtime` |
+| `runtime/reply-handler.js` | Legacy shim; re-exports `reply/reply-handler-runtime` for compatibility tests and tooling | Reply surface | `./reply/reply-handler-runtime` |
+| `runtime/reply-handler-runtime.js` | Legacy shim; re-exports `reply/reply-handler-runtime` for compatibility tests and tooling | Reply surface | `./reply/reply-handler-runtime` |
+| `runtime/reply/reply-handler-runtime.js` | Legacy CLI entrypoint shim for the reply handler; also re-exports `reply-handler-core-runtime` | Runs `handleIncomingMessage` when invoked directly | `./reply-handler-core-runtime` |
+| `runtime/reply/reply-handler-core-runtime.js` | Legacy Telegram reply surface wiring store, config, transport, intent service, command router, session, and onboarding | Telegram response sent; user state mutated | `../config-provider`, `./transport`, `./intent-service`, `./command-router`, `./reply-session-runtime`, `./info-handlers-runtime`, `./reply-command-handlers-runtime`, `./reply-handler-onboarding-runtime`, `./reply-handler-defaults-runtime` |
 | `runtime/reply/reply-handler-defaults-runtime.js` | Defines app constants (`INDUSTRY_TOPICS`, `CAPABILITY_TOPICS`, `STANDARD_TOPICS`, `LINK_VERIFY_TTL_MS`) and `defaultBaseUrl` | Constants and helper functions | `node:path`, `./reply-logging-runtime` |
 | `runtime/reply/reply-handler-onboarding-runtime.js` | Creates `ReplyOnboardingService` that wraps `onboarding-service` with store and mailer deps for the reply handler | Onboarding service instance | `node:fs`, `node:path`, `../mailer/mailer-runtime`, `./onboarding-service`, `../runtime-state-paths-runtime` |
-| `runtime/reply/intent-service.js` | Parses raw Telegram message text into a structured `Intent` object (`action`, `items`, `topic`, `source`) | `Intent` object | None |
+| `runtime/reply/intent-service.js` | Parses raw legacy Telegram message text into a structured `Intent` object (`action`, `items`, `topic`, `source`) | `Intent` object | None |
 | `runtime/reply/command-router.js` | Maps an `Intent.action` string to the appropriate handler function from a handlers map | Return value of matched handler | None |
 | `runtime/reply/reply-session-runtime.js` | Creates and manages ephemeral in-process `ReplyState` (awaiting-email map, digest-inflight set, pending link verifications); initializes the user store | `ReplyState`; session controller | `../runtime-types` (type only) |
 | `runtime/reply/reply-command-handlers-runtime.js` | Assembles all command handlers (engagement + onboarding + core) into a unified `createReplyCommandHandlers` factory | Handler map | `../user-contract-runtime`, `./reply-command-handlers-core-runtime` |
-| `runtime/reply/reply-command-handlers-core-runtime.js` | Core command handlers: `settings`, `bookmarks`, `topics`, `help` — reads user record and delegates to info renderers | Telegram message sent | `./info-handlers-runtime`, `./info-renderers-runtime` |
-| `runtime/reply/reply-command-digest-runtime.js` | `/digest` command handler: checks inflight state, calls `queueDigestTrigger`, sends status reply | Telegram message sent; digest spawned | `../../jobs/digest-runner-runtime` |
-| `runtime/reply/reply-command-engagement-runtime.js` | Engagement command handlers: `save`, `topic_more`/`topic_less`, `source_block`/`source_trust`/`source_unblock`, `topic_add` | User record updated; Telegram confirm sent | `../engagement/engagement-events-runtime` |
-| `runtime/reply/reply-command-onboarding-runtime.js` | Onboarding command handlers: `/start`, email capture, `verify_link` | User record created/updated; welcome email queued; Telegram message sent | `../../jobs/digest-runner-runtime` |
+| `runtime/reply/reply-command-handlers-core-runtime.js` | Legacy core command handlers: `settings`, `bookmarks`, `topics`, `help` — reads user record and delegates to info renderers | Telegram message sent | `./info-handlers-runtime`, `./info-renderers-runtime` |
+| `runtime/reply/reply-command-digest-runtime.js` | Legacy `/digest` command handler; currently responds with the email-only MVP disabled-path message | Telegram message sent | `../../jobs/digest-runner-runtime` |
+| `runtime/reply/reply-command-engagement-runtime.js` | Legacy engagement command handlers: `save`, `topic_more`/`topic_less`, `source_block`/`source_trust`/`source_unblock`, `topic_add` | User record updated; Telegram confirm sent | `../engagement/engagement-events-runtime` |
+| `runtime/reply/reply-command-onboarding-runtime.js` | Legacy onboarding command handlers: `/start`, email capture, `verify_link` | User record created/updated; Telegram message sent | `../../jobs/digest-runner-runtime` |
 | `runtime/reply/reply-logging-runtime.js` | Creates a leveled reply logger and intent tracer that write to `console` or a pluggable sink | Logger instance | None |
-| `runtime/reply/info-handlers-runtime.js` | Handles `/settings`, `/bookmarks`, `/topics`, `/help` commands by reading the user record and rendering the appropriate info view | Telegram message sent | `../user-contract-runtime`, `./info-renderers-runtime` |
-| `runtime/reply/info-renderers-runtime.js` | Renders settings, bookmarks, topics, and help views as formatted Telegram Markdown strings | Markdown strings | None |
-| `runtime/reply/transport.js` | `httpsPost` HTTPS helper and `createTelegramTransport` / `createAnthropicTransport` factory functions used by the reply handler | `{ status, body }` via `node:https`; saved audio file via `node:fs` | `node:https`, `node:fs` |
-| `runtime/reply/onboarding-service-runtime.js` | Core onboarding state machine: begins and completes the link-verification flow; manages resend cooldown and attempt limits | State mutations; sends verification email; sends Telegram prompt | `./onboarding/pending-verification`, `./onboarding/onboarding-context`, `./onboarding/link-verification-flow` |
+| `runtime/reply/info-handlers-runtime.js` | Handles legacy `/settings`, `/bookmarks`, `/topics`, `/help` commands by reading the user record and rendering the appropriate info view | Telegram message sent | `../user-contract-runtime`, `./info-renderers-runtime` |
+| `runtime/reply/info-renderers-runtime.js` | Renders settings, bookmarks, topics, and help views as formatted legacy Telegram Markdown strings | Markdown strings | None |
+| `runtime/reply/transport.js` | `httpsPost` HTTPS helper and `createTelegramTransport` / `createAnthropicTransport` factory functions used by the legacy reply handler | `{ status, body }` via `node:https`; saved audio file via `node:fs` | `node:https`, `node:fs` |
+| `runtime/reply/onboarding-service-runtime.js` | Legacy onboarding state machine: begins and completes the link-verification flow; manages resend cooldown and attempt limits | State mutations; sends verification email; sends Telegram prompt | `./onboarding/pending-verification`, `./onboarding/onboarding-context`, `./onboarding/link-verification-flow` |
 | `runtime/reply/onboarding-service.js` | Validation wrapper around `onboarding-service-runtime`; asserts required function deps before delegating | `OnboardingService` instance | `./onboarding-service-runtime` |
 | `runtime/reply/onboarding/keys.js` | Pure crypto helpers: `chatKey`, `normalizeEmail`, `generateVerificationCode` (6-digit), `validateCodeInput` | Strings; boolean | `node:crypto` |
 | `runtime/reply/onboarding/link-verification-flow.js` | Orchestrates `beginLinkVerificationFlow` and `completeLinkVerificationFlow` steps using the onboarding context | State mutations; Telegram messages sent | `./keys`, `./pending-verification`, `./messages` |
@@ -269,8 +269,8 @@ Each `index.js` is the single authoritative import surface for a domain. Entrypo
 |------|---------|--------|--------------|
 | `domains/digest/index.js` | Merges all digest sub-modules: pipeline seam, domain logic, formatting, data, archive, delivery-record, and quality score | Full digest API surface | `../../digest/application/digest-pipeline-seam-runtime`, all `digest/domain/*` and `digest/runtime/*` modules, `../../runtime/quality-score` |
 | `domains/engagement/index.js` | Canonical engagement facade | `{ appendEngagementEventChecked, buildDigestId, loadEngagementEvents, … }` | `../../runtime/engagement/engagement-events-runtime` |
-| `domains/personalization/index.js` | Canonical personalization facade | `{ applyAutoTopicLearning, … }` | `../../runtime/personalization/personalization-runtime` |
-| `domains/reply/index.js` | Canonical reply facade; merges the reply handler, intent service, command router, onboarding, transport, logging, session, and command-handler modules | `{ handleIncomingMessage, handleCallbackQuery, … }` | `../../runtime/reply/reply-handler-runtime`, `../../runtime/reply/intent-service`, `../../runtime/reply/command-router`, and all other `runtime/reply/*` modules |
+| `domains/personalization/index.js` | Canonical personalization facade for the legacy topic-learning surface | `{ applyAutoTopicLearning, … }` | `../../runtime/personalization/personalization-runtime` |
+| `domains/reply/index.js` | Canonical reply facade for the legacy Telegram compatibility surface | `{ handleIncomingMessage, handleCallbackQuery, … }` | `../../runtime/reply/reply-handler-runtime`, `../../runtime/reply/intent-service`, `../../runtime/reply/command-router`, and all other `runtime/reply/*` modules |
 
 ---
 
@@ -278,9 +278,9 @@ Each `index.js` is the single authoritative import surface for a domain. Entrypo
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `dependency-links.mjs` | Static ESM import graph that anchors all production and script modules for import-graph tooling | Side-effects only (module loading) | All production `src/` modules and `scripts/` files |
+| `dependency-links.mjs` | Static ESM import graph that anchors the active email-first MVP modules plus core scripts for import-graph tooling | Side-effects only (module loading) | Active `src/` modules and `scripts/` files |
 | `dependency-links-entry.mjs` | Bridge shim that imports `dependency-links.mjs`; used to anchor the graph from a single entry | Re-imports `./dependency-links.mjs` | `./dependency-links.mjs` |
-| `module-coverage-runtime.js` | Requires every key module in-process and runs assertion-based smoke tests to confirm they export expected symbols; used in CI | Test pass/fail assertions via `node:assert` | `node:assert`, `node:child_process`, `node:fs`, `node:path`, all key `src/` modules |
+| `module-coverage-runtime.js` | Requires every key active-path module in-process and runs assertion-based smoke tests to confirm they export expected symbols; used in CI | Test pass/fail assertions via `node:assert` | `node:assert`, `node:child_process`, `node:fs`, `node:path`, key active-path `src/` modules |
 | `module-coverage.test.js` | Thin test-runner shim that delegates to `module-coverage-runtime` | Calls `runModuleCoverageTests()` | `./module-coverage-runtime` |
 | `sandbox-pipeline.js` | Shim; re-exports `sandbox-pipeline-runtime` | Sandbox pipeline surface | `./sandbox-pipeline-runtime` |
-| `sandbox-pipeline-runtime.js` | Dry-run pipeline for the admin sandbox tool: fetches, enriches, and formats a digest without sending email or persisting user state | Formatted Telegram + email output objects | `node:crypto`, `./digest/application/digest-service-runtime`, `../domains/digest` |
+| `sandbox-pipeline-runtime.js` | Dry-run pipeline for the admin sandbox tool: fetches, enriches, and formats a digest without sending email or persisting user state | Formatted email output objects plus legacy Telegram preview output | `node:crypto`, `./digest/application/digest-service-runtime`, `../domains/digest` |

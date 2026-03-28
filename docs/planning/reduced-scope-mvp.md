@@ -1,3 +1,108 @@
+## 2026-03-27 Update — QA Audit Against Current Codebase
+
+Audit basis: `reduced-scope-mvp.md` against the merged/deployed code at commit `c2492f70d63edeef8d2e96b3964f619654ba4125`.
+
+Verdict: the scheduled email path is much closer to the reduced-scope MVP, but the codebase does not fully match the spec yet. The main runtime behavior is mostly pointed in the right direction; the biggest failures are incomplete architectural cleanup, incomplete source/control cleanup, and legacy scope still leaking into active modules.
+
+### A. Fully implemented and aligned
+
+- The hard `5 items per topic` shipping contract is enforced in the scheduled path; underfilled topic buckets are withheld rather than sent. Files: `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js`, `src/runtime/config-provider.js`.
+- The `48h` freshness ceiling is enforced in fetch, scoring, selection, and tuning validation. Files: `src/entrypoints/digest-orchestrator-fetch-runtime.js`, `src/domains/scoring/score-candidate.js`, `src/runtime/digest-tuning-runtime.js`.
+- The live delivery path is email-only; Telegram is rejected in signup/settings and not used in delivery. Files: `web/services/web-user-signup-actions-runtime.js`, `web/services/web-user-settings-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js`.
+- Founder/operator auditability is strong: topic/day audit, lane mix, candidate diagnostics, source health, and rerun diagnostics are all present. Files: `src/entrypoints/digest-orchestrator-core-runtime.js`, `web/routes/admin-api-digest-audit-runtime.js`, `web/admin.html`.
+
+### B. Partially implemented
+
+- The active broker path is reduced to the 7 MVP topics, but old topic taxonomy still exists in shared active modules. Files: `src/runtime/standard-topic-broker-runtime.js`, `src/digest/domain/storyline-domain-runtime.js`, `src/runtime/topic-normalization-runtime.js`.
+- `One story to one best-fit topic` is implemented through storyline clustering plus canonical topic reassignment, but it is still heuristic, not a hard event-identity guarantee. Files: `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/digest/domain/storyline-domain-runtime.js`, `src/runtime/standard-topic-broker-runtime.js`.
+- Repetition handling exists via repeat history, cross-day dedupe, follow-up classification, and history suppression, but `distinct new angle` is still inferred rather than explicitly enforced. Files: `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/entrypoints/digest-orchestrator-core-runtime.js`.
+- RSS/direct-first with discovery capped is implemented, but there is no separate 4-hour ingest/cache backbone; feed retrieval still appears tied to digest runtime. Files: `src/entrypoints/digest-orchestrator-fetch-runtime.js`, `src/runtime/standard-topic-broker-runtime.js`, `src/entrypoints/scheduler-worker.js`.
+- Depth modes reuse the same selected items, but scan still runs enrichment and final bucketing can still use `relevanceScore`. Files: `src/runtime/digest-depth-runtime.js`, `src/digest/runtime/digest-data-enrich-runtime.js`, `src/runtime/digest-delivery-policy-runtime.js`.
+- Source/admin controls are useful, but not complete: source enable/tier, topic feed/official toggles, tuning, reruns, regeneration, and editorial override APIs exist, but there is no per-topic discovery toggle and no obvious first-class `add broker source` flow. Files: `web/routes/admin-api-source-registry-runtime.js`, `web/admin-source-registry.html`, `web/routes/admin-api-digest-tuning-runtime.js`, `web/routes/admin-api-editorial-overrides-runtime.js`.
+
+### C. Still missing
+
+- A distinct `every 4 hours` feed-ingestion backbone/cache, separate from the daily send path. Files: `src/entrypoints/digest-orchestrator-fetch-runtime.js`, `src/entrypoints/scheduler-worker.js`.
+- Per-topic discovery-lane on/off control. Files: `web/routes/admin-api-source-registry-runtime.js`, `web/admin-source-registry.html`.
+- A clean archive/deprecated boundary for removed runtime/config code. Most old code is still co-located with active code rather than moved under archive/deprecated.
+
+### D. Still conflicts with the spec
+
+- Old topic families like `policy regulatory`, `public sector`, `digital`, `sustainability`, `pe m a`, and `talent` still live in active shared modules. Files: `src/digest/domain/storyline-domain-runtime.js`, `src/runtime/topic-normalization-runtime.js`, `src/runtime/preferred-source-registry-runtime.js`.
+- The public `/digest/:date?` route still exists in the active router, even though it only redirects/fails rather than serving a public digest. Files: `web/routes/public-static.js`.
+- `consultant_lens_mode` still leaks through the public user record/preferences surface, which is out of scope for this MVP. Files: `web/routes/core-api.js`.
+- The old preferred-sources registry still coexists with the broker registry, so the source registry is not truly singular. Files: `src/runtime/preferred-source-registry-runtime.js`, `config/preferred-sources.json`, `config/standard-topic-broker-sources.json`.
+
+### E. Old/out-of-scope features still active in the main codepath
+
+- Legacy topic aliasing and related-topic logic still influence active topic-fit/scoring behavior. Files: `src/digest/domain/storyline-domain-runtime.js`, `src/runtime/topic-normalization-runtime.js`.
+- `/digest` remains an active public route, even if neutered. Files: `web/routes/public-static.js`.
+- `consultant_lens_mode` is still part of the active public API contract. Files: `web/routes/core-api.js`.
+
+### F. Archived/deprecated successfully
+
+- Deprecated user-facing fields are mostly removed from active signup/settings/admin payloads and rejected on write: `telegram`, `items_per_digest`, `topic_weights`, `custom_keywords`, `watchlist`, `source_preferences`, `bookmarks`. Files: `web/services/web-user-signup-actions-runtime.js`, `web/services/web-user-settings-runtime.js`, `web/routes/core-api.js`.
+- Public on-demand digest serving is behaviorally retired; archive browsing remains. Files: `web/routes/public-static.js`, `web/routes/core-api-archive-runtime.js`.
+- Caveat: this is behavioral deprecation, not structural archival. Very little is actually moved under archive/deprecated beyond docs/tests.
+
+### G. Technically works but violates the spirit of the spec
+
+- Selection can underfill internally and only fail closed at delivery time; that meets the send contract but not the cleanest `always assemble 5 strong signals or stop earlier` intent. Files: `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js`.
+- `scan` depth still triggers enrichment work; the spec explicitly wanted depth to affect writeup length, not selection, and did not want scan to require Claude. Files: `src/runtime/digest-depth-runtime.js`, `src/digest/runtime/digest-data-enrich-runtime.js`.
+- Final per-topic bucket order can depend on `relevanceScore`, which is too close to old relevance/personalization logic for a strict MVP reading. Files: `src/runtime/digest-delivery-policy-runtime.js`.
+- The product behavior is reduced-scope; the codebase itself is not yet reduced-scope.
+
+### Feature-by-feature status table
+
+| Spec area | Expected behavior | Current implementation | Status | Files involved | Recommended next action |
+|---|---|---|---|---|---|
+| Topic scope | Only 7 MVP topics active | Broker runtime uses 7 topics, but old topic taxonomy remains in shared active modules | Partial | `src/runtime/standard-topic-broker-runtime.js`, `src/digest/domain/storyline-domain-runtime.js`, `src/runtime/topic-normalization-runtime.js` | Remove non-MVP topics/aliases from active shared code and archive them |
+| Exactly 5 items/topic | Every delivered topic digest has exactly 5 items | Delivery withholds underfilled topics; config is fixed at 5 | Aligned | `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js`, `src/runtime/config-provider.js` | Keep; optionally fail earlier in selection for cleaner semantics |
+| Freshness max 48h | Never exceed 48h | Hard-clamped in fetch/scoring/selection/tuning | Aligned | `src/entrypoints/digest-orchestrator-fetch-runtime.js`, `src/domains/scoring/score-candidate.js`, `src/runtime/digest-tuning-runtime.js` | Keep |
+| One story to one topic | Best-fit topic only | Storylines are clustered then canonically reassigned | Partial | `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/digest/domain/storyline-domain-runtime.js` | Add a harder cross-topic uniqueness rule keyed by storyline/event |
+| Repetition across days | Avoid repeats unless clearly new angle | Repeat index, history suppression, follow-up logic exist | Partial | `src/entrypoints/digest-orchestrator-selection-runtime.js`, `src/entrypoints/digest-orchestrator-core-runtime.js` | Make `new angle` auditable and explicit in rejection/keep reasons |
+| RSS/direct backbone | Feed/direct sources drive retrieval; discovery only supplements | Broker-first, discovery capped, but no separate ingest backbone found | Partial | `src/entrypoints/digest-orchestrator-fetch-runtime.js`, `src/runtime/standard-topic-broker-runtime.js`, `src/entrypoints/scheduler-worker.js` | Build a 4-hour ingest/cache job and score from stored candidates |
+| Discovery as supplement only | AI search not backbone | Discovery share is capped and visible, but control surface is incomplete | Partial | `src/entrypoints/digest-orchestrator-fetch-runtime.js`, `web/admin.html`, `web/admin-source-registry.html` | Add per-topic discovery toggles and clearer operator controls |
+| Email-only MVP | No Telegram/user-channel branching | Signup/settings reject Telegram; delivery sends email only | Aligned | `web/services/web-user-signup-actions-runtime.js`, `web/services/web-user-settings-runtime.js`, `src/entrypoints/digest-orchestrator-delivery-runtime.js` | Keep |
+| Depth modes | Change writeup length only, not selection | Same selected items reused, but scan still enriches and bucket order can use relevanceScore | Partial | `src/runtime/digest-depth-runtime.js`, `src/digest/runtime/digest-data-enrich-runtime.js`, `src/runtime/digest-delivery-policy-runtime.js` | Skip enrichment for scan; order by `_score` only |
+| Auditability | Founder can inspect what went in and why | Audit docs, lane mix, source health, topic rerun diagnostics exist | Aligned | `src/entrypoints/digest-orchestrator-core-runtime.js`, `web/routes/admin-api-digest-audit-runtime.js`, `web/admin.html` | Keep |
+| Source registry and controls | Single source of truth with operator controls | Strong controls exist, but legacy preferred-source config remains and discovery toggle is missing | Partial | `web/routes/admin-api-source-registry-runtime.js`, `config/preferred-sources.json`, `config/standard-topic-broker-sources.json` | Make broker registry sole source of truth; remove legacy registry |
+| Deprecated/out-of-scope cleanup | Old features removed from active path and archived cleanly | Public/admin payloads are mostly clean, but old code/config/routes still remain nearby or active | Conflicting | `web/routes/core-api.js`, `web/routes/public-static.js`, `src/runtime/user-contract-runtime.js` | Delete/archive legacy code instead of only stripping it at the edges |
+
+### Dead code, stale config, unused routes, or hidden coupling still left behind
+
+- `config/preferred-sources.json`: legacy registry with many non-MVP topics.
+- `src/runtime/preferred-source-registry-runtime.js`: legacy fallback logic and aliases still present.
+- `src/runtime/topic-normalization-runtime.js`: related-topic groups still include removed topic families.
+- `src/digest/domain/storyline-domain-runtime.js`: active shared domain file still carries a large pre-MVP topic universe.
+- `src/runtime/digest-delivery-policy-runtime.js`: legacy custom-keyword/confidence machinery remains in an active module.
+- `web/routes/public-static.js`: `/digest` compatibility route still shipped.
+- `src/runtime/user-contract-runtime.js`: model-cleanup is incomplete; removed fields are still stripped rather than absent by construction.
+- `config/standard-topic-broker-sources.json`: still includes disabled `POLICY×REGULATORY`.
+
+### Risky assumptions made during implementation
+
+- This audit checks code paths, not live content quality across recent real digest days.
+- It does not inspect a full run-history sample to prove operational metrics like `>=15 candidates/topic/day` or `0 duplicate URLs across consecutive days`.
+- It treats this markdown file as the sole source of truth because that was the instruction.
+- It assumes commit `c2492f70d63edeef8d2e96b3964f619654ba4125` is the right audit target because it matches the merged/deployed worktree inspected.
+
+### The 5 biggest gaps or concerns remaining
+
+1. No clear separate 4-hour feed-ingestion backbone/cache.
+2. Legacy topic/config/runtime surface is still too large for a true reduced-scope MVP.
+3. Source registry is not truly singular, and discovery-lane controls are incomplete.
+4. Story/topic uniqueness and repeat handling are still heuristic, not hard guarantees.
+5. Depth-mode implementation still leaks old behavior through enrichment work and `relevanceScore` ordering.
+
+### Top 3 highest-leverage next fixes
+
+1. Build a real broker/feed ingest layer on a 4-hour cadence and rank from stored candidates, not just digest-time fetches.
+2. Delete/archive non-MVP topic machinery and make `config/standard-topic-broker-sources.json` the sole source registry; remove `config/preferred-sources.json`, `/digest`, and `consultant_lens_mode`.
+3. Lock selection semantics: hard one-story/one-topic enforcement, `_score`-only ordering after selection, and no enrichment for scan mode.
+
+Bottom line: the main scheduled product flow is mostly pointed at the reduced-scope MVP, but the codebase is not yet cleanly reduced to it. The runtime is closer than the repository structure.
+
 SignalBrief MVP — Architecture Reset & Build Plan (v2)
 
 1. MVP Product Definition

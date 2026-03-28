@@ -181,6 +181,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     digestDateKey: "2026-03-27",
     dueUsersCount: 1,
     standardFetchCallsPlanned: 7,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
   });
 
   assert.strictEqual(fallbackOut.selected.length, 5, "fallback path should preserve the 5-item contract when 4 events + 1 commentary are available");

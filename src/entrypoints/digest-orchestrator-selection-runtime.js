@@ -302,6 +302,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       dueUsersCount,
       standardFetchCallsPlanned,
       scoringConfig: paramScoringConfig,
+      nowMs: paramNowMs,
     } = params;
     let allItems = params.allItems; // must be let — editorial override block reassigns it below
     const rawCandidateCount = Array.isArray(allItems) ? allItems.length : 0;
@@ -495,7 +496,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const scoringConfig = paramScoringConfig && typeof paramScoringConfig === "object"
       ? paramScoringConfig
       : (CONFIG.digest?.scoring || {});
-    const nowMs = Date.now();
+    const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
     const scoredItems = scoreCandidates(scoringInput, { scoringConfig, nowMs });
     if (scoredItems.length > 0) {
       const topScore = scoredItems[0]?._score?.toFixed(3) ?? "?";

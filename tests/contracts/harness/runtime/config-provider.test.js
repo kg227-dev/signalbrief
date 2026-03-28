@@ -52,6 +52,14 @@ const testConfig = {
       tag: "AI×TECH",
       queries: ["ai strategy updates 2026"],
     },
+    {
+      tag: "CONSUMER",
+      queries: ["retail and consumer pricing"],
+    },
+    {
+      tag: "HEALTHCARE",
+      queries: ["hospital strategy"],
+    },
   ],
   admin: {
     email: "config-admin@example.com",
@@ -80,6 +88,11 @@ try {
   assert.strictEqual(envOverridden.admin.email, "env-admin@example.com", "env admin email should override config");
   assert.strictEqual(envOverridden.keys.anthropic, "config-anthropic", "non-overridden keys should remain from config");
   assert.strictEqual(envOverridden.digest.itemCount, 5, "runtime config should normalize the MVP digest size to 5");
+  assert.deepStrictEqual(
+    envOverridden.topics.map((topic) => topic.tag),
+    ["HEALTHCARE", "CONSUMER & RETAIL"],
+    "runtime config should strip legacy topics and canonicalize consumer to consumer & retail"
+  );
 
   process.env.SIGNALBRIEF_PERPLEXITY_API_KEY = "";
   process.env.SIGNALBRIEF_ADMIN_EMAIL = "";
@@ -88,6 +101,11 @@ try {
   assert.strictEqual(configOnly.keys.perplexity, "config-perplexity", "config value should be used when env override is absent");
   assert.strictEqual(configOnly.admin.email, "config-admin@example.com", "config admin email should be used when env override is absent");
   assert.strictEqual(configOnly.digest.itemCount, 5, "legacy config itemCount should be coerced to the MVP fixed count");
+  assert.deepStrictEqual(
+    configOnly.topics.map((topic) => topic.tag),
+    ["HEALTHCARE", "CONSUMER & RETAIL"],
+    "config-only load should keep only canonical reduced-scope topics"
+  );
 } finally {
   for (const key of envKeys) {
     const value = originalEnv.get(key);

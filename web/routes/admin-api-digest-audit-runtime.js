@@ -18,7 +18,15 @@ function pct(part, whole) {
 function normalizeSelectedTier(rawTier) {
   const numeric = Number(rawTier);
   if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
+  const normalized = String(rawTier || "").trim().toLowerCase();
+  if (normalized === "premium") return 1;
+  if (normalized === "strong") return 2;
+  if (normalized === "standard") return 3;
   return null;
+}
+
+function resolveCandidateLane(candidate = {}) {
+  return candidate?.lane || candidate?.retrieval_origin || candidate?.retrieval_lane || candidate?.retrieval_pass || "";
 }
 
 function buildSourceHealthSummary(sourceHealth = {}) {
@@ -122,7 +130,7 @@ function buildTopicReadiness(auditDocs = [], sourceHealth = aggregateSourceHealt
       if (totalCandidates >= 15) stats.candidate_depth_ok_days += 1;
       stats.missed_story_flag_count += Math.max(0, Number(Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags.length : 0));
       for (const candidate of candidates) {
-        const lane = classifyLane(candidate?.lane);
+        const lane = classifyLane(resolveCandidateLane(candidate));
         stats.lane_totals[lane] = (stats.lane_totals[lane] || 0) + 1;
         if (candidate?.selected === true) {
           stats.selected_item_count += 1;
@@ -237,9 +245,15 @@ function buildRollingMvpReadiness(auditDocs = [], sourceHealth = aggregateSource
   let missedStoryFlagCount = 0;
   let underfilledTopicDays = 0;
   let fullDigestDays = 0;
+  let candidateLaneEvidenceCount = 0;
+  const laneTotals = { rss: 0, official: 0, discovery: 0, unknown: 0 };
+  let fallbackBrokerCandidateCount = 0;
+  let fallbackDiscoveryCandidateCount = 0;
 
   const fullDays = [];
   for (const doc of docs) {
+    fallbackBrokerCandidateCount += Number(doc?.fetch?.broker_candidate_count || 0);
+    fallbackDiscoveryCandidateCount += Number(doc?.fetch?.discovery_candidate_count || 0);
     const topics = doc?.topics && typeof doc.topics === "object" ? Object.entries(doc.topics) : [];
     let dayIsFull = topics.length > 0;
     for (const [, topic] of topics) {
@@ -253,6 +267,9 @@ function buildRollingMvpReadiness(auditDocs = [], sourceHealth = aggregateSource
       if (Number(topic?.total_candidates || 0) >= 15) topicDaysDepthOk += 1;
       missedStoryFlagCount += Math.max(0, Number(Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags.length : 0));
       for (const candidate of (Array.isArray(topic?.candidates) ? topic.candidates : [])) {
+        const lane = classifyLane(resolveCandidateLane(candidate));
+        laneTotals[lane] = (laneTotals[lane] || 0) + 1;
+        candidateLaneEvidenceCount += 1;
         if (candidate?.selected !== true) continue;
         selectedItemCount += 1;
         const tier = normalizeSelectedTier(candidate?.source_tier);
@@ -278,11 +295,23 @@ function buildRollingMvpReadiness(auditDocs = [], sourceHealth = aggregateSource
     providerLimitedTopicDays += Number(topic?.provider_limited_days || 0);
   }
 
-  const brokerCandidateCount = docs.reduce((sum, doc) => sum + Number(doc?.fetch?.broker_candidate_count || 0), 0);
-  const discoveryCandidateCount = docs.reduce((sum, doc) => sum + Number(doc?.fetch?.discovery_candidate_count || 0), 0);
+  const laneTotalCount = Number(laneTotals.rss || 0)
+    + Number(laneTotals.official || 0)
+    + Number(laneTotals.discovery || 0)
+    + Number(laneTotals.unknown || 0);
+  const brokerCandidateCount = candidateLaneEvidenceCount > 0
+    ? Number(laneTotals.rss || 0) + Number(laneTotals.official || 0)
+    : fallbackBrokerCandidateCount;
+  const discoveryCandidateCount = candidateLaneEvidenceCount > 0
+    ? Number(laneTotals.discovery || 0)
+    : fallbackDiscoveryCandidateCount;
   const trustedSelectedSharePct = pct(trustedSelectedItemCount, selectedItemCount);
-  const brokerCandidateSharePct = pct(brokerCandidateCount, brokerCandidateCount + discoveryCandidateCount);
-  const discoveryCandidateSharePct = pct(discoveryCandidateCount, brokerCandidateCount + discoveryCandidateCount);
+  const brokerCandidateSharePct = candidateLaneEvidenceCount > 0
+    ? pct(Number(laneTotals.rss || 0) + Number(laneTotals.official || 0), laneTotalCount)
+    : pct(brokerCandidateCount, brokerCandidateCount + discoveryCandidateCount);
+  const discoveryCandidateSharePct = candidateLaneEvidenceCount > 0
+    ? pct(Number(laneTotals.discovery || 0), laneTotalCount)
+    : pct(discoveryCandidateCount, brokerCandidateCount + discoveryCandidateCount);
   const sourceSuccessRatePct = pct(sourceSuccessDays, sourceAttemptedDays);
   const topicDayFull5RatePct = pct(topicDaysFull5, topicDaysObserved);
   const candidateDepthRatePct = pct(topicDaysDepthOk, topicDaysObserved);

@@ -10,10 +10,14 @@ const {
 {
   assert.strictEqual(classifyLane("rss"), "rss");
   assert.strictEqual(classifyLane("publisher_feed"), "rss");
+  assert.strictEqual(classifyLane("broker_publisher_feed"), "rss");
   assert.strictEqual(classifyLane("official"), "official");
+  assert.strictEqual(classifyLane("broker_official"), "official");
   assert.strictEqual(classifyLane("regulatory"), "official");
   assert.strictEqual(classifyLane("perplexity_discovery"), "discovery");
   assert.strictEqual(classifyLane("discovery"), "discovery");
+  assert.strictEqual(classifyLane("preferred"), "discovery");
+  assert.strictEqual(classifyLane("broad"), "discovery");
   assert.strictEqual(classifyLane(""), "unknown");
   assert.strictEqual(classifyLane(null), "unknown");
   console.log("classifyLane ✓");

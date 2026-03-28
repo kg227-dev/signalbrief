@@ -1,6 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 const { validateConfigSchema } = require("./config-schema-runtime");
+const {
+  STANDARD_MVP_TOPIC_TAGS,
+  canonicalizeMvpTopicTag,
+} = require("./topic-normalization-runtime");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const CONFIG_PATH = path.join(APP_ROOT, "config.json");
@@ -74,6 +78,28 @@ function applyEnvOverrides(config) {
   return resolved;
 }
 
+function normalizeTopicQueries(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function normalizeMvpTopics(rawTopics) {
+  const byTag = new Map();
+  for (const rawTopic of (Array.isArray(rawTopics) ? rawTopics : [])) {
+    const canonicalTag = canonicalizeMvpTopicTag(rawTopic?.tag);
+    if (!canonicalTag || byTag.has(canonicalTag)) continue;
+    byTag.set(canonicalTag, {
+      ...(rawTopic && typeof rawTopic === "object" ? rawTopic : {}),
+      tag: canonicalTag,
+      queries: normalizeTopicQueries(rawTopic?.queries),
+    });
+  }
+  return STANDARD_MVP_TOPIC_TAGS
+    .filter((tag) => byTag.has(tag))
+    .map((tag) => byTag.get(tag));
+}
+
 function normalizeMvpConfig(config) {
   const resolved = JSON.parse(JSON.stringify(config));
   if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
@@ -81,6 +107,7 @@ function normalizeMvpConfig(config) {
       resolved.digest = {};
     }
     resolved.digest.itemCount = 5;
+    resolved.topics = normalizeMvpTopics(resolved.topics);
   }
   return resolved;
 }

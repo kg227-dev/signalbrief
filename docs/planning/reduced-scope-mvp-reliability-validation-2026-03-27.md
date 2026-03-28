@@ -100,8 +100,8 @@ The 7-day window passes only if all of the following are true:
 | Field | Value |
 |---|---|
 | Current deploy SHA | `02bc16211dcad3e2d2c39ac66a98e893acc901a7` |
-| Validation start date | 2026-03-29 (Day 1 = first 07:00 ET send) |
-| Validation end date | 2026-04-04 (Day 7) |
+| Validation start date | 2026-03-28 (Day 1 = first 07:00 ET send) |
+| Validation end date | 2026-04-03 (Day 7) |
 | Primary operator | Kush Gulati |
 | Secondary operator | TBD |
 | Current digest tuning snapshot | No `data/digest-tuning.json` present — system uses hardcoded defaults |
@@ -159,7 +159,7 @@ The 7-day window passes only if all of the following are true:
 
 | Day | Date | Scheduler healthy | Canary users due | Canary users delivered | Topic-days expected | Topic-days 5/5 | Freshness violations >48h | Duplicate URL violations | Topic-days depth <15 | Tier 1/2 share | Broker share | Discovery share | Broker source success | Incidents opened | Circuit breaker | Manual interventions | Color | Notes |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---:|---|---|---|---|
-| Day 1 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
+| Day 1 | 2026-03-28 | Yes | 10 | 0 | 16 | 0 | 0 | 0 | 10 observed in audit; 2 intended-topic misses | KPI bug in admin | KPI bug in admin | KPI bug in admin | 89.36% | 4 | Closed | Scheduler lock reset pre-Day 1; no rerun used to satisfy canaries | Red | Scheduled run executed, but all canaries missed. Audit leaked 8 legacy topics; 9 canaries failed on `normalizeCustomKeyword is not defined`; T6 was withheld because `CONSUMER` did not bucket into `CONSUMER & RETAIL`. |
 | Day 2 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 3 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
@@ -189,10 +189,51 @@ The 7-day window passes only if all of the following are true:
 
 ### Day 1
 
-- [ ] Pre-send checks complete
-- [ ] Post-send checks complete
-- [ ] Scorecard row completed
-- [ ] Root cause note added if yellow or red
+- [x] Pre-send checks complete
+- [x] Post-send checks complete
+- [x] Scorecard row completed
+- [x] Root cause note added if yellow or red
+
+#### Day 1 Result
+
+`Red`
+
+The scheduled run executed on production as `scheduled:2026-03-28T11-04-33-111Z`, but the canary promise failed. The run-level audit captured 15 topic buckets instead of the intended 7 reduced-scope topics, and all 10 canary records ended in either failed delivery or withholding.
+
+#### Day 1 What Worked
+
+- Scheduler did run on time and produced a scheduled audit doc at `data/digest-audit/2026-03-28.json`.
+- Freshness held: no selected item in the audit exceeded 48 hours.
+- Broker/source backbone was materially present in the selected set even though the admin KPI is currently wrong. Selected lanes were `41 broker_publisher_feed`, `5 broker_official`, and `3 broad`.
+- The source backbone itself was close to target at `42/47` successful broker source fetches, or `89.36%`.
+
+#### Day 1 What Failed
+
+- **Canary delivery failed**: 9 canary digest records failed after selection with `normalizeCustomKeyword is not defined`.
+- **Consumer delivery path failed differently**: T6 (`Consumer & Retail`) was withheld with `retrieval_thin`, and M3 only had `10/15` items available. This aligns with active selection producing `CONSUMER` while user subscriptions and delivery bucketing expect `CONSUMER & RETAIL`.
+- **Reduced-scope topic enforcement failed**: the Day 1 audit file contains 15 topic keys: `TECHNOLOGY`, `REAL ESTATE`, `LIFE SCIENCES`, `HEALTHCARE`, `FINANCIAL SERVICES`, `AI×TECH`, `ENERGY`, `INDUSTRIALS`, `CONSUMER`, `DIGITAL`, `POLICY×REGULATORY`, `TALENT`, `PUBLIC SECTOR`, `STRATEGY`, and `SUSTAINABILITY`.
+- **Candidate depth failed**: only 5 of the 15 observed audit topics cleared the `>=15` candidate threshold. On the intended 7-topic set, `HEALTHCARE` had `12` candidates and `CONSUMER` had `7`.
+- **Admin readiness KPIs are partially wrong**: the current digest-audit readiness layer reported `0%` trusted share and `0%` broker share even though the selected set was mostly broker-fed and mostly from `strong`/`premium`/`standard` sources. This means the dashboard is not yet a reliable source for those specific Day 1 percentages.
+
+#### Day 1 Root Cause Summary
+
+1. **Legacy delivery code is still active**: the send path crashes on a custom-keyword normalization reference that should not be on the active reduced-scope MVP path.
+2. **Legacy topic scope is still leaking into scheduled selection/audit**: the scheduled run is still emitting non-MVP topic tags into the Day 1 audit.
+3. **Topic naming is inconsistent in the active path**: `CONSUMER` selection does not align with `CONSUMER & RETAIL` user subscriptions and exact-match delivery bucketing.
+4. **Admin KPI math is not yet trustworthy for backbone/trusted-share reporting**: the selected-set evidence and the readiness calculations disagree.
+
+#### Day 1 Immediate Execution Order
+
+1. Fix the delivery crash so scheduled canaries can actually complete.
+2. Fix active topic normalization and delivery bucketing so only the 7 MVP topics participate, including `CONSUMER & RETAIL`.
+3. Fix admin digest-audit KPI math so Day 2 evidence reflects the real run.
+
+#### Day 1 Remediation Started
+
+- [x] Clamp active config/fetch topic lists to the 7 reduced-scope MVP topics and canonicalize `CONSUMER` to `CONSUMER & RETAIL`.
+- [x] Normalize per-user delivery bucketing so legacy `CONSUMER` selections still land in `CONSUMER & RETAIL` subscriptions.
+- [x] Fix admin digest-audit readiness math to count string source tiers (`premium`, `strong`, `standard`) and audited candidate lanes (`broker_publisher_feed`, `broker_official`, `broad`) correctly.
+- [x] Re-ran local contract coverage: `npm test`, `npm run smoke:worker`, and `npm run smoke:admin-scheduler` all passed before deploy.
 
 ### Day 2
 
@@ -256,7 +297,10 @@ The 7-day window passes only if all of the following are true:
 
 | Date | Severity | Trigger | What failed | User impact | Evidence | Root cause | Intervention used | Follow-up action | Closed |
 |---|---|---|---|---|---|---|---|---|---|
-| TBD |  |  |  |  |  |  |  |  |  |
+| 2026-03-28 | Critical | Scheduled delivery runtime | 9 canary digests failed after selection with `normalizeCustomKeyword is not defined` | 9/10 canary sends failed; 0 successful canary deliveries on Day 1 | Production digest records under `data/digest-records/email-177467271*/2026-03-28--scheduled.json` | Legacy custom-keyword delivery path still active in reduced-scope runtime | None during Day 1 window; no rerun used to claim success | Patch delivery runtime and re-verify on Day 2 | No |
+| 2026-03-28 | High | Scheduled topic selection/audit | Audit emitted 15 topic keys instead of the intended 7 reduced-scope topics | Day 1 evidence polluted; out-of-scope topic logic is still active | Production audit file `data/digest-audit/2026-03-28.json` | Legacy topic scope still leaks into scheduled selection/audit | None | Restrict active scheduled path to the 7 MVP topics only | No |
+| 2026-03-28 | High | Topic naming mismatch | `CONSUMER` selection did not land in `CONSUMER & RETAIL` user buckets | T6 was withheld; M3 underfilled at `10/15` requested items | Production digest records for `email-1774672713028` and `email-1774672713049` | Exact-match delivery bucketing does not reconcile active topic aliases | None | Normalize delivery bucketing/topic tags to the MVP canonical topic names | No |
+| 2026-03-28 | Medium | Admin audit KPI math | Trusted-share and broker-share KPIs reported impossible zeros | Operator dashboard is misleading for Day 1 backbone/trust metrics | Selected-item lane/tier breakdown from `data/digest-audit/2026-03-28.json` vs readiness calculations | Readiness builder assumes numeric source tiers and inconsistent fetch counters | Manual inspection of raw audit doc | Fix digest-audit metric calculation before relying on dashboard percentages | No |
 
 ## Scenario Handling Notes
 

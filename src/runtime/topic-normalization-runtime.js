@@ -1,5 +1,15 @@
 "use strict";
 
+const STANDARD_MVP_TOPIC_TAGS = Object.freeze([
+  "HEALTHCARE",
+  "LIFE SCIENCES",
+  "TECHNOLOGY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
+  "CONSUMER & RETAIL",
+  "INDUSTRIALS",
+]);
+
 function normalizeMatchText(value) {
   return String(value || "")
     .toLowerCase()
@@ -10,6 +20,24 @@ function normalizeMatchText(value) {
 
 function normalizeTopicToken(value) {
   return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
+}
+
+const CANONICAL_MVP_TOPIC_ALIASES = Object.freeze((() => {
+  const aliases = Object.create(null);
+  for (const tag of STANDARD_MVP_TOPIC_TAGS) {
+    aliases[normalizeTopicToken(tag)] = tag;
+  }
+  aliases[normalizeTopicToken("CONSUMER")] = "CONSUMER & RETAIL";
+  return aliases;
+})());
+
+function canonicalizeMvpTopicTag(value) {
+  const normalized = normalizeTopicToken(value);
+  return CANONICAL_MVP_TOPIC_ALIASES[normalized] || "";
+}
+
+function isStandardMvpTopicTag(value) {
+  return Boolean(canonicalizeMvpTopicTag(value));
 }
 
 const RELATED_TOPIC_GROUPS = Object.freeze([
@@ -30,6 +58,9 @@ function topicsRelated(a, b) {
 }
 
 module.exports = {
+  STANDARD_MVP_TOPIC_TAGS,
+  canonicalizeMvpTopicTag,
+  isStandardMvpTopicTag,
   RELATED_TOPIC_GROUPS,
   normalizeMatchText,
   normalizeTopicToken,

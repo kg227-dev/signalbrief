@@ -1,5 +1,7 @@
 "use strict";
 
+const { canonicalizeMvpTopicTag } = require("./topic-normalization-runtime");
+
 let topicDomainRuntime = null;
 let storylineDomainRuntime = null;
 
@@ -332,6 +334,12 @@ function deriveInternalThinnessLabel(params = {}) {
   return "product_underdelivery";
 }
 
+function resolveBucketTopicTag(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return canonicalizeMvpTopicTag(raw) || raw;
+}
+
 /**
  * Group items into per-topic buckets, each capped at `itemsPerTopic`,
  * sorted descending by relevanceScore. Only topics in subscribedTopics included.
@@ -342,13 +350,17 @@ function deriveInternalThinnessLabel(params = {}) {
  * @returns {{ [topic: string]: Array }}
  */
 function selectTopicBuckets(items, subscribedTopics, itemsPerTopic = 5) {
-  const topicSet = new Set(Array.isArray(subscribedTopics) ? subscribedTopics : []);
+  const topicSet = new Set(
+    (Array.isArray(subscribedTopics) ? subscribedTopics : [])
+      .map((topic) => resolveBucketTopicTag(topic))
+      .filter(Boolean)
+  );
   const buckets = {};
   for (const topic of topicSet) {
     buckets[topic] = [];
   }
   for (const item of (Array.isArray(items) ? items : [])) {
-    const tag = String(item?.tag || "").trim();
+    const tag = resolveBucketTopicTag(item?.tag);
     if (!topicSet.has(tag)) continue;
     buckets[tag].push(item);
   }

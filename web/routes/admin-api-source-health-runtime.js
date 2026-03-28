@@ -6,13 +6,17 @@ const path = require("path");
 const LANE_CLASSIFICATIONS = {
   rss: "rss",
   publisher_feed: "rss",
+  broker_publisher_feed: "rss",
   official: "official",
+  broker_official: "official",
   regulatory: "official",
   sec: "official",
   fda: "official",
   discovery: "discovery",
   perplexity: "discovery",
   perplexity_discovery: "discovery",
+  preferred: "discovery",
+  broad: "discovery",
 };
 
 /**
@@ -22,10 +26,14 @@ function classifyLane(raw) {
   const key = String(raw || "").toLowerCase().trim();
   if (!key) return "unknown";
   if (LANE_CLASSIFICATIONS[key]) return LANE_CLASSIFICATIONS[key];
-  if (key.includes("rss") || key.includes("feed")) return "rss";
-  if (key.includes("official") || key.includes("regulatory")) return "official";
-  if (key.includes("discovery") || key.includes("perplexity")) return "discovery";
+  if (key.includes("broker_publisher") || key.includes("rss") || key.includes("feed")) return "rss";
+  if (key.includes("broker_official") || key.includes("official") || key.includes("regulatory")) return "official";
+  if (key.includes("discovery") || key.includes("perplexity") || key === "preferred" || key === "broad") return "discovery";
   return "unknown";
+}
+
+function resolveCandidateLane(candidate = {}) {
+  return candidate?.lane || candidate?.retrieval_origin || candidate?.retrieval_lane || candidate?.retrieval_pass || "";
 }
 
 function normalizeDomain(raw) {
@@ -99,7 +107,7 @@ function mergeTopicCandidateFallback(topicStats, globalTotals, tag, candidates =
   }
   let dayBrokerCount = 0;
   for (const candidate of candidates) {
-    const lane = classifyLane(candidate?.lane);
+    const lane = classifyLane(resolveCandidateLane(candidate));
     stats.lane_totals[lane] = (stats.lane_totals[lane] || 0) + 1;
     globalTotals[lane] = (globalTotals[lane] || 0) + 1;
     const domain = normalizeDomain(candidate?.source);

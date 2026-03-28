@@ -42,4 +42,11 @@ function item(tag, score, url) {
   console.log("✓ missing relevanceScore safe");
 }
 
+// Test 5: legacy consumer alias canonicalizes into the MVP topic
+{
+  const result = selectTopicBuckets([item("CONSUMER", 9, "c1")], ["CONSUMER & RETAIL"], 5);
+  assert.strictEqual(result["CONSUMER & RETAIL"].length, 1, "legacy consumer items should land in the canonical consumer & retail bucket");
+  console.log("✓ consumer alias canonicalized");
+}
+
 console.log("All selectTopicBuckets tests passed ✓");

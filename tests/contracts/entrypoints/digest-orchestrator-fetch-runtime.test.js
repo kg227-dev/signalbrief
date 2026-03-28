@@ -52,6 +52,23 @@ assertModuleExports(() => runtime, TARGET_REL);
     ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "FINANCIAL SERVICES", "ENERGY"]
   );
 
+  const scheduledTopics = resolveTopicsToFetch({
+    configTopics: [
+      { tag: "HEALTHCARE", queries: ["a", "b"] },
+      { tag: "CONSUMER", queries: ["c", "d"] },
+      { tag: "REAL ESTATE", queries: ["e", "f"] },
+    ],
+    dueUsers: [
+      { topics: ["CONSUMER & RETAIL"] },
+    ],
+    runMode: "scheduled",
+    log: () => {},
+  });
+  assert.deepStrictEqual(
+    scheduledTopics.map((topic) => topic.tag),
+    ["HEALTHCARE", "CONSUMER & RETAIL"]
+  );
+
   const fetchCalls = [];
   const shortlistCalls = [];
   const fetchRuntime = createDigestOrchestratorFetchRuntime({

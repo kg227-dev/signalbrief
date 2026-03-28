@@ -92,6 +92,37 @@ function buildCtx(pathname) {
 }
 
 {
+  const readiness = buildRollingMvpReadiness([
+    {
+      date_et: "2026-03-28",
+      fetch: {
+        broker_candidate_count: 0,
+        discovery_candidate_count: 10,
+      },
+      topics: {
+        TECHNOLOGY: {
+          total_candidates: 5,
+          selected_count: 5,
+          missed_story_flags: [],
+          candidates: [
+            { selected: true, source_tier: "premium", retrieval_origin: "broker_publisher_feed" },
+            { selected: true, source_tier: "strong", retrieval_origin: "broker_official" },
+            { selected: true, source_tier: "standard", retrieval_origin: "broad" },
+            { selected: true, source_tier: "unknown", retrieval_origin: "broad" },
+            { selected: true, source_tier: "corporate", retrieval_origin: "broad" },
+          ],
+        },
+      },
+    },
+  ]);
+
+  assert.strictEqual(readiness.trusted_selected_share_pct, 40, "premium + strong should count as trusted Tier 1/2");
+  assert.strictEqual(readiness.broker_candidate_share_pct, 40, "candidate lane evidence should override stale fetch summary counts");
+  assert.strictEqual(readiness.discovery_candidate_share_pct, 60, "broad lane should count as discovery supplement");
+  console.log("buildRollingMvpReadiness string tiers ✓");
+}
+
+{
   const topicReadiness = buildTopicReadiness([
     {
       date_et: "2026-03-26",

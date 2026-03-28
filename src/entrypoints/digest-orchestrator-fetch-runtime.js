@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalizeSourcePolicyDomain } = require("../runtime/source-policy-registry-runtime");
+const { canonicalizeMvpTopicTag } = require("../runtime/topic-normalization-runtime");
 const { scoreCandidate } = require("../domains/scoring/score-candidate");
 const {
   createConversionFunnel,
@@ -121,20 +122,33 @@ function buildTagPriority(dueUsers, normalizeTopicToken) {
   return priority;
 }
 
+function sanitizeConfigTopicsToMvp(configTopics = []) {
+  const seenTags = new Set();
+  const topics = [];
+  for (const rawTopic of (Array.isArray(configTopics) ? configTopics : [])) {
+    const canonicalTag = canonicalizeMvpTopicTag(rawTopic?.tag);
+    if (!canonicalTag || seenTags.has(canonicalTag)) continue;
+    seenTags.add(canonicalTag);
+    const overrideQueries = TRACKED_TOPIC_QUERY_OVERRIDES[canonicalTag];
+    topics.push({
+      ...(rawTopic && typeof rawTopic === "object" ? rawTopic : {}),
+      tag: canonicalTag,
+      queries: Array.isArray(overrideQueries) && overrideQueries.length > 0
+        ? overrideQueries.slice()
+        : (Array.isArray(rawTopic?.queries) ? rawTopic.queries.slice() : []),
+    });
+  }
+  return topics;
+}
+
 function resolveTopicsToFetch({ configTopics, dueUsers, runMode, log }) {
-  const topics = (Array.isArray(configTopics) ? configTopics : []).map((topic) => {
-    const tag = String(topic?.tag || "").trim().toUpperCase();
-    const overrideQueries = TRACKED_TOPIC_QUERY_OVERRIDES[tag];
-    if (!Array.isArray(overrideQueries) || overrideQueries.length === 0) return topic;
-    return {
-      ...topic,
-      queries: overrideQueries.slice(),
-    };
-  });
+  const topics = sanitizeConfigTopicsToMvp(configTopics);
   const logger = typeof log === "function" ? log : () => {};
   if (String(runMode || "").trim() === "admin_topic_audit_rerun") {
     const focusedTags = new Set(
-      flattenDueUserTopics(dueUsers).map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+      flattenDueUserTopics(dueUsers)
+        .map((value) => canonicalizeMvpTopicTag(value))
+        .filter(Boolean)
     );
     const focusedTopics = topics.filter((topic) => focusedTags.has(String(topic?.tag || "").trim().toUpperCase()));
     logger(`Admin topic audit rerun: fetching ${focusedTopics.length}/${topics.length} topic(s) for ${Array.from(focusedTags).join(", ") || "none"}`);
@@ -176,7 +190,7 @@ function buildFocusedStandardTagSet(dueUsers = [], normalizeTopicToken = (value)
     : (value) => String(value || "").trim().toUpperCase();
   const focused = new Set();
   for (const topic of flattenDueUserTopics(dueUsers)) {
-    const key = String(normalized(topic) || "").trim().toUpperCase();
+    const key = canonicalizeMvpTopicTag(topic) || String(normalized(topic) || "").trim().toUpperCase();
     if (!key) continue;
     if (FULL_EXHAUST_STANDARD_TAGS.has(key)) focused.add(key);
   }
@@ -189,7 +203,7 @@ function buildAllStandardTagSet(dueUsers = [], normalizeTopicToken = (value) => 
     : (value) => String(value || "").trim().toUpperCase();
   const focused = new Set();
   for (const topic of flattenDueUserTopics(dueUsers)) {
-    const key = String(normalized(topic) || "").trim().toUpperCase();
+    const key = canonicalizeMvpTopicTag(topic) || String(normalized(topic) || "").trim().toUpperCase();
     if (!key || !ALL_STANDARD_TOPIC_TAGS.has(key)) continue;
     focused.add(key);
   }

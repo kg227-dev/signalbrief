@@ -1,5 +1,7 @@
 "use strict";
 
+const { canonicalizeMvpTopicTag } = require("./topic-normalization-runtime");
+
 const DELIVERY_POLICY = Object.freeze({
   target_item_count: 5,
   candidate_pool_target_count: 7,
@@ -42,12 +44,22 @@ function deriveInternalThinnessLabel(params = {}) {
   return "product_underdelivery";
 }
 
+function resolveBucketTopicTag(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return canonicalizeMvpTopicTag(raw) || raw;
+}
+
 function selectTopicBuckets(items, subscribedTopics, itemsPerTopic = 5) {
-  const topicSet = new Set(Array.isArray(subscribedTopics) ? subscribedTopics : []);
+  const topicSet = new Set(
+    (Array.isArray(subscribedTopics) ? subscribedTopics : [])
+      .map((topic) => resolveBucketTopicTag(topic))
+      .filter(Boolean)
+  );
   const buckets = {};
   for (const topic of topicSet) buckets[topic] = [];
   for (const item of (Array.isArray(items) ? items : [])) {
-    const tag = String(item?.tag || "").trim();
+    const tag = resolveBucketTopicTag(item?.tag);
     if (!topicSet.has(tag)) continue;
     buckets[tag].push(item);
   }

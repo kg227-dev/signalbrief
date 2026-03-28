@@ -27,4 +27,9 @@ const buckets = selectTopicBuckets([
 assert.strictEqual(buckets.TECHNOLOGY.length, 2, "technology bucket keeps tagged items");
 assert.strictEqual(buckets.HEALTHCARE.length, 1, "healthcare bucket keeps tagged items");
 
+const aliasedBuckets = selectTopicBuckets([
+  { tag: "CONSUMER", relevanceScore: 9, url: "consumer-a" },
+], ["CONSUMER & RETAIL"], 5);
+assert.strictEqual(aliasedBuckets["CONSUMER & RETAIL"].length, 1, "legacy consumer tag should flow into consumer & retail deliveries");
+
 console.log("digest-mvp-delivery-runtime ✓");

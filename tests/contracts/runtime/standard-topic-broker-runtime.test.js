@@ -198,7 +198,7 @@ const responses = new Map([
           <item>
             <title><a href="/newsroom/press-releases/cms-final-rule-modernizes-claims-attachments">CMS Final Rule Modernizes Claims Attachments</a></title>
             <link>https://www.cms.gov/%3Ca%20href%3D%22/newsroom/press-releases/cms-final-rule-modernizes-claims-attachments%22%3ECMS%20Final%20Rule%20Modernizes%20Claims%20Attachments%3C/a%3E</link>
-            <pubDate>Sat, Mar 21, 2026</pubDate>
+            <pubDate>Sat, 21 Mar 2026 12:00:00 GMT</pubDate>
             <description>Official CMS rule announcement.</description>
           </item>
         </channel>

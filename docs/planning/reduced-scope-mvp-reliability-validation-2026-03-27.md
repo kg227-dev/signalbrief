@@ -234,6 +234,7 @@ The scheduled run executed on production as `scheduled:2026-03-28T11-04-33-111Z`
 - [x] Normalize per-user delivery bucketing so legacy `CONSUMER` selections still land in `CONSUMER & RETAIL` subscriptions.
 - [x] Fix admin digest-audit readiness math to count string source tiers (`premium`, `strong`, `standard`) and audited candidate lanes (`broker_publisher_feed`, `broker_official`, `broad`) correctly.
 - [x] Re-ran local contract coverage: `npm test`, `npm run smoke:worker`, and `npm run smoke:admin-scheduler` all passed before deploy.
+- [x] Set `SIGNALBRIEF_ANTHROPIC_TIMEOUT_MS=60000` in production `.env` to prevent Claude enrichment timeouts. Default 30s was too tight for 49-item enrichment batches; 60s gives sufficient headroom. Also documented the tuning knobs (`SIGNALBRIEF_ANTHROPIC_TIMEOUT_MS`, `SIGNALBRIEF_ANTHROPIC_RETRIES`, `SIGNALBRIEF_ANTHROPIC_RETRY_DELAY_MS`) in `.env.example`.
 
 ### Day 2
 

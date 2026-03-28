@@ -5,7 +5,7 @@ const {
   isWeakSourceItem,
   normalizeSourceDomain,
 } = require("../../src/digest/domain/storyline-domain-runtime");
-const { normalizeTopicToken } = require("../../src/digest/domain/topic-domain-runtime");
+const { normalizeTopicToken } = require("../../src/runtime/topic-normalization-runtime");
 const {
   inferSourceDomainFromIdentityKey,
   normalizeSourceIdentityKey,

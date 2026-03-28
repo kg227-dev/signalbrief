@@ -5,7 +5,7 @@ const path = require("path");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
-const { normalizeTopicToken } = require("../digest/domain/topic-domain-runtime");
+const { normalizeTopicToken } = require("./topic-normalization-runtime");
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;

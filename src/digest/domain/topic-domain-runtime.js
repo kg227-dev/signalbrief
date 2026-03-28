@@ -1,16 +1,11 @@
 "use strict";
 
-function normalizeMatchText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeTopicToken(value) {
-  return normalizeMatchText(String(value || "").replace(/^custom_/i, "").replace(/×/g, " "));
-}
+const {
+  RELATED_TOPIC_GROUPS,
+  normalizeMatchText,
+  normalizeTopicToken,
+  topicsRelated,
+} = require("../../runtime/topic-normalization-runtime");
 
 const CUSTOM_TOPIC_ALIASES = {
   nvidia: [
@@ -141,14 +136,6 @@ const CUSTOM_TOKEN_ALIASES = {
   rate: ["interest", "federal", "reserve", "fomc"],
 };
 
-const RELATED_TOPIC_GROUPS = [
-  ["healthcare", "life sciences"],
-  ["ai tech", "technology", "digital"],
-  ["pe m a", "m a advisory", "financial services"],
-  ["public sector", "policy regulatory"],
-  ["energy", "sustainability"],
-];
-
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -196,15 +183,6 @@ function customKeywordMatches(topicNormalized, bodyText, tagNormalized = "") {
   }, 0);
   const requiredHits = tokens.length >= 3 ? 2 : tokens.length;
   return hitCount >= Math.max(1, requiredHits);
-}
-
-function topicsRelated(a, b) {
-  const left = normalizeTopicToken(a);
-  const right = normalizeTopicToken(b);
-  if (!left || !right) return false;
-  if (left === right) return true;
-  if (left.includes(right) || right.includes(left)) return true;
-  return RELATED_TOPIC_GROUPS.some((group) => group.includes(left) && group.includes(right));
 }
 
 function computeTopicSignals(item, userTopics) {

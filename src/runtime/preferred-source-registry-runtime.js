@@ -8,7 +8,7 @@ const { buildBrokerPreferredTopicEntriesFromConfig } = require("./standard-topic
 const {
   normalizeTopicToken,
   topicsRelated,
-} = require("../digest/domain/topic-domain-runtime");
+} = require("./topic-normalization-runtime");
 
 const DEFAULT_PREFERRED_SOURCES_VERSION = 1;
 const OFFICIAL_FRIENDLY_TOPIC_KEYS = Object.freeze([

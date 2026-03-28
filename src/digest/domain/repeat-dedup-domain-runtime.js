@@ -1,6 +1,6 @@
 "use strict";
 
-const { normalizeMatchText } = require("./topic-domain-runtime");
+const { normalizeMatchText } = require("../../runtime/topic-normalization-runtime");
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
 
 function normalizeUrlForDedup(value) {

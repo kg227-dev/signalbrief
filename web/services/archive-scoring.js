@@ -1,9 +1,11 @@
 const {
   computeTopicMatch,
+} = require("../../src/domains/digest");
+const {
   normalizeMatchText,
   normalizeTopicToken,
   topicsRelated,
-} = require("../../src/domains/digest");
+} = require("../../src/runtime/topic-normalization-runtime");
 
 function archiveTopicMatch(itemTag, itemHeadline, itemSummary, userTopics) {
   const tag = normalizeTopicToken(itemTag);

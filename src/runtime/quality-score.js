@@ -2,7 +2,7 @@ const {
   normalizeMatchText,
   normalizeTopicToken,
   topicsRelated,
-} = require("../digest/domain/topic-domain-runtime");
+} = require("./topic-normalization-runtime");
 
 function mean(values) {
   const nums = (values || []).map(Number).filter(Number.isFinite);

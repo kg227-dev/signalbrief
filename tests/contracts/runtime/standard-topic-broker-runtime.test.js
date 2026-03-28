@@ -17,6 +17,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 
 const {
   createStandardTopicBrokerRuntime,
+  matchPreferredSourceFromBrokerConfig,
   sanitizeBrokerConfig,
 } = runtime;
 
@@ -217,6 +218,23 @@ const brokerRuntime = createStandardTopicBrokerRuntime({
 const sanitized = sanitizeBrokerConfig(config);
 assert.strictEqual(sanitized.sources.length, 4);
 assert.strictEqual(sanitized.topics.HEALTHCARE.enabled, true);
+
+const brokerReportedMatch = matchPreferredSourceFromBrokerConfig(config, "alerts.statnews.com", "HEALTHCARE");
+assert.strictEqual(brokerReportedMatch.match, "topic_reported");
+assert.strictEqual(brokerReportedMatch.kind, "reported");
+assert.strictEqual(brokerReportedMatch.scope, "domain");
+assert.strictEqual(brokerReportedMatch.matched_domain, "statnews.com");
+
+const brokerOfficialMatch = matchPreferredSourceFromBrokerConfig(config, "www.fda.gov", "HEALTHCARE");
+assert.strictEqual(brokerOfficialMatch.match, "topic_official");
+assert.strictEqual(brokerOfficialMatch.kind, "official");
+assert.strictEqual(brokerOfficialMatch.matched_domain, "fda.gov");
+
+const brokerNoMatch = matchPreferredSourceFromBrokerConfig(config, "youtube.com", "HEALTHCARE", {
+  sourceIdentityKey: "youtube:@insideboardroom",
+});
+assert.strictEqual(brokerNoMatch.match, "none");
+assert.strictEqual(brokerNoMatch.scope, "none");
 
 const snapshot = brokerRuntime.inspectStandardTopicBrokerConfig();
 assert.strictEqual(snapshot.source_mode, "runtime");

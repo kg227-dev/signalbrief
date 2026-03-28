@@ -79,14 +79,11 @@ const {
   toEtDateString,
   formatEtDateKey,
 } = require("./digest-orchestrator-time-runtime");
-const { setAdminSourceRegistry, setPreferredSourceRegistry } = require("../domains/digest");
+const { setAdminSourceRegistry, setPreferredSourceMatcher } = require("../domains/digest");
 const { createStructuredLogger } = require("../runtime/structured-logger-runtime");
 const { createDigestRetryStateRuntime } = require("../runtime/digest-retry-state-runtime");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../runtime/source-policy-registry-runtime");
-const {
-  createPreferredSourceRegistryRuntime,
-} = require("../runtime/preferred-source-registry-runtime");
 const { createStandardTopicBrokerRuntime } = require("../runtime/standard-topic-broker-runtime");
 const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestrator-spend-guard-runtime");
 const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orchestrator-circuit-breaker-runtime");
@@ -127,15 +124,6 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
   appRoot: APP_ROOT,
   env: process.env,
   nodeEnv: process.env.NODE_ENV,
-  standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
-  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
-});
-const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
-  fs,
-  appRoot: APP_ROOT,
-  env: process.env,
-  nodeEnv: process.env.NODE_ENV,
-  preferredSourcesPath: RUNTIME_PATHS.preferredSourcesPath,
   standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
@@ -1284,8 +1272,6 @@ async function main() {
   if (Object.keys(rawTuning).length > 0) {
     log(`[digest-tuning] overrides active: ${Object.keys(rawTuning).join(", ")}`);
   }
-  const preferredSourceRegistry = preferredSourceRegistryRuntime.loadPreferredSourceRegistry();
-  setPreferredSourceRegistry(preferredSourceRegistry);
   const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
     fs,
     path,
@@ -1296,6 +1282,9 @@ async function main() {
     bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
     log,
   });
+  setPreferredSourceMatcher((sourceDomain, tag, options = {}) => (
+    standardTopicBrokerRuntime.matchPreferredSourceFromConfig(sourceDomain, tag, options)
+  ));
   function buildActivePreferredDomainShortlist(options = {}) {
     const brokerShortlist = standardTopicBrokerRuntime?.buildPreferredDomainShortlist?.(options);
     if (brokerShortlist) return brokerShortlist;
@@ -1617,7 +1606,7 @@ async function main() {
       }
     }
 
-    setPreferredSourceRegistry(null);
+    setPreferredSourceMatcher(null);
   } finally {
     recordRunCost({
       now,

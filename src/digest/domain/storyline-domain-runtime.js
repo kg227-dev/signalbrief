@@ -18,7 +18,6 @@ const {
   TIER_OVERRIDE_SCORES,
   TOPIC_FIT_BAND_SCORES,
 } = require("../../runtime/source-policy-registry-runtime");
-const { matchPreferredSourceDomain } = require("../../runtime/preferred-source-registry-runtime");
 
 const STANDARD_TOPIC_TOKENS = new Set([
   "healthcare",
@@ -663,6 +662,11 @@ function buildPolicyEffects(policy, sourceType) {
 
 let _adminSourceRegistry = null;
 let _preferredSourceRegistry = null;
+let _preferredSourceMatcher = null;
+
+function getLegacyPreferredSourceDomainMatcher() {
+  return require("../../runtime/preferred-source-registry-runtime").matchPreferredSourceDomain;
+}
 
 function setAdminSourceRegistry(registryMap) {
   if (registryMap instanceof Map) {
@@ -683,6 +687,10 @@ function setAdminSourceRegistry(registryMap) {
 
 function setPreferredSourceRegistry(registry) {
   _preferredSourceRegistry = registry && typeof registry === "object" ? registry : null;
+}
+
+function setPreferredSourceMatcher(matcher) {
+  _preferredSourceMatcher = typeof matcher === "function" ? matcher : null;
 }
 
 function resolveAdminSourceRegistryEntry(sourceDomain, sourceIdentityKey = null) {
@@ -845,6 +853,17 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
 }
 
 function resolvePreferredSourceMatch(sourceDomain, tag, sourceIdentityKey = null) {
+  if (_preferredSourceMatcher) {
+    return _preferredSourceMatcher(sourceDomain, tag, { sourceIdentityKey }) || {
+      match: "none",
+      kind: null,
+      scope: "none",
+      topics: [],
+      strength: 0,
+      matched_domain: null,
+      matched_identity: null,
+    };
+  }
   if (!_preferredSourceRegistry) {
     return {
       match: "none",
@@ -856,7 +875,7 @@ function resolvePreferredSourceMatch(sourceDomain, tag, sourceIdentityKey = null
       matched_identity: null,
     };
   }
-  return matchPreferredSourceDomain(_preferredSourceRegistry, sourceDomain, tag, {
+  return getLegacyPreferredSourceDomainMatcher()(_preferredSourceRegistry, sourceDomain, tag, {
     sourceIdentityKey,
   });
 }
@@ -2082,6 +2101,7 @@ module.exports = {
   isWeakSourceItem,
   normalizeSourceDomain,
   setAdminSourceRegistry,
+  setPreferredSourceMatcher,
   setPreferredSourceRegistry,
   storylineSimilarity,
 };

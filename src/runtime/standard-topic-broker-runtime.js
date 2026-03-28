@@ -5,7 +5,7 @@ const path = require("path");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
-const { normalizeTopicToken } = require("./topic-normalization-runtime");
+const { normalizeTopicToken, topicsRelated } = require("./topic-normalization-runtime");
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
@@ -601,6 +601,86 @@ function buildBrokerPreferredSourceFamilyShortlistsFromConfig(config, options = 
   };
 }
 
+function matchesBrokerPreferredDomain(sourceDomain, candidateDomain) {
+  const normalizedSource = normalizeSourcePolicyDomain(sourceDomain);
+  const normalizedCandidate = normalizeSourcePolicyDomain(candidateDomain);
+  if (!normalizedSource || !normalizedCandidate) return false;
+  return normalizedSource === normalizedCandidate || normalizedSource.endsWith(`.${normalizedCandidate}`);
+}
+
+function emptyPreferredSourceMatch() {
+  return {
+    match: "none",
+    kind: null,
+    scope: "none",
+    topics: [],
+    strength: 0,
+    matched_domain: null,
+    matched_identity: null,
+  };
+}
+
+function matchPreferredSourceFromBrokerConfig(configRaw, sourceDomain, topicTag, options = {}) {
+  void options;
+  const config = sanitizeBrokerConfig(configRaw || {});
+  const normalizedSource = normalizeSourcePolicyDomain(sourceDomain);
+  const normalizedTopic = normalizeTopicToken(topicTag);
+  if (!normalizedSource || !normalizedTopic) return emptyPreferredSourceMatch();
+
+  let bestMatch = null;
+  function considerMatch(entry) {
+    if (!entry || !entry.matched_domain) return;
+    if (!bestMatch || entry.weight > bestMatch.weight || (entry.weight === bestMatch.weight && entry.matched_domain.length > bestMatch.matched_domain.length)) {
+      bestMatch = entry;
+    }
+  }
+
+  for (const candidateTopicTag of PHASE1_TOPIC_TAGS) {
+    const candidateTopicKey = normalizeTopicToken(candidateTopicTag);
+    if (!candidateTopicKey) continue;
+    if (normalizedTopic !== candidateTopicKey && !topicsRelated(normalizedTopic, candidateTopicKey)) continue;
+    const isExact = normalizedTopic === candidateTopicKey;
+
+    for (const domain of buildBrokerDomainList(config, candidateTopicTag, "official")) {
+      if (!matchesBrokerPreferredDomain(normalizedSource, domain)) continue;
+      considerMatch({
+        match: "topic_official",
+        kind: "official",
+        scope: "domain",
+        topics: [candidateTopicKey],
+        strength: isExact ? 0.86 : 0.76,
+        matched_domain: domain,
+        matched_identity: null,
+        weight: isExact ? 86 : 76,
+      });
+    }
+
+    for (const domain of buildBrokerDomainList(config, candidateTopicTag, "publisher_feed")) {
+      if (!matchesBrokerPreferredDomain(normalizedSource, domain)) continue;
+      considerMatch({
+        match: "topic_reported",
+        kind: "reported",
+        scope: "domain",
+        topics: [candidateTopicKey],
+        strength: isExact ? 0.74 : 0.64,
+        matched_domain: domain,
+        matched_identity: null,
+        weight: isExact ? 74 : 64,
+      });
+    }
+  }
+
+  return bestMatch ? {
+    match: bestMatch.match,
+    kind: bestMatch.kind,
+    scope: bestMatch.scope,
+    topics: bestMatch.topics,
+    strength: bestMatch.strength,
+    matched_domain: bestMatch.matched_domain,
+    matched_identity: null,
+  } : emptyPreferredSourceMatch();
+}
+
 function buildInitialDiagnostics(activeTopicTags = []) {
   const topicDiagnostics = {};
   for (const tag of activeTopicTags) {
@@ -1112,6 +1192,10 @@ function createStandardTopicBrokerRuntime(options = {}) {
     return buildBrokerPreferredSourceFamilyShortlistsFromConfig(readConfigSnapshot().config, options);
   }
 
+  function matchPreferredSourceFromConfig(sourceDomain, topicTag, options = {}) {
+    return matchPreferredSourceFromBrokerConfig(readConfigSnapshot().config, sourceDomain, topicTag, options);
+  }
+
   async function fetchBrokerCandidates(params = {}) {
     const configSnapshot = readConfigSnapshot();
     const config = configSnapshot.config;
@@ -1220,6 +1304,7 @@ function createStandardTopicBrokerRuntime(options = {}) {
     updateBrokerSourceConfig,
     buildPreferredDomainShortlist,
     buildPreferredSourceFamilyShortlists,
+    matchPreferredSourceFromConfig,
     fetchBrokerCandidates,
   };
 }
@@ -1230,6 +1315,7 @@ module.exports = {
   buildBrokerPreferredDomainShortlistFromConfig,
   buildBrokerPreferredTopicEntriesFromConfig,
   buildBrokerPreferredSourceFamilyShortlistsFromConfig,
+  matchPreferredSourceFromBrokerConfig,
   chooseBestFitTopicTag,
   createStandardTopicBrokerRuntime,
   scoreBestFitTopicTag,

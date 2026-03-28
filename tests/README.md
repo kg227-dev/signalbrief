@@ -11,7 +11,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
 | `entrypoints/` | 2 | Digest entrypoint and scheduler worker startup contracts; checks exported function surfaces and guards against import-time side effects | `src/entrypoints/digest.js`, `src/entrypoints/scheduler-worker.js` |
-| `entrypoints/` (runtime) | 2 | Digest data runtime and digest runtime module shapes | `src/digest/runtime/digest-data-runtime.js`, `src/entrypoints/digest-runtime.js` |
+| `entrypoints/` (runtime) | 2 | Digest data runtime and digest orchestrator runtime module shapes | `src/digest/runtime/digest-data-runtime.js`, `src/entrypoints/digest-orchestrator-runtime.js` |
 | `entrypoints/` (orchestrator) | 16 | One file per orchestrator stage: archive, bootstrap, cost, delivery, delivery-ranking, enrichment, fetch, incident, lock, logging, parity-shape, prefilter, schedule, seams, selection, transport | `src/entrypoints/digest-orchestrator-*-runtime.js` |
 
 ---

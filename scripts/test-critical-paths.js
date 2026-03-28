@@ -14,8 +14,8 @@ const {
   normalizeDigestTriggerResult,
   triggerDigest,
 } = require("../src/jobs/digest-runner-runtime");
-const { handleCoreApiRoutes } = require("../web/api/core");
-const { handlePublicStaticRoutes } = require("../web/api/public");
+const { handleCoreApiRoutes } = require("../web/routes/core-api");
+const { handlePublicStaticRoutes } = require("../web/routes/public-static");
 const { createAdminApiRouteHandler } = require("../web/routes/admin-api");
 const { createAdminRunDigestHandler } = require("../web/services/web-user-admin-runtime");
 const { createWebUserHandlers } = require("../web/services/web-user-handlers");

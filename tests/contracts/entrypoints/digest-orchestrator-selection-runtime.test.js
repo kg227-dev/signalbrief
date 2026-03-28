@@ -116,6 +116,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     digestDateKey: "2026-03-27",
     dueUsersCount: 2,
     standardFetchCallsPlanned: 14,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
   });
 
   assert.strictEqual(selectedOut.selected.length, 6);

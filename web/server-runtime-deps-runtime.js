@@ -1,8 +1,8 @@
 "use strict";
 
-const { createCoreApiRouteHandler } = require("./api/core");
-const { createAdminApiRouteHandler } = require("./api/admin");
-const { createPublicStaticRouteHandler } = require("./api/public");
+const { createCoreApiRouteHandler } = require("./routes/core-api");
+const { createAdminApiRouteHandler } = require("./routes/admin-api");
+const { createPublicStaticRouteHandler } = require("./routes/public-static");
 const { createSharedRouteHandlers } = require("./server-runtime-shared-handlers-runtime");
 const { createCoreRouteDependencies } = require("./server-runtime-core-registry-runtime");
 const { createAdminRouteDependencies } = require("./server-runtime-admin-registry-runtime");

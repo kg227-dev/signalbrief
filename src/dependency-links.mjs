@@ -119,7 +119,6 @@ import "../test-harness/matrix/window-execution-core-runtime.js";
 import "../test-harness/personas/canonical/personas-core-defs.js";
 import "../test-harness/personas/canonical/personas-core-defs-core.js";
 import "../test-harness/personas/canonical/personas-depth-defs.js";
-import "../test-harness/personas/stress/personas-stress-custom-defs.js";
 import "../test-harness/personas/stress/personas-stress-distribution-defs.js";
 import "../test-harness/personas/stress/personas-stress-focus-defs.js";
 import "../test-harness/stages/dataset/live-enrichment.js";

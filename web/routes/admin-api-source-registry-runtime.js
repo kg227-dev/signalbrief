@@ -96,8 +96,6 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     getAdminActor,
     requireJsonBody,
     loadSourceRegistry,
-    loadPreferredSourceRegistry,
-    inspectPreferredSourceRegistry,
     inspectStandardTopicBrokerConfig,
     buildSourceRegistryMap,
     setAdminSourceRegistry,
@@ -105,8 +103,6 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     readJsonLineLog,
     ADMIN_ACTION_LOG,
     sourceRegistryPath,
-    preferredSourcesPath,
-    bundledPreferredSourcesPath,
     updateBrokerTopicConfig,
     updateBrokerSourceConfig,
     upsertSourceRegistryEntry,
@@ -119,14 +115,10 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
     if (!isAdminAuthed(req)) return json(res, { error: "admin access only" }, 403);
     const payload = buildSourceRegistryOverview({
       loadSourceRegistry,
-      loadPreferredSourceRegistry,
-      inspectPreferredSourceRegistry,
       inspectStandardTopicBrokerConfig,
       buildSourceRegistryMap,
       setAdminSourceRegistry,
       buildRecentDigestsExport,
-      preferredSourcesPath,
-      bundledPreferredSourcesPath,
       query: url.searchParams.get("query") || "",
       limit: parseLimitParam(url),
     });

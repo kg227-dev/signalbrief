@@ -455,70 +455,87 @@ function buildIdentityCandidates(rows = [], domain, registryIdentities = {}) {
       || String(left.identity_key || "").localeCompare(String(right.identity_key || "")));
 }
 
-function summarizePreferredSourceRegistry({
-  loadPreferredSourceRegistry,
-  inspectPreferredSourceRegistry,
-  preferredSourcesPath,
-  bundledPreferredSourcesPath,
-}) {
-  const snapshot = typeof inspectPreferredSourceRegistry === "function"
-    ? inspectPreferredSourceRegistry()
+function summarizePreferredSourceCompatibilityView(inspectStandardTopicBrokerConfig) {
+  const snapshot = typeof inspectStandardTopicBrokerConfig === "function"
+    ? inspectStandardTopicBrokerConfig()
     : null;
-  const registry = snapshot?.registry || (typeof loadPreferredSourceRegistry === "function"
-    ? loadPreferredSourceRegistry()
-    : {});
-  const globalReported = Array.isArray(registry?.global?.reported) ? registry.global.reported : [];
-  const globalOfficial = Array.isArray(registry?.global?.official) ? registry.global.official : [];
-  const topics = Object.entries(registry?.topics && typeof registry.topics === "object" ? registry.topics : {})
-    .map(([topic, entry]) => {
-      const reported = Array.isArray(entry?.reported) ? entry.reported : [];
-      const official = Array.isArray(entry?.official) ? entry.official : [];
+  const config = snapshot?.config;
+  if (!config || typeof config !== "object") {
+    return {
+      path: null,
+      runtime_path: null,
+      bundled_path: null,
+      source_mode: "empty compatibility view",
+      used_fallback: false,
+      version: 1,
+      global: {
+        reported: [],
+        official: [],
+      },
+      topic_count: 0,
+      total_unique_domains: 0,
+      topics: [],
+      standard_topic_source: null,
+      raw_json: JSON.stringify({}, null, 2),
+    };
+  }
+
+  const topics = Object.entries(config.topics && typeof config.topics === "object" ? config.topics : {})
+    .map(([topicTag]) => {
+      const topicSources = (Array.isArray(config.sources) ? config.sources : [])
+        .filter((source) => Array.isArray(source?.topic_tags) && source.topic_tags.includes(topicTag))
+        .filter((source) => source?.enabled !== false);
+      const reported = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "publisher_feed")
+        .flatMap((source) => Array.isArray(source?.domains) ? source.domains : [])));
+      const official = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "official")
+        .flatMap((source) => Array.isArray(source?.domains) ? source.domains : [])));
       return {
-        topic,
+        topic: normalizeTopicToken(topicTag),
         reported,
         official,
         reported_count: reported.length,
         official_count: official.length,
       };
     })
+    .filter((entry) => entry.reported_count > 0 || entry.official_count > 0)
     .sort((left, right) => left.topic.localeCompare(right.topic));
-  const uniqueDomains = new Set([
-    ...globalReported,
-    ...globalOfficial,
-    ...topics.flatMap((entry) => [...entry.reported, ...entry.official]),
-  ]);
-  const standardTopicSource = snapshot?.standard_topic_source || registry?.standard_topic_source || null;
-  const derivedFromBroker = standardTopicSource?.source_of_truth === "standard_topic_broker";
-  const resolvedSourceMode = String(
-    snapshot?.source_mode
-    || (derivedFromBroker
-      ? (String(standardTopicSource?.source_mode || "").trim() === "bundled" ? "broker_bundled" : "broker_runtime")
-      : "runtime")
-  ).trim() || "runtime";
+
+  const uniqueDomains = new Set(topics.flatMap((entry) => [...entry.reported, ...entry.official]));
+  const sourceMode = String(snapshot?.source_mode || "runtime").trim() || "runtime";
+  const standardTopicSource = {
+    source_of_truth: "standard_topic_broker",
+    source_mode: sourceMode,
+    active_path: String(snapshot?.active_path || "").trim() || null,
+    runtime_path: String(snapshot?.runtime_path || "").trim() || null,
+    bundled_path: String(snapshot?.bundled_path || "").trim() || null,
+    topic_count: topics.length,
+    topic_keys: topics.map((entry) => entry.topic),
+  };
   return {
-    path: String(snapshot?.active_path || standardTopicSource?.active_path || preferredSourcesPath || "").trim() || null,
-    runtime_path: String(snapshot?.runtime_path || standardTopicSource?.runtime_path || preferredSourcesPath || "").trim() || null,
-    bundled_path: String(snapshot?.bundled_path || standardTopicSource?.bundled_path || bundledPreferredSourcesPath || "").trim() || null,
-    source_mode: resolvedSourceMode,
-    used_fallback: snapshot?.used_fallback === true || (resolvedSourceMode === "broker_bundled"),
-    version: Number(registry?.version || 1),
+    path: standardTopicSource.active_path,
+    runtime_path: standardTopicSource.runtime_path,
+    bundled_path: standardTopicSource.bundled_path,
+    source_mode: sourceMode === "bundled" ? "broker_bundled" : "broker_runtime",
+    used_fallback: sourceMode === "bundled",
+    version: 1,
     global: {
-      reported: globalReported,
-      official: globalOfficial,
+      reported: [],
+      official: [],
     },
     topic_count: topics.length,
     total_unique_domains: uniqueDomains.size,
     topics,
-    standard_topic_source: standardTopicSource ? {
-      source_of_truth: String(standardTopicSource?.source_of_truth || "standard_topic_broker").trim() || "standard_topic_broker",
-      source_mode: String(standardTopicSource?.source_mode || "runtime").trim() || "runtime",
-      active_path: String(standardTopicSource?.active_path || "").trim() || null,
-      runtime_path: String(standardTopicSource?.runtime_path || "").trim() || null,
-      bundled_path: String(standardTopicSource?.bundled_path || "").trim() || null,
-      topic_count: Math.max(0, Number(standardTopicSource?.topic_count || 0)),
-      topic_keys: Array.isArray(standardTopicSource?.topic_keys) ? standardTopicSource.topic_keys : [],
-    } : null,
-    raw_json: JSON.stringify(registry || {}, null, 2),
+    standard_topic_source: standardTopicSource,
+    raw_json: JSON.stringify({
+      version: 1,
+      standard_topic_source: standardTopicSource,
+      topics: Object.fromEntries(topics.map((entry) => [entry.topic, {
+        reported: entry.reported,
+        official: entry.official,
+      }])),
+    }, null, 2),
   };
 }
 
@@ -669,14 +686,10 @@ function buildOverviewRows(metricsMap, registryDomains, query, limit) {
 
 function buildSourceRegistryOverview({
   loadSourceRegistry,
-  loadPreferredSourceRegistry,
-  inspectPreferredSourceRegistry,
   inspectStandardTopicBrokerConfig,
   buildSourceRegistryMap,
   setAdminSourceRegistry,
   buildRecentDigestsExport,
-  preferredSourcesPath,
-  bundledPreferredSourcesPath,
   query,
   limit = 20,
 }) {
@@ -693,12 +706,7 @@ function buildSourceRegistryOverview({
     days: recent?.window?.days ?? null,
     query: String(query || "").trim() || null,
     source_registry_path: null,
-    preferred_sources: summarizePreferredSourceRegistry({
-      loadPreferredSourceRegistry,
-      inspectPreferredSourceRegistry,
-      preferredSourcesPath,
-      bundledPreferredSourcesPath,
-    }),
+    preferred_sources: summarizePreferredSourceCompatibilityView(inspectStandardTopicBrokerConfig),
     broker_config: summarizeBrokerConfig(inspectStandardTopicBrokerConfig),
     curation_queues: curationQueues,
     override_count: Object.keys(registry.domains || {}).length,
@@ -780,7 +788,7 @@ function buildSourceRegistryDomainDetail({
 module.exports = {
   buildRecentDomainMetrics,
   buildCurationQueues,
-  summarizePreferredSourceRegistry,
+  summarizePreferredSourceCompatibilityView,
   summarizeBrokerConfig,
   buildSourceRegistryDomainDetail,
   buildSourceRegistryOverview,

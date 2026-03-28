@@ -99,7 +99,6 @@ const {
   describeRuntimePathAlignment,
 } = require("../src/runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../src/runtime/source-policy-registry-runtime");
-const { createPreferredSourceRegistryRuntime } = require("../src/runtime/preferred-source-registry-runtime");
 const { createStandardTopicBrokerRuntime } = require("../src/runtime/standard-topic-broker-runtime");
 const { setAdminSourceRegistry } = require("../src/domains/digest");
 
@@ -154,15 +153,6 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
   appRoot: APP_ROOT,
   env: process.env,
   nodeEnv: process.env.NODE_ENV,
-  standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
-  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
-});
-const preferredSourceRegistryRuntime = createPreferredSourceRegistryRuntime({
-  fs,
-  appRoot: APP_ROOT,
-  env: process.env,
-  nodeEnv: process.env.NODE_ENV,
-  preferredSourcesPath: runtimePaths.preferredSourcesPath,
   standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
@@ -654,11 +644,7 @@ const {
   getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
   buildRecentDigestsExport,
   sourceRegistryPath: sourceRegistryRuntime.sourceRegistryPath,
-  preferredSourcesPath: runtimePaths.preferredSourcesPath,
-  bundledPreferredSourcesPath: preferredSourceRegistryRuntime.bundledPreferredSourcesPath,
   loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),
-  loadPreferredSourceRegistry: () => preferredSourceRegistryRuntime.loadPreferredSourceRegistry(),
-  inspectPreferredSourceRegistry: () => preferredSourceRegistryRuntime.inspectPreferredSourceRegistry(),
   inspectStandardTopicBrokerConfig: () => standardTopicBrokerRuntime.inspectStandardTopicBrokerConfig(),
   buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
   listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),

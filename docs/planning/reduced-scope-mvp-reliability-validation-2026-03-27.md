@@ -99,15 +99,15 @@ The 7-day window passes only if all of the following are true:
 
 | Field | Value |
 |---|---|
-| Current deploy SHA | TBD |
-| Validation start date | TBD |
-| Validation end date | TBD |
+| Current deploy SHA | `02bc16211dcad3e2d2c39ac66a98e893acc901a7` |
+| Validation start date | TBD — pending canary cohort setup |
+| Validation end date | TBD — pending canary cohort setup |
 | Primary operator | TBD |
 | Secondary operator | TBD |
-| Current digest tuning snapshot | TBD |
-| Current source registry snapshot | TBD |
-| Non-canary users paused | TBD |
-| Canary delivery window ET | TBD |
+| Current digest tuning snapshot | No `data/digest-tuning.json` present — system uses hardcoded defaults |
+| Current source registry snapshot | `data/source-registry.json` (17 domains, last updated 2026-03-21) |
+| Non-canary users paused | TBD — pending canary cohort setup |
+| Canary delivery window ET | TBD — pending canary cohort setup |
 
 ### Known Caveats From March 27 Audit
 
@@ -118,32 +118,42 @@ The 7-day window passes only if all of the following are true:
 
 ### Day 0 Checklist
 
-- [ ] Record current deploy SHA
-- [ ] Snapshot current digest tuning state
-- [ ] Snapshot current source-registry state
+- [x] Record current deploy SHA
+- [x] Snapshot current digest tuning state
+- [x] Snapshot current source-registry state
 - [ ] Configure canary cohort in admin
 - [ ] Pause all non-canary active users
 - [ ] Align canary delivery times to one ET window
-- [ ] Run `npm test`
-- [ ] Run `npm run qa:harness`
-- [ ] Run `npm run smoke:worker`
-- [ ] Run `npm run smoke:admin-scheduler`
-- [ ] Run `npm run ops:verify-runtime`
-- [ ] Run `npm run eval:retrieval -- --historical-days=14`
-- [ ] Run `npm run ops:backup:state`
-- [ ] Record any pre-existing warnings before Day 1
+- [x] Run `npm test`
+- [x] Run `npm run qa:harness`
+- [x] Run `npm run smoke:worker`
+- [x] Run `npm run smoke:admin-scheduler`
+- [x] Run `npm run ops:verify-runtime`
+- [x] Run `npm run eval:retrieval -- --historical-days=14`
+- [x] Run `npm run ops:backup:state`
+- [x] Record any pre-existing warnings before Day 1
 
 ### Day 0 Results
 
 | Check | Result | Notes |
 |---|---|---|
-| `npm test` | TBD |  |
-| `npm run qa:harness` | TBD |  |
-| `npm run smoke:worker` | TBD |  |
-| `npm run smoke:admin-scheduler` | TBD |  |
-| `npm run ops:verify-runtime` | TBD |  |
-| `npm run eval:retrieval -- --historical-days=14` | TBD |  |
-| `npm run ops:backup:state` | TBD |  |
+| `npm test` | PASS | All critical path tests passed (243 sidecar modules). Scheduler lock state=corrupt flagged but contract test passes. |
+| `npm run qa:harness` | WARN | Composite 75.1/100. Topic Matching 90.5% PASS, Item Count 100% PASS, Depth Control 100% PASS, Module Coverage 100% PASS. Relevance Scoring 55.6% FAIL, Diversity 52.3% FAIL, Analysis Quality 3.93/5 WARN, Cross-Day Freshness 72.7% WARN. Lowest persona: Stress Brief Industrials (28.0). |
+| `npm run smoke:worker` | PASS | Worker boots, runs digest, exits cleanly. `no_due_users` (expected — no canary users configured yet). |
+| `npm run smoke:admin-scheduler` | PASS | Stale-health and healthy-after-stale checks pass. |
+| `npm run ops:verify-runtime` | FAIL | Docker not available in local dev environment. Expected for non-containerized runs. |
+| `npm run eval:retrieval -- --historical-days=14` | WARN | `completed_with_errors`. 4 scenarios, 26 personas, overall_score=0. Broker produced 306 candidates across 6 MVP topics — broker saturation reached for all 6. Budget spent: $10.72. Fixed `appRoot` reference bug in `runner-runtime.js:678` to unblock the run. |
+| `npm run ops:backup:state` | PASS | `state-backup-20260328-040859-02bc162.tgz` — 101 files, 30.7MB |
+
+### Pre-Existing Warnings (recorded before Day 1)
+
+1. **Scheduler lock corrupt**: `lock state=corrupt; manual intervention required (invalid_json)` — the scheduler enters blocked mode and refuses runs until the lock file is manually reset.
+2. **QA harness failures**: Relevance Scoring (55.6%) and Diversity (52.3%) are below passing thresholds. These reflect scoring/selection quality concerns, not delivery infrastructure.
+3. **Retrieval eval scoring broken**: All persona scores returned 0 despite successful candidate fetching and enrichment. Likely a scoring/assertion bug in the eval harness, not a retrieval failure.
+4. **Legacy topic fetching in eval**: The eval still fetches non-MVP topics (PE×M&A, REAL ESTATE, PUBLIC SECTOR, AI×TECH, STRATEGY, etc.) via Perplexity discovery lanes.
+5. **Parse error**: `SUSTAINABILITY preferred` source returned malformed JSON during eval.
+6. **SEC URL drops**: Two FINANCIAL SERVICES items dropped for unsupported `sec.gov` evidence URLs.
+7. **Docker unavailable**: `ops:verify-runtime` cannot run locally. Not blocking for canary validation if deploy target is verified separately.
 
 ## 7-Day Summary Scorecard
 

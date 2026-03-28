@@ -675,7 +675,7 @@ function createEvalServices() {
   const sourceRegistryRuntime = createSourceRegistryRuntime({
     fs,
     path,
-    appRoot,
+    appRoot: runtimePaths.appRoot,
     env: process.env,
     nodeEnv: process.env.NODE_ENV,
     standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,

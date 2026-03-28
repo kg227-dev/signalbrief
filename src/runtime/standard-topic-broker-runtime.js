@@ -5,7 +5,7 @@ const path = require("path");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
-const { normalizeTopicToken, topicsRelated } = require("./topic-normalization-runtime");
+const { normalizeTopicToken, topicsRelated, canonicalizeMvpTopicTag } = require("./topic-normalization-runtime");
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
@@ -180,7 +180,8 @@ function normalizeFeedLink(rawValue, baseUrl) {
 }
 
 function normalizeTopicTag(value) {
-  return String(value || "").trim().toUpperCase();
+  const raw = String(value || "").trim().toUpperCase();
+  return canonicalizeMvpTopicTag(raw) || raw;
 }
 
 const BROKER_TOPIC_KEYWORDS = Object.freeze({

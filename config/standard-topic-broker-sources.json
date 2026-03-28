@@ -177,7 +177,7 @@
       "domains": [
         "modernhealthcare.com"
       ],
-      "endpoint": "https://www.modernhealthcare.com/rss",
+      "endpoint": "https://www.modernhealthcare.com/arc/outboundfeeds/rss/",
       "parser": "rss",
       "content_kind": "article"
     },
@@ -196,7 +196,7 @@
       "domains": [
         "beckershospitalreview.com"
       ],
-      "endpoint": "https://www.beckershospitalreview.com/rss_feed.xml",
+      "endpoint": "https://www.beckershospitalreview.com/feed/",
       "parser": "rss",
       "content_kind": "article"
     },
@@ -639,9 +639,9 @@
       ]
     },
     {
-      "_comment": "BIS — export controls, entity list, semiconductor/AI enforcement.",
+      "_comment": "BIS — export controls, entity list, semiconductor/AI enforcement. Disabled: HTML search page, not RSS; transient fetch failures.",
       "id": "technology_bis_news",
-      "enabled": true,
+      "enabled": false,
       "tier": 1,
       "lane": "official",
       "topic_tags": [
@@ -752,9 +752,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "FERC — grid interconnection, transmission orders, capacity market rulings. Re-enabled for MVP.",
+      "_comment": "FERC — grid interconnection, transmission orders, capacity market rulings. Disabled: 403 on all paths as of 2026-03-28.",
       "id": "energy_ferc_news",
-      "enabled": true,
+      "enabled": false,
       "tier": 1,
       "lane": "official",
       "topic_tags": [
@@ -935,7 +935,7 @@
       "domains": [
         "pionline.com"
       ],
-      "endpoint": "https://www.pionline.com/rss",
+      "endpoint": "https://www.pionline.com/arc/outboundfeeds/rss/",
       "parser": "rss",
       "content_kind": "article"
     },

@@ -9,7 +9,7 @@ const {
 } = require("../digest/domain/storyline-domain-runtime");
 const {
   DELIVERY_POLICY,
-} = require("../runtime/digest-delivery-policy-runtime");
+} = require("../runtime/digest-mvp-delivery-runtime");
 
 function isStrictFreshnessMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();

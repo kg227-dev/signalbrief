@@ -2,6 +2,7 @@
 
 const DELIVERY_POLICY = Object.freeze({
   target_item_count: 5,
+  candidate_pool_target_count: 7,
 });
 
 const TRANSIENT_FAILURE_CLASSES = Object.freeze(new Set(["transient"]));

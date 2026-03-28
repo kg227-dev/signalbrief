@@ -6,6 +6,8 @@ const os = require("os");
 const path = require("path");
 
 const {
+  buildSourceHealthSummary,
+  buildTopicReadiness,
   handleAdminDigestAuditRoutes,
   buildRollingMvpReadiness,
 } = require("./admin-api-digest-audit-runtime");
@@ -90,6 +92,105 @@ function buildCtx(pathname) {
 }
 
 {
+  const topicReadiness = buildTopicReadiness([
+    {
+      date_et: "2026-03-26",
+      topics: {
+        TECHNOLOGY: {
+          total_candidates: 16,
+          selected_count: 5,
+          missed_story_flags: [{ headline: "Flagged story" }],
+          candidates: [
+            { lane: "publisher_feed", selected: true, source_tier: 1 },
+            { lane: "publisher_feed", selected: true, source_tier: 2 },
+            { lane: "publisher_feed", selected: true, source_tier: 2 },
+            { lane: "official", selected: true, source_tier: 2 },
+            { lane: "perplexity_discovery", selected: true, source_tier: 3 },
+          ],
+        },
+      },
+      fetch: {
+        standard_topic_broker: {
+          enabled: true,
+          source_diagnostics: [
+            {
+              id: "tech_feed",
+              lane: "publisher_feed",
+              topic_tags: ["TECHNOLOGY"],
+              endpoint: "https://example.com/feed.xml",
+              ok: true,
+            },
+          ],
+          topic_diagnostics: [
+            {
+              tag: "TECHNOLOGY",
+              lane_counts: { publisher_feed: 4, official: 1, discovery: 1 },
+              source_ids: ["tech_feed"],
+              item_count: 5,
+              errors: [],
+            },
+          ],
+        },
+        topic_diagnostics: [
+          { tag: "TECHNOLOGY", coverage_status: "covered" },
+        ],
+      },
+    },
+  ]);
+
+  assert.ok(topicReadiness.TECHNOLOGY, "topic readiness should include observed topic");
+  assert.strictEqual(topicReadiness.TECHNOLOGY.full_5_rate_pct, 100, "topic full-5 rate should be computed");
+  assert.strictEqual(topicReadiness.TECHNOLOGY.missed_story_flag_count, 1, "topic readiness should roll up missed-story flags");
+  assert.strictEqual(topicReadiness.TECHNOLOGY.broker_candidate_share_pct, 80, "broker share should reflect rss/official lane mix");
+  console.log("buildTopicReadiness ✓");
+}
+
+{
+  const sourceHealthSummary = buildSourceHealthSummary({
+    days_covered: 3,
+    global_lane_totals: {
+      rss: 12,
+      official: 3,
+      discovery: 5,
+      unknown: 0,
+    },
+    warnings: [{ topic: "TECHNOLOGY", message: "Topic TECHNOLOGY had zero rss/official items" }],
+    sources: {
+      a: {
+        id: "a",
+        lane: "publisher_feed",
+        topic_tags: ["TECHNOLOGY"],
+        attempted_days: 3,
+        success_days: 0,
+        failure_days: 3,
+        retained_count: 0,
+        stale_count: 0,
+        validation_drop_count: 0,
+        last_error: "timeout",
+      },
+      b: {
+        id: "b",
+        lane: "official",
+        topic_tags: ["HEALTHCARE"],
+        attempted_days: 3,
+        success_days: 3,
+        failure_days: 0,
+        retained_count: 7,
+        stale_count: 1,
+        validation_drop_count: 0,
+        last_error: null,
+      },
+    },
+  });
+
+  assert.strictEqual(sourceHealthSummary.broker_candidate_share_pct, 75, "broker backbone share should include rss + official");
+  assert.strictEqual(sourceHealthSummary.broker_source_success_rate_pct, 50, "source success rate should aggregate across sources");
+  assert.strictEqual(sourceHealthSummary.source_warning_count, 1, "failing sources should be flagged");
+  assert.strictEqual(sourceHealthSummary.top_source_warnings[0].source_id, "a", "worst source should be listed");
+  console.log("buildSourceHealthSummary ✓");
+}
+
+{
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-digest-audit-route-"));
   const auditDoc = {
     date_et: "2026-03-27",
@@ -134,6 +235,8 @@ function buildCtx(pathname) {
     const body = JSON.parse(ctx.res.body);
     assert.strictEqual(body.ok, true, "ok response");
     assert.ok(body.rolling_readiness && typeof body.rolling_readiness === "object", "rolling readiness included");
+    assert.ok(body.topic_readiness && typeof body.topic_readiness === "object", "topic readiness included");
+    assert.ok(body.source_health && typeof body.source_health === "object", "source health summary included");
     assert.strictEqual(body.summary.missed_story_flag_count, 1, "current audit summary preserved");
     console.log("handleAdminDigestAuditRoutes ✓");
   })().catch((error) => {

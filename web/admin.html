@@ -2322,6 +2322,122 @@ function renderRollingReadinessCard(readiness) {
   </div>`;
 }
 
+function renderBackboneHealthCard(sourceHealth) {
+  const data = sourceHealth && typeof sourceHealth === "object" ? sourceHealth : null;
+  if (!data) return "";
+  const topicWarnings = Array.isArray(data.warnings) ? data.warnings : [];
+  const sourceWarnings = Array.isArray(data.top_source_warnings) ? data.top_source_warnings : [];
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Backbone proof</div>
+        <div class="subscriber-sub">Broker/RSS-direct share and live source reliability over the rolling window.</div>
+      </div>
+      <div class="mono" style="color:${Number(data.broker_source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)"};font-weight:700;">${Math.max(0, Number(data.days_covered || 0))} day(s)</div>
+    </div>
+    <div class="digest-audit-kpis">
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Broker/RSS share</div>
+        <div class="digest-audit-kpi-value" style="color:${Number(data.broker_candidate_share_pct || 0) >= 70 ? "var(--green)" : "var(--yellow)"};">${formatPct(data.broker_candidate_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Discovery share</div>
+        <div class="digest-audit-kpi-value" style="color:${Number(data.discovery_candidate_share_pct || 0) <= 30 ? "var(--green)" : "var(--yellow)"};">${formatPct(data.discovery_candidate_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Broker source success</div>
+        <div class="digest-audit-kpi-value" style="color:${Number(data.broker_source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)"};">${formatPct(data.broker_source_success_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Observed sources</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.source_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Topic warnings</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.topic_warning_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Source warnings</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.source_warning_count || 0))}</div>
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${renderDigestAuditSummaryPill("RSS candidates", String(Math.max(0, Number(data?.global_lane_totals?.rss || 0))), "var(--green)")}
+      ${renderDigestAuditSummaryPill("Official candidates", String(Math.max(0, Number(data?.global_lane_totals?.official || 0))), "var(--green)")}
+      ${renderDigestAuditSummaryPill("Discovery candidates", String(Math.max(0, Number(data?.global_lane_totals?.discovery || 0))), "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Unknown lane", String(Math.max(0, Number(data?.global_lane_totals?.unknown || 0))))}
+    </div>
+    ${topicWarnings.length ? `<div style="margin-top:12px;">
+      <div class="subscriber-sub" style="font-weight:700;margin-bottom:8px;">Topic warnings</div>
+      <div class="digest-audit-item-list">${topicWarnings.map((warning) => renderDigestAuditConcern(warning?.message || "Unknown topic warning")).join("")}</div>
+    </div>` : ""}
+    ${sourceWarnings.length ? `<div style="margin-top:12px;">
+      <div class="subscriber-sub" style="font-weight:700;margin-bottom:8px;">Top failing sources</div>
+      <div class="digest-audit-item-list">${sourceWarnings.map((warning) => `
+        <div class="digest-audit-item">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+            <div style="min-width:0;">
+              <div style="font-size:12px;line-height:1.45;font-weight:600;">${esc(warning?.source_id || "unknown")}</div>
+              <div class="subscriber-sub" style="margin-top:4px;">${esc(warning?.lane || "unknown")} · ${esc((Array.isArray(warning?.topic_tags) ? warning.topic_tags.join(", ") : "") || "untagged")}</div>
+              ${warning?.last_error ? `<div class="subscriber-sub" style="margin-top:4px;">${esc(warning.last_error)}</div>` : ""}
+            </div>
+            <div class="mono" style="color:var(--yellow);font-weight:700;">${formatPct(warning?.success_rate_pct || 0)}</div>
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("Attempted days", String(Math.max(0, Number(warning?.attempted_days || 0))))}
+            ${renderDigestAuditSummaryPill("Failure days", String(Math.max(0, Number(warning?.failure_days || 0))), "var(--red)")}
+            ${renderDigestAuditSummaryPill("Retained", String(Math.max(0, Number(warning?.retained_count || 0))), "var(--green)")}
+            ${renderDigestAuditSummaryPill("Stale", String(Math.max(0, Number(warning?.stale_count || 0))), "var(--yellow)")}
+          </div>
+        </div>`).join("")}</div>
+    </div>` : `<div class="subscriber-sub" style="margin-top:12px;">No failing broker sources crossed the warning threshold in the current rolling window.</div>`}
+  </div>`;
+}
+
+function renderTopicReadinessCard(topicReadiness) {
+  const entries = topicReadiness && typeof topicReadiness === "object"
+    ? Object.entries(topicReadiness)
+    : [];
+  if (!entries.length) return "";
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Topic backbone proof</div>
+        <div class="subscriber-sub">Per-topic proof that the 5-item contract, candidate depth, and broker backbone are holding in practice.</div>
+      </div>
+    </div>
+    <div class="digest-audit-item-list" style="margin-top:12px;">
+      ${entries.map(([tag, readiness]) => {
+        const ready = readiness?.exit_ready === true;
+        const concerns = Array.isArray(readiness?.concerns) ? readiness.concerns : [];
+        return `<div class="digest-audit-item">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+            <div style="min-width:0;">
+              <div style="font-size:12px;line-height:1.45;font-weight:700;">${esc(tag)}</div>
+              <div class="subscriber-sub" style="margin-top:4px;">${Math.max(0, Number(readiness?.days_observed || 0))} observed day(s) · avg ${Number(readiness?.avg_candidate_count || 0).toFixed(1)} candidates/day · ${Math.max(0, Number(readiness?.active_source_count || 0))} active source(s)</div>
+            </div>
+            <div class="mono" style="color:${ready ? "var(--green)" : "var(--yellow)"};font-weight:700;">${ready ? "ready" : "watch"}</div>
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("Full 5", formatPct(readiness?.full_5_rate_pct || 0), Number(readiness?.full_5_rate_pct || 0) === 100 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Depth ≥15", formatPct(readiness?.candidate_depth_rate_pct || 0), Number(readiness?.candidate_depth_rate_pct || 0) === 100 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Broker/RSS share", formatPct(readiness?.broker_candidate_share_pct || 0), Number(readiness?.broker_candidate_share_pct || 0) >= 70 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Source success", formatPct(readiness?.source_success_rate_pct || 0), Number(readiness?.source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Trusted Tier 1/2", formatPct(readiness?.trusted_selected_share_pct || 0), Number(readiness?.trusted_selected_share_pct || 0) >= 80 ? "var(--green)" : "var(--yellow)")}
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("No-broker days", String(Math.max(0, Number(readiness?.no_broker_days || 0))), Number(readiness?.no_broker_days || 0) > 0 ? "var(--red)" : "var(--green)")}
+            ${renderDigestAuditSummaryPill("Provider-limited", String(Math.max(0, Number(readiness?.provider_limited_days || 0))), Number(readiness?.provider_limited_days || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+            ${renderDigestAuditSummaryPill("Missed-story flags", String(Math.max(0, Number(readiness?.missed_story_flag_count || 0))), Number(readiness?.missed_story_flag_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+            ${renderDigestAuditSummaryPill("Source domains", String(Math.max(0, Number(readiness?.source_domain_count || 0))))}
+          </div>
+          ${concerns.length ? `<div class="subscriber-sub" style="margin-top:8px;">${esc(concerns.join(" · "))}</div>` : `<div class="subscriber-sub" style="margin-top:8px;">This topic currently clears the coded MVP operating thresholds.</div>`}
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
 function renderMissedStoryFlag(flag) {
   const headline = esc(flag?.headline || "Untitled");
   const href = String(flag?.url || "").trim();
@@ -2425,6 +2541,12 @@ function renderDigestAuditPanel() {
   const readiness = data.rolling_readiness && typeof data.rolling_readiness === "object"
     ? data.rolling_readiness
     : null;
+  const sourceHealth = data.source_health && typeof data.source_health === "object"
+    ? data.source_health
+    : null;
+  const topicReadiness = data.topic_readiness && typeof data.topic_readiness === "object"
+    ? data.topic_readiness
+    : null;
   const fetchTopics = new Map((Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : []).map((topic) => [String(topic?.tag || "").trim().toUpperCase(), topic]));
   const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
   const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
@@ -2438,6 +2560,8 @@ function renderDigestAuditPanel() {
   meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${rerunLabel}${refreshingLabel}`;
   panel.innerHTML = `
     ${renderRollingReadinessCard(readiness)}
+    ${renderBackboneHealthCard(sourceHealth)}
+    ${renderTopicReadinessCard(topicReadiness)}
     <div class="digest-audit-card">
       <div class="digest-audit-kpis">
         <div class="digest-audit-kpi">

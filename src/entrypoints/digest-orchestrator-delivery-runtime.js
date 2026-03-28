@@ -8,7 +8,7 @@ const {
   deriveInternalThinnessLabel,
   isRetryEligibleFailureClass,
   selectTopicBuckets,
-} = require("../runtime/digest-delivery-policy-runtime");
+} = require("../runtime/digest-mvp-delivery-runtime");
 
 function createDigestOrchestratorDeliveryRuntime(deps) {
   const {

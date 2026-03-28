@@ -30,7 +30,7 @@ const {
   const tuning = { maxAgeHours: 36, weights: { freshness: 0.4, source_tier: 0.3, lane_bonus: 0.15, novelty: 0.15 } };
   fs.writeFileSync(goodPath, JSON.stringify(tuning));
   const result = loadDigestTuning(goodPath, fs);
-  assert.strictEqual("maxAgeHours" in result, false, "locked maxAgeHours stripped on load");
+  assert.strictEqual(result.maxAgeHours, 36, "maxAgeHours parsed correctly");
   assert.strictEqual(result.weights.freshness, 0.4, "weights.freshness parsed correctly");
 
   // Returns {} when file contains a non-object root
@@ -60,10 +60,10 @@ const {
   assert.strictEqual(badOk, false, "unknown key fails validation");
   assert.ok(badErrors.some((e) => e.includes("unknownKey")), "error mentions unknown key");
 
-  // Locked maxAgeHours is rejected even if well-typed
-  const { ok: numOk, errors: numErrors } = validateDigestTuning({ maxAgeHours: 48 });
-  assert.strictEqual(numOk, false, "locked maxAgeHours fails");
-  assert.ok(numErrors.some((e) => e.includes("locked")), "error mentions locked contract");
+  // maxAgeHours is allowed inside the MVP freshness cap
+  const { ok: maxAgeOk, errors: maxAgeErrors } = validateDigestTuning({ maxAgeHours: 48 });
+  assert.strictEqual(maxAgeOk, true, "maxAgeHours within cap passes");
+  assert.strictEqual(maxAgeErrors.length, 0, "no errors for valid maxAgeHours");
 
   // Weights with out-of-range value is rejected
   const { ok: wOk, errors: wErrors } = validateDigestTuning({ weights: { freshness: 2.0, source_tier: 0.35, lane_bonus: 0.15, novelty: 0.15 } });
@@ -78,6 +78,11 @@ const {
   const { ok: strOk, errors: strErrors } = validateDigestTuning({ maxAgeHours: "36" });
   assert.strictEqual(strOk, false, "string maxAgeHours still fails");
   assert.ok(strErrors.some((e) => e.includes("maxAgeHours")), "error mentions field name");
+
+  // maxAgeHours above the MVP cap is rejected
+  const { ok: capOk, errors: capErrors } = validateDigestTuning({ maxAgeHours: 72 });
+  assert.strictEqual(capOk, false, "maxAgeHours above cap fails");
+  assert.ok(capErrors.some((e) => e.includes("between 1 and 48")), "error mentions 48h cap");
 
   console.log("validateDigestTuning ✓");
 }
@@ -94,7 +99,7 @@ const {
 
   // Tuning overrides only the specified keys
   const merged = mergeDigestTuning(base, { maxAgeHours: 36, weights: { freshness: 0.5, source_tier: 0.3, lane_bonus: 0.1, novelty: 0.1 } });
-  assert.strictEqual(merged.maxAgeHours, 48, "locked maxAgeHours preserved from base");
+  assert.strictEqual(merged.maxAgeHours, 36, "maxAgeHours overridden within 48h cap");
   assert.strictEqual(merged.weights.freshness, 0.5, "weights overridden");
   assert.strictEqual(merged.maxItemsPerSourceDomain, 2, "unset key preserved from base");
 
@@ -115,10 +120,10 @@ const {
 // --- ALLOWED_TUNING_KEYS ---
 {
   assert.ok(Array.isArray(ALLOWED_TUNING_KEYS), "ALLOWED_TUNING_KEYS is an array");
-  assert.ok(!ALLOWED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is no longer allowed");
+  assert.ok(ALLOWED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is allowed again within the 48h cap");
   assert.ok(ALLOWED_TUNING_KEYS.includes("weights"), "weights is allowed");
   assert.ok(!ALLOWED_TUNING_KEYS.includes("keys"), "keys is not allowed (security)");
-  assert.ok(LOCKED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is explicitly locked");
+  assert.ok(!LOCKED_TUNING_KEYS.includes("maxAgeHours"), "maxAgeHours is no longer locked");
   console.log("ALLOWED_TUNING_KEYS ✓");
 }
 

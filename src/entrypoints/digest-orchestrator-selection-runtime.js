@@ -150,11 +150,21 @@ function toSelectionAuditCandidate(item, extras = {}) {
     headline: String(item?.headline || "").slice(0, 160),
     url: String(item?.url || ""),
     source: String(item?.source || item?.source_domain || ""),
+    source_domain: String(item?.source_domain || item?.source || ""),
     source_tier: item?.source_tier ?? null,
+    source_type: String(item?.source_type || ""),
+    source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
     lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
     _score: item?._score ?? null,
     _score_components: item?._score_components ?? null,
     _story_relationship: item?._story_relationship ?? "new",
+    storyline_key: String(item?.storyline_key || "").trim() || null,
+    cross_source_count: Number.isFinite(Number(item?.cross_source_count)) ? Number(item.cross_source_count) : null,
+    published_at: String(item?.published_date || item?.published_at || item?.date || "") || null,
+    freshness_hours: Number.isFinite(Number(extras?.freshness_hours))
+      ? Number(Number(extras.freshness_hours).toFixed(2))
+      : null,
+    content_flags: Array.isArray(item?.content_flags) ? item.content_flags.slice() : [],
     ...extras,
   };
 }
@@ -388,7 +398,11 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       targetCount: selectionTarget,
       minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || depthPolicy.defaultItemCount || 5)),
     });
-    const configuredMaxAgeHours = Number(CONFIG.digest.maxArticleAgeHours || 48);
+    const configuredMaxAgeHours = Number(
+      (paramScoringConfig && paramScoringConfig.maxAgeHours != null)
+        ? paramScoringConfig.maxAgeHours
+        : (CONFIG.digest.maxArticleAgeHours || 48)
+    );
     const maxArticleAgeHours = Number.isFinite(configuredMaxAgeHours)
       ? Math.min(48, Math.max(1, configuredMaxAgeHours))
       : 48;
@@ -544,6 +558,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         const selectionReason = selectedForTopic ? null : String(rejectionReasonByItem.get(item) || "selection_not_selected");
         if (!selectedForTopic) incrementCount(topicReasonCounts, selectionReason);
         return toSelectionAuditCandidate(item, {
+          freshness_hours: computeItemAgeHours(item, nowMs),
           selected: selectedForTopic,
           selection_reason: selectionReason,
         });

@@ -9,6 +9,7 @@
  */
 
 const ALLOWED_TUNING_KEYS = [
+  "maxAgeHours",
   "weights",
   "maxItemsPerSourceDomain",
   "crossDayDedupDays",
@@ -17,11 +18,10 @@ const ALLOWED_TUNING_KEYS = [
   "tierScores",
 ];
 
-const LOCKED_TUNING_KEYS = [
-  "maxAgeHours",
-];
+const LOCKED_TUNING_KEYS = [];
 
 const NUMERIC_KEYS = new Set([
+  "maxAgeHours",
   "maxItemsPerSourceDomain",
   "crossDayDedupDays",
   "historyLookbackDays",
@@ -92,7 +92,11 @@ function validateDigestTuning(tuning) {
         errors.push(`"${key}" must be a number, got: ${JSON.stringify(value)}`);
       } else {
         const n = value;
-        if (!Number.isFinite(n) || n < 0) {
+        if (!Number.isFinite(n)) {
+          errors.push(`"${key}" must be a finite number, got: ${JSON.stringify(value)}`);
+        } else if (key === "maxAgeHours" && (n < 1 || n > 48)) {
+          errors.push(`"${key}" must be between 1 and 48 hours to stay within the reduced-scope MVP freshness cap`);
+        } else if (n < 0) {
           errors.push(`"${key}" must be a non-negative finite number, got: ${JSON.stringify(value)}`);
         }
       }

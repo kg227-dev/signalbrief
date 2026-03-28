@@ -2266,6 +2266,82 @@ function renderDigestAuditCandidate(candidate) {
   </div>`;
 }
 
+function renderDigestAuditConcern(message) {
+  return `<div class="digest-audit-item">
+    <div style="font-size:12px;line-height:1.5;color:var(--text-1);">${esc(message || "Unknown concern")}</div>
+  </div>`;
+}
+
+function renderRollingReadinessCard(readiness) {
+  const data = readiness && typeof readiness === "object" ? readiness : null;
+  if (!data) return "";
+  const daysCovered = Math.max(0, Number(data.days_covered || 0));
+  const ready = data.exit_ready === true;
+  const tone = ready ? "var(--green)" : "var(--yellow)";
+  const concerns = Array.isArray(data.concerns) ? data.concerns : [];
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">MVP readiness (${daysCovered}-day window)</div>
+        <div class="subscriber-sub">${ready ? "Current rolling window meets the coded MVP launch thresholds." : "Rolling window still misses one or more MVP launch thresholds."}</div>
+      </div>
+      <div class="mono" style="color:${tone};font-weight:700;">${ready ? "ready" : "not ready"}</div>
+    </div>
+    <div class="digest-audit-kpis">
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Full 5 rate</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.topic_day_full_5_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Candidate depth ≥15</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.candidate_depth_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Trusted Tier 1/2 share</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.trusted_selected_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Broker candidate share</div>
+        <div class="digest-audit-kpi-value" style="color:var(--green);">${formatPct(data.broker_candidate_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Source success</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.source_success_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Missed-story flags</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.missed_story_flag_count || 0))}</div>
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${renderDigestAuditSummaryPill("Consecutive full-day streak", String(Math.max(0, Number(data.consecutive_full_day_streak || 0))))}
+      ${renderDigestAuditSummaryPill("No-broker topic-days", String(Math.max(0, Number(data.no_broker_topic_days || 0))), Number(data.no_broker_topic_days || 0) > 0 ? "var(--red)" : "var(--green)")}
+      ${renderDigestAuditSummaryPill("Provider-limited topic-days", String(Math.max(0, Number(data.provider_limited_topic_days || 0))), Number(data.provider_limited_topic_days || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+    </div>
+    ${concerns.length ? `<div class="digest-audit-item-list" style="margin-top:12px;">${concerns.slice(0, 6).map((message) => renderDigestAuditConcern(message)).join("")}</div>` : `<div class="subscriber-sub" style="margin-top:12px;">No launch-readiness concerns flagged in the current rolling window.</div>`}
+  </div>`;
+}
+
+function renderMissedStoryFlag(flag) {
+  const headline = esc(flag?.headline || "Untitled");
+  const href = String(flag?.url || "").trim();
+  const title = href
+    ? `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">${headline}</a>`
+    : `<span style="font-weight:600;">${headline}</span>`;
+  const score = Number(flag?._score);
+  const signals = Array.isArray(flag?.signals) ? flag.signals : [];
+  return `<div class="digest-audit-item">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="min-width:0;">
+        <div style="font-size:12px;line-height:1.45;">${title}</div>
+        <div class="subscriber-sub" style="margin-top:4px;">${esc(flag?.source || "unknown")} · ${esc(flag?.lane || "unknown")} · ${esc(flag?.selection_reason || "not_selected")}</div>
+      </div>
+      <div class="mono" style="color:var(--yellow);font-weight:700;">${Number.isFinite(score) ? score.toFixed(3) : "—"}</div>
+    </div>
+    ${signals.length ? `<div class="digest-audit-row" style="margin-top:8px;">${signals.map((signal) => renderDigestAuditSummaryPill(signal, "flag", "var(--yellow)")).join("")}</div>` : ""}
+  </div>`;
+}
+
 function canRerunDigestAuditTopic(dateKey) {
   return String(dateKey || "").trim() === getTodayEtDateKey();
 }
@@ -2279,6 +2355,7 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
   const rejectionCounts = topic?.rejection_reason_counts || {};
   const visibleCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).slice(0, 12);
   const hiddenCount = Math.max(0, Number((topic?.candidates || []).length) - visibleCandidates.length);
+  const missedStoryFlags = Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags : [];
   const lanePills = Object.entries(laneBreakdown).map(([lane, count]) => renderDigestAuditSummaryPill(lane, String(count)));
   const rejectionPills = Object.entries(rejectionCounts).map(([reason, count]) => renderDigestAuditSummaryPill(reason, String(count)));
   const coverageStatus = String(fetchTopic?.coverage_status || "").trim() || "unknown";
@@ -2306,6 +2383,10 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
       ${renderDigestAuditSummaryPill("Discovery capped", String(Number(fetchTopic?.discovery_capped_count || 0)), "var(--red)")}
     </div>
     ${lanePills.length ? `<div class="digest-audit-row" style="margin-bottom:10px;">${lanePills.join("")}</div>` : ""}
+    ${missedStoryFlags.length ? `<div style="margin-bottom:10px;">
+      <div class="subscriber-sub" style="font-weight:700;color:var(--yellow);margin-bottom:8px;">Missed-story watch</div>
+      <div class="digest-audit-item-list">${missedStoryFlags.map((flag) => renderMissedStoryFlag(flag)).join("")}</div>
+    </div>` : ""}
     <div class="digest-audit-item-list">
       ${selectedCandidates.length ? selectedCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No selected items captured for this topic.</div>`}
     </div>
@@ -2341,6 +2422,9 @@ function renderDigestAuditPanel() {
   const data = state.data || {};
   const summary = data.summary || {};
   const fetch = data.fetch || {};
+  const readiness = data.rolling_readiness && typeof data.rolling_readiness === "object"
+    ? data.rolling_readiness
+    : null;
   const fetchTopics = new Map((Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : []).map((topic) => [String(topic?.tag || "").trim().toUpperCase(), topic]));
   const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
   const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
@@ -2353,6 +2437,7 @@ function renderDigestAuditPanel() {
     : "";
   meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${rerunLabel}${refreshingLabel}`;
   panel.innerHTML = `
+    ${renderRollingReadinessCard(readiness)}
     <div class="digest-audit-card">
       <div class="digest-audit-kpis">
         <div class="digest-audit-kpi">
@@ -2378,6 +2463,10 @@ function renderDigestAuditPanel() {
         <div class="digest-audit-kpi">
           <div class="digest-audit-kpi-label">Target max discovery</div>
           <div class="digest-audit-kpi-value">${formatPct(fetch.max_discovery_candidate_share_pct || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Missed-story flags</div>
+          <div class="digest-audit-kpi-value">${Math.max(0, Number(summary.missed_story_flag_count || 0))}</div>
         </div>
       </div>
       <div class="digest-audit-row" style="margin-top:12px;">

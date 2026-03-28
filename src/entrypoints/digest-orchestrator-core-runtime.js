@@ -591,14 +591,78 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
     headline: String(candidate?.headline || "").slice(0, 160),
     url: String(candidate?.url || ""),
     source: String(candidate?.source || ""),
+    source_domain: String(candidate?.source_domain || ""),
     source_tier: candidate?.source_tier ?? null,
+    source_type: String(candidate?.source_type || ""),
+    source_authority: Number.isFinite(Number(candidate?.source_authority)) ? Number(candidate.source_authority) : null,
     lane: String(candidate?.lane || ""),
     _score: candidate?._score ?? null,
     _score_components: candidate?._score_components ?? null,
     _story_relationship: candidate?._story_relationship ?? "new",
+    storyline_key: String(candidate?.storyline_key || "").trim() || null,
+    cross_source_count: Number.isFinite(Number(candidate?.cross_source_count)) ? Number(candidate.cross_source_count) : null,
+    published_at: String(candidate?.published_at || "").trim() || null,
+    freshness_hours: Number.isFinite(Number(candidate?.freshness_hours)) ? Number(candidate.freshness_hours) : null,
+    content_flags: Array.isArray(candidate?.content_flags) ? candidate.content_flags.slice() : [],
     selected,
     selection_reason: selectionReason,
   };
+}
+
+function normalizeAuditSourceTier(rawTier) {
+  const numericTier = Number(rawTier);
+  if (numericTier === 1 || numericTier === 2 || numericTier === 3) return numericTier;
+  return null;
+}
+
+function buildTopicMissedStoryFlags(candidates = []) {
+  const rows = Array.isArray(candidates) ? candidates : [];
+  const selectedScores = rows
+    .filter((candidate) => candidate?.selected === true)
+    .map((candidate) => Number(candidate?._score))
+    .filter((value) => Number.isFinite(value));
+  const selectedFloor = selectedScores.length > 0 ? Math.min(...selectedScores) : 0.65;
+  return rows
+    .filter((candidate) => candidate?.selected !== true)
+    .map((candidate) => {
+      const score = Number(candidate?._score);
+      const tier = normalizeAuditSourceTier(candidate?.source_tier);
+      const lane = String(candidate?.lane || "").trim().toLowerCase();
+      const selectionReason = String(candidate?.selection_reason || "").trim() || "selection_not_selected";
+      const sourceAuthority = Number(candidate?.source_authority || 0);
+      const crossSourceCount = Number(candidate?.cross_source_count || 0);
+      const sourceType = String(candidate?.source_type || "").trim().toLowerCase();
+      const scoreNearSelected = Number.isFinite(score) && score >= Math.max(0.55, selectedFloor - 0.05);
+      const highTierSource = tier != null && tier <= 2;
+      const officialPrimary = sourceType === "primary_official" || lane.includes("official");
+      const multiSource = crossSourceCount >= 2;
+      const sourceCapBlocked = selectionReason.startsWith("selection_source_cap");
+      const poolBlocked = selectionReason === "selection_pool_full" || selectionReason === "selection_not_selected";
+      if (!scoreNearSelected) return null;
+      if (!(highTierSource || officialPrimary || multiSource || sourceAuthority >= 0.58)) return null;
+      if (!(sourceCapBlocked || poolBlocked || selectionReason === "selection_discovery_cap")) return null;
+      const signals = [];
+      if (highTierSource) signals.push(`tier_${tier}_source`);
+      if (officialPrimary) signals.push("official_primary");
+      if (multiSource) signals.push("multi_source");
+      if (sourceAuthority >= 0.58) signals.push("strong_authority");
+      if (sourceCapBlocked) signals.push("source_cap_blocked");
+      if (selectionReason === "selection_discovery_cap") signals.push("discovery_cap_blocked");
+      if (poolBlocked) signals.push("pool_cut");
+      return {
+        headline: candidate.headline,
+        url: candidate.url,
+        source: candidate.source,
+        source_tier: candidate.source_tier ?? null,
+        lane: candidate.lane,
+        _score: Number.isFinite(score) ? Number(score.toFixed(3)) : null,
+        selection_reason: selectionReason,
+        signals,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => Number(right?._score || 0) - Number(left?._score || 0))
+    .slice(0, 3);
 }
 
 function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selectedUrls) {
@@ -633,6 +697,7 @@ function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selec
         rejection_reason_counts: Object.keys(sanitizeCountMap(topic?.rejection_reason_counts)).length > 0
           ? sanitizeCountMap(topic?.rejection_reason_counts)
           : fallbackReasonCounts,
+        missed_story_flags: buildTopicMissedStoryFlags(candidates),
         candidates,
       };
     }
@@ -665,6 +730,7 @@ function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selec
       tier_counts: {},
       lane_breakdown: laneCounts,
       rejection_reason_counts: rejectionReasonCounts,
+      missed_story_flags: buildTopicMissedStoryFlags(candidates),
       candidates,
     };
   }
@@ -763,6 +829,9 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       globalLaneCounts[lane] = (globalLaneCounts[lane] || 0) + count;
     }
   }
+  const missedStoryFlagCount = Object.values(topicSummaries).reduce((sum, topic) => {
+    return sum + Math.max(0, Number(Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags.length : 0));
+  }, 0);
 
   return {
     run_id: runId || null,
@@ -792,6 +861,7 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       score_top: selectionDiagnostics?.score_top ?? null,
       score_bottom: selectionDiagnostics?.score_bottom ?? null,
       global_lane_breakdown: globalLaneCounts,
+      missed_story_flag_count: missedStoryFlagCount,
       broker_saturated_topics: Array.isArray(fetchDiagnostics?.topic_diagnostics)
         ? fetchDiagnostics.topic_diagnostics.filter((topic) => Number(topic?.broker_item_count || 0) >= 10).length
         : 0,
@@ -835,10 +905,12 @@ function recomputeDigestAuditRollups(auditDoc) {
   const selectionRejectionCounts = Object.create(null);
   let totalCandidates = 0;
   let totalSelected = 0;
+  let missedStoryFlagCount = 0;
 
   for (const topic of topicList) {
     totalCandidates += Number(topic?.total_candidates || 0);
     totalSelected += Number(topic?.selected_count || 0);
+    missedStoryFlagCount += Math.max(0, Number(Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags.length : 0));
     for (const [lane, count] of Object.entries(topic?.lane_breakdown || {})) {
       globalLaneBreakdown[lane] = (globalLaneBreakdown[lane] || 0) + Number(count || 0);
     }
@@ -854,6 +926,7 @@ function recomputeDigestAuditRollups(auditDoc) {
     global_lane_breakdown: globalLaneBreakdown,
     selection_rejection_counts: selectionRejectionCounts,
     discovery_capped: Number(selectionRejectionCounts.selection_discovery_cap || 0),
+    missed_story_flag_count: missedStoryFlagCount,
   };
 
   const fetch = doc.fetch && typeof doc.fetch === "object" ? doc.fetch : {};
@@ -1335,6 +1408,7 @@ async function main() {
   } = await fetchRuntime.orchestrateFetch({
     dueUsers,
     runMode,
+    scoringConfig: mergedScoringConfig,
   });
   let allItems = fetchedItems;
 

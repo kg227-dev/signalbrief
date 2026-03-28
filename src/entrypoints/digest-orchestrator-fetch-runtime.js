@@ -1287,7 +1287,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     return batchResults;
   }
 
-  function buildPreferredInvocation(state, queryIndex, { countsAsRetry = false } = {}) {
+  function buildPreferredInvocation(state, queryIndex, { countsAsRetry = false, maxAgeHours = 48 } = {}) {
     const query = Array.isArray(state?.topic?.queries) ? state.topic.queries[queryIndex] : "";
     if (!query) return null;
     return {
@@ -1300,6 +1300,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         queries: [query],
       },
       opts: {
+        maxAgeHours,
         retrievalPlan: {
           preferred_domains: Array.isArray(state.preferredDomains) ? state.preferredDomains.slice() : [],
           reported_domains: Array.isArray(state.reportedDomains) ? state.reportedDomains.slice() : [],
@@ -1313,7 +1314,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     };
   }
 
-  function buildBroadInvocation(state, queryIndex, { countsAsRetry = false, broadFallback = false } = {}) {
+  function buildBroadInvocation(state, queryIndex, { countsAsRetry = false, broadFallback = false, maxAgeHours = 48 } = {}) {
     const query = Array.isArray(state?.topic?.queries) ? state.topic.queries[queryIndex] : "";
     if (!query) return null;
     return {
@@ -1326,6 +1327,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         queries: [query],
       },
       opts: {
+        maxAgeHours,
         retrievalPlan: {
           preferred_domains: Array.isArray(state.preferredDomains) ? state.preferredDomains.slice() : [],
           reported_domains: Array.isArray(state.reportedDomains) ? state.reportedDomains.slice() : [],
@@ -1339,7 +1341,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     };
   }
 
-  function buildTrustedFamilyInvocation(state, { countsAsRetry = true } = {}) {
+  function buildTrustedFamilyInvocation(state, { countsAsRetry = true, maxAgeHours = 48 } = {}) {
     const family = Array.isArray(state?.trustedFamilyQueue)
       ? state.trustedFamilyQueue[Number(state?.nextTrustedFamilyIndex || 0)]
       : null;
@@ -1356,6 +1358,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         queries: [query],
       },
       opts: {
+        maxAgeHours,
         retrievalPlan: {
           preferred_domains: Array.isArray(family.domains) ? family.domains.slice() : [],
           reported_domains: Array.isArray(state.reportedDomains) ? state.reportedDomains.slice() : [],
@@ -1371,8 +1374,16 @@ function createDigestOrchestratorFetchRuntime(deps) {
     };
   }
 
-  async function orchestrateFetch({ dueUsers, runMode }) {
+  async function orchestrateFetch({ dueUsers, runMode, scoringConfig = null }) {
     const digestConfig = CONFIG?.digest || {};
+    const resolvedMaxAgeHours = Number(
+      scoringConfig && scoringConfig.maxAgeHours != null
+        ? scoringConfig.maxAgeHours
+        : (digestConfig.maxArticleAgeHours || 48)
+    );
+    const maxAgeHours = Number.isFinite(resolvedMaxAgeHours)
+      ? Math.min(48, Math.max(1, resolvedMaxAgeHours))
+      : 48;
     const aggressiveStandardRun = isAggressiveStandardRun(runMode);
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 5));
     const tagPriority = buildTagPriority(dueUsers, topicNormalizer);
@@ -1451,7 +1462,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       const brokerResult = await standardTopicBroker.fetchBrokerCandidates({
         topicStates: standardStates,
         retrievedAt: new Date().toISOString(),
-        maxAgeHours: Number(digestConfig.maxArticleAgeHours || 48),
+        maxAgeHours,
       });
       brokerDiagnostics = brokerResult?.diagnostics || null;
       for (const state of standardStates) {
@@ -1473,11 +1484,12 @@ function createDigestOrchestratorFetchRuntime(deps) {
 
     await runScheduledBatch(perplexityEligiblePhase1States, (state) => {
       if ((state.preferredDomains || []).length > 0) {
-        return buildPreferredInvocation(state, state.nextPreferredQueryIndex);
+        return buildPreferredInvocation(state, state.nextPreferredQueryIndex, { maxAgeHours });
       }
       return buildBroadInvocation(state, state.nextBroadQueryIndex, {
         countsAsRetry: false,
         broadFallback: false,
+        maxAgeHours,
       });
     }, "standard:phase1", budgetTracker);
 
@@ -1517,13 +1529,13 @@ function createDigestOrchestratorFetchRuntime(deps) {
         return buildBroadInvocation(
           state,
           state.nextBroadQueryIndex,
-          { countsAsRetry: true, broadFallback: true }
+          { countsAsRetry: true, broadFallback: true, maxAgeHours }
         );
       }
       return buildPreferredInvocation(
         state,
         state.nextPreferredQueryIndex,
-        { countsAsRetry: true }
+        { countsAsRetry: true, maxAgeHours }
       );
     }, "standard:phase2", budgetTracker);
 
@@ -1541,7 +1553,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     await runScheduledBatch(phase3States, (state) => buildBroadInvocation(
       state,
       state.nextBroadQueryIndex,
-      { countsAsRetry: true, broadFallback: true }
+      { countsAsRetry: true, broadFallback: true, maxAgeHours }
     ), "standard:phase3", budgetTracker);
 
     let standardDeepPhaseIndex = 4;
@@ -1558,7 +1570,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       if (trustedPhaseStates.length <= 0) break;
       await runScheduledBatch(trustedPhaseStates, (state) => buildTrustedFamilyInvocation(
         state,
-        { countsAsRetry: true }
+        { countsAsRetry: true, maxAgeHours }
       ), `standard:trusted${standardDeepPhaseIndex - 3}`, budgetTracker);
       standardDeepPhaseIndex += 1;
     }
@@ -1581,7 +1593,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       await runScheduledBatch(phase4States, (state) => buildBroadInvocation(
         state,
         state.nextBroadQueryIndex,
-        { countsAsRetry: true, broadFallback: true }
+        { countsAsRetry: true, broadFallback: true, maxAgeHours }
       ), `standard:phase${standardDeepPhaseIndex}`, budgetTracker);
       standardDeepPhaseIndex += 1;
     }
@@ -1603,7 +1615,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       await runScheduledBatch(focusedPhaseStates, (state) => buildBroadInvocation(
         state,
         state.nextBroadQueryIndex,
-        { countsAsRetry: true, broadFallback: true }
+        { countsAsRetry: true, broadFallback: true, maxAgeHours }
       ), `standard:phase${standardDeepPhaseIndex}`, budgetTracker);
       standardDeepPhaseIndex += 1;
     }

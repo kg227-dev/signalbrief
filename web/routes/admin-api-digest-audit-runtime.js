@@ -7,6 +7,7 @@ const {
   classifyLane,
   loadRecentAuditDocs,
 } = require("./admin-api-source-health-runtime");
+const { isStandardMvpTopicTag } = require("../../src/runtime/topic-normalization-runtime");
 
 function pct(part, whole) {
   const numerator = Number(part || 0);
@@ -254,7 +255,8 @@ function buildRollingMvpReadiness(auditDocs = [], sourceHealth = aggregateSource
   for (const doc of docs) {
     fallbackBrokerCandidateCount += Number(doc?.fetch?.broker_candidate_count || 0);
     fallbackDiscoveryCandidateCount += Number(doc?.fetch?.discovery_candidate_count || 0);
-    const topics = doc?.topics && typeof doc.topics === "object" ? Object.entries(doc.topics) : [];
+    const allTopics = doc?.topics && typeof doc.topics === "object" ? Object.entries(doc.topics) : [];
+    const topics = allTopics.filter(([rawTag]) => isStandardMvpTopicTag(rawTag));
     let dayIsFull = topics.length > 0;
     for (const [, topic] of topics) {
       topicDaysObserved += 1;
@@ -290,7 +292,8 @@ function buildRollingMvpReadiness(auditDocs = [], sourceHealth = aggregateSource
     sourceAttemptedDays += Number(source?.attempted_days || 0);
     sourceSuccessDays += Number(source?.success_days || 0);
   }
-  for (const topic of Object.values(sourceHealth.topics || {})) {
+  for (const [tag, topic] of Object.entries(sourceHealth.topics || {})) {
+    if (!isStandardMvpTopicTag(tag)) continue;
     noBrokerTopicDays += Number(topic?.no_broker_days || 0);
     providerLimitedTopicDays += Number(topic?.provider_limited_days || 0);
   }

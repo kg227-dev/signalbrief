@@ -44,16 +44,16 @@ All non-canary active users must be paused for the full validation window using 
 
 | Slot | Email | Topics | Depth | Delivery time ET | Notes |
 |---|---|---|---|---|---|
-| T1 | kushgulati29+sb-t1-healthcare@gmail.com | Healthcare | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216328 |
-| T2 | kushgulati29+sb-t2-lifesciences@gmail.com | Life Sciences | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216335 |
-| T3 | kushgulati29+sb-t3-technology@gmail.com | Technology | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216340 |
-| T4 | kushgulati29+sb-t4-energy@gmail.com | Energy | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216345 |
-| T5 | kushgulati29+sb-t5-finserv@gmail.com | Financial Services | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216350 |
-| T6 | kushgulati29+sb-t6-consumer@gmail.com | Consumer & Retail | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216355 |
-| T7 | kushgulati29+sb-t7-industrials@gmail.com | Industrials | Deep (`headline_plus_why`) | 07:00 | Single-topic, chatId=email-1774672216360 |
-| M1 | kushgulati29+sb-m1-scan@gmail.com | Healthcare, Technology, Financial Services | Scan (`headline_only`) | 07:00 | Multi-topic, chatId=email-1774672216365 |
-| M2 | kushgulati29+sb-m2-brief@gmail.com | Life Sciences, Energy, Industrials | Brief (`headline_plus_oneliner`) | 07:00 | Multi-topic, chatId=email-1774672216370 |
-| M3 | kushgulati29+sb-m3-deep@gmail.com | Consumer & Retail, Financial Services, Industrials | Deep (`headline_plus_why`) | 07:00 | Multi-topic, chatId=email-1774672216375 |
+| T1 | kushgulati29+sb-t1-healthcare@gmail.com | Healthcare | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672712991 |
+| T2 | kushgulati29+sb-t2-lifesciences@gmail.com | Life Sciences | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672713007 |
+| T3 | kushgulati29+sb-t3-technology@gmail.com | Technology | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672713013 |
+| T4 | kushgulati29+sb-t4-energy@gmail.com | Energy | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672713018 |
+| T5 | kushgulati29+sb-t5-finserv@gmail.com | Financial Services | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672713023 |
+| T6 | kushgulati29+sb-t6-consumer@gmail.com | Consumer & Retail | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672713028 |
+| T7 | kushgulati29+sb-t7-industrials@gmail.com | Industrials | Deep (`headline_plus_why`) | 07:00 | Single-topic, prod chatId=email-1774672713033 |
+| M1 | kushgulati29+sb-m1-scan@gmail.com | Healthcare, Technology, Financial Services | Scan (`headline_only`) | 07:00 | Multi-topic, prod chatId=email-1774672713038 |
+| M2 | kushgulati29+sb-m2-brief@gmail.com | Life Sciences, Energy, Industrials | Brief (`headline_plus_oneliner`) | 07:00 | Multi-topic, prod chatId=email-1774672713043 |
+| M3 | kushgulati29+sb-m3-deep@gmail.com | Consumer & Retail, Financial Services, Industrials | Deep (`headline_plus_why`) | 07:00 | Multi-topic, prod chatId=email-1774672713049 |
 
 ## Evidence Sources
 
@@ -100,13 +100,13 @@ The 7-day window passes only if all of the following are true:
 | Field | Value |
 |---|---|
 | Current deploy SHA | `02bc16211dcad3e2d2c39ac66a98e893acc901a7` |
-| Validation start date | TBD — pending lock reset + worker restart on deploy target |
-| Validation end date | TBD — 7 days after start |
-| Primary operator | TBD |
+| Validation start date | 2026-03-29 (Day 1 = first 07:00 ET send) |
+| Validation end date | 2026-04-04 (Day 7) |
+| Primary operator | Kush Gulati |
 | Secondary operator | TBD |
 | Current digest tuning snapshot | No `data/digest-tuning.json` present — system uses hardcoded defaults |
 | Current source registry snapshot | `data/source-registry.json` (17 domains, last updated 2026-03-21) |
-| Non-canary users paused | Yes — 8 non-canary users paused, 2 already paused/unsubscribed |
+| Non-canary users paused | N/A — production SQLite had 0 pre-existing users; only canary users exist |
 | Canary delivery window ET | 07:00 ET (all 10 canary users aligned) |
 
 ### Known Caveats From March 27 Audit

@@ -107,9 +107,6 @@ async function invoke(pathname, search, deps) {
       path,
       fs,
       APP_ROOT: rootDir,
-      isLegacyArchiveEndpointEnabled: () => true,
-      recordLegacyArchiveUsage: () => {},
-      ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC: "2026-06-30T00:00:00Z",
     };
 
     const steadyResult = await invoke("/api/archive/all", "?token=ok", steadyDeps);
@@ -251,22 +248,8 @@ async function invoke(pathname, search, deps) {
       snapshotAllBody.items.map((item) => item.rank),
       [1, 2, 3]
     );
-
-    fs.unlinkSync(path.join(archiveDir, "2026-03-12.json"));
-    const snapshotDateResult = await invoke("/api/archive/2026-03-12", "?token=ok", snapshotDeps);
-    assert.strictEqual(snapshotDateResult.handled, true);
-    assert.strictEqual(snapshotDateResult.res.statusCode, 200);
-    const snapshotDateBody = JSON.parse(snapshotDateResult.res.body || "{}");
-    assert.strictEqual(snapshotDateBody.quickScan, "Snapshot-only digest");
-    assert.strictEqual(snapshotDateBody.items.length, 3);
-    assert.deepStrictEqual(
-      snapshotDateBody.items.map((item) => item.headline),
-      [
-        "Highest score snapshot headline",
-        "Middle score snapshot headline",
-        "Lower score snapshot headline",
-      ]
-    );
+    const legacyDateResult = await invoke("/api/archive/2026-03-12", "?token=ok", snapshotDeps);
+    assert.strictEqual(legacyDateResult.handled, false);
   } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });
   }

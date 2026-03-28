@@ -9,7 +9,7 @@ const {
 } = require("../digest/domain/storyline-domain-runtime");
 const {
   DELIVERY_POLICY,
-} = require("../runtime/digest-delivery-policy-runtime");
+} = require("../runtime/digest-mvp-delivery-runtime");
 
 function isStrictFreshnessMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
@@ -18,7 +18,7 @@ function isStrictFreshnessMode(mode) {
 
 function isTopFitItem(item) {
   const topicMatch = Number(item?.topicMatch || 0);
-  return topicMatch >= 7 || (Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword"));
+  return topicMatch >= 7;
 }
 
 function applyTopFitCoverageFloor(items, requestedCount, minimumTopFit = 3) {
@@ -58,43 +58,6 @@ function itemNeedsCorroboration(item) {
 function itemIsCorroborated(item) {
   return Number(item?.cross_source_count || 0) >= 2
     || Number(item?.supporting_sources_avg_authority || 0) >= 0.7;
-}
-
-function hasCustomKeywordSignal(item) {
-  return Array.isArray(item?.why_shown) && item.why_shown.includes("custom_keyword");
-}
-
-function isCustomPrecisionMode(customKeywords = [], standardTopicsLower = []) {
-  const customCount = Array.isArray(customKeywords) ? customKeywords.length : 0;
-  const standardCount = Array.isArray(standardTopicsLower) ? standardTopicsLower.length : 0;
-  return customCount > 0 && customCount >= Math.max(1, standardCount) && standardCount <= 1;
-}
-
-function applyCustomPrecisionGate(items = [], enabled = false) {
-  const ranked = Array.isArray(items) ? items.filter(Boolean) : [];
-  if (!enabled || ranked.length === 0) {
-    return {
-      items: ranked,
-      removed: 0,
-      matched: 0,
-      applied: false,
-    };
-  }
-  const customMatched = ranked.filter((item) => hasCustomKeywordSignal(item));
-  if (customMatched.length === 0) {
-    return {
-      items: [],
-      removed: ranked.length,
-      matched: 0,
-      applied: true,
-    };
-  }
-  return {
-    items: customMatched,
-    removed: Math.max(0, ranked.length - customMatched.length),
-    matched: customMatched.length,
-    applied: true,
-  };
 }
 
 function applySourcePolicyCaps(items = [], requestedCount = 5) {
@@ -267,7 +230,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     isRecentRepeatItem,
     parseSourceDomain,
     applyEntityCoverageCap,
-    reserveCustomKeywordSlot,
   } = deps;
 
   function filterFreshCandidates(items, opts = {}) {
@@ -322,10 +284,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       captureDiagnostics,
     } = params;
 
-    const prefs = user.preferences || {};
-    const sourcePrefs = user.source_preferences || {};
-    const blockedSources = new Set(Array.isArray(sourcePrefs.blocked_sources) ? sourcePrefs.blocked_sources : []);
-    const trustedSources = new Set(Array.isArray(sourcePrefs.trusted_sources) ? sourcePrefs.trusted_sources : []);
     const trace = captureDiagnostics === true
       ? {
         snapshots: [],
@@ -339,7 +297,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       minItems: depthPolicy.minFilteredItems,
       strictZeroFallback: "specialist",
     });
-    const customKeywords = filteredResult.customKeywords || [];
     const specialistMode = Boolean(filteredResult.specialistMode);
     if (trace) appendStageTrace(trace, userItems, filteredResult.items, "topic_filter", "filtered_by_topic");
     userItems = filteredResult.items;
@@ -360,13 +317,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       ))
     );
 
-    const weights = user.topic_weights || {};
-    const hasWeights = Object.values(weights).some((value) => value !== 0);
-    if (hasWeights) {
-      log(`  [weights] ${user.email || user.chatId}: ${JSON.stringify(weights)}`);
-      log(`  [pre-sort] ${userItems.map((item) => `${item.tag}(${item.baseScore})`).join(", ")}`);
-    }
-
     userItems = applyTopicRelevanceScores(userItems, user.topics || [], {}, {
       specialistMode,
       repeatPenalty,
@@ -374,8 +324,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       sourceDomainForItem: parseSourceDomain,
       recentEntityCounts: recentHistory.entityCounts,
       recentStorylineKeys: recentHistory.storylineKeys,
-      blockedSources,
-      trustedSources,
       nowIso,
     });
     userItems.sort((a, b) => b.relevanceScore - a.relevanceScore);
@@ -387,10 +335,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     if (trace) appendStageTrace(trace, beforeEntityCap, userItems, "entity_cap", "removed_by_entity_cap");
     if (trace) trace.snapshots.push(snapshotStage(userItems, "entity_cap", "entity_cap_applied"));
 
-    const requestedCount = Math.max(
-      Number(DELIVERY_POLICY.target_item_count || 5),
-      Number(prefs.items_per_digest || depthPolicy.defaultItemCount || 5)
-    );
+    const requestedCount = Math.max(1, Number(DELIVERY_POLICY.target_item_count || 5));
     const candidatePoolTargetCount = Math.max(
       requestedCount,
       Number(DELIVERY_POLICY.candidate_pool_target_count || requestedCount)
@@ -430,15 +375,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
       );
     }
     if (trace) trace.snapshots.push(snapshotStage(userItems, "semantic_repeat", strictFreshness ? "removed_by_semantic_repeat" : "semantic_soft_preview"));
-
-    const customPrecisionMode = isCustomPrecisionMode(customKeywords, standardTopicsLower);
-    const precisionGate = applyCustomPrecisionGate(userItems, customPrecisionMode);
-    if (precisionGate.applied) {
-      if (trace) appendStageTrace(trace, userItems, precisionGate.items, "custom_precision_gate", "removed_by_custom_precision");
-      userItems = precisionGate.items;
-      log(`  [custom-precision] ${user.email || user.chatId}: kept ${precisionGate.matched} custom-matched item(s), removed ${precisionGate.removed} broad fallback candidate(s)`);
-    }
-    if (trace) trace.snapshots.push(snapshotStage(userItems, "custom_precision_gate", precisionGate.applied ? "removed_by_custom_precision" : "custom_precision_skipped"));
 
     const rankedFilteredPool = userItems.slice();
 
@@ -480,12 +416,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
     }
     if (trace) trace.snapshots.push(snapshotStage(userItems, "final_quality_gate", "excluded_by_final_quality_threshold"));
 
-    if (hasWeights) {
-      log(`  [post-sort] ${userItems.map((item) => `${item.tag}(${item.relevanceScore})`).join(", ")}`);
-    }
-
     userItems = applyTopFitCoverageFloor(userItems, candidatePoolTargetCount, Number(CONFIG.digest.minTopFitItems || 3));
-    userItems = reserveCustomKeywordSlot(userItems, candidatePoolTargetCount, customKeywords);
     const beforeSourcePolicyCaps = userItems.slice();
     userItems = applySourcePolicyCaps(userItems, candidatePoolTargetCount);
     if (trace) appendStageTrace(trace, beforeSourcePolicyCaps, userItems, "source_policy_caps", "removed_by_source_policy_cap");
@@ -519,7 +450,7 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         .filter((item) => Number(item?.routine_item_score || 0) <= maxRoutineScore)
         .filter((item) => Number(item?.strategic_value || 0) >= (minStrategicValue * 0.9))
         .sort((a, b) => b.relevanceScore - a.relevanceScore);
-      if (emergencyPool.length === 0 && !wasFiltered && !customPrecisionMode) {
+      if (emergencyPool.length === 0 && !wasFiltered) {
         emergencyPool = applyTopicRelevanceScores(enriched, user.topics || [], {}, {
           specialistMode: false,
           repeatPenalty,
@@ -527,8 +458,6 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
           sourceDomainForItem: parseSourceDomain,
           recentEntityCounts: recentHistory.entityCounts,
           recentStorylineKeys: recentHistory.storylineKeys,
-          blockedSources,
-          trustedSources,
           nowIso,
         })
           .sort((a, b) => b.relevanceScore - a.relevanceScore)
@@ -620,9 +549,9 @@ function createDigestOrchestratorDeliveryRankingRuntime(deps) {
         fallback_reason: fallbackReason,
         refill_count: qualityBackfillCount + minCountBackfillCount + emergencyFallbackCount,
         thin_pool: thinPool,
-        custom_precision_mode: customPrecisionMode,
-        custom_precision_applied: precisionGate.applied,
-        custom_precision_removed_count: Math.max(0, Number(precisionGate.removed || 0)),
+        custom_precision_mode: false,
+        custom_precision_applied: false,
+        custom_precision_removed_count: 0,
         short_digest_accepted: thinPool && userItems.length > 0,
         item_trace: trace,
         dominant_failure_mode: deriveDominantFailureMode({

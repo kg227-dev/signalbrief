@@ -2,9 +2,6 @@ function normalizeAdminMessageBody(body, summarizeMessage, hashText) {
   const email = String(body.email || "").toLowerCase().trim();
   const message = String(body.message || "").trim();
   const subject = String(body.subject || "Message from SignalBrief").trim().slice(0, 140) || "Message from SignalBrief";
-  const channels = Array.isArray(body.channels)
-    ? body.channels.map((channel) => String(channel).toLowerCase().trim()).filter(Boolean)
-    : [];
   const messagePreview = summarizeMessage(message);
   const payloadHash = hashText(message);
 
@@ -12,17 +9,15 @@ function normalizeAdminMessageBody(body, summarizeMessage, hashText) {
     email,
     message,
     subject,
-    channels,
     messagePreview,
     payloadHash,
   };
 }
 
-function validateAdminMessageRequest({ email, message, channels }) {
+function validateAdminMessageRequest({ email, message }) {
   if (!email) return "email required";
   if (message.length < 2) return "message too short";
   if (message.length > 4000) return "message too long (max 4000 chars)";
-  if (!channels.length) return "select at least one channel";
   return null;
 }
 
@@ -30,7 +25,6 @@ function buildAdminMessageAuditWriter({
   req,
   logAdminMessageEvent,
   email,
-  channels,
   subject,
   message,
   messagePreview,
@@ -40,8 +34,7 @@ function buildAdminMessageAuditWriter({
     logAdminMessageEvent(req, {
       action: "message_user",
       target_email: email || null,
-      target_chat_id: extra.target_chat_id || null,
-      requested_channels: channels,
+      requested_channels: ["email"],
       sent_channels: Array.isArray(extra.sent_channels) ? extra.sent_channels : [],
       subject,
       message_length: message.length,
@@ -53,15 +46,12 @@ function buildAdminMessageAuditWriter({
   };
 }
 
-function resolveUserChannelReadiness(user, channels) {
+function resolveUserChannelReadiness(user) {
   const prefs = user.preferences || {};
   const emailReady = !!user.email && prefs.email_enabled !== false;
-  const telegramReady = !!(user.chatId && !String(user.chatId).startsWith("email-") && prefs.telegram_enabled !== false);
   return {
-    wantsEmail: channels.includes("email"),
-    wantsTelegram: channels.includes("telegram"),
+    wantsEmail: true,
     emailReady,
-    telegramReady,
   };
 }
 
@@ -69,13 +59,11 @@ async function deliverAdminMessage({
   user,
   message,
   subject,
-  channels,
   escapeHtml,
   sendEmail,
-  sendTelegramText,
 }) {
-  const readiness = resolveUserChannelReadiness(user, channels);
-  const sent = { email: false, telegram: false };
+  const readiness = resolveUserChannelReadiness(user);
+  const sent = { email: false };
   const errors = [];
 
   if (readiness.wantsEmail) {
@@ -97,26 +85,12 @@ async function deliverAdminMessage({
     }
   }
 
-  if (readiness.wantsTelegram) {
-    if (!readiness.telegramReady) {
-      errors.push("telegram channel not available for this user");
-    } else {
-      try {
-        await sendTelegramText(user.chatId, `📣 SignalBrief update\n\n${message}`);
-        sent.telegram = true;
-      } catch (error) {
-        errors.push(`telegram failed: ${error.message}`);
-      }
-    }
-  }
-
   return { sent, errors };
 }
 
 function summarizeSentChannels(sent) {
   return [
     sent.email ? "email" : null,
-    sent.telegram ? "telegram" : null,
   ].filter(Boolean);
 }
 
@@ -130,7 +104,6 @@ async function processAdminMessageRequest({ ctx, deps }) {
     logAdminMessageEvent,
     escapeHtml,
     sendEmail,
-    sendTelegramText,
   } = deps;
 
   const body = await requireJsonBody(ctx.req, ctx.res);
@@ -141,13 +114,11 @@ async function processAdminMessageRequest({ ctx, deps }) {
     email,
     message,
     subject,
-    channels,
   } = requestData;
   const writeAudit = buildAdminMessageAuditWriter({
     req: ctx.req,
     logAdminMessageEvent,
     email,
-    channels,
     subject,
     message,
     messagePreview: requestData.messagePreview,
@@ -172,15 +143,12 @@ async function processAdminMessageRequest({ ctx, deps }) {
     user,
     message,
     subject,
-    channels,
     escapeHtml,
     sendEmail,
-    sendTelegramText,
   });
   const sentChannels = summarizeSentChannels(sent);
-  if (!sent.email && !sent.telegram) {
+  if (!sent.email) {
     writeAudit({
-      target_chat_id: user.chatId || null,
       sent_channels: sentChannels,
       success: false,
       errors,
@@ -190,7 +158,6 @@ async function processAdminMessageRequest({ ctx, deps }) {
   }
 
   writeAudit({
-    target_chat_id: user.chatId || null,
     sent_channels: sentChannels,
     success: true,
     errors,

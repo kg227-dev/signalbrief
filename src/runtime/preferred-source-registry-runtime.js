@@ -4,10 +4,11 @@ const path = require("path");
 
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
+const { buildBrokerPreferredTopicEntriesFromConfig } = require("./standard-topic-broker-runtime");
 const {
   normalizeTopicToken,
   topicsRelated,
-} = require("../digest/domain/topic-domain-runtime");
+} = require("./topic-normalization-runtime");
 
 const DEFAULT_PREFERRED_SOURCES_VERSION = 1;
 const OFFICIAL_FRIENDLY_TOPIC_KEYS = Object.freeze([
@@ -28,192 +29,6 @@ const BUILT_IN_PREFERRED_ALIASES = Object.freeze({
   "digital transformation": "digital",
   "sustainability esg": "sustainability",
   "talent workforce": "talent",
-});
-const BUILT_IN_STANDARD_TOPIC_SOURCE_MAP = Object.freeze({
-  "healthcare": Object.freeze({
-    reported: Object.freeze([
-      "statnews.com",
-      "endpointsnews.com",
-      "modernhealthcare.com",
-      "healthcaredive.com",
-      "beckershospitalreview.com",
-      "pharmavoice.com",
-    ]),
-    official: Object.freeze(["fda.gov", "cms.gov", "hhs.gov", "nih.gov"]),
-  }),
-  "financial services": Object.freeze({
-    reported: Object.freeze([
-      "americanbanker.com",
-      "bankingdive.com",
-      "paymentsdive.com",
-      "risk.net",
-    ]),
-    official: Object.freeze(["federalreserve.gov", "sec.gov", "occ.treas.gov", "fdic.gov", "cfpb.gov"]),
-  }),
-  "pe m a": Object.freeze({
-    reported: Object.freeze([
-      "pitchbook.com",
-      "pehub.com",
-      "mergermarket.com",
-      "globalcompetitionreview.com",
-    ]),
-    official: Object.freeze(["ftc.gov", "justice.gov", "sec.gov"]),
-  }),
-  "energy": Object.freeze({
-    reported: Object.freeze([
-      "utilitydive.com",
-      "energydive.com",
-      "canarymedia.com",
-      "powermag.com",
-      "heatmap.news",
-      "solarpowerworldonline.com",
-    ]),
-    official: Object.freeze(["ferc.gov", "eia.gov", "energy.gov", "iea.org"]),
-  }),
-  "consumer": Object.freeze({
-    reported: Object.freeze([
-      "retaildive.com",
-      "modernretail.co",
-      "chainstoreage.com",
-      "progressivegrocer.com",
-    ]),
-    official: Object.freeze(["ftc.gov", "census.gov"]),
-  }),
-  "life sciences": Object.freeze({
-    reported: Object.freeze([
-      "statnews.com",
-      "endpointsnews.com",
-      "fiercebiotech.com",
-      "fiercepharma.com",
-      "biopharmadive.com",
-      "biospace.com",
-    ]),
-    official: Object.freeze(["fda.gov", "ema.europa.eu", "clinicaltrials.gov"]),
-  }),
-  "technology": Object.freeze({
-    reported: Object.freeze([
-      "theinformation.com",
-      "semianalysis.com",
-      "techcrunch.com",
-      "theverge.com",
-      "ciodive.com",
-      "datacenterknowledge.com",
-      "arstechnica.com",
-      "wired.com",
-    ]),
-    official: Object.freeze(["sec.gov", "bis.gov"]),
-  }),
-  "industrials": Object.freeze({
-    reported: Object.freeze([
-      "industryweek.com",
-      "supplychaindive.com",
-      "freightwaves.com",
-      "manufacturingdive.com",
-    ]),
-    official: Object.freeze(["commerce.gov", "transportation.gov", "osha.gov"]),
-  }),
-  "real estate": Object.freeze({
-    reported: Object.freeze([
-      "costar.com",
-      "bisnow.com",
-      "commercialobserver.com",
-      "housingwire.com",
-    ]),
-    official: Object.freeze(["hud.gov", "census.gov", "sec.gov"]),
-  }),
-  "public sector": Object.freeze({
-    reported: Object.freeze([
-      "govexec.com",
-      "federalnewsnetwork.com",
-      "route-fifty.com",
-      "nextgov.com",
-    ]),
-    official: Object.freeze(["govinfo.gov", "federalregister.gov", "regulations.gov", "gao.gov", "gsa.gov"]),
-  }),
-  "ai tech": Object.freeze({
-    reported: Object.freeze([
-      "theinformation.com",
-      "semianalysis.com",
-      "techcrunch.com",
-      "theverge.com",
-      "arstechnica.com",
-      "wired.com",
-    ]),
-    official: Object.freeze(["bis.gov", "nist.gov", "sec.gov"]),
-  }),
-  "strategy": Object.freeze({
-    reported: Object.freeze([
-      "economist.com",
-      "axios.com",
-      "fortune.com",
-      "semafor.com",
-    ]),
-    official: Object.freeze(["sec.gov"]),
-  }),
-  "policy regulatory": Object.freeze({
-    reported: Object.freeze([
-      "govexec.com",
-      "federalnewsnetwork.com",
-      "route-fifty.com",
-      "politico.com",
-      "globalcompetitionreview.com",
-    ]),
-    official: Object.freeze([
-      "federalregister.gov",
-      "regulations.gov",
-      "govinfo.gov",
-      "sec.gov",
-      "ftc.gov",
-      "justice.gov",
-      "fda.gov",
-      "cms.gov",
-      "epa.gov",
-      "treasury.gov",
-      "bis.gov",
-      "ec.europa.eu",
-      "eur-lex.europa.eu",
-    ]),
-  }),
-  "sustainability": Object.freeze({
-    reported: Object.freeze([
-      "trellis.net",
-      "esgtoday.com",
-      "responsible-investor.com",
-      "canarymedia.com",
-      "heatmap.news",
-      "utilitydive.com",
-    ]),
-    official: Object.freeze(["epa.gov", "energy.gov", "eia.gov", "ec.europa.eu", "eur-lex.europa.eu", "sec.gov"]),
-  }),
-  "digital": Object.freeze({
-    reported: Object.freeze([
-      "ciodive.com",
-      "cio.com",
-      "informationweek.com",
-      "techtarget.com",
-      "techcrunch.com",
-      "theinformation.com",
-    ]),
-    official: Object.freeze(["sec.gov"]),
-  }),
-  "m a advisory": Object.freeze({
-    reported: Object.freeze([
-      "pitchbook.com",
-      "mergermarket.com",
-      "pehub.com",
-      "globalcompetitionreview.com",
-    ]),
-    official: Object.freeze(["ftc.gov", "justice.gov", "sec.gov"]),
-  }),
-  "talent": Object.freeze({
-    reported: Object.freeze([
-      "shrm.org",
-      "hrdive.com",
-      "workforce.com",
-      "staffingindustry.com",
-    ]),
-    official: Object.freeze(["bls.gov", "dol.gov", "eeoc.gov", "uscis.gov"]),
-  }),
 });
 
 function uniqueStrings(values = []) {
@@ -318,12 +133,32 @@ function mergePublisherTopicEntries(left = {}, right = {}) {
   };
 }
 
-function sanitizePreferredSourceRegistry(rawRegistry) {
+function sanitizePreferredSourceRegistry(rawRegistry, options = {}) {
   const registry = rawRegistry && typeof rawRegistry === "object" ? rawRegistry : {};
+  const embeddedStandardTopicSource = registry?.standard_topic_source
+    && typeof registry.standard_topic_source === "object"
+    ? registry.standard_topic_source
+    : null;
+  const embeddedStandardTopicKeys = Array.isArray(embeddedStandardTopicSource?.topic_keys)
+    ? registry.standard_topic_source.topic_keys
+    : [];
   const aliases = {
     ...sanitizePreferredAliases(BUILT_IN_PREFERRED_ALIASES),
     ...sanitizePreferredAliases(registry.aliases),
   };
+  const standardTopicSourceMapRaw = options?.standardTopicSourceMap
+    && typeof options.standardTopicSourceMap === "object"
+    && !Array.isArray(options.standardTopicSourceMap)
+    ? options.standardTopicSourceMap
+    : Object.fromEntries(
+      embeddedStandardTopicKeys
+        .map((topicKey) => [topicKey, registry?.topics?.[topicKey] || null])
+        .filter(([, entry]) => entry && typeof entry === "object")
+    );
+  const standardTopicSourceMeta = options?.standardTopicSourceMeta
+    && typeof options.standardTopicSourceMeta === "object"
+    ? options.standardTopicSourceMeta
+    : embeddedStandardTopicSource;
   const topicsRaw = registry.topics && typeof registry.topics === "object" && !Array.isArray(registry.topics)
     ? registry.topics
     : {};
@@ -341,21 +176,29 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     },
     topics: {},
   };
+  const standardTopicEntries = {};
+  const standardTopicKeys = new Set();
+
+  for (const [rawTopicKey, rawEntry] of Object.entries(standardTopicSourceMapRaw)) {
+    const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
+    if (!topicKey) continue;
+    const sanitizedEntry = sanitizeTopicEntry(rawEntry);
+    if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
+    standardTopicEntries[topicKey] = mergeTopicEntries(standardTopicEntries[topicKey], sanitizedEntry);
+    standardTopicKeys.add(topicKey);
+  }
 
   for (const [rawTopicKey, rawEntry] of Object.entries(topicsRaw)) {
     const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
     if (!topicKey) continue;
+    if (standardTopicKeys.has(topicKey)) continue;
     const sanitizedEntry = sanitizeTopicEntry(rawEntry);
     if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
     topics[topicKey] = mergeTopicEntries(topics[topicKey], sanitizedEntry);
   }
 
-  for (const [rawTopicKey, rawEntry] of Object.entries(BUILT_IN_STANDARD_TOPIC_SOURCE_MAP)) {
-    const topicKey = normalizePreferredTopicKey(rawTopicKey, aliases);
-    if (!topicKey) continue;
-    const sanitizedEntry = sanitizeTopicEntry(rawEntry);
-    if (!sanitizedEntry.reported.length && !sanitizedEntry.official.length) continue;
-    topics[topicKey] = mergeTopicEntries(topics[topicKey], sanitizedEntry);
+  for (const [topicKey, rawEntry] of Object.entries(standardTopicEntries)) {
+    topics[topicKey] = sanitizeTopicEntry(rawEntry);
   }
 
   for (const [rawTopicKey, rawEntry] of Object.entries(publisherTopicsRaw)) {
@@ -366,6 +209,18 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     publishers.topics[topicKey] = mergePublisherTopicEntries(publishers.topics[topicKey], sanitizedEntry);
   }
 
+  const standardTopicSource = standardTopicKeys.size > 0
+    ? {
+      source_of_truth: "standard_topic_broker",
+      source_mode: String(standardTopicSourceMeta?.source_mode || "runtime").trim() || "runtime",
+      active_path: String(standardTopicSourceMeta?.active_path || "").trim() || null,
+      runtime_path: String(standardTopicSourceMeta?.runtime_path || "").trim() || null,
+      bundled_path: String(standardTopicSourceMeta?.bundled_path || "").trim() || null,
+      topic_keys: Array.from(standardTopicKeys).sort((left, right) => left.localeCompare(right)),
+      topic_count: standardTopicKeys.size,
+    }
+    : null;
+
   return {
     version: DEFAULT_PREFERRED_SOURCES_VERSION,
     global: {
@@ -375,6 +230,7 @@ function sanitizePreferredSourceRegistry(rawRegistry) {
     topics,
     publishers,
     aliases,
+    standard_topic_source: standardTopicSource,
   };
 }
 
@@ -727,56 +583,86 @@ function matchPreferredSourceDomain(registryRaw, sourceDomain, topicTag, options
 
 function createPreferredSourceRegistryRuntime(options = {}) {
   const fs = options.fs || require("fs");
+  const runtimePaths = resolveSignalBriefRuntimePaths({
+    appRoot: options.appRoot,
+    env: options.env,
+    nodeEnv: options.nodeEnv,
+  });
   const bundledPreferredSourcesPath = String(options.bundledPreferredSourcesPath || "").trim() || path.resolve(
     options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
     "config",
     "preferred-sources.json"
   );
-  const preferredSourcesPath = String(options.preferredSourcesPath || "").trim() || resolveSignalBriefRuntimePaths({
-    appRoot: options.appRoot,
-    env: options.env,
-    nodeEnv: options.nodeEnv,
-  }).preferredSourcesPath;
+  const preferredSourcesPath = String(options.preferredSourcesPath || "").trim() || runtimePaths.preferredSourcesPath;
+  const bundledStandardTopicBrokerSourcesPath = String(options.bundledStandardTopicBrokerSourcesPath || "").trim() || path.resolve(
+    options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
+    "config",
+    "standard-topic-broker-sources.json"
+  );
+  const standardTopicBrokerSourcesPath = String(options.standardTopicBrokerSourcesPath || "").trim()
+    || runtimePaths.standardTopicBrokerSourcesPath;
 
-  function readSanitizedRegistry(filePath) {
+  function readJson(filePath) {
     try {
-      const raw = fs.readFileSync(filePath, "utf8");
-      return sanitizePreferredSourceRegistry(JSON.parse(raw));
+      return JSON.parse(fs.readFileSync(filePath, "utf8"));
     } catch {
       return null;
     }
   }
 
-  function inspectPreferredSourceRegistry() {
-    const runtimeRegistry = readSanitizedRegistry(preferredSourcesPath);
-    if (runtimeRegistry && !isPreferredRegistryEmpty(runtimeRegistry)) {
+  function inspectStandardTopicSourceOverlay() {
+    const runtimeConfig = readJson(standardTopicBrokerSourcesPath);
+    if (runtimeConfig) {
       return {
-        registry: runtimeRegistry,
+        source_of_truth: "standard_topic_broker",
         source_mode: "runtime",
-        active_path: preferredSourcesPath,
-        runtime_path: preferredSourcesPath,
-        bundled_path: bundledPreferredSourcesPath,
-        used_fallback: false,
+        active_path: standardTopicBrokerSourcesPath,
+        runtime_path: standardTopicBrokerSourcesPath,
+        bundled_path: bundledStandardTopicBrokerSourcesPath,
+        topic_map: buildBrokerPreferredTopicEntriesFromConfig(runtimeConfig),
       };
     }
-    const bundledRegistry = readSanitizedRegistry(bundledPreferredSourcesPath);
-    if (bundledRegistry && !isPreferredRegistryEmpty(bundledRegistry)) {
+
+    const bundledConfig = readJson(bundledStandardTopicBrokerSourcesPath);
+    if (bundledConfig) {
       return {
-        registry: bundledRegistry,
-        source_mode: "bundled_fallback",
-        active_path: bundledPreferredSourcesPath,
-        runtime_path: preferredSourcesPath,
-        bundled_path: bundledPreferredSourcesPath,
-        used_fallback: true,
+        source_of_truth: "standard_topic_broker",
+        source_mode: "bundled",
+        active_path: bundledStandardTopicBrokerSourcesPath,
+        runtime_path: standardTopicBrokerSourcesPath,
+        bundled_path: bundledStandardTopicBrokerSourcesPath,
+        topic_map: buildBrokerPreferredTopicEntriesFromConfig(bundledConfig),
+      };
+    }
+
+    return null;
+  }
+
+  function inspectPreferredSourceRegistry() {
+    const standardTopicSource = inspectStandardTopicSourceOverlay();
+    if (standardTopicSource) {
+      const registry = sanitizePreferredSourceRegistry({}, {
+        standardTopicSourceMap: standardTopicSource.topic_map,
+        standardTopicSourceMeta: standardTopicSource,
+      });
+      return {
+        registry,
+        source_mode: standardTopicSource.source_mode === "bundled" ? "broker_bundled" : "broker_runtime",
+        active_path: standardTopicSource.active_path,
+        runtime_path: standardTopicSource.runtime_path,
+        bundled_path: standardTopicSource.bundled_path,
+        used_fallback: standardTopicSource.source_mode === "bundled",
+        standard_topic_source: registry.standard_topic_source || standardTopicSource,
       };
     }
     return {
       registry: sanitizePreferredSourceRegistry({}),
       source_mode: "empty",
-      active_path: preferredSourcesPath,
-      runtime_path: preferredSourcesPath,
-      bundled_path: bundledPreferredSourcesPath,
-      used_fallback: runtimeRegistry == null,
+      active_path: null,
+      runtime_path: standardTopicBrokerSourcesPath,
+      bundled_path: bundledStandardTopicBrokerSourcesPath,
+      used_fallback: false,
+      standard_topic_source: null,
     };
   }
 
@@ -787,6 +673,8 @@ function createPreferredSourceRegistryRuntime(options = {}) {
   return {
     preferredSourcesPath,
     bundledPreferredSourcesPath,
+    standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath,
     buildPreferredSourceFamilyShortlists: (registry, options = {}) => buildPreferredSourceFamilyShortlists(registry, options),
     inspectPreferredSourceRegistry,
     loadPreferredSourceRegistry,

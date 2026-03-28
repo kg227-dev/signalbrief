@@ -1,32 +1,21 @@
 "use strict";
 
-const { createDigestOrchestratorDeliveryRankingRuntime } = require("./digest-orchestrator-delivery-ranking-runtime");
 const { sortDigestItemsByScoreDescending } = require("../digest/runtime/digest-item-ordering-runtime");
 const {
   DELIVERY_POLICY,
   classifyRetryFailureClass,
   computeRetryDelayMinutes,
-  countRecentLowerConfidenceAssist,
   deriveInternalThinnessLabel,
-  getCustomTopicMetadata,
   isRetryEligibleFailureClass,
-  listTrustedOnlyCustomKeywords,
   selectTopicBuckets,
-} = require("../runtime/digest-delivery-policy-runtime");
+} = require("../runtime/digest-mvp-delivery-runtime");
 
 function createDigestOrchestratorDeliveryRuntime(deps) {
   const {
     CONFIG,
     log,
     writeUser,
-    filterItemsByTopics,
-    applyTopicRelevanceScores,
-    buildRecentEntityHistory,
-    suppressRecentlySentForUser,
-    isRecentRepeatItem,
     parseSourceDomain,
-    applyEntityCoverageCap,
-    reserveCustomKeywordSlot,
     applyDigestDepth,
     computeDigestQualityScore,
     buildDigestId,
@@ -48,18 +37,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     topicVisual,
     escapeHtml,
   } = deps;
-  const rankingRuntime = createDigestOrchestratorDeliveryRankingRuntime({
-    CONFIG,
-    log,
-    filterItemsByTopics,
-    applyTopicRelevanceScores,
-    buildRecentEntityHistory,
-    suppressRecentlySentForUser,
-    isRecentRepeatItem,
-    parseSourceDomain,
-    applyEntityCoverageCap,
-    reserveCustomKeywordSlot,
-  });
 
   function buildQuickScanText(items) {
     return (Array.isArray(items) ? items : [])
@@ -121,11 +98,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       specialist_trade_outperformed_preferred: item?.specialist_trade_outperformed_preferred === true,
       strategic_value: Number.isFinite(Number(item?.strategic_value)) ? Number(item.strategic_value) : null,
       routine_item_score: Number.isFinite(Number(item?.routine_item_score)) ? Number(item.routine_item_score) : null,
-      delivery_confidence: String(item?.delivery_confidence || "").trim() || null,
-      delivery_confidence_label: String(item?.delivery_confidence_label || "").trim() || null,
-      delivery_trusted_only_topic_hit: item?.delivery_trusted_only_topic_hit === true,
-      delivery_topic_classes: Array.isArray(item?.delivery_topic_classes) ? item.delivery_topic_classes.slice() : [],
-      delivery_custom_keywords: Array.isArray(item?.delivery_custom_keywords) ? item.delivery_custom_keywords.slice() : [],
       score_breakdown: item?.score_breakdown && typeof item.score_breakdown === "object"
         ? { ...item.score_breakdown }
         : null,
@@ -174,10 +146,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     return priorAttemptCount + 1;
   }
 
-  function selectTrustedOnlyKeywords(customKeywords = []) {
-    return listTrustedOnlyCustomKeywords(customKeywords);
-  }
-
   function computeRemainingWindowMinutes(prefs = {}, nowDate = new Date()) {
     const catchupWindowMinutes = Math.max(30, Number(CONFIG?.digest?.catchupWindowMinutes || 60));
     const [dh, dm] = String(prefs.delivery_time || "07:00").split(":").map(Number);
@@ -196,15 +164,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     if (diff < -(12 * 60)) diff += 24 * 60;
     if (diff > (12 * 60)) diff -= 24 * 60;
     return catchupWindowMinutes - Math.max(0, diff);
-  }
-
-  function loadRecentLowerConfidenceAssistCount(userId, nowIso) {
-    if (typeof loadAllCurrentRecords !== "function") return 0;
-    const recentRecords = loadAllCurrentRecords({
-      status: "sent",
-      userId,
-    });
-    return countRecentLowerConfidenceAssist(recentRecords, nowIso);
   }
 
   function scheduleRetryState(params = {}) {
@@ -226,8 +185,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       prefs,
       now,
       attemptedChannelCount = 0,
-      highConfidenceCount = 0,
-      lowerConfidenceCount = 0,
+      requestedItemCount = DELIVERY_POLICY.target_item_count,
     } = params;
     if (deliveryMode !== "scheduled") return null;
 
@@ -254,9 +212,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       attempt_count: normalizedAttemptCount,
       next_retry_at: retryScheduledFor,
       underfill_reason: attemptedCount > 0 ? "delivery_failed" : "no_delivery_channel",
-      requested_count: DELIVERY_POLICY.target_item_count,
-      high_confidence_count: Math.max(0, Number(highConfidenceCount || 0)),
-      lower_confidence_count: Math.max(0, Number(lowerConfidenceCount || 0)),
+      requested_count: Math.max(1, Number(requestedItemCount || DELIVERY_POLICY.target_item_count)),
       delivery_outcome: deliveryOutcome,
       retry_pending: Boolean(retryScheduledFor),
       last_attempt_at: now.toISOString(),
@@ -267,6 +223,50 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       retryScheduledFor,
       retryPending: Boolean(retryScheduledFor),
     };
+  }
+
+  function getSubscribedStandardTopics(user) {
+    return (Array.isArray(user?.topics) ? user.topics : [])
+      .map((topic) => String(topic || "").trim())
+      .filter((topic) => topic && !topic.startsWith("custom_"));
+  }
+
+  function getRequestedItemCount(subscribedStandardTopics) {
+    return Math.max(0, subscribedStandardTopics.length) * DELIVERY_POLICY.target_item_count;
+  }
+
+  function filterItemsForSubscribedTopics(items, subscribedStandardTopics) {
+    const allowed = new Set(Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : []);
+    if (!allowed.size) return [];
+    return (Array.isArray(items) ? items : []).filter((item) => allowed.has(String(item?.tag || "").trim()));
+  }
+
+  function flattenTopicBuckets(topicBuckets, subscribedStandardTopics) {
+    const orderedTopics = Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : [];
+    const flattened = [];
+    for (const topic of orderedTopics) {
+      flattened.push(...(Array.isArray(topicBuckets?.[topic]) ? topicBuckets[topic] : []));
+    }
+    return flattened;
+  }
+
+  function buildDeliverySelection(items, topicBuckets, requestedItemCount, incompleteTopics) {
+    const selectedItems = Array.isArray(items) ? items : [];
+    const deliveryEligible = requestedItemCount > 0 && Array.isArray(incompleteTopics) && incompleteTopics.length === 0;
+    return {
+      items: selectedItems,
+      available_count: selectedItems.length,
+      selected_count: selectedItems.length,
+      delivery_eligible: deliveryEligible,
+      topic_buckets: topicBuckets,
+    };
+  }
+
+  function listIncompleteTopics(topicBuckets, subscribedStandardTopics) {
+    return (Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : []).filter((topic) => {
+      const count = Array.isArray(topicBuckets?.[topic]) ? topicBuckets[topic].length : 0;
+      return count < DELIVERY_POLICY.target_item_count;
+    });
   }
 
   function buildUserQuickScanRows(items) {
@@ -300,9 +300,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       rankingPolicy,
       publicDigestUrl,
       suppressWelcome,
-      targetChatId,
       deliveryMode = "scheduled",
-      deliveryEventSource = targetChatId ? "on-demand" : "scheduled-job",
+      deliveryEventSource = "scheduled-job",
       claudeUsage,
       engagementEvents,
       runDiagnostics,
@@ -323,16 +322,19 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       let quickScan = "";
       let deliveryDiagnostics = {};
       let deliverySelection = {
-        high_confidence_count: 0,
-        lower_confidence_count: 0,
-        high_confidence_available_count: 0,
-        lower_confidence_available_count: 0,
-        lower_confidence_used: false,
+        items: [],
+        available_count: 0,
+        selected_count: 0,
+        delivery_eligible: false,
+        topic_buckets: {},
       };
-      let lowerConfidenceAssist7dCount = 0;
       let internalThinnessLabel = null;
       let digestQuality = { score: null, band: null, components: null };
       let attemptedChannelCount = 0;
+      let requestedItemCount = DELIVERY_POLICY.target_item_count;
+      let depth = String(prefs?.depth || "full").trim() || "full";
+      let subjectLine = null;
+      let editorialNote = "";
       try {
         const recordStart = typeof beginDigestDeliveryRecord === "function"
           ? beginDigestDeliveryRecord({
@@ -355,54 +357,25 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         }
         deliveryRecordVersion = Math.max(1, Number(recordStart?.version || recordStart?.record?.version || 1));
 
-        const recentDigestRecords = typeof loadRecentSentDigests === "function"
-          ? loadRecentSentDigests(userId, {
-            limit: deliveryMode === "scheduled"
-              ? Math.max(5, Number(CONFIG.digest.scheduledFreshnessWindowDays || 5))
-              : Math.max(1, Number(CONFIG.digest.perUserEntityHistoryDigests || 3)),
-          })
-          : [];
         const learningSummary = String(repetitionNote || "").trim();
-
-        const ranked = rankingRuntime.rankAndSuppressUserItems({
-          user,
-          enriched,
-          repeatIndex,
-          repeatPenalty,
-          depthPolicy,
-          rankingPolicy,
-          recentDigestRecords,
-          nowIso: now.toISOString(),
-          deliveryMode,
-          runDiagnostics,
-        });
-        let userItems = ranked.userItems;
-        const wasFiltered = ranked.wasFiltered;
-        deliveryDiagnostics = ranked.diagnostics && typeof ranked.diagnostics === "object"
-          ? ranked.diagnostics
-          : {};
-        const depth = prefs.depth || "full";
-        const userCustomKeywords = (Array.isArray(user.topics) ? user.topics : [])
-          .filter((topic) => String(topic || "").startsWith("custom_"))
-          .map((topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").trim())
-          .filter(Boolean);
-        lowerConfidenceAssist7dCount = 0; // email-only MVP: confidence-tier tracking removed
-        const subscribedStandardTopics = (Array.isArray(user.topics) ? user.topics : [])
-          .filter((t) => !String(t || "").startsWith("custom_"));
-        const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, 5);
-        const bucketItems = Object.values(topicBuckets).flat();
-        deliverySelection = {
-          items: bucketItems,
-          delivery_eligible: bucketItems.length > 0,
-          high_confidence_available_count: bucketItems.length,
-          lower_confidence_available_count: 0,
-          high_confidence_count: bucketItems.length,
-          lower_confidence_count: 0,
-          lower_confidence_used: false,
-          lower_confidence_cap_reached: false,
-          annotations: [],
-          topic_buckets: topicBuckets,
+        depth = String(prefs?.depth || "full").trim() || "full";
+        const wasFiltered = false;
+        const subscribedStandardTopics = getSubscribedStandardTopics(user);
+        requestedItemCount = getRequestedItemCount(subscribedStandardTopics);
+        const userItems = filterItemsForSubscribedTopics(enriched, subscribedStandardTopics);
+        const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, DELIVERY_POLICY.target_item_count);
+        const bucketItems = flattenTopicBuckets(topicBuckets, subscribedStandardTopics);
+        const incompleteTopics = listIncompleteTopics(topicBuckets, subscribedStandardTopics);
+        deliveryDiagnostics = {
+          requested_count: requestedItemCount,
+          candidate_pool_before_dedup: Array.isArray(enriched) ? enriched.length : 0,
+          candidate_pool_after_dedup: userItems.length,
+          thin_pool: incompleteTopics.length > 0 || requestedItemCount === 0,
+          dominant_failure_mode: incompleteTopics.length > 0
+            ? "underfilled_topic_bucket"
+            : (requestedItemCount === 0 ? "no_standard_topics" : null),
         };
+        deliverySelection = buildDeliverySelection(bucketItems, topicBuckets, requestedItemCount, incompleteTopics);
         const candidateDisplayItems = sortDigestItemsByScoreDescending(applyDigestDepth(userItems, depth));
         const previousDigestItems = Array.isArray(user.last_digest_items) ? user.last_digest_items : [];
         const candidateDigestQuality = computeDigestQualityScore({
@@ -412,7 +385,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         });
         internalThinnessLabel = deriveInternalThinnessLabel({
           availableCandidateCount: userItems.length,
-          highConfidenceAvailableCount: deliverySelection.high_confidence_available_count,
+          highConfidenceAvailableCount: deliverySelection.available_count,
         });
         const deliveryEligible = deliverySelection.delivery_eligible === true;
         const deliveryItems = deliveryEligible
@@ -445,7 +418,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           strategic_value: item.strategic_value,
           routine_item_score: item.routine_item_score,
           score_breakdown: item.score_breakdown,
-          delivery_confidence: item.delivery_confidence || null,
         }));
         if (typeof updateDigestDeliveryRecord === "function") {
           updateDigestDeliveryRecord({
@@ -460,18 +432,13 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             status: "selected",
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            delivery_outcome: deliveryEligible
-              ? (deliverySelection.lower_confidence_used ? "delivered_with_lower_confidence" : "delivered_full_confidence")
-              : null,
+            delivery_outcome: deliveryEligible ? "delivered" : null,
             attempt_count: attemptCount,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
-            high_confidence_available_count: deliverySelection.high_confidence_available_count,
-            lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
-            lower_confidence_used: deliverySelection.lower_confidence_used,
-            lower_confidence_assist_7d_count: lowerConfidenceAssist7dCount + (deliverySelection.lower_confidence_used ? 1 : 0),
+            selected_count: deliverySelection.selected_count,
+            available_count: deliverySelection.available_count,
             internal_thinness_label: internalThinnessLabel,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
@@ -480,16 +447,18 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
         // --- shipping contract guard: each delivered digest must contain 5 items ---
         if (!deliveryEligible) {
-          const failureClass = classifyRetryFailureClass({
-            diagnostics: {
-              thin_pool: deliveryDiagnostics.thin_pool,
-              dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
-              provider_429_count: deliveryDiagnostics.provider_429_count,
-              transport_errors: deliveryDiagnostics.provider_transport_errors,
-              provider_degraded: deliveryDiagnostics.provider_degraded,
-            },
-            availableCandidateCount: userItems.length,
-          });
+          const failureClass = requestedItemCount <= 0
+            ? "no_standard_topics"
+            : classifyRetryFailureClass({
+              diagnostics: {
+                thin_pool: deliveryDiagnostics.thin_pool,
+                dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+                provider_429_count: deliveryDiagnostics.provider_429_count,
+                transport_errors: deliveryDiagnostics.provider_transport_errors,
+                provider_degraded: deliveryDiagnostics.provider_degraded,
+              },
+              availableCandidateCount: userItems.length,
+            });
           const retryableScheduledAttempt = deliveryMode === "scheduled"
             && attemptCount === 1
             && isRetryEligibleFailureClass(failureClass);
@@ -512,9 +481,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               attempt_count: attemptCount,
               next_retry_at: retryScheduledFor,
               underfill_reason: failureClass,
-              requested_count: DELIVERY_POLICY.target_item_count,
-              high_confidence_count: deliverySelection.high_confidence_count,
-              lower_confidence_count: deliverySelection.lower_confidence_count,
+              requested_count: requestedItemCount,
               delivery_outcome: deliveryOutcome,
               retry_pending: true,
               last_attempt_at: now.toISOString(),
@@ -526,9 +493,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               attempt_count: attemptCount,
               next_retry_at: null,
               underfill_reason: failureClass,
-              requested_count: DELIVERY_POLICY.target_item_count,
-              high_confidence_count: deliverySelection.high_confidence_count,
-              lower_confidence_count: deliverySelection.lower_confidence_count,
+              requested_count: requestedItemCount,
               delivery_outcome: deliveryOutcome,
               retry_pending: false,
               last_attempt_at: now.toISOString(),
@@ -545,18 +510,15 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               source: deliveryEventSource,
               trigger: deliveryMode,
               status: "withheld",
+              depth,
               withheld_reason: failureClass,
               delivery_outcome: deliveryOutcome,
               retry_scheduled_for: retryScheduledFor,
               quality_score: digestQuality.score,
               quality_band: digestQuality.band,
               attempt_count: attemptCount,
-              high_confidence_count: deliverySelection.high_confidence_count,
-              lower_confidence_count: deliverySelection.lower_confidence_count,
-              high_confidence_available_count: deliverySelection.high_confidence_available_count,
-              lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
-              lower_confidence_used: false,
-              lower_confidence_assist_7d_count: lowerConfidenceAssist7dCount,
+              selected_count: deliverySelection.selected_count,
+              available_count: deliverySelection.available_count,
               internal_thinness_label: internalThinnessLabel,
               ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
               items: selectedSnapshotItems,
@@ -572,12 +534,9 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             attempt_count: attemptCount,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
-            high_confidence_available_count: deliverySelection.high_confidence_available_count,
-            lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
+            selected_count: deliverySelection.selected_count,
+            available_count: deliverySelection.available_count,
             internal_thinness_label: internalThinnessLabel,
-            trusted_only_custom_keywords: trustedOnlyCustomKeywords,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
           });
           continue;
@@ -594,9 +553,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             attempt_count: attemptCount,
             next_retry_at: null,
             underfill_reason: withholdReason,
-            requested_count: DELIVERY_POLICY.target_item_count,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
+            requested_count: requestedItemCount,
             delivery_outcome: attemptCount > 1 ? "withheld_after_retry" : "withheld_after_retry_window",
             retry_pending: false,
             last_attempt_at: now.toISOString(),
@@ -612,17 +569,14 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               source: deliveryEventSource,
               trigger: deliveryMode,
               status: "withheld",
+              depth,
               withheld_reason: withholdReason,
               delivery_outcome: attemptCount > 1 ? "withheld_after_retry" : "withheld_after_retry_window",
               quality_score: digestQuality.score,
               quality_band: digestQuality.band,
               attempt_count: attemptCount,
-              high_confidence_count: deliverySelection.high_confidence_count,
-              lower_confidence_count: deliverySelection.lower_confidence_count,
-              high_confidence_available_count: deliverySelection.high_confidence_available_count,
-              lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
-              lower_confidence_used: deliverySelection.lower_confidence_used,
-              lower_confidence_assist_7d_count: lowerConfidenceAssist7dCount + (deliverySelection.lower_confidence_used ? 1 : 0),
+              selected_count: deliverySelection.selected_count,
+              available_count: deliverySelection.available_count,
               internal_thinness_label: internalThinnessLabel,
               ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             });
@@ -635,10 +589,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             attempt_count: attemptCount,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
-            high_confidence_available_count: deliverySelection.high_confidence_available_count,
-            lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
+            selected_count: deliverySelection.selected_count,
+            available_count: deliverySelection.available_count,
             internal_thinness_label: internalThinnessLabel,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
           });
@@ -665,16 +617,13 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             sending_at: new Date().toISOString(),
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            delivery_outcome: deliverySelection.lower_confidence_used ? "delivered_with_lower_confidence" : "delivered_full_confidence",
+            delivery_outcome: "delivered",
             attempt_count: attemptCount,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
-            high_confidence_available_count: deliverySelection.high_confidence_available_count,
-            lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
-            lower_confidence_used: deliverySelection.lower_confidence_used,
-            lower_confidence_assist_7d_count: lowerConfidenceAssist7dCount + (deliverySelection.lower_confidence_used ? 1 : 0),
+            selected_count: deliverySelection.selected_count,
+            available_count: deliverySelection.available_count,
             internal_thinness_label: internalThinnessLabel,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
@@ -690,6 +639,8 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           const noteResult = await generateEditorialNote(deliveryItems);
           claudeUsage.input_tokens += Number(noteResult?.usage?.input_tokens || 0);
           claudeUsage.output_tokens += Number(noteResult?.usage?.output_tokens || 0);
+          subjectLine = String(subjectResult?.subject || "").trim() || null;
+          editorialNote = String(noteResult?.note || "").trim();
 
           let userEmailHtml = buildEmail(
             deliveryItems,
@@ -706,7 +657,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               digestQuality,
               learningSummary,
               publicDigestUrl,
-              editorialNote: noteResult.note || "",
+              editorialNote,
             }
           );
           if (user.token) {
@@ -716,7 +667,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
               : `${userEmailHtml}\n${trackingPixel}`;
           }
           try {
-            await sendEmail(user.email, subjectResult.subject, userEmailHtml, user.token || null);
+            await sendEmail(user.email, subjectLine || subjectResult.subject, userEmailHtml, user.token || null);
             const eventOutcome = appendEngagementEventChecked({
               event_type: "digest_sent",
               event_key: `digest_sent:${userDigestId}:${deliveryMode}:v${deliveryRecordVersion}:email`,
@@ -765,16 +716,15 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             channels: deliveredChannels,
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
+            subject_line: subjectLine,
+            editorial_note: editorialNote,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
-            delivery_outcome: deliverySelection.lower_confidence_used ? "delivered_with_lower_confidence" : "delivered_full_confidence",
+            delivery_outcome: "delivered",
             attempt_count: attemptCount,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
-            high_confidence_available_count: deliverySelection.high_confidence_available_count,
-            lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
-            lower_confidence_used: deliverySelection.lower_confidence_used,
-            lower_confidence_assist_7d_count: lowerConfidenceAssist7dCount + (deliverySelection.lower_confidence_used ? 1 : 0),
+            selected_count: deliverySelection.selected_count,
+            available_count: deliverySelection.available_count,
             internal_thinness_label: internalThinnessLabel,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
             items: selectedSnapshotItems,
@@ -835,7 +785,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
         deliveredUsers.push({
           id: user.email || user.chatId,
-          on_demand: Boolean(targetChatId),
           digest_id: userDigestId,
           delivery_mode: deliveryMode,
           delivery_version: deliveryRecordVersion,
@@ -843,10 +792,9 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             ? Number(digestQuality.score.toFixed(2))
             : null,
           digest_quality_band: String(digestQuality?.band || "") || null,
-          delivery_outcome: deliverySelection.lower_confidence_used ? "delivered_with_lower_confidence" : "delivered_full_confidence",
-          high_confidence_count: deliverySelection.high_confidence_count,
-          lower_confidence_count: deliverySelection.lower_confidence_count,
-          lower_confidence_used: deliverySelection.lower_confidence_used,
+          delivery_outcome: "delivered",
+          selected_count: deliverySelection.selected_count,
+          available_count: deliverySelection.available_count,
           digest_url: String(publicDigestUrl || ""),
           engagement_event_failures: engagementWriteFailures,
           ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
@@ -865,8 +813,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           prefs,
           now,
           attemptedChannelCount,
-          highConfidenceCount: deliverySelection.high_confidence_count,
-          lowerConfidenceCount: deliverySelection.lower_confidence_count,
+          requestedItemCount,
         });
         if (deliveryRecordVersion && typeof updateDigestDeliveryRecord === "function") {
           updateDigestDeliveryRecord({
@@ -884,15 +831,14 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             delivery_outcome: failureRetry?.deliveryOutcome || null,
             retry_scheduled_for: failureRetry?.retryScheduledFor || null,
             attempt_count: attemptCount,
-            high_confidence_count: deliverySelection.high_confidence_count,
-            lower_confidence_count: deliverySelection.lower_confidence_count,
-            high_confidence_available_count: deliverySelection.high_confidence_available_count,
-            lower_confidence_available_count: deliverySelection.lower_confidence_available_count,
-            lower_confidence_used: deliverySelection.lower_confidence_used,
-            lower_confidence_assist_7d_count: lowerConfidenceAssist7dCount,
+            selected_count: deliverySelection.selected_count,
+            available_count: deliverySelection.available_count,
             internal_thinness_label: internalThinnessLabel,
             date_str: dateStr,
             quick_scan: quickScan,
+            depth,
+            subject_line: subjectLine,
+            editorial_note: editorialNote,
             quality_score: digestQuality.score,
             quality_band: digestQuality.band,
             ...buildDeliveryDiagnosticsFields(deliveryDiagnostics),
@@ -902,7 +848,6 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         failedUsers.push({
           id: user.email || user.chatId,
           error: err.message,
-          on_demand: Boolean(targetChatId),
           delivery_outcome: failureRetry?.deliveryOutcome || null,
           retry_scheduled_for: failureRetry?.retryScheduledFor || null,
         });

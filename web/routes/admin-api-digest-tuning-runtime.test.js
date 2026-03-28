@@ -56,7 +56,7 @@ const tuningPath = path.join(tmpDir, "digest-tuning.json");
 
 // GET — existing file returns content
 {
-  const content = { maxAgeHours: 36 };
+  const content = { maxAgeHours: 36, crossDayDedupDays: 4 };
   fs.writeFileSync(tuningPath, JSON.stringify(content));
   const ctx = buildCtx("GET", "/api/admin/digest-tuning");
   const deps = buildDeps(tuningPath);
@@ -64,25 +64,58 @@ const tuningPath = path.join(tmpDir, "digest-tuning.json");
     const handled = await handleAdminDigestTuningRoutes(ctx, deps);
     assert.strictEqual(handled, true);
     const body = JSON.parse(ctx.res._body);
-    assert.strictEqual(body.tuning.maxAgeHours, 36, "content returned");
+    assert.strictEqual(body.tuning.maxAgeHours, 36, "maxAgeHours returned from GET payload");
+    assert.strictEqual(body.tuning.crossDayDedupDays, 4, "allowed content returned");
+    assert.ok(Array.isArray(body.locked_keys) && body.locked_keys.length === 0, "no locked keys remain");
     console.log("GET existing file ✓");
   })().catch((e) => { console.error(e); process.exit(1); });
 }
 
 // PUT — valid update writes file
 {
-  const newTuning = { maxAgeHours: 48, crossDayDedupDays: 5 };
+  const blockTuningPath = path.join(tmpDir, "digest-tuning-valid-put.json");
+  const newTuning = { crossDayDedupDays: 5 };
   const ctx = buildCtx("PUT", "/api/admin/digest-tuning", newTuning);
-  const deps = buildDeps(tuningPath);
+  const deps = buildDeps(blockTuningPath);
   (async () => {
     const handled = await handleAdminDigestTuningRoutes(ctx, deps);
     assert.strictEqual(handled, true, "PUT handled");
     const body = JSON.parse(ctx.res._body);
     assert.strictEqual(body.ok, true, "PUT ok: true");
-    const onDisk = JSON.parse(fs.readFileSync(tuningPath, "utf8"));
-    assert.strictEqual(onDisk.maxAgeHours, 48, "file written");
+    const onDisk = JSON.parse(fs.readFileSync(blockTuningPath, "utf8"));
     assert.strictEqual(onDisk.crossDayDedupDays, 5, "crossDayDedupDays written");
     console.log("PUT valid → writes file ✓");
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
+
+// PUT — maxAgeHours is allowed inside the MVP cap
+{
+  const badTuning = { maxAgeHours: 48 };
+  const ctx = buildCtx("PUT", "/api/admin/digest-tuning", badTuning);
+  const deps = buildDeps(path.join(tmpDir, "digest-tuning-max-age-ok.json"));
+  (async () => {
+    const handled = await handleAdminDigestTuningRoutes(ctx, deps);
+    assert.strictEqual(handled, true);
+    assert.strictEqual(ctx.res.statusCode, 200, "valid maxAgeHours → 200");
+    const body = JSON.parse(ctx.res._body);
+    assert.strictEqual(body.ok, true, "ok: true");
+    console.log("PUT maxAgeHours within cap → 200 ✓");
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
+
+// PUT — maxAgeHours above cap rejected
+{
+  const badTuning = { maxAgeHours: 72 };
+  const ctx = buildCtx("PUT", "/api/admin/digest-tuning", badTuning);
+  const deps = buildDeps(path.join(tmpDir, "digest-tuning-max-age-bad.json"));
+  (async () => {
+    const handled = await handleAdminDigestTuningRoutes(ctx, deps);
+    assert.strictEqual(handled, true);
+    assert.strictEqual(ctx.res.statusCode, 400, "over-cap maxAgeHours → 400");
+    const body = JSON.parse(ctx.res._body);
+    assert.strictEqual(body.ok, false, "ok: false");
+    assert.ok(body.errors.some((entry) => String(entry).includes("48 hours")), "cap message returned");
+    console.log("PUT maxAgeHours above cap → 400 ✓");
   })().catch((e) => { console.error(e); process.exit(1); });
 }
 
@@ -90,7 +123,7 @@ const tuningPath = path.join(tmpDir, "digest-tuning.json");
 {
   const badTuning = { unknownKey: 123 };
   const ctx = buildCtx("PUT", "/api/admin/digest-tuning", badTuning);
-  const deps = buildDeps(tuningPath);
+  const deps = buildDeps(path.join(tmpDir, "digest-tuning-unknown-key.json"));
   (async () => {
     const handled = await handleAdminDigestTuningRoutes(ctx, deps);
     assert.strictEqual(handled, true);

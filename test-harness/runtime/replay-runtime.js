@@ -196,7 +196,6 @@ function isDateWithinWindow(dateKey, window) {
 function normalizeTopics(user) {
   return uniq([
     ...safeArray(user?.topics),
-    ...safeArray(user?.custom_topics),
   ].map((value) => normalizeTopicToken(value)).filter(Boolean));
 }
 
@@ -282,7 +281,6 @@ function inferDeliveryMode(event) {
   const runId = String(event?.run_id || "").trim().toLowerCase();
   const source = String(event?.source || "").trim().toLowerCase();
   if (runId.startsWith("scheduled:") || source === "scheduled-job") return "scheduled";
-  if (runId.startsWith("targeted:") || source === "on-demand") return "targeted";
   if (runId.startsWith("admin:") || source === "admin") return "admin";
   return "unknown";
 }

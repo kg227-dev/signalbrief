@@ -8,9 +8,7 @@ const LOCAL_BYPASS_HTML_ROUTES = new Set([
   "/admin/",
   "/admin.html",
   "/admin/user",
-  "/admin/sandbox",
   "/admin/source-registry",
-  "/admin/retrieval-eval",
 ]);
 const LOCAL_BYPASS_API_ROUTES = new Set([
   "/api/admin/check",
@@ -18,9 +16,6 @@ const LOCAL_BYPASS_API_ROUTES = new Set([
   "/api/admin/user-by-email",
   "/api/admin/audit",
   "/api/admin/digest-audit",
-  "/api/admin/retrieval-eval/status",
-  "/api/admin/retrieval-eval/runs",
-  "/api/admin/retrieval-eval/run",
 ]);
 
 const LOGIN_LIMIT = 5;

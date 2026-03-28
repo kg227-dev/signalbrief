@@ -25,6 +25,8 @@ const {
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-preferred-source-registry-"));
 const preferredSourcesPath = path.join(tempDir, "preferred-sources.json");
 const bundledPreferredSourcesPath = path.join(tempDir, "bundled-preferred-sources.json");
+const standardTopicBrokerSourcesPath = path.join(tempDir, "standard-topic-broker-sources.json");
+const bundledStandardTopicBrokerSourcesPath = path.join(tempDir, "bundled-standard-topic-broker-sources.json");
 
 fs.writeFileSync(preferredSourcesPath, JSON.stringify({
   version: 1,
@@ -72,16 +74,110 @@ fs.writeFileSync(bundledPreferredSourcesPath, JSON.stringify({
   topics: {},
   aliases: {},
 }, null, 2));
+fs.writeFileSync(standardTopicBrokerSourcesPath, JSON.stringify({
+  version: 2,
+  lanes: {
+    publisher_feed: { enabled: true },
+    official: { enabled: true },
+    perplexity_discovery: { enabled: false },
+  },
+  topics: {
+    HEALTHCARE: { enabled: true, lanes: { publisher_feed: true, official: true } },
+    TECHNOLOGY: { enabled: true, lanes: { publisher_feed: true, official: true } },
+    "FINANCIAL SERVICES": { enabled: true, lanes: { publisher_feed: true, official: true } },
+  },
+  sources: [
+    {
+      id: "healthcare_modern",
+      enabled: true,
+      lane: "publisher_feed",
+      topic_tags: ["HEALTHCARE"],
+      source_kind: "trade_specialist",
+      domains: ["modernhealthcare.com"],
+      endpoint: "https://www.modernhealthcare.com/rss",
+      parser: "rss",
+      content_kind: "article",
+    },
+    {
+      id: "healthcare_cms",
+      enabled: true,
+      lane: "official",
+      topic_tags: ["HEALTHCARE"],
+      source_kind: "primary_official",
+      domains: ["cms.gov"],
+      endpoint: "https://www.cms.gov/newsroom/rss-feeds",
+      parser: "rss",
+      content_kind: "official_document",
+    },
+    {
+      id: "technology_techcrunch",
+      enabled: true,
+      lane: "publisher_feed",
+      topic_tags: ["TECHNOLOGY"],
+      source_kind: "reported_media",
+      domains: ["techcrunch.com"],
+      endpoint: "https://techcrunch.com/feed/",
+      parser: "rss",
+      content_kind: "article",
+    },
+    {
+      id: "technology_sec",
+      enabled: true,
+      lane: "official",
+      topic_tags: ["TECHNOLOGY"],
+      source_kind: "primary_official",
+      domains: ["sec.gov"],
+      endpoint: "https://www.sec.gov/news/pressreleases.rss",
+      parser: "rss",
+      content_kind: "official_document",
+    },
+    {
+      id: "financial_american_banker",
+      enabled: true,
+      lane: "publisher_feed",
+      topic_tags: ["FINANCIAL SERVICES"],
+      source_kind: "reported_media",
+      domains: ["americanbanker.com"],
+      endpoint: "https://www.americanbanker.com/feed",
+      parser: "rss",
+      content_kind: "article",
+    },
+    {
+      id: "financial_fed",
+      enabled: true,
+      lane: "official",
+      topic_tags: ["FINANCIAL SERVICES"],
+      source_kind: "primary_official",
+      domains: ["federalreserve.gov"],
+      endpoint: "https://www.federalreserve.gov/feeds/press_all.xml",
+      parser: "rss",
+      content_kind: "official_document",
+    },
+  ],
+}, null, 2));
+fs.writeFileSync(bundledStandardTopicBrokerSourcesPath, fs.readFileSync(standardTopicBrokerSourcesPath, "utf8"));
 
-const registryRuntime = createPreferredSourceRegistryRuntime({ preferredSourcesPath, bundledPreferredSourcesPath });
+const registryRuntime = createPreferredSourceRegistryRuntime({
+  preferredSourcesPath,
+  bundledPreferredSourcesPath,
+  standardTopicBrokerSourcesPath,
+  bundledStandardTopicBrokerSourcesPath,
+});
 const registry = registryRuntime.loadPreferredSourceRegistry();
 
-assert.deepStrictEqual(registry.global.reported, ["reuters.com", "wsj.com"]);
-assert.ok(registry.topics["ai tech"].reported.includes("theinformation.com"));
-assert.ok(registry.topics["ai tech"].reported.includes("semianalysis.com"));
-assert.ok(registry.topics["ai tech"].reported.includes("techcrunch.com"));
-assert.ok(registry.topics.talent.reported.includes("shrm.org"));
+assert.deepStrictEqual(registry.global.reported, []);
+assert.deepStrictEqual(registry.global.official, []);
+assert.ok(!registry.topics["ai tech"], "legacy preferred-source-only topics should not survive in the broker-derived registry");
+assert.ok(!registry.topics["policy regulatory"], "retired policy registry entries should not leak into the reduced-scope runtime");
+assert.ok(registry.topics.technology.reported.includes("techcrunch.com"));
+assert.ok(!registry.topics.technology.reported.includes("theinformation.com"));
+assert.ok(!registry.topics.technology.reported.includes("semianalysis.com"));
 assert.ok(registry.topics["financial services"].official.includes("federalreserve.gov"));
+assert.ok(registry.topics.healthcare.reported.includes("modernhealthcare.com"));
+assert.ok(!registry.topics.healthcare.reported.includes("statnews.com"));
+assert.ok(!registry.topics.talent, "legacy non-MVP built-in standard topics should not leak into the active runtime registry");
+assert.strictEqual(registry.standard_topic_source?.source_of_truth, "standard_topic_broker");
+assert.ok(registry.standard_topic_source?.topic_keys.includes("technology"));
 
 const shortlist = buildPreferredDomainShortlist(registry, {
   topicTag: "AI×TECH",
@@ -89,20 +185,19 @@ const shortlist = buildPreferredDomainShortlist(registry, {
   queryText: "enterprise ai agents funding last 48 hours",
   maxDomains: 6,
 });
-assert.ok(shortlist.domains.includes("theinformation.com"));
-assert.ok(shortlist.domains.includes("semianalysis.com"));
 assert.ok(shortlist.domains.includes("techcrunch.com"));
-assert.ok(shortlist.domains.includes("theverge.com"));
+assert.ok(shortlist.domains.includes("sec.gov"));
+assert.ok(!shortlist.domains.includes("theinformation.com"));
+assert.ok(!shortlist.domains.includes("semianalysis.com"));
 
 const officialShortlist = buildPreferredDomainShortlist(registry, {
-  topicTag: "POLICY×REGULATORY",
-  dueUserTopics: ["POLICY×REGULATORY"],
+  topicTag: "TECHNOLOGY",
+  dueUserTopics: ["TECHNOLOGY"],
   queryText: "sec proposed disclosure rule guidance",
   maxDomains: 5,
 });
-assert.ok(officialShortlist.domains.includes("federalregister.gov"));
-assert.ok(officialShortlist.domains.includes("regulations.gov"));
-assert.ok(officialShortlist.domains.includes("govinfo.gov"));
+assert.ok(officialShortlist.domains.includes("sec.gov"));
+assert.ok(officialShortlist.domains.includes("techcrunch.com"));
 
 const familyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   topicTag: "AI×TECH",
@@ -110,11 +205,10 @@ const familyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   queryText: "enterprise ai agents funding last 48 hours",
   maxDomains: 6,
 });
-assert.ok(familyShortlists.reported_domains.includes("theinformation.com"));
-assert.ok(familyShortlists.reported_domains.includes("semianalysis.com"));
 assert.ok(familyShortlists.reported_domains.includes("techcrunch.com"));
-assert.ok(familyShortlists.reported_domains.includes("theverge.com"));
 assert.ok(familyShortlists.official_domains.includes("sec.gov"));
+assert.ok(!familyShortlists.reported_domains.includes("theinformation.com"));
+assert.ok(!familyShortlists.reported_domains.includes("semianalysis.com"));
 
 const policyFamilyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   topicTag: "POLICY×REGULATORY",
@@ -122,36 +216,26 @@ const policyFamilyShortlists = buildPreferredSourceFamilyShortlists(registry, {
   queryText: "sec proposed disclosure rule guidance",
   maxDomains: 5,
 });
-assert.ok(policyFamilyShortlists.official_domains.includes("federalregister.gov"));
-assert.ok(policyFamilyShortlists.official_domains.includes("regulations.gov"));
-assert.ok(policyFamilyShortlists.reported_domains.includes("govexec.com"));
-assert.ok(policyFamilyShortlists.reported_domains.includes("federalnewsnetwork.com"));
+assert.deepStrictEqual(policyFamilyShortlists.official_domains, []);
+assert.deepStrictEqual(policyFamilyShortlists.reported_domains, []);
 
-const talentFamilyShortlists = buildPreferredSourceFamilyShortlists(registry, {
-  topicTag: "TALENT",
-  dueUserTopics: ["TALENT"],
-  queryText: "labor market hiring layoffs workforce regulation",
-  maxDomains: 6,
-});
-assert.ok(talentFamilyShortlists.reported_domains.includes("shrm.org"));
-assert.ok(talentFamilyShortlists.official_domains.includes("bls.gov"));
-
-const inheritedMatch = matchPreferredSourceDomain(registry, "alerts.news.example.com", "TECHNOLOGY");
+const inheritedMatch = matchPreferredSourceDomain(registry, "alerts.techcrunch.com", "TECHNOLOGY");
 assert.strictEqual(inheritedMatch.match, "topic_reported");
-assert.strictEqual(inheritedMatch.matched_domain, "news.example.com");
+assert.strictEqual(inheritedMatch.matched_domain, "techcrunch.com");
 
 const publisherMatch = matchPreferredSourceDomain(registry, "youtube.com", "TECHNOLOGY", {
   sourceIdentityKey: "youtube:@insideboardroom",
 });
-assert.strictEqual(publisherMatch.match, "topic_reported");
-assert.strictEqual(publisherMatch.scope, "publisher");
-assert.strictEqual(publisherMatch.matched_identity, "youtube:@insideboardroom");
+assert.strictEqual(publisherMatch.match, "none");
+assert.strictEqual(publisherMatch.scope, "none");
+assert.strictEqual(publisherMatch.matched_identity, null);
 
 fs.writeFileSync(preferredSourcesPath, JSON.stringify({}, null, 2));
 const fallbackSnapshot = registryRuntime.inspectPreferredSourceRegistry();
-assert.strictEqual(fallbackSnapshot.source_mode, "runtime");
+assert.strictEqual(fallbackSnapshot.source_mode, "broker_runtime");
 assert.strictEqual(fallbackSnapshot.used_fallback, false);
-assert.strictEqual(fallbackSnapshot.active_path, preferredSourcesPath);
-assert.ok(fallbackSnapshot.registry.topics.healthcare.reported.includes("statnews.com"));
+assert.strictEqual(fallbackSnapshot.active_path, standardTopicBrokerSourcesPath);
+assert.ok(fallbackSnapshot.registry.topics.healthcare.reported.includes("modernhealthcare.com"));
+assert.strictEqual(fallbackSnapshot.standard_topic_source?.source_of_truth, "standard_topic_broker");
 
 process.stdout.write("[preferred-source-registry-runtime] all assertions passed\n");

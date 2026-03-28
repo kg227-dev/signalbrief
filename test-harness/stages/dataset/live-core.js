@@ -1,8 +1,7 @@
 const { toEtDateKey } = require("../../config");
-const { maxRequestedItems } = require("./shared");
+const { fixedSelectionTarget } = require("./shared");
 const {
   fetchStandardTopicItems,
-  fetchCustomTopicItems,
 } = require("./live-fetch");
 const { selectLiveDatasetItems } = require("./live-selection");
 const { enrichLiveDatasetItems } = require("./live-enrichment");
@@ -21,7 +20,7 @@ async function buildLiveOrCachedDataset({
   const digestConfig = appConfig.digest || {};
   const topics = appConfig.topics || [];
   const dateKey = String(args?.date_key || toEtDateKey());
-  const selectionTarget = maxRequestedItems(personas, Number(digestConfig.itemCount || 7));
+  const selectionTarget = fixedSelectionTarget(Number(digestConfig.itemCount || 5));
 
   const standardItemsByTopic = await fetchStandardTopicItems({
     topics,
@@ -31,18 +30,8 @@ async function buildLiveOrCachedDataset({
     args,
   });
 
-  const customItemsByTopic = await fetchCustomTopicItems({
-    digestConfig,
-    personas,
-    dateKey,
-    appConfig,
-    budget,
-    args,
-  });
-
   const {
     standardRawItems,
-    customRawItems,
     allRawItems,
     dedupRes,
     dedupedRawItems,
@@ -50,8 +39,6 @@ async function buildLiveOrCachedDataset({
     selectedItems,
   } = selectLiveDatasetItems({
     standardItemsByTopic,
-    customItemsByTopic,
-    personas,
     digestConfig,
     selectionTarget,
     archives,
@@ -66,7 +53,6 @@ async function buildLiveOrCachedDataset({
   });
   const metadata = buildLiveDatasetMetadata({
     standardRawItems,
-    customRawItems,
     dedupRes,
     selectedItems,
     selectionPolicy,
@@ -77,7 +63,6 @@ async function buildLiveOrCachedDataset({
     args,
     dateKey,
     standardItemsByTopic,
-    customItemsByTopic,
     allRawItems,
     dedupedRawItems,
     selectedItems,

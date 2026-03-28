@@ -55,8 +55,44 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     loadSourceRegistry: () => ({ version: 1, updated_at: null, domains: {}, identities: {} }),
     loadPreferredSourceRegistry: () => ({
       version: 1,
-      global: { reported: ["reuters.com"], official: ["sec.gov"] },
+      global: { reported: [], official: [] },
+      standard_topic_source: {
+        source_of_truth: "standard_topic_broker",
+        source_mode: "runtime",
+        active_path: "/tmp/standard-topic-broker-sources.json",
+        runtime_path: "/tmp/standard-topic-broker-sources.json",
+        bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+        topic_count: 7,
+        topic_keys: ["healthcare", "technology"],
+      },
       topics: {},
+    }),
+    inspectStandardTopicBrokerConfig: () => ({
+      source_mode: "runtime",
+      active_path: "/tmp/standard-topic-broker-sources.json",
+      runtime_path: "/tmp/standard-topic-broker-sources.json",
+      bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+      config: {
+        topics: {
+          HEALTHCARE: {
+            enabled: true,
+            lanes: { publisher_feed: true, official: true },
+          },
+        },
+        sources: [
+          {
+            id: "stat_rss",
+            enabled: true,
+            tier: 2,
+            lane: "publisher_feed",
+            topic_tags: ["HEALTHCARE"],
+            domains: ["statnews.com"],
+            source_kind: "reported_media",
+            source_family: "specialist",
+            endpoint: "https://feeds.example.com/stat.xml",
+          },
+        ],
+      },
     }),
     buildSourceRegistryMap: (registry) => ({
       domains: new Map(Object.entries(registry.domains || {})),
@@ -109,6 +145,42 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
       before: { domain: "benzinga.com" },
       after: null,
     }),
+    updateBrokerTopicConfig: () => ({
+      before: {
+        enabled: true,
+        lanes: { publisher_feed: true, official: true },
+      },
+      after: {
+        enabled: false,
+        lanes: { publisher_feed: true, official: true },
+      },
+      snapshot: {
+        source_mode: "runtime",
+        active_path: "/tmp/standard-topic-broker-sources.json",
+        runtime_path: "/tmp/standard-topic-broker-sources.json",
+        bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+        config: { topics: {}, sources: [] },
+      },
+    }),
+    updateBrokerSourceConfig: () => ({
+      before: {
+        id: "stat_rss",
+        enabled: true,
+        tier: 2,
+      },
+      after: {
+        id: "stat_rss",
+        enabled: false,
+        tier: 3,
+      },
+      snapshot: {
+        source_mode: "runtime",
+        active_path: "/tmp/standard-topic-broker-sources.json",
+        runtime_path: "/tmp/standard-topic-broker-sources.json",
+        bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+        config: { topics: {}, sources: [] },
+      },
+    }),
     logAdminActionEvent: () => {},
     ...deps,
   });
@@ -124,7 +196,10 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.ok(handled);
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.source_registry_path, "/tmp/source-registry.json");
-    assert.strictEqual(payload.preferred_sources.path, "/tmp/preferred-sources.json");
+    assert.strictEqual(payload.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
+    assert.strictEqual(payload.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
+    assert.strictEqual(payload.broker_config.topic_count, 1);
+    assert.strictEqual(payload.broker_config.sources[0].id, "stat_rss");
   }
 
   {
@@ -162,6 +237,39 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.strictEqual(payload.success, true);
     assert.strictEqual(payload.detail.domain, "youtube.com");
     assert.strictEqual(payload.detail.selected_identity_key, "youtube:@insideboardroom");
+  }
+
+  {
+    const { handled, res } = await invoke({}, {
+      method: "POST",
+      pathname: "/api/admin/source-registry/broker/topic",
+      body: {
+        topic: "HEALTHCARE",
+        enabled: false,
+      },
+    });
+    assert.ok(handled);
+    const payload = JSON.parse(res.body);
+    assert.strictEqual(payload.success, true);
+    assert.strictEqual(payload.topic, "HEALTHCARE");
+    assert.strictEqual(payload.after.enabled, false);
+  }
+
+  {
+    const { handled, res } = await invoke({}, {
+      method: "POST",
+      pathname: "/api/admin/source-registry/broker/source",
+      body: {
+        source_id: "stat_rss",
+        enabled: false,
+        tier: 3,
+      },
+    });
+    assert.ok(handled);
+    const payload = JSON.parse(res.body);
+    assert.strictEqual(payload.success, true);
+    assert.strictEqual(payload.source_id, "stat_rss");
+    assert.strictEqual(payload.after.tier, 3);
   }
 
   {

@@ -4,6 +4,8 @@ const {
   handleUpdateDeliveryTimeRoute,
   handleSetUserStatusRoute,
   handleDeleteUserRoute,
+  handleRegenerateDigestRoute,
+  handleResendDigestRoute,
   handleRestartSchedulerWorkerRoute,
 } = require("./admin-api-users-actions-runtime");
 
@@ -14,8 +16,8 @@ async function handleAdminUserRoutes(ctx, deps) {
     isAdminAuthed,
     requireJsonBody,
     allUsers,
-    getRecentAutoAdjustmentsForUser,
     countArchiveDigestsForUser,
+    loadCurrentDigestSnapshot,
     readJsonLineLog,
     ADMIN_ACTION_LOG,
     ADMIN_MESSAGE_LOG,
@@ -23,17 +25,50 @@ async function handleAdminUserRoutes(ctx, deps) {
     writeUser,
     deleteUser,
     logAdminActionEvent,
-    blankReengagementState,
     formatTimeEt,
     handleAdminRunDigest,
     requestSchedulerWorkerRestart,
     loadLatestDigestSnapshot,
+    regenerateDigestSnapshot,
+    resendDigestSnapshot,
     buildRecentDigestsExport,
+    getAdminActor,
   } = deps;
 
   if (pathname === "/api/admin/run-digest" && req.method === "POST") {
     await handleAdminRunDigest(ctx);
     return true;
+  }
+
+  if (pathname === "/api/admin/resend-digest" && req.method === "POST") {
+    return handleResendDigestRoute({
+      ctx,
+      deps: {
+        json,
+        isAdminAuthed,
+        requireJsonBody,
+        allUsers,
+        loadCurrentDigestSnapshot,
+        resendDigestSnapshot,
+        logAdminActionEvent,
+      },
+    });
+  }
+
+  if (pathname === "/api/admin/regenerate-digest" && req.method === "POST") {
+    return handleRegenerateDigestRoute({
+      ctx,
+      deps: {
+        json,
+        isAdminAuthed,
+        requireJsonBody,
+        allUsers,
+        loadCurrentDigestSnapshot,
+        regenerateDigestSnapshot,
+        logAdminActionEvent,
+        getAdminActor,
+      },
+    });
   }
 
   if (pathname === "/api/admin/user-by-email" && req.method === "GET") {
@@ -43,7 +78,6 @@ async function handleAdminUserRoutes(ctx, deps) {
         json,
         isAdminAuthed,
         allUsers,
-        getRecentAutoAdjustmentsForUser,
         countArchiveDigestsForUser,
         loadLatestDigestSnapshot,
         buildRecentDigestsExport,
@@ -90,7 +124,6 @@ async function handleAdminUserRoutes(ctx, deps) {
         allUsers,
         writeUser,
         logAdminActionEvent,
-        blankReengagementState,
       },
     });
   }

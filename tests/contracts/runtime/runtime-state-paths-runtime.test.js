@@ -42,9 +42,14 @@ const {
   assert.strictEqual(paths.archiveDir, path.join(appRoot, "archive-volume"));
   assert.strictEqual(paths.digestRecordsDir, path.join(appRoot, "runtime", "digest-records"));
   assert.strictEqual(paths.digestRetryStatePath, path.join(appRoot, "runtime", "digest-retry-state.json"));
-  assert.strictEqual(paths.sourceRegistryPath, path.join(appRoot, "runtime", "source-registry.json"));
+  assert.strictEqual(paths.sourceRegistryPath, path.join(appRoot, "runtime", "standard-topic-broker-sources.json"));
   assert.strictEqual(paths.preferredSourcesPath, path.join(appRoot, "runtime", "preferred-sources.json"));
   assert.strictEqual(paths.standardTopicBrokerSourcesPath, path.join(appRoot, "runtime", "standard-topic-broker-sources.json"));
+  assert.strictEqual(
+    Object.prototype.hasOwnProperty.call(paths, "digestOnDemandCooldownPath"),
+    false,
+    "runtime paths should not resolve a removed on-demand cooldown file"
+  );
 
   const aligned = describeRuntimePathAlignment(resolveSignalBriefRuntimePaths({
     appRoot,

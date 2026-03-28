@@ -22,9 +22,6 @@ function createDigestRunnerSpawnRuntime(deps) {
 
   function buildDigestArgs(opts = {}) {
     const args = [];
-    if (opts.chatId != null && String(opts.chatId).trim()) {
-      args.push("--chatId", String(opts.chatId).trim());
-    }
     if (opts.suppressWelcome) args.push("--suppressWelcome");
     if (Array.isArray(opts.extraArgs)) {
       for (const value of opts.extraArgs) {
@@ -47,9 +44,6 @@ function createDigestRunnerSpawnRuntime(deps) {
       SIGNALBRIEF_DIGEST_REQUEST_ID: requestId,
       SIGNALBRIEF_DIGEST_REQUESTED_AT: new Date().toISOString(),
     };
-    if (opts.chatId != null && String(opts.chatId).trim()) {
-      env.SIGNALBRIEF_DIGEST_CHAT_ID = String(opts.chatId).trim();
-    }
     return { env, source, trigger, requestId };
   }
 

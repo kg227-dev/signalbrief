@@ -1,4 +1,4 @@
-const { buildDigestForPersona, matchWeightToTag } = require("../runtime/pipeline");
+const { buildDigestForPersona } = require("../runtime/pipeline");
 const { mean, spearmanCorrelation } = require("../runtime/evaluator");
 
 function stddev(values) {
@@ -14,42 +14,9 @@ function buildRelevanceRows(digest, weights) {
     headline: item.headline,
     tag: item.tag,
     relevance: Number(item.relevanceScore || 0),
-    weight: Number(matchWeightToTag(item.tag, weights) || 0),
     topic_match: Number(item.topicMatch || 0),
     base_score: Number(item.baseScore || 0),
   }));
-}
-
-function hasWeightSignal(rows) {
-  const weightValues = rows.map((row) => row.weight);
-  return (
-    weightValues.some((value) => Math.abs(value) > 0.01)
-    && new Set(weightValues.map((value) => value.toFixed(3))).size > 1
-  );
-}
-
-function scoreWithWeights(rows, scoreValues) {
-  const weightValues = rows.map((row) => row.weight);
-  const corr = spearmanCorrelation(weightValues, scoreValues);
-  const anomalies = rows.filter(
-    (row) => (row.weight <= -2 && row.relevance > 8) || (row.weight >= 4 && row.relevance < 5)
-  );
-  const anomalyRate = rows.length ? anomalies.length / rows.length : 0;
-  const spread = stddev(scoreValues);
-  const corrNorm = ((corr + 1) / 2) * 100;
-  const spreadScore = Math.max(0, Math.min(100, (spread / 2.0) * 100));
-  const anomalyPenalty = Math.min(50, anomalyRate * 100);
-  const score = Math.max(0, Math.min(100, 0.7 * corrNorm + 0.3 * spreadScore - anomalyPenalty));
-
-  return {
-    mode: "weights",
-    corr,
-    spread,
-    anomalies,
-    anomalyRate,
-    score,
-    passed: corr >= 0.65 && anomalyRate <= 0.05,
-  };
 }
 
 function scoreWithBaseline(rows, scoreValues) {
@@ -90,10 +57,9 @@ function scoreWithBaseline(rows, scoreValues) {
 
 function evaluatePersonaRelevance(persona, dataset, runtime) {
   const digest = buildDigestForPersona(dataset.enriched_items, persona, runtime.digestPolicies);
-  const weights = persona.topic_weights || {};
-  const rows = buildRelevanceRows(digest, weights);
+  const rows = buildRelevanceRows(digest);
   const scoreValues = rows.map((row) => row.relevance);
-  const evaluation = hasWeightSignal(rows) ? scoreWithWeights(rows, scoreValues) : scoreWithBaseline(rows, scoreValues);
+  const evaluation = scoreWithBaseline(rows, scoreValues);
 
   return {
     personaRow: {
@@ -110,9 +76,9 @@ function evaluatePersonaRelevance(persona, dataset, runtime) {
   };
 }
 
-function computeRelevanceSuiteStatus(tweaker, suiteScore) {
-  if (!tweaker) return "pass";
-  const failedGate = tweaker.correlation_spearman < 0.65 || tweaker.anomaly_rate > 0.05;
+function computeRelevanceSuiteStatus(baselinePersona, suiteScore) {
+  if (!baselinePersona) return "pass";
+  const failedGate = baselinePersona.correlation_spearman < 0.6 || baselinePersona.anomaly_rate > 0.1;
   if (failedGate && suiteScore >= 70) return "warn";
   if (failedGate) return "fail";
   return "pass";
@@ -130,36 +96,36 @@ async function runRelevanceScoringSuite(context, suiteMeta) {
     perPersona[persona.id] = personaRow;
     suiteScores.push(raw.score);
 
-    if (!raw.passed && persona.id === "weight_tweaker") {
+    if (!raw.passed) {
       failures.push({
         persona: persona.name,
-        issue: `Weight-to-score gate missed (corr=${raw.corr.toFixed(2)} target>=0.65, anomalyRate=${(raw.anomalyRate * 100).toFixed(1)}% target<=5%).`,
+        issue: `Baseline relevance ordering missed (corr=${raw.corr.toFixed(2)} target>=0.60, anomalyRate=${(raw.anomalyRate * 100).toFixed(1)}% target<=10%).`,
         evidence: raw.anomalies,
       });
     }
   }
 
   const suiteScore = Number(mean(suiteScores).toFixed(2));
-  const tweaker = perPersona.weight_tweaker;
-  const status = computeRelevanceSuiteStatus(tweaker, suiteScore);
+  const baselinePersona = Object.values(perPersona)[0] || null;
+  const status = computeRelevanceSuiteStatus(baselinePersona, suiteScore);
   if (status !== "pass") {
-    suggestions.push("Increase separation between exact-tag and partial-tag topicMatch scores to improve ordering sensitivity.");
-    suggestions.push("Audit weight matching for ambiguous labels and ensure strong positive weights do not lose to weak base-score noise.");
+    suggestions.push("Increase separation between exact-tag and partial-tag topicMatch scores to improve reduced-scope ordering sensitivity.");
+    suggestions.push("Audit baseline score blending so strong topic matches do not lose to weak base-score noise.");
   }
 
   return {
-    id: suiteMeta.id,
-    name: suiteMeta.name,
-    score: suiteScore,
-    score_label: `${suiteScore.toFixed(1)}%`,
-    status,
+      id: suiteMeta.id,
+      name: suiteMeta.name,
+      score: suiteScore,
+      score_label: `${suiteScore.toFixed(1)}%`,
+      status,
     per_persona: perPersona,
     failures,
     suggestions,
     details: {
-      target: "Weight Tweaker Spearman >= 0.65 and anomaly rate <= 5%",
-      weight_tweaker_correlation: tweaker ? tweaker.correlation_spearman : null,
-      weight_tweaker_anomaly_rate: tweaker ? tweaker.anomaly_rate : null,
+      target: "Baseline relevance ordering Spearman >= 0.60 and anomaly rate <= 10%",
+      baseline_correlation: baselinePersona ? baselinePersona.correlation_spearman : null,
+      baseline_anomaly_rate: baselinePersona ? baselinePersona.anomaly_rate : null,
     },
     confidence: 0.84,
   };

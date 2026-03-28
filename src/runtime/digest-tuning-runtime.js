@@ -9,14 +9,16 @@
  */
 
 const ALLOWED_TUNING_KEYS = [
-  "weights",
   "maxAgeHours",
+  "weights",
   "maxItemsPerSourceDomain",
   "crossDayDedupDays",
   "historyLookbackDays",
   "laneBonuses",
   "tierScores",
 ];
+
+const LOCKED_TUNING_KEYS = [];
 
 const NUMERIC_KEYS = new Set([
   "maxAgeHours",
@@ -28,6 +30,16 @@ const NUMERIC_KEYS = new Set([
 const OBJECT_KEYS = new Set(["weights", "laneBonuses", "tierScores"]);
 
 const WEIGHT_COMPONENT_KEYS = ["freshness", "source_tier", "lane_bonus", "novelty"];
+
+function pickAllowedTuningEntries(tuning) {
+  const safeTuning = (tuning && typeof tuning === "object" && !Array.isArray(tuning)) ? tuning : {};
+  const picked = {};
+  for (const key of ALLOWED_TUNING_KEYS) {
+    if (!(key in safeTuning)) continue;
+    picked[key] = safeTuning[key];
+  }
+  return picked;
+}
 
 /**
  * Load digest-tuning.json from disk.
@@ -48,7 +60,7 @@ function loadDigestTuning(tuningPath, fs) {
     return {};
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  return parsed;
+  return pickAllowedTuningEntries(parsed);
 }
 
 /**
@@ -62,8 +74,13 @@ function validateDigestTuning(tuning) {
 
   const errors = [];
   const allowedSet = new Set(ALLOWED_TUNING_KEYS);
+  const lockedSet = new Set(LOCKED_TUNING_KEYS);
 
   for (const key of Object.keys(tuning)) {
+    if (lockedSet.has(key)) {
+      errors.push(`"${key}" is locked to the reduced-scope MVP contract and cannot be overridden`);
+      continue;
+    }
     if (!allowedSet.has(key)) {
       errors.push(`unknown tuning key: "${key}" — allowed keys: ${ALLOWED_TUNING_KEYS.join(", ")}`);
       continue;
@@ -75,7 +92,11 @@ function validateDigestTuning(tuning) {
         errors.push(`"${key}" must be a number, got: ${JSON.stringify(value)}`);
       } else {
         const n = value;
-        if (!Number.isFinite(n) || n < 0) {
+        if (!Number.isFinite(n)) {
+          errors.push(`"${key}" must be a finite number, got: ${JSON.stringify(value)}`);
+        } else if (key === "maxAgeHours" && (n < 1 || n > 48)) {
+          errors.push(`"${key}" must be between 1 and 48 hours to stay within the reduced-scope MVP freshness cap`);
+        } else if (n < 0) {
           errors.push(`"${key}" must be a non-negative finite number, got: ${JSON.stringify(value)}`);
         }
       }
@@ -115,7 +136,7 @@ function validateDigestTuning(tuning) {
  */
 function mergeDigestTuning(base, tuning) {
   const safeBase = (base && typeof base === "object" && !Array.isArray(base)) ? base : {};
-  const safeTuning = (tuning && typeof tuning === "object" && !Array.isArray(tuning)) ? tuning : {};
+  const safeTuning = pickAllowedTuningEntries(tuning);
   if (Object.keys(safeTuning).length === 0) return { ...safeBase };
 
   const merged = { ...safeBase };
@@ -136,4 +157,5 @@ module.exports = {
   validateDigestTuning,
   mergeDigestTuning,
   ALLOWED_TUNING_KEYS,
+  LOCKED_TUNING_KEYS,
 };

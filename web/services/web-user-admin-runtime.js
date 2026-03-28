@@ -1,6 +1,6 @@
 const {
-  handleTargetedDigestRun,
   handleFullDigestRun,
+  handleTopicAuditRerun,
 } = require("./web-user-admin-actions-runtime");
 
 function createAdminRunDigestHandler({
@@ -9,9 +9,9 @@ function createAdminRunDigestHandler({
   isAdminAuthed,
   requireJsonBody,
   allUsers,
-  runDigestTrigger,
   startDigestTrigger,
   logAdminActionEvent,
+  formatEtDateKey,
 }) {
   return async function handleAdminRunDigest(ctxOrReq, maybeRes) {
     const { req, res } = toRouteCtx(ctxOrReq, maybeRes);
@@ -19,16 +19,15 @@ function createAdminRunDigestHandler({
     const body = await requireJsonBody(req, res);
     if (body == null) return;
 
-    const targetChatId = body.chatId ? String(body.chatId).trim() : "";
-    if (targetChatId) {
-      return handleTargetedDigestRun({
+    if (String(body?.scope || "").trim().toLowerCase() === "topic_audit" || body?.topic || body?.topic_tag) {
+      return handleTopicAuditRerun({
         req,
         res,
         json,
-        allUsers,
-        targetChatId,
-        runDigestTrigger,
+        body,
+        startDigestTrigger,
         logAdminActionEvent,
+        formatEtDateKey,
       });
     }
 

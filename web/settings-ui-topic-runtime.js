@@ -8,7 +8,6 @@
     prefState,
     byId,
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     showError,
   }) {
@@ -24,7 +23,6 @@
       prefState,
       byId,
       INDUSTRY_TOPICS,
-      CAPABILITY_TOPICS,
       DEFAULT_TOPICS,
       showError,
     });

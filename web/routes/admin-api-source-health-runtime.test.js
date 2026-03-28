@@ -1,4 +1,5 @@
 "use strict";
+
 const assert = require("assert");
 const {
   aggregateSourceHealth,
@@ -18,7 +19,7 @@ const {
   console.log("classifyLane ✓");
 }
 
-// aggregateSourceHealth: basic 2-day scenario
+// Fallback candidate aggregation still works when broker telemetry is absent.
 {
   const auditDocs = [
     {
@@ -47,63 +48,224 @@ const {
           ],
         },
         HEALTHCARE: {
-          candidates: [], // zero items — should trigger miss
+          candidates: [],
         },
       },
     },
   ];
 
   const result = aggregateSourceHealth(auditDocs);
-
-  // TECHNOLOGY: 3 rss total, 0 official, 1 discovery, 0 miss days
-  const tech = result.topics["TECHNOLOGY"];
+  const tech = result.topics.TECHNOLOGY;
+  const health = result.topics.HEALTHCARE;
   assert(tech, "TECHNOLOGY topic exists");
-  assert.strictEqual(tech.lane_totals.rss, 3, `rss total: expected 3, got ${tech.lane_totals.rss}`);
-  assert.strictEqual(tech.lane_totals.discovery, 1, "discovery total");
-  assert.strictEqual(tech.miss_days, 0, "TECHNOLOGY: 0 miss days");
-  assert(tech.source_domains.includes("techcrunch.com"), "techcrunch in domains");
-
-  // HEALTHCARE: 1 official total, 1 miss day (empty candidates on day 2)
-  const health = result.topics["HEALTHCARE"];
-  assert.strictEqual(health.lane_totals.official, 1, "HEALTHCARE official total");
-  assert.strictEqual(health.miss_days, 1, `HEALTHCARE: 1 miss day, got ${health.miss_days}`);
-
-  // Warnings: HEALTHCARE had 1/2 miss days but threshold is 3 of 7 — no warning yet
-  assert.strictEqual(result.warnings.length, 0, "no warnings below threshold");
-
-  console.log("aggregateSourceHealth basic ✓");
+  assert.strictEqual(tech.lane_totals.rss, 3);
+  assert.strictEqual(tech.lane_totals.discovery, 1);
+  assert.strictEqual(tech.miss_days, 0);
+  assert(tech.source_domains.includes("techcrunch.com"));
+  assert.strictEqual(health.lane_totals.official, 1);
+  assert.strictEqual(health.miss_days, 1);
+  assert.strictEqual(result.warnings.length, 0);
+  console.log("aggregateSourceHealth fallback candidate path ✓");
 }
 
-// aggregateSourceHealth: warning when topic misses >= 3 of 7 days
+// Broker telemetry drives per-source health and topic miss/provider warnings.
 {
-  const missDays = Array.from({ length: 4 }, (_, i) => ({
-    date_et: `2026-03-${20 + i}`,
-    topics: { ENERGY: { candidates: [] } },
-  }));
-  const result = aggregateSourceHealth(missDays);
-  const warn = result.warnings.find((w) => w.topic === "ENERGY");
-  assert(warn, "ENERGY should have a warning");
-  assert(warn.message.includes("miss"), `warning message: ${warn.message}`);
-  console.log("aggregateSourceHealth warning ✓");
-}
-
-// Warning fires even when discovery items exist but rss+official are zero
-{
-  const discoveryOnlyDays = Array.from({ length: 4 }, (_, i) => ({
-    date_et: `2026-03-${20 + i}`,
-    topics: {
-      ENERGY: {
-        candidates: [
-          { lane: "perplexity_discovery", source: "example.com", selected: true },
+  const auditDocs = [
+    {
+      date_et: "2026-03-24",
+      fetch: {
+        topic_diagnostics: [
+          { tag: "TECHNOLOGY", coverage_status: "covered" },
+          { tag: "HEALTHCARE", coverage_status: "provider_limited_zero" },
         ],
+        standard_topic_broker: {
+          enabled: true,
+          source_fetch_count: 2,
+          source_success_count: 1,
+          source_failure_count: 1,
+          source_diagnostics: [
+            {
+              id: "techcrunch_feed",
+              lane: "publisher_feed",
+              topic_tags: ["TECHNOLOGY"],
+              endpoint: "https://techcrunch.com/feed/",
+              ok: true,
+              status: 200,
+              parsed_count: 10,
+              retained_count: 2,
+              stale_count: 1,
+              non_article_count: 0,
+              validation_drop_count: 0,
+            },
+            {
+              id: "fda_feed",
+              lane: "official",
+              topic_tags: ["HEALTHCARE"],
+              endpoint: "https://www.fda.gov/news-events/press-announcements/rss.xml",
+              ok: false,
+              status: 503,
+              parsed_count: 0,
+              retained_count: 0,
+              stale_count: 0,
+              non_article_count: 0,
+              validation_drop_count: 0,
+              error: "timeout",
+            },
+          ],
+          topic_diagnostics: [
+            {
+              tag: "TECHNOLOGY",
+              lane_counts: { publisher_feed: 2 },
+              source_ids: ["techcrunch_feed"],
+              item_count: 2,
+              errors: [],
+            },
+            {
+              tag: "HEALTHCARE",
+              lane_counts: {},
+              source_ids: ["fda_feed"],
+              item_count: 0,
+              errors: [{ source_id: "fda_feed", error: "timeout" }],
+            },
+          ],
+        },
       },
     },
-  }));
-  const result = aggregateSourceHealth(discoveryOnlyDays);
-  const warn = result.warnings.find((w) => w.topic === "ENERGY");
-  assert(warn, "ENERGY should warn even when discovery items exist but no rss/official");
-  assert(warn.message.includes("rss/official"), `warning message should mention rss/official: ${warn.message}`);
-  console.log("aggregateSourceHealth discovery-only warning ✓");
+    {
+      date_et: "2026-03-25",
+      fetch: {
+        topic_diagnostics: [
+          { tag: "TECHNOLOGY", coverage_status: "thin" },
+          { tag: "HEALTHCARE", coverage_status: "provider_limited_zero" },
+        ],
+        standard_topic_broker: {
+          enabled: true,
+          source_fetch_count: 2,
+          source_success_count: 1,
+          source_failure_count: 1,
+          source_diagnostics: [
+            {
+              id: "techcrunch_feed",
+              lane: "publisher_feed",
+              topic_tags: ["TECHNOLOGY"],
+              endpoint: "https://techcrunch.com/feed/",
+              ok: true,
+              status: 200,
+              parsed_count: 8,
+              retained_count: 1,
+              stale_count: 2,
+              non_article_count: 0,
+              validation_drop_count: 1,
+            },
+            {
+              id: "fda_feed",
+              lane: "official",
+              topic_tags: ["HEALTHCARE"],
+              endpoint: "https://www.fda.gov/news-events/press-announcements/rss.xml",
+              ok: false,
+              status: 503,
+              parsed_count: 0,
+              retained_count: 0,
+              stale_count: 0,
+              non_article_count: 0,
+              validation_drop_count: 0,
+              error: "timeout",
+            },
+          ],
+          topic_diagnostics: [
+            {
+              tag: "TECHNOLOGY",
+              lane_counts: { publisher_feed: 1 },
+              source_ids: ["techcrunch_feed"],
+              item_count: 1,
+              errors: [],
+            },
+            {
+              tag: "HEALTHCARE",
+              lane_counts: {},
+              source_ids: ["fda_feed"],
+              item_count: 0,
+              errors: [{ source_id: "fda_feed", error: "timeout" }],
+            },
+          ],
+        },
+      },
+    },
+    {
+      date_et: "2026-03-26",
+      fetch: {
+        topic_diagnostics: [
+          { tag: "TECHNOLOGY", coverage_status: "covered" },
+          { tag: "HEALTHCARE", coverage_status: "provider_limited_zero" },
+        ],
+        standard_topic_broker: {
+          enabled: true,
+          source_fetch_count: 2,
+          source_success_count: 1,
+          source_failure_count: 1,
+          source_diagnostics: [
+            {
+              id: "techcrunch_feed",
+              lane: "publisher_feed",
+              topic_tags: ["TECHNOLOGY"],
+              endpoint: "https://techcrunch.com/feed/",
+              ok: true,
+              status: 200,
+              parsed_count: 7,
+              retained_count: 2,
+              stale_count: 0,
+              non_article_count: 0,
+              validation_drop_count: 0,
+            },
+            {
+              id: "fda_feed",
+              lane: "official",
+              topic_tags: ["HEALTHCARE"],
+              endpoint: "https://www.fda.gov/news-events/press-announcements/rss.xml",
+              ok: false,
+              status: 503,
+              parsed_count: 0,
+              retained_count: 0,
+              stale_count: 0,
+              non_article_count: 0,
+              validation_drop_count: 0,
+              error: "timeout",
+            },
+          ],
+          topic_diagnostics: [
+            {
+              tag: "TECHNOLOGY",
+              lane_counts: { publisher_feed: 2 },
+              source_ids: ["techcrunch_feed"],
+              item_count: 2,
+              errors: [],
+            },
+            {
+              tag: "HEALTHCARE",
+              lane_counts: {},
+              source_ids: ["fda_feed"],
+              item_count: 0,
+              errors: [{ source_id: "fda_feed", error: "timeout" }],
+            },
+          ],
+        },
+      },
+    },
+  ];
+
+  const result = aggregateSourceHealth(auditDocs);
+  assert.strictEqual(result.broker_summary.source_fetch_count, 6, "broker fetch count should aggregate across days");
+  assert.strictEqual(result.topics.TECHNOLOGY.lane_totals.rss, 5, "TECHNOLOGY broker rss items should aggregate");
+  assert.strictEqual(result.topics.HEALTHCARE.miss_days, 3, "HEALTHCARE should show broker miss days");
+  assert.strictEqual(result.topics.HEALTHCARE.no_broker_days, 3, "HEALTHCARE should show no-broker days");
+  assert.strictEqual(result.topics.HEALTHCARE.provider_limited_days, 3, "HEALTHCARE should count provider-limited days");
+  assert.strictEqual(result.sources.techcrunch_feed.retained_count, 5, "source retained counts should aggregate");
+  assert.strictEqual(result.sources.fda_feed.failure_days, 3, "failing broker source should track failure days");
+  assert.strictEqual(result.sources.fda_feed.error_days, 3, "failing broker source should track error days");
+  assert(result.warnings.some((warning) => warning.topic === "HEALTHCARE" && String(warning.message).includes("rss/official")));
+  assert(result.warnings.some((warning) => warning.topic === "HEALTHCARE" && String(warning.message).includes("provider-limited")));
+  assert(result.source_warnings.some((warning) => warning.source_id === "fda_feed"));
+  console.log("aggregateSourceHealth broker telemetry path ✓");
 }
 
 console.log("All source-health tests passed ✓");

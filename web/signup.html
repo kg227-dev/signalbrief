@@ -4,17 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign Up — SignalBrief</title>
-<meta name="description" content="Create your free SignalBrief account and set the topics, sources, depth, and delivery schedule for your daily strategy briefing.">
+<meta name="description" content="Create your free SignalBrief account, choose 1 to 3 sectors, and set the depth and delivery time for your daily email briefing.">
 <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">
 <link rel="canonical" href="https://getsignalbrief.com/signup">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SignalBrief">
 <meta property="og:title" content="Sign Up — SignalBrief">
-<meta property="og:description" content="Build a personalized daily news briefing for strategy work in minutes.">
+<meta property="og:description" content="Choose your sectors, read depth, and delivery time for your daily SignalBrief email.">
 <meta property="og:url" content="https://getsignalbrief.com/signup">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Sign Up — SignalBrief">
-<meta name="twitter:description" content="Create your personalized SignalBrief and choose the topics, sources, and delivery time that fit your workflow.">
+<meta name="twitter:description" content="Choose your sectors, read depth, and delivery time for your daily SignalBrief email.">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -67,7 +67,6 @@ body.dark {
 body.dark .input-field { background: var(--card); color: var(--text); }
 body.dark select.input-field { background-color: var(--card); }
 body.dark .topic-chip { background: var(--card); }
-body.dark .topic-chip.topic-chip-custom { background: rgba(217,119,6,0.1); }
 body.dark .depth-card { background: var(--card); }
 body.dark .day-circle { background: var(--card); }
 body.dark .size-pill { background: var(--card); }
@@ -309,7 +308,7 @@ select.input-field {
 }
 
 /* Fallback for unclassed chips */
-.topic-chip:not(.topic-chip-industry):not(.topic-chip-capability):not(.topic-chip-custom):hover {
+.topic-chip:not(.topic-chip-industry):not(.topic-chip-capability):hover {
   border-color: var(--accent);
   color: var(--text);
   transform: scale(1.02);
@@ -329,28 +328,6 @@ select.input-field {
   font-size: 9px;
 }
 .topic-chip.selected .check::after { content: '\2713'; }
-
-/* Custom topic chips (orange) */
-.topic-chip.topic-chip-custom {
-  border-color: rgba(194,119,10,0.3);
-  color: var(--orange);
-  background: var(--orange-light);
-}
-.topic-chip.topic-chip-custom:hover {
-  border-color: var(--orange);
-  background: rgba(194,119,10,0.14);
-  transform: scale(1.02);
-}
-.topic-chip.topic-chip-custom.selected {
-  border-color: var(--orange);
-  background: var(--orange-light);
-  color: var(--orange);
-}
-.topic-chip.topic-chip-custom.selected .check {
-  background: var(--orange);
-  border-color: var(--orange);
-  color: #fff;
-}
 
 /* Custom group section */
 #customGroupSection { display: none; }
@@ -700,7 +677,7 @@ select.input-field {
     <div class="step-counter" aria-hidden="true">Step 1 of 5</div>
     <div class="step-dots" aria-hidden="true"><div class="sdot active"></div><div class="sdot"></div><div class="sdot"></div><div class="sdot"></div><div class="sdot"></div></div>
     <h2 id="step-0-heading">Let's set up your briefing</h2>
-    <p class="step-sub">We'll deliver a personalized digest at your chosen time.</p>
+    <p class="step-sub">We'll deliver your digest by email at your chosen time.</p>
     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:20px;"><span aria-hidden="true">*</span> Required</p>
     <div class="input-group">
       <label class="input-label" for="name">Full name <span aria-hidden="true" style="color:var(--accent)">*</span></label>

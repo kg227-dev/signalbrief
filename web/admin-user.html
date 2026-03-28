@@ -76,11 +76,6 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 .chip.selected { background:var(--accent); border-color:var(--accent); color:#fff; }
 .chip-check { font-size:11px; opacity:0; }
 .chip.selected .chip-check { opacity:1; }
-.chip-custom { border-style:dashed; }
-.custom-row { display:flex; gap:8px; margin-top:10px; }
-.custom-row input { flex:1; }
-.btn-add { padding:9px 14px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; white-space:nowrap; }
-.btn-add:hover { background:#1D4ED8; }
 .topic-note { font-size:11px; color:var(--text-secondary); margin-top:4px; }
 
 /* Depth */
@@ -258,23 +253,15 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
           <input type="email" id="email" readonly>
         </div>
       </div>
-      <div class="field">
-        <label>Telegram username</label>
-        <input type="text" id="telegram" placeholder="@handle (or blank)">
-      </div>
     </div>
 
     <!-- Topics -->
     <div class="form-card">
       <div class="card-title">Topics</div>
       <div class="card-heading">What they track</div>
-      <div class="section-subtitle">Minimum 2 required.</div>
+      <div class="section-subtitle">Pick 1 to 3 topics.</div>
       <div class="topic-grid" id="topicGrid"></div>
       <div class="topic-note" id="topicNote"></div>
-      <div class="custom-row">
-        <input type="text" id="customTopicInput" placeholder="Add a custom topic">
-        <button type="button" class="btn-add" id="addTopicBtn">+ Add</button>
-      </div>
     </div>
 
     <!-- Depth -->
@@ -335,30 +322,6 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
           <div class="day-circle" data-day="0" onclick="toggleDay(this)">S</div>
         </div>
       </div>
-      <div class="field">
-        <label>Items per digest</label>
-        <select id="itemsPerDigest">
-          <option value="5">5 items — quick scan</option>
-          <option value="10">10 items — full picture</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Topic weights — shown only if user has adjustments -->
-    <div class="form-card" id="weightsCard" style="display:none;">
-      <div class="card-title">Topic preferences</div>
-      <div class="card-heading">Personalization signals</div>
-      <div id="weightsList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
-      <div style="font-size:12px;color:var(--text-secondary);">Set via manual "more/less" commands plus automatic learning from saves/clicks. Read-only here.</div>
-    </div>
-
-    <!-- Auto-learning state -->
-    <div class="form-card" id="autoLearningCard" style="display:none;">
-      <div class="card-title">Auto learning</div>
-      <div class="card-heading">Feedback loop status</div>
-      <div id="autoLearningSummary" class="learning-summary"></div>
-      <div id="autoLearningList" class="adjustment-list"></div>
-      <div id="autoLearningEmpty" style="font-size:12px;color:var(--text-secondary);display:none;">No automatic adjustments yet. The model has not crossed thresholds for this user.</div>
     </div>
 
     <!-- Last digest preview — shown only if user has last_digest_items -->
@@ -381,7 +344,8 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
       <div class="action-bar-title">Admin actions</div>
       <div class="action-row">
         <button type="button" class="btn btn-primary" id="saveBtn">Save preferences</button>
-        <button type="button" class="btn btn-secondary" id="sendDigestBtn">Send digest now</button>
+        <button type="button" class="btn btn-secondary" id="regenerateDigestBtn" style="display:none;">Regenerate summaries</button>
+        <button type="button" class="btn btn-secondary" id="resendDigestBtn" style="display:none;">Resend latest digest</button>
         <button type="button" class="btn btn-secondary" id="resendLinkBtn">Resend settings link</button>
         <button type="button" class="btn btn-warn" id="pauseBtn">Pause deliveries</button>
         <button type="button" class="btn btn-danger-soft" id="unsubBtn">Mark unsubscribed</button>
@@ -396,28 +360,25 @@ input[readonly] { background:#F9FAFB; color:var(--text-secondary); cursor:defaul
 
 <script>
 const INDUSTRY_TOPICS = [
-  'HEALTHCARE','FINANCIAL SERVICES','PE×M&A','ENERGY','CONSUMER',
-  'LIFE SCIENCES','TECHNOLOGY','INDUSTRIALS','REAL ESTATE','PUBLIC SECTOR',
+  'HEALTHCARE','LIFE SCIENCES','TECHNOLOGY','ENERGY',
+  'FINANCIAL SERVICES','CONSUMER & RETAIL','INDUSTRIALS',
 ];
-const CAPABILITY_TOPICS = [
-  'AI×TECH','STRATEGY','POLICY×REGULATORY','SUSTAINABILITY',
-  'DIGITAL','M&A ADVISORY','TALENT',
-];
-const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-const MAX_CUSTOM_KEYWORDS = 3;
+const DEFAULT_TOPICS = [...INDUSTRY_TOPICS];
 const TOPIC_LABELS = {
-  'HEALTHCARE':'Healthcare','FINANCIAL SERVICES':'Financial Services','PE×M&A':'Private Equity & M&A',
-  'ENERGY':'Energy','CONSUMER':'Consumer & Retail','LIFE SCIENCES':'Life Sciences',
-  'TECHNOLOGY':'Technology','INDUSTRIALS':'Industrials','REAL ESTATE':'Real Estate',
-  'PUBLIC SECTOR':'Public Sector','AI×TECH':'AI & Technology','STRATEGY':'Strategy',
-  'POLICY×REGULATORY':'Policy & Regulatory','SUSTAINABILITY':'Sustainability & ESG',
-  'DIGITAL':'Digital Transformation','M&A ADVISORY':'M&A Advisory','TALENT':'Talent & Workforce',
+  'HEALTHCARE':'Healthcare',
+  'LIFE SCIENCES':'Life Sciences',
+  'TECHNOLOGY':'Technology',
+  'ENERGY':'Energy',
+  'FINANCIAL SERVICES':'Financial Services',
+  'CONSUMER & RETAIL':'Consumer & Retail',
+  'INDUSTRIALS':'Industrials',
 };
 
 let selectedTopics = new Set();
 let userToken = '';
 let userEmail = '';
 let userStatus = 'active';
+let currentAdminUser = null;
 
 function esc(s) {
   if (!s) return '';
@@ -425,18 +386,7 @@ function esc(s) {
 }
 
 function topicLabel(t) {
-  if (DEFAULT_TOPICS.includes(t)) return TOPIC_LABELS[t] || t;
-  return t.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-}
-
-function isCustom(t) { return !DEFAULT_TOPICS.includes(t); }
-
-function selectedCustomTopicCount() {
-  let count = 0;
-  selectedTopics.forEach((topic) => {
-    if (isCustom(topic)) count += 1;
-  });
-  return count;
+  return TOPIC_LABELS[t] || t;
 }
 
 function formatEtDateTime(iso) {
@@ -488,17 +438,17 @@ function resolveLatestDigestDateKey(user) {
 
 function updateTopicNote() {
   const n = selectedTopics.size;
-  const custom = selectedCustomTopicCount();
   const el = document.getElementById('topicNote');
   if (!el) return;
-  const customPart = ' · custom ' + custom + '/' + MAX_CUSTOM_KEYWORDS;
-  el.textContent = n + ' selected' + customPart + (n < 2 ? ' — minimum 2 required' : '');
-  el.style.color = (n < 2 && n > 0) ? 'var(--red)' : 'var(--text-secondary)';
+  el.textContent = n < 1
+    ? n + ' selected — minimum 1 required'
+    : (n > 3 ? n + ' selected — reduce to 3' : n + ' selected');
+  el.style.color = (n === 0 || n > 3) ? 'var(--red)' : 'var(--text-secondary)';
 }
 
 function renderChip(topic, selected) {
   const chip = document.createElement('div');
-  chip.className = 'chip' + (selected ? ' selected' : '') + (isCustom(topic) ? ' chip-custom' : '');
+  chip.className = 'chip' + (selected ? ' selected' : '');
   chip.dataset.topic = topic;
   chip.innerHTML = '<span class="chip-check">✓</span> ' + esc(topicLabel(topic));
   chip.addEventListener('click', function() {
@@ -506,8 +456,8 @@ function renderChip(topic, selected) {
       selectedTopics.delete(topic);
       chip.classList.remove('selected');
     } else {
-      if (isCustom(topic) && selectedCustomTopicCount() >= MAX_CUSTOM_KEYWORDS) {
-        showError('You can track up to ' + MAX_CUSTOM_KEYWORDS + ' custom keywords.');
+      if (selectedTopics.size >= 3) {
+        showError('Select no more than 3 topics.');
         return;
       }
       selectedTopics.add(topic);
@@ -531,12 +481,6 @@ function renderChips(userTopics) {
   container.innerHTML = '';
   container.appendChild(renderGroupLabel('Industries'));
   INDUSTRY_TOPICS.forEach(t => {
-    const sel = userTopics.includes(t);
-    if (sel) selectedTopics.add(t);
-    container.appendChild(renderChip(t, sel));
-  });
-  container.appendChild(renderGroupLabel('Capabilities'));
-  CAPABILITY_TOPICS.forEach(t => {
     const sel = userTopics.includes(t);
     if (sel) selectedTopics.add(t);
     container.appendChild(renderChip(t, sel));
@@ -637,19 +581,12 @@ function updateUnsubBtn(status) {
 
 function buildMetaBar(user) {
   const prefs = user.preferences || {};
-  const tgLinked = !!(user.chatId && !user.chatId.startsWith('email-'));
   const toETDate = iso => iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : '—';
   const statusClass = { active:'status-active', paused:'status-paused', unsubscribed:'status-unsubscribed' }[user.status] || 'status-paused';
   const emailOn = prefs.email_enabled !== false;
-  const tgOn    = !!(prefs.telegram_enabled && tgLinked);
   const emailVal = emailOn
     ? '<span style="color:var(--green);font-weight:700;">✓ enabled</span>'
     : '<span style="color:#D1D5DB;">off</span>';
-  const tgVal = tgOn
-    ? '<span style="color:var(--green);font-weight:700;">✓ linked</span>'
-    : tgLinked
-      ? '<span style="color:var(--yellow);font-weight:600;">linked / disabled</span>'
-      : '<span style="color:#D1D5DB;">not linked</span>';
   const digestCount = Number.isFinite(Number(user.archive_digest_count))
     ? Number(user.archive_digest_count)
     : Number(user.digests_received || 0);
@@ -659,92 +596,11 @@ function buildMetaBar(user) {
     { label: 'Digests',   value: esc(String(digestCount)) },
     { label: 'Last digest', value: esc(toETDate(user.last_digest_at)) },
     { label: 'Email',     value: emailVal },
-    { label: 'Telegram',  value: tgVal },
     { label: 'Chat ID',   value: `<span class="mono">${esc(user.chatId || '—')}</span>` },
-    { label: 'Bookmarks', value: esc(String((user.bookmarks || []).length)) },
   ];
   document.getElementById('metaBar').innerHTML = items.map(i =>
     `<div class="meta-item"><div class="meta-label">${i.label}</div><div class="meta-value">${i.value}</div></div>`
   ).join('');
-}
-
-function buildWeightsPanel(user) {
-  const weights = user.topic_weights || {};
-  const nonZero = Object.entries(weights).filter(([, v]) => v !== 0);
-  if (!nonZero.length) return;
-  document.getElementById('weightsCard').style.display = '';
-  const list = document.getElementById('weightsList');
-  list.innerHTML = nonZero
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    .map(([k, v]) => {
-      const label = k.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
-      const cls   = v > 0 ? 'weight-up' : 'weight-down';
-      const arrows = Math.abs(v) >= 2 ? (v > 0 ? '▲▲' : '▼▼') : (v > 0 ? '▲' : '▼');
-      return `<span class="weight-pill ${cls}"><span class="weight-signal">${esc(arrows)}</span> ${esc(label)} <span style="opacity:0.6;">(${v > 0 ? '+' : ''}${v})</span></span>`;
-    }).join('');
-}
-
-function buildAutoLearningPanel(user) {
-  const state = user.auto_learning && typeof user.auto_learning === 'object' ? user.auto_learning : null;
-  const recent = Array.isArray(user.auto_adjustments_recent) ? user.auto_adjustments_recent : [];
-  if (!state && !recent.length) return;
-
-  document.getElementById('autoLearningCard').style.display = '';
-  const summary = document.getElementById('autoLearningSummary');
-  const list = document.getElementById('autoLearningList');
-  const empty = document.getElementById('autoLearningEmpty');
-
-  const statusHtml = state && state.enabled === false
-    ? '<span style="color:var(--red);">disabled</span>'
-    : '<span style="color:var(--green);">enabled</span>';
-  const metrics = [
-    { label: 'Status', value: statusHtml },
-    { label: 'Total auto adjustments', value: esc(String(state?.total_auto_adjustments || 0)) },
-    { label: 'Last processed', value: esc(formatEtDateTime(state?.last_processed_ts)) },
-    { label: 'Last applied', value: esc(formatEtDateTime(state?.last_applied_at)) },
-    { label: 'Last checked', value: esc(formatEtDateTime(state?.last_checked_at)) },
-    { label: 'Lookback window', value: esc(String(state?.lookback_days || 14) + ' days') },
-  ];
-  summary.innerHTML = metrics.map((metric) => `
-    <div class="learning-metric">
-      <div class="learning-metric-label">${metric.label}</div>
-      <div class="learning-metric-value">${metric.value}</div>
-    </div>
-  `).join('');
-
-  if (!recent.length) {
-    list.innerHTML = '';
-    empty.style.display = '';
-    return;
-  }
-
-  empty.style.display = 'none';
-  list.innerHTML = recent.map((row) => {
-    const topic = topicLabel(String(row.topic_key || 'topic'));
-    const delta = Number(row.delta || 0);
-    const deltaClass = delta > 0 ? 'weight-up' : (delta < 0 ? 'weight-down' : '');
-    const deltaPrefix = delta > 0 ? '+' : '';
-    const net = Number.isFinite(Number(row.net)) ? Number(row.net) : 0;
-    const count = Number.isFinite(Number(row.count)) ? Number(row.count) : 0;
-    const saved = Number.isFinite(Number(row.saved)) ? Number(row.saved) : 0;
-    const clicked = Number.isFinite(Number(row.clicked)) ? Number(row.clicked) : 0;
-    const ignored = Number.isFinite(Number(row.ignored)) ? Number(row.ignored) : 0;
-    const whenLabel = row.ts_utc
-      ? formatEtDateTime(row.ts_utc)
-      : (row.date_et || '—');
-    return `
-      <div class="adjustment-row">
-        <div class="adjustment-main">
-          <div class="adjustment-topic">${esc(topic)}</div>
-          <div class="adjustment-meta">Signals: ${saved} saves · ${clicked} clicks · ${ignored} ignored · net ${net} across ${count} events</div>
-        </div>
-        <div class="adjustment-time">
-          <div class="adjustment-delta ${deltaClass}">${deltaPrefix}${delta}</div>
-          <div>${esc(whenLabel)}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
 }
 
 function buildLastDigestPanel(user) {
@@ -822,6 +678,15 @@ function buildRepeatEvidencePanel(details) {
   </details>`;
 }
 
+function buildAdminArchiveDigestHref(dateKey) {
+  const key = String(dateKey || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !userToken) return '';
+  const adminReturn = '/admin/user?email=' + encodeURIComponent(userEmail || '');
+  return '/archive?token=' + encodeURIComponent(userToken)
+    + '&date=' + encodeURIComponent(key)
+    + '&admin=1&admin_return=' + encodeURIComponent(adminReturn);
+}
+
 function buildDigestTimelinePanel(user) {
   const rows = Array.isArray(user?.recent_digests) ? user.recent_digests : [];
   if (!rows.length) return;
@@ -851,7 +716,7 @@ function buildDigestTimelinePanel(user) {
       .map((item) => esc(String(item?.headline || '').slice(0, 92)))
       .filter(Boolean)
       .join(' · ');
-    const digestHref = row.date_et ? `/digest/${encodeURIComponent(row.date_et)}${row.run_id ? `?run=${encodeURIComponent(row.run_id)}` : ''}` : '';
+    const digestHref = buildAdminArchiveDigestHref(row.date_et);
     return `
       <div class="digest-outcome-row">
         <div class="digest-outcome-head">
@@ -873,6 +738,85 @@ function buildDigestTimelinePanel(user) {
 async function logout() {
   await fetch('/api/admin/logout', { method: 'POST' });
   window.location.href = '/admin/login';
+}
+
+function syncDigestActionButtons(user = currentAdminUser) {
+  const digestDateKey = resolveLatestDigestDateKey(user);
+  const resendDigestBtn = document.getElementById('resendDigestBtn');
+  const regenerateDigestBtn = document.getElementById('regenerateDigestBtn');
+  if (regenerateDigestBtn) {
+    regenerateDigestBtn.style.display = digestDateKey ? 'inline-flex' : 'none';
+  }
+  if (resendDigestBtn) {
+    const canResend = Boolean(digestDateKey) && userStatus !== 'unsubscribed';
+    resendDigestBtn.style.display = canResend ? 'inline-flex' : 'none';
+  }
+}
+
+async function regenerateStoredDigest(triggerEl = null, explicitDateKey = '') {
+  const targetDate = String(explicitDateKey || resolveLatestDigestDateKey(currentAdminUser)).trim();
+  if (!userEmail || !targetDate) {
+    showBanner('❌ No regenable digest snapshot found for this user', true);
+    return;
+  }
+  if (!confirm('Regenerate summaries for the stored ' + targetDate + ' digest snapshot for ' + userEmail + '?')) return;
+  const btn = triggerEl || document.getElementById('regenerateDigestBtn');
+  const prevLabel = btn ? btn.textContent : 'Regenerate summaries';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Regenerating…';
+  }
+  try {
+    const r = await fetch('/api/admin/regenerate-digest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail, date_et: targetDate })
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || data.success !== true) {
+      throw new Error((data && data.error) || 'Failed to regenerate digest summaries');
+    }
+    showBanner('✅ Stored digest summaries regenerated for ' + userEmail);
+  } catch (err) {
+    showBanner('❌ ' + ((err && err.message) || 'Failed to regenerate digest summaries'), true);
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
+async function resendStoredDigest(triggerEl = null, explicitDateKey = '') {
+  const targetDate = String(explicitDateKey || resolveLatestDigestDateKey(currentAdminUser)).trim();
+  if (!userEmail || !targetDate) {
+    showBanner('❌ No resendable digest snapshot found for this user', true);
+    return;
+  }
+  if (!confirm('Resend the stored ' + targetDate + ' digest snapshot to ' + userEmail + '?')) return;
+  const btn = triggerEl || document.getElementById('resendDigestBtn');
+  const prevLabel = btn ? btn.textContent : 'Resend latest digest';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Resending…';
+  }
+  try {
+    const r = await fetch('/api/admin/resend-digest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail, date_et: targetDate })
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || data.success !== true) {
+      throw new Error((data && data.error) || 'Failed to resend digest snapshot');
+    }
+    showBanner('✅ Stored digest snapshot resent to ' + userEmail);
+  } catch (err) {
+    showBanner('❌ ' + ((err && err.message) || 'Failed to resend digest snapshot'), true);
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
 }
 
 async function init() {
@@ -899,6 +843,7 @@ async function init() {
     userToken = user.token || '';
     userEmail = user.email || '';
     userStatus = user.status || 'active';
+    currentAdminUser = user;
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
@@ -914,46 +859,26 @@ async function init() {
     const latestDigestQuickLink = document.getElementById('latestDigestQuickLink');
     if (latestDigestQuickLink) {
       const digestDateKey = resolveLatestDigestDateKey(user);
-      if (digestDateKey) {
-        latestDigestQuickLink.href = '/digest/' + encodeURIComponent(digestDateKey);
+      const latestDigestHref = digestDateKey ? buildAdminArchiveDigestHref(digestDateKey) : '';
+      if (latestDigestHref) {
+        latestDigestQuickLink.href = latestDigestHref;
         latestDigestQuickLink.style.display = 'inline-block';
       } else {
         latestDigestQuickLink.style.display = 'none';
       }
     }
+    syncDigestActionButtons(user);
 
     buildMetaBar(user);
-    buildWeightsPanel(user);
-    buildAutoLearningPanel(user);
     buildLastDigestPanel(user);
     buildDigestTimelinePanel(user);
 
     // Account fields
     document.getElementById('name').value = user.name || '';
     document.getElementById('email').value = userEmail;
-    document.getElementById('telegram').value = user.telegram ? '@' + user.telegram : '';
 
     // Topics
     renderChips(user.topics || []);
-    document.getElementById('addTopicBtn').addEventListener('click', function() {
-      const input = document.getElementById('customTopicInput');
-      const val = input.value.trim();
-      if (!val || selectedTopics.has(val)) { input.value = ''; return; }
-      if (selectedCustomTopicCount() >= MAX_CUSTOM_KEYWORDS) {
-        showError('You can track up to ' + MAX_CUSTOM_KEYWORDS + ' custom keywords.');
-        return;
-      }
-      const chip = renderChip(val, true);
-      selectedTopics.add(val);
-      document.getElementById('topicGrid').appendChild(chip);
-      updateTopicNote();
-      showError('');
-      input.value = '';
-    });
-    document.getElementById('customTopicInput').addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addTopicBtn').click(); }
-    });
-
     // Depth
     const depth = (user.preferences || {}).depth || 'headline_plus_why';
     document.querySelectorAll('.depth-option').forEach(opt => {
@@ -965,8 +890,6 @@ async function init() {
     const prefs = user.preferences || {};
     const timeEl = document.getElementById('deliveryTime');
     if (prefs.delivery_time) timeEl.value = prefs.delivery_time;
-    const itemsEl = document.getElementById('itemsPerDigest');
-    if (prefs.items_per_digest) itemsEl.value = String(prefs.items_per_digest);
 
     const savedDays = prefs.days_of_week || (prefs.frequency === 'daily_all' ? [0,1,2,3,4,5,6] : [1,2,3,4,5]);
     initDays(savedDays);
@@ -977,7 +900,8 @@ async function init() {
 
     // --- Save preferences ---
     document.getElementById('saveBtn').addEventListener('click', async function() {
-      if (selectedTopics.size < 2) { showError('Select at least 2 topics.'); return; }
+      if (selectedTopics.size < 1) { showError('Select at least 1 topic.'); return; }
+      if (selectedTopics.size > 3) { showError('Select no more than 3 topics.'); return; }
       const btn = this;
       btn.disabled = true; btn.textContent = 'Saving…';
       showError('');
@@ -988,16 +912,13 @@ async function init() {
           body: JSON.stringify({
             token: userToken,
             name: document.getElementById('name').value.trim(),
-            telegram: document.getElementById('telegram').value.replace('@','').trim() || null,
             topics: Array.from(selectedTopics),
             preferences: {
               depth: getDepth(),
               delivery_time: document.getElementById('deliveryTime').value,
               frequency: getFrequency(),
               days_of_week: getDays(),
-              items_per_digest: parseInt(document.getElementById('itemsPerDigest').value),
               email_enabled: true,
-              telegram_enabled: !!(user.chatId && !String(user.chatId).startsWith('email-') && (user.preferences || {}).telegram_enabled !== false),
             }
           })
         });
@@ -1006,24 +927,6 @@ async function init() {
         else showError(data.error || 'Save failed.');
       } catch { showError('Network error.'); }
       btn.disabled = false; btn.textContent = 'Save preferences';
-    });
-
-    // --- Send digest now ---
-    document.getElementById('sendDigestBtn').addEventListener('click', async function() {
-      if (!user.chatId) { showBanner('❌ No chatId — cannot trigger digest', true); return; }
-      const btn = this;
-      btn.disabled = true; btn.textContent = 'Sending…';
-      try {
-        const r = await fetch('/api/admin/run-digest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: user.chatId })
-        });
-        const data = await r.json();
-        if (data.success) showBanner('✅ Digest triggered for ' + (user.name || userEmail));
-        else showBanner('❌ ' + (data.error || 'Failed'), true);
-      } catch { showBanner('❌ Network error', true); }
-      btn.disabled = false; btn.textContent = 'Send digest now';
     });
 
     // --- Resend settings link ---
@@ -1044,6 +947,20 @@ async function init() {
       } catch (err) { showBanner('❌ ' + ((err && err.message) || 'Failed to send link'), true); }
       btn.disabled = false; btn.textContent = 'Resend settings link';
     });
+
+    const regenerateDigestBtnEl = document.getElementById('regenerateDigestBtn');
+    if (regenerateDigestBtnEl) {
+      regenerateDigestBtnEl.addEventListener('click', function() {
+        regenerateStoredDigest(this);
+      });
+    }
+
+    const resendDigestBtnEl = document.getElementById('resendDigestBtn');
+    if (resendDigestBtnEl) {
+      resendDigestBtnEl.addEventListener('click', function() {
+        resendStoredDigest(this);
+      });
+    }
 
     // --- Pause / Resume / Re-activate ---
     document.getElementById('pauseBtn').addEventListener('click', async function() {
@@ -1073,8 +990,10 @@ async function init() {
         const data = await r.json();
         if (data.success) {
           userStatus = newStatus;
+          if (currentAdminUser && typeof currentAdminUser === 'object') currentAdminUser.status = newStatus;
           updatePauseBtn(userStatus);
           updateUnsubBtn(userStatus);
+          syncDigestActionButtons(currentAdminUser);
           // Refresh meta bar status badge
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) {
@@ -1107,8 +1026,10 @@ async function init() {
         const data = await r.json();
         if (data.success) {
           userStatus = 'unsubscribed';
+          if (currentAdminUser && typeof currentAdminUser === 'object') currentAdminUser.status = 'unsubscribed';
           updatePauseBtn(userStatus);
           updateUnsubBtn(userStatus);
+          syncDigestActionButtons(currentAdminUser);
           const badge = document.querySelector('#metaBar .meta-item .status-badge');
           if (badge) { badge.className = 'status-badge status-unsubscribed'; badge.textContent = 'unsubscribed'; }
           showBanner(`👋 ${data.message || 'Subscriber set to unsubscribed'}`);

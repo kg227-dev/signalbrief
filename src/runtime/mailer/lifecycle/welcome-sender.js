@@ -26,7 +26,7 @@ async function sendWelcomeEmailForUser(user, deps) {
     .replace(/\{\{DELIVERY_TIME_LABEL\}\}/g, timeLabel)
     .replace(/\{\{DELIVERY_DAYS_LABEL\}\}/g, daysLabel)
     .replace(/\{\{DEPTH_LABEL\}\}/g, depthLabel)
-    .replace(/\{\{ITEMS_COUNT\}\}/g, String(prefs.items_per_digest || 5))
+    .replace(/\{\{ITEMS_COUNT\}\}/g, "5")
     .replace(/\{\{SETTINGS_URL\}\}/g, settingsUrl)
     .replace(/\{\{ARCHIVE_URL\}\}/g, archiveUrl)
     .replace(/\{\{USER_EMAIL\}\}/g, email);

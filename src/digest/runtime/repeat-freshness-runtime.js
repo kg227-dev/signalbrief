@@ -4,7 +4,7 @@ const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runti
 const {
   normalizeMatchText,
   normalizeTopicToken,
-} = require("../domain/topic-domain-runtime");
+} = require("../../runtime/topic-normalization-runtime");
 
 const REPEAT_TOKEN_STOPWORDS = new Set([
   "a",

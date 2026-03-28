@@ -2,136 +2,58 @@
 
 const {
   INDUSTRY_TOPICS,
-  CAPABILITY_TOPICS,
 } = require("../../../test-harness/personas/persona-topics");
 const { normalizeTopicToken } = require("../../digest/domain/topic-domain-runtime");
-const { CUSTOM_KEYWORD_SETS } = require("./constants-runtime");
-
-const CAPABILITY_ANCHORS = Object.freeze({
-  "AI×TECH": "TECHNOLOGY",
-  "STRATEGY": "PE×M&A",
-  "POLICY×REGULATORY": "PUBLIC SECTOR",
-  "SUSTAINABILITY": "ENERGY",
-  "DIGITAL": "CONSUMER",
-  "M&A ADVISORY": "FINANCIAL SERVICES",
-  "TALENT": "INDUSTRIALS",
-});
 
 const MIXED_PERSONAS = Object.freeze([
   {
-    id: "mixed_health_policy",
-    label: "Healthcare + Policy",
-    topics: ["HEALTHCARE", "LIFE SCIENCES", "POLICY×REGULATORY"],
+    id: "mixed_health_lifesciences",
+    label: "Healthcare + Life Sciences",
+    topics: ["HEALTHCARE", "LIFE SCIENCES"],
     group: "mixed_realistic",
   },
   {
-    id: "mixed_ai_strategy",
-    label: "AI + Strategy",
-    topics: ["AI×TECH", "TECHNOLOGY", "STRATEGY"],
+    id: "mixed_energy_finance",
+    label: "Energy + Financial Services",
+    topics: ["ENERGY", "FINANCIAL SERVICES"],
     group: "mixed_realistic",
   },
   {
-    id: "mixed_fs_mna",
-    label: "FS + M&A",
-    topics: ["FINANCIAL SERVICES", "PE×M&A", "M&A ADVISORY"],
+    id: "mixed_consumer_industrials",
+    label: "Consumer + Industrials",
+    topics: ["CONSUMER & RETAIL", "INDUSTRIALS"],
     group: "mixed_realistic",
   },
   {
-    id: "mixed_energy_esg",
-    label: "Energy + ESG",
-    topics: ["ENERGY", "SUSTAINABILITY", "POLICY×REGULATORY"],
+    id: "mixed_technology_triage",
+    label: "Technology + Energy + Financial Services",
+    topics: ["TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES"],
     group: "mixed_realistic",
   },
 ]);
+
 const STANDARD_CORE_PERSONAS = Object.freeze([
-  {
-    id: "core_healthcare",
-    label: "HEALTHCARE",
-    topics: ["HEALTHCARE", "STRATEGY"],
-    group: "standard_core",
-  },
-  {
-    id: "core_life_sciences",
-    label: "LIFE SCIENCES",
-    topics: ["LIFE SCIENCES", "HEALTHCARE"],
-    group: "standard_core",
-  },
-  {
-    id: "core_technology",
-    label: "TECHNOLOGY",
-    topics: ["TECHNOLOGY", "AI×TECH"],
-    group: "standard_core",
-  },
-  {
-    id: "core_strategy",
-    label: "STRATEGY",
-    topics: ["STRATEGY", "PE×M&A"],
-    group: "standard_core",
-  },
-  {
-    id: "core_policy_regulatory",
-    label: "POLICY×REGULATORY",
-    topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"],
-    group: "standard_core",
-  },
+  { id: "core_healthcare", label: "HEALTHCARE", topics: ["HEALTHCARE"], group: "standard_core" },
+  { id: "core_life_sciences", label: "LIFE SCIENCES", topics: ["LIFE SCIENCES"], group: "standard_core" },
+  { id: "core_technology", label: "TECHNOLOGY", topics: ["TECHNOLOGY"], group: "standard_core" },
+  { id: "core_energy", label: "ENERGY", topics: ["ENERGY"], group: "standard_core" },
+  { id: "core_financial_services", label: "FINANCIAL SERVICES", topics: ["FINANCIAL SERVICES"], group: "standard_core" },
 ]);
+
 const STANDARD_PHASE1_PERSONAS = Object.freeze([
-  {
-    id: "phase1_healthcare",
-    label: "HEALTHCARE",
-    topics: ["HEALTHCARE", "STRATEGY"],
-    group: "standard_phase1",
-  },
-  {
-    id: "phase1_life_sciences",
-    label: "LIFE SCIENCES",
-    topics: ["LIFE SCIENCES", "HEALTHCARE"],
-    group: "standard_phase1",
-  },
-  {
-    id: "phase1_technology",
-    label: "TECHNOLOGY",
-    topics: ["TECHNOLOGY", "AI×TECH"],
-    group: "standard_phase1",
-  },
-  {
-    id: "phase1_energy",
-    label: "ENERGY",
-    topics: ["ENERGY", "SUSTAINABILITY"],
-    group: "standard_phase1",
-  },
-  {
-    id: "phase1_financial_services",
-    label: "FINANCIAL SERVICES",
-    topics: ["FINANCIAL SERVICES", "M&A ADVISORY"],
-    group: "standard_phase1",
-  },
-  {
-    id: "phase1_policy_regulatory",
-    label: "POLICY×REGULATORY",
-    topics: ["POLICY×REGULATORY", "PUBLIC SECTOR"],
-    group: "standard_phase1",
-  },
+  { id: "phase1_healthcare", label: "HEALTHCARE", topics: ["HEALTHCARE"], group: "standard_phase1" },
+  { id: "phase1_life_sciences", label: "LIFE SCIENCES", topics: ["LIFE SCIENCES"], group: "standard_phase1" },
+  { id: "phase1_technology", label: "TECHNOLOGY", topics: ["TECHNOLOGY"], group: "standard_phase1" },
+  { id: "phase1_energy", label: "ENERGY", topics: ["ENERGY"], group: "standard_phase1" },
+  { id: "phase1_financial_services", label: "FINANCIAL SERVICES", topics: ["FINANCIAL SERVICES"], group: "standard_phase1" },
+  { id: "phase1_consumer_retail", label: "CONSUMER & RETAIL", topics: ["CONSUMER & RETAIL"], group: "standard_phase1" },
+  { id: "phase1_industrials", label: "INDUSTRIALS", topics: ["INDUSTRIALS"], group: "standard_phase1" },
 ]);
+
 const STANDARD_PHASE1_FOCUS_PERSONAS = Object.freeze([
-  {
-    id: "phase1_focus_technology",
-    label: "TECHNOLOGY",
-    topics: ["TECHNOLOGY", "AI×TECH"],
-    group: "standard_phase1_focus",
-  },
-  {
-    id: "phase1_focus_energy",
-    label: "ENERGY",
-    topics: ["ENERGY", "SUSTAINABILITY"],
-    group: "standard_phase1_focus",
-  },
-  {
-    id: "phase1_focus_financial_services",
-    label: "FINANCIAL SERVICES",
-    topics: ["FINANCIAL SERVICES", "M&A ADVISORY"],
-    group: "standard_phase1_focus",
-  },
+  { id: "phase1_focus_technology", label: "TECHNOLOGY", topics: ["TECHNOLOGY"], group: "standard_phase1_focus" },
+  { id: "phase1_focus_energy", label: "ENERGY", topics: ["ENERGY"], group: "standard_phase1_focus" },
+  { id: "phase1_focus_financial_services", label: "FINANCIAL SERVICES", topics: ["FINANCIAL SERVICES"], group: "standard_phase1_focus" },
 ]);
 
 function topicSlug(value) {
@@ -143,9 +65,8 @@ function buildVirtualUser({
   label,
   group,
   topics,
-  itemsPerDigest = 5,
 }) {
-  const normalizedTopics = Array.from(new Set((Array.isArray(topics) ? topics : []).filter(Boolean)));
+  const normalizedTopics = Array.from(new Set((Array.isArray(topics) ? topics : []).filter(Boolean))).slice(0, 3);
   return {
     chatId: `eval-${id}`,
     email: `eval-${id}@example.com`,
@@ -154,19 +75,12 @@ function buildVirtualUser({
     eval_group: group,
     status: "active",
     topics: normalizedTopics,
-    topic_weights: {},
-    source_preferences: {
-      blocked_sources: [],
-      trusted_sources: [],
-    },
     preferences: {
       depth: "headline_plus_why",
       delivery_time: "07:00",
       days_of_week: [1, 2, 3, 4, 5],
-      items_per_digest: itemsPerDigest,
       timezone: "America/New_York",
       email_enabled: false,
-      telegram_enabled: false,
     },
     recent_digest_url_history: [],
     last_digest_items: [],
@@ -178,16 +92,7 @@ function buildIndustryPersonas() {
     id: `industry_${topicSlug(topic)}`,
     label: topic,
     group: "industry",
-    topics: [topic, "STRATEGY"],
-  }));
-}
-
-function buildCapabilityPersonas() {
-  return CAPABILITY_TOPICS.map((topic) => buildVirtualUser({
-    id: `capability_${topicSlug(topic)}`,
-    label: topic,
-    group: "capability",
-    topics: [topic, CAPABILITY_ANCHORS[topic] || "TECHNOLOGY"],
+    topics: [topic],
   }));
 }
 
@@ -201,65 +106,27 @@ function buildMixedPersonas() {
 }
 
 function buildStandardCorePersonas() {
-  return STANDARD_CORE_PERSONAS.map((persona) => buildVirtualUser({
-    id: persona.id,
-    label: persona.label,
-    group: persona.group,
-    topics: persona.topics,
-  }));
+  return STANDARD_CORE_PERSONAS.map((persona) => buildVirtualUser(persona));
 }
 
 function buildStandardPhase1Personas() {
-  return STANDARD_PHASE1_PERSONAS.map((persona) => buildVirtualUser({
-    id: persona.id,
-    label: persona.label,
-    group: persona.group,
-    topics: persona.topics,
-  }));
+  return STANDARD_PHASE1_PERSONAS.map((persona) => buildVirtualUser(persona));
 }
 
 function buildStandardPhase1FocusPersonas() {
-  return STANDARD_PHASE1_FOCUS_PERSONAS.map((persona) => buildVirtualUser({
-    id: persona.id,
-    label: persona.label,
-    group: persona.group,
-    topics: persona.topics,
-  }));
+  return STANDARD_PHASE1_FOCUS_PERSONAS.map((persona) => buildVirtualUser(persona));
 }
 
 function buildStandardTopicPersonas() {
-  return [
-    ...buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
-    ...buildCapabilityPersonas().map((user) => ({ ...user, eval_group: "standard_topics" })),
-  ];
-}
-
-function buildCustomPersonas(keywords, group) {
-  return (Array.isArray(keywords) ? keywords : []).map((keyword) => {
-    const anchorTopic = group === "custom_adversarial" ? "AI×TECH" : "STRATEGY";
-    const slug = normalizeTopicToken(keyword).replace(/\s+/g, "_");
-    return buildVirtualUser({
-      id: `${group}_${slug}`,
-      label: keyword,
-      group,
-      topics: [anchorTopic, `custom_${slug}`],
-    });
-  });
+  return buildIndustryPersonas().map((user) => ({ ...user, eval_group: "standard_topics" }));
 }
 
 function buildScenarioRoster(scenarioId) {
   if (scenarioId === "standard_full") {
     return [
       ...buildIndustryPersonas(),
-      ...buildCapabilityPersonas(),
       ...buildMixedPersonas(),
     ];
-  }
-  if (scenarioId === "custom_realistic") {
-    return buildCustomPersonas(CUSTOM_KEYWORD_SETS.realistic, "custom_realistic");
-  }
-  if (scenarioId === "custom_adversarial") {
-    return buildCustomPersonas(CUSTOM_KEYWORD_SETS.adversarial, "custom_adversarial");
   }
   if (scenarioId === "standard_core") {
     return buildStandardCorePersonas();
@@ -287,11 +154,12 @@ function buildScenarioDefinition(scenarioId) {
 }
 
 function buildScenarioMatrix(scenarios) {
-  return (Array.isArray(scenarios) ? scenarios : []).map(buildScenarioDefinition).filter((scenario) => scenario.dueUsers.length > 0);
+  return (Array.isArray(scenarios) ? scenarios : [])
+    .map(buildScenarioDefinition)
+    .filter((scenario) => scenario.dueUsers.length > 0);
 }
 
 module.exports = {
-  buildCapabilityPersonas,
   buildIndustryPersonas,
   buildMixedPersonas,
   buildStandardCorePersonas,

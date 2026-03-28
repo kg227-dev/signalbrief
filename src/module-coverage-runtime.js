@@ -7,25 +7,15 @@ const path = require("path");
 
 // Static imports for modules that are safe to execute in-process.
 const digestRunner = require("./jobs/digest-runner-runtime");
-const reengagement = require("./jobs/reengagement-runtime");
 const marketingWeeklyReport = require("../scripts/marketing-weekly-report");
 const selectionDomain = require("./digest/domain/selection-domain-runtime");
-const botServerEntrypoint = require("../src/entrypoints/bot-server");
 const schedulerWorkerEntrypoint = require("../src/entrypoints/scheduler-worker");
 const digestEntrypoint = require("../src/entrypoints/digest");
 const configProvider = require("../src/runtime/config-provider");
 const engagementEvents = require("../src/runtime/engagement/engagement-events-runtime");
 const mailer = require("../src/runtime/mailer/mailer-runtime");
-const personalization = require("../src/runtime/personalization/personalization-runtime");
 const qualityScore = require("../src/runtime/quality-score");
-const replyHandler = require("../src/runtime/reply/reply-handler-runtime");
-const intentService = require("../src/runtime/reply/intent-service");
-const onboardingService = require("../src/runtime/reply/onboarding-service");
-const replyLoggingRuntime = require("./runtime/reply/reply-logging-runtime");
-const replySessionRuntime = require("./runtime/reply/reply-session-runtime");
-const transport = require("../src/runtime/reply/transport");
 const store = require("../src/runtime/store");
-const sandboxPipeline = require("../src/sandbox-pipeline-runtime");
 const cacheBudget = require("../test-harness/cache/cache-budget");
 const cacheClaude = require("../test-harness/cache/cache-claude");
 const cacheCommon = require("../test-harness/cache/cache-common");
@@ -42,7 +32,6 @@ const harnessSuiteRunnerStage = require("../test-harness/stages/suite-runner");
 const harnessSuiteModuleCoverage = require("../test-harness/suites/10-module-coverage");
 const harnessSuiteAnalysisQuality = require("../test-harness/suites/analysis-quality-runtime");
 const harnessSuiteCrossDayFreshness = require("../test-harness/suites/cross-day-freshness-runtime");
-const harnessSuiteCustomTopics = require("../test-harness/suites/custom-topics-runtime");
 const harnessSuiteDepthControl = require("../test-harness/suites/depth-control-runtime");
 const harnessSuiteEndToEnd = require("../test-harness/suites/end-to-end-runtime");
 const harnessSuiteRelevanceScoring = require("../test-harness/suites/relevance-scoring-runtime");
@@ -53,7 +42,6 @@ const coreApiRoutes = require("../web/routes/core-api");
 const adminOpsService = require("../web/services/admin-ops");
 const archiveScoringService = require("../web/services/archive-scoring");
 const deliverySchedule = require("../web/services/delivery-schedule");
-const reengagementStateService = require("../web/services/reengagement-state");
 const requestMetadataService = require("../web/services/request-metadata");
 const webRateLimitService = require("../web/services/web-rate-limit");
 
@@ -147,37 +135,17 @@ const SOURCE_ONLY_TARGETS = [
 ];
 
 const EXPORT_SHAPES = [
-  ["src/entrypoints/bot-server.js", botServerEntrypoint, ["poll", "processUpdate", "answerCallbackQuery", "runLoop", "startBotServer"]],
   ["src/entrypoints/scheduler-worker.js", schedulerWorkerEntrypoint, ["runDigest", "writeHeartbeat", "startSchedulerWorker", "stopSchedulerWorker"]],
   ["src/entrypoints/digest.js", digestEntrypoint, ["fetchTopicNews", "enrichItems", "buildEmail", "scoreColor"]],
   ["src/runtime/config-provider.js", configProvider, ["CONFIG_PATH", "loadConfig"]],
   ["src/runtime/engagement/engagement-events-runtime.js", engagementEvents, ["appendEngagementEvent", "loadEngagementEvents"]],
-  ["src/runtime/mailer/mailer-runtime.js", mailer, ["sendEmail", "sendWelcomeEmail", "sendReengagementDay4Email"]],
-  ["src/runtime/personalization/personalization-runtime.js", personalization, ["applyAutoTopicLearning"]],
+  ["src/runtime/mailer/mailer-runtime.js", mailer, ["sendEmail", "sendWelcomeEmail", "sendReferralThankYou"]],
   ["src/runtime/quality-score.js", qualityScore, ["computeDigestQualityScore", "qualityBand"]],
-  [
-    "src/runtime/reply/reply-handler-runtime.js",
-    replyHandler,
-    [
-      "createReplyState",
-      "resetReplyState",
-      "resetReplyRuntimeState",
-      "handleIncomingMessage",
-      "handleCallbackQuery",
-    ],
-  ],
-  ["src/runtime/reply/intent-service.js", intentService, ["createIntentService", "normalizeIntentPayload"]],
-  ["src/runtime/reply/onboarding-service.js", onboardingService, ["createOnboardingService"]],
-  ["src/runtime/reply/reply-logging-runtime.js", replyLoggingRuntime, ["createReplyLogger", "createReplyIntentTracer", "redactIntentForLogs"]],
-  ["src/runtime/reply/reply-session-runtime.js", replySessionRuntime, ["createReplyState", "createReplySessionController"]],
-  ["src/runtime/reply/transport.js", transport, ["httpsPost", "createTelegramTransport", "createAnthropicTransport"]],
   ["src/runtime/store.js", store, ["createStore", "initStore", "readUser", "writeUser", "findUserByToken"]],
-  ["src/sandbox-pipeline-runtime.js", sandboxPipeline, ["estimateCost", "runPipeline"]],
 ];
 
 const LOADED_MODULES = [
   ["src/jobs/digest-runner-runtime.js", digestRunner],
-  ["src/jobs/reengagement-runtime.js", reengagement],
   ["scripts/marketing-weekly-report.js", marketingWeeklyReport],
   ["src/digest/domain/selection-domain-runtime.js", selectionDomain],
   ["test-harness/cache/cache-budget.js", cacheBudget],
@@ -196,20 +164,16 @@ const LOADED_MODULES = [
   ["test-harness/suites/10-module-coverage.js", harnessSuiteModuleCoverage],
   ["test-harness/suites/analysis-quality-runtime.js", harnessSuiteAnalysisQuality],
   ["test-harness/suites/cross-day-freshness-runtime.js", harnessSuiteCrossDayFreshness],
-  ["test-harness/suites/custom-topics-runtime.js", harnessSuiteCustomTopics],
   ["test-harness/suites/depth-control-runtime.js", harnessSuiteDepthControl],
   ["test-harness/suites/end-to-end-runtime.js", harnessSuiteEndToEnd],
   ["test-harness/suites/relevance-scoring-runtime.js", harnessSuiteRelevanceScoring],
   ["src/digest/domain/topic-domain-runtime.js", topicDomain],
-  ["src/runtime/reply/reply-logging-runtime.js", replyLoggingRuntime],
-  ["src/runtime/reply/reply-session-runtime.js", replySessionRuntime],
   ["web/admin-auth.js", adminAuth],
   ["web/routes/admin-api.js", adminApiRoutes],
   ["web/routes/core-api.js", coreApiRoutes],
   ["web/services/admin-ops.js", adminOpsService],
   ["web/services/archive-scoring.js", archiveScoringService],
   ["web/services/delivery-schedule.js", deliverySchedule],
-  ["web/services/reengagement-state.js", reengagementStateService],
   ["web/services/request-metadata.js", requestMetadataService],
   ["web/services/web-rate-limit.js", webRateLimitService],
 ];
@@ -235,8 +199,8 @@ function assertLoadedModules() {
 
 function assertBehaviorContracts() {
   const sampleItems = [
-    { tag: "AI×TECH", headline: "AI deal 1", url: "https://a.example/1", source_domain: "a.example" },
-    { tag: "AI×TECH", headline: "AI deal 2", url: "https://b.example/2", source_domain: "b.example" },
+    { tag: "TECHNOLOGY", headline: "AI deal 1", url: "https://a.example/1", source_domain: "a.example" },
+    { tag: "TECHNOLOGY", headline: "AI deal 2", url: "https://b.example/2", source_domain: "b.example" },
     { tag: "HEALTHCARE", headline: "Health update", url: "https://c.example/3", source_domain: "c.example" },
   ];
   const selected = selectionDomain.selectItemsByPolicy(
@@ -258,15 +222,10 @@ function assertBehaviorContracts() {
   );
 
   const exactTopicScore = topicDomain.computeTopicMatch(
-    { tag: "AI×TECH", headline: "", summary: "" },
-    ["AI×TECH"]
+    { tag: "TECHNOLOGY", headline: "", summary: "" },
+    ["TECHNOLOGY"]
   );
   assert.strictEqual(exactTopicScore, 10, "topic-domain-runtime should score exact tag-topic matches as strong");
-  const customTopicScore = topicDomain.computeTopicMatch(
-    { tag: "", headline: "Federal Reserve weighs additional interest rate cuts", summary: "" },
-    ["custom_rate_cuts"]
-  );
-  assert.ok(customTopicScore >= 7, "topic-domain-runtime should recognize custom keyword topic matches");
 
   const busyOutcome = digestRunner.toDigestTriggerOutcome({
     ok: false,

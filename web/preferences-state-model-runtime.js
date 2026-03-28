@@ -6,16 +6,13 @@
     normalizeDayFn,
     normalizeDaysFn,
     frequencyFromDaysFn,
-    toPositiveInteger,
     initialDepth,
     initialDeliveryTime,
     initialDaysOfWeek,
-    initialItemsPerDigest,
   }) {
     let depth = String(initialDepth || defaultDepth);
     let deliveryTime = String(initialDeliveryTime || "07:00");
     let daysOfWeek = normalizeDaysFn(initialDaysOfWeek);
-    let itemsPerDigest = toPositiveInteger(initialItemsPerDigest, 5);
 
     return {
       getTopics() {
@@ -75,13 +72,6 @@
       getFrequency() {
         return frequencyFromDaysFn(daysOfWeek);
       },
-      getItemsPerDigest() {
-        return itemsPerDigest;
-      },
-      setItemsPerDigest(value) {
-        itemsPerDigest = toPositiveInteger(value, itemsPerDigest);
-        return itemsPerDigest;
-      },
       snapshot() {
         return {
           topics: this.getTopics(),
@@ -89,7 +79,6 @@
           delivery_time: this.getDeliveryTime(),
           frequency: this.getFrequency(),
           days_of_week: this.getDays(),
-          items_per_digest: this.getItemsPerDigest(),
         };
       },
     };

@@ -16,8 +16,6 @@ function createWebUserHandlers(deps) {
     writeUser,
     sendReferralThankYou,
     sendWelcomeEmail,
-    queueDigestTrigger,
-    runDigestTrigger,
     startDigestTrigger,
     BASE_URL,
     getBaseUrl,
@@ -27,6 +25,7 @@ function createWebUserHandlers(deps) {
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
+    formatEtDateKey,
   } = deps;
 
   const resolveBaseUrl = typeof getBaseUrl === "function"
@@ -53,7 +52,6 @@ function createWebUserHandlers(deps) {
     writeUser,
     sendReferralThankYou,
     sendWelcomeEmail,
-    queueDigestTrigger,
     resolveBaseUrl,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
@@ -80,9 +78,9 @@ function createWebUserHandlers(deps) {
     isAdminAuthed,
     requireJsonBody,
     allUsers,
-    runDigestTrigger,
     startDigestTrigger,
     logAdminActionEvent,
+    formatEtDateKey,
   });
 
   return {

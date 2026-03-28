@@ -5,6 +5,7 @@ const {
   isWeakSourceItem,
   normalizeSourceDomain,
 } = require("../../src/digest/domain/storyline-domain-runtime");
+const { normalizeTopicToken } = require("../../src/runtime/topic-normalization-runtime");
 const {
   inferSourceDomainFromIdentityKey,
   normalizeSourceIdentityKey,
@@ -454,53 +455,157 @@ function buildIdentityCandidates(rows = [], domain, registryIdentities = {}) {
       || String(left.identity_key || "").localeCompare(String(right.identity_key || "")));
 }
 
-function summarizePreferredSourceRegistry({
-  loadPreferredSourceRegistry,
-  inspectPreferredSourceRegistry,
-  preferredSourcesPath,
-  bundledPreferredSourcesPath,
-}) {
-  const snapshot = typeof inspectPreferredSourceRegistry === "function"
-    ? inspectPreferredSourceRegistry()
+function summarizePreferredSourceCompatibilityView(inspectStandardTopicBrokerConfig) {
+  const snapshot = typeof inspectStandardTopicBrokerConfig === "function"
+    ? inspectStandardTopicBrokerConfig()
     : null;
-  const registry = snapshot?.registry || (typeof loadPreferredSourceRegistry === "function"
-    ? loadPreferredSourceRegistry()
-    : {});
-  const globalReported = Array.isArray(registry?.global?.reported) ? registry.global.reported : [];
-  const globalOfficial = Array.isArray(registry?.global?.official) ? registry.global.official : [];
-  const topics = Object.entries(registry?.topics && typeof registry.topics === "object" ? registry.topics : {})
-    .map(([topic, entry]) => {
-      const reported = Array.isArray(entry?.reported) ? entry.reported : [];
-      const official = Array.isArray(entry?.official) ? entry.official : [];
+  const config = snapshot?.config;
+  if (!config || typeof config !== "object") {
+    return {
+      path: null,
+      runtime_path: null,
+      bundled_path: null,
+      source_mode: "empty compatibility view",
+      used_fallback: false,
+      version: 1,
+      global: {
+        reported: [],
+        official: [],
+      },
+      topic_count: 0,
+      total_unique_domains: 0,
+      topics: [],
+      standard_topic_source: null,
+      raw_json: JSON.stringify({}, null, 2),
+    };
+  }
+
+  const topics = Object.entries(config.topics && typeof config.topics === "object" ? config.topics : {})
+    .map(([topicTag]) => {
+      const topicSources = (Array.isArray(config.sources) ? config.sources : [])
+        .filter((source) => Array.isArray(source?.topic_tags) && source.topic_tags.includes(topicTag))
+        .filter((source) => source?.enabled !== false);
+      const reported = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "publisher_feed")
+        .flatMap((source) => Array.isArray(source?.domains) ? source.domains : [])));
+      const official = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "official")
+        .flatMap((source) => Array.isArray(source?.domains) ? source.domains : [])));
       return {
-        topic,
+        topic: normalizeTopicToken(topicTag),
         reported,
         official,
         reported_count: reported.length,
         official_count: official.length,
       };
     })
+    .filter((entry) => entry.reported_count > 0 || entry.official_count > 0)
     .sort((left, right) => left.topic.localeCompare(right.topic));
-  const uniqueDomains = new Set([
-    ...globalReported,
-    ...globalOfficial,
-    ...topics.flatMap((entry) => [...entry.reported, ...entry.official]),
-  ]);
+
+  const uniqueDomains = new Set(topics.flatMap((entry) => [...entry.reported, ...entry.official]));
+  const sourceMode = String(snapshot?.source_mode || "runtime").trim() || "runtime";
+  const standardTopicSource = {
+    source_of_truth: "standard_topic_broker",
+    source_mode: sourceMode,
+    active_path: String(snapshot?.active_path || "").trim() || null,
+    runtime_path: String(snapshot?.runtime_path || "").trim() || null,
+    bundled_path: String(snapshot?.bundled_path || "").trim() || null,
+    topic_count: topics.length,
+    topic_keys: topics.map((entry) => entry.topic),
+  };
   return {
-    path: String(snapshot?.active_path || preferredSourcesPath || "").trim() || null,
-    runtime_path: String(snapshot?.runtime_path || preferredSourcesPath || "").trim() || null,
-    bundled_path: String(snapshot?.bundled_path || bundledPreferredSourcesPath || "").trim() || null,
-    source_mode: String(snapshot?.source_mode || "runtime").trim() || "runtime",
-    used_fallback: snapshot?.used_fallback === true,
-    version: Number(registry?.version || 1),
+    path: standardTopicSource.active_path,
+    runtime_path: standardTopicSource.runtime_path,
+    bundled_path: standardTopicSource.bundled_path,
+    source_mode: sourceMode === "bundled" ? "broker_bundled" : "broker_runtime",
+    used_fallback: sourceMode === "bundled",
+    version: 1,
     global: {
-      reported: globalReported,
-      official: globalOfficial,
+      reported: [],
+      official: [],
     },
     topic_count: topics.length,
     total_unique_domains: uniqueDomains.size,
     topics,
-    raw_json: JSON.stringify(registry || {}, null, 2),
+    standard_topic_source: standardTopicSource,
+    raw_json: JSON.stringify({
+      version: 1,
+      standard_topic_source: standardTopicSource,
+      topics: Object.fromEntries(topics.map((entry) => [entry.topic, {
+        reported: entry.reported,
+        official: entry.official,
+      }])),
+    }, null, 2),
+  };
+}
+
+function summarizeBrokerConfig(inspectStandardTopicBrokerConfig) {
+  const snapshot = typeof inspectStandardTopicBrokerConfig === "function"
+    ? inspectStandardTopicBrokerConfig()
+    : null;
+  const config = snapshot?.config;
+  if (!config || typeof config !== "object") return null;
+
+  const sources = (Array.isArray(config.sources) ? config.sources : [])
+    .map((source) => ({
+      id: String(source?.id || "").trim(),
+      enabled: source?.enabled !== false,
+      tier: Number(source?.tier || 2),
+      lane: String(source?.lane || "").trim(),
+      topic_tags: Array.isArray(source?.topic_tags) ? source.topic_tags.slice() : [],
+      topic_keys: (Array.isArray(source?.topic_tags) ? source.topic_tags : []).map((tag) => normalizeTopicToken(tag)),
+      domains: Array.isArray(source?.domains) ? source.domains.slice() : [],
+      source_kind: String(source?.source_kind || "").trim(),
+      source_family: String(source?.source_family || "").trim(),
+      endpoint: String(source?.endpoint || "").trim(),
+    }))
+    .filter((source) => source.id)
+    .sort((left, right) => {
+      const leftTopic = String(left.topic_tags[0] || "");
+      const rightTopic = String(right.topic_tags[0] || "");
+      return leftTopic.localeCompare(rightTopic)
+        || String(left.lane || "").localeCompare(String(right.lane || ""))
+        || String(left.id || "").localeCompare(String(right.id || ""));
+    });
+
+  const topics = Object.entries(config.topics && typeof config.topics === "object" ? config.topics : {})
+    .map(([topicTag, entry]) => {
+      const topicSources = sources.filter((source) => source.topic_tags.includes(topicTag));
+      const reportedDomains = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "publisher_feed")
+        .flatMap((source) => source.domains || [])));
+      const officialDomains = Array.from(new Set(topicSources
+        .filter((source) => source.lane === "official")
+        .flatMap((source) => source.domains || [])));
+      return {
+        topic_tag: topicTag,
+        topic_key: normalizeTopicToken(topicTag),
+        enabled: entry?.enabled !== false,
+        lanes: {
+          publisher_feed: entry?.lanes?.publisher_feed !== false,
+          official: entry?.lanes?.official !== false,
+        },
+        source_count: topicSources.length,
+        enabled_source_count: topicSources.filter((source) => source.enabled !== false).length,
+        publisher_feed_source_count: topicSources.filter((source) => source.lane === "publisher_feed").length,
+        official_source_count: topicSources.filter((source) => source.lane === "official").length,
+        reported_domains: reportedDomains,
+        official_domains: officialDomains,
+      };
+    })
+    .sort((left, right) => String(left.topic_key || "").localeCompare(String(right.topic_key || "")));
+
+  return {
+    source_of_truth: "standard_topic_broker",
+    source_mode: String(snapshot?.source_mode || "runtime").trim() || "runtime",
+    active_path: String(snapshot?.active_path || "").trim() || null,
+    runtime_path: String(snapshot?.runtime_path || "").trim() || null,
+    bundled_path: String(snapshot?.bundled_path || "").trim() || null,
+    topic_count: topics.length,
+    source_count: sources.length,
+    enabled_source_count: sources.filter((source) => source.enabled !== false).length,
+    topics,
+    sources,
   };
 }
 
@@ -581,13 +686,10 @@ function buildOverviewRows(metricsMap, registryDomains, query, limit) {
 
 function buildSourceRegistryOverview({
   loadSourceRegistry,
-  loadPreferredSourceRegistry,
-  inspectPreferredSourceRegistry,
+  inspectStandardTopicBrokerConfig,
   buildSourceRegistryMap,
   setAdminSourceRegistry,
   buildRecentDigestsExport,
-  preferredSourcesPath,
-  bundledPreferredSourcesPath,
   query,
   limit = 20,
 }) {
@@ -604,12 +706,8 @@ function buildSourceRegistryOverview({
     days: recent?.window?.days ?? null,
     query: String(query || "").trim() || null,
     source_registry_path: null,
-    preferred_sources: summarizePreferredSourceRegistry({
-      loadPreferredSourceRegistry,
-      inspectPreferredSourceRegistry,
-      preferredSourcesPath,
-      bundledPreferredSourcesPath,
-    }),
+    preferred_sources: summarizePreferredSourceCompatibilityView(inspectStandardTopicBrokerConfig),
+    broker_config: summarizeBrokerConfig(inspectStandardTopicBrokerConfig),
     curation_queues: curationQueues,
     override_count: Object.keys(registry.domains || {}).length,
     suggestion_count: suggestions.length,
@@ -690,7 +788,8 @@ function buildSourceRegistryDomainDetail({
 module.exports = {
   buildRecentDomainMetrics,
   buildCurationQueues,
-  summarizePreferredSourceRegistry,
+  summarizePreferredSourceCompatibilityView,
+  summarizeBrokerConfig,
   buildSourceRegistryDomainDetail,
   buildSourceRegistryOverview,
   buildSourceAuditEntries,

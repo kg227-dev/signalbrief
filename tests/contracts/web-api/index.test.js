@@ -9,7 +9,7 @@ assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   "window.SignalBriefPrefs",
   "document.querySelector",
-  "matchDefault: true",
-  "You're already tracking",
-  "customTopicLimitMessage",
+  "topic-chip.selected",
+  "topicCount >= 1 && topicCount <= 3",
+  "panel === \"email\"",
 ]);

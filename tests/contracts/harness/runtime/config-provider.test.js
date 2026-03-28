@@ -39,7 +39,6 @@ const tempConfigPath = path.join(tempDir, "config.test.json");
 const testConfig = {
   user: {
     email: "user@example.com",
-    telegramChatId: "12345",
     deliveryTime: "07:00",
     timezone: "America/New_York",
   },
@@ -62,11 +61,6 @@ const testConfig = {
   keys: {
     perplexity: "config-perplexity",
     anthropic: "config-anthropic",
-    googleRefreshToken: "",
-    googleClientId: "",
-    googleClientSecret: "",
-    telegramBotToken: "",
-    signalBriefBotToken: "",
     resendApiKey: "",
     fromEmail: "digest@example.com",
     fromName: "SignalBrief",
@@ -85,6 +79,7 @@ try {
   assert.strictEqual(envOverridden.keys.perplexity, "env-perplexity-key", "env key should override config key");
   assert.strictEqual(envOverridden.admin.email, "env-admin@example.com", "env admin email should override config");
   assert.strictEqual(envOverridden.keys.anthropic, "config-anthropic", "non-overridden keys should remain from config");
+  assert.strictEqual(envOverridden.digest.itemCount, 5, "runtime config should normalize the MVP digest size to 5");
 
   process.env.SIGNALBRIEF_PERPLEXITY_API_KEY = "";
   process.env.SIGNALBRIEF_ADMIN_EMAIL = "";
@@ -92,6 +87,7 @@ try {
   const configOnly = loadConfig({ reload: true });
   assert.strictEqual(configOnly.keys.perplexity, "config-perplexity", "config value should be used when env override is absent");
   assert.strictEqual(configOnly.admin.email, "config-admin@example.com", "config admin email should be used when env override is absent");
+  assert.strictEqual(configOnly.digest.itemCount, 5, "legacy config itemCount should be coerced to the MVP fixed count");
 } finally {
   for (const key of envKeys) {
     const value = originalEnv.get(key);

@@ -2,7 +2,7 @@ const {
   normalizeMatchText,
   normalizeTopicToken,
   topicsRelated,
-} = require("../digest/domain/topic-domain-runtime");
+} = require("./topic-normalization-runtime");
 
 function mean(values) {
   const nums = (values || []).map(Number).filter(Number.isFinite);
@@ -23,10 +23,6 @@ function clamp(n, lo, hi) {
 }
 
 const normalizeToken = normalizeMatchText;
-
-function normalizeCustomKeyword(topic) {
-  return normalizeTopicToken(topic);
-}
 
 function rank(values) {
   const arr = values.map((v, i) => ({ v: Number(v), i })).sort((a, b) => a.v - b.v);
@@ -292,33 +288,11 @@ function computeNarrativeUniqueness(items) {
   return clamp((1 - avgSim) * 100, 0, 100);
 }
 
-function computeCustomCoverage(items, userTopics) {
-  const topics = (Array.isArray(userTopics) ? userTopics : [])
-    .filter((t) => String(t).startsWith("custom_"))
-    .map(normalizeCustomKeyword)
-    .filter(Boolean);
-  if (!topics.length) return 100;
-
-  const perKeyword = topics.map((kw) => {
-    const hits = (items || []).filter((item) => {
-      const text = normalizeToken([item?.tag, item?.headline, item?.summary, item?.wim].filter(Boolean).join(" "));
-      return text.includes(kw);
-    }).length;
-    return hits;
-  });
-  const withHit = perKeyword.filter((n) => n >= 1).length;
-  const coverage = topics.length ? withHit / topics.length : 0;
-  const avgHits = mean(perKeyword);
-  const score = clamp(coverage * 80 + Math.min(20, avgHits * 10), 0, 100);
-  return Number(score.toFixed(2));
-}
-
 function computeDigestQualityScore(opts = {}) {
   const items = Array.isArray(opts.items) ? opts.items : [];
   const user = opts.user || {};
   const previousItems = Array.isArray(opts.previous_items) ? opts.previous_items : [];
   const topics = Array.isArray(user.topics) ? user.topics : [];
-  const topicWeights = user.topic_weights || {};
 
   if (!items.length) {
     return {
@@ -329,7 +303,7 @@ function computeDigestQualityScore(opts = {}) {
         relevance_fit: 0,
         analysis_quality: 0,
         freshness_diversity: 0,
-        custom_coverage: 0,
+        narrative_uniqueness: 0,
         diversity: 0,
         freshness: 0,
       },
@@ -337,13 +311,12 @@ function computeDigestQualityScore(opts = {}) {
   }
 
   const T = computeTopicFit(items, topics);
-  const R = computeRelevanceFit(items, topics, topicWeights);
+  const R = computeRelevanceFit(items, topics, {});
   const A = computeAnalysisQuality(items);
   const freshness = computeFreshnessAndDiversity(items, previousItems);
   const F = freshness.score;
-  const C = computeCustomCoverage(items, topics);
   const N = computeNarrativeUniqueness(items);
-  const score = clamp(0.25 * T + 0.18 * R + 0.25 * A + 0.12 * F + 0.10 * C + 0.10 * N, 0, 100);
+  const score = clamp(0.25 * T + 0.2 * R + 0.25 * A + 0.2 * F + 0.1 * N, 0, 100);
 
   return {
     score: Number(score.toFixed(2)),
@@ -353,7 +326,6 @@ function computeDigestQualityScore(opts = {}) {
       relevance_fit: Number(R.toFixed(2)),
       analysis_quality: Number(A.toFixed(2)),
       freshness_diversity: Number(F.toFixed(2)),
-      custom_coverage: Number(C.toFixed(2)),
       narrative_uniqueness: Number(N.toFixed(2)),
       diversity: freshness.diversity,
       freshness: freshness.freshness,

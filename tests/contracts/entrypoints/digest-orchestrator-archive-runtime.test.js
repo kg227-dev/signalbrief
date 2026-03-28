@@ -37,18 +37,16 @@ function testArchivePersistOverwriteBehavior() {
     now,
     enriched,
     dateStr: "Friday, March 13, 2026",
-    targetChatId: null,
   });
   runtimeInstance.persistSharedArchive({
     now,
     enriched,
     dateStr: "Friday, March 13, 2026",
-    targetChatId: "12345",
   });
 
   assert.strictEqual(calls.length, 2);
   assert.deepStrictEqual(calls[0][4], { overwrite: true });
-  assert.deepStrictEqual(calls[1][4], { overwrite: false });
+  assert.deepStrictEqual(calls[1][4], { overwrite: true });
 }
 
 testBuildQuickScan();

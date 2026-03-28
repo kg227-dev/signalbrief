@@ -42,7 +42,7 @@
       const dayCount = typeof getSelectedDays === "function" ? getSelectedDays().length : 0;
 
       setProgressStep("prog-1", !!(name && email));
-      setProgressStep("prog-2", topicCount >= 2);
+      setProgressStep("prog-2", topicCount >= 1 && topicCount <= 3);
       setProgressStep("prog-3", !!depth);
       setProgressStep("prog-4", dayCount > 0);
     }
@@ -77,9 +77,7 @@
   }
 
   function switchPreview(byId, panel, button) {
-    const telegramPreview = byId("prev-telegram");
     const emailPreview = byId("prev-email");
-    if (telegramPreview) telegramPreview.style.display = panel === "telegram" ? "block" : "none";
     if (emailPreview) emailPreview.style.display = panel === "email" ? "block" : "none";
 
     document.querySelectorAll(".prev-tab").forEach((tab) => {

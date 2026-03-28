@@ -218,13 +218,6 @@ input::placeholder { color: var(--text-light); }
 .chip.chip-custom:hover { border-color: #D97706; background: #FEF3C7; color: #92400E; }
 .chip.chip-custom.selected { background: #D97706; border-color: #D97706; color: #fff; }
 .chip.chip-custom.selected:hover { background: #B45309; border-color: #B45309; }
-/* Topic weight badges */
-.weight-badge { font-size: 10px; font-weight: 700; margin-left: 4px; line-height: 1; background: none; border: none; padding: 0; cursor: pointer; }
-.weight-badge:hover { opacity: 0.6; }
-.weight-badge--up { color: #15803d; }
-.chip.selected .weight-badge--up { color: #bbf7d0; }
-.weight-badge--down { color: #b45309; }
-.chip.selected .weight-badge--down { color: #fde68a; }
 
 /* Custom topic add */
 .custom-topic-row {
@@ -390,19 +383,6 @@ input::placeholder { color: var(--text-light); }
 }
 .preview-panel { display: none; }
 .preview-panel.active { display: block; }
-
-.preview-telegram {
-  background: #212121;
-  border-radius: 10px;
-  padding: 20px;
-  font-family: 'DM Sans', monospace;
-  font-size: 13px;
-  color: #e5e5e5;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-.preview-telegram .tg-bold { font-weight: 700; color: #fff; }
-.preview-telegram .tg-muted { color: #9CA3AF; font-style: italic; }
 
 .preview-email {
   border: 1.5px solid var(--border);

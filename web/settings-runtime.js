@@ -7,19 +7,15 @@ const SettingsUiRuntime = globalScope.SignalBriefSettingsUiRuntime || {};
 const INDUSTRY_TOPICS = Array.isArray(Prefs.INDUSTRY_TOPICS)
   ? Prefs.INDUSTRY_TOPICS
   : [];
-const CAPABILITY_TOPICS = Array.isArray(Prefs.CAPABILITY_TOPICS)
-  ? Prefs.CAPABILITY_TOPICS
-  : [];
 const DEFAULT_TOPICS = Array.isArray(Prefs.DEFAULT_TOPICS)
   ? Prefs.DEFAULT_TOPICS
   : [];
-const MAX_CUSTOM_KEYWORDS = Math.max(1, Number(Prefs.MAX_CUSTOM_KEYWORDS || 3));
+const MAX_CUSTOM_KEYWORDS = Number(Prefs.MAX_CUSTOM_KEYWORDS || 0);
 
 const prefState = typeof Prefs.createPreferenceState === "function"
   ? Prefs.createPreferenceState({
       depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
       daysOfWeek: [],
-      itemsPerDigest: 5,
       deliveryTime: "07:00",
     })
   : null;
@@ -61,7 +57,6 @@ function getSettingsUi() {
     prefState,
     byId,
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     showError,
     showBanner,
@@ -200,17 +195,13 @@ function bindSaveHandler(effectiveToken, user) {
   if (!saveBtn || !prefState) return;
 
   saveBtn.addEventListener("click", async () => {
-    if (prefState.getTopics().length < 2) {
-      showError("Please select at least 2 topics.");
+    const topicCount = prefState.getTopics().length;
+    if (topicCount < 1) {
+      showError("Please select at least 1 topic.");
       return;
     }
-    const customCount = prefState.getTopics().filter((topic) => (
-      typeof Prefs.isCustomTopic === "function"
-        ? Prefs.isCustomTopic(topic)
-        : !DEFAULT_TOPICS.includes(String(topic || ""))
-    )).length;
-    if (customCount > MAX_CUSTOM_KEYWORDS) {
-      showError(`You can track up to ${MAX_CUSTOM_KEYWORDS} custom keywords.`);
+    if (topicCount > 3) {
+      showError("Please select no more than 3 topics.");
       return;
     }
 
@@ -219,13 +210,6 @@ function bindSaveHandler(effectiveToken, user) {
 
     try {
       prefState.setDeliveryTime(byId("deliveryTime").value || "07:00");
-      prefState.setItemsPerDigest(byId("itemsPerDigest").value || "5");
-
-      const telegramEnabled = !!(
-        user.chatId
-        && !String(user.chatId).startsWith("email-")
-        && (user.preferences || {}).telegram_enabled !== false
-      );
 
       const ui = getSettingsUi();
       const payload = typeof Prefs.buildSettingsPayload === "function"
@@ -233,29 +217,19 @@ function bindSaveHandler(effectiveToken, user) {
             state: prefState,
             token: effectiveToken,
             name: byId("name").value.trim(),
-            telegram: byId("telegram").value,
-            telegramEnabled,
           })
         : {
             token: effectiveToken,
             name: byId("name").value.trim(),
-            telegram: byId("telegram").value.replace("@", "").trim() || null,
             topics: prefState.getTopics(),
             preferences: {
               depth: prefState.getDepth(),
               delivery_time: byId("deliveryTime").value,
               frequency: ui ? ui.getSettingsFrequency() : "custom",
               days_of_week: ui ? ui.getSettingsDays() : [],
-              items_per_digest: parseInt(byId("itemsPerDigest").value, 10),
               email_enabled: true,
-              telegram_enabled: telegramEnabled,
             },
           };
-
-      const sourceState = globalScope._signalBriefSourceState;
-      if (sourceState && typeof sourceState.snapshot === "function") {
-        payload.source_preferences = sourceState.snapshot();
-      }
 
       const data = await fetchJsonStrict("/api/settings", {
         method: "POST",

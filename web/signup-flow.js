@@ -17,7 +17,6 @@
     ? Prefs.createPreferenceState({
         depth: Prefs.DEFAULT_DEPTH || "headline_plus_why",
         daysOfWeek: [],
-        itemsPerDigest: 5,
         deliveryTime: "07:00",
       })
     : null;
@@ -142,7 +141,8 @@
       return true;
     }
     if (idx === 1) {
-      if (selectedTopicKeys().length < 2) { showError(1, "Please select at least 2 topics."); return false; }
+      if (selectedTopicKeys().length < 1) { showError(1, "Please select at least 1 topic."); return false; }
+      if (selectedTopicKeys().length > 3) { showError(1, "Please select no more than 3 topics."); return false; }
       return true;
     }
     if (idx === 2) {
@@ -239,8 +239,6 @@
     if (!grid) return;
 
     var industries = Array.isArray(Prefs.INDUSTRY_TOPICS) ? Prefs.INDUSTRY_TOPICS : [];
-    var capabilities = Array.isArray(Prefs.CAPABILITY_TOPICS) ? Prefs.CAPABILITY_TOPICS : [];
-
     function topicLabel(topic) {
       return typeof Prefs.topicDisplayLabel === "function" ? Prefs.topicDisplayLabel(topic) : topic;
     }
@@ -266,7 +264,6 @@
     }
 
     addGroup("Sectors", industries, "topic-chip-industry");
-    if (capabilities.length) addGroup("Capabilities", capabilities, "topic-chip-capability");
   }
 
   function toggleTopic(chip) {
@@ -277,19 +274,27 @@
       chip.classList.remove("selected");
       if (prefState) prefState.removeTopic(topic);
     } else {
+      if (selectedTopicKeys().length >= 3) {
+        updateTopicFeedback("Select up to 3 sectors.");
+        return;
+      }
       chip.classList.add("selected");
       if (prefState) prefState.addTopic(topic);
     }
     updateTopicFeedback();
   }
 
-  function updateTopicFeedback() {
-    // No custom keywords in MVP — feedback is only shown when < 2 topics selected
+  function updateTopicFeedback(message) {
     var fb = byId("topicFeedback");
     if (!fb) return;
+    if (message) {
+      fb.textContent = message;
+      fb.className = "topic-feedback visible";
+      return;
+    }
     var count = selectedTopicKeys().length;
-    if (count > 0 && count < 2) {
-      fb.textContent = "Select at least 2 sectors to continue.";
+    if (count === 0) {
+      fb.textContent = "Select at least 1 sector to continue.";
       fb.className = "topic-feedback visible";
     } else {
       fb.textContent = "";
@@ -428,7 +433,6 @@
       prefState.setDepth(depth);
       prefState.setDeliveryTime(deliveryTime);
       prefState.setDays(days);
-      prefState.setItemsPerDigest(5); // MVP: always 5
     }
 
     var payload;
@@ -437,7 +441,6 @@
         state: prefState,
         name: name,
         email: email,
-        telegram: null,
         referralToken: referralToken,
       });
     } else {
@@ -451,7 +454,6 @@
         delivery_time: deliveryTime,
         frequency: freq,
         days_of_week: days,
-        items_per_digest: 5,
         referral_token: referralToken || null,
       };
     }

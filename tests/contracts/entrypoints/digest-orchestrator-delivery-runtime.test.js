@@ -17,6 +17,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 (async () => {
   const sentEmailOrders = [];
   const snapshotOrders = [];
+  const recordPayloads = [];
   const qualityOrders = [];
 
   const deliveryRuntime = createDigestOrchestratorDeliveryRuntime({
@@ -130,6 +131,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     appendEngagementEventChecked: () => ({ ok: true }),
     beginDigestDeliveryRecord: () => ({ ok: true, skipped: false, version: 1, record: { version: 1 } }),
     updateDigestDeliveryRecord: (payload) => {
+      recordPayloads.push(payload);
       if (Array.isArray(payload?.items) && payload.items.length) {
         snapshotOrders.push(payload.items.map((item) => item.headline));
       }
@@ -141,9 +143,6 @@ assertModuleExports(() => runtime, TARGET_REL);
       upsertRetryState: () => null,
       clearRetryState: () => true,
     },
-    sendTelegram: async () => {},
-    formatTelegram: () => "",
-    buildDigestInlineKeyboard: () => ({}),
     generateLeadSubjectLine: async () => ({ subject: "Subject", usage: {} }),
     generateEditorialNote: async () => ({ note: "", usage: {} }),
     buildEmail: (items) => {
@@ -176,7 +175,53 @@ assertModuleExports(() => runtime, TARGET_REL);
       welcome_email_sent: true,
       last_digest_items: [],
     }],
-    enriched: [],
+    enriched: [
+      {
+        tag: "TECHNOLOGY",
+        headline: "Lower scored item",
+        summary: "Summary",
+        url: "https://example.com/low",
+        source: "Example",
+        published_date: "2026-03-14T05:00:00.000Z",
+        relevanceScore: 6.8,
+      },
+      {
+        tag: "TECHNOLOGY",
+        headline: "Highest scored item",
+        summary: "Summary",
+        url: "https://example.com/high",
+        source: "Example",
+        published_date: "2026-03-14T05:00:00.000Z",
+        relevanceScore: 7.6,
+      },
+      {
+        tag: "TECHNOLOGY",
+        headline: "Middle scored item",
+        summary: "Summary",
+        url: "https://example.com/mid",
+        source: "Example",
+        published_date: "2026-03-14T05:00:00.000Z",
+        relevanceScore: 7.2,
+      },
+      {
+        tag: "TECHNOLOGY",
+        headline: "Fourth scored item",
+        summary: "Summary",
+        url: "https://example.com/fourth",
+        source: "Example",
+        published_date: "2026-03-14T05:00:00.000Z",
+        relevanceScore: 7.0,
+      },
+      {
+        tag: "TECHNOLOGY",
+        headline: "Fifth scored item",
+        summary: "Summary",
+        url: "https://example.com/fifth",
+        source: "Example",
+        published_date: "2026-03-14T05:00:00.000Z",
+        relevanceScore: 6.5,
+      },
+    ],
     now: new Date("2026-03-14T10:00:00.000Z"),
     shortDate: "Mar 14",
     dateStr: "Saturday, March 14, 2026",
@@ -195,6 +240,9 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   assert.strictEqual(result.failedUsers.length, 0);
   assert.strictEqual(result.deliveredUsers.length, 1);
+  assert.strictEqual(result.deliveredUsers[0].delivery_outcome, "delivered");
+  assert.strictEqual(result.deliveredUsers[0].selected_count, 5);
+  assert.strictEqual(result.deliveredUsers[0].available_count, 5);
   assert.deepStrictEqual(
     qualityOrders[0],
     ["Highest scored item", "Middle scored item", "Fourth scored item", "Lower scored item", "Fifth scored item"]
@@ -207,6 +255,16 @@ assertModuleExports(() => runtime, TARGET_REL);
     Array.isArray(order)
     && order.join("|") === "Highest scored item|Middle scored item|Fourth scored item|Lower scored item|Fifth scored item"
   )));
+  const sentRecord = recordPayloads.find((payload) => payload?.status === "sent");
+  assert.ok(sentRecord, "delivery runtime should write a sent delivery record");
+  assert.strictEqual(sentRecord.delivery_outcome, "delivered");
+  assert.strictEqual(sentRecord.selected_count, 5);
+  assert.strictEqual(sentRecord.available_count, 5);
+  assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "high_confidence_count"));
+  assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "lower_confidence_count"));
+  assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "lower_confidence_used"));
+  assert.ok(sentRecord.items.every((item) => !Object.prototype.hasOwnProperty.call(item, "delivery_confidence")));
+  assert.ok(sentRecord.items.every((item) => !Object.prototype.hasOwnProperty.call(item, "delivery_topic_classes")));
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);
@@ -332,9 +390,6 @@ assertModuleExports(() => runtime, TARGET_REL);
       },
       clearRetryState: () => true,
     },
-    sendTelegram: async () => {},
-    formatTelegram: () => "",
-    buildDigestInlineKeyboard: () => ({}),
     generateLeadSubjectLine: async () => ({ subject: "Subject", usage: {} }),
     generateEditorialNote: async () => ({ note: "", usage: {} }),
     buildEmail: () => "<html></html>",
@@ -367,7 +422,13 @@ assertModuleExports(() => runtime, TARGET_REL);
       welcome_email_sent: true,
       last_digest_items: [],
     }],
-    enriched: [],
+    enriched: [
+      { tag: "TECHNOLOGY", headline: "Item one", summary: "Summary", url: "https://example.com/1", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.5 },
+      { tag: "TECHNOLOGY", headline: "Item two", summary: "Summary", url: "https://example.com/2", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.4 },
+      { tag: "TECHNOLOGY", headline: "Item three", summary: "Summary", url: "https://example.com/3", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.3 },
+      { tag: "TECHNOLOGY", headline: "Item four", summary: "Summary", url: "https://example.com/4", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.2 },
+      { tag: "TECHNOLOGY", headline: "Item five", summary: "Summary", url: "https://example.com/5", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.1 },
+    ],
     now: new Date("2026-03-14T11:00:00.000Z"),
     shortDate: "Mar 14",
     dateStr: "Saturday, March 14, 2026",
@@ -515,9 +576,6 @@ assertModuleExports(() => runtime, TARGET_REL);
       },
       clearRetryState: () => true,
     },
-    sendTelegram: async () => {},
-    formatTelegram: () => "",
-    buildDigestInlineKeyboard: () => ({}),
     generateLeadSubjectLine: async () => ({ subject: "Subject", usage: {} }),
     generateEditorialNote: async () => ({ note: "", usage: {} }),
     buildEmail: () => "<html></html>",
@@ -553,7 +611,13 @@ assertModuleExports(() => runtime, TARGET_REL);
         attempt_count: 1,
       },
     }],
-    enriched: [],
+    enriched: [
+      { tag: "TECHNOLOGY", headline: "Item one", summary: "Summary", url: "https://example.com/1", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.5 },
+      { tag: "TECHNOLOGY", headline: "Item two", summary: "Summary", url: "https://example.com/2", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.4 },
+      { tag: "TECHNOLOGY", headline: "Item three", summary: "Summary", url: "https://example.com/3", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.3 },
+      { tag: "TECHNOLOGY", headline: "Item four", summary: "Summary", url: "https://example.com/4", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.2 },
+      { tag: "TECHNOLOGY", headline: "Item five", summary: "Summary", url: "https://example.com/5", source: "Example", published_date: "2026-03-14T05:00:00.000Z", relevanceScore: 7.1 },
+    ],
     now: new Date("2026-03-14T11:12:00.000Z"),
     shortDate: "Mar 14",
     dateStr: "Saturday, March 14, 2026",

@@ -92,6 +92,44 @@ async function flushMicrotasks() {
   const elements = new Map(elementIds.map((id) => [id, createElement(id)]));
   const location = new URL("https://example.com/admin/source-registry");
   const fetchCalls = [];
+  const brokerOverview = {
+    source_mode: "runtime",
+    active_path: "/app/data/standard-topic-broker-sources.json",
+    runtime_path: "/app/data/standard-topic-broker-sources.json",
+    bundled_path: "/app/config/standard-topic-broker-sources.json",
+    topic_count: 1,
+    source_count: 1,
+    enabled_source_count: 1,
+    topics: [
+      {
+        topic_tag: "HEALTHCARE",
+        topic_key: "healthcare",
+        enabled: true,
+        lanes: {
+          publisher_feed: true,
+          official: true,
+        },
+        source_count: 1,
+        enabled_source_count: 1,
+        publisher_feed_source_count: 1,
+        official_source_count: 0,
+      },
+    ],
+    sources: [
+      {
+        id: "stat_rss",
+        enabled: true,
+        tier: 2,
+        lane: "publisher_feed",
+        topic_tags: ["HEALTHCARE"],
+        topic_keys: ["healthcare"],
+        domains: ["statnews.com"],
+        source_kind: "reported_media",
+        source_family: "specialist",
+        endpoint: "https://feeds.example.com/stat.xml",
+      },
+    ],
+  };
 
   const document = {
     body: {
@@ -130,10 +168,26 @@ async function flushMicrotasks() {
       setItem() {},
     },
     fetch: async (url) => {
-      const href = String(url);
+      const href = typeof url === "string" ? url : String(url?.url || "");
       fetchCalls.push(href);
       if (href === "/api/admin/check") {
         return jsonResponse({ authenticated: true });
+      }
+      if (href === "/api/admin/source-registry/broker/topic") {
+        brokerOverview.topics[0].enabled = false;
+        return jsonResponse({
+          success: true,
+          topic: "HEALTHCARE",
+          after: brokerOverview.topics[0],
+        });
+      }
+      if (href === "/api/admin/source-registry/broker/source") {
+        brokerOverview.sources[0].tier = 3;
+        return jsonResponse({
+          success: true,
+          source_id: "stat_rss",
+          after: brokerOverview.sources[0],
+        });
       }
       if (href.startsWith("/api/admin/source-registry/domain?")) {
         const parsed = new URL(href, "https://example.com");
@@ -208,17 +262,34 @@ async function flushMicrotasks() {
       if (href.startsWith("/api/admin/source-registry?")) {
         return jsonResponse({
           preferred_sources: {
-            path: "/app/config/preferred-sources.json",
-            runtime_path: "/app/data/preferred-sources.json",
-            bundled_path: "/app/config/preferred-sources.json",
-            source_mode: "bundled_fallback",
-            used_fallback: true,
+            path: "/app/data/standard-topic-broker-sources.json",
+            runtime_path: "/app/data/standard-topic-broker-sources.json",
+            bundled_path: "/app/config/standard-topic-broker-sources.json",
+            source_mode: "broker_runtime",
+            used_fallback: false,
             version: 1,
-            total_unique_domains: 4,
+            total_unique_domains: 2,
             topic_count: 1,
+            standard_topic_source: {
+              source_of_truth: "standard_topic_broker",
+              source_mode: "runtime",
+              active_path: "/app/data/standard-topic-broker-sources.json",
+              runtime_path: "/app/data/standard-topic-broker-sources.json",
+              bundled_path: "/app/config/standard-topic-broker-sources.json",
+              topic_count: 7,
+              topic_keys: [
+                "consumer retail",
+                "energy",
+                "financial services",
+                "healthcare",
+                "industrials",
+                "life sciences",
+                "technology",
+              ],
+            },
             global: {
-              reported: ["reuters.com"],
-              official: ["sec.gov"],
+              reported: [],
+              official: [],
             },
             topics: [
               {
@@ -230,8 +301,8 @@ async function flushMicrotasks() {
             raw_json: JSON.stringify({
               version: 1,
               global: {
-                reported: ["reuters.com"],
-                official: ["sec.gov"],
+                reported: [],
+                official: [],
               },
               topics: {
                 healthcare: {
@@ -300,6 +371,7 @@ async function flushMicrotasks() {
               },
             ],
           },
+          broker_config: brokerOverview,
         });
       }
       return jsonResponse({ error: `unexpected fetch: ${href}` }, 404);
@@ -380,16 +452,32 @@ async function flushMicrotasks() {
     "overview reload should not reuse the inspect-domain value as a table filter"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
-    "preferred sources config should render on the source governance page"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Preferred-source compatibility signals are derived from broker config, so the active path has one live source control plane."),
+    "broker inventory panel should explain that broker config is the only live source control plane"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("statnews.com"),
-    "preferred sources panel should render topic-specific domains"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/data/standard-topic-broker-sources.json"),
+    "broker inventory panel should show the live broker config path"
   );
   assert.ok(
-    elements.get("preferredSourcesPanelBody").innerHTML.includes("bundled fallback"),
-    "preferred sources panel should explain when bundled fallback is active"
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Preferred-source compatibility view (broker-derived)"),
+    "broker inventory panel should describe the compatibility view as broker-derived"
+  );
+  assert.ok(
+    !elements.get("preferredSourcesPanelBody").innerHTML.includes("/app/config/preferred-sources.json"),
+    "broker inventory panel should stop exposing the retired preferred-sources file path"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Standard-topic source of truth: broker config"),
+    "broker inventory panel should explain that standard-topic control comes from broker config"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("MVP topic controls"),
+    "broker inventory panel should render broker topic controls"
+  );
+  assert.ok(
+    elements.get("preferredSourcesPanelBody").innerHTML.includes("Broker source controls"),
+    "broker inventory panel should render broker source controls"
   );
   assert.ok(
     elements.get("curationQueuesPanelBody").innerHTML.includes("Specialist candidates"),
@@ -402,6 +490,26 @@ async function flushMicrotasks() {
   assert.ok(
     elements.get("curationQueuesPanelBody").innerHTML.includes("HEALTHCARE"),
     "curation queues should render topic coverage gaps"
+  );
+
+  fetchCalls.length = 0;
+  await context.toggleBrokerTopicEnabled("HEALTHCARE", false);
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/broker/topic"),
+    "topic toggle should hit the broker topic admin endpoint"
+  );
+
+  elements.set("brokerSourceTier-stat-rss", createElement("brokerSourceTier-stat-rss"));
+  elements.get("brokerSourceTier-stat-rss").value = "3";
+  fetchCalls.length = 0;
+  await context.saveBrokerSourceTier("stat_rss");
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/broker/source"),
+    "source tier save should hit the broker source admin endpoint"
   );
 
   context.renderSourceRegistrySuggestions({

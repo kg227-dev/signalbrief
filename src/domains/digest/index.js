@@ -7,14 +7,19 @@ const repeatHistory = require("../../digest/domain/repeat-history-domain-runtime
 const selection = require("../../digest/domain/selection-domain-runtime");
 const source = require("../../digest/domain/source-domain-runtime");
 const storyline = require("../../digest/domain/storyline-domain-runtime");
-const topic = require("../../digest/domain/topic-domain-runtime");
 const formatting = require("../../digest/runtime/digest-formatting-runtime");
 const dataRuntime = require("../../digest/runtime/digest-data-runtime");
 const archiveRuntime = require("../../digest/runtime/digest-archive-runtime");
 const deliveryRecordRuntime = require("../../digest/runtime/digest-delivery-record-runtime");
 const quality = require("../../runtime/quality-score");
+const topicNormalization = require("../../runtime/topic-normalization-runtime");
+const depthRuntime = require("../../runtime/digest-depth-runtime");
 
-module.exports = {
+function loadTopicDomain() {
+  return require("../../digest/domain/topic-domain-runtime");
+}
+
+const digest = {
   ...digestPipeline,
   ...digestPolicy,
   ...repeatDedup,
@@ -22,12 +27,13 @@ module.exports = {
   ...selection,
   ...source,
   ...storyline,
-  ...topic,
   ...formatting,
   ...dataRuntime,
   ...archiveRuntime,
   ...deliveryRecordRuntime,
   ...quality,
+  ...topicNormalization,
+  ...depthRuntime,
   digestPipeline,
   digestPolicy,
   repeatDedup,
@@ -35,10 +41,40 @@ module.exports = {
   selection,
   source,
   storyline,
-  topic,
   formatting,
   dataRuntime,
   archiveRuntime,
   deliveryRecordRuntime,
   quality,
 };
+
+Object.defineProperty(digest, "topic", {
+  enumerable: true,
+  get: () => loadTopicDomain(),
+});
+
+for (const exportName of [
+  "CUSTOM_KEYWORD_ALIASES",
+  "CUSTOM_TOPIC_ALIASES",
+  "CUSTOM_TOPIC_METADATA",
+  "RELATED_TOPIC_GROUPS",
+  "buildCustomTopicQueries",
+  "computeTopicMatch",
+  "computeTopicSignals",
+  "customKeywordMatches",
+  "filterItemsByTopics",
+  "getCustomTopicMetadata",
+  "reserveCustomKeywordSlot",
+  "applyTopicRelevanceScores",
+  "matchWeightToTag",
+  "normalizeCustomKeyword",
+  "splitUserTopics",
+  "itemMatchesPersonaTopic",
+]) {
+  Object.defineProperty(digest, exportName, {
+    enumerable: true,
+    get: () => loadTopicDomain()[exportName],
+  });
+}
+
+module.exports = digest;

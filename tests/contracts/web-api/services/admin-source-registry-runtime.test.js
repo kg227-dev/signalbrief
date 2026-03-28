@@ -9,12 +9,15 @@ const {
 
 const TARGET_REL = "web/services/admin-source-registry-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
+const STORYLINE_RUNTIME_PATH = require.resolve(path.join(process.cwd(), "src/digest/domain/storyline-domain-runtime.js"));
 assertNodeSyntaxFile(TARGET_PATH);
+delete require.cache[TARGET_PATH];
+delete require.cache[STORYLINE_RUNTIME_PATH];
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 const {
   setAdminSourceRegistry,
-} = require(path.join(process.cwd(), "src/digest/domain/storyline-domain-runtime.js"));
+} = require(STORYLINE_RUNTIME_PATH);
 
 const {
   buildRecentDomainMetrics,
@@ -184,14 +187,61 @@ const {
     loadPreferredSourceRegistry: () => ({
       version: 1,
       global: {
-        reported: ["reuters.com"],
-        official: ["sec.gov"],
+        reported: [],
+        official: [],
+      },
+      standard_topic_source: {
+        source_of_truth: "standard_topic_broker",
+        source_mode: "runtime",
+        active_path: "/tmp/standard-topic-broker-sources.json",
+        runtime_path: "/tmp/standard-topic-broker-sources.json",
+        bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+        topic_count: 7,
+        topic_keys: ["healthcare", "technology"],
       },
       topics: {
         healthcare: {
           reported: ["statnews.com"],
           official: ["fda.gov"],
         },
+      },
+    }),
+    inspectStandardTopicBrokerConfig: () => ({
+      source_mode: "runtime",
+      active_path: "/tmp/standard-topic-broker-sources.json",
+      runtime_path: "/tmp/standard-topic-broker-sources.json",
+      bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+      config: {
+        topics: {
+          HEALTHCARE: {
+            enabled: true,
+            lanes: { publisher_feed: true, official: true },
+          },
+        },
+        sources: [
+          {
+            id: "stat_rss",
+            enabled: true,
+            tier: 2,
+            lane: "publisher_feed",
+            topic_tags: ["HEALTHCARE"],
+            domains: ["statnews.com"],
+            source_kind: "reported_media",
+            source_family: "specialist",
+            endpoint: "https://feeds.example.com/stat.xml",
+          },
+          {
+            id: "fda_rss",
+            enabled: true,
+            tier: 1,
+            lane: "official",
+            topic_tags: ["HEALTHCARE"],
+            domains: ["fda.gov"],
+            source_kind: "primary_official",
+            source_family: "official",
+            endpoint: "https://www.fda.gov/newsroom/rss-feeds",
+          },
+        ],
       },
     }),
     buildSourceRegistryMap: (value) => ({
@@ -212,9 +262,14 @@ const {
   assert.strictEqual(overview.suggestions.length, 1);
   assert.strictEqual(overview.suggestions[0].domain, "benzinga.com");
   assert.strictEqual(overview.suggestions[0].effective_policy.hard_block, true);
-  assert.strictEqual(overview.preferred_sources.path, "/tmp/preferred-sources.json");
+  assert.strictEqual(overview.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
   assert.strictEqual(overview.preferred_sources.topic_count, 1);
-  assert.strictEqual(overview.preferred_sources.total_unique_domains, 4);
+  assert.strictEqual(overview.preferred_sources.total_unique_domains, 2);
+  assert.strictEqual(overview.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
+  assert.strictEqual(overview.broker_config.topic_count, 1);
+  assert.strictEqual(overview.broker_config.enabled_source_count, 2);
+  assert.strictEqual(overview.broker_config.topics[0].topic_key, "healthcare");
+  assert.strictEqual(overview.broker_config.sources[0].id, "fda_rss");
   assert.strictEqual(overview.curation_queues.specialist_candidates[0].domain, "pharmavoice.com");
   assert.strictEqual(overview.curation_queues.derivative_winners[0].domain, "benzinga.com");
   assert.strictEqual(overview.curation_queues.platform_ambiguity[0].domain, "youtube.com");

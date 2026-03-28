@@ -21,5 +21,10 @@ const request = runtime.buildSearchRequest("AI×TECH", "enterprise AI funding", 
 assert.deepStrictEqual(request.search_domain_filter, ["theinformation.com", "reuters.com"]);
 assert.ok(request.messages[1].content.includes("Prefer direct reporting from the preferred domains"));
 assert.ok(request.messages[0].content.includes("Return fewer than 3 items rather than including stale or uncertain results."));
+assert.ok(request.messages[0].content.includes("topic-focused sector news researcher"));
+assert.ok(request.messages[0].content.includes("one digest topic only"));
+assert.ok(request.messages[0].content.includes("Prefer original reporting, trade coverage, company releases, and regulator or official source material"));
+assert.ok(!request.messages[0].content.includes("private equity"));
+assert.ok(!request.messages[0].content.includes("consulting"));
 
 process.stdout.write("[digest-data-fetch-request-runtime] all assertions passed\n");

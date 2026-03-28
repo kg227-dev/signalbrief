@@ -270,7 +270,7 @@ assert.ok(corporateTier.source_authority < 0.5);
     source_domain: "www.sec.gov",
     baseScore: 7,
   }]);
-  assert.strictEqual(annotated[0].preferred_source_match, "topic_official");
+  assert.strictEqual(annotated[0].preferred_source_match, "global_official");
   assert.strictEqual(annotated[0].preferred_source_kind, "official");
 
   setAdminSourceRegistry(null);
@@ -432,8 +432,8 @@ assert.ok(corporateTier.source_authority < 0.5);
   assert.strictEqual(candidates.length, 1);
   assert.strictEqual(candidates[0].source_domain, "statnews.com");
   assert.strictEqual(candidates[0].specialist_trade_outperformed_preferred, true);
-  assert.strictEqual(candidates[0].coverage_gap_status, "preferred_exists_and_should_win");
-  assert.strictEqual(candidates[0].winner_selection_reason, "preferred_domain_match");
+  assert.strictEqual(candidates[0].coverage_gap_status, "preferred_exists_but_weaker");
+  assert.strictEqual(candidates[0].winner_selection_reason, "specialist_trade_best_fit");
   setPreferredSourceRegistry(null);
 }
 

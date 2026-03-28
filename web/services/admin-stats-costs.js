@@ -1,3 +1,5 @@
+const { isScheduledRunRecord } = require("./admin-ops-io");
+
 function sumRuns(rows, key) {
   return rows.reduce((sum, row) => sum + (row[key] || 0), 0);
 }
@@ -37,35 +39,9 @@ function normalizeDeliveryTimeRaw(deliveryTime) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function extractCustomKeywords(users, maxCustomFetchPerRun) {
-  const customTopicCounts = new Map();
-  for (const user of (Array.isArray(users) ? users : [])) {
-    for (const topic of (Array.isArray(user?.topics_raw) ? user.topics_raw : [])) {
-      const topicRaw = String(topic || "");
-      if (!topicRaw.startsWith("custom_")) continue;
-      customTopicCounts.set(topicRaw, (customTopicCounts.get(topicRaw) || 0) + 1);
-    }
-  }
-
-  const configuredMax = Number(maxCustomFetchPerRun);
-  const dynamicCap = Number.isFinite(configuredMax) && configuredMax > 0
-    ? configuredMax
-    : Math.min(18, Math.max(6, Math.ceil((((Array.isArray(users) ? users.length : 0) || 1)) / 4)));
-
-  return [...customTopicCounts.entries()]
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0]);
-    })
-    .slice(0, dynamicCap)
-    .map(([topic]) => String(topic).replace(/^custom_/, "").replace(/_/g, " ").trim())
-    .filter(Boolean);
-}
-
-function fallbackEstimateDigestCost({ topics, customKeywords, itemCount }) {
+function fallbackEstimateDigestCost({ topics, itemCount }) {
   const standardCalls = Array.isArray(topics) ? topics.length : 0;
-  const customCalls = (Array.isArray(customKeywords) ? customKeywords.length : 0) * 3;
-  const perplexityCost = (standardCalls + customCalls) * 0.005;
+  const perplexityCost = standardCalls * 0.005;
   const estInputTokens = 2500 + (Number(itemCount || 5) * 300);
   const estOutputTokens = Number(itemCount || 5) * 250;
   const claudeCost = (estInputTokens / 1_000_000 * 0.80) + (estOutputTokens / 1_000_000 * 4.00);
@@ -91,9 +67,7 @@ function buildTrailingWindowCostSummary(runs, { nowParts, days = 7 } = {}) {
       runs: [],
       total_cost: 0,
       scheduled_cost: 0,
-      on_demand_cost: 0,
       scheduled_runs: 0,
-      on_demand_runs: 0,
       deliveries: 0,
     };
   }
@@ -101,9 +75,8 @@ function buildTrailingWindowCostSummary(runs, { nowParts, days = 7 } = {}) {
   const normalizedDays = Math.max(1, Number(days || 7));
   const endDateKey = buildEtDateKeyFromParts(parts, 0);
   const startDateKey = buildEtDateKeyFromParts(parts, -(normalizedDays - 1));
-  const windowRuns = filterRunsWithinEtWindow(runs, startDateKey, endDateKey);
-  const scheduledRuns = windowRuns.filter((run) => !run.on_demand);
-  const onDemandRuns = windowRuns.filter((run) => !!run.on_demand);
+  const windowRuns = filterRunsWithinEtWindow(runs, startDateKey, endDateKey)
+    .filter((run) => isScheduledRunRecord(run));
 
   return {
     days: normalizedDays,
@@ -111,10 +84,8 @@ function buildTrailingWindowCostSummary(runs, { nowParts, days = 7 } = {}) {
     end_date_et: endDateKey,
     runs: windowRuns,
     total_cost: parseFloat(sumRuns(windowRuns, "total_cost_usd").toFixed(4)),
-    scheduled_cost: parseFloat(sumRuns(scheduledRuns, "total_cost_usd").toFixed(4)),
-    on_demand_cost: parseFloat(sumRuns(onDemandRuns, "total_cost_usd").toFixed(4)),
-    scheduled_runs: scheduledRuns.length,
-    on_demand_runs: onDemandRuns.length,
+    scheduled_cost: parseFloat(sumRuns(windowRuns, "total_cost_usd").toFixed(4)),
+    scheduled_runs: windowRuns.length,
     deliveries: sumRuns(windowRuns, "users_served"),
   };
 }
@@ -161,33 +132,20 @@ function buildProjectedWindowCostSummary({
   roster,
   nowParts,
   config,
-  estimateSandboxCost,
   days = 7,
 } = {}) {
   const slots = buildProjectedRunSlots(roster, { nowParts, days });
   const configTopics = Array.isArray(config?.topics) ? config.topics : [];
   const standardTopics = configTopics.map((topic) => topic?.tag).filter(Boolean);
-  const maxCustomFetchPerRun = config?.digest?.maxCustomFetchPerRun;
-  const estimator = typeof estimateSandboxCost === "function"
-    ? estimateSandboxCost
-    : fallbackEstimateDigestCost;
 
   let totalCost = 0;
   let projectedDeliveries = 0;
 
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
-    const customKeywords = extractCustomKeywords(users, maxCustomFetchPerRun);
-    const itemCount = Math.max(
-      5,
-      ...users.map((user) => {
-        const count = Number(user?.items_per_digest);
-        return Number.isFinite(count) && count > 0 ? count : 5;
-      })
-    );
-    const estimate = estimator({
+    const itemCount = 5;
+    const estimate = fallbackEstimateDigestCost({
       topics: standardTopics,
-      customKeywords,
       itemCount,
     }) || { totalUsd: 0 };
     const estimatedCost = toFiniteNumber(estimate.totalUsd, 0);
@@ -197,7 +155,6 @@ function buildProjectedWindowCostSummary({
       ...slot,
       user_count: users.length,
       item_count: itemCount,
-      custom_keywords: customKeywords,
       estimated_cost_usd: parseFloat(estimatedCost.toFixed(5)),
     };
   });

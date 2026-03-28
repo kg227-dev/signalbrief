@@ -10,8 +10,6 @@ assertNodeSyntaxFile(TARGET_PATH);
 const source = fs.readFileSync(TARGET_PATH, "utf8");
 if (
   !source.includes("@typedef {Object} UserRecord")
-  || !source.includes("@typedef {Object} ReplyState")
-  || !source.includes("@typedef {Object} TransportJsonResponse")
 ) {
   throw new Error("runtime-types should define shared runtime JSDoc contracts");
 }

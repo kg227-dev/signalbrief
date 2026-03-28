@@ -167,10 +167,6 @@ function createRenderPublicPages(deps) {
     const referralToken = normalizeReferralToken(refToken);
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
     const canonicalUrl = `${normalizedBaseUrl}/digest/${dateKey}`;
-    const shareUrl = canonicalUrl;
-    const signupUrl = referralToken
-      ? `${normalizedBaseUrl}/?ref=${encodeURIComponent(referralToken)}`
-      : `${normalizedBaseUrl}/`;
     const rawDateLabel = String(dateLabel || formatPublicDigestDateLabel(dateKey) || "");
     const safeDateLabel = escapeHtml(rawDateLabel);
     const safeItems = Array.isArray(items) ? items : [];
@@ -185,13 +181,11 @@ function createRenderPublicPages(deps) {
     const digestDescription = truncateText(
       quickScanPoints.length > 0
         ? `${rawDateLabel}: ${quickScanPoints.join(" · ")}`
-        : `SignalBrief public digest for ${rawDateLabel}.`,
+        : `SignalBrief digest for ${rawDateLabel}.`,
       155
     );
     const safeDigestDescription = escapeHtml(digestDescription);
-    const robotsContent = isPersonalized
-      ? "noindex,nofollow,noarchive"
-      : "index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1";
+    const robotsContent = "noindex,nofollow,noarchive";
     const quickScanHtml = quickScanPoints
       .map((point) => {
         const pointScore = scoreByHeadline.get(normalizeHeadlineLookup(point));
@@ -357,19 +351,15 @@ function createRenderPublicPages(deps) {
 <body>
   <main class="wrap">
     <section class="hero">
-      <div class="kicker">SignalBrief Public Digest</div>
+      <div class="kicker">${isPersonalized ? "SignalBrief Digest" : "SignalBrief Admin Preview"}</div>
       <h1>${safeDateLabel}</h1>
-      <p class="hero-sub">A shareable briefing from SignalBrief: daily intelligence across AI, strategy, and business.</p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="${escapeHtml(signupUrl)}" target="_blank" rel="noopener">Get your own personalized brief</a>
-        <a class="btn btn-secondary" href="mailto:?subject=SignalBrief%20Digest&body=${encodeURIComponent(shareUrl)}">Forward this brief</a>
-      </div>
+      <p class="hero-sub">A private SignalBrief digest view for subscriber and operator use.</p>
       ${quickScanHtml ? `<div class="scan"><p class="scan-heading">Quick scan</p><ul class="scan-list">${quickScanHtml}</ul></div>` : ""}
     </section>
     <section class="item-list">
       ${cards || `<div class="item-card"><p class="item-summary">No items available for this date.</p></div>`}
     </section>
-    <p class="footer">Built with SignalBrief · <a href="https://getsignalbrief.com" target="_blank" rel="noopener">getsignalbrief.com</a></p>
+    <p class="footer">Private SignalBrief digest view</p>
   </main>
 ${isPersonalized ? `<script>
 (function() {
@@ -440,8 +430,8 @@ ${isPersonalized ? `<script>
     <div class="card">
       <div class="kicker">SignalBrief</div>
       <h1>Digest not found</h1>
-      <p>We could not find a public digest for ${safeDate || "that date"}.</p>
-      <a href="https://getsignalbrief.com" target="_blank" rel="noopener">Get your own personalized brief</a>
+      <p>We could not find a digest preview for ${safeDate || "that date"}.</p>
+      <a href="https://getsignalbrief.com" target="_blank" rel="noopener">SignalBrief home</a>
     </div>
   </main>
 </body>

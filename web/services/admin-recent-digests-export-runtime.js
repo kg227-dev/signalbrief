@@ -54,13 +54,11 @@ function estimateEventLookbackDays(runs, now = new Date()) {
 
 function normalizeMode(perUserRow, run) {
   const explicit = String(perUserRow?.delivery_mode || "").trim().toLowerCase();
-  if (explicit) return explicit;
+  if (explicit === "scheduled" || explicit === "welcome") return explicit;
   const runId = String(run?.run_id || "").trim();
   const runMode = runId.includes(":") ? runId.split(":")[0].toLowerCase() : "";
-  if (runMode === "scheduled") return "scheduled";
-  if (runMode === "targeted") return "manual";
-  if (runMode) return runMode;
-  return run?.on_demand ? "manual" : "scheduled";
+  if (runMode === "scheduled" || runMode === "welcome") return runMode;
+  return "scheduled";
 }
 
 function normalizeItem(item) {
@@ -266,7 +264,6 @@ function createRecentDigestsExporter(deps) {
           date_et: dateEt,
           run_id: runId || null,
           mode: normalizeMode(perUserRow, run),
-          on_demand: run?.on_demand === true,
           run_at_utc: String(run?.run_at || "").trim() || null,
           run_at_et: String(run?.run_at_et || "").trim() || null,
           digest_id: digestId,

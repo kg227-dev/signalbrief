@@ -15,33 +15,66 @@ function sortedKeys(obj) {
 (async () => {
   const fetchRuntime = createDigestOrchestratorFetchRuntime({
     CONFIG: {
-      topics: [{ tag: "AI×TECH", queries: ["ai"] }],
+      topics: [{ tag: "TECHNOLOGY", queries: ["ai"] }],
       digest: {
-        itemCount: 7,
-        maxCustomFetchPerRun: 5,
+        itemCount: 5,
       },
     },
     log: () => {},
     normalizeTopicToken: (value) => String(value || "").toLowerCase().trim(),
-    fetchTopicNews: async (topic) => ({
+    fetchTopicNews: async () => ({
       apiCalls: 1,
-      items: [{ tag: topic.tag, headline: `${topic.tag} headline`, baseScore: 7.5 }],
+      items: [],
+      diagnostics: {
+        provider: "perplexity",
+        successful_calls: 1,
+        failed_calls: 0,
+        transport_errors: 0,
+        status_counts: {},
+      },
     }),
-    buildCustomTopicQueries: (keyword) => [`${keyword} query`],
-    buildCustomRescueItemsFromStandard: () => [],
+    standardTopicBrokerRuntime: {
+      fetchBrokerCandidates: async () => ({
+        topicItems: {
+          TECHNOLOGY: [{
+            tag: "TECHNOLOGY",
+            headline: "TECHNOLOGY headline",
+            baseScore: 7.5,
+            summary: "Summary",
+            url: "https://example.com/technology",
+            canonical_url: "https://example.com/technology",
+            source: "example.com",
+            source_domain: "example.com",
+            published_date: "2026-03-27T10:00:00.000Z",
+            retrieval_origin: "broker_publisher_feed",
+            source_type: "reported_media",
+            source_tier: "strong",
+          }],
+        },
+        diagnostics: {
+          enabled: true,
+          config_source: "test",
+          active_path: "/tmp/test-broker.json",
+          active_topic_tags: ["TECHNOLOGY"],
+          lane_counts: { publisher_feed: 1, official: 0 },
+          source_fetch_count: 1,
+          source_success_count: 1,
+          source_failure_count: 0,
+          source_diagnostics: [],
+          topic_diagnostics: {},
+        },
+      }),
+    },
     emitDigestIncident: async () => {},
   });
   const fetchOut = await fetchRuntime.orchestrateFetch({
-    dueUsers: [{ topics: ["AI×TECH"], preferences: { items_per_digest: 5 } }],
-    targetChatId: "u1",
-    runMode: "targeted",
+    dueUsers: [{ topics: ["TECHNOLOGY"], preferences: {} }],
+    runMode: "scheduled",
   });
   assert.deepStrictEqual(
     sortedKeys(fetchOut),
     [
       "allItems",
-      "customFetchCalls",
-      "customTags",
       "fetchDiagnostics",
       "selectionTarget",
       "standardFetchCalls",
@@ -68,19 +101,26 @@ function sortedKeys(obj) {
     dedupAgainstRecentArchives: (items) => ({ items, removed: 0, archive_days_used: 3, backfilled: 0 }),
     buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
     selectItems: (items) => items.slice(0, 1),
-    loadRecentArchiveItems: () => [],
     loadRecentArchiveByDate: () => [],
     buildRepeatHistory: () => new Map(),
     filterItemsAgainstHistory: (items) => ({ items, suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
     buildRepetitionNote: () => "",
     emitDigestIncident: async () => {},
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/parity-shape-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
+    annotateEditorialSignals: (items) => items.slice(),
+    buildStorylineCandidates: (items) => items.slice(),
   });
   const selectionOut = await selectionRuntime.selectForEnrichment({
     allItems: fetchOut.allItems,
     selectionTarget: fetchOut.selectionTarget,
-    customTags: fetchOut.customTags,
     tagPriority: fetchOut.tagPriority,
-    runMode: "targeted",
+    runMode: "scheduled",
     dueUsersCount: 1,
     standardFetchCallsPlanned: fetchOut.standardFetchCallsPlanned,
   });
@@ -141,9 +181,8 @@ function sortedKeys(obj) {
   const deliveryOut = deliveryRankingRuntime.rankAndSuppressUserItems({
     user: {
       chatId: "u1",
-      topics: ["AI×TECH"],
-      preferences: { items_per_digest: 5 },
-      topic_weights: {},
+      topics: ["TECHNOLOGY"],
+      preferences: {},
     },
     enriched: enrichmentOut.enriched,
     repeatIndex: selectionOut.repeatIndex,

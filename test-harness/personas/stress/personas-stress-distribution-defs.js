@@ -1,75 +1,66 @@
 function buildStressDistributionPersonaSpecs(fallbackTopics) {
+  const fallback = Array.isArray(fallbackTopics) && fallbackTopics.length
+    ? fallbackTopics
+    : ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "ENERGY", "FINANCIAL SERVICES", "CONSUMER & RETAIL", "INDUSTRIALS"];
   return [
     {
-      id: "stress_low_item_brief_1",
-      name: "Stress: Low Item Brief A",
-      description: "Low item count user with brief depth.",
+      id: "stress_brief_consumer",
+      name: "Stress: Brief Consumer",
+      description: "Single-topic brief reader.",
       overrides: {
         is_stress: true,
-        topics: ["AI×TECH", "TECHNOLOGY", "DIGITAL"],
-        preferences: { items_per_digest: 3, depth: "headline_plus_oneliner" },
+        topics: ["CONSUMER & RETAIL"],
+        preferences: { depth: "headline_plus_oneliner" },
       },
     },
     {
-      id: "stress_low_item_brief_2",
-      name: "Stress: Low Item Brief B",
-      description: "Another low item count with different topic mix.",
+      id: "stress_brief_industrials",
+      name: "Stress: Brief Industrials",
+      description: "Another brief single-topic reader.",
       overrides: {
         is_stress: true,
-        topics: ["ENERGY", "SUSTAINABILITY", "POLICY×REGULATORY"],
-        preferences: { items_per_digest: 4, depth: "headline_plus_oneliner" },
+        topics: ["INDUSTRIALS"],
+        preferences: { depth: "headline_plus_oneliner" },
       },
     },
     {
-      id: "stress_high_item_generalist_1",
-      name: "Stress: High Item Generalist A",
-      description: "High item count broad coverage persona.",
+      id: "stress_deep_multi_sector",
+      name: "Stress: Deep Multi-Sector",
+      description: "Three-topic deep reader.",
       overrides: {
         is_stress: true,
-        topics: fallbackTopics.slice(0, Math.min(10, fallbackTopics.length)),
-        preferences: { items_per_digest: 10, depth: "headline_plus_why" },
+        topics: fallback.slice(0, 3),
+        preferences: { depth: "headline_plus_why" },
       },
     },
     {
-      id: "stress_high_item_generalist_2",
-      name: "Stress: High Item Generalist B",
-      description: "High item count with alternate broad mix.",
+      id: "stress_finance_energy",
+      name: "Stress: Finance and Energy",
+      description: "Two-topic capital-intensive pairing.",
       overrides: {
         is_stress: true,
-        topics: [...fallbackTopics].reverse().slice(0, Math.min(10, fallbackTopics.length)),
-        preferences: { items_per_digest: 10, depth: "headline_plus_why" },
+        topics: ["FINANCIAL SERVICES", "ENERGY"],
+        preferences: { depth: "headline_plus_why" },
       },
     },
     {
-      id: "stress_negative_weights_mix",
-      name: "Stress: Negative Weights Mix",
-      description: "Heavy negative weighting edge case.",
+      id: "stress_consumer_health",
+      name: "Stress: Consumer and Health",
+      description: "Mixed-sector operator pairing.",
       overrides: {
         is_stress: true,
-        topics: ["AI×TECH", "HEALTHCARE", "ENERGY", "FINANCIAL SERVICES", "CONSUMER"],
-        topic_weights: { "AI×TECH": 2, HEALTHCARE: 1, ENERGY: -5, "FINANCIAL SERVICES": -4, CONSUMER: -3 },
-        preferences: { items_per_digest: 10, depth: "headline_plus_why" },
+        topics: ["CONSUMER & RETAIL", "HEALTHCARE"],
+        preferences: { depth: "headline_plus_why" },
       },
     },
     {
-      id: "stress_positive_spike_mix",
-      name: "Stress: Positive Spike Mix",
-      description: "Max-positive weighting spread.",
+      id: "stress_industrials_tech",
+      name: "Stress: Industrials and Tech",
+      description: "Two-topic industrial technology reader.",
       overrides: {
         is_stress: true,
-        topics: ["PE×M&A", "M&A ADVISORY", "STRATEGY", "AI×TECH", "TECHNOLOGY"],
-        topic_weights: { "PE×M&A": 5, "M&A ADVISORY": 4, STRATEGY: 4, "AI×TECH": 3, TECHNOLOGY: 2 },
-        preferences: { items_per_digest: 10, depth: "headline_plus_why" },
-      },
-    },
-    {
-      id: "stress_sparse_three_topic_deep",
-      name: "Stress: Sparse Three Topic Deep",
-      description: "Sparse-topic deep reader persona.",
-      overrides: {
-        is_stress: true,
-        topics: ["LIFE SCIENCES", "PUBLIC SECTOR", "REAL ESTATE"],
-        preferences: { items_per_digest: 5, depth: "headline_plus_why" },
+        topics: ["INDUSTRIALS", "TECHNOLOGY"],
+        preferences: { depth: "headline_plus_why" },
       },
     },
   ];

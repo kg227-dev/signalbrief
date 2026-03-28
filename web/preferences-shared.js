@@ -13,17 +13,13 @@
     "CONSUMER & RETAIL",
     "INDUSTRIALS",
   ];
-  const FALLBACK_CAPABILITY_TOPICS = [];
   const INDUSTRY_TOPICS = Array.isArray(runtime.INDUSTRY_TOPICS)
     ? runtime.INDUSTRY_TOPICS
     : FALLBACK_INDUSTRY_TOPICS;
-  const CAPABILITY_TOPICS = Array.isArray(runtime.CAPABILITY_TOPICS)
-    ? runtime.CAPABILITY_TOPICS
-    : FALLBACK_CAPABILITY_TOPICS;
   const DEFAULT_TOPICS = Array.isArray(runtime.DEFAULT_TOPICS)
     ? runtime.DEFAULT_TOPICS
-    : [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-  const MAX_CUSTOM_KEYWORDS = 0; // MVP: no custom keywords
+    : [...INDUSTRY_TOPICS];
+  const MAX_CUSTOM_KEYWORDS = 0;
   const TOPIC_LABELS = runtime.TOPIC_LABELS && typeof runtime.TOPIC_LABELS === "object"
     ? runtime.TOPIC_LABELS
     : {};
@@ -62,13 +58,6 @@
     return "custom";
   }
 
-  function normalizeCustomTopicInputFallback(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    return slug ? `custom_${slug}` : "";
-  }
-
   function topicKeyFromInputFallback(value, opts = {}) {
     const raw = String(value || "").trim();
     if (!raw) return "";
@@ -100,29 +89,18 @@
       });
       if (defaultMatch) return defaultMatch;
     }
-    return normalizeCustomTopicInputFallback(raw);
-  }
-
-  function isCustomTopicFallback(topic) {
-    return !DEFAULT_TOPICS.includes(String(topic || ""));
+    return "";
   }
 
   function topicDisplayLabelFallback(topic) {
     const key = String(topic || "");
     if (!key) return "";
-    if (DEFAULT_TOPICS.includes(key)) return TOPIC_LABELS[key] || key;
-    return key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  function normalizeTelegramFallback(value) {
-    const raw = String(value || "").trim().replace(/^@+/, "");
-    return raw || null;
+    return DEFAULT_TOPICS.includes(key) ? (TOPIC_LABELS[key] || key) : key;
   }
 
   function getTopicCatalogFallback() {
     return {
       industries: INDUSTRY_TOPICS.slice(),
-      capabilities: CAPABILITY_TOPICS.slice(),
       topics: DEFAULT_TOPICS.slice(),
     };
   }
@@ -135,12 +113,7 @@
   const loadTopicCatalog = selectRuntimeFn(runtime.loadTopicCatalog, async () => getTopicCatalogFallback());
   const normalizeDay = selectRuntimeFn(runtime.normalizeDay, normalizeDayFallback);
   const normalizeDays = selectRuntimeFn(runtime.normalizeDays, normalizeDaysFallback);
-  const normalizeCustomTopicInput = selectRuntimeFn(
-    runtime.normalizeCustomTopicInput,
-    normalizeCustomTopicInputFallback
-  );
   const topicKeyFromInput = selectRuntimeFn(runtime.topicKeyFromInput, topicKeyFromInputFallback);
-  const isCustomTopic = selectRuntimeFn(runtime.isCustomTopic, isCustomTopicFallback);
   const topicDisplayLabel = selectRuntimeFn(runtime.topicDisplayLabel, topicDisplayLabelFallback);
   const daysFromFrequency = selectRuntimeFn(runtime.daysFromFrequency, daysFromFrequencyFallback);
   const frequencyFromDays = selectRuntimeFn(runtime.frequencyFromDays, frequencyFromDaysFallback);
@@ -152,8 +125,6 @@
     runtime.isEveryday,
     (days) => normalizeDaysFallback(days).length === 7
   );
-  const normalizeTelegram = selectRuntimeFn(runtime.normalizeTelegram, normalizeTelegramFallback);
-
   const createStateFactory = typeof stateRuntime.createPreferenceState === "function"
     ? stateRuntime.createPreferenceState
     : null;
@@ -178,7 +149,7 @@
     });
   }
 
-  function buildSignupPayload({ state, name, email, telegram, referralToken }) {
+  function buildSignupPayload({ state, name, email, referralToken }) {
     if (!buildSignupFactory) {
       throw new Error("SignalBriefPrefsStateRuntime.buildSignupPayload is required");
     }
@@ -186,13 +157,11 @@
       state,
       name,
       email,
-      telegram,
       referralToken,
-      normalizeTelegram,
     });
   }
 
-  function buildSettingsPayload({ state, token, name, telegram, telegramEnabled }) {
+  function buildSettingsPayload({ state, token, name }) {
     if (!buildSettingsFactory) {
       throw new Error("SignalBriefPrefsStateRuntime.buildSettingsPayload is required");
     }
@@ -200,15 +169,11 @@
       state,
       token,
       name,
-      telegram,
-      telegramEnabled,
-      normalizeTelegram,
     });
   }
 
   globalScope.SignalBriefPrefs = {
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
     TOPIC_LABELS,
@@ -216,15 +181,12 @@
     getTopicCatalog,
     loadTopicCatalog,
     createPreferenceState,
-    normalizeCustomTopicInput,
     topicKeyFromInput,
     topicDisplayLabel,
-    isCustomTopic,
     isWeekdays,
     isEveryday,
     daysFromFrequency,
     frequencyFromDays,
-    normalizeTelegram,
     buildSignupPayload,
     buildSettingsPayload,
   };

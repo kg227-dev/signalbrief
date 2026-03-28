@@ -43,7 +43,6 @@ function baseDeps(overrides = {}) {
     json,
     DEFAULT_TOPICS: ["AI×TECH"],
     INDUSTRY_TOPICS: ["HEALTHCARE"],
-    CAPABILITY_TOPICS: ["AI×TECH"],
     digestRunStatus: () => ({ running: false, state: "absent", lock: {} }),
     getCachedOrRefreshSchedulerHeartbeat: () => ({
       available: true,
@@ -66,10 +65,6 @@ function baseDeps(overrides = {}) {
     handleSettings: async () => {},
     allUsers: () => [],
     writeUser: () => {},
-    blankReengagementState: () => ({}),
-    isLegacyArchiveEndpointEnabled: () => true,
-    recordLegacyArchiveUsage: () => {},
-    getArchiveLegacyDeprecationDeadlineUtc: () => "2026-06-30T00:00:00Z",
     readArchiveFiles: () => [],
     getAllowedArchiveDates: () => new Set(),
     archiveRelevanceScore: () => 0,
@@ -80,7 +75,6 @@ function baseDeps(overrides = {}) {
     buildDigestId: () => "digest-id",
     toEtDateKey: () => "2026-03-12",
     appendEngagementEventChecked: () => ({ ok: true }),
-    resetReengagementState: () => ({}),
     sendTransparentGif: () => {},
     normalizeEngagementUrl: (value) => String(value || ""),
     requireJsonBody: async () => ({}),
@@ -106,6 +100,7 @@ async function invoke(handler, { method, pathname, search = "" }) {
     assert.strictEqual(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.deepStrictEqual(body.topics, ["AI×TECH"]);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "capabilities"), false);
   }
 
   {
@@ -121,7 +116,6 @@ async function invoke(handler, { method, pathname, search = "" }) {
       findUserByToken: () => ({
         chatId: "123",
         email: "user@example.com",
-        telegram: "jarvis",
         name: "User Example",
         status: "active",
         topics: ["AI×TECH", "HEALTHCARE"],
@@ -144,8 +138,20 @@ async function invoke(handler, { method, pathname, search = "" }) {
     const body = JSON.parse(res.body);
     assert.strictEqual(body.chatId, "123");
     assert.strictEqual(body.email, "user@example.com");
-    assert.strictEqual(body.preferences.items_per_digest, 7);
-    assert.strictEqual(body.topic_weights["AI×TECH"], 2);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "telegram"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "custom_keywords"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "watchlist"), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "source_preferences"), false);
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(body.preferences, "items_per_digest"),
+      false,
+      "public user record should not expose deprecated items_per_digest"
+    );
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(body, "topic_weights"),
+      false,
+      "public user record should not expose deprecated topic weights"
+    );
     assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "token"), false);
     assert.strictEqual(Object.prototype.hasOwnProperty.call(body, "admin"), false);
   }
@@ -171,7 +177,11 @@ async function invoke(handler, { method, pathname, search = "" }) {
     assert.strictEqual(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.strictEqual(body.preferences.email_enabled, false);
-    assert.strictEqual(body.preferences.telegram_enabled, false);
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(body.preferences, "telegram_enabled"),
+      false,
+      "public user record should not expose deprecated telegram_enabled"
+    );
     assert.strictEqual(body.preferences.consultant_lens_mode, true);
   }
 
@@ -264,7 +274,7 @@ async function invoke(handler, { method, pathname, search = "" }) {
       sendMagicLinkEmail: async (user) => {
         sendCount += 1;
         assert.strictEqual(user.email, "user@example.com");
-        return { ok: true, via: "gmail" };
+        return { ok: true, via: "resend" };
       },
     }));
     const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });
@@ -296,7 +306,7 @@ async function invoke(handler, { method, pathname, search = "" }) {
       requireJsonBody: async () => ({ email: "user@example.com" }),
       allUsers: () => [{ email: "user@example.com", token: "token-123" }],
       sendMagicLinkEmail: async () => {
-        throw new Error("gmail send failed");
+        throw new Error("resend send failed");
       },
     }));
     const { handled, res } = await invoke(handler, { method: "POST", pathname: "/api/request-link" });

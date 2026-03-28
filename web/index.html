@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalBrief — Daily AI Briefings for Strategy &amp; Finance Professionals</title>
-<meta name="description" content="SignalBrief is a daily AI-curated news digest for strategy professionals. Five minutes every morning covering AI, healthcare, private equity, finance, and policy — ranked by relevance to your work.">
+<title>SignalBrief — Daily Sector Briefings By Email</title>
+<meta name="description" content="SignalBrief delivers 5 fresh signals per topic every morning across 7 sectors, with trusted sources and depth modes that fit your read.">
 <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">
 <link rel="canonical" href="https://getsignalbrief.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SignalBrief">
-<meta property="og:title" content="SignalBrief — Daily AI Briefings for Strategy &amp; Finance Professionals">
-<meta property="og:description" content="AI-curated daily briefings for strategy professionals. Covers AI, healthcare, private equity, finance, and policy — ranked by relevance and delivered in under 5 minutes.">
+<meta property="og:title" content="SignalBrief — Daily Sector Briefings By Email">
+<meta property="og:description" content="Five fresh signals per topic, every morning, across healthcare, life sciences, technology, energy, financial services, consumer &amp; retail, and industrials.">
 <meta property="og:url" content="https://getsignalbrief.com/">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="SignalBrief — Daily AI Briefings for Strategy &amp; Finance Professionals">
-<meta name="twitter:description" content="AI-curated news digests for strategy professionals. Covers AI, healthcare, private equity, finance, and policy — ranked by relevance, delivered in 5 minutes.">
+<meta name="twitter:title" content="SignalBrief — Daily Sector Briefings By Email">
+<meta name="twitter:description" content="Five fresh signals per topic, every morning, from trusted trade and official sources across 7 sectors.">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -23,13 +23,13 @@
       "@type": "Organization",
       "name": "SignalBrief",
       "url": "https://getsignalbrief.com",
-      "description": "SignalBrief publishes daily AI-curated briefings for strategy and finance professionals across healthcare, private equity, technology, and policy."
+      "description": "SignalBrief publishes daily email briefings across healthcare, life sciences, technology, energy, financial services, consumer and retail, and industrials."
     },
     {
       "@type": "WebSite",
       "name": "SignalBrief",
       "url": "https://getsignalbrief.com/",
-      "description": "Daily AI-curated news digest for strategy professionals.",
+      "description": "Daily sector briefings by email.",
       "potentialAction": {
         "@type": "SubscribeAction",
         "target": "https://getsignalbrief.com/signup"
@@ -38,7 +38,7 @@
     {
       "@type": "Service",
       "name": "SignalBrief Daily Briefing",
-      "description": "An AI-curated daily newsletter that scans hundreds of business, strategy, and policy sources each morning and delivers a concise ranked briefing to strategy professionals across AI, healthcare, private equity, finance, and regulatory policy.",
+      "description": "A daily email briefing that delivers 5 fresh signals per topic from trusted trade and official sources across 7 sectors.",
       "provider": {
         "@type": "Organization",
         "name": "SignalBrief",
@@ -47,7 +47,7 @@
       "serviceType": "Newsletter",
       "audience": {
         "@type": "Audience",
-        "audienceType": "Strategy professionals, management consultants, private equity analysts, healthcare executives, corporate development teams"
+        "audienceType": "Operators, founders, investors, and sector professionals"
       },
       "url": "https://getsignalbrief.com",
       "offers": {
@@ -65,7 +65,7 @@
           "name": "What is SignalBrief?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "SignalBrief is a daily AI-curated news digest for strategy professionals. Each morning our AI scans hundreds of business, finance, and policy sources and delivers a concise briefing ranked by strategic relevance — covering AI and technology, healthcare, private equity and M&A, finance, and regulatory policy."
+            "text": "SignalBrief is a daily email briefing that delivers 5 fresh signals per topic across 7 sectors. It prioritizes trusted trade and official sources and lets subscribers choose how much context they want under each story."
           }
         },
         {
@@ -73,7 +73,7 @@
           "name": "Who is SignalBrief for?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "SignalBrief is built for strategy and finance professionals who need to stay current across multiple sectors — consultants, private equity analysts, corporate development teams, healthcare executives, and investors who need intelligence without the noise."
+            "text": "SignalBrief is built for operators, founders, investors, and sector professionals who need a tight morning read without sifting through a general news feed."
           }
         },
         {
@@ -81,7 +81,7 @@
           "name": "How does SignalBrief work?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "SignalBrief's AI reads thousands of headlines every morning and scores each item for strategic relevance. You receive a personalized briefing with the most important signals first, each with a summary and a 'why it matters' note connecting the news to strategic implications."
+            "text": "SignalBrief gathers candidates from a maintained registry of trusted trade and official sources, scores them for freshness and relevance, and sends 5 selected signals per topic. Subscribers can read the same selected stories in Scan, Brief, or Deep mode."
           }
         },
         {
@@ -89,7 +89,7 @@
           "name": "Is SignalBrief free?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes — SignalBrief is free to sign up. Create a free account, choose your verticals, and start receiving your daily personalized briefing."
+            "text": "Yes. Create a free account, choose 1 to 3 sectors, and start receiving your daily email briefing."
           }
         }
       ]
@@ -171,8 +171,12 @@ body.dark .dp-tag-finance { background: rgba(3,105,161,0.2); color: #7dd3fc; }
   padding: 0 40px;
   height: 56px;
   display: flex; align-items: center; justify-content: space-between;
+  opacity: 0; pointer-events: none;
+  transform: translateY(-8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
   box-shadow: var(--shadow-sm);
 }
+.sticky-nav.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .sticky-nav-brand {
   font-family: 'Playfair Display', Georgia, serif;
   font-size: 18px; font-weight: 400; color: var(--text);
@@ -777,7 +781,7 @@ body.dark .topics-custom-row {
     <div class="digest-card" id="digestCard">
       <div class="dp-header">
         <div class="dp-brand"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--orange,#c2770a);flex-shrink:0"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> SignalBrief</div>
-        <div class="dp-meta">Saturday, March 1, 2026 &nbsp;&middot;&nbsp; Today's brief &middot; 4 min read</div>
+        <div class="dp-meta">Saturday, March 1, 2026 &nbsp;&middot;&nbsp; Today&rsquo;s brief &middot; 4 min read</div>
       </div>
 
       <div class="dp-scan">
@@ -860,7 +864,7 @@ body.dark .topics-custom-row {
       </div>
     </div>
     <div class="features-about">
-      <h2>Stay informed without doing all the reading</h2>
+      <h2>Stay informed without doing the reading</h2>
       <p>Most industry news is not built to help you think. It is built to get you to click.</p>
       <p>SignalBrief is different.</p>
       <p>Each morning, it distills what is actually moving your sector into a short, focused brief, with the context you need to understand the impact right away.</p>
@@ -920,6 +924,17 @@ body.dark .topics-custom-row {
     apply(isDark);
     try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
   };
+})();
+
+/* Sticky nav */
+(function() {
+  var nav = document.getElementById('stickyNav');
+  var heroCta = document.querySelector('.hero-cta');
+  if (!nav || !heroCta || !('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function(entries) {
+    nav.classList.toggle('visible', !entries[0].isIntersecting);
+  }, { threshold: 0 });
+  obs.observe(heroCta);
 })();
 
 

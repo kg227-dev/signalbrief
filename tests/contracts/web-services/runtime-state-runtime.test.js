@@ -47,8 +47,6 @@ const inspector = createRuntimeStateInspector({
     schedulerHeartbeatPath: path.join(process.cwd(), "data", "scheduler-heartbeat.json"),
     schedulerControlPath: path.join(process.cwd(), "data", "scheduler-control.json"),
     digestRunLockPath: path.join(process.cwd(), "data", "digest-run-lock.json"),
-    digestOnDemandCooldownPath: path.join(process.cwd(), "data", "digest-ondemand-cooldown.json"),
-    domainStatsPath: path.join(process.cwd(), "data", "domain-stats.json"),
     sourceRegistryPath: path.join(process.cwd(), "data", "source-registry.json"),
   },
   store: {
@@ -71,6 +69,16 @@ const diagnostics = inspector.getRuntimeStateDiagnostics();
 assert.strictEqual(diagnostics.store.backend, "canary");
 assert.strictEqual(diagnostics.store.initialized, true);
 assert.strictEqual(diagnostics.store.sqlite_path, path.join(process.cwd(), "data", "signalbrief.sqlite"));
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(diagnostics.paths, "digestOnDemandCooldownPath"),
+  false,
+  "runtime state diagnostics should not expose the removed on-demand cooldown file"
+);
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(diagnostics.paths, "domainStatsPath"),
+  false,
+  "runtime state diagnostics should not expose removed domain-learning state"
+);
 
 const health = inspector.getRuntimeStateHealth();
 assert.strictEqual(health.store_backend, "canary");

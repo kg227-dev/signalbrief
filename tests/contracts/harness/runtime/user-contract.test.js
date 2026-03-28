@@ -25,12 +25,15 @@ const normalized = normalizeUserRecord({
   email: " USER@EXAMPLE.COM ",
   status: "PAUSED",
   token: "abc",
-  topics: [" AI×TECH ", "AI×TECH", ""],
-  custom_topics: ["custom_glp_1", "custom_glp_1"],
-  topic_weights: { " AI×TECH ": "2.5", bad: "x" },
+  bookmarks: [{ url: "https://example.com" }],
+  custom_topics: ["custom_glp_1"],
+  source_preferences: { blocked_sources: ["bad.com"], trusted_sources: ["good.com"] },
+  topic_weights: { TECHNOLOGY: 3 },
+  telegram: { chat_id: "123" },
+  watchlist: ["NVIDIA"],
+  topics: [" TECHNOLOGY ", "TECHNOLOGY", "custom_glp_1", ""],
   preferences: {
     delivery_time: " 08:15 ",
-    items_per_digest: "7.1",
     days_of_week: [1, "2", 2, 7],
     email_enabled: false,
   },
@@ -38,13 +41,16 @@ const normalized = normalizeUserRecord({
 assert.strictEqual(normalized.email, "user@example.com");
 assert.strictEqual(normalized.status, USER_STATUS.PAUSED);
 assert.strictEqual(normalized.token, "abc");
-assert.deepStrictEqual(normalized.topics, ["AI×TECH"]);
-assert.deepStrictEqual(normalized.custom_topics, ["custom_glp_1"]);
-assert.strictEqual(normalized.topic_weights["AI×TECH"], 2.5);
-assert.strictEqual(normalized.topic_weights.bad, 0);
-assert.strictEqual(normalized.preferences.items_per_digest, 7);
+assert.deepStrictEqual(normalized.topics, ["TECHNOLOGY"]);
 assert.deepStrictEqual(normalized.preferences.days_of_week, [1, 2]);
 assert.strictEqual(normalized.preferences.email_enabled, false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized.preferences, "items_per_digest"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized.preferences, "telegram_enabled"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized, "topic_weights"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized, "custom_topics"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized, "bookmarks"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized, "source_preferences"), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized, "telegram"), false);
 
 const validation = validateUserRecord(normalized);
 assert.strictEqual(validation.ok, true);

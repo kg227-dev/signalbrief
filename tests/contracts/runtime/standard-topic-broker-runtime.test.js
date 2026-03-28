@@ -17,6 +17,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 
 const {
   createStandardTopicBrokerRuntime,
+  matchPreferredSourceFromBrokerConfig,
   sanitizeBrokerConfig,
 } = runtime;
 
@@ -26,6 +27,17 @@ const bundledConfigPath = path.join(tempDir, "bundled-standard-topic-broker-sour
 
 const config = {
   version: 1,
+  governance: {
+    version: 1,
+    updated_at: "2026-03-25T12:00:00.000Z",
+    domains: {
+      "benzinga.com": {
+        domain: "benzinga.com",
+        policy: "blocked",
+      },
+    },
+    identities: {},
+  },
   lanes: {
     perplexity_discovery: { enabled: true },
     publisher_feed: { enabled: true },
@@ -207,9 +219,61 @@ const sanitized = sanitizeBrokerConfig(config);
 assert.strictEqual(sanitized.sources.length, 4);
 assert.strictEqual(sanitized.topics.HEALTHCARE.enabled, true);
 
+const brokerReportedMatch = matchPreferredSourceFromBrokerConfig(config, "alerts.statnews.com", "HEALTHCARE");
+assert.strictEqual(brokerReportedMatch.match, "topic_reported");
+assert.strictEqual(brokerReportedMatch.kind, "reported");
+assert.strictEqual(brokerReportedMatch.scope, "domain");
+assert.strictEqual(brokerReportedMatch.matched_domain, "statnews.com");
+
+const brokerOfficialMatch = matchPreferredSourceFromBrokerConfig(config, "www.fda.gov", "HEALTHCARE");
+assert.strictEqual(brokerOfficialMatch.match, "topic_official");
+assert.strictEqual(brokerOfficialMatch.kind, "official");
+assert.strictEqual(brokerOfficialMatch.matched_domain, "fda.gov");
+
+const brokerNoMatch = matchPreferredSourceFromBrokerConfig(config, "youtube.com", "HEALTHCARE", {
+  sourceIdentityKey: "youtube:@insideboardroom",
+});
+assert.strictEqual(brokerNoMatch.match, "none");
+assert.strictEqual(brokerNoMatch.scope, "none");
+
 const snapshot = brokerRuntime.inspectStandardTopicBrokerConfig();
 assert.strictEqual(snapshot.source_mode, "runtime");
 assert.strictEqual(snapshot.active_path, runtimeConfigPath);
+
+const topicUpdate = brokerRuntime.updateBrokerTopicConfig({
+  topic: "HEALTHCARE",
+  enabled: false,
+  publisher_feed_enabled: false,
+});
+assert.strictEqual(topicUpdate.after.enabled, false);
+assert.strictEqual(topicUpdate.after.lanes.publisher_feed, false);
+assert.strictEqual(topicUpdate.after.lanes.official, true);
+
+const sourceUpdate = brokerRuntime.updateBrokerSourceConfig({
+  source_id: "stat_rss",
+  enabled: false,
+  tier: 3,
+});
+assert.strictEqual(sourceUpdate.after.enabled, false);
+assert.strictEqual(sourceUpdate.after.tier, 3);
+
+const persistedRawConfig = JSON.parse(fs.readFileSync(runtimeConfigPath, "utf8"));
+assert.strictEqual(persistedRawConfig.governance.domains["benzinga.com"].policy, "blocked");
+assert.strictEqual(persistedRawConfig.topics.HEALTHCARE.enabled, false);
+assert.strictEqual(persistedRawConfig.topics.HEALTHCARE.lanes.publisher_feed, false);
+assert.strictEqual(persistedRawConfig.sources.find((source) => source.id === "stat_rss").enabled, false);
+assert.strictEqual(persistedRawConfig.sources.find((source) => source.id === "stat_rss").tier, 3);
+
+brokerRuntime.updateBrokerTopicConfig({
+  topic: "HEALTHCARE",
+  enabled: true,
+  publisher_feed_enabled: true,
+});
+brokerRuntime.updateBrokerSourceConfig({
+  source_id: "stat_rss",
+  enabled: true,
+  tier: 2,
+});
 
 (async () => {
   const result = await brokerRuntime.fetchBrokerCandidates({

@@ -22,8 +22,8 @@ const {
 const ROOT = path.resolve(__dirname, "..");
 const PUBLIC_VERIFY_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_ATTEMPTS, 8, 1);
 const PUBLIC_VERIFY_DELAY_MS = parsePositiveInt(process.env.DEPLOY_PUBLIC_VERIFY_DELAY_MS, 2500, 250);
-const IMAGE_WAIT_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_ATTEMPTS, 40, 1);
-const IMAGE_WAIT_DELAY_MS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_DELAY_MS, 15000, 250);
+const IMAGE_WAIT_ATTEMPTS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_ATTEMPTS, 8, 1);
+const IMAGE_WAIT_DELAY_MS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_DELAY_MS, 5000, 250);
 const IMAGE_WAIT_TIMEOUT_MS = parsePositiveInt(process.env.DEPLOY_IMAGE_WAIT_TIMEOUT_MS, 10000, 1000);
 const IMAGE_WAIT_AUTO_FALLBACK = parseBoolean(
   Object.prototype.hasOwnProperty.call(process.env, "DEPLOY_IMAGE_WAIT_AUTO_FALLBACK")
@@ -517,7 +517,8 @@ function inferRegistryFromImage(appImage) {
 }
 
 function packageWorkingTreeArchive(archivePath) {
-  run("tar", [
+  const tarArgs = [
+    ...resolveLocalTarCreateFlags(),
     "-czf",
     archivePath,
     "--exclude=.git",
@@ -530,7 +531,8 @@ function packageWorkingTreeArchive(archivePath) {
     "--exclude=tmp",
     "--exclude=.desloppify",
     ".",
-  ], {
+  ];
+  run("tar", tarArgs, {
     label: "pack",
     env: {
       COPYFILE_DISABLE: "1",
@@ -555,6 +557,7 @@ function packageCommitArchive(archivePath, archiveSha) {
     ], { label: "pack source" });
     run("tar", ["-xf", sourceTarPath, "-C", extractDir], { label: "pack extract" });
     run("tar", [
+      ...resolveLocalTarCreateFlags(),
       "-czf",
       archivePath,
       "--exclude=.git",
@@ -578,6 +581,11 @@ function packageCommitArchive(archivePath, archiveSha) {
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
+}
+
+function resolveLocalTarCreateFlags() {
+  if (process.platform !== "darwin") return [];
+  return ["--format", "ustar", "--disable-copyfile", "--no-mac-metadata"];
 }
 
 function buildComposeServiceArgs(services) {
@@ -687,9 +695,11 @@ function buildVerifyRuntimeCommand({
     args.push("--expected-sqlite-path", String(expectedSqlitePath || "").trim());
   }
   const quotedArgs = args.map((arg) => shellQuote(arg)).join(" ");
+  const containerArgs = ["--container-mode", ...args].map((arg) => shellQuote(arg)).join(" ");
   return {
     npm: `npm run -s ops:verify-runtime:quick -- ${quotedArgs}`,
     node: `node scripts/verify-runtime.js ${quotedArgs}`,
+    container: `docker compose exec -T web node scripts/verify-runtime.js ${containerArgs}`,
   };
 }
 
@@ -729,18 +739,12 @@ function buildImageDeployRemoteSteps({
     "echo '[deploy-prod] remote: compose pull'",
     `${composeEnvPrefix}docker compose pull ${composeServices}`.trim(),
     "echo '[deploy-prod] remote: compose up'",
-    `${composeEnvPrefix}docker compose up -d --no-build${requiresForceRecreate ? " --force-recreate" : ""} ${composeServices}`.trim(),
+    `${composeEnvPrefix}docker compose up -d --no-build --remove-orphans${requiresForceRecreate ? " --force-recreate" : ""} ${composeServices}`.trim(),
   );
   if (!skipRemoteVerify) {
     steps.push(
       "echo '[deploy-prod] remote: runtime verify'",
-      "if command -v npm >/dev/null 2>&1; then "
-      + `${verifyCommand.npm}; `
-      + "elif command -v node >/dev/null 2>&1; then "
-      + `${verifyCommand.node}; `
-      + "else "
-      + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
-      + "fi"
+      verifyCommand.container
     );
   }
   steps.push("echo '[deploy-prod] remote: compose ps'");
@@ -760,7 +764,7 @@ function buildArchiveDeployRemoteSteps({
   expectedStoreBackend,
   expectedSqlitePath,
 }) {
-  const composeArgs = ["docker", "compose", "up", "-d"];
+  const composeArgs = ["docker", "compose", "up", "-d", "--remove-orphans"];
   if (!skipBuild) composeArgs.push("--build");
   const requiresForceRecreate = Object.keys(deployEnvValues || {}).some((key) => key !== "SIGNALBRIEF_APP_IMAGE");
   if (requiresForceRecreate) composeArgs.push("--force-recreate");
@@ -797,13 +801,7 @@ function buildArchiveDeployRemoteSteps({
   if (!skipRemoteVerify) {
     steps.push(
       "echo '[deploy-prod] remote: runtime verify'",
-      "if command -v npm >/dev/null 2>&1; then "
-      + `${verifyCommand.npm}; `
-      + "elif command -v node >/dev/null 2>&1; then "
-      + `${verifyCommand.node}; `
-      + "else "
-      + "echo '[deploy-prod] WARN: remote verify skipped (npm and node missing on VM host)' >&2; "
-      + "fi"
+      verifyCommand.container
     );
   }
   steps.push("echo '[deploy-prod] remote: compose ps'");
@@ -950,7 +948,7 @@ async function main() {
         "  --registry-user <registry-user>",
         "  --archive-sha <commit-sha> (legacy alias for --deploy-sha)",
         "  --target-env <production|staging>",
-        "  --services \"web bot worker\"",
+        "  --services \"web worker\"",
         "  --staging-artifact-path <path>",
         "  --staging-artifact-max-age-minutes <n>",
         "  --release-windows-et <spec>",
@@ -980,6 +978,7 @@ async function main() {
   const remoteTmpDir = readOption(options, "remote-tmp-dir", "remote_tmp_dir") || process.env.DEPLOY_REMOTE_TMP_DIR || "/tmp";
   const publicUrl = readOption(options, "public-url", "public_url") || process.env.DEPLOY_PUBLIC_URL || "https://getsignalbrief.com";
   let appImage = readOption(options, "app-image", "app_image") || process.env.DEPLOY_APP_IMAGE || "";
+  const appImageProvidedExplicitly = hasValue(appImage);
   let registry = readOption(options, "registry") || process.env.DEPLOY_REGISTRY || "";
   const registryUser = readOption(options, "registry-user", "registry_user") || process.env.DEPLOY_REGISTRY_USER || "";
   const registryPassword = process.env.DEPLOY_REGISTRY_PASSWORD || "";
@@ -1008,7 +1007,7 @@ async function main() {
     DEFAULT_STAGING_ARTIFACT_MAX_AGE_MINUTES
   );
 
-  const serviceListRaw = readOption(options, "services") || process.env.DEPLOY_SERVICES || "web bot worker";
+  const serviceListRaw = readOption(options, "services") || process.env.DEPLOY_SERVICES || "web worker";
   const services = parseServiceList(serviceListRaw);
   if (services.length === 0) fail("no deploy services provided");
 
@@ -1073,6 +1072,13 @@ async function main() {
   let imageDeployEnabled = hasValue(appImage);
   let useEmergencySourceBuild = emergencySourceBuild;
   let allowAnonymousRegistryPull = false;
+
+  if (targetEnv === "production" && hotfixMode && !useEmergencySourceBuild && !appImageProvidedExplicitly) {
+    log("hotfix deploy: defaulting to emergency_source_build for the local commit");
+    imageDeployEnabled = false;
+    useEmergencySourceBuild = true;
+    appImage = "";
+  }
 
   if (imageDeployEnabled && useEmergencySourceBuild) {
     fail("--emergency-source-build cannot be combined with --app-image");

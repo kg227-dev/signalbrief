@@ -265,24 +265,59 @@ function sanitizeRegistry(rawRegistry) {
 function createSourceRegistryRuntime(options = {}) {
   const fs = options.fs || require("fs");
   const path = options.path || require("path");
-  const sourceRegistryPath = String(options.sourceRegistryPath || "").trim() || resolveSignalBriefRuntimePaths({
+  const runtimePaths = resolveSignalBriefRuntimePaths({
     appRoot: options.appRoot,
     env: options.env,
     nodeEnv: options.nodeEnv,
-  }).sourceRegistryPath;
+  });
+  const explicitSourceRegistryPath = String(options.sourceRegistryPath || "").trim();
+  const configuredBrokerPath = String(options.standardTopicBrokerSourcesPath || "").trim()
+    || runtimePaths.standardTopicBrokerSourcesPath;
+  const standardTopicBrokerSourcesPath = explicitSourceRegistryPath || configuredBrokerPath;
+  const bundledStandardTopicBrokerSourcesPath = String(options.bundledStandardTopicBrokerSourcesPath || "").trim()
+    || path.resolve(
+      options.appRoot ? String(options.appRoot) : path.join(__dirname, "..", ".."),
+      "config",
+      "standard-topic-broker-sources.json"
+    );
+  const sourceRegistryPath = standardTopicBrokerSourcesPath;
+
+  function buildEmptyRegistry() {
+    return {
+      version: DEFAULT_REGISTRY_VERSION,
+      updated_at: null,
+      domains: {},
+      identities: {},
+    };
+  }
+
+  function readJson(filePath) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  function readActiveBrokerConfig() {
+    return readJson(sourceRegistryPath)
+      || readJson(bundledStandardTopicBrokerSourcesPath)
+      || null;
+  }
+
+  function extractGovernanceRegistry(config) {
+    if (!config || typeof config !== "object") return buildEmptyRegistry();
+    if (config.governance && typeof config.governance === "object") {
+      return sanitizeRegistry(config.governance);
+    }
+    if ((config.domains && typeof config.domains === "object") || (config.identities && typeof config.identities === "object")) {
+      return sanitizeRegistry(config);
+    }
+    return sanitizeRegistry(config.governance);
+  }
 
   function loadSourceRegistry() {
-    try {
-      const raw = fs.readFileSync(sourceRegistryPath, "utf8");
-      return sanitizeRegistry(JSON.parse(raw));
-    } catch {
-      return {
-        version: DEFAULT_REGISTRY_VERSION,
-        updated_at: null,
-        domains: {},
-        identities: {},
-      };
-    }
+    return extractGovernanceRegistry(readActiveBrokerConfig());
   }
 
   function buildRegistryMap(registry = loadSourceRegistry()) {
@@ -296,7 +331,12 @@ function createSourceRegistryRuntime(options = {}) {
     const sanitized = sanitizeRegistry(registry);
     const dir = path.dirname(sourceRegistryPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(sourceRegistryPath, JSON.stringify(sanitized, null, 2), "utf8");
+    const baseConfig = readActiveBrokerConfig() || { version: 1, lanes: {}, topics: {}, families: {}, sources: [] };
+    const nextConfig = {
+      ...baseConfig,
+      governance: sanitized,
+    };
+    fs.writeFileSync(sourceRegistryPath, JSON.stringify(nextConfig, null, 2), "utf8");
     return sanitized;
   }
 
@@ -411,6 +451,9 @@ function createSourceRegistryRuntime(options = {}) {
 
   return {
     sourceRegistryPath,
+    sourceOfTruth: "standard_topic_broker",
+    standardTopicBrokerSourcesPath,
+    bundledStandardTopicBrokerSourcesPath,
     loadSourceRegistry,
     writeSourceRegistry,
     buildRegistryMap,

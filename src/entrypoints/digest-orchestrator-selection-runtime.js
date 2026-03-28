@@ -1,9 +1,17 @@
 "use strict";
 
+const {
+  annotateEditorialSignals: annotateEditorialSignalsDefault,
+  buildStorylineCandidates: buildStorylineCandidatesDefault,
+} = require("../domains/digest");
 const { scoreCandidates } = require("../domains/scoring/score-candidate");
+const {
+  assignCanonicalTopic: assignCanonicalTopicDefault,
+  scoreBestFitTopicTag: scoreBestFitTopicTagDefault,
+} = require("../runtime/standard-topic-broker-runtime");
 
 function computeItemAgeHours(item, nowMs) {
-  const ts = item?.published_at || item?.date || item?.timestamp;
+  const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
   if (!ts) return Infinity;
   const ms = typeof ts === "number" ? ts : new Date(ts).getTime();
   if (!Number.isFinite(ms)) return Infinity;
@@ -13,7 +21,7 @@ function computeItemAgeHours(item, nowMs) {
 function splitByFreshnessTiers(items, nowMs) {
   const tier1 = []; // 0–24h: breaking / today
   const tier2 = []; // 24–48h: yesterday
-  const tier3 = []; // 48h+: analysis / commentary
+  const tier3 = []; // >48h: stale overflow, never eligible in the active MVP path
   for (const item of (Array.isArray(items) ? items : [])) {
     const age = computeItemAgeHours(item, nowMs);
     if (age <= 24) tier1.push(item);
@@ -23,13 +31,239 @@ function splitByFreshnessTiers(items, nowMs) {
   return { tier1, tier2, tier3 };
 }
 
-function computeMaxCustomItems({ configuredMaxCustom, selectionTarget, customTags }) {
-  const defaultMaxCustom = (Array.isArray(customTags) && customTags.length > 0)
-    ? Math.max(1, Math.floor(selectionTarget * 0.4))
-    : 0;
-  return Number.isFinite(configuredMaxCustom) && configuredMaxCustom >= 0
-    ? configuredMaxCustom
-    : defaultMaxCustom;
+function isDiscoveryLaneItem(item) {
+  const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").trim().toLowerCase();
+  return origin.includes("discovery") || origin.includes("perplexity");
+}
+
+function isAnalysisOrCommentaryItem(item) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const originalityProfile = String(item?.originality_profile || "").trim().toLowerCase();
+  const contentFlags = Array.isArray(item?.content_flags) ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase()) : [];
+  const url = String(item?.url || "").trim().toLowerCase();
+  return sourceType === "analysis_blog"
+    || originalityProfile === "derived_synthesis"
+    || contentFlags.includes("generic_commentary")
+    || /\/opinions?\//.test(url)
+    || /\/analysis\//.test(url);
+}
+
+function buildTopicFallbackPools(topicItems, nowMs) {
+  const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
+  const eventTier1 = tier1.filter((item) => !isAnalysisOrCommentaryItem(item));
+  const eventTier2 = tier2.filter((item) => !isAnalysisOrCommentaryItem(item));
+  const commentaryPool = [...tier1, ...tier2].filter((item) => isAnalysisOrCommentaryItem(item));
+  return {
+    tier1,
+    tier2,
+    tier3,
+    eventTier1,
+    eventTier2,
+    commentaryPool,
+  };
+}
+
+function selectTopicItemsWithFallback(params = {}) {
+  const {
+    topicItems,
+    itemsPerTopic,
+    maxItemsPerSourceDomain,
+    maxDiscoveryPerTopic,
+    nowMs,
+  } = params;
+
+  const targetCount = Math.max(1, Number(itemsPerTopic || 5));
+  const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 2));
+  const discoveryCap = Math.max(0, Number(maxDiscoveryPerTopic ?? 1));
+  const pools = buildTopicFallbackPools(topicItems, nowMs);
+  const selected = [];
+  const selectedSet = new Set();
+  const rejectionReasonByItem = new Map();
+  const domainCounts = Object.create(null);
+  let discoveryCount = 0;
+  let commentarySelectedCount = 0;
+
+  function recordRejection(item, reason) {
+    if (!item || selectedSet.has(item) || rejectionReasonByItem.has(item)) return;
+    rejectionReasonByItem.set(item, String(reason || "selection_not_selected"));
+  }
+
+  function attemptStage(items, stageName, { commentaryCap = 0 } = {}) {
+    for (const item of (Array.isArray(items) ? items : [])) {
+      if (!item || selectedSet.has(item)) continue;
+      const isCommentary = isAnalysisOrCommentaryItem(item);
+      if (commentaryCap > 0 && isCommentary && commentarySelectedCount >= commentaryCap) {
+        recordRejection(item, "selection_commentary_cap");
+        continue;
+      }
+
+      if (selected.length >= targetCount) {
+        recordRejection(item, "selection_pool_full");
+        continue;
+      }
+
+      const domain = String(item?.source_domain || item?.source || "unknown").trim().toLowerCase();
+      const domainCount = domainCounts[domain] || 0;
+      if (domainCount >= perSourceCap) {
+        recordRejection(item, `selection_source_cap (${domain}: ${domainCount}/${perSourceCap})`);
+        continue;
+      }
+
+      if (isDiscoveryLaneItem(item) && discoveryCount >= discoveryCap) {
+        recordRejection(item, "selection_discovery_cap");
+        continue;
+      }
+
+      selected.push(item);
+      selectedSet.add(item);
+      domainCounts[domain] = domainCount + 1;
+      if (isDiscoveryLaneItem(item)) discoveryCount += 1;
+      if (stageName === "commentary" && isCommentary) commentarySelectedCount += 1;
+    }
+  }
+
+  attemptStage(pools.eventTier1, "event_tier1");
+  if (selected.length < targetCount) attemptStage(pools.eventTier2, "event_tier2");
+  if (selected.length < targetCount) attemptStage(pools.commentaryPool, "commentary", { commentaryCap: 1 });
+
+  for (const item of (Array.isArray(topicItems) ? topicItems : [])) {
+    if (selectedSet.has(item)) continue;
+    recordRejection(item, "selection_not_selected");
+  }
+
+  return {
+    selected,
+    rejectionReasonByItem,
+    pools,
+    commentarySelectedCount,
+  };
+}
+
+function incrementCount(target, key) {
+  const normalizedKey = String(key || "").trim() || "unknown";
+  target[normalizedKey] = (target[normalizedKey] || 0) + 1;
+}
+
+function toSelectionAuditCandidate(item, extras = {}) {
+  return {
+    tag: String(item?.tag || "").trim().toUpperCase() || null,
+    headline: String(item?.headline || "").slice(0, 160),
+    url: String(item?.url || ""),
+    source: String(item?.source || item?.source_domain || ""),
+    source_domain: String(item?.source_domain || item?.source || ""),
+    source_tier: item?.source_tier ?? null,
+    source_type: String(item?.source_type || ""),
+    source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
+    lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
+    _score: item?._score ?? null,
+    _score_components: item?._score_components ?? null,
+    _story_relationship: item?._story_relationship ?? "new",
+    storyline_key: String(item?.storyline_key || "").trim() || null,
+    cross_source_count: Number.isFinite(Number(item?.cross_source_count)) ? Number(item.cross_source_count) : null,
+    published_at: String(item?.published_date || item?.published_at || item?.date || "") || null,
+    freshness_hours: Number.isFinite(Number(extras?.freshness_hours))
+      ? Number(Number(extras.freshness_hours).toFixed(2))
+      : null,
+    content_flags: Array.isArray(item?.content_flags) ? item.content_flags.slice() : [],
+    ...extras,
+  };
+}
+
+function normalizeBestFitText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveConfiguredTopicTags(configTopics = []) {
+  return Array.from(new Set(
+    (Array.isArray(configTopics) ? configTopics : [])
+      .map((topic) => String(topic?.tag || "").trim().toUpperCase())
+      .filter(Boolean)
+  ));
+}
+
+function canonicalizeCandidateTopicTags(items = [], opts = {}) {
+  const candidates = Array.isArray(items) ? items : [];
+  const configTopicTags = resolveConfiguredTopicTags(opts.configTopics);
+  const assignCanonicalTopic = typeof opts.assignCanonicalTopic === "function"
+    ? opts.assignCanonicalTopic
+    : assignCanonicalTopicDefault;
+  const scoreBestFitTopicTag = typeof opts.scoreBestFitTopicTag === "function"
+    ? opts.scoreBestFitTopicTag
+    : scoreBestFitTopicTagDefault;
+  if (configTopicTags.length === 0 || typeof assignCanonicalTopic !== "function" || typeof scoreBestFitTopicTag !== "function") {
+    return { items: candidates.slice(), bestFitTopicReassignedCount: 0 };
+  }
+
+  let bestFitTopicReassignedCount = 0;
+  const canonicalized = candidates.map((item) => {
+    const originalTag = String(item?.tag || "").trim().toUpperCase();
+    const fitText = normalizeBestFitText([
+      item?.headline,
+      item?.summary,
+      item?.canonical_url,
+      item?.url,
+      ...(Array.isArray(item?.entity_keys) ? item.entity_keys : []),
+      ...(Array.isArray(item?.content_flags) ? item.content_flags : []),
+    ].filter(Boolean).join(" "));
+    if (!fitText) return item;
+    const bestTag = String(assignCanonicalTopic(configTopicTags, item) || "").trim().toUpperCase();
+    if (!bestTag) return item;
+    const bestScore = Number(scoreBestFitTopicTag(bestTag, fitText) || 0);
+    const currentScore = originalTag ? Number(scoreBestFitTopicTag(originalTag, fitText) || 0) : 0;
+    if (bestScore <= 0 || bestTag === originalTag || bestScore <= currentScore) return item;
+    bestFitTopicReassignedCount += 1;
+    return {
+      ...item,
+      tag: bestTag,
+      original_tag: item?.original_tag || originalTag || null,
+      canonical_topic_reassigned: true,
+    };
+  });
+
+  return {
+    items: canonicalized,
+    bestFitTopicReassignedCount,
+  };
+}
+
+function prepareSelectionCandidates(items = [], opts = {}) {
+  const candidates = Array.isArray(items) ? items.slice() : [];
+  const buildStorylineCandidates = typeof opts.buildStorylineCandidates === "function"
+    ? opts.buildStorylineCandidates
+    : buildStorylineCandidatesDefault;
+  const annotateEditorialSignals = typeof opts.annotateEditorialSignals === "function"
+    ? opts.annotateEditorialSignals
+    : annotateEditorialSignalsDefault;
+
+  let prepared = candidates;
+  let storylineClusterRemovedCount = 0;
+  if (typeof buildStorylineCandidates === "function" && prepared.length > 0) {
+    const clustered = buildStorylineCandidates(prepared);
+    if (Array.isArray(clustered) && clustered.length > 0) {
+      storylineClusterRemovedCount = Math.max(0, prepared.length - clustered.length);
+      prepared = clustered;
+    }
+  }
+
+  const canonicalized = canonicalizeCandidateTopicTags(prepared, opts);
+  prepared = canonicalized.items;
+
+  if (typeof annotateEditorialSignals === "function" && prepared.length > 0) {
+    const annotated = annotateEditorialSignals(prepared);
+    if (Array.isArray(annotated) && annotated.length === prepared.length) {
+      prepared = annotated;
+    }
+  }
+
+  return {
+    items: prepared,
+    storylineClusterRemovedCount,
+    bestFitTopicReassignedCount: canonicalized.bestFitTopicReassignedCount,
+  };
 }
 
 function createDigestOrchestratorSelectionRuntime(deps) {
@@ -40,7 +274,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     dedupAgainstRecentArchives,
     buildRecentRepeatIndex,
     selectItems,
-    loadRecentArchiveItems,
+    selectItemsDetailed,
     loadRecentArchiveByDate,
     buildRepeatHistory,
     filterItemsAgainstHistory,
@@ -53,12 +287,15 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     isUrlExcluded,
     isDomainSuppressed,
     getPinsForDate,
+    annotateEditorialSignals,
+    buildStorylineCandidates,
+    assignCanonicalTopic,
+    scoreBestFitTopicTag,
   } = deps;
 
   async function selectForEnrichment(params) {
     const {
       selectionTarget,
-      customTags,
       tagPriority,
       runMode,
       digestDateKey,
@@ -67,6 +304,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       scoringConfig: paramScoringConfig,
     } = params;
     let allItems = params.allItems; // must be let — editorial override block reassigns it below
+    const rawCandidateCount = Array.isArray(allItems) ? allItems.length : 0;
 
     const todayStr = String(digestDateKey || "").slice(0, 10);
 
@@ -104,9 +342,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const activePins = typeof getPinsForDate === "function"
       ? getPinsForDate(editorialOverrides.pins, todayStr)
       : [];
+    let injectedPinCount = 0;
     if (activePins.length > 0) {
       const existingUrls = new Set(allItems.map((item) => String(item?.url || "").trim()));
-      let injectedCount = 0;
       for (const pin of activePins) {
         const pinUrl = String(pin?.url || "").trim();
         if (!pinUrl || existingUrls.has(pinUrl)) continue;
@@ -122,11 +360,29 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           source_tier: 1,
         });
         existingUrls.add(pinUrl);
-        injectedCount += 1;
+        injectedPinCount += 1;
       }
-      if (injectedCount > 0) {
-        log(`Editorial overrides: injected ${injectedCount} pinned item(s)`);
+      if (injectedPinCount > 0) {
+        log(`Editorial overrides: injected ${injectedPinCount} pinned item(s)`);
       }
+    }
+    const candidatePoolAfterEditorial = Array.isArray(allItems) ? allItems.length : 0;
+    const preparedCandidates = prepareSelectionCandidates(allItems, {
+      configTopics: CONFIG.topics,
+      annotateEditorialSignals,
+      buildStorylineCandidates,
+      assignCanonicalTopic,
+      scoreBestFitTopicTag,
+    });
+    allItems = preparedCandidates.items;
+    const candidatePoolAfterPreparation = Array.isArray(allItems) ? allItems.length : 0;
+    const storylineClusterRemovedCount = Math.max(0, Number(preparedCandidates.storylineClusterRemovedCount || 0));
+    const bestFitTopicReassignedCount = Math.max(0, Number(preparedCandidates.bestFitTopicReassignedCount || 0));
+    if (storylineClusterRemovedCount > 0) {
+      log(`Storyline clustering collapsed ${storylineClusterRemovedCount} same-story candidate(s) before selection`);
+    }
+    if (bestFitTopicReassignedCount > 0) {
+      log(`Best-fit topic arbitration reassigned ${bestFitTopicReassignedCount} candidate(s) to a stronger topic`);
     }
 
     const crossDayDedupDays = Math.max(1, Number(
@@ -142,8 +398,14 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       targetCount: selectionTarget,
       minBackfillItems: Math.max(1, Number(CONFIG.digest.minBackfillItemsAfterDedup || depthPolicy.defaultItemCount || 5)),
     });
-    const scheduledDefaultMaxAgeHours = 48; // email-only MVP: universal 48h max age regardless of run mode
-    const maxArticleAgeHours = Number(CONFIG.digest.maxArticleAgeHours || scheduledDefaultMaxAgeHours);
+    const configuredMaxAgeHours = Number(
+      (paramScoringConfig && paramScoringConfig.maxAgeHours != null)
+        ? paramScoringConfig.maxAgeHours
+        : (CONFIG.digest.maxArticleAgeHours || 48)
+    );
+    const maxArticleAgeHours = Number.isFinite(configuredMaxAgeHours)
+      ? Math.min(48, Math.max(1, configuredMaxAgeHours))
+      : 48;
     const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;
     const freshItems = dedupRes.items.filter((item) => !ageFilter(item, maxArticleAgeHours));
     const staleRemoved = dedupRes.items.length - freshItems.length;
@@ -226,13 +488,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
     const scoringInput = annotatedItems;
 
-    const configuredMaxCustom = Number(CONFIG.digest.maxCustomItemsPerRun);
-    const maxCustomItems = computeMaxCustomItems({
-      configuredMaxCustom,
-      selectionTarget,
-      customTags,
-    });
-
     // MVP transparent scoring: score every candidate before selection.
     // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
     // Scored items are sorted by _score descending so the selection policy
@@ -248,9 +503,12 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       log(`Scored ${scoredItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
     }
 
-    // MVP per-topic selection: group candidates by tag, select up to itemsPerTopic
-    // per topic, then cap discovery-origin (Perplexity) items to at most 1 per topic.
-    const itemsPerTopic = Math.max(1, Number(CONFIG.digest.itemCount || selectionTarget || 5));
+    // MVP per-topic selection: exactly 5 items per topic when the pool supports it.
+    // Fallback hierarchy stays inside the 48h cap:
+    // 1. event-driven items from the last 24h
+    // 2. event-driven items from 24–48h
+    // 3. at most one strong analysis/commentary item if still needed
+    const itemsPerTopic = 5;
     const maxDiscoveryPerTopic = Math.max(0, Number(CONFIG.digest.maxDiscoveryItemsPerTopic ?? 1));
 
     // Group scored+sorted candidates by topic tag.
@@ -261,45 +519,75 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       byTag.get(topicTag).push(item);
     }
 
-    // Select per topic with freshness-tier fallback, then apply discovery cap.
-    // Spec §2.5: prefer 0-24h items first, backfill 24-48h, then 48h+ as last resort.
+    // Select per topic with a controlled fallback hierarchy that never exceeds 48h.
     const perTopicSelected = [];
     let totalDiscoveryCapped = 0;
+    const topicSelectionAudit = [];
+    const selectionRejectionCounts = Object.create(null);
     for (const [topicTag, topicItems] of byTag.entries()) {
-      // Build tiered pool: tier1 (0-24h) first for freshness preference, then tier2, then tier3.
-      // Pass the full ordered pool to selectItems so its source-domain cap can pick from the
-      // widest possible set rather than a pre-truncated slice.
-      const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
-      const tieredPool = [...tier1, ...tier2, ...tier3];
-
-      const topicPool = selectItems(tieredPool, {
-        maxItems: itemsPerTopic,
-        maxItemsPerTag: itemsPerTopic,
-        customTags: [],
-        maxCustomItems: 0,
-        tagPriority,
-        maxItemsPerSourceDomain: (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
-          ? paramScoringConfig.maxItemsPerSourceDomain
-          : CONFIG.digest.maxItemsPerSourceDomain,
+      const maxItemsPerSourceDomain = (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
+        ? paramScoringConfig.maxItemsPerSourceDomain
+        : CONFIG.digest.maxItemsPerSourceDomain;
+      const topicSelection = selectTopicItemsWithFallback({
+        topicItems,
+        itemsPerTopic,
+        maxItemsPerSourceDomain,
+        maxDiscoveryPerTopic,
+        nowMs,
       });
+      const {
+        selected: topicAcceptedItems,
+        rejectionReasonByItem,
+        pools,
+        commentarySelectedCount,
+      } = topicSelection;
+      const { tier1, tier2, tier3, commentaryPool } = pools;
+      const tieredPool = [...tier1, ...tier2];
 
-      if (topicPool.length < itemsPerTopic) {
-        log(`⚠️ Topic ${topicTag}: only ${topicPool.length}/${itemsPerTopic} items selected (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length}, pool=${tieredPool.length})`);
+      if (topicAcceptedItems.length < itemsPerTopic) {
+        log(`⚠️ Topic ${topicTag}: only ${topicAcceptedItems.length}/${itemsPerTopic} items selected (event_0_24=${pools.eventTier1.length}, event_24_48=${pools.eventTier2.length}, commentary=${commentaryPool.length}, stale=${tier3.length})`);
       }
 
-      let discoveryCount = 0;
-      for (const item of topicPool) {
-        const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").toLowerCase();
-        const isDiscovery = origin.includes("discovery") || origin.includes("perplexity");
-        if (isDiscovery) {
-          discoveryCount += 1;
-          if (discoveryCount > maxDiscoveryPerTopic) {
-            totalDiscoveryCapped += 1;
-            continue;
-          }
-        }
-        perTopicSelected.push(item);
+      totalDiscoveryCapped += Array.from(rejectionReasonByItem.values()).filter((reason) => reason === "selection_discovery_cap").length;
+      perTopicSelected.push(...topicAcceptedItems);
+
+      const topicReasonCounts = Object.create(null);
+      const selectedSet = new Set(topicAcceptedItems);
+      const topicCandidates = tieredPool.map((item) => {
+        const selectedForTopic = selectedSet.has(item);
+        const selectionReason = selectedForTopic ? null : String(rejectionReasonByItem.get(item) || "selection_not_selected");
+        if (!selectedForTopic) incrementCount(topicReasonCounts, selectionReason);
+        return toSelectionAuditCandidate(item, {
+          freshness_hours: computeItemAgeHours(item, nowMs),
+          selected: selectedForTopic,
+          selection_reason: selectionReason,
+        });
+      });
+      for (const [reason, count] of Object.entries(topicReasonCounts)) {
+        selectionRejectionCounts[reason] = (selectionRejectionCounts[reason] || 0) + count;
       }
+      const topicLaneCounts = Object.create(null);
+      for (const item of tieredPool) incrementCount(topicLaneCounts, String(item?.retrieval_origin || item?.retrieval_lane || "unknown"));
+      topicSelectionAudit.push({
+        tag: topicTag,
+        total_candidates: tieredPool.length,
+        selected_count: topicAcceptedItems.length,
+        rejected_count: Math.max(0, topicItems.length - topicAcceptedItems.length),
+        tier_counts: {
+          tier1: tier1.length,
+          tier2: tier2.length,
+          tier3: tier3.length,
+        },
+        fallback_stage_counts: {
+          event_tier1: pools.eventTier1.length,
+          event_tier2: pools.eventTier2.length,
+          commentary_candidates: commentaryPool.length,
+          commentary_selected: commentarySelectedCount,
+        },
+        lane_breakdown: topicLaneCounts,
+        rejection_reason_counts: topicReasonCounts,
+        candidates: topicCandidates,
+      });
     }
     let selected = perTopicSelected;
     if (totalDiscoveryCapped > 0) {
@@ -307,38 +595,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     }
 
     if (selected.length === 0) {
-      if (runMode === "scheduled") {
-        await emitDigestIncident(
-          "no-live-items-scheduled",
-          "Scheduled run produced zero live selectable items; aborting (no archive rescue on scheduled runs)",
-          { mode: runMode, due_users: dueUsersCount, standard_topics: standardFetchCallsPlanned }
-        );
-        throw new Error("No live items on scheduled run; digest aborted (no archive rescue)");
-      }
-      // Non-scheduled (manual/on-demand) runs may still use archive fallback.
-      const fallbackPool = loadRecentArchiveItems(5);
-      if (fallbackPool.length > 0) {
-        selected = selectItems(fallbackPool, {
-          maxItems: selectionTarget,
-          maxItemsPerTag: CONFIG.digest.maxItemsPerTag,
-          customTags: [],
-          maxCustomItems: 0,
-          tagPriority,
-          maxItemsPerSourceDomain: CONFIG.digest.maxItemsPerSourceDomain,
-        });
-        log(`⚠️ Live fetch produced no selectable items; using archive fallback pool (${fallbackPool.length} items, selected=${selected.length})`);
-        await emitDigestIncident(
-          "archive-fallback-engaged",
-          `Live fetch produced zero selectable items; archive fallback selected ${selected.length}`,
-          { mode: runMode, due_users: dueUsersCount, standard_topics: standardFetchCallsPlanned, selected_items: selected.length }
-        );
-      }
-    }
-
-    if (selected.length === 0) {
       await emitDigestIncident(
         "no-selectable-items",
-        "No selectable items after archive fallback; digest run aborted",
+        "No selectable live items; digest run aborted",
         {
           mode: runMode,
           due_users: dueUsersCount,
@@ -346,7 +605,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           selected_items: 0,
         }
       );
-      throw new Error("No items available from live fetch or archive fallback; digest aborted");
+      throw new Error("No live items available after freshness and selection filters; digest aborted");
     }
 
     log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
@@ -359,8 +618,16 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       depthPolicy,
       repetitionNote,
       selectionDiagnostics: {
-        candidate_pool_before_dedup: Array.isArray(allItems) ? allItems.length : 0,
+        candidate_pool_before_dedup: rawCandidateCount,
+        candidate_pool_after_editorial: candidatePoolAfterEditorial,
+        candidate_pool_after_preparation: candidatePoolAfterPreparation,
+        candidate_pool_after_archive_dedup: dedupRes.items.length,
+        candidate_pool_after_freshness: freshItems.length,
+        candidate_pool_after_history: dedupedItems.length,
+        candidate_pool_after_story_relationship: annotatedItems.length,
         candidate_pool_after_dedup: dedupedItems.length,
+        storyline_cluster_removed_count: storylineClusterRemovedCount,
+        best_fit_topic_reassigned_count: bestFitTopicReassignedCount,
         candidate_pool_scored: scoredItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
         stale_removed_count: Math.max(0, Number(staleRemoved || 0)),
@@ -369,19 +636,15 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         history_streaks_detected: historyResult.streaks.length,
         story_relationship_continuation_removed: continuationRemovedCount || 0,
         story_relationship_follow_up_count: followUpCount || 0,
+        editorial_excluded_count: excludedCount,
+        editorial_domain_suppressed_count: suppressedCount,
+        editorial_pin_count: injectedPinCount,
+        discovery_capped_count: totalDiscoveryCapped,
         score_top: scoredItems[0]?._score ?? null,
         score_bottom: scoredItems.length > 0 ? scoredItems[scoredItems.length - 1]?._score ?? null : null,
-        scored_candidates: scoredItems.map((item) => ({
-          tag: String(item?.tag || "").trim().toUpperCase() || null,
-          headline: String(item?.headline || "").slice(0, 80),
-          url: String(item?.url || ""),
-          source: String(item?.source || item?.source_domain || ""),
-          source_tier: item?.source_tier ?? null,
-          lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
-          _score: item?._score ?? null,
-          _score_components: item?._score_components ?? null,
-          _story_relationship: item?._story_relationship ?? "new",
-        })),
+        selection_rejection_counts: selectionRejectionCounts,
+        scored_candidates: scoredItems.map((item) => toSelectionAuditCandidate(item)),
+        topic_selection_audit: topicSelectionAudit,
       },
     };
   }
@@ -393,7 +656,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
 module.exports = {
   createDigestOrchestratorSelectionRuntime,
-  computeMaxCustomItems,
+  canonicalizeCandidateTopicTags,
   computeItemAgeHours,
+  prepareSelectionCandidates,
   splitByFreshnessTiers,
 };

@@ -61,7 +61,6 @@ function buildCtx(method, rawUrl) {
       json,
       findUserByToken: (token) => users.find((user) => user.token === token) || null,
       writeUser: (chatId, payload) => writes.push({ chatId, payload }),
-      blankReengagementState: () => ({}),
     });
     const ctx = buildCtx("GET", "/api/unsubscribe/confirm?token=token-1");
     const handled = await actions.handleUnsubscribeConfirm(ctx);
@@ -76,7 +75,6 @@ function buildCtx(method, rawUrl) {
       json,
       findUserByToken: () => null,
       writeUser: () => {},
-      blankReengagementState: () => ({}),
     });
     const missingToken = buildCtx("POST", "/api/unsubscribe/one-click");
     await actions.handleUnsubscribeOneClick(missingToken);
@@ -93,7 +91,6 @@ function buildCtx(method, rawUrl) {
       json,
       findUserByToken: (token) => users.find((user) => user.token === token) || null,
       writeUser: (chatId, payload) => writes.push({ chatId, payload }),
-      blankReengagementState: () => ({ day4_sent_at: null }),
     });
 
     const pauseCtx = buildCtx("GET", "/api/pause?token=token-1");
@@ -109,7 +106,6 @@ function buildCtx(method, rawUrl) {
     assert.ok(String(reactivateCtx.res.headers.Location || "").includes("&reactivated=1"));
     assert.strictEqual(writes[1].payload.status, "active");
     assert.strictEqual(writes[1].payload.preferences.email_enabled, true);
-    assert.deepStrictEqual(writes[1].payload.reengagement_state, { day4_sent_at: null });
   }
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

@@ -159,7 +159,6 @@ function buildAdminRosterEntry({
   const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
   const daysLabel = formatDaysLabel(allowedDays);
   const nextDelivery = user.status === "active" ? computeNextDeliveryEt(prefs) : null;
-  const tgLinked = !!(user.chatId && !user.chatId.startsWith("email-"));
   const adminUserPath = user.email ? `/admin/user?email=${encodeURIComponent(user.email)}` : null;
   const archivePath = buildArchivePath(user, adminUserPath);
   const settingsPath = buildSettingsPath(user, adminUserPath);
@@ -180,15 +179,10 @@ function buildAdminRosterEntry({
     digests_legacy: Math.max(0, Number(user.digests_received || 0)),
     last_digest: toETDate(effectiveLastDigestAt),
     last_scheduled_digest: toETDate(recentScheduledAt),
-    telegram: tgLinked,
     email_enabled: prefs.email_enabled !== false,
-    telegram_enabled: !!(prefs.telegram_enabled && tgLinked),
     topics: (user.topics || []).length,
     topics_raw: Array.isArray(user.topics) ? user.topics : [],
     topics_list: buildTopicsList(user.topics),
-    bookmarks: (user.bookmarks || []).length,
-    adjustments: Object.keys(user.topic_weights || {}).length,
-    topic_weights: user.topic_weights || {},
     last_digest_preview: buildLastDigestPreview({ last_digest_items: effectiveLastDigestItems }),
     last_digest_item_count: effectiveLastDigestItems.length,
     last_scheduled_digest_item_count: Array.isArray(recentScheduledRow?.sent_items) ? recentScheduledRow.sent_items.length : 0,
@@ -198,7 +192,6 @@ function buildAdminRosterEntry({
     days_of_week: allowedDays,
     days_label: daysLabel,
     timezone: prefs.timezone || "America/New_York",
-    items_per_digest: parseInt(prefs.items_per_digest, 10) || 5,
     depth: depthLabel(prefs.depth),
     next_delivery_et: nextDelivery?.label || "—",
     next_delivery_key: nextDelivery?.key || null,

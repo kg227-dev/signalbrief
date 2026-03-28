@@ -10,7 +10,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `entrypoints/` | 3 | Bot server, digest entrypoint, and scheduler worker startup contracts; checks exported function surfaces and guards against import-time side effects | `src/entrypoints/bot-server.js`, `src/entrypoints/digest.js`, `src/entrypoints/scheduler-worker.js` |
+| `entrypoints/` | 2 | Digest entrypoint and scheduler worker startup contracts; checks exported function surfaces and guards against import-time side effects | `src/entrypoints/digest.js`, `src/entrypoints/scheduler-worker.js` |
 | `entrypoints/` (runtime) | 2 | Digest data runtime and digest runtime module shapes | `src/digest/runtime/digest-data-runtime.js`, `src/entrypoints/digest-runtime.js` |
 | `entrypoints/` (orchestrator) | 16 | One file per orchestrator stage: archive, bootstrap, cost, delivery, delivery-ranking, enrichment, fetch, incident, lock, logging, parity-shape, prefilter, schedule, seams, selection, transport | `src/entrypoints/digest-orchestrator-*-runtime.js` |
 
@@ -34,13 +34,13 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `harness/digest/domain/` | 3 | Domain learning, source domain, and storyline domain runtime module shapes | `src/digest/domain/domain-learning-runtime.js`, `source-domain-runtime.js`, `storyline-domain-runtime.js` |
+| `harness/digest/domain/` | 2 | Source domain and storyline domain runtime module shapes | `src/digest/domain/source-domain-runtime.js`, `storyline-domain-runtime.js` |
 
 ### Digest runtime tests — `tests/contracts/harness/digest/runtime/`
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `harness/digest/runtime/` | 8 | Export surfaces for data enrichment, fetch, fetch-request, delivery record, email item formatting, Telegram content formatting, item ordering, and repeat freshness runtimes | `src/digest/runtime/digest-data-enrich-runtime.js`, `digest-data-fetch-*.js`, `digest-delivery-record-runtime.js`, `digest-formatting-*.js`, `digest-item-ordering-runtime.js`, `repeat-freshness-runtime.js` |
+| `harness/digest/runtime/` | 7 | Export surfaces for data enrichment, fetch, fetch-request, delivery record, item ordering, repeat freshness, and email formatting runtimes | `src/digest/runtime/digest-data-enrich-runtime.js`, `digest-data-fetch-*.js`, `digest-delivery-record-runtime.js`, `digest-formatting-*.js`, `digest-item-ordering-runtime.js`, `repeat-freshness-runtime.js` |
 
 ### Digest application tests — `tests/contracts/harness/digest/application/`
 
@@ -58,20 +58,13 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `harness/runtime/` | 20 | Core platform runtime module surfaces: config provider, digest lock, engagement events, mailer lifecycle, mailer, personalization, quality score, reply handler, runtime types, store adapters (file, SQLite, canary), store record, store (full behavioral contract), structured logger, user contract | `src/runtime/store.js`, `src/runtime/mailer/*.js`, `src/runtime/personalization/*.js`, `src/runtime/engagement/*.js`, `src/runtime/reply-handler-runtime.js`, `src/runtime/structured-logger-runtime.js` |
-
-### Reply handler tests — `tests/contracts/harness/runtime/reply/`
-
-| Directory | File Count | What It Tests | Key Dependencies |
-|---|---|---|---|
-| `harness/runtime/reply/` | 8 | Intent service, onboarding service, reply command digest, reply command handlers, reply logging, reply session runtime surfaces, and transport module | `src/runtime/reply/intent-service.js`, `onboarding-service*.js`, `reply-command-*.js`, `reply-logging-runtime.js`, `reply-session-runtime.js`, `transport.js` |
-| `harness/runtime/reply/onboarding/` | 2 | Link verification flow and pending verification onboarding step contracts | `src/runtime/reply/onboarding/link-verification-flow.js`, `pending-verification.js` |
+| `harness/runtime/` | 16 | Core platform runtime module surfaces: config provider, digest lock, engagement events, mailer lifecycle, mailer, quality score, runtime types, store adapters (file, SQLite, canary), store record, store (full behavioral contract), structured logger, user contract | `src/runtime/store.js`, `src/runtime/mailer/*.js`, `src/runtime/engagement/*.js`, `src/runtime/structured-logger-runtime.js` |
 
 ### Suite tests — `tests/contracts/harness/suites/`
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `harness/suites/` | 11 | Test harness suite module exports: analysis quality, cross-day freshness, custom topics, depth control, end-to-end, module coverage (checks-runtime, checks-topic, common, suite), relevance scoring runtimes | `test-harness/suites/*.js`, `test-harness/suites/module-coverage/*.js` |
+| `harness/suites/` | 11 | Test harness suite module exports: analysis quality, cross-day freshness, depth control, end-to-end, module coverage (checks-runtime, checks-topic, common, suite), relevance scoring runtimes, and legacy coverage shims pending archive cleanup | `test-harness/suites/*.js`, `test-harness/suites/module-coverage/*.js` |
 
 ### Stage tests — `tests/contracts/harness/stages/`
 
@@ -112,8 +105,6 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 | `replay-eval.test.js` | Replay eval module export surface |
 | `replay-runtime.test.js` | Replay runtime module export surface |
 | `run-matrix.test.js` | Run-matrix script export surface |
-| `sandbox-pipeline.test.js` | Sandbox pipeline export surface |
-| `sandbox-pipeline-runtime.test.js` | Sandbox pipeline runtime export surface |
 
 ---
 
@@ -134,27 +125,27 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 | Settings UI | 2 | Settings UI runtime and settings UI topic actions runtime | `web/settings-ui-runtime.js`, `web/settings-ui-topic-actions-runtime.js` |
 | Web index | 1 | Web index export surface | `web/index.js` |
 
-### Route handler tests — `tests/contracts/web-api/routes/` (10 files)
+### Route handler tests — `tests/contracts/web-api/routes/` (11 files)
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `web-api/routes/` | 10 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, bookmarks actions, engagement actions, health, unsubscribe actions, and source registry routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js` |
+| `web-api/routes/` | 11 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, engagement, health, unsubscribe, source registry, admin email messaging, and legacy bookmark-removal routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js`, `web/routes/admin-api-message-actions-runtime.js` |
 
 ### Service tests — `tests/contracts/web-api/services/` (15 files)
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `web-api/services/` | 15 | Behavioral and export contracts for web services: admin-ops (cost log, heartbeat, action log), admin-ops analytics/scheduler/utils, admin digest insights, admin recent digests export, admin source registry, admin stats costs forecast, archive scoring, delivery schedule, reengagement state, request metadata, topic normalization, rate limiter, user handlers | `web/services/admin-ops*.js`, `web/services/archive-scoring.js`, `web/services/delivery-schedule.js`, `web/services/reengagement-state.js`, `web/services/request-metadata.js`, `web/services/web-rate-limit.js`, `web/services/web-user-handlers.js` |
+| `web-api/services/` | 14 | Behavioral and export contracts for web services: admin-ops (cost log, heartbeat, action log), admin-ops analytics/scheduler/utils, admin digest insights, admin recent digests export, admin source registry, admin stats costs forecast, archive scoring, delivery schedule, request metadata, topic normalization, rate limiter, user handlers | `web/services/admin-ops*.js`, `web/services/archive-scoring.js`, `web/services/delivery-schedule.js`, `web/services/request-metadata.js`, `web/services/web-rate-limit.js`, `web/services/web-user-handlers.js` |
 
 ---
 
 ## 4. Job Contracts
 
-`tests/contracts/jobs/` — 4 files
+`tests/contracts/jobs/` — 3 files
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `jobs/` | 4 | Digest runner (export surface), digest runner runtime, digest runner core runtime, and reengagement job export surfaces | `src/jobs/digest-runner-runtime.js`, `src/jobs/digest-runner-core-runtime.js`, `src/jobs/reengagement.js` |
+| `jobs/` | 3 | Digest runner (export surface), digest runner runtime, and digest runner core runtime export surfaces | `src/jobs/digest-runner-runtime.js`, `src/jobs/digest-runner-core-runtime.js` |
 
 ---
 

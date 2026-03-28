@@ -34,33 +34,35 @@ assert.strictEqual(
   "should match standard topic in all caps"
 );
 
-// custom topic slugification
+// custom topics are disabled unless explicitly allowed
 assert.strictEqual(
   canonicalizeTopicKey("Quantum Computing", DEFAULT_TOPICS),
-  "custom_quantum_computing",
-  "non-standard topic should become custom slug"
+  "",
+  "non-standard topic should be rejected when custom topics are disabled"
 );
 
 assert.strictEqual(
   canonicalizeTopicKey("custom_blockchain", DEFAULT_TOPICS),
-  "custom_blockchain",
-  "already-prefixed custom topic should normalize cleanly"
+  "",
+  "already-prefixed custom topic should be rejected when custom topics are disabled"
 );
 
-// special characters stripped
 assert.strictEqual(
-  canonicalizeTopicKey("AI/ML & Robotics!!!", DEFAULT_TOPICS),
-  "custom_ai_ml_robotics",
-  "special chars should be stripped and replaced with underscores"
+  canonicalizeTopicKey("Quantum Computing", DEFAULT_TOPICS, { allowCustomTopics: true }),
+  "",
+  "non-standard topic should still fail closed in the reduced-scope MVP"
 );
 
-// slug length capped
+assert.strictEqual(
+  canonicalizeTopicKey("AI/ML & Robotics!!!", DEFAULT_TOPICS, { allowCustomTopics: true }),
+  "",
+  "special-character inputs should not create custom topics"
+);
+
 {
   const longTopic = "a".repeat(100);
-  const result = canonicalizeTopicKey(longTopic, DEFAULT_TOPICS);
-  assert.ok(result.startsWith("custom_"), "long topic should get custom_ prefix");
-  const slugPart = result.replace(/^custom_/, "");
-  assert.ok(slugPart.length <= MAX_CUSTOM_SLUG_LENGTH, `slug should be capped at ${MAX_CUSTOM_SLUG_LENGTH} chars`);
+  const result = canonicalizeTopicKey(longTopic, DEFAULT_TOPICS, { allowCustomTopics: true });
+  assert.strictEqual(result, "", `long non-standard topics should be rejected even with legacy flags (max slug ${MAX_CUSTOM_SLUG_LENGTH})`);
 }
 
 // --------------- normalizeTopicsForUserInput ---------------
@@ -89,6 +91,20 @@ assert.strictEqual(
   assert.ok(result.error.includes("at least 2"));
 }
 
+// too many topics
+{
+  const result = normalizeTopicsForUserInput(
+    ["AI & Machine Learning", "Cybersecurity", "Climate & Energy", "Energy Storage"],
+    {
+      defaultTopics: [...DEFAULT_TOPICS, "Energy Storage"],
+      minRequired: 1,
+      maxTopics: 3,
+    }
+  );
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.error.includes("no more than 3"));
+}
+
 // valid input with dedup
 {
   const result = normalizeTopicsForUserInput(
@@ -98,28 +114,27 @@ assert.strictEqual(
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.topics.length, 2, "duplicate should be deduped");
   assert.deepStrictEqual(result.topics, ["AI & Machine Learning", "Cybersecurity"]);
-  assert.strictEqual(result.customCount, 0);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(result, "customCount"), false);
 }
 
-// custom keyword limit
+// custom topics rejected in reduced-scope mode
 {
   const result = normalizeTopicsForUserInput(
     ["AI & Machine Learning", "custom1", "custom2", "custom3", "custom4"],
-    { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxCustomKeywords: 3 }
+    { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxTopics: 8, maxCustomKeywords: 0 }
   );
   assert.strictEqual(result.ok, false);
-  assert.ok(result.error.includes("up to 3"), "should enforce custom keyword limit");
+  assert.ok(result.error.includes("supported topic"), "reduced-scope MVP should reject custom topics");
 }
 
-// valid with custom keywords within limit
+// non-default topics fail closed even when legacy flags are present
 {
   const result = normalizeTopicsForUserInput(
     ["AI & Machine Learning", "Quantum Computing", "Blockchain"],
     { defaultTopics: DEFAULT_TOPICS, minRequired: 1, maxCustomKeywords: 3 }
   );
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.topics.length, 3);
-  assert.strictEqual(result.customCount, 2, "2 non-default topics should count as custom");
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.error.includes("supported topic"));
 }
 
 process.stdout.write("[topic-normalization-runtime] all assertions passed\n");

@@ -27,10 +27,6 @@ function buildWelcomeDepthLabel(prefs) {
 
 function buildWelcomeTopicsHtml(topics) {
   return (topics || []).map((topic) => {
-    if (topic.startsWith("custom_")) {
-      const label = `Custom: ${topic.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}`;
-      return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#7C3AED;background:#F5F3FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${label}</span>`;
-    }
     return `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:4px;margin:0 5px 6px 0;">${topic}</span>`;
   }).join("");
 }

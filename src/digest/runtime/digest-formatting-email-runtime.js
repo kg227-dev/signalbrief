@@ -9,7 +9,6 @@ function createDigestEmailFormattingRuntime(deps) {
   const {
     BASE_URL,
     EMAIL_TEMPLATE,
-    buildPublicDigestUrl,
     topicVisual,
     formatTopicDisplay,
   } = deps;
@@ -46,13 +45,6 @@ function createDigestEmailFormattingRuntime(deps) {
       : "today's top signals across all areas";
     const learningSummary = String(opts.learningSummary || "").trim();
     const editorialNoteText = String(opts.editorialNote || "").trim();
-    const publicDigestUrlBase = String(opts.publicDigestUrl || "").trim()
-      || buildPublicDigestUrl(digestDateKey)
-      || BASE_URL;
-    const publicDigestUrl = userToken
-      ? `${publicDigestUrlBase}${publicDigestUrlBase.includes("?") ? "&" : "?"}ref=${encodeURIComponent(userToken)}`
-      : publicDigestUrlBase;
-    const publicDigestUrlEncoded = encodeURIComponent(publicDigestUrl);
     const headerMeta = styleRuntime.buildEmailHeaderMeta(items.length, opts.digestQuality);
     const itemsHtml = items
       .map((item, index) => itemsRuntime.renderDigestItemHtml(item, index, { userToken, digestId, depth }))
@@ -67,8 +59,6 @@ function createDigestEmailFormattingRuntime(deps) {
       editorialNote: sectionsRuntime.buildEditorialNote(editorialNoteText),
       settingsFooter: sectionsRuntime.renderSettingsFooter(user, userToken),
       baseUrl: BASE_URL,
-      publicDigestUrl,
-      publicDigestUrlEncoded,
       userToken,
       digestDateKey: digestDateKey || "",
       itemsHtml,

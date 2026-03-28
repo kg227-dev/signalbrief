@@ -7,8 +7,9 @@ const DEFAULT_BUDGET_CAP_USD = 25;
 const DEFAULT_BUDGET_RESERVE_USD = 5;
 const DEFAULT_SCENARIOS = Object.freeze([
   "standard_full",
-  "custom_realistic",
-  "custom_adversarial",
+  "standard_core",
+  "standard_phase1",
+  "standard_phase1_focus",
 ]);
 const DEFAULT_MANUAL_REVIEW_SAMPLE_COUNT = 8;
 
@@ -56,25 +57,6 @@ const SOURCE_EVAL_BANDS = Object.freeze({
   decent: 68,
 });
 
-const CUSTOM_KEYWORD_SETS = Object.freeze({
-  realistic: Object.freeze([
-    "Nvidia",
-    "GLP-1",
-    "agentic AI",
-    "SEC rulemaking",
-    "CBAM",
-    "rate cuts",
-    "grid infrastructure",
-    "semicap",
-  ]),
-  adversarial: Object.freeze([
-    "DOGE",
-    "quantum computing",
-    "Starlink",
-    "SEC rulemaking",
-  ]),
-});
-
 function sourceEvalBand(score) {
   const value = Number(score) || 0;
   if (value >= SOURCE_EVAL_BANDS.strong) return "strong";
@@ -84,7 +66,6 @@ function sourceEvalBand(score) {
 
 module.exports = {
   CURRENT_DQS_FORMULA,
-  CUSTOM_KEYWORD_SETS,
   DEFAULT_BUDGET_CAP_USD,
   DEFAULT_BUDGET_RESERVE_USD,
   DEFAULT_MANUAL_REVIEW_SAMPLE_COUNT,

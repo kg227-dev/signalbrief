@@ -6,7 +6,6 @@ const suiteModules = [
   require("../suites/02-relevance-scoring"),
   require("../suites/03-analysis-quality"),
   require("../suites/04-diversity"),
-  require("../suites/05-custom-topics"),
   require("../suites/06-depth-control"),
   require("../suites/07-item-count"),
   require("../suites/08-cross-day-freshness"),
@@ -43,7 +42,7 @@ function buildRuntime({ args, appConfig, dataset, recentRepeatIndex }) {
       minBaseScoreForFinal: Number(appConfig?.digest?.minBaseScoreForFinal || 6.5),
     },
     depthPolicy: {
-      defaultItemCount: Number(dataset?.metadata?.selection_target || appConfig?.digest?.itemCount || 7),
+      defaultItemCount: Number(dataset?.metadata?.selection_target || appConfig?.digest?.itemCount || 5),
       minFilteredItems: 3,
     },
   });
@@ -60,7 +59,6 @@ function buildRuntime({ args, appConfig, dataset, recentRepeatIndex }) {
     analysis_calibration_samples: Number(args.analysis_calibration_samples || 0),
     freshness_max_snapshots: Number(args.freshness_max_snapshots || 120),
     freshness_window_days: Math.max(3, Number(appConfig?.digest?.crossDayDedupDays || 3)),
-    custom_persona_limit: Number(args.custom_persona_limit || 0),
     confidence_bootstrap: args.confidence_bootstrap,
     run_label: args.run_label,
   };

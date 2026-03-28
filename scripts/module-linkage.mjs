@@ -2,7 +2,6 @@
 // This file is not executed in production; it enumerates module relationships explicitly.
 
 import "../src/jobs/digest-runner-runtime.js";
-import "../src/jobs/reengagement-runtime.js";
 import "../src/digest/domain/digest-policy-domain-runtime.js";
 import "../src/digest/domain/repeat-dedup-domain-runtime.js";
 import "../src/digest/domain/selection-domain-runtime.js";
@@ -25,9 +24,7 @@ import "../src/digest/runtime/digest-formatting-email-template-runtime.js";
 import "../src/digest/runtime/digest-formatting-email-runtime.js";
 import "../src/digest/runtime/digest-item-ordering-runtime.js";
 import "../src/digest/runtime/digest-formatting-topic-runtime.js";
-import "../src/digest/runtime/digest-formatting-telegram-runtime.js";
 import "../src/dependency-links.mjs";
-import "../src/entrypoints/bot-server.js";
 import "../src/entrypoints/digest.js";
 import "../src/entrypoints/digest-orchestrator-archive-runtime.js";
 import "../src/entrypoints/digest-orchestrator-bootstrap-runtime.js";
@@ -46,22 +43,9 @@ import "../src/runtime/mailer/lifecycle/lifecycle-senders.js";
 import "../src/runtime/mailer/lifecycle/welcome-content.js";
 import "../src/runtime/mailer/lifecycle/welcome-sender.js";
 import "../src/runtime/mailer/mailer-runtime.js";
-import "../src/runtime/personalization/personalization-runtime.js";
 import "../src/runtime/quality-score.js";
 import "../src/runtime/url-normalization-runtime.js";
-import "../src/runtime/reply/reply-handler-runtime.js";
-import "../src/runtime/reply/command-router.js";
-import "../src/runtime/reply/intent-service.js";
-import "../src/runtime/reply/onboarding/keys.js";
-import "../src/runtime/reply/onboarding/link-verification-flow.js";
-import "../src/runtime/reply/onboarding/messages.js";
-import "../src/runtime/reply/onboarding-service.js";
-import "../src/runtime/reply/onboarding-service-runtime.js";
-import "../src/runtime/reply/reply-logging-runtime.js";
-import "../src/runtime/reply/reply-session-runtime.js";
-import "../src/runtime/reply/transport.js";
 import "../src/runtime/store.js";
-import "../src/sandbox-pipeline-runtime.js";
 import "../test-harness/cache/index.js";
 import "../test-harness/cache/cache-archive.js";
 import "../test-harness/cache/cache-budget.js";
@@ -102,7 +86,6 @@ import "../test-harness/suites/01-topic-matching.js";
 import "../test-harness/suites/02-relevance-scoring.js";
 import "../test-harness/suites/03-analysis-quality.js";
 import "../test-harness/suites/04-diversity.js";
-import "../test-harness/suites/05-custom-topics.js";
 import "../test-harness/suites/06-depth-control.js";
 import "../test-harness/suites/07-item-count.js";
 import "../test-harness/suites/08-cross-day-freshness.js";
@@ -114,7 +97,6 @@ import "../test-harness/suites/module-coverage/common.js";
 import "../test-harness/suites/module-coverage/suite.js";
 import "../test-harness/suites/analysis-quality-runtime.js";
 import "../test-harness/suites/cross-day-freshness-runtime.js";
-import "../test-harness/suites/custom-topics-runtime.js";
 import "../test-harness/suites/depth-control-runtime.js";
 import "../test-harness/suites/end-to-end-runtime.js";
 import "../test-harness/suites/relevance-scoring-runtime.js";
@@ -134,7 +116,6 @@ import "../web/services/admin-ops-scheduler.js";
 import "../web/services/admin-ops-utils.js";
 import "../web/services/archive-scoring.js";
 import "../web/services/delivery-schedule.js";
-import "../web/services/reengagement-state.js";
 import "../web/services/request-metadata.js";
 import "../web/services/web-rate-limit.js";
 import "../web/settings-runtime.js";
@@ -143,7 +124,6 @@ import "../web/settings.js";
 
 export const dependencyLinks = [
   "src/jobs/digest-runner-runtime.js",
-  "src/jobs/reengagement-runtime.js",
   "src/digest/domain/digest-policy-domain-runtime.js",
   "src/digest/domain/repeat-dedup-domain-runtime.js",
   "src/digest/domain/selection-domain-runtime.js",
@@ -166,9 +146,7 @@ export const dependencyLinks = [
   "src/digest/runtime/digest-formatting-email-runtime.js",
   "src/digest/runtime/digest-item-ordering-runtime.js",
   "src/digest/runtime/digest-formatting-topic-runtime.js",
-  "src/digest/runtime/digest-formatting-telegram-runtime.js",
   "src/dependency-links.mjs",
-  "src/entrypoints/bot-server.js",
   "src/entrypoints/digest.js",
   "src/entrypoints/digest-orchestrator-archive-runtime.js",
   "src/entrypoints/digest-orchestrator-bootstrap-runtime.js",
@@ -187,22 +165,9 @@ export const dependencyLinks = [
   "src/runtime/mailer/lifecycle/welcome-content.js",
   "src/runtime/mailer/lifecycle/welcome-sender.js",
   "src/runtime/mailer/mailer-runtime.js",
-  "src/runtime/personalization/personalization-runtime.js",
   "src/runtime/quality-score.js",
   "src/runtime/url-normalization-runtime.js",
-  "src/runtime/reply/reply-handler-runtime.js",
-  "src/runtime/reply/command-router.js",
-  "src/runtime/reply/intent-service.js",
-  "src/runtime/reply/onboarding/keys.js",
-  "src/runtime/reply/onboarding/link-verification-flow.js",
-  "src/runtime/reply/onboarding/messages.js",
-  "src/runtime/reply/onboarding-service.js",
-  "src/runtime/reply/onboarding-service-runtime.js",
-  "src/runtime/reply/reply-logging-runtime.js",
-  "src/runtime/reply/reply-session-runtime.js",
-  "src/runtime/reply/transport.js",
   "src/runtime/store.js",
-  "src/sandbox-pipeline-runtime.js",
   "test-harness/cache/index.js",
   "test-harness/cache/cache-archive.js",
   "test-harness/cache/cache-budget.js",
@@ -243,7 +208,6 @@ export const dependencyLinks = [
   "test-harness/suites/02-relevance-scoring.js",
   "test-harness/suites/03-analysis-quality.js",
   "test-harness/suites/04-diversity.js",
-  "test-harness/suites/05-custom-topics.js",
   "test-harness/suites/06-depth-control.js",
   "test-harness/suites/07-item-count.js",
   "test-harness/suites/08-cross-day-freshness.js",
@@ -255,7 +219,6 @@ export const dependencyLinks = [
   "test-harness/suites/module-coverage/suite.js",
   "test-harness/suites/analysis-quality-runtime.js",
   "test-harness/suites/cross-day-freshness-runtime.js",
-  "test-harness/suites/custom-topics-runtime.js",
   "test-harness/suites/depth-control-runtime.js",
   "test-harness/suites/end-to-end-runtime.js",
   "test-harness/suites/relevance-scoring-runtime.js",
@@ -275,7 +238,6 @@ export const dependencyLinks = [
   "web/services/admin-ops-utils.js",
   "web/services/archive-scoring.js",
   "web/services/delivery-schedule.js",
-  "web/services/reengagement-state.js",
   "web/services/request-metadata.js",
   "web/services/web-rate-limit.js",
   "web/settings-runtime.js",

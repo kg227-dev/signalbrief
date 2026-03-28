@@ -539,6 +539,10 @@ function createDigestDataFetchRuntime(deps) {
     const allowBroadFallback = retrievalPlan.allow_broad_fallback !== false;
     const preferredEnabled = preferredDomains.length > 0 && !broadOnly;
     const thinThreshold = Math.max(1, Number(retrievalPlan.thin_item_threshold || 2));
+    const resolvedMaxAgeHours = Number(opts?.maxAgeHours ?? CONFIG?.digest?.maxArticleAgeHours ?? 48);
+    const maxAgeHours = Number.isFinite(resolvedMaxAgeHours)
+      ? Math.min(48, Math.max(1, resolvedMaxAgeHours))
+      : 48;
     const diagnostics = {
       provider: "perplexity",
       retrieval_mode: preferredEnabled
@@ -569,10 +573,9 @@ function createDigestDataFetchRuntime(deps) {
       preferred_search_result_hit_count: 0,
       preferred_search_results_without_preferred_item: false,
       conversion_funnel: createConversionFunnel(),
-      freshness_max_age_hours: Number(CONFIG?.digest?.maxArticleAgeHours || 48),
+      freshness_max_age_hours: maxAgeHours,
       require_verified_published_date: true,
     };
-    const maxAgeHours = Number(CONFIG?.digest?.maxArticleAgeHours || 48);
 
     if (!queries.length) {
       return { items: [], apiCalls: 0, diagnostics };

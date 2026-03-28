@@ -45,7 +45,6 @@ function buildBaseDeps(overrides = {}) {
     buildDigestId: (date, chatId) => `${date}:${chatId}`,
     toEtDateKey: () => "2026-03-16",
     appendEngagementEventChecked: overrides.appendEngagementEventChecked || (() => {}),
-    resetReengagementState: overrides.resetReengagementState || ((user) => user.reengagement_state || {}),
     sendTransparentGif: overrides.sendTransparentGif || ((res) => { res.writeHead(200, { "Content-Type": "image/gif" }); res.end(); }),
     findUserByToken: overrides.findUserByToken || (() => null),
     normalizeEngagementUrl: overrides.normalizeEngagementUrl || ((u) => String(u || "").toLowerCase()),

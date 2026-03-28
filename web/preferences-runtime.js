@@ -14,12 +14,9 @@
     "INDUSTRIALS",
   ];
 
-  const FALLBACK_CAPABILITY_TOPICS = [];
-
   const INDUSTRY_TOPICS = [...FALLBACK_INDUSTRY_TOPICS];
-  const CAPABILITY_TOPICS = [...FALLBACK_CAPABILITY_TOPICS];
-  const DEFAULT_TOPICS = [...INDUSTRY_TOPICS, ...CAPABILITY_TOPICS];
-  const MAX_CUSTOM_KEYWORDS = 0; // MVP: no custom keywords
+  const DEFAULT_TOPICS = [...INDUSTRY_TOPICS];
+  const MAX_CUSTOM_KEYWORDS = 0;
 
   const TOPIC_LABELS = {
     HEALTHCARE: "Healthcare",
@@ -40,34 +37,21 @@
 
   const buildTopicCatalogSnapshot = typeof topicRuntime.buildTopicCatalogSnapshot === "function"
     ? topicRuntime.buildTopicCatalogSnapshot
-    : ({ industryTopics, capabilityTopics, defaultTopics }) => ({
+    : ({ industryTopics, defaultTopics }) => ({
       industries: industryTopics.slice(),
-      capabilities: capabilityTopics.slice(),
       topics: defaultTopics.slice(),
     });
 
   const deriveTopicCatalog = typeof topicRuntime.deriveTopicCatalog === "function"
     ? topicRuntime.deriveTopicCatalog
-    : (payload, { fallbackIndustries, fallbackCapabilities }) => {
+    : (payload, { fallbackIndustries }) => {
       const industries = Array.isArray(payload?.industries) ? payload.industries.map(String).filter(Boolean) : [];
-      const capabilities = Array.isArray(payload?.capabilities) ? payload.capabilities.map(String).filter(Boolean) : [];
       const topics = Array.isArray(payload?.topics) ? payload.topics.map(String).filter(Boolean) : [];
       const nextIndustries = industries.length ? industries : fallbackIndustries;
-      const nextCapabilities = capabilities.length ? capabilities : fallbackCapabilities;
       return {
         industries: nextIndustries,
-        capabilities: nextCapabilities,
-        topics: topics.length ? topics : [...nextIndustries, ...nextCapabilities],
+        topics: topics.length ? topics : [...nextIndustries],
       };
-    };
-
-  const normalizeCustomTopicInput = typeof topicRuntime.normalizeCustomTopicInput === "function"
-    ? topicRuntime.normalizeCustomTopicInput
-    : (value) => {
-      const raw = String(value || "").trim();
-      if (!raw) return "";
-      const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-      return slug ? `custom_${slug}` : "";
     };
 
   const topicKeyFromInputHelper = typeof topicRuntime.topicKeyFromInput === "function"
@@ -80,19 +64,8 @@
         const match = defaults.find((topic) => topic.toLowerCase() === raw.toLowerCase());
         if (match) return match;
       }
-      return normalizeCustomTopicInput(raw);
+      return "";
     };
-
-  const isCustomTopicHelper = typeof topicRuntime.isCustomTopic === "function"
-    ? topicRuntime.isCustomTopic
-    : (topic, opts = {}) => {
-      const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
-      return !defaults.includes(String(topic || ""));
-    };
-
-  const formatCustomLabel = typeof topicRuntime.formatCustomLabel === "function"
-    ? topicRuntime.formatCustomLabel
-    : (topic) => String(topic || "").replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
   const topicDisplayLabelHelper = typeof topicRuntime.topicDisplayLabel === "function"
     ? topicRuntime.topicDisplayLabel
@@ -101,8 +74,7 @@
       const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
       const labels = opts.topicLabels && typeof opts.topicLabels === "object" ? opts.topicLabels : {};
       if (!key) return "";
-      if (defaults.includes(key)) return labels[key] || key;
-      return formatCustomLabel(key);
+      return defaults.includes(key) ? (labels[key] || key) : key;
     };
 
   const normalizeDay = typeof scheduleRuntime.normalizeDay === "function"
@@ -148,14 +120,9 @@
       return "custom";
     };
 
-  const normalizeTelegram = typeof scheduleRuntime.normalizeTelegram === "function"
-    ? scheduleRuntime.normalizeTelegram
-    : (value) => String(value || "").trim().replace(/^@+/, "") || null;
-
   function getTopicCatalog() {
     return buildTopicCatalogSnapshot({
       industryTopics: INDUSTRY_TOPICS,
-      capabilityTopics: CAPABILITY_TOPICS,
       defaultTopics: DEFAULT_TOPICS,
     });
   }
@@ -163,10 +130,8 @@
   function setTopicCatalog(payload = {}) {
     const nextCatalog = deriveTopicCatalog(payload, {
       fallbackIndustries: FALLBACK_INDUSTRY_TOPICS,
-      fallbackCapabilities: FALLBACK_CAPABILITY_TOPICS,
     });
     replaceArray(INDUSTRY_TOPICS, nextCatalog.industries);
-    replaceArray(CAPABILITY_TOPICS, nextCatalog.capabilities);
     replaceArray(DEFAULT_TOPICS, nextCatalog.topics);
     topicCatalogLoaded = true;
     return getTopicCatalog();
@@ -210,10 +175,6 @@
     });
   }
 
-  function isCustomTopic(topic) {
-    return isCustomTopicHelper(topic, { defaultTopics: DEFAULT_TOPICS });
-  }
-
   function topicDisplayLabel(topic) {
     return topicDisplayLabelHelper(topic, {
       defaultTopics: DEFAULT_TOPICS,
@@ -223,7 +184,6 @@
 
   globalScope.SignalBriefPrefsRuntime = {
     INDUSTRY_TOPICS,
-    CAPABILITY_TOPICS,
     DEFAULT_TOPICS,
     MAX_CUSTOM_KEYWORDS,
     TOPIC_LABELS,
@@ -232,15 +192,11 @@
     loadTopicCatalog,
     normalizeDay,
     normalizeDays,
-    normalizeCustomTopicInput,
     topicKeyFromInput,
-    isCustomTopic,
-    formatCustomLabel,
     topicDisplayLabel,
     isWeekdays,
     isEveryday,
     daysFromFrequency,
     frequencyFromDays,
-    normalizeTelegram,
   };
 })(window);

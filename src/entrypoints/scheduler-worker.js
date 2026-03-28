@@ -59,7 +59,7 @@ function sanitizeSchedulerWorkerArgs(workerArgs) {
   }
   if (removedTargetedArgs) {
     process.stderr.write(
-      "[worker] ignored targeted digest args in DIGEST_WORKER_ARGS; scheduler runs always use scheduled audience\n"
+      "[worker] ignored deprecated chat-targeting args in DIGEST_WORKER_ARGS; scheduler runs always use the scheduled audience\n"
     );
   }
   return safe;

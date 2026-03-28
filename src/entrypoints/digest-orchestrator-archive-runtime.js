@@ -13,9 +13,9 @@ function createDigestOrchestratorArchiveRuntime(deps) {
   } = deps || {};
   const saveArchive = typeof saveToArchive === "function" ? saveToArchive : () => {};
 
-  function persistSharedArchive({ now, enriched, dateStr, targetChatId }) {
+  function persistSharedArchive({ now, enriched, dateStr }) {
     const quickScan = buildQuickScan(enriched);
-    saveArchive(now, enriched, dateStr, quickScan, { overwrite: !targetChatId });
+    saveArchive(now, enriched, dateStr, quickScan, { overwrite: true });
     return {
       quickScan,
     };

@@ -5,7 +5,7 @@ const {
   normalizeMatchText,
   normalizeTopicToken,
   topicsRelated,
-} = require("./topic-domain-runtime");
+} = require("../../runtime/topic-normalization-runtime");
 const {
   parseSourceIdentity,
 } = require("./source-domain-runtime");
@@ -18,7 +18,6 @@ const {
   TIER_OVERRIDE_SCORES,
   TOPIC_FIT_BAND_SCORES,
 } = require("../../runtime/source-policy-registry-runtime");
-const { matchPreferredSourceDomain } = require("../../runtime/preferred-source-registry-runtime");
 
 const STANDARD_TOPIC_TOKENS = new Set([
   "healthcare",
@@ -557,13 +556,11 @@ function derivePolicyFromBaseline(baseTier, sourceType) {
   if (sourceType === "platform_user_generated") return "review";
   if (sourceType === "corporate_pr") return "limited";
   if (sourceType === "aggregator_republisher") return baseTier === "suspect" ? "review" : "limited";
-  if (String(baseTier || "").startsWith("learned-")) return baseTier === "learned-standard" ? "allowed" : "review";
   return "allowed";
 }
 
 function deriveReviewStatusFromBaseline(baseTier, sourceType) {
   if (baseTier === "unknown" || baseTier === "suspect") return "unreviewed";
-  if (String(baseTier || "").startsWith("learned-")) return "monitor";
   if (sourceType === "platform_user_generated") return "monitor";
   return "reviewed";
 }
@@ -663,13 +660,12 @@ function buildPolicyEffects(policy, sourceType) {
   };
 }
 
-// Learned domain authority adjustments (populated at runtime via setLearnedDomainAdjustments)
-let _learnedAdjustments = null;
 let _adminSourceRegistry = null;
 let _preferredSourceRegistry = null;
+let _preferredSourceMatcher = null;
 
-function setLearnedDomainAdjustments(adjustmentsMap) {
-  _learnedAdjustments = adjustmentsMap instanceof Map ? adjustmentsMap : null;
+function getLegacyPreferredSourceDomainMatcher() {
+  return require("../../runtime/preferred-source-registry-runtime").matchPreferredSourceDomain;
 }
 
 function setAdminSourceRegistry(registryMap) {
@@ -691,6 +687,10 @@ function setAdminSourceRegistry(registryMap) {
 
 function setPreferredSourceRegistry(registry) {
   _preferredSourceRegistry = registry && typeof registry === "object" ? registry : null;
+}
+
+function setPreferredSourceMatcher(matcher) {
+  _preferredSourceMatcher = typeof matcher === "function" ? matcher : null;
 }
 
 function resolveAdminSourceRegistryEntry(sourceDomain, sourceIdentityKey = null) {
@@ -753,7 +753,6 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
       topic_fit_map: {},
       baseline_source_tier: "unknown",
       baseline_source_authority: 0.42,
-      learned_adjustment: null,
       topic_override_score: null,
       topic_override_applied: false,
       policy_source: "baseline",
@@ -809,18 +808,6 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
     }
   }
 
-  // Apply learned domain authority for unknown/suspect domains
-  let learnedAdjustment = null;
-  if ((baseTier === "unknown" || baseTier === "suspect") && _learnedAdjustments && _learnedAdjustments.has(sourceDomain)) {
-    const learned = _learnedAdjustments.get(sourceDomain);
-    if (Number.isFinite(learned) && learned > 0) {
-      learnedAdjustment = learned;
-      baseScore = learned;
-      if (learned >= 0.45) baseTier = "learned-standard";
-      else if (learned <= 0.18) baseTier = "learned-suspect";
-    }
-  }
-
   // Apply topic-domain fit overrides
   const fit = computeTopicDomainFit(sourceDomain, tag);
   const sourceType = classifySourceType(sourceDomain, baseTier);
@@ -835,7 +822,7 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
     reviewStatus,
     topicFitBand: fit.band || null,
     originalityProfile,
-    preserveLowBase: baseTier === "suspect" || baseTier === "learned-suspect",
+    preserveLowBase: baseTier === "suspect",
   });
   const policyEffects = buildPolicyEffects(policy, sourceType);
 
@@ -852,12 +839,11 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
     topic_fit_map: buildBaselineTopicFitMap(sourceDomain),
     baseline_source_tier: baseTier,
     baseline_source_authority: finalScore,
-    learned_adjustment: learnedAdjustment,
     topic_override_score: fit.overrideScore,
     topic_override_applied: topicOverrideApplied,
     policy_source: topicOverrideApplied
       ? "topic_override"
-      : (learnedAdjustment != null ? "learned_adjustment" : "baseline"),
+      : "baseline",
     policy_effects: policyEffects,
     hard_block: false,
     source_family_domain: matchedRuleDomain || sourceDomain,
@@ -867,6 +853,17 @@ function classifySourceTierBaseline(sourceDomainRaw, tag) {
 }
 
 function resolvePreferredSourceMatch(sourceDomain, tag, sourceIdentityKey = null) {
+  if (_preferredSourceMatcher) {
+    return _preferredSourceMatcher(sourceDomain, tag, { sourceIdentityKey }) || {
+      match: "none",
+      kind: null,
+      scope: "none",
+      topics: [],
+      strength: 0,
+      matched_domain: null,
+      matched_identity: null,
+    };
+  }
   if (!_preferredSourceRegistry) {
     return {
       match: "none",
@@ -878,7 +875,7 @@ function resolvePreferredSourceMatch(sourceDomain, tag, sourceIdentityKey = null
       matched_identity: null,
     };
   }
-  return matchPreferredSourceDomain(_preferredSourceRegistry, sourceDomain, tag, {
+  return getLegacyPreferredSourceDomainMatcher()(_preferredSourceRegistry, sourceDomain, tag, {
     sourceIdentityKey,
   });
 }
@@ -930,7 +927,7 @@ function explainSourcePolicy(sourceDomainRaw, tag, options = {}) {
       reviewStatus: effectiveReviewStatus,
       topicFitBand: fit.band || baseline.topic_fit_band || null,
       originalityProfile: effectiveOriginalityProfile,
-      preserveLowBase: tierOverride === "suspect" || tierOverride === "learned-suspect" || (!tierOverride && baseline.source_tier === "suspect"),
+      preserveLowBase: tierOverride === "suspect" || (!tierOverride && baseline.source_tier === "suspect"),
     });
   }
   if (authorityOverride != null) effectiveAuthority = authorityOverride;
@@ -2104,7 +2101,7 @@ module.exports = {
   isWeakSourceItem,
   normalizeSourceDomain,
   setAdminSourceRegistry,
-  setLearnedDomainAdjustments,
+  setPreferredSourceMatcher,
   setPreferredSourceRegistry,
   storylineSimilarity,
 };

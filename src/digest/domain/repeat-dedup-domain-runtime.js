@@ -1,6 +1,6 @@
 "use strict";
 
-const { normalizeMatchText } = require("./topic-domain-runtime");
+const { normalizeMatchText } = require("../../runtime/topic-normalization-runtime");
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
 
 function normalizeUrlForDedup(value) {
@@ -52,7 +52,7 @@ function dedupItemsAgainstRepeatIndex(items, repeatIndex, opts = {}) {
   }
 
   const minBackfillItems = Math.max(1, Number(opts.minBackfillItems || 3));
-  const targetCount = Math.max(1, Number(opts.targetCount || 7));
+  const targetCount = Math.max(1, Number(opts.targetCount || 5));
 
   const kept = [];
   const removed = [];

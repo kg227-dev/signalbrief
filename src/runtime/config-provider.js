@@ -11,11 +11,6 @@ const ENV_OVERRIDE_MAP = Object.freeze([
   { path: ["admin", "passwordHash"], env: ["SIGNALBRIEF_ADMIN_PASSWORD_HASH", "ADMIN_PASSWORD_HASH"] },
   { path: ["keys", "perplexity"], env: ["SIGNALBRIEF_PERPLEXITY_API_KEY", "PERPLEXITY_API_KEY"] },
   { path: ["keys", "anthropic"], env: ["SIGNALBRIEF_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"] },
-  { path: ["keys", "googleRefreshToken"], env: ["SIGNALBRIEF_GOOGLE_REFRESH_TOKEN", "GOOGLE_REFRESH_TOKEN"] },
-  { path: ["keys", "googleClientId"], env: ["SIGNALBRIEF_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"] },
-  { path: ["keys", "googleClientSecret"], env: ["SIGNALBRIEF_GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"] },
-  { path: ["keys", "telegramBotToken"], env: ["SIGNALBRIEF_TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"] },
-  { path: ["keys", "signalBriefBotToken"], env: ["SIGNALBRIEF_SIGNALBRIEF_BOT_TOKEN", "SIGNALBRIEF_BOT_TOKEN"] },
   { path: ["keys", "resendApiKey"], env: ["SIGNALBRIEF_RESEND_API_KEY", "RESEND_API_KEY"] },
   { path: ["keys", "unsubscribeSigningSecret"], env: ["SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET", "UNSUBSCRIBE_SIGNING_SECRET"] },
   { path: ["keys", "fromEmail"], env: ["SIGNALBRIEF_FROM_EMAIL"] },
@@ -79,6 +74,17 @@ function applyEnvOverrides(config) {
   return resolved;
 }
 
+function normalizeMvpConfig(config) {
+  const resolved = JSON.parse(JSON.stringify(config));
+  if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+    if (!resolved.digest || typeof resolved.digest !== "object" || Array.isArray(resolved.digest)) {
+      resolved.digest = {};
+    }
+    resolved.digest.itemCount = 5;
+  }
+  return resolved;
+}
+
 function loadConfig(opts = {}) {
   if (!opts.reload && cachedConfig) return cachedConfig;
   const configPath = resolveConfigPath(opts.configPath);
@@ -101,7 +107,7 @@ function loadConfig(opts = {}) {
     throw configError("invalid_shape", configPath, new Error("config root must be an object"));
   }
 
-  const merged = applyEnvOverrides(parsed);
+  const merged = normalizeMvpConfig(applyEnvOverrides(parsed));
   const validation = validateConfigSchema(merged);
   if (!validation.ok) {
     throw configError("schema_failed", configPath, new Error(validation.errors.join("; ")));
@@ -118,4 +124,5 @@ module.exports = {
   applyEnvOverrides,
   loadConfig,
   validateConfigSchema,
+  normalizeMvpConfig,
 };

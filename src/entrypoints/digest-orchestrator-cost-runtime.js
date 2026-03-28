@@ -7,14 +7,13 @@ const DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK = 4.00;
 function calculateRunCosts(params = {}) {
   const {
     standardFetchCalls = 0,
-    customFetchCalls = 0,
     claudeUsage = {},
     perplexityCostPerCall = DEFAULT_PERPLEXITY_COST_PER_CALL,
     claudeInputPerMtok = DEFAULT_CLAUDE_HAIKU_IN_PER_MTOK,
     claudeOutputPerMtok = DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK,
   } = params;
 
-  const perplexityCalls = Number(standardFetchCalls || 0) + Number(customFetchCalls || 0);
+  const perplexityCalls = Number(standardFetchCalls || 0);
   const perplexityCost = Number(perplexityCostPerCall || 0) * perplexityCalls;
   const inputTokens = Number(claudeUsage.input_tokens || 0);
   const outputTokens = Number(claudeUsage.output_tokens || 0);
@@ -57,9 +56,7 @@ function createDigestOrchestratorCostRuntime(deps) {
     const {
       now,
       runId,
-      targetChatId,
       standardFetchCalls,
-      customFetchCalls,
       claudeUsage,
       dueUsers,
       deliveredUsers,
@@ -71,7 +68,6 @@ function createDigestOrchestratorCostRuntime(deps) {
 
     const costs = calculateRunCosts({
       standardFetchCalls,
-      customFetchCalls,
       claudeUsage,
       perplexityCostPerCall,
       claudeInputPerMtok,
@@ -90,16 +86,14 @@ function createDigestOrchestratorCostRuntime(deps) {
         minute: "2-digit",
         hour12: true,
       }),
-      on_demand: !!targetChatId,
       perplexity_calls: costs.perplexityCalls,
       perplexity_calls_standard: Number(standardFetchCalls || 0),
-      perplexity_calls_custom: Number(customFetchCalls || 0),
       perplexity_cost_usd: parseFloat(costs.perplexityCost.toFixed(5)),
       claude_tokens_in: Number(claudeUsage?.input_tokens || 0),
       claude_tokens_out: Number(claudeUsage?.output_tokens || 0),
       claude_cost_usd: parseFloat(costs.claudeCost.toFixed(6)),
       total_cost_usd: parseFloat(costs.totalCost.toFixed(5)),
-      users_targeted: Array.isArray(dueUsers) ? dueUsers.length : 0,
+      users_due: Array.isArray(dueUsers) ? dueUsers.length : 0,
       users_served: Array.isArray(deliveredUsers) ? deliveredUsers.length : 0,
       digest_url: String(publicDigestUrl || ""),
       per_user: Array.isArray(deliveredUsers) ? deliveredUsers : [],

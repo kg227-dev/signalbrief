@@ -55,7 +55,6 @@ function baseDeps(overrides = {}) {
     getCachedOrRefreshSchedulerHeartbeat: () => null,
     readSchedulerHeartbeat: () => null,
     allUsers: () => [],
-    getRecentAutoAdjustmentsForUser: () => [],
     readJsonLineLog: () => [],
     ADMIN_ACTION_LOG: "/tmp/admin-action-log.json",
     ADMIN_MESSAGE_LOG: "/tmp/admin-message-log.json",
@@ -132,6 +131,17 @@ async function invoke(handler, { method, pathname, search = "", headers = {} }) 
     const { handled } = await invoke(handler, {
       method: "GET",
       pathname: "/api/admin/not-a-route",
+    });
+    assert.strictEqual(handled, false);
+  }
+
+  {
+    const handler = createAdminApiRouteHandler(baseDeps({
+      isAdminAuthed: () => true,
+    }));
+    const { handled } = await invoke(handler, {
+      method: "GET",
+      pathname: "/api/admin/retrieval-eval/status",
     });
     assert.strictEqual(handled, false);
   }

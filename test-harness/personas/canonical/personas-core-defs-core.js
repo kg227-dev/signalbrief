@@ -5,10 +5,10 @@ function buildCoreCanonicalPersonaSpecs(allTopics) {
     {
       id: "generalist",
       name: "The Generalist",
-      description: "All topics enabled with deep mode and max item count.",
+      description: "Three-topic generalist with deep mode.",
       overrides: {
-        topics: [...allTopics],
-        preferences: { depth: "headline_plus_why", items_per_digest: 10 },
+        topics: (Array.isArray(allTopics) && allTopics.length ? allTopics : ["HEALTHCARE", "TECHNOLOGY", "FINANCIAL SERVICES"]).slice(0, 3),
+        preferences: { depth: "headline_plus_why" },
       },
     },
     {
@@ -16,17 +16,14 @@ function buildCoreCanonicalPersonaSpecs(allTopics) {
       name: "The Fresh Subscriber",
       description: "New user defaults from current signup behavior.",
       overrides: {
-        topics: allTopics.slice(0, 5),
-        topic_weights: {},
+        topics: (Array.isArray(allTopics) && allTopics.length ? allTopics : ["HEALTHCARE", "LIFE SCIENCES"]).slice(0, 2),
         preferences: {
           depth: "headline_plus_why",
           delivery_time: "07:00",
           frequency: "daily_weekday",
           days_of_week: [1, 2, 3, 4, 5],
-          items_per_digest: 5,
           timezone: "America/New_York",
           email_enabled: true,
-          telegram_enabled: true,
         },
       },
     },

@@ -211,9 +211,7 @@ body.dark .modal-close { background:var(--card); }
     <div class="header-top">
       <span class="header-brand">SignalBrief</span>
       <a href="/admin" class="nav-link">Admin</a>
-      <a href="/admin/sandbox" class="nav-link">Sandbox</a>
       <a href="/admin/source-registry" class="nav-link current">Source Registry</a>
-      <a href="/admin/retrieval-eval" class="nav-link">Retrieval Eval</a>
       <button onclick="logout()" class="signout-btn">Sign out</button>
       <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
@@ -266,11 +264,11 @@ body.dark .modal-close { background:var(--card); }
   <div class="card" style="margin-bottom:28px;">
     <div class="section-head">
       <div>
-        <div class="section-title" style="margin-bottom:0;">Preferred source config</div>
-        <div class="section-subcopy">Read-only view of the active preferred-source registry used for retrieval-time biasing and preferred-source reranking. Runtime file wins when present; bundled seed is the fallback.</div>
+        <div class="section-title" style="margin-bottom:0;">Broker source inventory</div>
+        <div class="section-subcopy">Founder controls for the live MVP broker-backed source inventory. Shared preferred-source diagnostics are now derived from broker config, so the active path no longer carries a separate preferred-source control plane.</div>
       </div>
     </div>
-    <div id="preferredSourcesPanelBody" class="empty">Loading preferred-source config…</div>
+    <div id="preferredSourcesPanelBody" class="empty">Loading broker source inventory…</div>
   </div>
 
   <div class="card" style="margin-bottom:28px;">
@@ -422,56 +420,171 @@ function renderPreferredDomainList(domains) {
   if (!rows.length) return `<div class="table-meta">None configured.</div>`;
   return `<div class="preferred-domain-list">${rows.map((domain) => `<span class="preferred-chip mono">${esc(domain)}</span>`).join("")}</div>`;
 }
-function renderPreferredSourcesConfig(overview) {
-  const container = document.getElementById("preferredSourcesPanelBody");
-  if (!container) return;
-  const preferred = overview?.preferred_sources;
-  if (!preferred || typeof preferred !== "object") {
-    container.innerHTML = `<div class="empty">Preferred-source config unavailable.</div>`;
-    return;
-  }
-  const topics = Array.isArray(preferred.topics) ? preferred.topics : [];
-  const sourceMode = String(preferred.source_mode || "runtime").trim();
-  const sourceLabel = sourceMode === "bundled_fallback"
-    ? "bundled fallback"
-    : (sourceMode === "empty" ? "empty registry" : "runtime file");
-  container.innerHTML = `
-    <div class="table-meta">Active source: ${esc(sourceLabel)} · config file: ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics</div>
-    ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime path <span class="mono">${esc(preferred.runtime_path)}</span> was empty or missing, so the bundled seed <span class="mono">${esc(preferred.bundled_path)}</span> is being used.</div>` : ""}
-    <div class="preferred-summary-grid">
-      <div class="explain-block">
-        <div class="explain-label">Global reported core</div>
-        <div class="explain-copy">Broad preferred reporting sources used to bias retrieval when topic-specific sources are sparse.</div>
-        ${renderPreferredDomainList(preferred?.global?.reported)}
-      </div>
-      <div class="explain-block">
-        <div class="explain-label">Global official / primary</div>
-        <div class="explain-copy">Official domains used when the topic or query is heavy on filings, rules, agencies, or primary documents.</div>
-        ${renderPreferredDomainList(preferred?.global?.official)}
-      </div>
-    </div>
+function brokerControlStatePill(enabled, onLabel = "Enabled", offLabel = "Disabled") {
+  const isEnabled = enabled !== false;
+  const tone = isEnabled ? "var(--green)" : "var(--red)";
+  const bg = isEnabled ? "#DCFCE7" : "#FEE2E2";
+  return `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${bg};color:${tone};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(isEnabled ? onLabel : offLabel)}</span>`;
+}
+function brokerLaneLabel(lane) {
+  if (lane === "publisher_feed") return "Publisher feed";
+  if (lane === "official") return "Official";
+  return String(lane || "unknown");
+}
+function brokerSourceDomId(sourceId) {
+  return String(sourceId || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "source";
+}
+function renderBrokerTopicControls(brokerConfig) {
+  const topics = Array.isArray(brokerConfig?.topics) ? brokerConfig.topics : [];
+  if (!topics.length) return `<div class="empty" style="margin-top:12px;">No broker topic controls available.</div>`;
+  return `
+    <div class="section-title" style="margin-top:18px;font-size:11px;">MVP topic controls</div>
     <table class="preferred-topic-table">
       <thead>
         <tr>
           <th>Topic</th>
-          <th>Reported</th>
+          <th>Topic</th>
+          <th>Publisher feed</th>
           <th>Official</th>
+          <th>Sources</th>
         </tr>
       </thead>
       <tbody>
-        ${topics.length ? topics.map((entry) => `
+        ${topics.map((topic) => `
           <tr>
-            <td style="width:18%;font-size:12px;font-weight:700;color:var(--text);">${esc(entry.topic || "unknown")}</td>
-            <td style="width:41%;">${renderPreferredDomainList(entry.reported)}</td>
-            <td style="width:41%;">${renderPreferredDomainList(entry.official)}</td>
+            <td style="width:20%;font-size:12px;font-weight:700;color:var(--text);">${esc(topic.topic_key || topic.topic_tag || "unknown")}</td>
+            <td style="width:20%;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                ${brokerControlStatePill(topic.enabled !== false, "Enabled", "Disabled")}
+                <button class="table-action-link" type="button" onclick="toggleBrokerTopicEnabled('${esc(topic.topic_tag || "")}', ${topic.enabled !== false ? "false" : "true"})">${topic.enabled !== false ? "Disable topic" : "Enable topic"}</button>
+              </div>
+            </td>
+            <td style="width:20%;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                ${brokerControlStatePill(topic?.lanes?.publisher_feed !== false, "On", "Off")}
+                <button class="table-action-link" type="button" onclick="toggleBrokerTopicLane('${esc(topic.topic_tag || "")}', 'publisher_feed', ${topic?.lanes?.publisher_feed !== false ? "false" : "true"})">${topic?.lanes?.publisher_feed !== false ? "Disable feed" : "Enable feed"}</button>
+              </div>
+            </td>
+            <td style="width:20%;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                ${brokerControlStatePill(topic?.lanes?.official !== false, "On", "Off")}
+                <button class="table-action-link" type="button" onclick="toggleBrokerTopicLane('${esc(topic.topic_tag || "")}', 'official', ${topic?.lanes?.official !== false ? "false" : "true"})">${topic?.lanes?.official !== false ? "Disable official" : "Enable official"}</button>
+              </div>
+            </td>
+            <td style="width:20%;font-size:12px;color:var(--text-secondary);">${Math.max(0, Number(topic.enabled_source_count || 0))} active / ${Math.max(0, Number(topic.source_count || 0))} total</td>
           </tr>
-        `).join("") : `<tr><td colspan="3" class="empty">No topic-specific preferred sources configured.</td></tr>`}
+        `).join("")}
       </tbody>
-    </table>
-    <details style="margin-top:12px;">
-      <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Raw JSON</summary>
-      <pre class="preferred-json mono">${esc(String(preferred.raw_json || "{}"))}</pre>
-    </details>`;
+    </table>`;
+}
+function renderBrokerSourceControls(brokerConfig) {
+  const sources = Array.isArray(brokerConfig?.sources) ? brokerConfig.sources : [];
+  if (!sources.length) return `<div class="empty" style="margin-top:12px;">No broker sources configured.</div>`;
+  return `
+    <div class="section-title" style="margin-top:18px;font-size:11px;">Broker source controls</div>
+    <table class="preferred-topic-table">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Topics</th>
+          <th>Lane</th>
+          <th>Status</th>
+          <th>Tier</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sources.map((source) => {
+          const domId = brokerSourceDomId(source.id);
+          return `
+            <tr>
+              <td style="width:28%;">
+                <div style="font-size:12px;font-weight:700;color:var(--text);">${esc(source.id || "unknown")}</div>
+                <div class="table-meta">${source.domains && source.domains.length ? esc(source.domains.join(", ")) : esc(source.endpoint || "no domain")}</div>
+              </td>
+              <td style="width:20%;font-size:12px;color:var(--text-secondary);">${esc((Array.isArray(source.topic_keys) ? source.topic_keys : []).join(", ") || "—")}</td>
+              <td style="width:14%;font-size:12px;color:var(--text-secondary);">${esc(brokerLaneLabel(source.lane))}</td>
+              <td style="width:18%;">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  ${brokerControlStatePill(source.enabled !== false, "Enabled", "Disabled")}
+                  <button class="table-action-link" type="button" onclick="toggleBrokerSourceEnabled('${esc(source.id || "")}', ${source.enabled !== false ? "false" : "true"})">${source.enabled !== false ? "Disable source" : "Enable source"}</button>
+                </div>
+              </td>
+              <td style="width:20%;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <select id="brokerSourceTier-${domId}" class="table-filter">
+                    ${[1,2,3].map((tier) => `<option value="${tier}" ${Number(source.tier || 2) === tier ? "selected" : ""}>Tier ${tier}</option>`).join("")}
+                  </select>
+                  <button class="table-action-link" type="button" onclick="saveBrokerSourceTier('${esc(source.id || "")}')">Save tier</button>
+                </div>
+              </td>
+            </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+}
+function renderPreferredSourcesConfig(overview) {
+  const container = document.getElementById("preferredSourcesPanelBody");
+  if (!container) return;
+  const preferred = overview?.preferred_sources;
+  const brokerConfig = overview?.broker_config;
+  if (!brokerConfig || typeof brokerConfig !== "object") {
+    container.innerHTML = `<div class="empty">Broker source inventory unavailable.</div>`;
+    return;
+  }
+  const brokerSourceMode = String(brokerConfig?.source_mode || "runtime").trim();
+  const brokerSourceLabel = brokerSourceMode === "bundled"
+    ? "bundled broker config"
+    : "runtime broker config";
+  const preferredTopics = Array.isArray(preferred?.topics) ? preferred.topics : [];
+  const preferredSourceMode = String(preferred?.source_mode || "runtime").trim();
+  const preferredSourceLabel = preferredSourceMode === "broker_bundled"
+    ? "bundled broker config (derived view)"
+    : (preferredSourceMode === "broker_runtime"
+      ? "runtime broker config (derived view)"
+      : "empty compatibility view");
+  container.innerHTML = `
+    <div class="table-meta">Standard-topic source of truth: broker config.</div>
+    <div class="table-meta" style="margin-top:4px;">Broker controls write to ${esc(brokerSourceLabel)} at ${brokerConfig.active_path ? `<span class="mono">${esc(brokerConfig.active_path)}</span>` : "not available"} · ${Math.max(0, Number(brokerConfig.enabled_source_count || 0))} active sources across ${Math.max(0, Number(brokerConfig.topic_count || 0))} topics.</div>
+    <div class="table-meta" style="margin-top:4px;">Preferred-source compatibility signals are derived from broker config, so the active path has one live source control plane.</div>
+    ${renderBrokerTopicControls(brokerConfig)}
+    ${renderBrokerSourceControls(brokerConfig)}
+    ${preferred && typeof preferred === "object" ? `
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Preferred-source compatibility view (broker-derived)</summary>
+        <div class="table-meta" style="margin-top:8px;">Shared scoring and diagnostics still consume this shape, but it is generated from ${esc(preferredSourceLabel)} at ${preferred.path ? `<span class="mono">${esc(preferred.path)}</span>` : "not available"} · version ${esc(preferred.version || 1)} · ${Math.max(0, Number(preferred.total_unique_domains || 0))} unique domains across ${Math.max(0, Number(preferred.topic_count || 0))} topics.</div>
+        ${(preferred.used_fallback === true && preferred.runtime_path && preferred.bundled_path) ? `<div class="table-meta" style="margin-top:4px;">Runtime broker path <span class="mono">${esc(preferred.runtime_path)}</span> was unavailable, so the bundled broker seed <span class="mono">${esc(preferred.bundled_path)}</span> is driving the compatibility view.</div>` : ""}
+        <div class="preferred-summary-grid" style="margin-top:10px;">
+          <div class="explain-block">
+            <div class="explain-label">Global reported core</div>
+            <div class="explain-copy">Usually empty in the reduced-scope MVP because source control is topic-scoped in broker config.</div>
+            ${renderPreferredDomainList(preferred?.global?.reported)}
+          </div>
+          <div class="explain-block">
+            <div class="explain-label">Global official / primary</div>
+            <div class="explain-copy">Usually empty in the reduced-scope MVP because official coverage is attached to sector topics.</div>
+            ${renderPreferredDomainList(preferred?.global?.official)}
+          </div>
+        </div>
+        <table class="preferred-topic-table">
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th>Reported</th>
+              <th>Official</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${preferredTopics.length ? preferredTopics.map((entry) => `
+              <tr>
+                <td style="width:18%;font-size:12px;font-weight:700;color:var(--text);">${esc(entry.topic || "unknown")}</td>
+                <td style="width:41%;">${renderPreferredDomainList(entry.reported)}</td>
+                <td style="width:41%;">${renderPreferredDomainList(entry.official)}</td>
+              </tr>
+            `).join("") : `<tr><td colspan="3" class="empty">No broker-derived preferred-source entries available.</td></tr>`}
+          </tbody>
+        </table>
+      </details>
+    ` : ""}`;
 }
 function renderCurationQueueDomainRows(rows, countKey, reasonLabel) {
   const entries = Array.isArray(rows) ? rows : [];
@@ -1195,6 +1308,56 @@ function closeConfirmModal(accepted) {
     confirmResolve(!!accepted);
     confirmResolve = null;
   }
+}
+async function postBrokerConfigUpdate(pathname, payload, successMessage) {
+  const resp = await apiFetchJson(pathname, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  }, 1);
+  const data = resp.data || {};
+  if (!resp.ok || data.error) {
+    showToast("err", data.error || "Failed to update broker config");
+    return false;
+  }
+  showToast("ok", successMessage || "Broker config updated");
+  await loadSourceRegistryOverview(true);
+  if (selectedSourceRegistryDomain && !isEditingSourceRegistry()) {
+    await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true, selectedSourceRegistryIdentityKey);
+  }
+  return true;
+}
+async function toggleBrokerTopicEnabled(topicTag, nextEnabled) {
+  return postBrokerConfigUpdate("/api/admin/source-registry/broker/topic", {
+    topic: topicTag,
+    enabled: nextEnabled === true,
+  }, `${topicTag} topic ${nextEnabled === true ? "enabled" : "disabled"}`);
+}
+async function toggleBrokerTopicLane(topicTag, lane, nextEnabled) {
+  const payload = { topic: topicTag };
+  if (lane === "publisher_feed") payload.publisher_feed_enabled = nextEnabled === true;
+  else if (lane === "official") payload.official_enabled = nextEnabled === true;
+  else return false;
+  return postBrokerConfigUpdate("/api/admin/source-registry/broker/topic", payload, `${topicTag} ${brokerLaneLabel(lane).toLowerCase()} ${nextEnabled === true ? "enabled" : "disabled"}`);
+}
+async function toggleBrokerSourceEnabled(sourceId, nextEnabled) {
+  return postBrokerConfigUpdate("/api/admin/source-registry/broker/source", {
+    source_id: sourceId,
+    enabled: nextEnabled === true,
+  }, `${sourceId} ${nextEnabled === true ? "enabled" : "disabled"}`);
+}
+async function saveBrokerSourceTier(sourceId) {
+  const domId = brokerSourceDomId(sourceId);
+  const tierInput = document.getElementById(`brokerSourceTier-${domId}`);
+  const tier = Number(tierInput?.value || 0);
+  if (![1, 2, 3].includes(tier)) {
+    showToast("err", "Choose broker source tier 1, 2, or 3.");
+    return false;
+  }
+  return postBrokerConfigUpdate("/api/admin/source-registry/broker/source", {
+    source_id: sourceId,
+    tier,
+  }, `${sourceId} tier set to ${tier}`);
 }
 async function loadSourceRegistryOverview(silent = true) {
   const query = getSourceRegistryOverviewQuery();

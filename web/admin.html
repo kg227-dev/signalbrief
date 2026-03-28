@@ -392,6 +392,93 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   font-size:12px;
   color:var(--text-2);
 }
+.digest-audit-controls {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.digest-audit-grid {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.digest-audit-card {
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:#fff;
+  padding:16px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.04);
+}
+.digest-audit-kpis {
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+  gap:10px;
+}
+.digest-audit-kpi {
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  padding:12px;
+  background:#F8FAFC;
+}
+.digest-audit-kpi-label {
+  font-size:11px;
+  color:var(--text-secondary);
+  margin-bottom:4px;
+}
+.digest-audit-kpi-value {
+  font-size:20px;
+  font-weight:700;
+  color:var(--text);
+}
+.digest-audit-topic-list {
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
+  gap:12px;
+}
+.digest-audit-topic {
+  border:1px solid var(--border-subtle);
+  border-radius:12px;
+  padding:14px;
+  background:#fff;
+}
+.digest-audit-topic-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.digest-audit-item-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.digest-audit-item {
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  padding:10px;
+  background:#F8FAFC;
+}
+.digest-audit-row {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.digest-audit-pill {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:3px 8px;
+  border-radius:999px;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  font-size:10px;
+  font-weight:700;
+  color:var(--text-secondary);
+  letter-spacing:0.03em;
+  text-transform:uppercase;
+}
 .mono { font-family:ui-monospace,monospace; font-size:12px; }
 .topics-cell { white-space:normal; line-height:1.45; min-width:280px; max-width:460px; }
 .topics-cell-tight { white-space:normal; line-height:1.45; max-width:320px; }
@@ -406,11 +493,7 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .topic-chip-preset {
   background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE;
 }
-.topic-chip-custom {
-  background:#ECFDF5; color:#047857; border-color:#A7F3D0;
-}
 
-.badge-on-demand { font-size:10px; font-weight:700; color:#fff; background:#7C3AED; padding:2px 7px; border-radius:100px; letter-spacing:0.03em; }
 .badge-scheduled { font-size:10px; font-weight:600; color:var(--text-secondary); background:#F3F4F6; padding:2px 7px; border-radius:100px; }
 
 .cost-cell { font-family:ui-monospace,monospace; font-size:12px; font-weight:600; }
@@ -434,13 +517,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 /* Delivery health warning */
 .warn-badge { font-size:11px; font-weight:700; color:var(--yellow); }
 .missed-flag { color:var(--yellow); font-size:12px; font-weight:600; }
-
-/* Topic weights pill */
-.weights-pill {
-  display:inline-block; font-size:11px; font-weight:600; font-family:ui-monospace,monospace;
-  background:#EFF6FF; color:var(--accent); padding:2px 7px; border-radius:100px;
-  margin-left:6px; cursor:default; white-space:nowrap;
-}
 
 /* Send digest button (inline in roster) */
 .send-btn {
@@ -490,8 +566,6 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
 .modal-mode-btn:disabled { opacity:0.5; cursor:not-allowed; }
 .modal-panel { border:1px solid var(--border-subtle); border-radius:10px; padding:12px; background:rgba(0,0,0,0.01); margin-bottom:10px; }
 .modal-help { font-size:12px; color:var(--text-secondary); line-height:1.45; }
-.modal-channels { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; font-size:13px; color:var(--text-2); }
-.modal-channels label { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2); }
 .modal-input, .modal-textarea {
   width:100%; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; color:var(--text);
   padding:9px 11px; font-size:13px; outline:none; margin-top:6px;
@@ -904,6 +978,11 @@ body.dark .drawer-row td { background:rgba(255,255,255,0.02); }
 body.dark .drawer-card { background:var(--card); }
 body.dark .drawer-preview-item { background:var(--card); }
 body.dark .audit-item { background:var(--card); }
+body.dark .digest-audit-card { background:var(--card); }
+body.dark .digest-audit-kpi { background:rgba(255,255,255,0.03); }
+body.dark .digest-audit-topic { background:var(--card); }
+body.dark .digest-audit-item { background:rgba(255,255,255,0.03); }
+body.dark .digest-audit-pill { background:rgba(255,255,255,0.04); }
 body.dark .subscriber-row-main.expanded td { background:rgba(107,139,214,0.06); }
 body.dark .subscriber-row-main.expanded:hover td { background:rgba(107,139,214,0.08); }
 body.dark .modal-card { background:var(--card); box-shadow:0 16px 44px rgba(0,0,0,0.5); }
@@ -919,7 +998,6 @@ body.dark .toast.ok { background:#0a2a1a; color:#6ee7a0; border-color:#065F46; }
 body.dark .toast.err { background:#2a0a0a; color:#fca5a5; border-color:#991B1B; }
 body.dark .toast.warn { background:#2a1f0a; color:#fcd34d; border-color:#92400E; }
 body.dark .topic-chip-preset { background:rgba(107,139,214,0.15); color:#93b0e8; border-color:rgba(107,139,214,0.25); }
-body.dark .topic-chip-custom { background:rgba(16,163,87,0.12); color:#6ee7a0; border-color:rgba(16,163,87,0.25); }
 body.dark .send-btn { background:var(--card); color:var(--accent); }
 body.dark .send-btn:hover { background:var(--accent-light); }
 body.dark .danger-btn { background:rgba(185,28,28,0.12); color:#fca5a5; border-color:rgba(185,28,28,0.3); }
@@ -929,7 +1007,6 @@ body.dark .btn-secondary:hover { background:var(--accent-light); }
 body.dark .table-action-link { background:var(--card); color:var(--accent); }
 body.dark .table-action-link:hover { background:var(--accent-light); }
 body.dark .expand-btn { background:var(--card); }
-body.dark .weights-pill { background:rgba(107,139,214,0.15); color:var(--accent); }
 body.dark .modal-feedback.ok { background:#0a2a1a; color:#6ee7a0; border-color:#065F46; }
 body.dark .modal-feedback.err { background:#2a0a0a; color:#fca5a5; border-color:#991B1B; }
 body.dark .failed-delivery-row { background:var(--card); }
@@ -951,9 +1028,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     <div class="header-top">
       <span class="header-brand">SignalBrief</span>
       <a href="/admin" class="nav-link current">Admin</a>
-      <a href="/admin/sandbox" class="nav-link">Sandbox</a>
       <a href="/admin/source-registry" class="nav-link">Source Registry</a>
-      <a href="/admin/retrieval-eval" class="nav-link">Retrieval Eval</a>
       <button onclick="logout()" class="signout-btn">Sign out</button>
       <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
@@ -978,7 +1053,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="card">
           <div class="card-label">Users reached</div>
           <div class="card-value" id="monthUsers">—</div>
-          <div class="card-sub" id="monthOnDemand">— on-demand</div>
+          <div class="card-sub" id="monthOnDemand">— scheduled path</div>
         </div>
       </div>
     </div>
@@ -1013,7 +1088,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="card">
           <div class="card-label">Active subscribers</div>
           <div class="card-value" id="activeUsers">—</div>
-          <div class="card-sub" id="telegramUsers">— on Telegram</div>
+          <div class="card-sub" id="subscriberFootnote">Email-only MVP</div>
         </div>
       </div>
     </div>
@@ -1029,11 +1104,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           <div class="card-label">Subscribers</div>
           <div class="card-value" id="engagementSubscribers">—</div>
           <div class="card-sub" id="engagementSubscribersSub">—</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Re-engagement pipeline</div>
-          <div class="card-value" id="engagementPipeline">—</div>
-          <div class="card-sub" id="engagementPipelineSub">—</div>
         </div>
         <div class="card">
           <div class="card-label">Referral signups</div>
@@ -1131,6 +1201,23 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
     </div>
   </div>
 
+  <div class="section-head" id="digestAuditSection">
+    <div>
+      <div class="section-title" style="margin-bottom:0;">Digest audit</div>
+      <div class="section-subcopy">Inspect lane mix, selected items, and candidate rejections for any day. Topic reruns are today-only so the system never fakes a historical backfill.</div>
+    </div>
+    <div class="digest-audit-controls">
+      <input id="digestAuditDate" class="table-filter" type="date" onkeydown="if(event.key==='Enter'){event.preventDefault();loadDigestAudit();}">
+      <button class="btn-secondary" type="button" onclick="loadDigestAudit()">Load audit</button>
+    </div>
+  </div>
+  <div id="digestAuditMeta" class="table-meta" style="margin-bottom:10px;">Loading latest digest audit…</div>
+  <div id="digestAuditPanel" class="digest-audit-grid">
+    <div class="digest-audit-card">
+      <div class="empty">Loading digest audit…</div>
+    </div>
+  </div>
+
   <!-- Upcoming deliveries -->
   <div class="section-title">Upcoming deliveries (next 7 days)</div>
   <div class="schedule-wrap" id="scheduleWrap">
@@ -1144,7 +1231,6 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <div class="section-title" style="margin:0 0 2px;">Failed deliveries (today)</div>
         <div id="failedDeliverySummary" class="table-meta" style="margin:0;">No failed deliveries in today's scheduled runs.</div>
       </div>
-      <button id="resendAllFailedBtn" class="btn-secondary" onclick="resendFailedDeliveries()" disabled>Resend failed users</button>
     </div>
     <div id="failedDeliveryList" class="failed-delivery-list"></div>
   </div>
@@ -1279,7 +1365,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
         <tr>
           <th title="The ET calendar date of the digest run.">Date (ET)</th>
           <th title="The ET time the run executed.">Time (ET)</th>
-          <th title="Scheduled is the normal automated run. On-demand is manually triggered.">Type</th>
+          <th title="All active digest runs use the scheduled email path.">Type</th>
           <th title="How many recipients were actually served in that run.">Users</th>
           <th title="Recipients who were served in the run.">Sent to</th>
           <th title="Claude token usage for the run: input tokens / output tokens.">Tokens (in / out)</th>
@@ -1322,7 +1408,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
       <thead>
         <tr>
           <th>User</th>
-          <th title="Includes scheduled, on-demand, and retry runs (may exceed unique digest dates)">Runs (incl. retries)</th>
+          <th title="Includes scheduled runs and retries (may exceed unique digest dates)">Runs (incl. retries)</th>
           <th>Total cost</th>
           <th>Avg cost / run</th>
         </tr>
@@ -1339,27 +1425,15 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
   <div class="modal-card">
     <div class="modal-head">
       <div>
-        <div class="modal-kicker">User send options</div>
-        <div class="modal-title" id="sendModalTitle">Send to user</div>
+        <div class="modal-kicker">User message</div>
+        <div class="modal-title" id="sendModalTitle">Send message to user</div>
       </div>
       <button class="modal-close" onclick="closeSendModal()" aria-label="Close">×</button>
     </div>
 
-    <div class="modal-mode-row">
-      <button id="sendModeDigestBtn" class="modal-mode-btn active" onclick="setSendMode('digest')">Digest now</button>
-      <button id="sendModeCustomBtn" class="modal-mode-btn" onclick="setSendMode('custom')">Custom message</button>
-    </div>
-
-    <div id="sendDigestPanel" class="modal-panel">
-      <div class="modal-help">
-        Sends a normal digest immediately using this user's configured channels and preferences.
-      </div>
-    </div>
-
-    <div id="sendCustomPanel" class="modal-panel" style="display:none;">
-      <div class="modal-channels">
-        <label><input type="checkbox" id="sendViaEmail" onchange="syncSendModalState()"> Email</label>
-        <label><input type="checkbox" id="sendViaTelegram" onchange="syncSendModalState()"> Telegram</label>
+    <div class="modal-panel">
+      <div class="modal-help" style="margin-bottom:10px;">
+        Email-only MVP mode is active. This sends a direct email message, not a digest.
       </div>
       <div id="sendChannelHint" class="modal-help" style="margin-bottom:10px;"></div>
       <div class="modal-field">
@@ -1483,27 +1557,9 @@ function renderTestTargets(roster) {
   const sel = document.getElementById("testDigestTarget");
   const btn = document.getElementById("testDigestBtn");
   if (!sel) return;
-  const prev = sel.value;
-  const targets = (roster || []).filter(u =>
-    u.status === "active" &&
-    u.chat_id &&
-    !String(u.chat_id).startsWith("email-")
-  );
-  if (!targets.length) {
-    sel.innerHTML = `<option value="">No Telegram-linked users</option>`;
-    sel.disabled = true;
-    if (btn) btn.disabled = true;
-    return;
-  }
-  sel.disabled = false;
-  if (btn) btn.disabled = false;
-  sel.innerHTML = targets.map(u => {
-    const label = `${u.name || "User"} · ${u.email || u.chat_id}`;
-    return `<option value="${esc(u.chat_id)}">${esc(label)}</option>`;
-  }).join("");
-  if (prev && targets.some(u => String(u.chat_id) === prev)) {
-    sel.value = prev;
-  }
+  sel.innerHTML = `<option value="">Targeted digests disabled in email-only MVP</option>`;
+  sel.disabled = true;
+  if (btn) btn.disabled = true;
 }
 function renderRunRecipients(run) {
   const recipients = Array.isArray(run?.per_user)
@@ -1545,7 +1601,9 @@ function resolveRunDigestHref(run) {
   const rawHref = String(run?.digest_url || "").trim();
   if (rawHref) return normalizeAdminActionHref(rawHref);
   const dateKey = String(run?.digest_date_key || run?.date || "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return `/digest/${encodeURIComponent(dateKey)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return `/admin?digest_audit_date=${encodeURIComponent(dateKey)}#digestAuditSection`;
+  }
   return "";
 }
 function renderRunDigestLink(run) {
@@ -1973,7 +2031,7 @@ function renderDigestQualityComponents(components) {
     { label: "ranking", value: fmtDebugNumber(components.relevance_fit, 0) },
     { label: "writeup", value: fmtDebugNumber(components.analysis_quality, 0) },
     { label: "freshness", value: fmtDebugNumber(components.freshness_diversity, 0) },
-    { label: "custom", value: fmtDebugNumber(components.custom_coverage, 0) },
+    { label: "narrative", value: fmtDebugNumber(components.narrative_uniqueness, 0) },
   ]);
 }
 function renderItemScoreBreakdown(breakdown) {
@@ -2003,7 +2061,7 @@ function summarizeDigestQuality(row, score) {
     { value: components.relevance_fit, strong: "good signal selection", weak: "weak signal selection" },
     { value: components.analysis_quality, strong: "clear writeups", weak: "weak writeups" },
     { value: components.freshness_diversity, strong: "fresh, non-repetitive coverage", weak: "repetitive or stale coverage" },
-    { value: components.custom_coverage, strong: "good custom-topic coverage", weak: "thin custom-topic coverage" },
+    { value: components.narrative_uniqueness, strong: "good storyline spread", weak: "too many overlapping angles" },
   ];
   checks.forEach((check) => {
     const state = qualityComponentState(check.value);
@@ -2125,7 +2183,7 @@ function renderRunDebugPanel(run) {
   </details>`;
 }
 function topicLabel(raw) {
-  return String(raw || "").replace(/^custom_/, "").replace(/_/g, " ");
+  return String(raw || "").replace(/_/g, " ");
 }
 function renderTopicChips(rawTopics, limit = Infinity) {
   const topics = Array.isArray(rawTopics) ? rawTopics.filter(Boolean) : [];
@@ -2133,10 +2191,7 @@ function renderTopicChips(rawTopics, limit = Infinity) {
   const max = Number.isFinite(limit) ? Math.max(0, limit) : topics.length;
   const visible = topics.slice(0, max);
   const hiddenCount = Math.max(0, topics.length - visible.length);
-  const chips = visible.map(t => {
-    const cls = String(t).startsWith("custom_") ? "topic-chip-custom" : "topic-chip-preset";
-    return `<span class="topic-chip ${cls}">${esc(topicLabel(t))}</span>`;
-  });
+  const chips = visible.map((t) => `<span class="topic-chip topic-chip-preset">${esc(topicLabel(t))}</span>`);
   if (hiddenCount > 0) {
     chips.push(`<span class="topic-chip topic-chip-preset">+${hiddenCount}</span>`);
   }
@@ -2155,6 +2210,447 @@ function formatEtDateTime(iso) {
     });
   } catch {
     return String(iso);
+  }
+}
+
+function getTodayEtDateKey() {
+  try {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function ensureDigestAuditDateInput() {
+  const input = document.getElementById("digestAuditDate");
+  if (!input) return "";
+  if (!input.value) input.value = getTodayEtDateKey();
+  return String(input.value || "").trim() || getTodayEtDateKey();
+}
+
+function formatPct(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? `${num.toFixed(1)}%` : "—";
+}
+
+function renderDigestAuditSummaryPill(label, value, tone = "var(--text-secondary)") {
+  return `<span class="digest-audit-pill" style="color:${tone};">${esc(label)}: ${esc(value)}</span>`;
+}
+
+function renderDigestAuditCandidate(candidate) {
+  const headline = esc(candidate?.headline || "Untitled");
+  const href = String(candidate?.url || "").trim();
+  const title = href
+    ? `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">${headline}</a>`
+    : `<span style="font-weight:600;">${headline}</span>`;
+  const source = candidate?.source ? `${candidate.source}` : "unknown";
+  const lane = candidate?.lane ? `${candidate.lane}` : "unknown";
+  const reason = candidate?.selection_reason ? String(candidate.selection_reason) : "selected";
+  const score = Number(candidate?._score);
+  const selected = candidate?.selected === true;
+  const scoreLabel = Number.isFinite(score) ? score.toFixed(3) : "—";
+  const tone = selected ? "var(--green)" : "var(--text-secondary)";
+  return `<div class="digest-audit-item">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="min-width:0;">
+        <div style="font-size:12px;line-height:1.45;">${title}</div>
+        <div class="subscriber-sub" style="margin-top:4px;">${esc(source)} · ${esc(lane)}</div>
+      </div>
+      <div class="mono" style="color:${tone};font-weight:700;">${scoreLabel}</div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:8px;">
+      ${renderDigestAuditSummaryPill(selected ? "Selected" : "Rejected", selected ? "yes" : "no", tone)}
+      ${renderDigestAuditSummaryPill("Reason", reason)}
+      ${candidate?.source_tier != null ? renderDigestAuditSummaryPill("Tier", String(candidate.source_tier)) : ""}
+    </div>
+  </div>`;
+}
+
+function renderDigestAuditConcern(message) {
+  return `<div class="digest-audit-item">
+    <div style="font-size:12px;line-height:1.5;color:var(--text-1);">${esc(message || "Unknown concern")}</div>
+  </div>`;
+}
+
+function renderRollingReadinessCard(readiness) {
+  const data = readiness && typeof readiness === "object" ? readiness : null;
+  if (!data) return "";
+  const daysCovered = Math.max(0, Number(data.days_covered || 0));
+  const ready = data.exit_ready === true;
+  const tone = ready ? "var(--green)" : "var(--yellow)";
+  const concerns = Array.isArray(data.concerns) ? data.concerns : [];
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">MVP readiness (${daysCovered}-day window)</div>
+        <div class="subscriber-sub">${ready ? "Current rolling window meets the coded MVP launch thresholds." : "Rolling window still misses one or more MVP launch thresholds."}</div>
+      </div>
+      <div class="mono" style="color:${tone};font-weight:700;">${ready ? "ready" : "not ready"}</div>
+    </div>
+    <div class="digest-audit-kpis">
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Full 5 rate</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.topic_day_full_5_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Candidate depth ≥15</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.candidate_depth_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Trusted Tier 1/2 share</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.trusted_selected_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Broker candidate share</div>
+        <div class="digest-audit-kpi-value" style="color:var(--green);">${formatPct(data.broker_candidate_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Source success</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.source_success_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Missed-story flags</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.missed_story_flag_count || 0))}</div>
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${renderDigestAuditSummaryPill("Consecutive full-day streak", String(Math.max(0, Number(data.consecutive_full_day_streak || 0))))}
+      ${renderDigestAuditSummaryPill("No-broker topic-days", String(Math.max(0, Number(data.no_broker_topic_days || 0))), Number(data.no_broker_topic_days || 0) > 0 ? "var(--red)" : "var(--green)")}
+      ${renderDigestAuditSummaryPill("Provider-limited topic-days", String(Math.max(0, Number(data.provider_limited_topic_days || 0))), Number(data.provider_limited_topic_days || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+    </div>
+    ${concerns.length ? `<div class="digest-audit-item-list" style="margin-top:12px;">${concerns.slice(0, 6).map((message) => renderDigestAuditConcern(message)).join("")}</div>` : `<div class="subscriber-sub" style="margin-top:12px;">No launch-readiness concerns flagged in the current rolling window.</div>`}
+  </div>`;
+}
+
+function renderBackboneHealthCard(sourceHealth) {
+  const data = sourceHealth && typeof sourceHealth === "object" ? sourceHealth : null;
+  if (!data) return "";
+  const topicWarnings = Array.isArray(data.warnings) ? data.warnings : [];
+  const sourceWarnings = Array.isArray(data.top_source_warnings) ? data.top_source_warnings : [];
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Backbone proof</div>
+        <div class="subscriber-sub">Broker/RSS-direct share and live source reliability over the rolling window.</div>
+      </div>
+      <div class="mono" style="color:${Number(data.broker_source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)"};font-weight:700;">${Math.max(0, Number(data.days_covered || 0))} day(s)</div>
+    </div>
+    <div class="digest-audit-kpis">
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Broker/RSS share</div>
+        <div class="digest-audit-kpi-value" style="color:${Number(data.broker_candidate_share_pct || 0) >= 70 ? "var(--green)" : "var(--yellow)"};">${formatPct(data.broker_candidate_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Discovery share</div>
+        <div class="digest-audit-kpi-value" style="color:${Number(data.discovery_candidate_share_pct || 0) <= 30 ? "var(--green)" : "var(--yellow)"};">${formatPct(data.discovery_candidate_share_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Broker source success</div>
+        <div class="digest-audit-kpi-value" style="color:${Number(data.broker_source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)"};">${formatPct(data.broker_source_success_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Observed sources</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.source_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Topic warnings</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.topic_warning_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Source warnings</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.source_warning_count || 0))}</div>
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${renderDigestAuditSummaryPill("RSS candidates", String(Math.max(0, Number(data?.global_lane_totals?.rss || 0))), "var(--green)")}
+      ${renderDigestAuditSummaryPill("Official candidates", String(Math.max(0, Number(data?.global_lane_totals?.official || 0))), "var(--green)")}
+      ${renderDigestAuditSummaryPill("Discovery candidates", String(Math.max(0, Number(data?.global_lane_totals?.discovery || 0))), "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Unknown lane", String(Math.max(0, Number(data?.global_lane_totals?.unknown || 0))))}
+    </div>
+    ${topicWarnings.length ? `<div style="margin-top:12px;">
+      <div class="subscriber-sub" style="font-weight:700;margin-bottom:8px;">Topic warnings</div>
+      <div class="digest-audit-item-list">${topicWarnings.map((warning) => renderDigestAuditConcern(warning?.message || "Unknown topic warning")).join("")}</div>
+    </div>` : ""}
+    ${sourceWarnings.length ? `<div style="margin-top:12px;">
+      <div class="subscriber-sub" style="font-weight:700;margin-bottom:8px;">Top failing sources</div>
+      <div class="digest-audit-item-list">${sourceWarnings.map((warning) => `
+        <div class="digest-audit-item">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+            <div style="min-width:0;">
+              <div style="font-size:12px;line-height:1.45;font-weight:600;">${esc(warning?.source_id || "unknown")}</div>
+              <div class="subscriber-sub" style="margin-top:4px;">${esc(warning?.lane || "unknown")} · ${esc((Array.isArray(warning?.topic_tags) ? warning.topic_tags.join(", ") : "") || "untagged")}</div>
+              ${warning?.last_error ? `<div class="subscriber-sub" style="margin-top:4px;">${esc(warning.last_error)}</div>` : ""}
+            </div>
+            <div class="mono" style="color:var(--yellow);font-weight:700;">${formatPct(warning?.success_rate_pct || 0)}</div>
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("Attempted days", String(Math.max(0, Number(warning?.attempted_days || 0))))}
+            ${renderDigestAuditSummaryPill("Failure days", String(Math.max(0, Number(warning?.failure_days || 0))), "var(--red)")}
+            ${renderDigestAuditSummaryPill("Retained", String(Math.max(0, Number(warning?.retained_count || 0))), "var(--green)")}
+            ${renderDigestAuditSummaryPill("Stale", String(Math.max(0, Number(warning?.stale_count || 0))), "var(--yellow)")}
+          </div>
+        </div>`).join("")}</div>
+    </div>` : `<div class="subscriber-sub" style="margin-top:12px;">No failing broker sources crossed the warning threshold in the current rolling window.</div>`}
+  </div>`;
+}
+
+function renderTopicReadinessCard(topicReadiness) {
+  const entries = topicReadiness && typeof topicReadiness === "object"
+    ? Object.entries(topicReadiness)
+    : [];
+  if (!entries.length) return "";
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Topic backbone proof</div>
+        <div class="subscriber-sub">Per-topic proof that the 5-item contract, candidate depth, and broker backbone are holding in practice.</div>
+      </div>
+    </div>
+    <div class="digest-audit-item-list" style="margin-top:12px;">
+      ${entries.map(([tag, readiness]) => {
+        const ready = readiness?.exit_ready === true;
+        const concerns = Array.isArray(readiness?.concerns) ? readiness.concerns : [];
+        return `<div class="digest-audit-item">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+            <div style="min-width:0;">
+              <div style="font-size:12px;line-height:1.45;font-weight:700;">${esc(tag)}</div>
+              <div class="subscriber-sub" style="margin-top:4px;">${Math.max(0, Number(readiness?.days_observed || 0))} observed day(s) · avg ${Number(readiness?.avg_candidate_count || 0).toFixed(1)} candidates/day · ${Math.max(0, Number(readiness?.active_source_count || 0))} active source(s)</div>
+            </div>
+            <div class="mono" style="color:${ready ? "var(--green)" : "var(--yellow)"};font-weight:700;">${ready ? "ready" : "watch"}</div>
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("Full 5", formatPct(readiness?.full_5_rate_pct || 0), Number(readiness?.full_5_rate_pct || 0) === 100 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Depth ≥15", formatPct(readiness?.candidate_depth_rate_pct || 0), Number(readiness?.candidate_depth_rate_pct || 0) === 100 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Broker/RSS share", formatPct(readiness?.broker_candidate_share_pct || 0), Number(readiness?.broker_candidate_share_pct || 0) >= 70 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Source success", formatPct(readiness?.source_success_rate_pct || 0), Number(readiness?.source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Trusted Tier 1/2", formatPct(readiness?.trusted_selected_share_pct || 0), Number(readiness?.trusted_selected_share_pct || 0) >= 80 ? "var(--green)" : "var(--yellow)")}
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("No-broker days", String(Math.max(0, Number(readiness?.no_broker_days || 0))), Number(readiness?.no_broker_days || 0) > 0 ? "var(--red)" : "var(--green)")}
+            ${renderDigestAuditSummaryPill("Provider-limited", String(Math.max(0, Number(readiness?.provider_limited_days || 0))), Number(readiness?.provider_limited_days || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+            ${renderDigestAuditSummaryPill("Missed-story flags", String(Math.max(0, Number(readiness?.missed_story_flag_count || 0))), Number(readiness?.missed_story_flag_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+            ${renderDigestAuditSummaryPill("Source domains", String(Math.max(0, Number(readiness?.source_domain_count || 0))))}
+          </div>
+          ${concerns.length ? `<div class="subscriber-sub" style="margin-top:8px;">${esc(concerns.join(" · "))}</div>` : `<div class="subscriber-sub" style="margin-top:8px;">This topic currently clears the coded MVP operating thresholds.</div>`}
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+function renderMissedStoryFlag(flag) {
+  const headline = esc(flag?.headline || "Untitled");
+  const href = String(flag?.url || "").trim();
+  const title = href
+    ? `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">${headline}</a>`
+    : `<span style="font-weight:600;">${headline}</span>`;
+  const score = Number(flag?._score);
+  const signals = Array.isArray(flag?.signals) ? flag.signals : [];
+  return `<div class="digest-audit-item">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="min-width:0;">
+        <div style="font-size:12px;line-height:1.45;">${title}</div>
+        <div class="subscriber-sub" style="margin-top:4px;">${esc(flag?.source || "unknown")} · ${esc(flag?.lane || "unknown")} · ${esc(flag?.selection_reason || "not_selected")}</div>
+      </div>
+      <div class="mono" style="color:var(--yellow);font-weight:700;">${Number.isFinite(score) ? score.toFixed(3) : "—"}</div>
+    </div>
+    ${signals.length ? `<div class="digest-audit-row" style="margin-top:8px;">${signals.map((signal) => renderDigestAuditSummaryPill(signal, "flag", "var(--yellow)")).join("")}</div>` : ""}
+  </div>`;
+}
+
+function canRerunDigestAuditTopic(dateKey) {
+  return String(dateKey || "").trim() === getTodayEtDateKey();
+}
+
+function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
+  const dateKey = String(options?.dateKey || "").trim();
+  const canRerun = canRerunDigestAuditTopic(dateKey);
+  const topicArg = JSON.stringify(String(tag || ""));
+  const selectedCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).filter((candidate) => candidate.selected === true);
+  const laneBreakdown = topic?.lane_breakdown || {};
+  const rejectionCounts = topic?.rejection_reason_counts || {};
+  const visibleCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).slice(0, 12);
+  const hiddenCount = Math.max(0, Number((topic?.candidates || []).length) - visibleCandidates.length);
+  const missedStoryFlags = Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags : [];
+  const lanePills = Object.entries(laneBreakdown).map(([lane, count]) => renderDigestAuditSummaryPill(lane, String(count)));
+  const rejectionPills = Object.entries(rejectionCounts).map(([reason, count]) => renderDigestAuditSummaryPill(reason, String(count)));
+  const coverageStatus = String(fetchTopic?.coverage_status || "").trim() || "unknown";
+  const coverageTone = coverageStatus === "covered"
+    ? "var(--green)"
+    : coverageStatus.includes("thin")
+      ? "var(--yellow)"
+      : "var(--red)";
+  return `<div class="digest-audit-topic">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">${esc(tag)}</div>
+        <div class="subscriber-sub">${Number(topic?.selected_count || 0)}/${Number(topic?.total_candidates || 0)} selected · ${formatPct(fetchTopic?.discovery_candidate_share_pct || 0)} discovery candidates</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+        <div class="mono" style="color:${coverageTone};font-weight:700;">${esc(coverageStatus)}</div>
+        ${canRerun
+          ? `<button type="button" class="btn-secondary" style="padding:7px 10px;font-size:12px;" onclick='triggerTopicAuditRerun(${topicArg}, this)'>Rerun topic audit</button>`
+          : `<span class="subscriber-sub">Today only</span>`}
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-bottom:10px;">
+      ${renderDigestAuditSummaryPill("Broker", `${Number(fetchTopic?.broker_item_count || 0)} kept`, "var(--green)")}
+      ${renderDigestAuditSummaryPill("Discovery", `${Number(fetchTopic?.discovery_item_count || 0)} kept`, "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Discovery capped", String(Number(fetchTopic?.discovery_capped_count || 0)), "var(--red)")}
+    </div>
+    ${lanePills.length ? `<div class="digest-audit-row" style="margin-bottom:10px;">${lanePills.join("")}</div>` : ""}
+    ${missedStoryFlags.length ? `<div style="margin-bottom:10px;">
+      <div class="subscriber-sub" style="font-weight:700;color:var(--yellow);margin-bottom:8px;">Missed-story watch</div>
+      <div class="digest-audit-item-list">${missedStoryFlags.map((flag) => renderMissedStoryFlag(flag)).join("")}</div>
+    </div>` : ""}
+    <div class="digest-audit-item-list">
+      ${selectedCandidates.length ? selectedCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No selected items captured for this topic.</div>`}
+    </div>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Candidate audit (${Number(topic?.total_candidates || 0)})</summary>
+      ${rejectionPills.length ? `<div class="digest-audit-row" style="margin-top:10px;">${rejectionPills.join("")}</div>` : ""}
+      <div class="digest-audit-item-list" style="margin-top:10px;">
+        ${visibleCandidates.length ? visibleCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No candidate detail captured.</div>`}
+      </div>
+      ${hiddenCount > 0 ? `<div class="subscriber-sub" style="margin-top:8px;">+${hiddenCount} more candidates in the audit log</div>` : ""}
+    </details>
+  </div>`;
+}
+
+function renderDigestAuditPanel() {
+  const meta = document.getElementById("digestAuditMeta");
+  const panel = document.getElementById("digestAuditPanel");
+  if (!meta || !panel) return;
+  const state = digestAuditState || {};
+  if (state.loading && !state.data) {
+    meta.textContent = `Loading digest audit for ${state.dateKey || ensureDigestAuditDateInput()}…`;
+    panel.innerHTML = `<div class="digest-audit-card"><div class="empty">Loading digest audit…</div></div>`;
+    return;
+  }
+  if (state.error && !state.data) {
+    const available = Array.isArray(state.availableDates) && state.availableDates.length
+      ? ` Available dates: ${state.availableDates.slice(0, 6).join(", ")}`
+      : "";
+    meta.textContent = `Digest audit unavailable for ${state.dateKey || ensureDigestAuditDateInput()}.`;
+    panel.innerHTML = `<div class="digest-audit-card"><div class="empty">${esc(state.error)}${esc(available)}</div></div>`;
+    return;
+  }
+  const data = state.data || {};
+  const summary = data.summary || {};
+  const fetch = data.fetch || {};
+  const readiness = data.rolling_readiness && typeof data.rolling_readiness === "object"
+    ? data.rolling_readiness
+    : null;
+  const sourceHealth = data.source_health && typeof data.source_health === "object"
+    ? data.source_health
+    : null;
+  const topicReadiness = data.topic_readiness && typeof data.topic_readiness === "object"
+    ? data.topic_readiness
+    : null;
+  const fetchTopics = new Map((Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : []).map((topic) => [String(topic?.tag || "").trim().toUpperCase(), topic]));
+  const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
+  const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
+  const refreshingLabel = state.loading ? " · refreshing…" : "";
+  const partialRefresh = data.partial_refresh && typeof data.partial_refresh === "object"
+    ? data.partial_refresh
+    : null;
+  const rerunLabel = partialRefresh && partialRefresh.tag
+    ? ` · last topic rerun ${partialRefresh.tag} at ${formatEtDateTime(partialRefresh.refreshed_at || data.generated_at || "")}`
+    : "";
+  meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${rerunLabel}${refreshingLabel}`;
+  panel.innerHTML = `
+    ${renderRollingReadinessCard(readiness)}
+    ${renderBackboneHealthCard(sourceHealth)}
+    ${renderTopicReadinessCard(topicReadiness)}
+    <div class="digest-audit-card">
+      <div class="digest-audit-kpis">
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Candidates scored</div>
+          <div class="digest-audit-kpi-value">${Number(summary.total_candidates || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Items selected</div>
+          <div class="digest-audit-kpi-value">${Number(summary.total_selected || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Broker candidate share</div>
+          <div class="digest-audit-kpi-value" style="color:var(--green);">${formatPct(fetch.broker_candidate_share_pct || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Discovery candidate share</div>
+          <div class="digest-audit-kpi-value" style="color:${Number(fetch.discovery_candidate_share_pct || 0) > Number(fetch.max_discovery_candidate_share_pct || 20) ? "var(--red)" : "var(--yellow)"};">${formatPct(fetch.discovery_candidate_share_pct || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Discovery capped</div>
+          <div class="digest-audit-kpi-value">${Number(fetch.discovery_candidate_capped_count || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Target max discovery</div>
+          <div class="digest-audit-kpi-value">${formatPct(fetch.max_discovery_candidate_share_pct || 0)}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Missed-story flags</div>
+          <div class="digest-audit-kpi-value">${Math.max(0, Number(summary.missed_story_flag_count || 0))}</div>
+        </div>
+      </div>
+      <div class="digest-audit-row" style="margin-top:12px;">
+        ${renderDigestAuditSummaryPill("Archive dedup removed", String(Number(summary.dedup_removed || 0)))}
+        ${renderDigestAuditSummaryPill("History suppressed", String(Number(summary.history_suppressed || 0)))}
+        ${renderDigestAuditSummaryPill("Continuation removed", String(Number(summary.continuation_removed || 0)))}
+        ${renderDigestAuditSummaryPill("Selected discovery capped", String(Number(summary.discovery_capped || 0)))}
+      </div>
+    </div>
+    <div class="digest-audit-topic-list">
+      ${topics.length ? topics.map(([tag, topic]) => renderDigestAuditTopic(tag, topic, fetchTopics.get(tag), { dateKey: data.date_et || state.dateKey || "" })).join("") : `<div class="digest-audit-card"><div class="empty">No topic-level audit data captured for this day.</div></div>`}
+    </div>
+  `;
+}
+
+async function loadDigestAudit(silent = true) {
+  const dateKey = ensureDigestAuditDateInput();
+  digestAuditState = {
+    ...digestAuditState,
+    loading: true,
+    dateKey,
+    error: "",
+    availableDates: [],
+  };
+  renderDigestAuditPanel();
+  try {
+    const resp = await apiFetchJson(`/api/admin/digest-audit?date=${encodeURIComponent(dateKey)}`, {}, 1);
+    const data = resp.data || {};
+    if (!resp.ok || data.error) {
+      digestAuditState = {
+        ...digestAuditState,
+        loading: false,
+        data: null,
+        error: data.error === "not_found"
+          ? "No digest audit file exists for that date yet."
+          : (data.error || `Failed to load digest audit (HTTP ${resp.status})`),
+        availableDates: Array.isArray(data.available_dates) ? data.available_dates : [],
+      };
+      renderDigestAuditPanel();
+      if (!silent) showToast("err", digestAuditState.error);
+      return;
+    }
+    digestAuditState = {
+      loading: false,
+      dateKey,
+      data,
+      error: "",
+      availableDates: [],
+    };
+    renderDigestAuditPanel();
+  } catch (e) {
+    digestAuditState = {
+      ...digestAuditState,
+      loading: false,
+      data: null,
+      error: e.message || "Network error loading digest audit",
+      availableDates: [],
+    };
+    renderDigestAuditPanel();
+    if (!silent) showToast("err", digestAuditState.error);
   }
 }
 
@@ -2186,6 +2682,67 @@ function ceoCommandButtonId(commandId) {
   if (id === "run_full_digest") return "runFullDigestBtn";
   if (id === "restart_worker") return "restartWorkerBtn";
   return "";
+}
+
+async function triggerTopicAuditRerun(topicTag, triggerEl = null) {
+  const normalizedTag = String(topicTag || "").trim().toUpperCase();
+  const dateKey = String((digestAuditState?.data?.date_et) || digestAuditState?.dateKey || ensureDigestAuditDateInput()).trim();
+  const todayEt = getTodayEtDateKey();
+  if (!normalizedTag) return;
+  if (dateKey !== todayEt) {
+    const detail = `Topic audit reruns only support today ET (${todayEt}) to avoid fake historical backfills.`;
+    setOpsActionMessage("warn", `⚠️ ${detail}`);
+    showToast("err", detail);
+    return;
+  }
+
+  const approved = await openConfirmModal(
+    `Rerun ${normalizedTag} audit?`,
+    `This queues an audit-only rerun for ${normalizedTag} on ${dateKey}. It refreshes selection diagnostics for that topic only and does not resend email.`,
+    "Queue topic rerun",
+  );
+  if (!approved) return;
+
+  const btn = triggerEl || null;
+  const prevLabel = btn ? btn.textContent : "Rerun topic audit";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Queueing…";
+  }
+  setOpsActionMessage("info", `Queueing ${normalizedTag} audit rerun for ${dateKey}…`);
+  try {
+    const resp = await apiFetchJson("/api/admin/run-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scope: "topic_audit",
+        topic: normalizedTag,
+        date_et: dateKey,
+      }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to queue topic audit rerun (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || `Topic audit rerun queued for ${normalizedTag}`;
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", msg);
+    window.setTimeout(() => {
+      loadDigestAudit(true).catch(() => {});
+    }, 2500);
+  } catch (e) {
+    const msg = e.message || "Network error queueing topic audit rerun";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  }
 }
 
 function renderCeoCommandButtons(commands) {
@@ -2359,7 +2916,7 @@ function renderAdminMessages(entries) {
       : `<span style="color:var(--red);font-weight:700;">failed</span>`;
     const target = e.target_email
       ? `<a href="/admin/user?email=${encodeURIComponent(e.target_email)}" target="_blank" style="color:var(--accent);text-decoration:none;">${esc(e.target_email_masked || e.target_email)}</a>`
-      : (e.target_chat_id ? `<span class="mono">${esc(e.target_chat_id)}</span>` : "—");
+      : "—";
     const notes = (e.errors && e.errors.length)
       ? esc(e.errors.join(" | "))
       : (e.message_preview ? esc(e.message_preview) : "—");
@@ -2394,20 +2951,21 @@ function setLastRefreshed(dateObj) {
 function countActiveUsers(roster) {
   return (roster || []).filter(u => u.status === "active").length;
 }
-function countActiveTelegramUsers(roster) {
-  return (roster || []).filter(u => u.status === "active" && u.telegram).length;
-}
 let latestRoster = [];
 let latestRuns = [];
 let latestHealth = null;
-let latestFailedDeliveries = [];
 let latestSourceRegistryOverview = null;
+let digestAuditState = {
+  loading: false,
+  dateKey: "",
+  data: null,
+  error: "",
+  availableDates: [],
+};
 let autoRefreshTimer = null;
 let loadInFlight = false;
-let resendAllInFlight = false;
 const AUTO_REFRESH_MS = 30000;
 let sendModalUser = null;
-let sendMode = "digest";
 let deliveryTimeModalState = { email: "", current: "07:00", triggerBtn: null };
 let subscriberSearchQuery = "";
 let subscriberStatusFilter = "all";
@@ -2573,40 +3131,13 @@ async function apiFetchJson(url, options = {}, maxRetries = 2) {
   return { ok: false, status: 0, data: { error: "Request failed" }, attempts: maxRetries + 1 };
 }
 
-// ── Topic weights summary string ───────────────────────────────────────────────
-function weightsSummary(weights) {
-  if (!weights || !Object.keys(weights).length) return "";
-  return Object.entries(weights)
-    .filter(([, v]) => v !== 0)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])) // highest magnitude first
-    .slice(0, 3) // cap at 3 for space
-    .map(([k, v]) => {
-      const label = k.replace(/^custom_/,"").replace(/_/g," ").split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ").slice(0, 10);
-      return `${label} ${v > 0 ? "+" : ""}${v}`;
-    })
-    .join(" · ");
-}
-
-// ── Per-user send tools (digest + custom message) ─────────────────────────────
+// ── Per-user send tools (email-only MVP) ──────────────────────────────────────
 function getSendCapabilities(user) {
-  const canDigest = user.status === "active" && !!user.chat_id;
   const canEmailMessage = !!user.email && user.email_enabled !== false;
-  const canTelegramMessage = !!(user.chat_id && !String(user.chat_id).startsWith("email-") && user.telegram_enabled);
   return {
-    canDigest,
     canEmailMessage,
-    canTelegramMessage,
-    canAnyMessage: canEmailMessage || canTelegramMessage,
+    canAnyMessage: canEmailMessage,
   };
-}
-
-async function runDigestForChat(chatId) {
-  const resp = await apiFetchJson("/api/admin/run-digest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chatId }),
-  });
-  return { ok: resp.ok, data: resp.data, status: resp.status };
 }
 
 function findRosterUser(email, chatId) {
@@ -2628,36 +3159,11 @@ function setSendModalFeedback(type, text) {
   box.textContent = text;
 }
 
-function setSendMode(mode) {
-  if (!sendModalUser) return;
-  const caps = getSendCapabilities(sendModalUser);
-  if (mode === "digest" && !caps.canDigest) mode = "custom";
-  if (mode === "custom" && !caps.canAnyMessage && caps.canDigest) mode = "digest";
-  sendMode = mode;
-
-  const digestBtn = document.getElementById("sendModeDigestBtn");
-  const customBtn = document.getElementById("sendModeCustomBtn");
-  digestBtn.classList.toggle("active", mode === "digest");
-  customBtn.classList.toggle("active", mode === "custom");
-  digestBtn.disabled = !caps.canDigest;
-  customBtn.disabled = !caps.canAnyMessage;
-  document.getElementById("sendDigestPanel").style.display = mode === "digest" ? "block" : "none";
-  document.getElementById("sendCustomPanel").style.display = mode === "custom" ? "block" : "none";
-  document.getElementById("sendModalSubmit").textContent = mode === "digest" ? "Send Digest" : "Send Message";
-  setSendModalFeedback(null, "");
-  syncSendModalState();
-}
-
 function syncSendModalState() {
   if (!sendModalUser) return;
   const caps = getSendCapabilities(sendModalUser);
-  const emailCb = document.getElementById("sendViaEmail");
-  const tgCb = document.getElementById("sendViaTelegram");
   const body = document.getElementById("sendCustomBody").value.trim();
-  const hasChannel = (emailCb.checked && caps.canEmailMessage) || (tgCb.checked && caps.canTelegramMessage);
-  const canSend = sendMode === "digest"
-    ? caps.canDigest
-    : (caps.canAnyMessage && hasChannel && body.length > 0);
+  const canSend = caps.canEmailMessage && body.length > 0;
   document.getElementById("sendModalSubmit").disabled = !canSend;
 }
 
@@ -2668,28 +3174,20 @@ function openSendModal(email, chatId) {
   const caps = getSendCapabilities(user);
 
   document.getElementById("sendModalTitle").textContent = `Send to ${user.name || user.email || user.chat_id}`;
-  const emailCb = document.getElementById("sendViaEmail");
-  const tgCb = document.getElementById("sendViaTelegram");
   const hint = document.getElementById("sendChannelHint");
-  emailCb.checked = caps.canEmailMessage;
-  emailCb.disabled = !caps.canEmailMessage;
-  tgCb.checked = caps.canTelegramMessage;
-  tgCb.disabled = !caps.canTelegramMessage;
   document.getElementById("sendCustomSubject").value = "Quick note from SignalBrief";
   document.getElementById("sendCustomBody").value = "";
-  hint.textContent = [
-    caps.canEmailMessage ? "Email ready" : "Email unavailable",
-    caps.canTelegramMessage ? "Telegram ready" : "Telegram unavailable",
-  ].join(" · ");
+  hint.textContent = caps.canEmailMessage ? "Email delivery ready" : "Email unavailable for this user";
 
   document.getElementById("sendModal").style.display = "flex";
-  setSendMode(caps.canDigest ? "digest" : "custom");
+  document.getElementById("sendModalSubmit").textContent = "Send Message";
+  setSendModalFeedback(null, "");
+  syncSendModalState();
 }
 
 function closeSendModal() {
   document.getElementById("sendModal").style.display = "none";
   sendModalUser = null;
-  sendMode = "digest";
   setSendModalFeedback(null, "");
 }
 
@@ -2699,32 +3197,15 @@ async function submitSendModal() {
   const originalLabel = submitBtn.textContent;
   submitBtn.disabled = true;
   submitBtn.classList.add("loading");
-  submitBtn.textContent = sendMode === "digest" ? "Sending digest…" : "Sending…";
+  submitBtn.textContent = "Sending…";
   setSendModalFeedback(null, "");
   const userEmailKey = String(sendModalUser.email || "").toLowerCase().trim();
 
   try {
-    if (sendMode === "digest") {
-      const { ok, data } = await runDigestForChat(sendModalUser.chat_id);
-      if (!ok || !data.success) {
-        setSendModalFeedback("err", data.error || "Failed to trigger digest");
-        setRowActionStatus(userEmailKey, "err", data.error || "Digest trigger failed");
-      } else {
-        setSendModalFeedback("ok", data.message || "Digest triggered");
-        setRowActionStatus(userEmailKey, "ok", "Digest triggered");
-        showToast("ok", `Digest triggered for ${sendModalUser.name || sendModalUser.email || "user"}`);
-      }
-      return;
-    }
-
-    const channels = [];
-    if (document.getElementById("sendViaEmail").checked) channels.push("email");
-    if (document.getElementById("sendViaTelegram").checked) channels.push("telegram");
     const body = document.getElementById("sendCustomBody").value.trim();
     const subject = document.getElementById("sendCustomSubject").value.trim();
     const payload = JSON.stringify({
       email: sendModalUser.email,
-      channels,
       subject,
       message: body,
     });
@@ -3086,7 +3567,7 @@ function buildFailedDeliveryRows(roster, runs) {
   const latestOutcomeByUser = new Map();
   for (const run of todayRuns) {
     const runAtLabel = run.run_at_et || formatEtDateTime(run.run_at);
-    const fromScheduled = !run.on_demand;
+    const fromScheduled = true;
     (Array.isArray(run.per_user) ? run.per_user : []).forEach((entry) => {
       const resolved = resolveRecipient(entry && entry.id);
       if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
@@ -3096,6 +3577,7 @@ function buildFailedDeliveryRows(roster, runs) {
         runId: resolved.rawId,
         user: resolved.user,
         emailKey: resolved.emailKey,
+        dateKey: String(run.date || ""),
         runAtIso: run.run_at || null,
         runAtLabel,
       });
@@ -3111,6 +3593,7 @@ function buildFailedDeliveryRows(roster, runs) {
         user: resolved.user,
         emailKey: resolved.emailKey,
         error: String((entry && entry.error) || "Delivery failed"),
+        dateKey: String(run.date || ""),
         runAtIso: run.run_at || null,
         runAtLabel,
       });
@@ -3119,41 +3602,26 @@ function buildFailedDeliveryRows(roster, runs) {
 
   return Array.from(latestOutcomeByUser.values())
     .filter((row) => row.status === "failed" && row.fromScheduled)
-    .map((row) => {
-      const resendChatId = row.user ? String(row.user.chat_id || "").trim() : "";
-      const canResend = !!(resendChatId && row.user && row.user.status === "active");
-      return {
-        ...row,
-        resendChatId,
-        canResend,
-      };
-    });
+    .map((row) => ({ ...row }));
 }
 
 function renderFailedDeliveries(roster, runs) {
   const panel = document.getElementById("failedDeliveryPanel");
   const summary = document.getElementById("failedDeliverySummary");
   const list = document.getElementById("failedDeliveryList");
-  const resendAllBtn = document.getElementById("resendAllFailedBtn");
-  if (!panel || !summary || !list || !resendAllBtn) return;
+  if (!panel || !summary || !list) return;
 
   const failedRows = buildFailedDeliveryRows(roster, runs);
-  latestFailedDeliveries = failedRows;
 
   if (!failedRows.length) {
     panel.style.display = "none";
     list.innerHTML = "";
     summary.textContent = "No failed deliveries in today's scheduled runs.";
-    resendAllBtn.disabled = true;
-    resendAllBtn.textContent = "Resend failed users";
     return;
   }
 
   panel.style.display = "";
-  const resendable = failedRows.filter((row) => row.canResend);
-  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs${resendable.length ? ` · ${resendable.length} ready to resend` : ""}.`;
-  resendAllBtn.disabled = resendAllInFlight || resendable.length === 0;
-  resendAllBtn.textContent = resendAllInFlight ? "Resending..." : "Resend failed users";
+  summary.textContent = `${failedRows.length} failed user${failedRows.length === 1 ? "" : "s"} in today's scheduled runs. If a full 5-item snapshot was captured, you can regenerate summaries on that exact digest and resend it without rerunning everyone.`;
 
   list.innerHTML = failedRows.map((row) => {
     const displayName = row.user
@@ -3166,117 +3634,18 @@ function renderFailedDeliveries(roster, runs) {
     const deliveryTarget = email
       ? esc(email)
       : (row.user && row.user.chat_id ? `<span class="mono">${esc(row.user.chat_id)}</span>` : `<span class="mono">${esc(row.runId || "unknown")}</span>`);
-    const reason = row.canResend
-      ? ""
-      : (row.user ? `Cannot resend while user is ${row.user.status || "inactive"}.` : "Cannot resend: user no longer exists in roster.");
     return `
       <div class="failed-delivery-row">
         <div class="failed-delivery-main">
           <div class="failed-delivery-name">${userLink}</div>
           <div class="failed-delivery-meta">${deliveryTarget} · failed ${esc(row.runAtLabel || "today")}</div>
           <div class="failed-delivery-error">${esc(row.error || "Delivery failed")}</div>
-          ${reason ? `<div class="failed-delivery-meta">${esc(reason)}</div>` : ""}
-        </div>
-        <div class="failed-delivery-actions">
-          <button
-            class="schedule-set-btn"
-            onclick='resendFailedDelivery(${JSON.stringify(row.resendChatId || "")}, ${JSON.stringify(row.emailKey || "")}, this)'
-            ${row.canResend && !resendAllInFlight ? "" : "disabled"}
-          >
-            resend
-          </button>
+          <div class="failed-delivery-meta">Stored snapshot controls are available when the failed run already captured a complete 5-item digest.</div>
+          ${email && row.dateKey ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary" onclick="regenerateDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Regenerate summaries</button><button type="button" class="btn btn-secondary" onclick="resendDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Resend stored digest</button></div>` : ''}
         </div>
       </div>
     `;
   }).join("");
-}
-
-async function resendFailedDelivery(chatId, emailKey, triggerBtn) {
-  if (resendAllInFlight) return;
-  const targetChatId = String(chatId || "").trim();
-  const normalizedEmail = normalizeEmailKey(emailKey || "");
-  if (!targetChatId) {
-    showToast("err", "No resend target found for this row.");
-    return;
-  }
-  const user = findRosterUser(normalizedEmail, targetChatId);
-  const label = user ? (user.name || user.email || user.chat_id) : targetChatId;
-  const accepted = await openConfirmModal(
-    "Resend failed delivery",
-    `Resend today's digest to ${label}?`,
-    "Resend"
-  );
-  if (!accepted) return;
-
-  const btn = triggerBtn && triggerBtn.tagName ? triggerBtn : null;
-  const prevText = btn ? btn.textContent : "";
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "sending...";
-  }
-
-  try {
-    const { ok, data, status } = await runDigestForChat(targetChatId);
-    if (!ok || !data.success) {
-      const errMsg = data.error || `Resend failed (HTTP ${status})`;
-      showToast("err", errMsg);
-      if (normalizedEmail) setRowActionStatus(normalizedEmail, "err", `Resend failed: ${errMsg}`);
-      return;
-    }
-    showToast("ok", data.message || `Digest resent to ${label}`);
-    if (normalizedEmail) setRowActionStatus(normalizedEmail, "ok", "Digest resent");
-    await load(true);
-  } catch (e) {
-    const errMsg = e.message || "Network error during resend";
-    showToast("err", errMsg);
-    if (normalizedEmail) setRowActionStatus(normalizedEmail, "err", errMsg);
-  } finally {
-    if (btn && document.body.contains(btn)) {
-      btn.disabled = false;
-      btn.textContent = prevText || "resend";
-    }
-  }
-}
-
-async function resendFailedDeliveries() {
-  if (resendAllInFlight) return;
-  const queue = (latestFailedDeliveries || []).filter((row) => row.canResend && row.resendChatId);
-  if (!queue.length) {
-    showToast("warn", "No failed users are currently eligible for resend.");
-    return;
-  }
-  const accepted = await openConfirmModal(
-    "Resend failed users",
-    `Resend today's digest to ${queue.length} failed user${queue.length === 1 ? "" : "s"} now?`,
-    "Resend all"
-  );
-  if (!accepted) return;
-
-  resendAllInFlight = true;
-  renderFailedDeliveries(latestRoster || [], latestRuns || []);
-  let sent = 0;
-  let failed = 0;
-  try {
-    for (const row of queue) {
-      const result = await runDigestForChat(row.resendChatId);
-      if (result.ok && result.data && result.data.success) {
-        sent += 1;
-        if (row.emailKey) setRowActionStatus(row.emailKey, "ok", "Digest resent");
-      } else {
-        failed += 1;
-        const errMsg = (result.data && result.data.error) ? result.data.error : `HTTP ${result.status}`;
-        if (row.emailKey) setRowActionStatus(row.emailKey, "err", `Resend failed: ${errMsg}`);
-      }
-      await sleep(140);
-    }
-  } finally {
-    resendAllInFlight = false;
-    renderFailedDeliveries(latestRoster || [], latestRuns || []);
-  }
-
-  if (sent > 0) showToast("ok", `Resent ${sent} user${sent === 1 ? "" : "s"}.`);
-  if (failed > 0) showToast("err", `${failed} resend${failed === 1 ? "" : "s"} failed.`);
-  await load(true);
 }
 
 function toggleScheduleDay(dateKey) {
@@ -3568,9 +3937,7 @@ function renderSubscriberDrawer(u) {
   const preview = Array.isArray(u.last_digest_preview) ? u.last_digest_preview : [];
   const channels = [
     `${u.email_enabled ? "✅" : "⛔"} Email ${u.email_enabled ? "enabled" : "disabled"}`,
-    `${u.telegram_enabled ? "✅" : "⛔"} Telegram ${u.telegram_enabled ? "enabled" : "disabled"}`,
   ];
-  const wSummary = weightsSummary(u.topic_weights || {});
   const previewHtml = preview.length
     ? `<div class="drawer-preview-list">${preview.map((p, i) => {
       const label = `[${p.tag || "news"}] ${p.headline || ""}`.trim();
@@ -3587,7 +3954,7 @@ function renderSubscriberDrawer(u) {
   const archiveHref = normalizeAdminActionHref(u.archive_url);
   if (archiveHref) actionParts.push(`<a class="table-action-link" href="${esc(archiveHref)}" target="_blank" rel="noopener">view digests</a>`);
   const caps = getSendCapabilities(u);
-  if (caps.canDigest || caps.canAnyMessage) {
+  if (caps.canAnyMessage) {
     actionParts.push(`<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`);
   }
   const userStatus = normalizeUserStatus(u.status);
@@ -3615,9 +3982,7 @@ function renderSubscriberDrawer(u) {
             <div class="drawer-list-row"><span class="drawer-list-label">Schedule</span><span class="drawer-list-value">${esc(u.days_label || "—")} · ${esc(u.delivery_time || "—")}</span></div>
             <div class="drawer-list-row"><span class="drawer-list-label">Timezone</span><span class="drawer-list-value mono">${esc(u.timezone || "America/New_York")}</span></div>
             <div class="drawer-list-row"><span class="drawer-list-label">Depth</span><span class="drawer-list-value">${esc(u.depth || "Deep")}</span></div>
-            <div class="drawer-list-row"><span class="drawer-list-label">Items / digest</span><span class="drawer-list-value">${esc(u.items_per_digest || 5)}</span></div>
             <div class="drawer-list-row"><span class="drawer-list-label">Channels</span><span class="drawer-list-value">${esc(channels.join(" · "))}</span></div>
-            <div class="drawer-list-row"><span class="drawer-list-label">Topic tuning</span><span class="drawer-list-value">${esc(wSummary || "None")}</span></div>
           </div>
         </div>
         <div class="drawer-card">
@@ -3658,10 +4023,6 @@ function renderSubscriberTable(roster) {
     const emailKey = String(u.email || "").toLowerCase().trim();
     const isExpanded = emailKey && expandedSubscriberEmail === emailKey;
     const topicsCell = renderTopicChips(u.topics_raw || [], 4);
-    const wSummary = weightsSummary(u.topic_weights || {});
-    const weightsPill = wSummary
-      ? `<span class="weights-pill" title="Personalization: ${esc(wSummary)}">${esc(wSummary)}</span>`
-      : "";
     const lastDig = u.last_digest || "—";
     const missedHtml = u.days_missed >= 2
       ? ` <span class="missed-flag" title="Missed ${u.days_missed} scheduled delivery day${u.days_missed > 1 ? "s" : ""}">⚠️</span>`
@@ -3684,7 +4045,7 @@ function renderSubscriberTable(roster) {
           <div class="subscriber-sub">${esc(u.days_label || "—")} · ${esc(u.timezone || "America/New_York")}</div>
         </td>
         <td class="mono" style="white-space:normal;line-height:1.4;">${esc(u.next_delivery_et || "—")}</td>
-        <td class="topics-cell">${topicsCell}${weightsPill ? `<div style="margin-top:6px;">${weightsPill}</div>` : ""}</td>
+        <td class="topics-cell">${topicsCell}</td>
         <td>
           <div style="font-weight:700;">${u.digests || 0}</div>
           <div class="subscriber-sub mono">${esc(lastDig)}${missedHtml}</div>
@@ -3708,7 +4069,6 @@ function downloadScheduleCsv() {
     "delivery_days",
     "delivery_time",
     "timezone",
-    "items_per_digest",
     "depth",
     "topics",
     "digests",
@@ -3722,7 +4082,6 @@ function downloadScheduleCsv() {
     u.days_label || "",
     u.delivery_time || "",
     u.timezone || "America/New_York",
-    u.items_per_digest || 5,
     u.depth || "",
     u.topics_list || "",
     u.digests || 0,
@@ -3761,7 +4120,7 @@ function renderTestDigestStatus(status) {
       btn.disabled = true;
       btn.textContent = "🧪 Running test digest…";
     }
-    msg.textContent = `Running for chat ${status.target_chat_id || "—"}...`;
+    msg.textContent = "Running requested test digest…";
     msg.style.color = "var(--accent)";
     msg.style.display = "block";
     return;
@@ -3848,7 +4207,7 @@ async function restartSchedulerWorker(triggerEl = null) {
     const resp = await apiFetchJson("/api/admin/restart-scheduler-worker", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason: "manual_admin_recovery" }),
+      body: JSON.stringify({ reason: "scheduler_recovery_request" }),
     });
     const data = resp.data || {};
     if (!resp.ok || !data.success) {
@@ -3918,6 +4277,102 @@ async function triggerFullDigest(triggerEl = null) {
   }
 }
 
+async function regenerateDigestSnapshotForUser(email, dateKey, triggerEl = null) {
+  const targetEmail = String(email || '').trim();
+  const targetDate = String(dateKey || '').trim();
+  if (!targetEmail || !targetDate) return;
+
+  const approved = await openConfirmModal(
+    "Regenerate stored digest summaries?",
+    `This rewrites the saved ${targetDate} digest summaries for ${targetEmail} without changing story selection or sending email.`,
+    "Regenerate summaries",
+  );
+  if (!approved) return;
+
+  const btn = triggerEl || null;
+  const prevLabel = btn ? btn.textContent : "Regenerate summaries";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Regenerating…";
+  }
+  setOpsActionMessage("info", `Regenerating stored digest summaries for ${targetEmail}…`);
+  try {
+    const resp = await apiFetchJson("/api/admin/regenerate-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail, date_et: targetDate }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to regenerate digest summaries (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || "Stored digest summaries regenerated";
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", `${msg} for ${targetEmail}`);
+  } catch (e) {
+    const msg = e.message || "Network error regenerating digest summaries";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
+async function resendDigestSnapshotForUser(email, dateKey, triggerEl = null) {
+  const targetEmail = String(email || '').trim();
+  const targetDate = String(dateKey || '').trim();
+  if (!targetEmail || !targetDate) return;
+
+  const approved = await openConfirmModal(
+    "Resend stored digest snapshot?",
+    `This re-sends the saved ${targetDate} digest to ${targetEmail} without rerunning the full pipeline.`,
+    "Resend digest",
+  );
+  if (!approved) return;
+
+  const btn = triggerEl || null;
+  const prevLabel = btn ? btn.textContent : "Resend stored digest";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Resending…";
+  }
+  setOpsActionMessage("info", `Resending stored digest for ${targetEmail}…`);
+  try {
+    const resp = await apiFetchJson("/api/admin/resend-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail, date_et: targetDate }),
+    });
+    const data = resp.data || {};
+    if (!resp.ok || !data.success) {
+      const detail = data.error || `Failed to resend digest snapshot (HTTP ${resp.status})`;
+      setOpsActionMessage("err", `❌ ${detail}`);
+      showToast("err", detail);
+      return;
+    }
+    const msg = data.message || "Stored digest snapshot resent";
+    setOpsActionMessage("ok", `✅ ${msg}`);
+    showToast("ok", `${msg} for ${targetEmail}`);
+  } catch (e) {
+    const msg = e.message || "Network error resending digest snapshot";
+    setOpsActionMessage("err", `❌ ${msg}`);
+    showToast("err", msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+    load(true);
+  }
+}
+
 const DIGEST_PROGRESS_STEPS = [
   { label: "Fetching news from sources", pct: 10, delayMs: 0 },
   { label: "Deduplicating against recent archives", pct: 25, delayMs: 8000 },
@@ -3940,55 +4395,8 @@ function renderDigestProgress(msg, stepIdx, elapsed) {
 }
 
 async function triggerTestDigest(triggerEl = null) {
-  const btn = triggerEl || document.getElementById("testDigestBtn");
-  const msg = document.getElementById("testDigestMsg");
-  const targetSel = document.getElementById("testDigestTarget");
-  const targetChatId = targetSel ? targetSel.value : "";
-  const targetLabel = (targetSel && targetSel.selectedOptions && targetSel.selectedOptions[0])
-    ? targetSel.selectedOptions[0].textContent
-    : targetChatId;
-  if (!targetChatId) {
-    renderTestDigestStatus({ state: "failed", message: "Choose a Telegram-linked test target first." });
-    return;
-  }
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "🧪 Running…";
-  }
-
-  let stepIdx = 0;
-  const t0 = Date.now();
-  renderDigestProgress(msg, 0, 0);
-  const progressTimer = setInterval(() => {
-    const elapsed = Date.now() - t0;
-    const nextStep = DIGEST_PROGRESS_STEPS[stepIdx + 1];
-    if (nextStep) {
-      const cumulativeDelay = DIGEST_PROGRESS_STEPS.slice(0, stepIdx + 2).reduce((s, st) => s + st.delayMs, 0);
-      if (elapsed >= cumulativeDelay) stepIdx = Math.min(stepIdx + 1, DIGEST_PROGRESS_STEPS.length - 1);
-    }
-    renderDigestProgress(msg, stepIdx, elapsed);
-  }, 500);
-
-  try {
-    const resp = await apiFetchJson("/api/admin/run-digest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId: targetChatId }),
-    });
-    clearInterval(progressTimer);
-    const data = resp.data;
-    if (!resp.ok || !data.success) {
-      renderTestDigestStatus({ state: "failed", message: data.error || `Failed to start test digest (HTTP ${resp.status})` });
-      showToast("err", data.error || "Test digest failed");
-      return;
-    }
-    renderTestDigestStatus({ state: "success", message: data.message || `Digest sent to ${targetLabel}` });
-    showToast("ok", data.message || `Digest sent to ${targetLabel}`);
-  } catch (e) {
-    clearInterval(progressTimer);
-    renderTestDigestStatus({ state: "failed", message: e.message || "Network error starting test digest" });
-    showToast("err", e.message || "Network error starting test digest");
-  }
+  renderTestDigestStatus({ state: "failed", message: "Targeted digests are disabled in the reduced-scope email-only MVP." });
+  showToast("err", "Targeted digests are disabled in the reduced-scope email-only MVP.");
 }
 
 async function logout() {
@@ -4005,6 +4413,13 @@ async function load(silent = false) {
     if (!authResp.ok || !(authResp.data && authResp.data.authenticated)) {
       window.location.href = "/admin/login";
       return;
+    }
+
+    const pageParams = new URLSearchParams(window.location.search);
+    const digestAuditDateParam = String(pageParams.get("digest_audit_date") || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(digestAuditDateParam)) {
+      const digestAuditInput = document.getElementById("digestAuditDate");
+      if (digestAuditInput) digestAuditInput.value = digestAuditDateParam;
     }
 
     const now = new Date();
@@ -4043,6 +4458,7 @@ async function load(silent = false) {
 	    renderAdminMessages(admin_messages || []);
 	    renderDigestInsights(digest_insights || {});
 	    renderExecutiveSummary(health || null);
+      await loadDigestAudit(true);
 
     if (summary.month_label) {
       document.getElementById("monthLabel").textContent = summary.month_label;
@@ -4169,7 +4585,7 @@ async function load(silent = false) {
     document.getElementById("monthDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${monthDelivered}</a>`;
     document.getElementById("monthDigestsSub").innerHTML =
-      `<strong>${summary.month_on_demand}</strong> on-demand runs`;
+      `<strong>${Math.max(0, Number(summary.month_runs || 0))}</strong> scheduled runs`;
     document.getElementById("allTimeDigestsSent").innerHTML =
       `<a href="#runsSection" style="color:inherit;text-decoration:none;">${allTimeDelivered}</a>`;
     document.getElementById("allTimeDigestsSub").innerHTML =
@@ -4185,21 +4601,20 @@ async function load(silent = false) {
     document.getElementById("monthUsers").innerHTML =
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${monthUniqueUsers}</a>`;
     document.getElementById("monthOnDemand").innerHTML =
-      `<strong>${monthDeliveries}</strong> deliveries · <strong>${summary.month_on_demand}</strong> on-demand runs`;
+      `<strong>${monthDeliveries}</strong> deliveries · email-only scheduled path`;
     document.getElementById("costLast7d").textContent = fmt$(summary.trailing_7d_cost);
     document.getElementById("costLast7dSub").innerHTML =
-      `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_on_demand_runs || 0}</strong> on-demand · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries`;
+      `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries`;
     document.getElementById("costNext7d").textContent = fmt$(summary.projected_7d_cost);
     document.getElementById("costNext7dSub").innerHTML =
       `<strong>${summary.projected_7d_runs || 0}</strong> scheduled runs · <strong>${summary.projected_7d_deliveries || 0}</strong> projected deliveries · scheduled baseline only`;
 
     const totalUsers = roster ? roster.length : (summary.total_users || 0);
     const activeUsers = roster ? countActiveUsers(roster) : (summary.active_users || 0);
-    const activeTelegramUsers = roster ? countActiveTelegramUsers(roster) : (summary.active_tg_users || 0);
     document.getElementById("activeUsers").innerHTML =
       `<a href="#rosterSection" style="color:inherit;text-decoration:none;">${activeUsers}</a>`;
-    document.getElementById("telegramUsers").innerHTML =
-      `<strong>${activeTelegramUsers}</strong> active on Telegram · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
+    document.getElementById("subscriberFootnote").innerHTML =
+      `Email-only MVP · <a href="#rosterSection" style="color:var(--accent);text-decoration:none;">${totalUsers} total users</a>`;
 
     const openRate7d = Number(engagement && engagement.open_rate_7d || 0);
     const openRate30d = Number(engagement && engagement.open_rate_30d || 0);
@@ -4217,12 +4632,6 @@ async function load(silent = false) {
     document.getElementById("engagementSubscribers").textContent = `${activeCount} / ${pausedCount} / ${unsubCount}`;
     document.getElementById("engagementSubscribersSub").textContent = "active / paused / unsubscribed";
 
-    const day4 = Number(engagement && engagement.in_reengagement_day4 || 0);
-    const day8 = Number(engagement && engagement.in_reengagement_day8 || 0);
-    const pipelineTotal = day4 + day8;
-    document.getElementById("engagementPipeline").textContent = String(pipelineTotal);
-    document.getElementById("engagementPipelineSub").textContent = `day4: ${day4} · day8: ${day8}`;
-
     const referralSignups = Number(engagement && engagement.referral_signups_total || 0);
     document.getElementById("engagementReferrals").textContent = String(referralSignups);
     document.getElementById("engagementReferralsSub").textContent = "all-time attributed signups";
@@ -4233,9 +4642,7 @@ async function load(silent = false) {
       runsBody.innerHTML = `<tr><td colspan="9" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
     } else {
       runsBody.innerHTML = runs.map(r => {
-        const typeBadge = r.on_demand
-          ? `<span class="badge-on-demand">on-demand</span>`
-          : `<span class="badge-scheduled">scheduled</span>`;
+        const typeBadge = `<span class="badge-scheduled">scheduled</span>`;
         const totalClass = costClass(r.total_cost_usd || 0);
         // Cost breakdown on hover
         const perpFmt  = r.perplexity_cost_usd != null ? `$${r.perplexity_cost_usd.toFixed(4)}` : "—";
@@ -4300,6 +4707,7 @@ async function load(silent = false) {
 readSubscriberStateFromUrl();
 applySubscriberInputsFromState();
 updateSortIndicators();
+ensureDigestAuditDateInput();
 load();
 if (!autoRefreshTimer) {
   autoRefreshTimer = setInterval(() => {

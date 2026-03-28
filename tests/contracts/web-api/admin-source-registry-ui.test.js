@@ -10,9 +10,12 @@ const pageSource = fs.readFileSync(PAGE_PATH, "utf8");
 const requiredPageSnippets = [
   "Source Governance",
   "Source governance (all tracked history)",
-  "Preferred source config",
+  "Broker source inventory",
   "Curation queues",
-  "Runtime file wins when present; bundled seed is the fallback.",
+  "Shared preferred-source diagnostics are now derived from broker config",
+  "Standard-topic source of truth: broker config",
+  "MVP topic controls",
+  "Broker source controls",
   'id="preferredSourcesPanelBody"',
   'id="curationQueuesPanelBody"',
   'id="sourceRegistryInspector"',
@@ -21,6 +24,9 @@ const requiredPageSnippets = [
   'id="sourceRegistryScopeInput"',
   "function buildGovernanceRows(overview)",
   "function renderPreferredSourcesConfig(overview)",
+  "Preferred-source compatibility view (broker-derived)",
+  "async function toggleBrokerTopicEnabled(topicTag, nextEnabled)",
+  "async function saveBrokerSourceTier(sourceId)",
   "function renderCurationQueues(overview)",
   "function renderSourceRegistrySuggestions(overview)",
   "function renderSourceRegistryInspector(detail, overview)",
@@ -33,7 +39,6 @@ const requiredPageSnippets = [
   "async function saveSourceRegistryDomain()",
   "async function resetSourceRegistryDomain()",
   "/api/admin/source-registry",
-  "/admin/sandbox",
 ];
 
 for (const snippet of requiredPageSnippets) {
@@ -43,7 +48,7 @@ for (const snippet of requiredPageSnippets) {
 }
 
 const adminSource = fs.readFileSync(path.join(process.cwd(), "web/admin.html"), "utf8");
-for (const snippet of ["/admin/sandbox", "/admin/source-registry", "function setSourceRegistryOverviewQuery(query)"]) {
+for (const snippet of ["/admin/source-registry", "function setSourceRegistryOverviewQuery(query)"]) {
   if (!adminSource.includes(snippet)) {
     throw new Error(`admin page nav is missing required snippet: ${snippet}`);
   }

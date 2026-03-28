@@ -52,10 +52,6 @@ function getTrustedCorsOrigins() {
   return defaultOrigins;
 }
 
-function getArchiveLegacyDeprecationDeadlineUtc() {
-  return process.env.ARCHIVE_LEGACY_DEPRECATION_DEADLINE_UTC || "2026-06-30T00:00:00Z";
-}
-
 function getSchedulerHeartbeatFile() {
   return resolveSignalBriefRuntimePaths({
     appRoot: APP_ROOT,
@@ -118,7 +114,6 @@ module.exports = {
   getServerPort,
   getBaseUrl,
   getTrustedCorsOrigins,
-  getArchiveLegacyDeprecationDeadlineUtc,
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
   getWebAssetVersion,

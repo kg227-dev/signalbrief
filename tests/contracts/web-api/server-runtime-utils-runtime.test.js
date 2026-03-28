@@ -67,20 +67,20 @@ assert.strictEqual(typeof createSendMagicLinkEmail, "function");
         assert.strictEqual(token, "user-token");
         assert.match(html, /settings\?token=user-token/);
         assert.match(html, /archive\?token=user-token/);
-        return { ok: true, via: "gmail", message_id: "abc123" };
+        return { ok: true, via: "resend", message_id: "abc123" };
       },
     });
     const success = await sendMagicLinkEmail({ email: "user@example.com", token: "user-token" });
     assert.strictEqual(sendEmailCalls, 1);
-    assert.deepStrictEqual(success, { ok: true, via: "gmail", message_id: "abc123" });
+    assert.deepStrictEqual(success, { ok: true, via: "resend", message_id: "abc123" });
 
     const failingMagicLink = createSendMagicLinkEmail({
       getBaseUrl: () => "https://getsignalbrief.com",
-      sendEmail: async () => ({ ok: false, error: "gmail send failed" }),
+      sendEmail: async () => ({ ok: false, error: "resend send failed" }),
     });
     await assert.rejects(
       () => failingMagicLink({ email: "user@example.com", token: "user-token" }),
-      /gmail send failed/
+      /resend send failed/
     );
   } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });

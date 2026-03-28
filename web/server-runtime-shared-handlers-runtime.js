@@ -16,8 +16,6 @@ function createSharedRouteHandlers(deps) {
     writeUser,
     sendReferralThankYou,
     sendWelcomeEmail,
-    queueDigestTrigger,
-    runDigestTrigger,
     startDigestTrigger,
     getBaseUrl,
     DEFAULT_TOPICS,
@@ -26,6 +24,7 @@ function createSharedRouteHandlers(deps) {
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
+    formatEtDateKey,
   } = deps;
 
   return createWebUserHandlers({
@@ -41,8 +40,6 @@ function createSharedRouteHandlers(deps) {
     writeUser,
     sendReferralThankYou,
     sendWelcomeEmail,
-    queueDigestTrigger,
-    runDigestTrigger,
     startDigestTrigger,
     getBaseUrl,
     DEFAULT_TOPICS,
@@ -51,6 +48,7 @@ function createSharedRouteHandlers(deps) {
     PROTECTED_FIELDS,
     isAdminAuthed,
     logAdminActionEvent,
+    formatEtDateKey,
   });
 }
 

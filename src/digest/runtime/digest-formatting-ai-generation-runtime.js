@@ -22,7 +22,7 @@ function createDigestAiGenerationRuntime(deps) {
       return { subject: fallback, usage: { input_tokens: 0, output_tokens: 0 } };
     }
 
-    const prompt = `Given this news headline and "why it matters" analysis, write a single email subject line (max 65 characters) for a daily briefing aimed at strategy consultants. The subject should hint at the strategic implication without being clickbait. No emoji. No "SignalBrief" in the subject.
+    const prompt = `Given this news headline and "why it matters" analysis, write a single email subject line (max 65 characters) for a daily sector briefing read by operators, founders, investors, and team leads following one topic closely. The subject should hint at the business implication without being clickbait. No emoji. No "SignalBrief" in the subject.
 
 Headline: ${stripInlineHtml(leadItem.headline)}
 Why it matters: ${stripInlineHtml(leadItem.wim || leadItem.wim_brief || leadItem.summary || "")}
@@ -47,7 +47,7 @@ Reply with ONLY the subject line, no quotes, no explanation.`;
     const stories = safeItems
       .map((item) => `[${String(item.tag || "news").trim()}] ${stripInlineHtml(item.headline)}`)
       .join(", ");
-    const prompt = `Write a single editorial sentence (max 120 characters) for a strategy professional's morning briefing. It should flag the most important cross-sector or non-obvious pattern across today's ${safeItems.length} stories. Be specific. Name a sector or player. No hedging. No "today's digest" language.
+    const prompt = `Write a single editorial sentence (max 120 characters) for a focused sector briefing. It should flag the clearest business pattern across these ${safeItems.length} stories. Be specific. Name a company, regulator, buyer segment, or supply chain node. No hedging. No "today's digest" language.
 
 Stories: ${stories}
 

@@ -69,7 +69,6 @@ function coverageImportMap() {
   if (false) {
     import("../../src/digest/domain/digest-policy-domain-runtime.js");
     import("../../src/jobs/digest-runner-runtime.js");
-    import("../../src/jobs/reengagement-runtime.js");
     import("../../src/digest/domain/repeat-dedup-domain-runtime.js");
     import("../../src/digest/domain/selection-domain-runtime.js");
     import("../../src/digest/domain/source-domain-runtime.js");
@@ -79,7 +78,6 @@ function coverageImportMap() {
     import("../../scripts/smoke-worker.js");
     import("../../scripts/test-critical-paths.js");
     import("../../src/digest/application/digest-service-runtime.js");
-    import("../../src/entrypoints/bot-server.js");
     import("../../src/entrypoints/digest.js");
     import("../../src/entrypoints/scheduler-worker.js");
     import("../../src/module-coverage-runtime.js");
@@ -87,17 +85,8 @@ function coverageImportMap() {
     import("../../src/runtime/engagement/engagement-events-runtime.js");
     import("../../src/runtime/mailer/mailer-runtime.js");
     import("../../src/runtime/mailer-lifecycle-runtime.js");
-    import("../../src/runtime/personalization/personalization-runtime.js");
     import("../../src/runtime/quality-score.js");
-    import("../../src/runtime/reply/reply-handler-runtime.js");
-    import("../../src/runtime/reply/command-router.js");
-    import("../../src/runtime/reply/intent-service.js");
-    import("../../src/runtime/reply/onboarding-service-runtime.js");
-    import("../../src/runtime/reply/reply-logging-runtime.js");
-    import("../../src/runtime/reply/reply-session-runtime.js");
-    import("../../src/runtime/reply/transport.js");
     import("../../src/runtime/store.js");
-    import("../../src/sandbox-pipeline-runtime.js");
     import("../../src/digest/domain/topic-domain-runtime.js");
     import("../../web/admin-auth.js");
     import("../../web/index.js");
@@ -114,7 +103,6 @@ function coverageImportMap() {
     import("../../web/services/admin-ops-utils.js");
     import("../../web/services/archive-scoring.js");
     import("../../web/services/delivery-schedule.js");
-    import("../../web/services/reengagement-state.js");
     import("../../web/services/request-metadata.js");
     import("../../web/services/web-rate-limit.js");
     import("../../web/settings-runtime.js");
@@ -149,11 +137,6 @@ function coverageImportMap() {
     import("../../src/digest/runtime/digest-item-ordering-runtime.js");
     import("../../src/digest/runtime/digest-formatting-runtime.js");
     import("../../src/jobs/digest-runner-utils-runtime.js");
-    import("../../src/runtime/reply/info-handlers-runtime.js");
-    import("../../src/runtime/reply/info-renderers-runtime.js");
-    import("../../src/runtime/reply/onboarding-service.js");
-    import("../../src/runtime/reply/onboarding/pending-verification.js");
-    import("../../src/runtime/reply/reply-command-handlers-runtime.js");
     import("../../src/runtime/runtime-types.js");
     import("../../src/runtime/url-normalization-runtime.js");
     import("../../test-harness/cache/index.js");
@@ -184,7 +167,6 @@ function coverageImportMap() {
     import("../../web/routes/admin-api-auth-runtime.js");
     import("../../web/routes/admin-api-bulk-runtime.js");
     import("../../web/routes/admin-api-message-runtime.js");
-    import("../../web/routes/admin-api-sandbox-runtime.js");
     import("../../web/routes/admin-api-users-runtime.js");
     import("../../web/routes/core-api-archive-runtime.js");
     import("../../web/routes/core-api-bookmarks-runtime.js");
@@ -208,9 +190,6 @@ function coverageImportMap() {
     import("../../web/settings-ui-topic-runtime.js");
     import("../../test-harness/suites/module-coverage/checks-core-runtime.js");
     import("../../src/runtime/store-core-runtime.js");
-    import("../../src/runtime/reply/reply-handler-core-runtime.js");
-    import("../../src/runtime/reply/reply-command-handlers-core-runtime.js");
-    import("../../src/runtime/reply/onboarding/onboarding-context.js");
     import("../../src/jobs/digest-runner-core-runtime.js");
     import("../../src/entrypoints/digest-orchestrator-archive-runtime.js");
     import("../../src/entrypoints/digest-orchestrator-bootstrap-runtime.js");
@@ -221,7 +200,6 @@ function coverageImportMap() {
     import("../../src/entrypoints/digest-orchestrator-transport-runtime.js");
     import("../../src/entrypoints/digest-orchestrator-runtime.js");
     import("../../src/digest/runtime/digest-formatting-topic-runtime.js");
-    import("../../src/digest/runtime/digest-formatting-telegram-runtime.js");
     import("../../test-harness/cache/cache-claude-judge-core.js");
     import("../../test-harness/cache/cache-claude-enrich-core.js");
     import("../../test-harness/replay-eval.js");

@@ -26,8 +26,8 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     incidentStorePath,
     log,
     formatEtDateKey,
-    resolveOpsChatId,
-    sendTelegram,
+    resolveOpsAlertTarget,
+    sendOpsAlert,
     nowProvider = () => new Date(),
   } = deps || {};
 
@@ -35,8 +35,12 @@ function createDigestOrchestratorIncidentRuntime(deps) {
   let _inMemoryStore = { version: 1, updated_at: "", incidents: {} };
 
   const logger = typeof log === "function" ? log : () => {};
-  const getOpsChatId = typeof resolveOpsChatId === "function" ? resolveOpsChatId : () => null;
-  const sendTelegramMessage = typeof sendTelegram === "function" ? sendTelegram : async () => {};
+  const getOpsAlertTarget = typeof resolveOpsAlertTarget === "function"
+    ? resolveOpsAlertTarget
+    : () => null;
+  const sendOpsAlertMessage = typeof sendOpsAlert === "function"
+    ? sendOpsAlert
+    : async () => {};
 
   function _atomicWriteJson(filePath, data) {
     const dir = path.dirname(filePath);
@@ -83,9 +87,9 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     }
   }
 
-  async function _notifyTelegram(incident, transitionType, previousSeverity) {
-    const opsChatId = getOpsChatId();
-    if (!opsChatId) return;
+  async function _notifyOpsAlert(incident, transitionType, previousSeverity) {
+    const opsAlertTarget = getOpsAlertTarget();
+    if (!opsAlertTarget) return;
     let lines;
     if (transitionType === "OPEN") {
       lines = [
@@ -117,9 +121,9 @@ function createDigestOrchestratorIncidentRuntime(deps) {
       return;
     }
     try {
-      await sendTelegramMessage(lines.join("\n"), opsChatId);
+      await sendOpsAlertMessage(lines.join("\n"), opsAlertTarget);
     } catch (e) {
-      logger(`[warn] Incident Telegram send failed: ${e.message}`);
+      logger(`[warn] Incident ops alert send failed: ${e.message}`);
     }
   }
 
@@ -167,7 +171,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
         metadata: record.metadata,
       });
       _saveIncidentStore(store);
-      await _notifyTelegram(record, "OPEN", null);
+      await _notifyOpsAlert(record, "OPEN", null);
       record.notified_statuses.push("OPEN");
       _saveIncidentStore(store);
       return true;
@@ -205,7 +209,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     _saveIncidentStore(store);
 
     if (severityIncreased) {
-      await _notifyTelegram(existing, "ESCALATED", previousSeverity);
+      await _notifyOpsAlert(existing, "ESCALATED", previousSeverity);
       existing.notified_statuses.push("ESCALATED");
       _saveIncidentStore(store);
       return true;
@@ -221,7 +225,7 @@ function createDigestOrchestratorIncidentRuntime(deps) {
     incident.status = INCIDENT_STATUS_RESOLVED;
     incident.last_seen = nowProvider().toISOString();
     _saveIncidentStore(store);
-    await _notifyTelegram(incident, "RESOLVED", null);
+    await _notifyOpsAlert(incident, "RESOLVED", null);
     incident.notified_statuses.push("RESOLVED");
     _saveIncidentStore(store);
     return true;

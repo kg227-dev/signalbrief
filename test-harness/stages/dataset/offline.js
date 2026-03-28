@@ -33,14 +33,13 @@ function buildOfflineDatasetFromArchives(appConfig, archives) {
   const items = mergeRecentArchiveItems(archives);
 
   const digestConfig = appConfig.digest || {};
-  const itemCount = Number(digestConfig.itemCount || 7);
+  const itemCount = Number(digestConfig.itemCount || 5);
 
   return {
     mode: "offline_archive",
     generated_at: new Date().toISOString(),
     date_key: latest.date || toEtDateKey(),
     standard_fetch_topics: [],
-    custom_fetch_topics: [],
     raw_items: items,
     selected_items: items.slice(0, itemCount),
     enriched_items: items,
@@ -49,7 +48,6 @@ function buildOfflineDatasetFromArchives(appConfig, archives) {
       archive_item_count: items.length,
       archive_days_merged: Math.min(5, archives.length),
       selection_target: itemCount,
-      max_custom_items: 0,
       max_items_per_source_domain: Number(digestConfig.maxItemsPerSourceDomain || 2),
     },
   };

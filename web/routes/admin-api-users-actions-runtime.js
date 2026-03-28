@@ -15,8 +15,8 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
         summary = "Resent settings link";
       } else if (action === "bulk_set_time" && details.to) {
         summary = `Set delivery time to ${details.to}`;
-      } else if (action === "run_digest_targeted") {
-        summary = row.success ? "Triggered digest run" : "Digest run failed";
+      } else if (action.startsWith("run_digest_")) {
+        summary = "Legacy digest action ignored";
       } else if (action === "restart_scheduler_worker") {
         summary = row.success ? "Requested scheduler worker restart" : "Scheduler worker restart failed";
       } else if (action === "set_user_status") {
@@ -25,6 +25,10 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
         summary = from && to ? `Status ${from} → ${to}` : "Updated subscriber status";
       } else if (action === "delete_user") {
         summary = row.success ? "Deleted subscriber" : "Delete subscriber failed";
+      } else if (action === "resend_digest_precise") {
+        summary = row.success ? "Resent stored digest snapshot" : "Stored digest resend failed";
+      } else if (action === "regenerate_digest_summaries") {
+        summary = row.success ? "Regenerated stored digest summaries" : "Digest summary regeneration failed";
       }
       return {
         at: row.at || null,
@@ -46,7 +50,7 @@ function buildAuditEntries({ email, limit, readJsonLineLog, adminActionLog, admi
       action: "message_user",
       success: !!row.success,
       summary: row.success
-        ? `Message sent via ${(row.sent_channels || []).join(" + ") || "channel"}`
+        ? `Message sent via ${(row.sent_channels || []).join(" + ") || "email"}`
         : `Message failed: ${(row.errors || []).join(" | ") || "unknown error"}`,
       details: {
         requested_channels: Array.isArray(row.requested_channels) ? row.requested_channels : [],
@@ -91,7 +95,6 @@ function handleUserByEmailRoute({ ctx, deps }) {
     json,
     isAdminAuthed,
     allUsers,
-    getRecentAutoAdjustmentsForUser,
     countArchiveDigestsForUser,
     loadLatestDigestSnapshot,
     buildRecentDigestsExport,
@@ -106,10 +109,6 @@ function handleUserByEmailRoute({ ctx, deps }) {
     json(res, { error: "email required" }, 400);
     return true;
   }
-  const requestedAutoLimit = parseInt(url.searchParams.get("auto_limit"), 10);
-  const autoLimit = Number.isFinite(requestedAutoLimit)
-    ? Math.min(Math.max(requestedAutoLimit, 1), 20)
-    : 8;
   const lookup = emailParam.toLowerCase().trim();
   const adminUser = allUsers().find((user) => (user.email || "").toLowerCase().trim() === lookup);
   if (!adminUser) {
@@ -139,10 +138,267 @@ function handleUserByEmailRoute({ ctx, deps }) {
   json(res, {
     ...adminUser,
     archive_digest_count: archiveDigestCount,
-    auto_adjustments_recent: getRecentAutoAdjustmentsForUser(adminUser, autoLimit),
     latest_digest_record: latestDigestRecord,
     recent_digests: recentDigestRows,
   });
+  return true;
+}
+
+function resolveDigestDateKeyForAdminAction(body, adminUser) {
+  let digestDateKey = String(body?.date_et || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(digestDateKey)) {
+    digestDateKey = parseDigestDateKeyFromUser(adminUser);
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(digestDateKey) ? digestDateKey : "";
+}
+
+function loadOperableDigestSnapshot({ adminUser, body, loadCurrentDigestSnapshot }) {
+  const digestDateKey = resolveDigestDateKeyForAdminAction(body, adminUser);
+  if (!digestDateKey) {
+    return { digestDateKey: "", snapshot: null, selectedCount: 0, snapshotStatus: "" };
+  }
+  const snapshot = typeof loadCurrentDigestSnapshot === "function"
+    ? loadCurrentDigestSnapshot(adminUser.chatId, digestDateKey, "scheduled")
+    : null;
+  const itemCount = Array.isArray(snapshot?.items) ? snapshot.items.length : 0;
+  const selectedCount = Math.max(0, Number(snapshot?.selected_count || itemCount));
+  const snapshotStatus = String(snapshot?.status || "").trim().toLowerCase();
+  return {
+    digestDateKey,
+    snapshot,
+    selectedCount,
+    snapshotStatus,
+  };
+}
+
+function isOperableDigestSnapshot(snapshot, selectedCount, snapshotStatus) {
+  const operableStatuses = new Set(["sent", "failed", "selected", "sending"]);
+  return !!snapshot && selectedCount >= 5 && operableStatuses.has(String(snapshotStatus || "").trim().toLowerCase());
+}
+
+async function handleResendDigestRoute({ ctx, deps }) {
+  const { req, res } = ctx;
+  const {
+    json,
+    isAdminAuthed,
+    requireJsonBody,
+    allUsers,
+    loadCurrentDigestSnapshot,
+    resendDigestSnapshot,
+    logAdminActionEvent,
+  } = deps;
+
+  if (!isAdminAuthed(req)) {
+    json(res, { error: "admin access only" }, 403);
+    return true;
+  }
+
+  const body = await requireJsonBody(req, res);
+  if (body == null) return true;
+
+  const email = String(body?.email || "").trim().toLowerCase();
+  if (!email) {
+    json(res, { error: "email required" }, 400);
+    return true;
+  }
+
+  const adminUser = allUsers().find((user) => (user.email || "").toLowerCase().trim() === email);
+  if (!adminUser) {
+    json(res, { error: "user not found" }, 404);
+    return true;
+  }
+  if (!String(adminUser?.email || "").trim()) {
+    json(res, { error: "subscriber has no email address" }, 400);
+    return true;
+  }
+  if (String(adminUser?.status || "").trim().toLowerCase() === "unsubscribed") {
+    json(res, { error: "cannot resend digest to an unsubscribed user" }, 409);
+    return true;
+  }
+
+  const {
+    digestDateKey,
+    snapshot,
+    selectedCount,
+    snapshotStatus,
+  } = loadOperableDigestSnapshot({
+    adminUser,
+    body,
+    loadCurrentDigestSnapshot,
+  });
+  if (!digestDateKey) {
+    json(res, { error: "valid digest date required" }, 400);
+    return true;
+  }
+
+  if (!isOperableDigestSnapshot(snapshot, selectedCount, snapshotStatus)) {
+    logAdminActionEvent(req, {
+      action: "resend_digest_precise",
+      success: false,
+      target_email: adminUser.email,
+      details: {
+        date_et: digestDateKey,
+        reason: "snapshot_unavailable",
+        status: snapshotStatus || null,
+        selected_count: selectedCount,
+      },
+    });
+    json(res, { error: "No resendable 5-item digest snapshot found for that user/date." }, 409);
+    return true;
+  }
+
+  try {
+    const outcome = await resendDigestSnapshot({
+      user: adminUser,
+      snapshot,
+    });
+
+    logAdminActionEvent(req, {
+      action: "resend_digest_precise",
+      success: true,
+      target_email: adminUser.email,
+      details: {
+        date_et: digestDateKey,
+        status: snapshotStatus,
+        item_count: outcome.item_count,
+        subject: outcome.subject,
+      },
+    });
+
+    json(res, {
+      success: true,
+      email: adminUser.email,
+      date_et: digestDateKey,
+      item_count: outcome.item_count,
+      status: snapshotStatus,
+      message: "Stored digest snapshot resent",
+    });
+  } catch (error) {
+    logAdminActionEvent(req, {
+      action: "resend_digest_precise",
+      success: false,
+      target_email: adminUser.email,
+      details: {
+        date_et: digestDateKey,
+        status: snapshotStatus,
+        error: error?.message || "resend failed",
+      },
+    });
+    json(res, {
+      error: `Failed to resend stored digest snapshot: ${error?.message || "unknown error"}`,
+    }, 500);
+  }
+  return true;
+}
+
+async function handleRegenerateDigestRoute({ ctx, deps }) {
+  const { req, res } = ctx;
+  const {
+    json,
+    isAdminAuthed,
+    requireJsonBody,
+    allUsers,
+    loadCurrentDigestSnapshot,
+    regenerateDigestSnapshot,
+    logAdminActionEvent,
+    getAdminActor,
+  } = deps;
+
+  if (!isAdminAuthed(req)) {
+    json(res, { error: "admin access only" }, 403);
+    return true;
+  }
+
+  const body = await requireJsonBody(req, res);
+  if (body == null) return true;
+
+  const email = String(body?.email || "").trim().toLowerCase();
+  if (!email) {
+    json(res, { error: "email required" }, 400);
+    return true;
+  }
+
+  const adminUser = allUsers().find((user) => (user.email || "").toLowerCase().trim() === email);
+  if (!adminUser) {
+    json(res, { error: "user not found" }, 404);
+    return true;
+  }
+
+  const {
+    digestDateKey,
+    snapshot,
+    selectedCount,
+    snapshotStatus,
+  } = loadOperableDigestSnapshot({
+    adminUser,
+    body,
+    loadCurrentDigestSnapshot,
+  });
+  if (!digestDateKey) {
+    json(res, { error: "valid digest date required" }, 400);
+    return true;
+  }
+
+  if (!isOperableDigestSnapshot(snapshot, selectedCount, snapshotStatus)) {
+    logAdminActionEvent(req, {
+      action: "regenerate_digest_summaries",
+      success: false,
+      target_email: adminUser.email,
+      details: {
+        date_et: digestDateKey,
+        reason: "snapshot_unavailable",
+        status: snapshotStatus || null,
+        selected_count: selectedCount,
+      },
+    });
+    json(res, { error: "No regenable 5-item digest snapshot found for that user/date." }, 409);
+    return true;
+  }
+
+  try {
+    const outcome = await regenerateDigestSnapshot({
+      user: adminUser,
+      snapshot,
+      actor: typeof getAdminActor === "function" ? getAdminActor(req) : "admin",
+    });
+
+    logAdminActionEvent(req, {
+      action: "regenerate_digest_summaries",
+      success: true,
+      target_email: adminUser.email,
+      details: {
+        date_et: digestDateKey,
+        status: snapshotStatus,
+        item_count: outcome.item_count,
+        regenerated_at: outcome.regenerated_at,
+        subject: outcome.subject,
+      },
+    });
+
+    json(res, {
+      success: true,
+      email: adminUser.email,
+      date_et: digestDateKey,
+      item_count: outcome.item_count,
+      status: snapshotStatus,
+      regenerated_at: outcome.regenerated_at,
+      message: "Stored digest summaries regenerated",
+    });
+  } catch (error) {
+    logAdminActionEvent(req, {
+      action: "regenerate_digest_summaries",
+      success: false,
+      target_email: adminUser.email,
+      details: {
+        date_et: digestDateKey,
+        status: snapshotStatus,
+        error: error?.message || "regeneration failed",
+      },
+    });
+    json(res, {
+      error: `Failed to regenerate stored digest summaries: ${error?.message || "unknown error"}`,
+    }, 500);
+  }
   return true;
 }
 
@@ -254,10 +510,6 @@ function normalizeManagedStatus(rawStatus) {
 
 const PRE_UNSUBSCRIBE_CHANNELS_KEY = "_pre_unsubscribe_channels";
 
-function hasTelegramDeliveryIdentity(user) {
-  return !!(user?.chatId && !String(user.chatId).startsWith("email-"));
-}
-
 function deriveRestoredChannelPreferences(user, previousStatus) {
   const prefs = user && user.preferences && typeof user.preferences === "object"
     ? user.preferences
@@ -265,25 +517,21 @@ function deriveRestoredChannelPreferences(user, previousStatus) {
   const saved = prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY] && typeof prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY] === "object"
     ? prefs[PRE_UNSUBSCRIBE_CHANNELS_KEY]
     : null;
-  const telegramLinked = hasTelegramDeliveryIdentity(user);
 
   if (saved) {
     return {
       email_enabled: saved.email_enabled === true && !!user?.email,
-      telegram_enabled: saved.telegram_enabled === true && telegramLinked,
     };
   }
 
   if (previousStatus === "paused") {
     return {
       email_enabled: !!user?.email,
-      telegram_enabled: telegramLinked && prefs.telegram_enabled !== false,
     };
   }
 
   return {
     email_enabled: !!user?.email,
-    telegram_enabled: telegramLinked,
   };
 }
 
@@ -311,20 +559,14 @@ function applyManagedStatus(user, nextStatus, opts = {}) {
   if (nextStatus === "unsubscribed") {
     updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY] = {
       email_enabled: updated.preferences.email_enabled !== false && !!user?.email,
-      telegram_enabled: updated.preferences.telegram_enabled !== false && hasTelegramDeliveryIdentity(user),
     };
     updated.email_unsubscribed_at = nowIso;
     updated.preferences.email_enabled = false;
-    updated.preferences.telegram_enabled = false;
   } else if (nextStatus === "active") {
     const restored = deriveRestoredChannelPreferences(user, previousStatus);
     updated.preferences.email_enabled = restored.email_enabled;
-    updated.preferences.telegram_enabled = restored.telegram_enabled;
     delete updated.preferences[PRE_UNSUBSCRIBE_CHANNELS_KEY];
     delete updated.email_unsubscribed_at;
-    if (typeof opts.blankReengagementState === "function") {
-      updated.reengagement_state = opts.blankReengagementState();
-    }
   }
   return updated;
 }
@@ -338,7 +580,6 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
     allUsers,
     writeUser,
     logAdminActionEvent,
-    blankReengagementState,
   } = deps;
 
   if (!isAdminAuthed(req)) {
@@ -379,7 +620,6 @@ async function handleSetUserStatusRoute({ ctx, deps }) {
 
   const updated = applyManagedStatus(user, nextStatus, {
     previousStatus,
-    blankReengagementState,
   });
   writeUser(user.chatId, updated);
   logAdminActionEvent(req, {
@@ -548,6 +788,8 @@ async function handleRestartSchedulerWorkerRoute({ ctx, deps }) {
 
 module.exports = {
   handleUserByEmailRoute,
+  handleRegenerateDigestRoute,
+  handleResendDigestRoute,
   handleAuditRoute,
   handleUpdateDeliveryTimeRoute,
   handleSetUserStatusRoute,

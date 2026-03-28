@@ -2,8 +2,6 @@ const { normalizeUserRecord } = require("../../src/platform/store");
 const { normalizeTopicsForUserInput } = require("./topic-normalization-runtime");
 
 const WEEKDAY_DAYS = Object.freeze([1, 2, 3, 4, 5]);
-const ITEMS_PER_DIGEST_MIN = 5;
-const ITEMS_PER_DIGEST_MAX = 5; // MVP: always 5
 
 function deriveFrequencyFromDays(days) {
   if (!Array.isArray(days) || days.length === 0) return "daily_weekday";
@@ -12,19 +10,6 @@ function deriveFrequencyFromDays(days) {
     return "daily_weekday";
   }
   return "custom";
-}
-
-function normalizeItemsPerDigest(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return { ok: false, error: "preferences.items_per_digest must be a positive number" };
-  }
-
-  // Settings UI exposes 5 and 10; normalize API writes to the same supported buckets.
-  const bounded = Math.min(ITEMS_PER_DIGEST_MAX, Math.max(ITEMS_PER_DIGEST_MIN, parsed));
-  const midpoint = (ITEMS_PER_DIGEST_MIN + ITEMS_PER_DIGEST_MAX) / 2;
-  const normalized = bounded <= midpoint ? ITEMS_PER_DIGEST_MIN : ITEMS_PER_DIGEST_MAX;
-  return { ok: true, itemsPerDigest: normalized };
 }
 
 function normalizeDaysOfWeek(value) {
@@ -76,15 +61,6 @@ function sanitizePreferencesPatch(rawPreferences) {
       continue;
     }
 
-    if (key === "items_per_digest") {
-      const itemsResult = normalizeItemsPerDigest(value);
-      if (!itemsResult.ok) {
-        return itemsResult;
-      }
-      patch.items_per_digest = itemsResult.itemsPerDigest;
-      continue;
-    }
-
     if (key === "days_of_week") {
       const daysResult = normalizeDaysOfWeek(value);
       if (!daysResult.ok) {
@@ -101,9 +77,6 @@ function sanitizePreferencesPatch(rawPreferences) {
       patch[key] = value;
       continue;
     }
-
-    // telegram_enabled: silently accepted but ignored for email-only MVP
-    if (key === "telegram_enabled") continue;
 
     return { ok: false, error: `preferences.${key} is not allowed` };
   }
@@ -125,7 +98,6 @@ function createSettingsHandler({
   allUsers,
   writeUser,
   DEFAULT_TOPICS,
-  MAX_CUSTOM_KEYWORDS,
   PROTECTED_FIELDS,
 }) {
   return async function handleSettings(ctxOrReq, maybeRes) {
@@ -161,8 +133,8 @@ function createSettingsHandler({
     if (safeBody.topics != null) {
       const topicsResult = normalizeTopicsForUserInput(safeBody.topics, {
         defaultTopics: DEFAULT_TOPICS,
-        minRequired: 2,
-        maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
+        minRequired: 1,
+        maxTopics: 3,
       });
       if (!topicsResult.ok) {
         return json(res, { error: topicsResult.error }, 400);
@@ -171,52 +143,19 @@ function createSettingsHandler({
     }
 
     if (safeBody.topic_weights != null) {
-      const tw = safeBody.topic_weights;
-      if (typeof tw !== "object" || Array.isArray(tw)) {
-        return json(res, { error: "topic_weights must be an object" }, 400);
-      }
-      const patch = {};
-      for (const [key, val] of Object.entries(tw)) {
-        const tag = String(key || "").trim();
-        if (!tag) continue;
-        const n = Number(val);
-        patch[tag] = Number.isFinite(n) ? Math.max(-5, Math.min(5, n)) : 0;
-      }
-      // Merge patch: 0 = remove key, otherwise set value
-      const merged = { ...(existing.topic_weights || {}) };
-      for (const [tag, val] of Object.entries(patch)) {
-        if (val === 0) delete merged[tag];
-        else merged[tag] = val;
-      }
-      safeBody.topic_weights = merged;
+      return json(res, { error: "topic_weights is not allowed in the reduced-scope MVP" }, 400);
     }
-
+    if (safeBody.custom_keywords != null) {
+      return json(res, { error: "custom_keywords is not allowed in the reduced-scope MVP" }, 400);
+    }
+    if (safeBody.watchlist != null) {
+      return json(res, { error: "watchlist is not allowed in the reduced-scope MVP" }, 400);
+    }
     if (safeBody.source_preferences != null) {
-      const sp = safeBody.source_preferences;
-      if (typeof sp !== "object" || Array.isArray(sp)) {
-        return json(res, { error: "source_preferences must be an object" }, 400);
-      }
-      const normalizeDomainList = (arr, field) => {
-        if (!Array.isArray(arr)) return { ok: false, error: `source_preferences.${field} must be an array` };
-        const out = [];
-        for (const d of arr) {
-          const s = String(d || "").trim().toLowerCase().replace(/^www\./, "");
-          if (!s || s.length > 120) continue;
-          if (!/^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$/.test(s)) continue;
-          if (!out.includes(s)) out.push(s);
-        }
-        return { ok: true, value: out };
-      };
-      const t = normalizeDomainList(sp.trusted_sources || [], "trusted_sources");
-      if (!t.ok) return json(res, { error: t.error }, 400);
-      const b = normalizeDomainList(sp.blocked_sources || [], "blocked_sources");
-      if (!b.ok) return json(res, { error: b.error }, 400);
-      safeBody.source_preferences = { trusted_sources: t.value, blocked_sources: b.value };
+      return json(res, { error: "source_preferences is not allowed in the reduced-scope MVP" }, 400);
     }
-
-    // Telegram field: silently accepted but not used for email-only MVP
     if (safeBody.telegram != null) {
-      delete safeBody.telegram;
+      return json(res, { error: "telegram is not allowed in the reduced-scope MVP" }, 400);
     }
 
     if (safeBody.email != null) {
@@ -241,10 +180,6 @@ function createSettingsHandler({
       preferences: { ...existing.preferences, ...safeBody.preferences },
       ...Object.fromEntries(PROTECTED_FIELDS.map((key) => [key, existing[key]])),
     }, { chatId: existing.chatId });
-
-    if (Array.isArray(updated.topics)) {
-      updated.custom_topics = updated.topics.filter((topic) => !DEFAULT_TOPICS.includes(topic));
-    }
 
     if (updated.status === "unsubscribed" && existing.status !== "unsubscribed") {
       updated.email_unsubscribed_at = new Date().toISOString();

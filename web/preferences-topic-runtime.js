@@ -15,35 +15,24 @@
     return out;
   }
 
-  function buildTopicCatalogSnapshot({ industryTopics, capabilityTopics, defaultTopics }) {
+  function buildTopicCatalogSnapshot({ industryTopics, defaultTopics }) {
     return {
       industries: industryTopics.slice(),
-      capabilities: capabilityTopics.slice(),
       topics: defaultTopics.slice(),
     };
   }
 
-  function deriveTopicCatalog(payload, { fallbackIndustries, fallbackCapabilities }) {
+  function deriveTopicCatalog(payload, { fallbackIndustries }) {
     const industries = sanitizeTopicList(payload && payload.industries);
-    const capabilities = sanitizeTopicList(payload && payload.capabilities);
     const defaults = sanitizeTopicList(payload && payload.topics);
 
     const nextIndustries = industries.length ? industries : fallbackIndustries;
-    const nextCapabilities = capabilities.length ? capabilities : fallbackCapabilities;
-    const nextDefaults = defaults.length ? defaults : [...nextIndustries, ...nextCapabilities];
+    const nextDefaults = defaults.length ? defaults : [...nextIndustries];
 
     return {
       industries: nextIndustries,
-      capabilities: nextCapabilities,
       topics: nextDefaults,
     };
-  }
-
-  function normalizeCustomTopicInput(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    return slug ? `custom_${slug}` : "";
   }
 
   function normalizeTopicLookupValue(value) {
@@ -75,19 +64,7 @@
       if (defaultMatch) return defaultMatch;
     }
 
-    return normalizeCustomTopicInput(raw);
-  }
-
-  function isCustomTopic(topic, opts = {}) {
-    const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
-    return !defaults.includes(String(topic || ""));
-  }
-
-  function formatCustomLabel(topic) {
-    return String(topic || "")
-      .replace(/^custom_/, "")
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (char) => char.toUpperCase());
+    return "";
   }
 
   function topicDisplayLabel(topic, opts = {}) {
@@ -96,8 +73,7 @@
 
     const defaults = Array.isArray(opts.defaultTopics) ? opts.defaultTopics : [];
     const labels = opts.topicLabels && typeof opts.topicLabels === "object" ? opts.topicLabels : {};
-    if (defaults.includes(key)) return labels[key] || key;
-    return formatCustomLabel(key);
+    return defaults.includes(key) ? (labels[key] || key) : key;
   }
 
   globalScope.SignalBriefPrefsTopicRuntime = {
@@ -105,11 +81,8 @@
     sanitizeTopicList,
     buildTopicCatalogSnapshot,
     deriveTopicCatalog,
-    normalizeCustomTopicInput,
     normalizeTopicLookupValue,
     topicKeyFromInput,
-    isCustomTopic,
-    formatCustomLabel,
     topicDisplayLabel,
   };
 })(window);

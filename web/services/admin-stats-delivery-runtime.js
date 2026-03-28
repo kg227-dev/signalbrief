@@ -31,7 +31,6 @@ function deliveredScheduledCount(windowRows, runs, activeEmailSet) {
   const allowedDates = new Set(windowRows.map((row) => row.dateKey));
   const deliveredSet = new Set();
   for (const run of runs) {
-    if (run.on_demand) continue;
     const dateKey = String(run.date || "");
     if (!allowedDates.has(dateKey)) continue;
     const perUsers = Array.isArray(run.per_user) ? run.per_user : [];
@@ -45,7 +44,7 @@ function deliveredScheduledCount(windowRows, runs, activeEmailSet) {
 }
 
 function getLastSuccessfulScheduledRun(runs) {
-  return runs.find((run) => !run.on_demand && (run.users_served || 0) > 0) || null;
+  return runs.find((run) => (run.users_served || 0) > 0) || null;
 }
 
 function getNextExpectedActiveDelivery(activeRoster) {

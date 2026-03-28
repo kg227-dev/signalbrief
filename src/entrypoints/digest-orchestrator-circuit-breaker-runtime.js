@@ -90,10 +90,10 @@ function createDigestOrchestratorCircuitBreakerRuntime(deps) {
     const served = Math.max(0, Number(servedCount || 0));
     const isNonTransient = dominantFailureClass && dominantFailureClass !== "transient";
 
-    // Trigger 1: ≥3 users targeted, 0 served, non-transient dominant failure
+    // Trigger 1: ≥3 users due, 0 served, non-transient dominant failure
     if (due >= 3 && served === 0 && isNonTransient) {
       return openCircuit({
-        reason: `targeted_${due}_served_0_${dominantFailureClass}`,
+        reason: `scheduled_due_${due}_served_0_${dominantFailureClass}`,
         triggeredBy: runId,
         dateEt,
       });

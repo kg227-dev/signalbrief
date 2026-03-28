@@ -1,4 +1,3 @@
-const { normalizeCustomKeyword } = require("../../utils/topic-utils");
 const {
   createRepeatIndex,
   dedupItemsAgainstRepeatIndex,
@@ -16,23 +15,8 @@ function standardTopicUniverse(appConfig) {
   return (appConfig.topics || []).map((t) => t.tag).filter(Boolean);
 }
 
-function collectCustomTopics(personas, limit = 12) {
-  const values = [];
-  for (const persona of personas || []) {
-    for (const topic of persona.topics || []) {
-      if (!String(topic).startsWith("custom_")) continue;
-      values.push(normalizeCustomKeyword(topic));
-    }
-  }
-  return [...new Set(values.filter(Boolean))].slice(0, limit);
-}
-
-function maxRequestedItems(personas, fallback = 7) {
-  const requested = (personas || [])
-    .map((persona) => Number(persona?.preferences?.items_per_digest))
-    .filter((value) => Number.isFinite(value) && value > 0);
-
-  return Math.max(Number(fallback || 7), requested.length ? Math.max(...requested) : 0);
+function fixedSelectionTarget(fallback = 5) {
+  return Math.max(1, Number(fallback || 5));
 }
 
 function buildRecentRepeatIndexFromArchives(archives, days = 3) {
@@ -117,8 +101,7 @@ function mapArchiveItem(item) {
 module.exports = {
   syncBudget,
   standardTopicUniverse,
-  collectCustomTopics,
-  maxRequestedItems,
+  fixedSelectionTarget,
   buildRecentRepeatIndexFromArchives,
   dedupAgainstRecentArchivesForDataset,
   mapArchiveItem,

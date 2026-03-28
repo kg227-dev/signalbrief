@@ -5,10 +5,11 @@ const path = require("path");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
+const { normalizeTopicToken, topicsRelated } = require("./topic-normalization-runtime");
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
-// MVP topic set: 7 topics. POLICY×REGULATORY dropped as standalone; regulatory items
+// MVP topic set: 7 topics. Regulatory coverage now rolls into the closest sector topic;
 // surface through sector-specific official sources tagged to their relevant topics.
 const PHASE1_TOPIC_TAGS = new Set([
   "HEALTHCARE",
@@ -31,16 +32,27 @@ const ATTRIBUTE_PATTERN = /([a-zA-Z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)
 const RSS_ITEM_PATTERN = /<item\b[\s\S]*?<\/item>/gi;
 const ATOM_ENTRY_PATTERN = /<entry\b[\s\S]*?<\/entry>/gi;
 const ATOM_LINK_PATTERN = /<link\b[^>]*href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/gi;
+const BROKER_OFFICIAL_QUERY_HINT_PATTERN = /\b(rule|rules|rulemaking|filing|filings|approval|approves?|approved|agency|register|proposed|guidance|enforcement|regulation|regulatory|directive|law|laws|compliance)\b/i;
+const OFFICIAL_FRIENDLY_TOPIC_TAGS = new Set([
+  "HEALTHCARE",
+  "LIFE SCIENCES",
+  "FINANCIAL SERVICES",
+  "ENERGY",
+]);
 
 /**
  * Pick one canonical topic for an article.
- * Uses topic_tags[0] — callers should list tags in priority order.
+ * Without item context this falls back to the first configured tag, preserving
+ * the exported helper contract used by existing tests and tools.
  * @param {string[]} topicTags
+ * @param {object} [item]
  * @returns {string|null}
  */
-function assignCanonicalTopic(topicTags) {
-  if (!Array.isArray(topicTags) || topicTags.length === 0) return null;
-  return topicTags[0];
+function assignCanonicalTopic(topicTags, item) {
+  const candidates = Array.isArray(topicTags) ? topicTags : [];
+  if (candidates.length === 0) return null;
+  if (!item || typeof item !== "object") return candidates[0];
+  return chooseBestFitTopicTag(candidates, item) || candidates[0];
 }
 
 function normalizeWhitespace(value) {
@@ -171,6 +183,187 @@ function normalizeTopicTag(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+const BROKER_TOPIC_KEYWORDS = Object.freeze({
+  [normalizeTopicToken("HEALTHCARE")]: Object.freeze([
+    "healthcare",
+    "hospital",
+    "health system",
+    "medicare",
+    "medicaid",
+    "payer",
+    "provider",
+    "physician",
+    "clinic",
+    "patient",
+    "care delivery",
+    "reimbursement",
+    "medical device",
+  ]),
+  [normalizeTopicToken("LIFE SCIENCES")]: Object.freeze([
+    "life sciences",
+    "biotech",
+    "biopharma",
+    "pharma",
+    "pharmaceutical",
+    "drug",
+    "therapy",
+    "therapeutic",
+    "clinical trial",
+    "trial",
+    "phase 1",
+    "phase 2",
+    "phase 3",
+    "biologic",
+    "molecule",
+  ]),
+  [normalizeTopicToken("TECHNOLOGY")]: Object.freeze([
+    "technology",
+    "software",
+    "artificial intelligence",
+    "ai",
+    "semiconductor",
+    "chip",
+    "cloud",
+    "cyber",
+    "privacy",
+    "data",
+    "platform",
+    "app",
+    "digital",
+    "saas",
+  ]),
+  [normalizeTopicToken("ENERGY")]: Object.freeze([
+    "energy",
+    "oil",
+    "gas",
+    "utility",
+    "utilities",
+    "power",
+    "grid",
+    "solar",
+    "wind",
+    "battery",
+    "transmission",
+    "pipeline",
+    "renewable",
+    "nuclear",
+    "electricity",
+  ]),
+  [normalizeTopicToken("FINANCIAL SERVICES")]: Object.freeze([
+    "financial services",
+    "bank",
+    "banking",
+    "lender",
+    "lending",
+    "credit",
+    "payments",
+    "payment",
+    "capital markets",
+    "securities",
+    "asset manager",
+    "fintech",
+    "insurance",
+    "brokerage",
+    "consumer lending",
+    "private equity",
+  ]),
+  [normalizeTopicToken("CONSUMER & RETAIL")]: Object.freeze([
+    "consumer",
+    "retail",
+    "retailer",
+    "grocery",
+    "restaurant",
+    "ecommerce",
+    "e commerce",
+    "apparel",
+    "beauty",
+    "brand",
+    "shopper",
+    "checkout",
+    "loyalty program",
+    "marketplace",
+    "pricing",
+  ]),
+  [normalizeTopicToken("INDUSTRIALS")]: Object.freeze([
+    "industrial",
+    "manufacturing",
+    "factory",
+    "logistics",
+    "freight",
+    "transportation",
+    "aerospace",
+    "defense",
+    "auto",
+    "automotive",
+    "airline",
+    "rail",
+    "supply chain",
+  ]),
+});
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasBrokerWordBoundary(text, token) {
+  const haystack = String(text || "").trim();
+  const needle = String(token || "").trim();
+  if (!haystack || !needle) return false;
+  return new RegExp(`(?:^|\\s)${escapeRegExp(needle)}(?:\\s|$)`, "i").test(haystack);
+}
+
+function matchesBrokerKeyword(text, keyword) {
+  const normalizedKeyword = normalizeTopicToken(keyword);
+  if (!normalizedKeyword) return false;
+  if (String(text || "").includes(normalizedKeyword)) return true;
+  const tokens = normalizedKeyword.split(" ").filter(Boolean);
+  return tokens.length > 1 && tokens.every((token) => hasBrokerWordBoundary(text, token));
+}
+
+function scoreBestFitTopicTag(topicTag, text) {
+  const topicToken = normalizeTopicToken(topicTag);
+  if (!topicToken || !text) return 0;
+
+  let score = 0;
+  if (String(text).includes(topicToken)) score += 8;
+
+  for (const token of topicToken.split(" ").filter(Boolean)) {
+    if (token.length <= 2 && !["ai"].includes(token)) continue;
+    if (hasBrokerWordBoundary(text, token)) score += 2;
+  }
+
+  const keywords = BROKER_TOPIC_KEYWORDS[topicToken] || [];
+  for (const keyword of keywords) {
+    if (!matchesBrokerKeyword(text, keyword)) continue;
+    score += normalizeTopicToken(keyword).includes(" ") ? 4 : 3;
+  }
+
+  return score;
+}
+
+function chooseBestFitTopicTag(topicTags, item = {}) {
+  const candidates = Array.from(new Set((Array.isArray(topicTags) ? topicTags : []).map(normalizeTopicTag).filter(Boolean)));
+  if (candidates.length <= 1) return candidates[0] || "";
+
+  const text = normalizeTopicToken([
+    item?.headline,
+    item?.summary,
+    item?.canonical_url,
+    item?.url,
+  ].filter(Boolean).join(" "));
+
+  let bestTag = candidates[0];
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const score = scoreBestFitTopicTag(candidate, text);
+    if (score > bestScore) {
+      bestTag = candidate;
+      bestScore = score;
+    }
+  }
+  return bestTag;
+}
+
 function safeJsonParse(rawValue) {
   try {
     return JSON.parse(rawValue);
@@ -191,7 +384,7 @@ function pickFirstDomain(domains, endpoint) {
   }
 }
 
-function readSanitizedJson(fs, filePath) {
+function readJson(fs, filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
@@ -215,6 +408,10 @@ function buildRuntimeConfigPath(options = {}) {
     env: options.env,
     nodeEnv: options.nodeEnv,
   }).standardTopicBrokerSourcesPath;
+}
+
+function brokerQueryLooksOfficial(queryText) {
+  return BROKER_OFFICIAL_QUERY_HINT_PATTERN.test(String(queryText || ""));
 }
 
 function sanitizeLaneMap(rawLanes = {}) {
@@ -321,6 +518,167 @@ function sanitizeBrokerConfig(rawConfig = {}) {
     families,
     sources,
   };
+}
+
+function buildBrokerDomainList(config, topicTag, lane) {
+  const normalizedTopicTag = normalizeTopicTag(topicTag);
+  const normalizedLane = String(lane || "").trim();
+  if (!normalizedTopicTag || !PHASE1_TOPIC_TAGS.has(normalizedTopicTag)) return [];
+  if (!ALLOWED_LANES.has(normalizedLane)) return [];
+  if (!topicLaneEnabled(config, normalizedTopicTag, normalizedLane)) return [];
+  const domains = [];
+  const seen = new Set();
+  for (const source of (Array.isArray(config?.sources) ? config.sources : [])) {
+    if (source?.enabled === false) continue;
+    if (String(source?.lane || "").trim() !== normalizedLane) continue;
+    if (!(Array.isArray(source?.topic_tags) ? source.topic_tags : []).includes(normalizedTopicTag)) continue;
+    const candidates = [
+      ...(Array.isArray(source?.domains) ? source.domains : []),
+      pickFirstDomain(source?.domains, source?.endpoint),
+    ];
+    for (const candidate of candidates) {
+      const domain = normalizeSourcePolicyDomain(candidate);
+      if (!domain || seen.has(domain)) continue;
+      seen.add(domain);
+      domains.push(domain);
+    }
+  }
+  return domains;
+}
+
+function buildBrokerPreferredTopicEntriesFromConfig(configRaw) {
+  const config = sanitizeBrokerConfig(configRaw || {});
+  const topics = {};
+  for (const topicTag of PHASE1_TOPIC_TAGS) {
+    const reported = buildBrokerDomainList(config, topicTag, "publisher_feed");
+    const official = buildBrokerDomainList(config, topicTag, "official");
+    if (!reported.length && !official.length) continue;
+    topics[normalizeTopicToken(topicTag)] = {
+      reported,
+      official,
+    };
+  }
+  return topics;
+}
+
+function buildBrokerPreferredDomainShortlistFromConfig(config, options = {}) {
+  const topicTag = normalizeTopicTag(options?.topicTag);
+  if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) return null;
+  const maxDomains = Math.max(1, Number(options?.maxDomains || 20));
+  const officialDomains = buildBrokerDomainList(config, topicTag, "official");
+  const reportedDomains = buildBrokerDomainList(config, topicTag, "publisher_feed");
+  const officialFriendly = OFFICIAL_FRIENDLY_TOPIC_TAGS.has(topicTag) || brokerQueryLooksOfficial(options?.queryText);
+  const domains = officialFriendly
+    ? Array.from(new Set([...officialDomains, ...reportedDomains]))
+    : Array.from(new Set([...reportedDomains, ...officialDomains]));
+  return {
+    domains: domains.slice(0, maxDomains),
+    topic_keys: [normalizeTopicToken(topicTag)],
+    official_friendly: officialFriendly,
+    source_of_truth: "standard_topic_broker",
+  };
+}
+
+function buildBrokerPreferredSourceFamilyShortlistsFromConfig(config, options = {}) {
+  const topicTag = normalizeTopicTag(options?.topicTag);
+  if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) return null;
+  const maxDomains = Math.max(1, Number(options?.maxDomains || 20));
+  const reportedDomains = buildBrokerDomainList(config, topicTag, "publisher_feed").slice(0, maxDomains);
+  const officialDomains = buildBrokerDomainList(config, topicTag, "official").slice(0, maxDomains);
+  const officialFriendly = OFFICIAL_FRIENDLY_TOPIC_TAGS.has(topicTag) || brokerQueryLooksOfficial(options?.queryText);
+  const combinedDomains = officialFriendly
+    ? Array.from(new Set([...officialDomains, ...reportedDomains]))
+    : Array.from(new Set([...reportedDomains, ...officialDomains]));
+  return {
+    reported_domains: reportedDomains,
+    official_domains: officialDomains,
+    global_reported_domains: [],
+    global_official_domains: [],
+    combined_domains: combinedDomains.slice(0, maxDomains),
+    topic_keys: [normalizeTopicToken(topicTag)],
+    official_friendly: officialFriendly,
+    source_of_truth: "standard_topic_broker",
+  };
+}
+
+function matchesBrokerPreferredDomain(sourceDomain, candidateDomain) {
+  const normalizedSource = normalizeSourcePolicyDomain(sourceDomain);
+  const normalizedCandidate = normalizeSourcePolicyDomain(candidateDomain);
+  if (!normalizedSource || !normalizedCandidate) return false;
+  return normalizedSource === normalizedCandidate || normalizedSource.endsWith(`.${normalizedCandidate}`);
+}
+
+function emptyPreferredSourceMatch() {
+  return {
+    match: "none",
+    kind: null,
+    scope: "none",
+    topics: [],
+    strength: 0,
+    matched_domain: null,
+    matched_identity: null,
+  };
+}
+
+function matchPreferredSourceFromBrokerConfig(configRaw, sourceDomain, topicTag, options = {}) {
+  void options;
+  const config = sanitizeBrokerConfig(configRaw || {});
+  const normalizedSource = normalizeSourcePolicyDomain(sourceDomain);
+  const normalizedTopic = normalizeTopicToken(topicTag);
+  if (!normalizedSource || !normalizedTopic) return emptyPreferredSourceMatch();
+
+  let bestMatch = null;
+  function considerMatch(entry) {
+    if (!entry || !entry.matched_domain) return;
+    if (!bestMatch || entry.weight > bestMatch.weight || (entry.weight === bestMatch.weight && entry.matched_domain.length > bestMatch.matched_domain.length)) {
+      bestMatch = entry;
+    }
+  }
+
+  for (const candidateTopicTag of PHASE1_TOPIC_TAGS) {
+    const candidateTopicKey = normalizeTopicToken(candidateTopicTag);
+    if (!candidateTopicKey) continue;
+    if (normalizedTopic !== candidateTopicKey && !topicsRelated(normalizedTopic, candidateTopicKey)) continue;
+    const isExact = normalizedTopic === candidateTopicKey;
+
+    for (const domain of buildBrokerDomainList(config, candidateTopicTag, "official")) {
+      if (!matchesBrokerPreferredDomain(normalizedSource, domain)) continue;
+      considerMatch({
+        match: "topic_official",
+        kind: "official",
+        scope: "domain",
+        topics: [candidateTopicKey],
+        strength: isExact ? 0.86 : 0.76,
+        matched_domain: domain,
+        matched_identity: null,
+        weight: isExact ? 86 : 76,
+      });
+    }
+
+    for (const domain of buildBrokerDomainList(config, candidateTopicTag, "publisher_feed")) {
+      if (!matchesBrokerPreferredDomain(normalizedSource, domain)) continue;
+      considerMatch({
+        match: "topic_reported",
+        kind: "reported",
+        scope: "domain",
+        topics: [candidateTopicKey],
+        strength: isExact ? 0.74 : 0.64,
+        matched_domain: domain,
+        matched_identity: null,
+        weight: isExact ? 74 : 64,
+      });
+    }
+  }
+
+  return bestMatch ? {
+    match: bestMatch.match,
+    kind: bestMatch.kind,
+    scope: bestMatch.scope,
+    topics: bestMatch.topics,
+    strength: bestMatch.strength,
+    matched_domain: bestMatch.matched_domain,
+    matched_identity: null,
+  } : emptyPreferredSourceMatch();
 }
 
 function buildInitialDiagnostics(activeTopicTags = []) {
@@ -641,7 +999,10 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       diagnostics.stale_count += 1;
       continue;
     }
-    const canonicalTag = assignCanonicalTopic(Array.isArray(source?.topic_tags) ? source.topic_tags : []);
+    const canonicalTag = assignCanonicalTopic(
+      Array.isArray(source?.topic_tags) ? source.topic_tags : [],
+      itemBase
+    );
     if (canonicalTag) {
       items.push({ ...itemBase, tag: canonicalTag });
       diagnostics.retained_count += 1;
@@ -685,24 +1046,36 @@ function createStandardTopicBrokerRuntime(options = {}) {
   const bundledConfigPath = String(options.bundledStandardTopicBrokerSourcesPath || "").trim() || buildBundledConfigPath(options);
 
   function readConfigSnapshot() {
-    const runtimeConfig = readSanitizedJson(fs, runtimeConfigPath);
+    const runtimeConfig = readJson(fs, runtimeConfigPath);
     if (runtimeConfig) {
       return {
         source_mode: "runtime",
         active_path: runtimeConfigPath,
         runtime_path: runtimeConfigPath,
         bundled_path: bundledConfigPath,
+        raw_config: runtimeConfig,
         config: sanitizeBrokerConfig(runtimeConfig),
       };
     }
-    const bundledConfig = readSanitizedJson(fs, bundledConfigPath);
+    const bundledConfig = readJson(fs, bundledConfigPath);
     return {
       source_mode: "bundled",
       active_path: bundledConfigPath,
       runtime_path: runtimeConfigPath,
       bundled_path: bundledConfigPath,
+      raw_config: bundledConfig || {},
       config: sanitizeBrokerConfig(bundledConfig || {}),
     };
+  }
+
+  function ensureRuntimeConfigDir() {
+    const dir = path.dirname(runtimeConfigPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  }
+
+  function writeRawBrokerConfig(rawConfig) {
+    ensureRuntimeConfigDir();
+    fs.writeFileSync(runtimeConfigPath, `${JSON.stringify(rawConfig, null, 2)}\n`, "utf8");
   }
 
   function inspectStandardTopicBrokerConfig() {
@@ -711,6 +1084,116 @@ function createStandardTopicBrokerRuntime(options = {}) {
 
   function loadStandardTopicBrokerConfig() {
     return readConfigSnapshot().config;
+  }
+
+  function updateBrokerTopicConfig(input = {}) {
+    const topicTag = normalizeTopicTag(input?.topicTag || input?.topic);
+    if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) {
+      throw new Error("valid standard-topic broker topic required");
+    }
+
+    const snapshot = readConfigSnapshot();
+    const before = snapshot?.config?.topics?.[topicTag] || {
+      enabled: true,
+      lanes: {
+        publisher_feed: true,
+        official: true,
+      },
+    };
+    const rawConfig = snapshot?.raw_config && typeof snapshot.raw_config === "object"
+      ? { ...snapshot.raw_config }
+      : {};
+    const rawTopics = rawConfig.topics && typeof rawConfig.topics === "object"
+      ? { ...rawConfig.topics }
+      : {};
+    const rawTopic = rawTopics[topicTag] && typeof rawTopics[topicTag] === "object"
+      ? rawTopics[topicTag]
+      : {};
+    const rawLanes = rawTopic.lanes && typeof rawTopic.lanes === "object"
+      ? rawTopic.lanes
+      : {};
+
+    const nextEnabled = input?.enabled == null
+      ? before.enabled !== false
+      : input.enabled === true;
+    const nextPublisherFeedEnabled = input?.publisher_feed_enabled == null
+      ? before?.lanes?.publisher_feed !== false
+      : input.publisher_feed_enabled === true;
+    const nextOfficialEnabled = input?.official_enabled == null
+      ? before?.lanes?.official !== false
+      : input.official_enabled === true;
+
+    rawTopics[topicTag] = {
+      ...rawTopic,
+      enabled: nextEnabled,
+      lanes: {
+        ...rawLanes,
+        publisher_feed: nextPublisherFeedEnabled,
+        official: nextOfficialEnabled,
+      },
+    };
+    rawConfig.topics = rawTopics;
+
+    writeRawBrokerConfig(rawConfig);
+    const nextSnapshot = readConfigSnapshot();
+    return {
+      before,
+      after: nextSnapshot?.config?.topics?.[topicTag] || null,
+      snapshot: nextSnapshot,
+    };
+  }
+
+  function updateBrokerSourceConfig(input = {}) {
+    const sourceId = String(input?.sourceId || input?.source_id || "").trim();
+    if (!sourceId) throw new Error("valid broker source id required");
+
+    const nextTier = input?.tier == null ? null : Number(input.tier);
+    if (nextTier != null && nextTier !== 1 && nextTier !== 2 && nextTier !== 3) {
+      throw new Error("valid broker source tier required");
+    }
+
+    const snapshot = readConfigSnapshot();
+    const before = (Array.isArray(snapshot?.config?.sources) ? snapshot.config.sources : [])
+      .find((source) => String(source?.id || "").trim() === sourceId);
+    if (!before) throw new Error("broker source not found");
+
+    const rawConfig = snapshot?.raw_config && typeof snapshot.raw_config === "object"
+      ? { ...snapshot.raw_config }
+      : {};
+    const rawSources = Array.isArray(rawConfig.sources) ? rawConfig.sources.slice() : [];
+    const rawSourceIndex = rawSources.findIndex((source) => String(source?.id || "").trim() === sourceId);
+    if (rawSourceIndex === -1) throw new Error("broker source not found");
+    const rawSource = rawSources[rawSourceIndex] && typeof rawSources[rawSourceIndex] === "object"
+      ? rawSources[rawSourceIndex]
+      : {};
+
+    rawSources[rawSourceIndex] = {
+      ...rawSource,
+      enabled: input?.enabled == null ? before.enabled !== false : input.enabled === true,
+      tier: nextTier == null ? Number(before.tier || 2) : nextTier,
+    };
+    rawConfig.sources = rawSources;
+
+    writeRawBrokerConfig(rawConfig);
+    const nextSnapshot = readConfigSnapshot();
+    return {
+      before,
+      after: (Array.isArray(nextSnapshot?.config?.sources) ? nextSnapshot.config.sources : [])
+        .find((source) => String(source?.id || "").trim() === sourceId) || null,
+      snapshot: nextSnapshot,
+    };
+  }
+
+  function buildPreferredDomainShortlist(options = {}) {
+    return buildBrokerPreferredDomainShortlistFromConfig(readConfigSnapshot().config, options);
+  }
+
+  function buildPreferredSourceFamilyShortlists(options = {}) {
+    return buildBrokerPreferredSourceFamilyShortlistsFromConfig(readConfigSnapshot().config, options);
+  }
+
+  function matchPreferredSourceFromConfig(sourceDomain, topicTag, options = {}) {
+    return matchPreferredSourceFromBrokerConfig(readConfigSnapshot().config, sourceDomain, topicTag, options);
   }
 
   async function fetchBrokerCandidates(params = {}) {
@@ -817,12 +1300,24 @@ function createStandardTopicBrokerRuntime(options = {}) {
   return {
     inspectStandardTopicBrokerConfig,
     loadStandardTopicBrokerConfig,
+    updateBrokerTopicConfig,
+    updateBrokerSourceConfig,
+    buildPreferredDomainShortlist,
+    buildPreferredSourceFamilyShortlists,
+    matchPreferredSourceFromConfig,
     fetchBrokerCandidates,
   };
 }
 
 module.exports = {
   assignCanonicalTopic,
+  brokerQueryLooksOfficial,
+  buildBrokerPreferredDomainShortlistFromConfig,
+  buildBrokerPreferredTopicEntriesFromConfig,
+  buildBrokerPreferredSourceFamilyShortlistsFromConfig,
+  matchPreferredSourceFromBrokerConfig,
+  chooseBestFitTopicTag,
   createStandardTopicBrokerRuntime,
+  scoreBestFitTopicTag,
   sanitizeBrokerConfig,
 };

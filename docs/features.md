@@ -61,7 +61,7 @@ SignalBrief is an email-only daily digest across **7 fixed sectors**: Healthcare
 - Open: storyline collapse, richer score composition, structured implications block.
 
 ### Growth
-- Implemented: referral token capture and attribution, engagement winback and reengagement lifecycle flows, welcome digest on signup.
+- Implemented: referral token capture and attribution, welcome digest on signup.
 - Partial: referral end-user loop is not complete; public sharing UX is limited.
 - Open: role-aware onboarding, SEO discovery surface, team accounts.
 

@@ -12,18 +12,17 @@ Top-level process entry and the digest orchestrator broken into focused sub-modu
 |------|---------|--------|--------------|
 | `entrypoints/digest.js` | CLI entrypoint for the digest pipeline; delegates immediately to `digest-orchestrator-runtime` | Re-exports `digest-service-runtime` surface plus `main`/`runCli` | `./digest-orchestrator-runtime`, `../digest/application/digest-service-runtime` |
 | `entrypoints/digest-runtime.js` | Thin re-export shim keeping the legacy `digest-runtime` import path alive | Re-exports `digest-orchestrator-runtime` | `./digest-orchestrator-runtime` |
-| `entrypoints/bot-server.js` | Polling-first Telegram ingress worker; long-polls `getUpdates` and dispatches to `domains/reply` | Runs an infinite poll loop; process stays alive | `node:https`, `../platform/config`, `../platform/store`, `../domains/reply` |
 | `entrypoints/scheduler-worker.js` | Cron-style daemon that fires `digest-runner-runtime` on a configurable interval; writes a heartbeat file; handles restart requests via a control file | Heartbeat JSON at `schedulerHeartbeatPath`; exits `0` on restart request | `node:fs`, `node:path`, `../runtime/runtime-state-paths-runtime`, `../jobs/digest-runner-runtime`, `DIGEST_POLL_MS`, `DIGEST_RUN_ON_STARTUP`, `DIGEST_RUN_TIMEOUT_MS`, `DIGEST_WORKER_ARGS`, `DIGEST_STARTUP_DELAY_MS`, `DIGEST_LOCK_UNHEALTHY_BLOCK_THRESHOLD` |
 | `entrypoints/digest-orchestrator-runtime.js` | Root orchestrator facade; loads config and email template, asserts the pipeline seam, then delegates to `digest-orchestrator-core-runtime` | Re-exports all `core-runtime` symbols | `node:fs`, `node:path`, `../runtime/config-provider`, `../digest/application/digest-pipeline-seam-runtime`, `./digest-orchestrator-core-runtime`, `BASE_URL` |
-| `entrypoints/digest-orchestrator-core-runtime.js` | Wires all orchestrator sub-runtimes together; implements `main()` and `runCli()`; drives the full per-run pipeline (lock, bootstrap, schedule, fetch, select, enrich, delivery, archive, cost) | Digest emails + Telegram messages sent; archive written; exit code | All orchestrator sub-modules below; `../domains/*`, `../platform/*`, `../runtime/*` |
+| `entrypoints/digest-orchestrator-core-runtime.js` | Wires all orchestrator sub-runtimes together; implements `main()` and `runCli()`; drives the full per-run pipeline (lock, bootstrap, schedule, fetch, select, enrich, delivery, archive, cost) | Digest emails sent, archive written, optional ops incidents emitted; exit code | All orchestrator sub-modules below; `../domains/*`, `../platform/*`, `../runtime/*` |
 | `entrypoints/digest-orchestrator-archive-runtime.js` | Persists the shared enriched item list to the archive after a run | `quickScan` string; calls `saveToArchive` | Injected `saveToArchive` dep |
 | `entrypoints/digest-orchestrator-bootstrap-runtime.js` | One-time process setup: calls `initStore` and registers `exit`/signal handlers to release the digest lock | Side-effects only | Injected `initStore`, `releaseDigestLock` |
 | `entrypoints/digest-orchestrator-cost-runtime.js` | Calculates per-run API spend (Perplexity calls + Claude token usage) | `{ perplexityCalls, perplexityCost, claudeCost, totalCost }` | No external deps; constants `DEFAULT_PERPLEXITY_COST_PER_CALL`, `DEFAULT_CLAUDE_HAIKU_*` |
-| `entrypoints/digest-orchestrator-delivery-ranking-runtime.js` | Per-user item ranking: filters by topic, scores relevance, applies entity cap, enforces freshness, reorders by score | Ranked item array for each user | `../digest/runtime/repeat-freshness-runtime`, `../digest/domain/storyline-domain-runtime`, `../digest/runtime/digest-item-ordering-runtime` |
-| `entrypoints/digest-orchestrator-delivery-runtime.js` | Per-user delivery loop: runs ranking, builds email + Telegram payloads, sends both, records engagement, updates delivery records and user topic learning | Email + Telegram sent per user | `./digest-orchestrator-delivery-ranking-runtime`, `../digest/runtime/digest-item-ordering-runtime`, injected transport and formatting deps |
+| `entrypoints/digest-orchestrator-delivery-ranking-runtime.js` | Retrieval-eval support runtime for ranked candidate analysis; not part of the scheduled delivery path | Ranked candidate array for eval scenarios | `../digest/runtime/repeat-freshness-runtime`, `../digest/domain/storyline-domain-runtime` |
+| `entrypoints/digest-orchestrator-delivery-runtime.js` | Scheduled email delivery loop: delivers deterministic per-topic buckets, records engagement, and updates delivery records | Email sent per user | `../runtime/digest-delivery-policy-runtime`, injected transport and formatting deps |
 | `entrypoints/digest-orchestrator-enrichment-runtime.js` | Calls `enrichItems` on selected candidates; emits a degradation incident if the AI provider downgrades | Enriched item array + `claudeUsage` token counts | Injected `enrichItems`, `emitDigestIncident` |
-| `entrypoints/digest-orchestrator-fetch-runtime.js` | Orchestrates Perplexity fetches for standard and custom topics; resolves preferred-domain shortlists; appends custom-keyword rescue items; aggregates fetch diagnostics | `{ selectionTarget, tagPriority, allItems, customTags, fetchDiagnostics, … }` | Injected `fetchTopicNews`, `buildPreferredDomainShortlist`, `buildCustomTopicQueries`, `emitDigestIncident` |
-| `entrypoints/digest-orchestrator-incident-runtime.js` | Appends JSONL incident log entries and optionally fires a Telegram alert to the ops chat | Side-effects: file append + optional Telegram message | `node:fs`, `node:path`, injected `sendTelegram`, `formatEtDateKey` |
+| `entrypoints/digest-orchestrator-fetch-runtime.js` | Orchestrates standard-topic retrieval with broker/direct-feed-first behavior, preferred-domain shortlists, and fetch diagnostics | `{ selectionTarget, tagPriority, allItems, fetchDiagnostics, … }` | Injected `fetchTopicNews`, `buildPreferredDomainShortlist`, `emitDigestIncident` |
+| `entrypoints/digest-orchestrator-incident-runtime.js` | Appends JSONL incident log entries and optionally fires an ops alert to the configured incident transport | Side-effects: file append + optional ops alert | `node:fs`, `node:path`, injected `sendOpsAlert`, `formatEtDateKey` |
 | `entrypoints/digest-orchestrator-lock-runtime.js` | Acquires and releases the run-level digest lock file; guards against concurrent digest processes | Lock file at `lockFilePath`; `lockOwned` flag | `node:fs`, `node:path`, `../runtime/digest-lock-runtime` (injected) |
 | `entrypoints/digest-orchestrator-pipeline-runtime.js` | Item selection and storyline pool helpers used inside the orchestrator core | `selectItems()` result; filtered storyline pool | `../domains/digest` |
 | `entrypoints/digest-orchestrator-schedule-runtime.js` | Resolves which users are due for a digest right now based on their delivery-time preferences and ET clock | Array of due user records | Injected `getEtNow`, `getEtNowParts`, `allUsers`, `USER_STATUS`, `CONFIG` |
@@ -39,11 +38,10 @@ Long-running and spawned background work.
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `jobs/digest-runner-runtime.js` | Public facade for the digest job; adds `confirmQueuedRunStarted` on top of `digest-runner-core-runtime` | Re-exports all core symbols | `./digest-runner-core-runtime` |
-| `jobs/digest-runner-core-runtime.js` | Core digest-trigger logic: checks/clears stale locks, enqueues on-demand runs with cooldown enforcement, spawns `digest.js` as a child process | `{ ok, exitCode, signal, busy, lockUnhealthy, … }` | `node:fs`, `node:path`, `../runtime/digest-lock-runtime`, `./digest-runner-utils-runtime`, `./digest-runner-spawn-runtime`, `../runtime/runtime-state-paths-runtime` |
+| `jobs/digest-runner-runtime.js` | Public facade for the digest job runtime | Re-exports all core symbols | `./digest-runner-core-runtime` |
+| `jobs/digest-runner-core-runtime.js` | Core digest-trigger logic: checks/clears stale locks, starts or runs `digest.js`, and normalizes runner health outcomes for the scheduler/admin surfaces | `{ ok, exitCode, signal, busy, lockUnhealthy, … }` | `node:path`, `../runtime/digest-lock-runtime`, `./digest-runner-utils-runtime`, `./digest-runner-spawn-runtime`, `../runtime/runtime-state-paths-runtime` |
 | `jobs/digest-runner-spawn-runtime.js` | Spawns `digest.js` with sanitized args and trigger env vars; streams stdout/stderr to the caller; resolves when the child exits | Resolves `{ code, signal }` | `node:child_process` (`spawn`) |
 | `jobs/digest-runner-utils-runtime.js` | Tiny shared helpers: `toPositiveIntOrDefault`, `sleep` | Scalar values / Promise | None |
-| `jobs/reengagement-runtime.js` | Scans all active users for inactivity; sends day-4 nudge, day-8 warning, or auto-pauses after 10 days of no digests | Emails sent; user records updated; log written to `/tmp/signalbrief-reengagement.log` | `node:fs`, `../platform/store`, `../platform/mailer` |
 
 ---
 
@@ -53,13 +51,12 @@ Pure business-logic modules with no I/O.
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `digest/domain/digest-policy-domain-runtime.js` | Creates `SelectionPolicy` and `RankingPolicy` value objects from raw config; enforces per-tag cap, per-source cap, custom-tag order, and max-custom-items limits | Policy objects | None |
+| `digest/domain/digest-policy-domain-runtime.js` | Creates `SelectionPolicy` and `RankingPolicy` value objects from raw config; enforces per-tag and per-source caps plus tag priority | Policy objects | None |
 | `digest/domain/repeat-dedup-domain-runtime.js` | Builds a cross-day repeat index (URL keys, headline fingerprints, storyline keys, freshness keys); tests items against it | `RepeatIndex`; boolean `isRepeatedItem`; deduped array | `./topic-domain-runtime`, `../../runtime/url-normalization-runtime` |
-| `digest/domain/selection-domain-runtime.js` | Selects up to N items from a pool while enforcing per-tag, per-source, and custom-item caps; deduplicates candidates using pluggable adapters | Ordered selected item array | `./digest-policy-domain-runtime`, `../../runtime/url-normalization-runtime` |
+| `digest/domain/selection-domain-runtime.js` | Selects up to N items from a pool while enforcing per-tag and per-source caps; deduplicates candidates using pluggable adapters | Ordered selected item array | `./digest-policy-domain-runtime`, `../../runtime/url-normalization-runtime` |
 | `digest/domain/source-domain-runtime.js` | Parses and normalizes source domains from item URLs or `.source` fields; resolves source identity for storyline building | Normalized domain string | `../../runtime/source-policy-registry-runtime` |
 | `digest/domain/storyline-domain-runtime.js` | Builds storyline candidates from enriched items; scores strategic vs. routine value; applies quality gate; identifies weak-source items | Storyline candidate array; quality scores | `node:crypto`, `./topic-domain-runtime`, `./source-domain-runtime`, `../runtime/repeat-freshness-runtime`, `../../runtime/source-policy-registry-runtime`, `../../runtime/preferred-source-registry-runtime` |
-| `digest/domain/topic-domain-runtime.js` | Normalizes topic tokens and match text; expands custom-topic aliases into concrete search queries; scores topic relevance | Normalized strings; query arrays; relevance scores | None |
-| `digest/domain/domain-learning-runtime.js` | Tracks per-domain delivery frequency with exponential decay; prunes the registry to 500 entries | Persisted JSON stats at `domainStatsPath` | `node:fs`, `node:path`, `../../runtime/runtime-state-paths-runtime` |
+| `digest/domain/topic-domain-runtime.js` | Normalizes topic tokens and match text; scores topic relevance and related-topic proximity | Normalized strings; relevance scores | None |
 
 ---
 
@@ -97,7 +94,7 @@ Concrete I/O implementations for data fetching, enrichment, formatting, and arch
 | `digest/runtime/digest-formatting-email-runtime.js` | Assembles all email sub-runtimes; exports `buildEmail()` | HTML email string | `./digest-formatting-email-style-runtime`, `./digest-formatting-email-sections-runtime`, `./digest-formatting-email-items-runtime`, `./digest-formatting-email-template-runtime` |
 | `digest/runtime/digest-formatting-email-template-runtime.js` | Applies named slots (`{{DATE}}`, `{{QUICK_SCAN}}`, etc.) into the HTML template string | Filled HTML string | None |
 | `digest/runtime/digest-formatting-email-style-runtime.js` | Maps relevance scores to color tokens (dot, text, bg, glow) used in item cards; provides `escapeHtml` | Color objects; safe HTML strings | None |
-| `digest/runtime/digest-formatting-email-sections-runtime.js` | Builds welcome banner, personalization note, editorial note, and settings footer HTML blocks | HTML fragment strings | `BASE_URL` |
+| `digest/runtime/digest-formatting-email-sections-runtime.js` | Builds welcome banner, delivery context note, editorial note, and settings footer HTML blocks | HTML fragment strings | `BASE_URL` |
 | `digest/runtime/digest-formatting-email-items-runtime.js` | Renders individual digest item cards as HTML with score badges, source labels, and engagement links | HTML item card strings | `BASE_URL` |
 
 ### AI Generation
@@ -111,25 +108,16 @@ Concrete I/O implementations for data fetching, enrichment, formatting, and arch
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `digest/runtime/digest-formatting-topic-runtime.js` | Composes visual, rescue, and learning sub-runtimes into a single topic formatting factory | `{ topicVisual, formatTopicDisplay, buildCustomRescueItemsFromStandard, buildLearningSummary }` | `./digest-formatting-topic-visual-runtime`, `./digest-formatting-topic-rescue-runtime`, `./digest-formatting-topic-learning-runtime` |
-| `digest/runtime/digest-formatting-topic-display-runtime.js` | Converts a raw topic slug (e.g. `custom_rate_cuts`) into a title-cased display label | Display label string | None |
+| `digest/runtime/digest-formatting-topic-runtime.js` | Composes visual and learning sub-runtimes into a single topic formatting factory | `{ topicVisual, formatTopicDisplay, buildLearningSummary }` | `./digest-formatting-topic-visual-runtime`, `./digest-formatting-topic-learning-runtime` |
+| `digest/runtime/digest-formatting-topic-display-runtime.js` | Converts a raw topic slug into a title-cased display label | Display label string | None |
 | `digest/runtime/digest-formatting-topic-learning-runtime.js` | Formats per-topic weight adjustments into a human-readable learning summary for digest headers | Summary string | `./digest-formatting-topic-display-runtime` |
-| `digest/runtime/digest-formatting-topic-rescue-runtime.js` | Rescues items matching custom keywords from the standard pool when the custom-topic fetch is thin | Additional item array | Injected `normalizeTopicToken`, `customKeywordMatches`, `normalizeMatchText`, `headlineFingerprint`, `normalizeUrlForDedup` |
 | `digest/runtime/digest-formatting-topic-visual-runtime.js` | Maps topic tokens to emoji/color visual identifiers; formats topics for display | `{ topicVisual, formatTopicDisplay }` | `./digest-formatting-topic-display-runtime` |
-
-### Telegram
-
-| File | Purpose | Output | Dependencies |
-|------|---------|--------|--------------|
-| `digest/runtime/digest-formatting-telegram-runtime.js` | Assembles Telegram formatting runtime; re-exports `formatTelegram` and `buildDigestInlineKeyboard` | Runtime object | `./digest-formatting-telegram-content-runtime`, `./digest-formatting-telegram-keyboard-runtime` |
-| `digest/runtime/digest-formatting-telegram-content-runtime.js` | Renders the Telegram digest message text with numbered items, emoji labels, and a command menu | Markdown-formatted message string | None |
-| `digest/runtime/digest-formatting-telegram-keyboard-runtime.js` | Builds an inline keyboard with save/more/less buttons for each digest item | Telegram `inline_keyboard` array | None |
 
 ### General
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `digest/runtime/digest-formatting-runtime.js` | Top-level formatting factory; wires AI, email, topic, and Telegram sub-runtimes together | `{ generateLeadSubjectLine, generateEditorialNote, buildEmail, formatTelegram, buildDigestInlineKeyboard, topicVisual, formatTopicDisplay, buildCustomRescueItemsFromStandard, buildLearningSummary, stripInlineHtml, escapeHtml }` | All four formatting sub-runtimes above |
+| `digest/runtime/digest-formatting-runtime.js` | Top-level formatting factory; wires AI, email, and topic formatting helpers together | `{ generateLeadSubjectLine, generateEditorialNote, buildEmail, topicVisual, formatTopicDisplay, buildLearningSummary, stripInlineHtml, escapeHtml }` | AI, email, and topic formatting runtimes |
 
 ### Archive / Delivery
 
@@ -192,9 +180,9 @@ Concrete implementations backing the platform facades. Do not import these direc
 | `runtime/mailer.js` | Shim; re-exports `mailer/mailer-runtime` | Mailer surface | `./mailer/mailer-runtime` |
 | `runtime/mailer/mailer-runtime.js` | Sends email via Resend API (preferred) or Gmail OAuth fallback; builds open-tracking pixel URLs; provides `sendEmail` and `buildOpenTrackingPixel` | Email delivery result; pixel URL | `node:https`, `node:fs`, `node:path`, `node:crypto`, `../config-provider`, `../mailer-lifecycle-runtime`, `SIGNALBRIEF_RESEND_API_KEY`, `SIGNALBRIEF_FROM_EMAIL`, `BASE_URL` |
 | `runtime/mailer-runtime.js` | Shim; re-exports `mailer/mailer-runtime` | Mailer surface | `./mailer/mailer-runtime` |
-| `runtime/mailer-lifecycle-runtime.js` | Factory that assembles the lifecycle mailer from shared deps; exposes `createLifecycleMailer` | `{ sendReferralThankYou, sendReengagementDay4Email, sendReengagementDay8Email, sendAutoPauseConfirmationEmail, sendWelcomeEmail }` | `./mailer/lifecycle/lifecycle-senders`, `./mailer/lifecycle/welcome-sender` |
+| `runtime/mailer-lifecycle-runtime.js` | Factory that assembles the lifecycle mailer from shared deps; exposes `createLifecycleMailer` | `{ sendReferralThankYou, sendWelcomeEmail }` | `./mailer/lifecycle/lifecycle-senders`, `./mailer/lifecycle/welcome-sender` |
 | `runtime/mailer/lifecycle/common.js` | Shared utilities for lifecycle emails: `firstName`, `topicListForUser`, `deliveryTimeLabelEt`, `lifecycleEmailShell`, `profileLinks` | Helper functions | None |
-| `runtime/mailer/lifecycle/lifecycle-senders.js` | Sends referral thank-you, day-4 reengagement, day-8 reengagement, and auto-pause confirmation emails | Email sent via injected `sendEmail` | `./common` |
+| `runtime/mailer/lifecycle/lifecycle-senders.js` | Sends referral thank-you emails via injected `sendEmail` | Email sent via injected `sendEmail` | `./common` |
 | `runtime/mailer/lifecycle/welcome-content.js` | Builds welcome-email content blocks: delivery time label, days label, depth label, topics HTML | HTML fragments; label strings | None |
 | `runtime/mailer/lifecycle/welcome-sender.js` | Renders and sends the onboarding welcome email using the welcome HTML template | Email sent; `{ ok, … }` result | `./welcome-content`, injected `sendEmail`, `loadWelcomeTemplate`, `BASE_URL` |
 
@@ -210,9 +198,6 @@ Concrete implementations backing the platform facades. Do not import these direc
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `runtime/personalization.js` | Shim; re-exports `personalization/personalization-runtime` | Personalization surface | `./personalization/personalization-runtime` |
-| `runtime/personalization-runtime.js` | Shim; re-exports `personalization/personalization-runtime` | Personalization surface | `./personalization/personalization-runtime` |
-| `runtime/personalization/personalization-runtime.js` | Applies topic weight adjustments to a user record based on engagement events (save, more, less); calls `appendEngagementEventChecked`; writes updated user | Updated `UserRecord`; topic weight deltas | `../engagement/engagement-events-runtime`, `../../digest/domain/topic-domain-runtime` |
 
 ### Quality
 
@@ -229,36 +214,6 @@ Concrete implementations backing the platform facades. Do not import these direc
 |------|---------|--------|--------------|
 | `runtime/structured-logger-runtime.js` | Writes structured JSONL log lines with `ts_utc`, `service`, `event`, `level`, and arbitrary scalar fields; enforces reserved-field protection | JSONL to a writable stream or `node:fs` file | `node:fs` |
 
-### Reply Handler
-
-| File | Purpose | Output | Dependencies |
-|------|---------|--------|--------------|
-| `runtime/reply-handler.js` | Shim; re-exports `reply/reply-handler-runtime` | Reply surface | `./reply/reply-handler-runtime` |
-| `runtime/reply-handler-runtime.js` | Shim; re-exports `reply/reply-handler-runtime` | Reply surface | `./reply/reply-handler-runtime` |
-| `runtime/reply/reply-handler-runtime.js` | CLI entrypoint shim for the reply handler; also re-exports `reply-handler-core-runtime` | Runs `handleIncomingMessage` when invoked directly | `./reply-handler-core-runtime` |
-| `runtime/reply/reply-handler-core-runtime.js` | Wires store, config, transport, intent service, command router, session, and onboarding into a unified `handleIncomingMessage` / `handleCallbackQuery` surface | Telegram response sent; user state mutated | `../config-provider`, `./transport`, `./intent-service`, `./command-router`, `./reply-session-runtime`, `./info-handlers-runtime`, `./reply-command-handlers-runtime`, `./reply-handler-onboarding-runtime`, `./reply-handler-defaults-runtime` |
-| `runtime/reply/reply-handler-defaults-runtime.js` | Defines app constants (`INDUSTRY_TOPICS`, `CAPABILITY_TOPICS`, `STANDARD_TOPICS`, `LINK_VERIFY_TTL_MS`) and `defaultBaseUrl` | Constants and helper functions | `node:path`, `./reply-logging-runtime` |
-| `runtime/reply/reply-handler-onboarding-runtime.js` | Creates `ReplyOnboardingService` that wraps `onboarding-service` with store and mailer deps for the reply handler | Onboarding service instance | `node:fs`, `node:path`, `../mailer/mailer-runtime`, `./onboarding-service`, `../runtime-state-paths-runtime` |
-| `runtime/reply/intent-service.js` | Parses raw Telegram message text into a structured `Intent` object (`action`, `items`, `topic`, `source`) | `Intent` object | None |
-| `runtime/reply/command-router.js` | Maps an `Intent.action` string to the appropriate handler function from a handlers map | Return value of matched handler | None |
-| `runtime/reply/reply-session-runtime.js` | Creates and manages ephemeral in-process `ReplyState` (awaiting-email map, digest-inflight set, pending link verifications); initializes the user store | `ReplyState`; session controller | `../runtime-types` (type only) |
-| `runtime/reply/reply-command-handlers-runtime.js` | Assembles all command handlers (engagement + onboarding + core) into a unified `createReplyCommandHandlers` factory | Handler map | `../user-contract-runtime`, `./reply-command-handlers-core-runtime` |
-| `runtime/reply/reply-command-handlers-core-runtime.js` | Core command handlers: `settings`, `bookmarks`, `topics`, `help` — reads user record and delegates to info renderers | Telegram message sent | `./info-handlers-runtime`, `./info-renderers-runtime` |
-| `runtime/reply/reply-command-digest-runtime.js` | `/digest` command handler: checks inflight state, calls `queueDigestTrigger`, sends status reply | Telegram message sent; digest spawned | `../../jobs/digest-runner-runtime` |
-| `runtime/reply/reply-command-engagement-runtime.js` | Engagement command handlers: `save`, `topic_more`/`topic_less`, `source_block`/`source_trust`/`source_unblock`, `topic_add` | User record updated; Telegram confirm sent | `../engagement/engagement-events-runtime` |
-| `runtime/reply/reply-command-onboarding-runtime.js` | Onboarding command handlers: `/start`, email capture, `verify_link` | User record created/updated; welcome email queued; Telegram message sent | `../../jobs/digest-runner-runtime` |
-| `runtime/reply/reply-logging-runtime.js` | Creates a leveled reply logger and intent tracer that write to `console` or a pluggable sink | Logger instance | None |
-| `runtime/reply/info-handlers-runtime.js` | Handles `/settings`, `/bookmarks`, `/topics`, `/help` commands by reading the user record and rendering the appropriate info view | Telegram message sent | `../user-contract-runtime`, `./info-renderers-runtime` |
-| `runtime/reply/info-renderers-runtime.js` | Renders settings, bookmarks, topics, and help views as formatted Telegram Markdown strings | Markdown strings | None |
-| `runtime/reply/transport.js` | `httpsPost` HTTPS helper and `createTelegramTransport` / `createAnthropicTransport` factory functions used by the reply handler | `{ status, body }` via `node:https`; saved audio file via `node:fs` | `node:https`, `node:fs` |
-| `runtime/reply/onboarding-service-runtime.js` | Core onboarding state machine: begins and completes the link-verification flow; manages resend cooldown and attempt limits | State mutations; sends verification email; sends Telegram prompt | `./onboarding/pending-verification`, `./onboarding/onboarding-context`, `./onboarding/link-verification-flow` |
-| `runtime/reply/onboarding-service.js` | Validation wrapper around `onboarding-service-runtime`; asserts required function deps before delegating | `OnboardingService` instance | `./onboarding-service-runtime` |
-| `runtime/reply/onboarding/keys.js` | Pure crypto helpers: `chatKey`, `normalizeEmail`, `generateVerificationCode` (6-digit), `validateCodeInput` | Strings; boolean | `node:crypto` |
-| `runtime/reply/onboarding/link-verification-flow.js` | Orchestrates `beginLinkVerificationFlow` and `completeLinkVerificationFlow` steps using the onboarding context | State mutations; Telegram messages sent | `./keys`, `./pending-verification`, `./messages` |
-| `runtime/reply/onboarding/messages.js` | Returns the verification-prompt and link-success Telegram message strings | Markdown strings | None |
-| `runtime/reply/onboarding/onboarding-context.js` | Creates the `OnboardingVerificationContext` that bridges state, messaging, and user-store access for the verification flow | Context object | `./keys` |
-| `runtime/reply/onboarding/pending-verification.js` | Creates and mutates `PendingVerification` records (email, code, expiry, attempt counter, resend throttle) | `PendingVerification` value objects | `../runtime-types` (type only) |
-
 ---
 
 ## 8. Domains — Canonical Facades (`domains/`)
@@ -269,8 +224,6 @@ Each `index.js` is the single authoritative import surface for a domain. Entrypo
 |------|---------|--------|--------------|
 | `domains/digest/index.js` | Merges all digest sub-modules: pipeline seam, domain logic, formatting, data, archive, delivery-record, and quality score | Full digest API surface | `../../digest/application/digest-pipeline-seam-runtime`, all `digest/domain/*` and `digest/runtime/*` modules, `../../runtime/quality-score` |
 | `domains/engagement/index.js` | Canonical engagement facade | `{ appendEngagementEventChecked, buildDigestId, loadEngagementEvents, … }` | `../../runtime/engagement/engagement-events-runtime` |
-| `domains/personalization/index.js` | Canonical personalization facade | `{ applyAutoTopicLearning, … }` | `../../runtime/personalization/personalization-runtime` |
-| `domains/reply/index.js` | Canonical reply facade; merges the reply handler, intent service, command router, onboarding, transport, logging, session, and command-handler modules | `{ handleIncomingMessage, handleCallbackQuery, … }` | `../../runtime/reply/reply-handler-runtime`, `../../runtime/reply/intent-service`, `../../runtime/reply/command-router`, and all other `runtime/reply/*` modules |
 
 ---
 
@@ -278,9 +231,7 @@ Each `index.js` is the single authoritative import surface for a domain. Entrypo
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `dependency-links.mjs` | Static ESM import graph that anchors all production and script modules for import-graph tooling | Side-effects only (module loading) | All production `src/` modules and `scripts/` files |
+| `dependency-links.mjs` | Static ESM import graph that anchors the active email-first MVP modules plus core scripts for import-graph tooling | Side-effects only (module loading) | Active `src/` modules and `scripts/` files |
 | `dependency-links-entry.mjs` | Bridge shim that imports `dependency-links.mjs`; used to anchor the graph from a single entry | Re-imports `./dependency-links.mjs` | `./dependency-links.mjs` |
-| `module-coverage-runtime.js` | Requires every key module in-process and runs assertion-based smoke tests to confirm they export expected symbols; used in CI | Test pass/fail assertions via `node:assert` | `node:assert`, `node:child_process`, `node:fs`, `node:path`, all key `src/` modules |
+| `module-coverage-runtime.js` | Requires every key active-path module in-process and runs assertion-based smoke tests to confirm they export expected symbols; used in CI | Test pass/fail assertions via `node:assert` | `node:assert`, `node:child_process`, `node:fs`, `node:path`, key active-path `src/` modules |
 | `module-coverage.test.js` | Thin test-runner shim that delegates to `module-coverage-runtime` | Calls `runModuleCoverageTests()` | `./module-coverage-runtime` |
-| `sandbox-pipeline.js` | Shim; re-exports `sandbox-pipeline-runtime` | Sandbox pipeline surface | `./sandbox-pipeline-runtime` |
-| `sandbox-pipeline-runtime.js` | Dry-run pipeline for the admin sandbox tool: fetches, enriches, and formats a digest without sending email or persisting user state | Formatted Telegram + email output objects | `node:crypto`, `./digest/application/digest-service-runtime`, `../domains/digest` |

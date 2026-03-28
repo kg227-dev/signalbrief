@@ -1,5 +1,5 @@
 // Static dependency-links map for tools that only parse ESM import declarations.
-// Runtime code remains CommonJS; this file is for analysis fidelity only.
+// Runtime code remains CommonJS; this map stays scoped to the active email-first MVP path.
 import "../src/jobs/digest-runner-runtime.js";
 import "../src/digest/domain/digest-policy-domain-runtime.js";
 import "../src/digest/domain/repeat-dedup-domain-runtime.js";
@@ -18,20 +18,8 @@ import "../src/runtime/mailer/lifecycle/lifecycle-senders.js";
 import "../src/runtime/mailer/lifecycle/welcome-content.js";
 import "../src/runtime/mailer/lifecycle/welcome-sender.js";
 import "../src/runtime/mailer/mailer-runtime.js";
-import "../src/runtime/personalization/personalization-runtime.js";
 import "../src/runtime/quality-score.js";
-import "../src/runtime/reply/reply-handler-runtime.js";
-import "../src/runtime/reply/command-router.js";
-import "../src/runtime/reply/intent-service.js";
-import "../src/runtime/reply/onboarding/keys.js";
-import "../src/runtime/reply/onboarding/link-verification-flow.js";
-import "../src/runtime/reply/onboarding/messages.js";
-import "../src/runtime/reply/onboarding-service-runtime.js";
-import "../src/runtime/reply/reply-logging-runtime.js";
-import "../src/runtime/reply/reply-session-runtime.js";
-import "../src/runtime/reply/transport.js";
 import "../src/runtime/store.js";
-import "../src/sandbox-pipeline-runtime.js";
 import "../web/admin-auth.js";
 import "../web/preferences-runtime.js";
 import "../web/preferences-state-runtime.js";
@@ -47,6 +35,5 @@ import "../web/services/admin-ops-scheduler.js";
 import "../web/services/admin-ops-utils.js";
 import "../web/services/archive-scoring.js";
 import "../web/services/delivery-schedule.js";
-import "../web/services/reengagement-state.js";
 import "../web/services/request-metadata.js";
 import "../web/services/web-rate-limit.js";

@@ -8,9 +8,7 @@ function selectDigestItems(allItems, opts = {}) {
     maxItems: opts.maxItems,
     perTagCap: opts.maxItemsPerTag,
     perSourceCap: opts.maxItemsPerSourceDomain,
-    customTagOrder: opts.customTags || [],
     tagPriority: opts.tagPriority,
-    maxCustomItems: opts.maxCustomItems,
   });
   return selectItemsByPolicy(allItems, policy, {
     normalizeUrl: opts.normalizeUrl,
@@ -25,9 +23,7 @@ function selectDigestItemsDetailed(allItems, opts = {}) {
     maxItems: opts.maxItems,
     perTagCap: opts.maxItemsPerTag,
     perSourceCap: opts.maxItemsPerSourceDomain,
-    customTagOrder: opts.customTags || [],
     tagPriority: opts.tagPriority,
-    maxCustomItems: opts.maxCustomItems,
   });
   return selectItemsByPolicyDetailed(allItems, policy, {
     normalizeUrl: opts.normalizeUrl,

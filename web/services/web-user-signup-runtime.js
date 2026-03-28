@@ -20,10 +20,8 @@ function createSignupHandler({
   writeUser,
   sendReferralThankYou,
   sendWelcomeEmail,
-  queueDigestTrigger,
   resolveBaseUrl,
   DEFAULT_TOPICS,
-  MAX_CUSTOM_KEYWORDS,
   allowExampleEmails,
 }) {
   return async function handleSignup(ctxOrReq, maybeRes) {
@@ -35,7 +33,6 @@ function createSignupHandler({
       body,
       normalizeReferralToken,
       defaultTopics: DEFAULT_TOPICS,
-      maxCustomKeywords: MAX_CUSTOM_KEYWORDS,
       allowExampleEmails,
     });
     if (!parsedInput.ok) return json(res, { error: parsedInput.error }, parsedInput.status);
@@ -49,7 +46,6 @@ function createSignupHandler({
     const conflict = findSignupConflict({
       users,
       emailNorm: input.emailNorm,
-      telegramClean: input.telegramClean,
     });
     if (conflict) return json(res, { error: conflict.error }, conflict.status);
 
@@ -66,7 +62,6 @@ function createSignupHandler({
       chatId,
       input,
       token: generateToken(),
-      defaultTopics: DEFAULT_TOPICS,
       signupReferralSource,
     });
 
@@ -78,12 +73,9 @@ function createSignupHandler({
 
     const sideEffectFailures = await runSignupSideEffects({
       user,
-      chatId,
       referrerUser,
       sendReferralThankYou,
       sendWelcomeEmail,
-      queueDigestTrigger,
-      resolveBaseUrl,
     });
     if (sideEffectFailures.length && process.env.DEBUG_WEB_SERVER === "1") {
       console.warn(`[signup] side effects degraded for ${chatId}:`, sideEffectFailures);

@@ -86,9 +86,6 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(ranked.userItems.length, 1);
   assert.strictEqual(ranked.userItems[0].tag, "AI×TECH");
   assert.strictEqual(ranked.diagnostics.requested_count, 5);
-  assert.ok(logs.some((line) => line.includes("[pre-sort]")));
-  assert.ok(logs.some((line) => line.includes("[post-sort]")));
-
   let emergencyScoreCalls = 0;
   const emergencyRuntime = createDigestOrchestratorDeliveryRankingRuntime({
     CONFIG: {
@@ -192,10 +189,11 @@ assertModuleExports(() => runtime, TARGET_REL);
     deliveryMode: "scheduled",
   });
 
-  assert.strictEqual(customPrecisionOut.userItems.length, 1);
+  assert.strictEqual(customPrecisionOut.userItems.length, 2);
   assert.strictEqual(customPrecisionOut.userItems[0].tag, "NVIDIA");
-  assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_mode, true);
-  assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_applied, true);
+  assert.strictEqual(customPrecisionOut.userItems[1].tag, "STRATEGY");
+  assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_mode, false);
+  assert.strictEqual(customPrecisionOut.diagnostics.custom_precision_applied, false);
   assert.strictEqual(customPrecisionOut.diagnostics.short_digest_accepted, true);
 
   const strictCustomRuntime = createDigestOrchestratorDeliveryRankingRuntime({
@@ -230,7 +228,7 @@ assertModuleExports(() => runtime, TARGET_REL);
     reserveCustomKeywordSlot: (items) => items,
   });
 
-  assert.throws(() => strictCustomRuntime.rankAndSuppressUserItems({
+  const strictCustomOut = strictCustomRuntime.rankAndSuppressUserItems({
     user: {
       chatId: "strict-custom",
       topics: ["AI×TECH", "custom_doge"],
@@ -247,7 +245,10 @@ assertModuleExports(() => runtime, TARGET_REL);
     recentDigestRecords: [],
     nowIso: "2026-03-13T11:00:00.000Z",
     deliveryMode: "scheduled",
-  }), /No deliverable items after emergency fallback/);
+  });
+  assert.strictEqual(strictCustomOut.userItems.length, 1);
+  assert.strictEqual(strictCustomOut.userItems[0].tag, "AI×TECH");
+  assert.strictEqual(strictCustomOut.diagnostics.custom_precision_mode, false);
 
   const repeatLogs = [];
   const freshnessRuntime = createDigestOrchestratorDeliveryRankingRuntime({

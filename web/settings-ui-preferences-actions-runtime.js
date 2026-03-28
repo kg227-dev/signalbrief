@@ -84,14 +84,6 @@
         prefState.setDeliveryTime(delivery.value || "07:00");
       });
     }
-
-    const items = byId("itemsPerDigest");
-    if (items && prefState) {
-      prefState.setItemsPerDigest(items.value || "5");
-      items.addEventListener("change", () => {
-        prefState.setItemsPerDigest(items.value || "5");
-      });
-    }
   }
 
   function renderInitialState({
@@ -104,7 +96,6 @@
     showBanner,
     renderChips,
     prefState,
-    sourceState,
   }) {
     loadingEl.style.display = "none";
     formEl.style.display = "block";
@@ -112,14 +103,12 @@
 
     byId("name").value = user.name || "";
     byId("email").value = user.email || "";
-    byId("telegram").value = user.telegram ? `@${user.telegram}` : "";
 
-    renderChips(user.topics || [], user.topic_weights || {});
+    renderChips(user.topics || []);
 
     const prefs = user.preferences || {};
     initDepthSelector({ prefState, initialDepth: prefs.depth || "headline_plus_why" });
     setSettingsSelectValue({ byId, id: "deliveryTime", value: prefs.delivery_time || "07:00" });
-    setSettingsSelectValue({ byId, id: "itemsPerDigest", value: prefs.items_per_digest ? String(prefs.items_per_digest) : "5" });
     bindPreferenceSelectHandlers({ byId, prefState });
 
     const defaultDays = typeof Prefs.daysFromFrequency === "function"
@@ -132,14 +121,6 @@
       renderDays,
     });
 
-    // Source preferences
-    const SourcesRuntime = globalScope.SignalBriefSettingsUiSourcesRuntime;
-    if (SourcesRuntime && typeof SourcesRuntime.createSourceState === "function") {
-      const ss = sourceState || SourcesRuntime.createSourceState(user.source_preferences || {});
-      SourcesRuntime.initSourcesUi(ss);
-      // Expose on globalScope so settings-runtime.js save handler can read it
-      globalScope._signalBriefSourceState = ss;
-    }
   }
 
   function renderUnsubscribedState(formEl) {

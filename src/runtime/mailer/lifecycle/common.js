@@ -7,10 +7,7 @@ function firstName(value, fallback = "there") {
 function topicLabel(topic) {
   const raw = String(topic || "").trim();
   if (!raw) return "";
-  if (raw.startsWith("custom_")) {
-    return raw.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-  return raw;
+  return raw.replace(/_/g, " ");
 }
 
 function topicListForUser(user) {

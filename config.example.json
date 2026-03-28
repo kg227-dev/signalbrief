@@ -1,5 +1,5 @@
 {
-  "_comment": "SignalBrief MVP config. Copy to config.json and fill in keys. Telegram keys not used for email-only MVP.",
+  "_comment": "SignalBrief reduced-scope MVP config. Copy to config.json and fill in the scheduled email/runtime keys only.",
   "user": {
     "email": "you@example.com",
     "deliveryTime": "07:00",
@@ -9,6 +9,7 @@
     "itemCount": 5,
     "maxItemsPerTag": 2,
     "maxItemsPerSourceDomain": 2,
+    "maxDiscoveryCandidateShare": 0.2,
     "catchupWindowMinutes": 720,
     "crossDayDedupDays": 3,
     "crossDayRepeatPenalty": 0.8,
@@ -20,10 +21,6 @@
       "scheduled": {
         "soft_calls": 14,
         "hard_calls": 21
-      },
-      "on_demand": {
-        "soft_calls": 4,
-        "hard_calls": 7
       }
     },
     "minBaseScoreForFinal": 6.5,
@@ -123,12 +120,6 @@
     "resendApiKey": "",
     "fromEmail": "digest@getsignalbrief.com",
     "fromName": "SignalBrief",
-    "unsubscribeSigningSecret": "",
-    "_comment_deprecated": "Telegram and Google OAuth keys kept here for reference but not used in email-only MVP.",
-    "telegramBotToken": "",
-    "signalBriefBotToken": "",
-    "googleRefreshToken": "",
-    "googleClientId": "",
-    "googleClientSecret": ""
+    "unsubscribeSigningSecret": ""
   }
 }

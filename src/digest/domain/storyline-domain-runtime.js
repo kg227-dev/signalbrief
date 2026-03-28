@@ -5,7 +5,7 @@ const {
   normalizeMatchText,
   normalizeTopicToken,
   topicsRelated,
-} = require("./topic-domain-runtime");
+} = require("../../runtime/topic-normalization-runtime");
 const {
   parseSourceIdentity,
 } = require("./source-domain-runtime");

@@ -19,7 +19,7 @@ const {
   storylineSimilarity,
   normalizeTopicToken,
 } = require("../../src/domains/digest");
-const { loadEngagementEvents } = require("../../src/runtime/engagement-events");
+const { loadEngagementEvents } = require("../../src/runtime/engagement/engagement-events-runtime");
 const { normalizeCanonicalUrl } = require("../../src/runtime/url-normalization-runtime");
 const { mapArchiveItem } = require("../stages/dataset/shared");
 

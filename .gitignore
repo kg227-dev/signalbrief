@@ -14,6 +14,12 @@ config.json
 # OS
 .DS_Store
 
+# Editor swap / backup files
+*.swp
+*.swo
+*.swn
+*~
+
 # Runtime state (workspace-level, not repo-level)
 spend_state.json
 system_state.json

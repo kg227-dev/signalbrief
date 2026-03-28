@@ -2024,8 +2024,8 @@ Continuation items are removed before scoring; only new and follow_up items appe
 
 ### Critical Files for Implementation
 
-- `/Users/kushgulati/Desktop/signalbrief/.claude/worktrees/objective-wilbur/src/digest/domain/fuzzy-dedup-runtime.js` - Add `classifyStoryRelationship`; this is the only new export needed for cross-day classification
-- `/Users/kushgulati/Desktop/signalbrief/.claude/worktrees/objective-wilbur/src/entrypoints/digest-orchestrator-selection-runtime.js` - Central selection pipeline; receives editorial overrides application, story relationship annotation, and scoring config override parameter
-- `/Users/kushgulati/Desktop/signalbrief/.claude/worktrees/objective-wilbur/src/entrypoints/digest-orchestrator-core-runtime.js` - Wires all new modules at run start; where `loadDigestTuning`, `EDITORIAL_OVERRIDES_PATH`, and `classifyStoryRelationship` are imported and passed down
-- `/Users/kushgulati/Desktop/signalbrief/.claude/worktrees/objective-wilbur/web/routes/admin-api.js` - Dispatch table; add two new handler requires and dispatch calls
-- `/Users/kushgulati/Desktop/signalbrief/.claude/worktrees/objective-wilbur/web/server-runtime-admin-registry-runtime.js` - Admin deps registry; add `digestTuningPath`, `editorialOverridesPath`, `todayStr` to the passthrough
+- `/src/digest/domain/fuzzy-dedup-runtime.js` - Add `classifyStoryRelationship`; this is the only new export needed for cross-day classification
+- `/src/entrypoints/digest-orchestrator-selection-runtime.js` - Central selection pipeline; receives editorial overrides application, story relationship annotation, and scoring config override parameter
+- `/src/entrypoints/digest-orchestrator-core-runtime.js` - Wires all new modules at run start; where `loadDigestTuning`, `EDITORIAL_OVERRIDES_PATH`, and `classifyStoryRelationship` are imported and passed down
+- `/web/routes/admin-api.js` - Dispatch table; add two new handler requires and dispatch calls
+- `/web/server-runtime-admin-registry-runtime.js` - Admin deps registry; add `digestTuningPath`, `editorialOverridesPath`, `todayStr` to the passthrough

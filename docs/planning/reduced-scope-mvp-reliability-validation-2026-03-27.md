@@ -11,7 +11,7 @@ This is a fresh standalone validation artifact. It is intentionally separate fro
 
 ## Source of Truth
 
-- [Reduced-Scope MVP](/Users/kushgulati/Desktop/signalbrief/docs/planning/reduced-scope-mvp.md)
+- [Reduced-Scope MVP](/docs/planning/reduced-scope-mvp.md)
 - March 27, 2026 QA audit conclusions embedded at the top of the active reduced-scope MVP doc
 
 ## Validation Boundaries

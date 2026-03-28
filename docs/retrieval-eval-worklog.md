@@ -1864,14 +1864,14 @@ That is the smallest build I think has a real chance of making the standard dige
 
 ### What changed
 
-- Added `buildPreferredSourceFamilyShortlists(...)` in [src/runtime/preferred-source-registry-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/runtime/preferred-source-registry-runtime.js) so the fetch layer can split a topic's preferred domains into:
+- Added `buildPreferredSourceFamilyShortlists(...)` in [src/runtime/preferred-source-registry-runtime.js](/src/runtime/preferred-source-registry-runtime.js) so the fetch layer can split a topic's preferred domains into:
   - `official_domains`
   - `reported_domains`
   - combined topic-aware trusted families
 - Wired the fetch orchestrator to run a **standard-only trusted-source second pass** after the normal preferred + broad phases when a standard topic still looks thin or review-tier-heavy.
 - Injected the new family-shortlist builder plus editorial annotations into:
-  - [src/entrypoints/digest-orchestrator-core-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/entrypoints/digest-orchestrator-core-runtime.js)
-  - [src/eval/retrieval/runner-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/eval/retrieval/runner-runtime.js)
+  - [src/entrypoints/digest-orchestrator-core-runtime.js](/src/entrypoints/digest-orchestrator-core-runtime.js)
+  - [src/eval/retrieval/runner-runtime.js](/src/eval/retrieval/runner-runtime.js)
 - Added contract coverage for:
   - preferred-source family shortlists
   - trusted-source second-pass fetch behavior
@@ -1890,10 +1890,10 @@ This does **not** redesign retrieval yet. It answers whether the current archite
 
 ### Validation
 
-- [tests/contracts/runtime/preferred-source-registry-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/runtime/preferred-source-registry-runtime.test.js)
-- [tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js)
-- [tests/contracts/harness/eval/retrieval/runner-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/harness/eval/retrieval/runner-runtime.test.js)
-- [tests/contracts/harness/digest/runtime/digest-data-fetch-runtime.test.js](/Users/kushgulati/Desktop/signalbrief/tests/contracts/harness/digest/runtime/digest-data-fetch-runtime.test.js)
+- [tests/contracts/runtime/preferred-source-registry-runtime.test.js](/tests/contracts/runtime/preferred-source-registry-runtime.test.js)
+- [tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js](/tests/contracts/entrypoints/digest-orchestrator-fetch-runtime.test.js)
+- [tests/contracts/harness/eval/retrieval/runner-runtime.test.js](/tests/contracts/harness/eval/retrieval/runner-runtime.test.js)
+- [tests/contracts/harness/digest/runtime/digest-data-fetch-runtime.test.js](/tests/contracts/harness/digest/runtime/digest-data-fetch-runtime.test.js)
 - `scripts/test-critical-paths.js`
 
 ### Live eval result
@@ -1983,18 +1983,18 @@ That points to a larger retrieval step next:
 
 ### What changed
 
-- added a built-in standard-topic source map in [src/runtime/preferred-source-registry-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/runtime/preferred-source-registry-runtime.js) so all `17` standard industries/capabilities now have explicit:
+- added a built-in standard-topic source map in [src/runtime/preferred-source-registry-runtime.js](/src/runtime/preferred-source-registry-runtime.js) so all `17` standard industries/capabilities now have explicit:
   - `official` source families
   - `reported` source families
   - built-in aliases that do not depend on the runtime JSON file
-- expanded source recognition in [src/digest/domain/storyline-domain-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/digest/domain/storyline-domain-runtime.js) so standard-category trade and specialist publishers can promote out of `unknown` more reliably
-- added richer query packs for all `17` standard topics in [src/entrypoints/digest-orchestrator-fetch-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/entrypoints/digest-orchestrator-fetch-runtime.js)
-- added a new aggressive eval scenario, `standard_topics`, in [src/eval/retrieval/personas-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/eval/retrieval/personas-runtime.js) so the harness can run:
+- expanded source recognition in [src/digest/domain/storyline-domain-runtime.js](/src/digest/domain/storyline-domain-runtime.js) so standard-category trade and specialist publishers can promote out of `unknown` more reliably
+- added richer query packs for all `17` standard topics in [src/entrypoints/digest-orchestrator-fetch-runtime.js](/src/entrypoints/digest-orchestrator-fetch-runtime.js)
+- added a new aggressive eval scenario, `standard_topics`, in [src/eval/retrieval/personas-runtime.js](/src/eval/retrieval/personas-runtime.js) so the harness can run:
   - industries only
   - capabilities only
   - no mixed personas
   - no custom keywords
-- expanded eval instrumentation in [src/eval/retrieval/runner-runtime.js](/Users/kushgulati/Desktop/signalbrief/src/eval/retrieval/runner-runtime.js) so the run artifact now records:
+- expanded eval instrumentation in [src/eval/retrieval/runner-runtime.js](/src/eval/retrieval/runner-runtime.js) so the run artifact now records:
   - retrieval origin counts:
     - `preferred`
     - `broad`

@@ -6,10 +6,10 @@ Move SignalBrief away from local tarball upload plus remote source builds and to
 
 ## Current State
 
-- CI already runs tests and production deploys from [`.github/workflows/ci.yml`](/Users/kushgulati/Desktop/signalbrief/.github/workflows/ci.yml).
-- Normal production deploys now resolve to a CI-built GHCR image by commit SHA in [`scripts/deploy-production.js`](/Users/kushgulati/Desktop/signalbrief/scripts/deploy-production.js).
+- CI already runs tests and production deploys from [`.github/workflows/ci.yml`](/.github/workflows/ci.yml).
+- Normal production deploys now resolve to a CI-built GHCR image by commit SHA in [`scripts/deploy-production.js`](/scripts/deploy-production.js).
 - The tarball upload plus remote source-build path still exists, but only behind the explicit emergency fallback switch `--emergency-source-build`.
-- All three runtime services share the same Dockerfile in [`Dockerfile`](/Users/kushgulati/Desktop/signalbrief/Dockerfile), so rebuilding `web`, `bot`, and `worker` separately is no longer the default path.
+- All three runtime services share the same Dockerfile in [`Dockerfile`](/Dockerfile), so rebuilding `web`, `bot`, and `worker` separately is no longer the default path.
 
 ## Ideal State
 
@@ -20,8 +20,8 @@ Move SignalBrief away from local tarball upload plus remote source builds and to
 
 ## Phase 1
 
-- [x] Add `SIGNALBRIEF_APP_IMAGE` support to [`docker-compose.yml`](/Users/kushgulati/Desktop/signalbrief/docker-compose.yml)
-- [x] Add image deploy mode to [`scripts/deploy-production.js`](/Users/kushgulati/Desktop/signalbrief/scripts/deploy-production.js)
+- [x] Add `SIGNALBRIEF_APP_IMAGE` support to [`docker-compose.yml`](/docker-compose.yml)
+- [x] Add image deploy mode to [`scripts/deploy-production.js`](/scripts/deploy-production.js)
 - [x] Build and push a single image in CI
 - [x] Switch CI production deploy to image mode
 - [x] Validate a full CI-driven image deploy on the next `main` push
@@ -31,7 +31,7 @@ Move SignalBrief away from local tarball upload plus remote source builds and to
 - [x] Make image deploy the default production path, including local/operator `ops:deploy:prod`
 - [x] Keep source-build deploy as an explicit emergency fallback only
 - [x] Update rollback-by-SHA to deploy commit-tagged images by default
-- [x] Add explicit emergency fallback scripts in [`package.json`](/Users/kushgulati/Desktop/signalbrief/package.json)
+- [x] Add explicit emergency fallback scripts in [`package.json`](/package.json)
 
 ## Follow-ups
 

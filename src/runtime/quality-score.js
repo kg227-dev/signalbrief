@@ -4,6 +4,11 @@ const {
   topicsRelated,
 } = require("./topic-normalization-runtime");
 
+// Alias kept for custom keyword normalization in topicMatchScore.
+// In the reduced-scope MVP custom keywords are disabled (MAX_CUSTOM_KEYWORDS=0),
+// but the code path must not crash if a legacy user record still carries them.
+const normalizeCustomKeyword = normalizeTopicToken;
+
 function mean(values) {
   const nums = (values || []).map(Number).filter(Number.isFinite);
   if (!nums.length) return 0;

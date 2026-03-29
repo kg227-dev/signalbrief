@@ -71,22 +71,40 @@ function buildCacheKey(rawUrl, classifierVersion) {
 /**
  * Read and parse the JSON cache file at filePath.
  * Returns a Map keyed by cache_key.
+ * Prunes expired entries before returning.
  * Returns an empty Map if the file is missing or malformed — never crashes.
+ * Logs a warning (via log or console.warn) if the file is malformed (but not if missing).
+ *
+ * @param {string} filePath
+ * @param {number} [ttlDays=14]
+ * @param {Function|null} [log]   - optional warning logger; falls back to console.warn
  */
-function loadCache(filePath) {
+function loadCache(filePath, ttlDays = 14, log = null) {
+  let raw;
   try {
-    const raw = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw);
-    const cache = new Map();
-    if (parsed && parsed.entries && typeof parsed.entries === "object") {
-      for (const [key, entry] of Object.entries(parsed.entries)) {
-        cache.set(key, entry);
-      }
-    }
-    return cache;
-  } catch (_) {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch (err) {
+    // File not found — silent empty cache
     return new Map();
   }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const warn = typeof log === "function" ? log : console.warn;
+    warn(`[strategic-relevance-cache] malformed cache file at ${filePath}: ${err.message}`);
+    return new Map();
+  }
+
+  const cache = new Map();
+  if (parsed && parsed.entries && typeof parsed.entries === "object") {
+    for (const [key, entry] of Object.entries(parsed.entries)) {
+      cache.set(key, entry);
+    }
+  }
+  pruneExpired(cache, ttlDays);
+  return cache;
 }
 
 // ─── lookupCache ──────────────────────────────────────────────────────────────
@@ -125,17 +143,16 @@ function lookupCache(cache, rawUrl, classifierVersion, { ttlDays }) {
  * @param {Map} cache
  * @param {string} rawUrl
  * @param {string} classifierVersion
- * @param {string} classification  - e.g. "relevant" | "not_relevant"
- * @param {string} reason
- * @param {string|null} filePath   - optional path to flush to disk
+ * @param {{ classification: string, reason: string }} result
  * @param {{ source?: string, topic?: string }} meta
+ * @param {string|null} filePath   - optional path to flush to disk
  */
-function writeEntry(cache, rawUrl, classifierVersion, classification, reason, filePath, meta) {
+function writeEntry(cache, rawUrl, classifierVersion, result, meta, filePath) {
   const key = buildCacheKey(rawUrl, classifierVersion);
   const entry = {
     cache_key: key,
-    classification,
-    reason,
+    classification: result && result.classification != null ? result.classification : null,
+    reason: result && result.reason != null ? result.reason : null,
     classifier_version: classifierVersion,
     classified_at: new Date().toISOString(),
     source: (meta && meta.source != null) ? meta.source : null,
@@ -174,12 +191,13 @@ function pruneExpired(cache, ttlDays = 14) {
  * Atomically write the full cache to disk.
  * Format: { version: 1, flushed_at: ISO, entries: { [cache_key]: entry } }
  * Write to filePath + ".tmp" then fs.renameSync to filePath.
- * Cleans up .tmp on error.
+ * Cleans up .tmp on error. Never throws — logs a warning instead.
  *
  * @param {Map} cache
  * @param {string} filePath
+ * @param {Function|null} [log]   - optional warning logger; falls back to console.warn
  */
-function flushCache(cache, filePath) {
+function flushCache(cache, filePath, log = null) {
   const tmpPath = filePath + ".tmp";
   const entries = {};
   for (const [key, entry] of cache) {
@@ -196,7 +214,8 @@ function flushCache(cache, filePath) {
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore */ }
-    throw err;
+    const warn = typeof log === "function" ? log : console.warn;
+    warn(`[strategic-relevance-cache] failed to flush cache to ${filePath}: ${err.message}`);
   }
 }
 

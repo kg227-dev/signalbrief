@@ -143,14 +143,14 @@ test("loadCache: returns empty Map for JSON with no entries", () => {
 test("writeEntry: adds entry to the Map", () => {
   const cache = new Map();
   const url = "https://example.com/test-article";
-  writeEntry(cache, url, "v1", "relevant", "Strong signal", null, {
+  writeEntry(cache, url, "v1", { classification: "HIGH", reason: "Strong signal" }, {
     source: "reuters.com",
     topic: "TECHNOLOGY",
-  });
+  }, null);
   const key = buildCacheKey(url, "v1");
   assert.ok(cache.has(key), "entry should exist in map");
   const entry = cache.get(key);
-  assert.strictEqual(entry.classification, "relevant");
+  assert.strictEqual(entry.classification, "HIGH");
   assert.strictEqual(entry.reason, "Strong signal");
   assert.strictEqual(entry.classifier_version, "v1");
   assert.ok(entry.classified_at, "classified_at should be set");
@@ -161,7 +161,7 @@ test("writeEntry: adds entry to the Map", () => {
 
 test("writeEntry: classified_at is a valid ISO string", () => {
   const cache = new Map();
-  writeEntry(cache, "https://example.com/a", "v1", "not_relevant", "No signal", null, {});
+  writeEntry(cache, "https://example.com/a", "v1", { classification: "LOW", reason: "No signal" }, {}, null);
   const key = buildCacheKey("https://example.com/a", "v1");
   const entry = cache.get(key);
   assert.ok(!isNaN(Date.parse(entry.classified_at)), "classified_at must be valid ISO");
@@ -171,10 +171,10 @@ test("writeEntry: writes file to disk when filePath provided", () => {
   const tmpPath = path.join(os.tmpdir(), `sb-cache-write-${Date.now()}.json`);
   try {
     const cache = new Map();
-    writeEntry(cache, "https://example.com/written", "v1", "relevant", "Good signal", tmpPath, {
+    writeEntry(cache, "https://example.com/written", "v1", { classification: "HIGH", reason: "Good signal" }, {
       source: "wsj.com",
       topic: "FINANCE",
-    });
+    }, tmpPath);
     assert.ok(fs.existsSync(tmpPath), "cache file should exist on disk");
     const raw = JSON.parse(fs.readFileSync(tmpPath, "utf8"));
     assert.strictEqual(raw.version, 1);
@@ -189,7 +189,7 @@ test("writeEntry: writes file to disk when filePath provided", () => {
 test("writeEntry: no filePath does not crash", () => {
   const cache = new Map();
   // Should not throw
-  writeEntry(cache, "https://example.com/no-file", "v1", "relevant", "reason", null, {});
+  writeEntry(cache, "https://example.com/no-file", "v1", { classification: "MEDIUM", reason: "reason" }, {}, null);
   assert.strictEqual(cache.size, 1);
 });
 
@@ -197,10 +197,10 @@ test("writeEntry: no filePath does not crash", () => {
 
 test("lookupCache: returns entry on cache hit within TTL", () => {
   const cache = new Map();
-  writeEntry(cache, "https://example.com/hit", "v1", "relevant", "reason", null, {});
+  writeEntry(cache, "https://example.com/hit", "v1", { classification: "HIGH", reason: "reason" }, {}, null);
   const result = lookupCache(cache, "https://example.com/hit", "v1", { ttlDays: 14 });
   assert.ok(result !== null, "should return entry on hit");
-  assert.strictEqual(result.classification, "relevant");
+  assert.strictEqual(result.classification, "HIGH");
 });
 
 test("lookupCache: returns null on cache miss (unknown URL)", () => {
@@ -211,7 +211,7 @@ test("lookupCache: returns null on cache miss (unknown URL)", () => {
 
 test("lookupCache: returns null on classifier version mismatch", () => {
   const cache = new Map();
-  writeEntry(cache, "https://example.com/version-test", "v1", "relevant", "reason", null, {});
+  writeEntry(cache, "https://example.com/version-test", "v1", { classification: "HIGH", reason: "reason" }, {}, null);
   const result = lookupCache(cache, "https://example.com/version-test", "v2", { ttlDays: 14 });
   assert.strictEqual(result, null);
 });
@@ -224,7 +224,7 @@ test("lookupCache: returns null for expired entry (beyond TTL)", () => {
   const oldDate = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
   cache.set(key, {
     cache_key: key,
-    classification: "relevant",
+    classification: "HIGH",
     reason: "old",
     classifier_version: "v1",
     classified_at: oldDate,
@@ -243,7 +243,7 @@ test("lookupCache: returns entry exactly at TTL boundary (not expired)", () => {
   const recentDate = new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString();
   cache.set(key, {
     cache_key: key,
-    classification: "relevant",
+    classification: "MEDIUM",
     reason: "fresh-ish",
     classifier_version: "v1",
     classified_at: recentDate,
@@ -265,7 +265,7 @@ test("pruneExpired: removes entries older than TTL", () => {
 
   cache.set(key1, {
     cache_key: key1,
-    classification: "relevant",
+    classification: "LOW",
     reason: "old",
     classifier_version: "v1",
     classified_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
@@ -274,7 +274,7 @@ test("pruneExpired: removes entries older than TTL", () => {
   });
   cache.set(key2, {
     cache_key: key2,
-    classification: "not_relevant",
+    classification: "HIGH",
     reason: "fresh",
     classifier_version: "v1",
     classified_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
@@ -290,7 +290,7 @@ test("pruneExpired: removes entries older than TTL", () => {
 test("pruneExpired: keeps all entries if none are expired", () => {
   const cache = new Map();
   const url = "https://example.com/fresh2";
-  writeEntry(cache, url, "v1", "relevant", "reason", null, {});
+  writeEntry(cache, url, "v1", { classification: "HIGH", reason: "reason" }, {}, null);
   const sizeBefore = cache.size;
   pruneExpired(cache, 14);
   assert.strictEqual(cache.size, sizeBefore);
@@ -309,7 +309,7 @@ test("flushCache: writes file atomically (no leftover .tmp)", () => {
   const tmpFile = tmpPath + ".tmp";
   try {
     const cache = new Map();
-    writeEntry(cache, "https://example.com/flush-test", "v1", "relevant", "reason", null, {});
+    writeEntry(cache, "https://example.com/flush-test", "v1", { classification: "HIGH", reason: "reason" }, {}, null);
     flushCache(cache, tmpPath);
     assert.ok(fs.existsSync(tmpPath), "final file should exist");
     assert.ok(!fs.existsSync(tmpFile), "no leftover .tmp file");
@@ -323,7 +323,7 @@ test("flushCache: written file has correct top-level structure", () => {
   const tmpPath = path.join(os.tmpdir(), `sb-cache-struct-${Date.now()}.json`);
   try {
     const cache = new Map();
-    writeEntry(cache, "https://example.com/struct-test", "v1", "not_relevant", "No signal", null, {});
+    writeEntry(cache, "https://example.com/struct-test", "v1", { classification: "LOW", reason: "No signal" }, {}, null);
     flushCache(cache, tmpPath);
     const raw = JSON.parse(fs.readFileSync(tmpPath, "utf8"));
     assert.strictEqual(raw.version, 1);
@@ -340,10 +340,10 @@ test("flushCache: round-trips with loadCache", () => {
   try {
     const cache = new Map();
     const url = "https://example.com/roundtrip";
-    writeEntry(cache, url, "v1", "relevant", "Round-trip test", null, {
+    writeEntry(cache, url, "v1", { classification: "HIGH", reason: "Round-trip test" }, {
       source: "ft.com",
       topic: "FINANCE",
-    });
+    }, null);
     flushCache(cache, tmpPath);
 
     const loaded = loadCache(tmpPath);
@@ -353,7 +353,7 @@ test("flushCache: round-trips with loadCache", () => {
     const key = buildCacheKey(url, "v1");
     assert.ok(loaded.has(key), "loaded cache should contain the written entry");
     const entry = loaded.get(key);
-    assert.strictEqual(entry.classification, "relevant");
+    assert.strictEqual(entry.classification, "HIGH");
     assert.strictEqual(entry.reason, "Round-trip test");
     assert.strictEqual(entry.source, "ft.com");
     assert.strictEqual(entry.topic, "FINANCE");
@@ -366,13 +366,69 @@ test("flushCache: multiple entries round-trip correctly", () => {
   const tmpPath = path.join(os.tmpdir(), `sb-cache-multi-${Date.now()}.json`);
   try {
     const cache = new Map();
-    writeEntry(cache, "https://example.com/article-1", "v1", "relevant", "r1", null, { source: "wsj.com", topic: "FINANCE" });
-    writeEntry(cache, "https://example.com/article-2", "v1", "not_relevant", "r2", null, { source: "buzzfeed.com", topic: "TECHNOLOGY" });
-    writeEntry(cache, "https://example.com/article-3", "v2", "relevant", "r3", null, { source: "ft.com", topic: "HEALTHCARE" });
+    writeEntry(cache, "https://example.com/article-1", "v1", { classification: "HIGH", reason: "r1" }, { source: "wsj.com", topic: "FINANCE" }, null);
+    writeEntry(cache, "https://example.com/article-2", "v1", { classification: "LOW", reason: "r2" }, { source: "buzzfeed.com", topic: "TECHNOLOGY" }, null);
+    writeEntry(cache, "https://example.com/article-3", "v2", { classification: "MEDIUM", reason: "r3" }, { source: "ft.com", topic: "HEALTHCARE" }, null);
     flushCache(cache, tmpPath);
 
     const loaded = loadCache(tmpPath);
     assert.strictEqual(loaded.size, 3);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+});
+
+// ─── loadCache pruning and warning ───────────────────────────────────────────
+
+test("loadCache: prunes expired entries at load time", () => {
+  const tmpPath = path.join(os.tmpdir(), `sb-cache-prune-load-${Date.now()}.json`);
+  try {
+    const urlExpired = "https://example.com/expired-on-load";
+    const urlFresh = "https://example.com/fresh-on-load";
+    const keyExpired = buildCacheKey(urlExpired, "v1");
+    const keyFresh = buildCacheKey(urlFresh, "v1");
+
+    const entries = {};
+    entries[keyExpired] = {
+      cache_key: keyExpired,
+      classification: "HIGH",
+      reason: "old",
+      classifier_version: "v1",
+      classified_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+      source: null,
+      topic: null,
+    };
+    entries[keyFresh] = {
+      cache_key: keyFresh,
+      classification: "MEDIUM",
+      reason: "fresh",
+      classifier_version: "v1",
+      classified_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      source: null,
+      topic: null,
+    };
+
+    fs.writeFileSync(tmpPath, JSON.stringify({ version: 1, flushed_at: new Date().toISOString(), entries }), "utf8");
+
+    const loaded = loadCache(tmpPath, 14);
+    assert.ok(!loaded.has(keyExpired), "expired entry should be pruned on load");
+    assert.ok(loaded.has(keyFresh), "fresh entry should remain after load");
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+});
+
+test("loadCache: calls log on malformed cache file", () => {
+  const tmpPath = path.join(os.tmpdir(), `sb-cache-malformed-log-${Date.now()}.json`);
+  fs.writeFileSync(tmpPath, "{{not valid json}}", "utf8");
+  let warnCalled = false;
+  let warnMsg = "";
+  const logSpy = (msg) => { warnCalled = true; warnMsg = msg; };
+  try {
+    const cache = loadCache(tmpPath, 14, logSpy);
+    assert.ok(cache instanceof Map, "should return empty Map");
+    assert.strictEqual(cache.size, 0, "Map should be empty");
+    assert.ok(warnCalled, "log spy should have been called on malformed file");
   } finally {
     if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
   }

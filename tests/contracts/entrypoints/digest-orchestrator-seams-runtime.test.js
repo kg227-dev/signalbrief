@@ -128,6 +128,7 @@ const { createDigestOrchestratorDeliveryRankingRuntime } = require(DELIVERY_RANK
     runMode: "scheduled",
     dueUsersCount: 1,
     standardFetchCallsPlanned: fetchOut.standardFetchCallsPlanned,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
   });
   assert.strictEqual(selectionOut.selected.length, 1, "selection seam should trim to selected items");
 

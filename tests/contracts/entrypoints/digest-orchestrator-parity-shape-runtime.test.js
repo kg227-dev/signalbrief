@@ -123,6 +123,7 @@ function sortedKeys(obj) {
     runMode: "scheduled",
     dueUsersCount: 1,
     standardFetchCallsPlanned: fetchOut.standardFetchCallsPlanned,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
   });
   assert.deepStrictEqual(
     sortedKeys(selectionOut),

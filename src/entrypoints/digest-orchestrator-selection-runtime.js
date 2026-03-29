@@ -9,6 +9,10 @@ const {
   assignCanonicalTopic: assignCanonicalTopicDefault,
   scoreBestFitTopicTag: scoreBestFitTopicTagDefault,
 } = require("../runtime/standard-topic-broker-runtime");
+const { classifyCandidates } = require("../domains/classification/strategic-relevance-classifier");
+const { filterLowRelevance, boostHighRelevance } = require("../domains/classification/strategic-relevance-scoring");
+const { loadCache } = require("../domains/classification/strategic-relevance-cache");
+const path = require("path");
 
 function computeItemAgeHours(item, nowMs) {
   const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
@@ -291,6 +295,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     buildStorylineCandidates,
     assignCanonicalTopic,
     scoreBestFitTopicTag,
+    httpsPostWithRetry,
   } = deps;
 
   async function selectForEnrichment(params) {
@@ -487,7 +492,34 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       }
     }
 
-    const scoringInput = annotatedItems;
+    // --- Strategic relevance classification (feature-gated) ---
+    let classificationDiagnostics = null;
+    let filterDiagnostics = null;
+    let boostDiagnostics = null;
+    const classificationEnabled = CONFIG.digest?.classification?.enabled === true;
+    let scoringInput = annotatedItems;
+
+    if (classificationEnabled) {
+      const cachePath = path.resolve(process.cwd(), "data", "strategic-classification-cache.json");
+      const cache = loadCache(cachePath);
+      const { candidates: classified, diagnostics: classRunDiag } = await classifyCandidates(
+        annotatedItems,
+        {
+          cache,
+          config: CONFIG,
+          log,
+          httpsPost: httpsPostWithRetry,
+          cachePath,
+        }
+      );
+      classificationDiagnostics = classRunDiag;
+
+      const { filtered, dropped, diagnostics: filterDiag } = filterLowRelevance(classified, { log });
+      filterDiagnostics = filterDiag;
+      scoringInput = filtered;
+
+      log(`Strategic classifier: ${classRunDiag.total_classified} classified (${classRunDiag.cache_hits} cached, ${classRunDiag.model_calls} model), ${dropped.length} LOW dropped, ${filtered.length} remain`);
+    }
 
     // MVP transparent scoring: score every candidate before selection.
     // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
@@ -498,10 +530,23 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       : (CONFIG.digest?.scoring || {});
     const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
     const scoredItems = scoreCandidates(scoringInput, { scoringConfig, nowMs });
-    if (scoredItems.length > 0) {
-      const topScore = scoredItems[0]?._score?.toFixed(3) ?? "?";
-      const bottomScore = scoredItems[scoredItems.length - 1]?._score?.toFixed(3) ?? "?";
-      log(`Scored ${scoredItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
+
+    // --- Post-score strategic boost ---
+    let postScoreItems = scoredItems;
+    if (classificationEnabled) {
+      const boostAmount = CONFIG.digest?.classification?.boost_amount ?? 0.12;
+      const boostInThinPool = CONFIG.digest?.classification?.boost_in_thin_pool ?? true;
+      const { boosted, diagnostics: bDiag } = boostHighRelevance(scoredItems, { boostAmount, boostInThinPool, log });
+      boostDiagnostics = bDiag;
+      // Re-sort after boost so selection sees correct order
+      boosted.sort((a, b) => (b._score || 0) - (a._score || 0));
+      postScoreItems = boosted;
+    }
+
+    if (postScoreItems.length > 0) {
+      const topScore = postScoreItems[0]?._score?.toFixed(3) ?? "?";
+      const bottomScore = postScoreItems[postScoreItems.length - 1]?._score?.toFixed(3) ?? "?";
+      log(`Scored ${postScoreItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
     }
 
     // MVP per-topic selection: exactly 5 items per topic when the pool supports it.
@@ -514,7 +559,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
     // Group scored+sorted candidates by topic tag.
     const byTag = new Map();
-    for (const item of scoredItems) {
+    for (const item of postScoreItems) {
       const topicTag = String(item?.tag || "").trim().toUpperCase() || "__untagged__";
       if (!byTag.has(topicTag)) byTag.set(topicTag, []);
       byTag.get(topicTag).push(item);
@@ -627,9 +672,14 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         candidate_pool_after_history: dedupedItems.length,
         candidate_pool_after_story_relationship: annotatedItems.length,
         candidate_pool_after_dedup: dedupedItems.length,
+        classification_enabled: classificationEnabled,
+        classification_run: classificationDiagnostics,
+        classification_summary: filterDiagnostics,
+        classification_boost: boostDiagnostics,
+        candidate_pool_after_classification: classificationEnabled ? scoringInput.length : null,
         storyline_cluster_removed_count: storylineClusterRemovedCount,
         best_fit_topic_reassigned_count: bestFitTopicReassignedCount,
-        candidate_pool_scored: scoredItems.length,
+        candidate_pool_scored: postScoreItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
         stale_removed_count: Math.max(0, Number(staleRemoved || 0)),
         history_suppressed_count: Math.max(0, Number(historyResult.suppressedCount || 0)),
@@ -641,10 +691,10 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         editorial_domain_suppressed_count: suppressedCount,
         editorial_pin_count: injectedPinCount,
         discovery_capped_count: totalDiscoveryCapped,
-        score_top: scoredItems[0]?._score ?? null,
-        score_bottom: scoredItems.length > 0 ? scoredItems[scoredItems.length - 1]?._score ?? null : null,
+        score_top: postScoreItems[0]?._score ?? null,
+        score_bottom: postScoreItems.length > 0 ? postScoreItems[postScoreItems.length - 1]?._score ?? null : null,
         selection_rejection_counts: selectionRejectionCounts,
-        scored_candidates: scoredItems.map((item) => toSelectionAuditCandidate(item)),
+        scored_candidates: postScoreItems.map((item) => toSelectionAuditCandidate(item)),
         topic_selection_audit: topicSelectionAudit,
       },
     };

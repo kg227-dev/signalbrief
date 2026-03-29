@@ -855,6 +855,30 @@ function buildUrlExclusionMatcher(patterns = []) {
   return buildPatternMatcher(patterns, false);
 }
 
+// Headline patterns that indicate non-news content (buying guides, coupon pages,
+// deal roundups, index/listing pages). Checked for publisher_feed items only.
+const NON_NEWS_HEADLINE_PATTERNS = [
+  /promo\s*codes?/i,
+  /discount\s*codes?/i,
+  /coupon\s*codes?/i,
+  /\bbuying\s*guide\b/i,
+  /\bprice\s*drop\b/i,
+  /\bspring\s*sale\b/i,
+  /\bblack\s*friday\b/i,
+  /\bcyber\s*monday\b/i,
+  /^best\s+.{3,}\s+(?:of|in|\()\s*202\d/i,
+  /\bdeals?\b.{0,20}\b(?:are|we|you|actually|:)/i,
+  /\bsave\s+(?:on|\$|\d+%)/i,
+  /^what.s\s+new\s+(?:for|related\s+to)\b/i,
+  /^novel\s+drug\s+approvals?\s+for\s+\d{4}/i,
+];
+
+function isNonNewsHeadline(headline) {
+  const text = String(headline || "").trim();
+  if (!text) return false;
+  return NON_NEWS_HEADLINE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 function officialListingUrlLooksArticleLike(url) {
   try {
     const parsed = new URL(String(url || "").trim());
@@ -958,6 +982,10 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       continue;
     }
     if (String(source?.lane || "").trim() === "official" && !matchesTitle(headline)) {
+      diagnostics.validation_drop_count += 1;
+      continue;
+    }
+    if (String(source?.lane || "").trim() === "publisher_feed" && isNonNewsHeadline(headline)) {
       diagnostics.validation_drop_count += 1;
       continue;
     }

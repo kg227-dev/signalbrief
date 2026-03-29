@@ -114,7 +114,7 @@ All 7 topics delivered 5 items. Two topics failed depth gate.
 
 ---
 
-## Day 2 — 2026-03-29 (Saturday)
+## Day 2 — 2026-03-29 (Sunday)
 
 ### What shipped
 

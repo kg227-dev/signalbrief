@@ -554,9 +554,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Wired — broad tech/culture coverage.",
+      "_comment": "Wired — broad tech/culture coverage. Disabled: feed dominated by consumer gadget reviews, buying guides, and coupon pages — not enterprise/strategic tech. Pollutes Technology selection.",
       "id": "technology_wired",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1113,9 +1113,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Progressive Grocer — grocery retail strategy, store operations, supplier news.",
+      "_comment": "Progressive Grocer — grocery retail strategy, store operations, supplier news. Disabled: 403 on all paths as of 2026-03-29.",
       "id": "consumer_progressive_grocer",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1284,7 +1284,8 @@
       ],
       "endpoint": "https://www.freightwaves.com/news/rss",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true
     },
     {
       "_comment": "Defense News — defense contracting, DoD budget, aerospace/defense procurement.",
@@ -1341,12 +1342,13 @@
       ],
       "endpoint": "https://www.constructiondive.com/feeds/news/",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true
     },
     {
       "_comment": "Logistics Management — supply chain, warehousing, transportation, 3PL strategy.",
       "id": "industrials_logistics_management",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1365,7 +1367,7 @@
     {
       "_comment": "SAE International — automotive, aerospace, and commercial vehicle engineering standards and technical news.",
       "id": "industrials_sae",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [

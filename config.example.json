@@ -42,6 +42,14 @@
         "3": 0.4,
         "unknown": 0.2
       }
+    },
+    "classification": {
+      "enabled": false,
+      "concurrency": 8,
+      "boost_amount": 0.12,
+      "cache_ttl_days": 14,
+      "boost_in_thin_pool": true,
+      "model": "claude-haiku-4-5-20241022"
     }
   },
   "topics": [

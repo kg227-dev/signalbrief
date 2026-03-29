@@ -139,6 +139,16 @@ function buildTopicReadiness(auditDocs = [], sourceHealth = aggregateSourceHealt
           if (tier != null && tier <= 2) stats.trusted_selected_count += 1;
         }
       }
+      // Classification diagnostics (from strategic relevance classifier)
+      const classificationSummary = doc?.selectionDiagnostics?.classification_summary || {};
+      const topicClassification = classificationSummary[tag] || {};
+      if (topicClassification.total_candidates) {
+        stats.classification_high = (stats.classification_high || 0) + (topicClassification.count_high || 0);
+        stats.classification_medium = (stats.classification_medium || 0) + (topicClassification.count_medium || 0);
+        stats.classification_low = (stats.classification_low || 0) + (topicClassification.count_low || 0);
+        stats.classification_low_dropped = (stats.classification_low_dropped || 0) + (topicClassification.low_dropped || 0);
+        stats.classification_thin_pool_days = (stats.classification_thin_pool_days || 0) + (topicClassification.thin_pool_mode ? 1 : 0);
+      }
     }
   }
 
@@ -219,6 +229,11 @@ function buildTopicReadiness(auditDocs = [], sourceHealth = aggregateSourceHealt
       provider_limited_days: providerLimitedDays,
       missed_story_flag_count: stats.missed_story_flag_count,
       lane_totals: { ...stats.lane_totals },
+      classification_high: stats.classification_high || 0,
+      classification_medium: stats.classification_medium || 0,
+      classification_low: stats.classification_low || 0,
+      classification_low_dropped: stats.classification_low_dropped || 0,
+      classification_thin_pool_days: stats.classification_thin_pool_days || 0,
       source_ids: Array.isArray(health?.source_ids) ? health.source_ids : [],
       source_domains: Array.isArray(health?.source_domains) ? health.source_domains : [],
       concerns,

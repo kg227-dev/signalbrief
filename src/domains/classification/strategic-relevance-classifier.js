@@ -47,12 +47,10 @@ function buildClassificationPrompt(candidate) {
     "LOW — Background noise. Routine updates, minor announcements, opinion pieces, or stories",
     "      that lack strategic significance for a senior executive.",
     "",
-    "Classification rules:",
-    "- Focus on the content and substance of the article, not the source.",
-    "- Be conservative: only mark HIGH if it has clear, immediate strategic impact.",
-    "- Return ONLY valid JSON. No prose, no markdown, no explanation outside the JSON.",
+    "Focus on content, not source reputation. A prestigious source can publish non-strategic content.",
     "",
-    'Respond with exactly this JSON format: {"classification": "HIGH"|"MEDIUM"|"LOW", "reason": "<15 words or fewer>"}',
+    'Return JSON only:',
+    '{"classification": "HIGH | MEDIUM | LOW", "reason": "max 15 words explaining why"}',
   ].join("\n");
 
   const user = [
@@ -131,7 +129,7 @@ async function classifySingle(candidate, opts) {
     headers: {
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+      "Content-Type": "application/json",
     },
   };
 
@@ -143,6 +141,10 @@ async function classifySingle(candidate, opts) {
   try {
     res = await httpsPost(requestOpts, JSON.stringify(requestBody));
   } catch (err) {
+    return { ...FALLBACK_RESULT, _fallback_type: "network_error" };
+  }
+
+  if (res.status >= 400) {
     return { ...FALLBACK_RESULT, _fallback_type: "network_error" };
   }
 
@@ -333,11 +335,6 @@ async function classifyCandidates(candidates, opts) {
 
 module.exports = {
   CLASSIFIER_VERSION,
-  VALID_LABELS,
-  FALLBACK_RESULT,
-  DEFAULT_CONCURRENCY,
-  DEFAULT_MODEL,
-  DEFAULT_MAX_TOKENS,
   buildClassificationPrompt,
   normalizeClassificationResult,
   classifySingle,

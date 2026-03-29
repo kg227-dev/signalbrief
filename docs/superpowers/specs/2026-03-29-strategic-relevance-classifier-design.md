@@ -121,11 +121,39 @@ src/domains/classification/
 
 1. Call `buildClassificationPrompt(candidate)` using title, snippet (if available), source, topic.
 2. HTTPS POST to Anthropic Messages API via `httpsPostWithRetry`.
-3. Parse JSON from response.
-4. Call `normalizeClassificationResult(raw)` to validate.
-5. On any failure (network, parse, malformed): return `{ classification: "MEDIUM", reason: "Classifier fallback" }`.
+3. Extract text from response at `res.body.content[0].text`.
+4. `JSON.parse()` the extracted text.
+5. Call `normalizeClassificationResult(parsed)` to validate.
+6. On any failure (network, parse, malformed): return `{ classification: "MEDIUM", reason: "Classifier fallback" }`.
 
 **Missing snippet handling:** If snippet is absent, classify using title + source + topic only. Never drop a candidate for missing snippet.
+
+### Anthropic Messages API request shape
+
+```javascript
+{
+  method: "POST",
+  hostname: "api.anthropic.com",
+  path: "/v1/messages",
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": CONFIG.keys.anthropic,
+    "anthropic-version": "2023-06-01"
+  },
+  body: {
+    model: "claude-haiku-4-5-20241022",   // or CONFIG.digest.classification.model
+    max_tokens: 100,
+    system: "<system prompt from buildClassificationPrompt>",
+    messages: [
+      { role: "user", content: "<user message from buildClassificationPrompt>" }
+    ]
+  }
+}
+```
+
+**Response extraction:** `res.body.content[0].text` → `JSON.parse()` → `normalizeClassificationResult()`.
+
+**`max_tokens: 100`** — sufficient for the small JSON output (`{"classification":"HIGH","reason":"..."}` is ~20–60 tokens). Prevents runaway output and reduces cost/latency.
 
 ### `buildClassificationPrompt()` — draft
 
@@ -168,7 +196,7 @@ Topic: {topic tag}
 
 - Default: 8 concurrent Haiku calls for cache misses.
 - Configurable via `CONFIG.digest.classification.concurrency`.
-- Uses the existing `runWithConcurrency` pattern from the fetch runtime.
+- Implements its own simple concurrency pool following the same pattern as the fetch runtime's `runWithConcurrency` (Promise.all with N workers consuming from a shared cursor). Does NOT import the fetch runtime's function directly — it is tightly coupled to the fetch batch system and budget tracker.
 
 ---
 
@@ -218,7 +246,7 @@ Write to `data/strategic-classification-cache.json.tmp`, then rename to `data/st
 
 ### Write strategy
 
-Write-through per entry for MVP. The `flushCache` export supports switching to buffered end-of-run writes if per-entry writes become noisy at scale.
+For MVP, `classifyCandidates()` collects all new entries in memory during concurrent classification, then calls `flushCache()` once after all misses are resolved. This avoids 8 near-simultaneous file writes from the concurrency pool. The per-entry `writeEntry()` export remains available for single-item reclassification scenarios or future use.
 
 ### Malformed cache file
 
@@ -242,7 +270,7 @@ Groups candidates by `tag`, then for each topic:
 | Topic candidate count | Behavior                                          |
 |-----------------------|---------------------------------------------------|
 | >= 20                 | Drop all LOW                                      |
-| 15 - 19              | Drop LOW unless it would leave < 5 for that topic |
+| >= 15 and <= 19      | Drop LOW unless it would leave < 5 for that topic |
 | < 15                  | Keep all LOW (thin-pool mode)                     |
 
 Returns `{ filtered, dropped, diagnostics }`.
@@ -343,7 +371,7 @@ strategic_relevance_applied:  true
 _score:                       number [0, 1]  (final, after boost)
 _score_before_strategic:      number [0, 1]  (before boost)
 _strategic_boost_applied:     number          (0 or boost amount)
-_score_final:                 number [0, 1]  (same as _score, explicit alias)
+_score_final:                 number [0, 1]  (explicit final score after all adjustments)
 _score_components:            { freshness, source_tier, lane_bonus, novelty }
 _score_reasons:               string[]
 ```
@@ -351,7 +379,7 @@ _score_reasons:               string[]
 ### Feature gate
 
 - `CONFIG.digest.classification.enabled` — default `false`. Set to `true` to activate.
-- When disabled, the pipeline skips classification entirely — no API calls, no filtering, no boost. Candidates pass through unchanged.
+- When disabled, the pipeline skips classification entirely — no API calls, no filtering, no boost. Candidates pass through unchanged. The `strategic_relevance`, `_score_before_strategic`, `_strategic_boost_applied`, and `_score_final` fields will NOT be present on candidates. Downstream code must tolerate their absence (use optional chaining or explicit checks).
 
 ### Existing `isNonNewsHeadline()` relationship
 
@@ -393,7 +421,7 @@ Extend the existing audit route (`web/routes/admin-api-digest-audit-runtime.js`)
   "total_classified": 87,
   "cache_hits": 62,
   "model_calls": 23,
-  "fallbacks": 2,
+  "fallbacks": 4,
   "errors": 2,
   "high": 31,
   "medium": 44,
@@ -402,6 +430,12 @@ Extend the existing audit route (`web/routes/admin-api-digest-audit-runtime.js`)
   "classifier_version": "1.0"
 }
 ```
+
+**`errors` vs `fallbacks` distinction:**
+
+- `fallbacks` = total candidates that received the MEDIUM fallback instead of a model classification. This is the broader category. Includes network/HTTP errors, malformed JSON responses, and unrecognized classification values.
+- `errors` = subset of fallbacks caused specifically by network or HTTP failures (timeout, 5xx, connection refused). Does not include parse failures or unrecognized labels.
+- Invariant: `errors <= fallbacks`.
 
 ### Per-candidate data
 
@@ -441,7 +475,7 @@ Every candidate in the scored candidate list carries `strategic_relevance`, `str
   "total": 87,
   "cache_hits": 62,
   "model_calls": 23,
-  "fallbacks": 2,
+  "fallbacks": 4,
   "errors": 2,
   "high": 31,
   "medium": 44,
@@ -451,7 +485,9 @@ Every candidate in the scored candidate list carries `strategic_relevance`, `str
 }
 ```
 
-The `errors` field tracks count of Haiku calls that failed and fell back to MEDIUM. Logged at warn level individually, counted in the run summary.
+- `fallbacks`: total candidates that received MEDIUM fallback (network errors + parse failures + unrecognized labels)
+- `errors`: subset of fallbacks caused by network/HTTP failures only
+- Individual errors logged at warn level; run summary logged at info level.
 
 ---
 
@@ -476,9 +512,16 @@ All configuration under `CONFIG.digest.classification`:
 | `boost_amount`       | number  | `0.12`  | Score boost for HIGH items (capped at 1.0)   |
 | `cache_ttl_days`     | number  | `14`    | Days before cache entries expire             |
 | `boost_in_thin_pool` | boolean | `true`  | Whether HIGH boost applies in thin-pool mode |
-| `model`              | string  | `"claude-haiku-4-20250514"` | Haiku model ID        |
+| `model`              | string  | `"claude-haiku-4-5-20241022"` | Haiku model ID (pinned for classification stability) |
 
 API key: `CONFIG.keys.anthropic` (already loaded via `SIGNALBRIEF_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY`).
+
+### Config integration
+
+- Add `classification` sub-object to `config.json` and `config.example.json` under `digest`.
+- All values use defensive access with defaults: `CONFIG.digest?.classification?.enabled ?? false`, etc.
+- No config schema validation required for MVP — the classifier module applies defaults internally for any missing keys.
+- The `classification` block is entirely optional in config; absence means the feature is off.
 
 ---
 
@@ -570,6 +613,11 @@ API key: `CONFIG.keys.anthropic` (already loaded via `SIGNALBRIEF_ANTHROPIC_API_
 - Network timeout → MEDIUM fallback
 - API key missing → all MEDIUM fallback, warning logged
 - Empty candidate list → no-op, empty diagnostics
+
+### Feature gate
+
+- `enabled: false` → candidates pass through with no classification fields, no API calls, no filtering, no boost
+- `enabled: true` with missing API key → all MEDIUM fallback, pipeline continues
 
 ### Admin payload
 

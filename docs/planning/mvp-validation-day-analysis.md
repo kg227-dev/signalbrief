@@ -114,9 +114,109 @@ All 7 topics delivered 5 items. Two topics failed depth gate.
 
 ---
 
-## Day 2 — 2026-03-29
+## Day 2 — 2026-03-29 (Saturday)
 
-_Pending. Expected improvements: Consumer broker sources online, Healthcare URLs fixed, 3 fewer source failures._
+### What shipped
+
+| Topic | Items | Candidates | Depth ≥15 | Trusted T1/2 | Strongest source |
+|-------|-------|-----------|-----------|---------------|-----------------|
+| Technology | 5/5 | 82 | YES | 3/5 (60%) | wired.com (43 retained) |
+| Financial Services | 5/5 | 16 | YES | 4/5 (80%) | americanbanker.com (10 retained) |
+| Consumer & Retail | 5/5 | 18 | YES | 2/5 (40%) | retaildive.com (retained) |
+| Life Sciences | 5/5 | 16 | YES | 2/5 (40%) | endpoints.news (20 retained) |
+| Healthcare | **4/5** | 12 | NO (12) | 2/4 (50%) | modernhealthcare.com + statnews.com |
+| Energy | **4/5** | 11 | NO (11) | 1/4 (25%) | cleantechnica.com (27 retained, most deduped) |
+| Industrials | **3/5** | 6 | NO (6) | 1/3 (33%) | supplychaindive.com (7 retained) |
+
+4/7 topics delivered 5 items. 3 topics underfilled. **First Red day for delivery.**
+
+### What failed
+
+1. **Weekend publishing volume collapse** — Saturday is structurally thin. Sources returned items but 70%+ were >48h stale. Examples:
+   - `energy_canary`: 100 parsed → 96 stale → 4 retained
+   - `healthcare_fiercehealthcare`: 25 parsed → 18 stale → 7 retained
+   - `life_fiercepharma`: 25 parsed → 19 stale → 6 retained
+   - Total stale across all sources: ~700+ items filtered
+
+2. **Industrials FreightWaves feed broken** — 56 items parsed, all 56 classified `non_article` (likely podcast/video content). ConstructionDive same: 10/10 `non_article`. These two sources together should be providing ~15+ candidates but delivered zero.
+
+3. **Archive dedup removed 45 candidates** — Correct behavior (prevents cross-day repetition), but compounds weekend thinness. Items that were fresh on Day 1 are now deduplicated, and no new weekend content replaced them.
+
+4. **consumer_progressive_grocer returning 403** — Only Consumer source failure. Needs URL investigation like the Day 1 batch.
+
+### What worked (Day 1 fixes confirmed)
+
+1. **Consumer broker fix landed**: `CONSUMER & RETAIL` in `active_topic_tags`. 8 sources fetched, 18 candidates, 5 selected. Topic went from broken to functional.
+2. **Healthcare URL fixes confirmed**: Modern Healthcare and Becker's both 200, producing candidates. Becker's hitting source cap (2/2) — a sign of healthy volume.
+3. **Source reliability**: 52/53 (98.1%), up from 42/47 (89.4%). Single failure (progressive_grocer 403).
+4. **100% broker backbone**: Zero discovery candidates. Entire pipeline is RSS-driven.
+
+### Weakest 2 topics
+
+**1. Industrials** — Only 3 items delivered from 6 candidates. All 8 sources returned 200, but FreightWaves (56 items, all non_article) and ConstructionDive (10 items, all non_article) are dead weight. After removing those, only 3 sources produced usable content: supplychaindive (7), manufacturingdive (5), defensenews (10 before stale filter). Weekend stale filtering cut this further. The 3 selected items include 2 Ukraine/defense geopolitics pieces scored 0.457 and 0.594 — low quality forced by empty pool.
+
+**2. Energy** — 4 items from 11 candidates. The numbers look reasonable but mask a problem: Canary Media returned 100 items, 96 were stale, leaving only 4. CleanTechnica retained 27 but most were Day 1 duplicates removed by archive dedup. FERC (disabled) and EIA (low weekend yield) contributed nothing. Weekend energy news is simply thin.
+
+### Strongest 2 topics
+
+**1. Consumer & Retail** — The turnaround topic. From zero broker sources yesterday to 18 candidates and a full 5-item delivery. Retail Dive and consumergoods.com are the workhorses. Items are topically correct (Designer Brands, Shoe Carnival, Colgate exec discussion, Southern Glazer's, Jack Daniel's/Pernod Ricard merger). The fix worked.
+
+**2. Financial Services** — 16 candidates, 5 selected, 4/5 trusted. American Banker and Banking Dive continue to be reliable. The two Day 1 missed stories (Loan sale, Citi regional bank deal) made it into today's selection, proving the pipeline's next-day recovery when candidates aren't duped out.
+
+### Missed-story review (top 3)
+
+**14 total flags, down from 19 on Day 1.**
+
+#### True misses — "we should have included this"
+
+1. **"Otsuka picks up PTSD drug with $700M Transcend buy"** (Life Sciences, biopharmadive.com, score 0.620)
+   Pool-full cut. A $700M acquisition is material pharma news. It was displaced by two FDA index pages ("What's New for Biologics" 0.691, "Novel Drug Approvals for 2025" 0.666) that are not discrete news stories. The scoring model over-ranks FDA listing pages vs genuine M&A news.
+
+2. **"STAT+: In private meetings, White House works to win pharma companies' support for drug pricing"** (Life Sciences, statnews.com, score 0.634)
+   Pool-full cut. White House pharma pricing negotiations are high-signal for anyone in life sciences. Lost to lower-relevance items that scored higher on source authority.
+
+3. **"FDIC staff reductions raise watchdog concerns"** (Financial Services, americanbanker.com, score 0.635)
+   Source-cap blocked — same story flagged on Day 1, still being blocked. Regulatory oversight is core financial services signal. Now appearing as a recurring miss.
+
+#### Borderline — "reasonable either way"
+
+4. **"Stanford study outlines dangers of asking AI chatbots for personal advice"** (Technology, techcrunch.com, score 0.789)
+   Pool-full cut. Important AI safety study but pool already had strong AI/tech items. Reasonable exclusion given depth.
+
+5. **"If AI 'adds friction, it fails': How Mayo Clinic scales technology"** (Healthcare, beckershospitalreview.com, score 0.623)
+   Source-cap blocked. Health IT angle is valuable but Becker's already placed 2 items. Source diversity correctly enforced.
+
+#### False positives — "this is noisy flagging"
+
+6. **"Best Heart Rate Monitors (2026): Polar, Coros, Garmin"** (Technology, wired.com, score 0.894)
+   Product buying guide, not news. Same pattern as Day 1 Wired flags.
+
+7. **"These 40 Amazon Spring Sale Tech Deals Are Actually Good"** (Technology, wired.com, score 0.891)
+   Shopping deals roundup. Not intelligence.
+
+8. **"Here's what Verge readers are buying during Amazon's Big Spring Sale"** (note: this one was *selected*, not flagged — but it's the same category of shopping content that shouldn't be in an intelligence brief)
+
+### Missed-story flag summary
+
+| Classification | Count | % of 14 | Day 1 comparison |
+|---------------|-------|---------|-----------------|
+| True miss | 3 | 21% | 3 (16%) |
+| Borderline | 2 | 14% | 3 (16%) |
+| False positive | 9 | 64% | 13 (68%) |
+
+**Day-over-day pattern**: False positive rate is consistently ~65%. The same categories recur: Wired shopping/deal pages, FDA index pages. The true-miss rate slightly increased (21% vs 16%) because thinner weekend pools mean more legitimate content gets cut.
+
+### Hypothesis: what's driving Day 2 results
+
+1. **Weekend is a structural constraint, not a bug.** Trade publications don't publish on Saturdays. The 48h freshness filter is correct — the problem is that Saturday candidate pools are 40-60% thinner than weekday pools. This will recur every weekend.
+
+2. **The FreightWaves non_article problem is costing Industrials ~15 candidates per day.** This is the single largest source of lost volume. If FreightWaves items were articles instead of non_article, Industrials would have had 20+ candidates and easily filled 5 items.
+
+3. **FDA index pages are polluting Life Sciences selection.** "What's New for Biologics" and "Novel Drug Approvals for 2025" are not discrete news — they're rolling update pages. They score high (0.66-0.69) on authority and occupy 2 of 5 Life Sciences slots, displacing genuine pharma news (the Otsuka $700M acquisition, the White House pricing story).
+
+4. **Archive dedup + weekend = compounding scarcity.** Day 1 consumed the freshest items from the prior week. Day 2 (Saturday) has no new weekday publishing to replace them. Sunday (Day 3) will likely be worse.
+
+5. **Scoring still over-rewards source authority.** A Wired Amazon deals page (0.901) outscores a Stanford AI safety study (0.789). An FDA listing page (0.691) outscores a $700M pharma acquisition (0.620). The authority signal is drowning out content-quality signal.
 
 ---
 
@@ -154,15 +254,16 @@ _Pending._
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
 |--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | | | | | | | 7/7 |
-| Depth ≥15 (7 topics) | 5/7 | | | | | | | 7/7 |
-| Trusted T1/2 share | ~83% | | | | | | | ≥80% |
-| Broker/RSS share | 96% | | | | | | | ≥70% |
-| Source success rate | 89% | | | | | | | ≥90% |
-| Missed-story flags | 19 | | | | | | | 0 |
-| True miss flags | 3 | | | | | | | 0 |
-| Manual intervention | 0 | | | | | | | 0 |
-| Consecutive full days | 0 | | | | | | | 7 |
+| Full 5-item (7 topics) | 7/7 | **4/7** | | | | | | 7/7 |
+| Depth ≥15 (7 topics) | 5/7 | **4/7** | | | | | | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | | | | | | ≥80% |
+| Broker/RSS share | 96% | 100% | | | | | | ≥70% |
+| Source success rate | 89% | **98%** | | | | | | ≥90% |
+| Missed-story flags | 19 | 14 | | | | | | 0 |
+| True miss flags | 3 | 3 | | | | | | 0 |
+| Manual intervention | 0 | 0 | | | | | | 0 |
+| Consecutive full days | 0 | 0 | | | | | | 7 |
+| Day color | Red | Red | | | | | | Green |
 
 ---
 

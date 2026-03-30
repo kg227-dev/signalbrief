@@ -780,7 +780,7 @@
       "content_kind": "article"
     },
     {
-      "_comment": "FERC — grid interconnection, transmission orders, capacity market rulings. Disabled: 403 on all paths as of 2026-03-28.",
+      "_comment": "FERC direct feed — permanently disabled: ferc.gov is Cloudflare-blocked for all programmatic access. Use energy_ferc_federal_register instead.",
       "id": "energy_ferc_news",
       "enabled": false,
       "tier": 1,
@@ -806,6 +806,39 @@
         "capacity",
         "reliability",
         "market"
+      ]
+    },
+    {
+      "_comment": "FERC via Federal Register API — orders, rules, and notices from FERC published in the Federal Register. Replaces energy_ferc_news which is permanently blocked by Cloudflare. Covers Final Rules, Proposed Rules, and Notices; misses informal press releases posted only on ferc.gov.",
+      "id": "energy_ferc_federal_register",
+      "enabled": true,
+      "tier": 1,
+      "lane": "official",
+      "topic_tags": [
+        "ENERGY"
+      ],
+      "family": "energy_official",
+      "source_kind": "primary_official",
+      "source_family": "official",
+      "domains": [
+        "federalregister.gov"
+      ],
+      "endpoint": "https://www.federalregister.gov/api/v1/documents.json?per_page=20&order=newest&conditions[agencies][]=federal-energy-regulatory-commission",
+      "parser": "federal_register_api",
+      "content_kind": "official_document",
+      "title_include_patterns": [
+        "order",
+        "rule",
+        "notice",
+        "reliability",
+        "transmission",
+        "interconnection",
+        "rate",
+        "tariff",
+        "market",
+        "grid",
+        "pipeline",
+        "capacity"
       ]
     },
     {
@@ -1061,9 +1094,9 @@
       ]
     },
     {
-      "_comment": "OCC — national bank supervision, enforcement actions, charters. Re-enabled for MVP.",
+      "_comment": "OCC — national bank supervision, enforcement actions, charters. Disabled: index-news-releases.html URL is dead — all paths redirect to the OCC homepage with no accessible news feed. Re-enable if a working endpoint is found.",
       "id": "financial_occ_news",
-      "enabled": true,
+      "enabled": false,
       "tier": 1,
       "lane": "official",
       "topic_tags": [
@@ -1204,7 +1237,7 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Progressive Grocer — grocery retail strategy, store operations, supplier news. Disabled: 403 on all paths as of 2026-03-29.",
+      "_comment": "Progressive Grocer — grocery retail strategy, store operations, supplier news. Permanently disabled: all paths (rss.xml, rss/news.rss, feed/) return Cloudflare 403. Coverage partially replaced by consumer_supermarket_news.",
       "id": "consumer_progressive_grocer",
       "enabled": false,
       "tier": 2,

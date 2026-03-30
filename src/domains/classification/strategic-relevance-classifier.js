@@ -15,7 +15,7 @@ const CLASSIFIER_VERSION = "1.0";
 const VALID_LABELS = ["HIGH", "MEDIUM", "LOW"];
 const FALLBACK_RESULT = Object.freeze({ classification: "MEDIUM", reason: "Classifier fallback" });
 const DEFAULT_CONCURRENCY = 8;
-const DEFAULT_MODEL = "claude-haiku-4-5-20241022";
+const DEFAULT_MODEL = "claude-3-haiku-20240307";
 const DEFAULT_MAX_TOKENS = 100;
 
 // ─── buildClassificationPrompt ───────────────────────────────────────────────

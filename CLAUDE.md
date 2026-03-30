@@ -2,17 +2,13 @@
 
 Agent overlay for this repository. This file is intentionally narrow: use it for working conventions, not as the primary architecture document.
 
-## Read First
+## Key references
 
-- [README.md](./README.md)
-- [docs/INDEX.md](./docs/INDEX.md)
-- [SPEC.md](./SPEC.md)
-- [FORMAT-RULES.md](./FORMAT-RULES.md)
-- [docs/features.md](./docs/features.md)
-
-If your work needs March 2026 execution history, read:
-
-- [March 2026 Planning Archive](./docs/archive/planning/2026-03/README.md)
+- [SPEC.md](./SPEC.md) — runtime and product contract (read before changing pipeline behavior)
+- [FORMAT-RULES.md](./FORMAT-RULES.md) — email output rules (read before changing digest rendering)
+- [docs/features.md](./docs/features.md) — live backlog and active risks
+- [docs/INDEX.md](./docs/INDEX.md) — full doc router
+- [March 2026 Planning Archive](./docs/archive/planning/2026-03/README.md) — closed execution history
 
 ## Repo Truths
 

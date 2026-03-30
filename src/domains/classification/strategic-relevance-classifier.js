@@ -122,24 +122,21 @@ async function classifySingle(candidate, opts) {
     messages: [{ role: "user", content: user }],
   };
 
-  const requestOpts = {
-    hostname: "api.anthropic.com",
-    path: "/v1/messages",
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
+  const headers = {
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "Content-Type": "application/json",
   };
-
-  if (timeout) {
-    requestOpts.timeout = timeout;
-  }
 
   let res;
   try {
-    res = await httpsPost(requestOpts, JSON.stringify(requestBody));
+    res = await httpsPost(
+      "api.anthropic.com",
+      "/v1/messages",
+      headers,
+      requestBody,
+      { timeoutMs: timeout || 15000, retries: 1, retryDelayMs: 500 }
+    );
   } catch (err) {
     return { ...FALLBACK_RESULT, _fallback_type: "network_error" };
   }
@@ -233,10 +230,11 @@ async function classifyCandidates(candidates, opts) {
     cachePath = null,
   } = opts || {};
 
-  const apiKey = config.ANTHROPIC_API_KEY || config.apiKey || null;
-  const model = config.model || DEFAULT_MODEL;
-  const concurrency = config.concurrency || DEFAULT_CONCURRENCY;
-  const ttlDays = config.ttlDays || 14;
+  const apiKey = config.keys?.anthropic || config.ANTHROPIC_API_KEY || config.apiKey || null;
+  const classificationConfig = config.digest?.classification || {};
+  const model = classificationConfig.model || DEFAULT_MODEL;
+  const concurrency = classificationConfig.concurrency || DEFAULT_CONCURRENCY;
+  const ttlDays = classificationConfig.cache_ttl_days || 14;
 
   let cacheHits = 0;
   let modelCalls = 0;

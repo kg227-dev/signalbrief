@@ -13,6 +13,7 @@ Use this as the default "what should I run?" guide before opening a PR.
 
 | If you changed... | Run these commands | Why |
 | --- | --- | --- |
+| `src/domains/classification/*` | `npm test` + `node tests/contracts/domains/classification/*.test.js` | validates strategic relevance classification, cache, scoring |
 | `src/digest/*`, `src/domains/digest/*`, selection/scoring logic | `npm test` + `npm run qa:harness` + `npm run qa:matrix` | validates ranking quality and matrix stability |
 | `src/platform/mailer/*`, `src/runtime/mailer*`, email formatting/sending | `npm test` + `npm run smoke:worker` | verifies delivery pathway and worker-run flow |
 | `src/platform/store/*`, `src/runtime/store*`, user/archive persistence | `npm test` | validates core state contracts and storage behavior |

@@ -582,9 +582,9 @@
       ]
     },
     {
-      "_comment": "Wired — broad tech/culture coverage. Disabled: feed dominated by consumer gadget reviews, buying guides, and coupon pages — not enterprise/strategic tech. Pollutes Technology selection.",
+      "_comment": "Wired Business — enterprise/AI/platform coverage from Wired's business category feed. Narrower than the full /feed/rss which is 64% consumer gadget/deal content.",
       "id": "technology_wired",
-      "enabled": false,
+      "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -596,9 +596,13 @@
       "domains": [
         "wired.com"
       ],
-      "endpoint": "https://www.wired.com/feed/rss",
+      "endpoint": "https://www.wired.com/feed/business/rss",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "url_exclude_patterns": [
+        "/gallery/",
+        "/review/"
+      ]
     },
     {
       "_comment": "MIT Technology Review — deep tech journalism, AI, biotech, energy, computing.",
@@ -1042,9 +1046,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Finextra Banking — bank, payments, fintech, and regulatory news with strong weekday and early-morning volume. Excludes paid presswire items.",
+      "_comment": "Finextra Banking — bank, payments, fintech, and regulatory news. Disabled: all feed paths return 403 Forbidden; server blocks programmatic access.",
       "id": "financial_finextra_banking",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1349,9 +1353,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Chain Store Age — specialty, drug, and mass merchandiser retail news. Publishes 7 days/week.",
+      "_comment": "Chain Store Age — specialty, drug, and mass merchandiser retail news. Disabled: RSS endpoint returns 403 Forbidden.",
       "id": "consumer_chain_store_age",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1387,9 +1391,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Drug Store News — pharmacy retail, health and beauty, front-end merchandising. Good weekend volume.",
+      "_comment": "Drug Store News — pharmacy retail, health and beauty, front-end merchandising. Disabled: RSS endpoint returns 403 Forbidden.",
       "id": "consumer_drug_store_news",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1452,9 +1456,9 @@
       ]
     },
     {
-      "_comment": "Industry Week — manufacturing strategy, automation, workforce.",
+      "_comment": "Industry Week — manufacturing strategy, automation, workforce. Disabled: all feed URL paths return 404; site appears to no longer publish RSS.",
       "id": "industrials_industry_week",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1559,9 +1563,9 @@
       ]
     },
     {
-      "_comment": "Logistics Management — supply chain, warehousing, transportation, 3PL strategy.",
+      "_comment": "Logistics Management — supply chain, warehousing, transportation, 3PL strategy. Disabled: RSS endpoint returns 403 Forbidden.",
       "id": "industrials_logistics_management",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [

@@ -35,7 +35,6 @@ const {
 const TEST_FILE_SUFFIX = ".test.js";
 const TEST_DIR_EXCLUDES = new Set([
   ".git",
-  ".desloppify",
   ".claude",
   "node_modules",
   "test-results",

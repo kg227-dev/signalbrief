@@ -30,8 +30,6 @@ test-results/
 # Tooling and dependency artifacts
 node_modules/
 .claude/worktrees/
-.desloppify/
-.desloppify-orphaned.json
 artifacts/*
 !artifacts/README.md
 

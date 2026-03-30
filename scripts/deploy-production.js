@@ -529,7 +529,6 @@ function packageWorkingTreeArchive(archivePath) {
     "--exclude=.env",
     "--exclude=.env.*",
     "--exclude=tmp",
-    "--exclude=.desloppify",
     ".",
   ];
   run("tar", tarArgs, {
@@ -568,8 +567,7 @@ function packageCommitArchive(archivePath, archiveSha) {
       "--exclude=.env",
       "--exclude=.env.*",
       "--exclude=tmp",
-      "--exclude=.desloppify",
-      ".",
+        ".",
     ], {
       cwd: extractDir,
       label: "pack",

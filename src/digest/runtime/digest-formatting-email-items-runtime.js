@@ -30,17 +30,6 @@ function createDigestEmailItemsRuntime(deps) {
     return ` · <span style="font-size:11px;color:#b45309;">${diffDays}d ago</span>`;
   }
 
-  function buildEmailWhyShownText(item) {
-    if (Array.isArray(item.why_shown) && item.why_shown.length) {
-      return item.why_shown.map((k) => String(k).replace(/_/g, " ")).join(" · ");
-    }
-    const entities = (item.entity_keys || []).slice(0, 2).map((k) =>
-      k.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
-    );
-    if (entities.length) return `${item.tag || "Signal"} · ${entities.join(", ")}`;
-    return item.tag || "";
-  }
-
   function renderDigestItemHtml(item, index, opts = {}) {
     const userToken = String(opts.userToken || "");
     const digestId = String(opts.digestId || "");
@@ -83,11 +72,6 @@ function createDigestEmailItemsRuntime(deps) {
       ? `<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-bottom:8px;font-style:italic;">👀 ${item.watch_next}</div>`
       : "";
 
-    const whyText = buildEmailWhyShownText(item);
-    const whyShownHtml = whyText
-      ? `<div style="font-size:11px;color:#6B7280;line-height:1.5;margin-bottom:10px;">Why included: ${escapeHtml(whyText)}</div>`
-      : "";
-
     const sourceBadgeHtml = renderEmailSourceBadge(item.source_tier);
     const corrobHtml = Number(item.cross_source_count) >= 2
       ? ` · <span style="font-size:11px;color:#6B7280;">+${Number(item.cross_source_count) - 1} source${Number(item.cross_source_count) > 2 ? "s" : ""}</span>`
@@ -113,7 +97,6 @@ function createDigestEmailItemsRuntime(deps) {
         ${bodyHtml}
         ${implHtml}
         ${watchHtml}
-        ${whyShownHtml}
         <div style="font-size:14px;"><a href="${trackedLinkUrl}" style="color:#2563EB;text-decoration:none;font-weight:600;">Read more →</a><span style="font-size:12px;color:#9CA3AF;">&nbsp;&nbsp;${escapeHtml(item.source || "")}${sourceBadgeHtml}${corrobHtml}${freshnessHtml}</span></div>
       </div>`;
   }

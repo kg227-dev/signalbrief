@@ -1410,6 +1410,25 @@
       "content_kind": "article"
     },
     {
+      "_comment": "PYMNTS Retail — retailer strategy, commerce tech, M&A, brand and platform moves. Category feed is editorial-only; verified live with strong weekday + weekend output.",
+      "id": "consumer_pymnts_retail",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "pymnts.com"
+      ],
+      "endpoint": "https://www.pymnts.com/category/retail/feed/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
       "_comment": "Manufacturing Dive — factory, production, operations, reshoring. Industry Dive network.",
       "id": "industrials_manufacturing_dive",
       "enabled": true,
@@ -1597,6 +1616,63 @@
         "sae.org"
       ],
       "endpoint": "https://www.sae.org/news/rss",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Journal of Commerce — container shipping, ports, tariffs, intermodal freight. High-authority global trade coverage; 40 items/day, verified live.",
+      "id": "industrials_joc",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "joc.com"
+      ],
+      "endpoint": "https://www.joc.com/rss.xml",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "DC Velocity — warehouse automation, 3PL, freight markets, AI in logistics. Executive/investor lens; 20+ items active daily.",
+      "id": "industrials_dc_velocity",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "dcvelocity.com"
+      ],
+      "endpoint": "https://www.dcvelocity.com/rss/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Area Development — corporate expansion announcements, reshoring, industrial capex decisions with investment amounts and job-creation data. Unique site-selection coverage not in current set.",
+      "id": "industrials_area_development",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "areadevelopment.com"
+      ],
+      "endpoint": "https://www.areadevelopment.com/rss/rss.xml?t=5",
       "parser": "rss",
       "content_kind": "article"
     },

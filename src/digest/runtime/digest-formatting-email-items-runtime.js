@@ -56,13 +56,16 @@ function createDigestEmailItemsRuntime(deps) {
       ? `<div style="margin-bottom:8px;">${knownFlags.map((f) => `<span style="font-size:11px;font-weight:600;color:#6B7280;background:#F3F4F6;padding:2px 7px;border-radius:100px;margin-right:4px;">${EMAIL_FLAG_LABELS[f]}</span>`).join("")}</div>`
       : "";
 
-    // WIM (already contains <strong> markup from enrichment) merged with summary
+    // WIM: show analysis when present; fall back to truncated summary so raw RSS walls of text don't appear in place of analysis
     const bodyHtml = (() => {
       const wim = item.wim || "";
-      const summary = item.summary || "";
-      return (wim || summary)
-        ? `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${wim}${summary ? " " + summary : ""}</div>`
-        : "";
+      if (wim) {
+        return `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${wim}</div>`;
+      }
+      const summary = String(item.summary || "").trim();
+      if (!summary) return "";
+      const truncated = summary.length > 200 ? `${summary.slice(0, 197)}…` : summary;
+      return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(truncated)}</div>`;
     })();
 
     const implHtml = (isDeep && item.implications)

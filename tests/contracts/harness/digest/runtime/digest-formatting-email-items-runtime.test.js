@@ -36,5 +36,19 @@ const html = emailItemsRuntime.renderDigestItemHtml({
 
 assert.ok(html.includes("Read more"), "email item should keep the read-more link");
 assert.ok(html.includes("reuters.com"), "email item should keep source attribution");
+assert.ok(html.includes("Why it matters."), "email item should render wim when present");
+assert.ok(!html.includes("Summary text."), "email item should not render raw summary when wim is present");
 assert.ok(!html.includes("Why included:"), "email item should not render why_shown text");
 assert.ok(!html.includes("Lower confidence"), "email item should not render lower-confidence badges in the active MVP email path");
+
+// summary fallback when wim is absent
+const noWimHtml = emailItemsRuntime.renderDigestItemHtml({
+  tag: "AI",
+  headline: "Some headline",
+  summary: "A short summary that describes the article.",
+  wim: null,
+  source: "example.com",
+  url: "https://example.com/article",
+}, 0, { depth: "headline_plus_why" });
+assert.ok(noWimHtml.includes("A short summary"), "email item should show summary when wim is absent");
+assert.ok(!noWimHtml.includes("Why it matters."), "email item should not show wim when it is null");

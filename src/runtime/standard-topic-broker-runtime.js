@@ -74,7 +74,7 @@ function decodeHtmlEntities(value) {
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, "\"")
-    .replace(/&#39;/gi, "'")
+    .replace(/&#0*39;/gi, "'")
     .replace(/&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")

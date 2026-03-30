@@ -77,7 +77,7 @@ function selectTopicItemsWithFallback(params = {}) {
   } = params;
 
   const targetCount = Math.max(1, Number(itemsPerTopic || 5));
-  const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 2));
+  const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 3));
   const discoveryCap = Math.max(0, Number(maxDiscoveryPerTopic ?? 1));
   const pools = buildTopicFallbackPools(topicItems, nowMs);
   const selected = [];
@@ -654,7 +654,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       throw new Error("No live items available after freshness and selection filters; digest aborted");
     }
 
-    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 2)})`);
+    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 3)})`);
 
     return {
       selected,

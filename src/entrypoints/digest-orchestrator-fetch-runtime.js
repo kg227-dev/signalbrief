@@ -1431,9 +1431,15 @@ function createDigestOrchestratorFetchRuntime(deps) {
         ? scoringConfig.maxAgeHours
         : (digestConfig.maxArticleAgeHours || 48)
     );
+    // On Mondays the 07:00 ET run window covers Saturday→Monday (the weekend trough).
+    // Extend the lookback to 72h so Friday content is eligible, supplementing the thin
+    // weekend pool. Cross-day dedup prevents repeating items already selected Sunday.
+    const etDayOfWeek = new Date().toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short" });
+    const isMonday = etDayOfWeek.startsWith("Mon");
+    const maxAgeCapHours = isMonday ? 72 : 48;
     const maxAgeHours = Number.isFinite(resolvedMaxAgeHours)
-      ? Math.min(48, Math.max(1, resolvedMaxAgeHours))
-      : 48;
+      ? Math.min(maxAgeCapHours, Math.max(1, resolvedMaxAgeHours))
+      : maxAgeCapHours;
     const inventoryRefreshOnly = String(runMode || "").trim() === "inventory_refresh";
     const aggressiveStandardRun = isAggressiveStandardRun(runMode);
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 5));

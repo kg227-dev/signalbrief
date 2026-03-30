@@ -183,7 +183,12 @@
       "url_exclude_patterns": [
         "/content-studio/",
         "/white-paper/",
-        "/publishing-partner/"
+        "/publishing-partner/",
+        "/advertiser-content/",
+        "/sponsored/",
+        "/webinar/",
+        "/infographic/",
+        "/research/"
       ]
     },
     {
@@ -469,6 +474,12 @@
         "label",
         "drug",
         "biologics"
+      ],
+      "title_exclude_patterns": [
+        "^what's new",
+        "^novel drug approvals for",
+        "^new drugs at fda",
+        "^what's new related to"
       ]
     },
     {
@@ -499,6 +510,12 @@
         "biologics",
         "vaccine",
         "cell therapy"
+      ],
+      "title_exclude_patterns": [
+        "^what's new",
+        "^novel drug approvals for",
+        "^new drugs at fda",
+        "^what's new related to"
       ]
     },
     {
@@ -912,10 +929,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Reuters Business News — timed out during verification; enable after confirming endpoint.",
+      "_comment": "Reuters Business News — global business and finance newswire. Publishes 7 days/week including weekends.",
       "id": "financial_reuters_business",
-      "enabled": false,
-      "note": "feed url unverified — check before enabling",
+      "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -930,6 +946,48 @@
       "endpoint": "https://feeds.reuters.com/reuters/businessNews",
       "parser": "rss",
       "content_kind": "article"
+    },
+    {
+      "_comment": "MarketWatch Top Stories — Dow Jones market and finance news. Publishes 7 days/week including weekends.",
+      "id": "financial_marketwatch",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
+      "family": "financial_reported",
+      "source_kind": "reported_media",
+      "source_family": "reported",
+      "domains": [
+        "marketwatch.com"
+      ],
+      "endpoint": "https://feeds.marketwatch.com/marketwatch/topstories/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "CFO Dive — corporate finance, treasury, accounting, capital markets. Industry Dive network. Weekday-focused but good breadth.",
+      "id": "financial_cfo_dive",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
+      "family": "financial_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "cfodive.com"
+      ],
+      "endpoint": "https://www.cfodive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Pensions & Investments — institutional asset management, pension fund strategy.",
@@ -1254,6 +1312,63 @@
         "restaurantbusinessonline.com"
       ],
       "endpoint": "https://www.restaurantbusinessonline.com/feed",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Chain Store Age — specialty, drug, and mass merchandiser retail news. Publishes 7 days/week.",
+      "id": "consumer_chain_store_age",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "chainstoreage.com"
+      ],
+      "endpoint": "https://chainstoreage.com/rss.xml",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Nation's Restaurant News — quick service and full service restaurant industry. Publishes weekends.",
+      "id": "consumer_nations_restaurant_news",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "nrn.com"
+      ],
+      "endpoint": "https://www.nrn.com/rss.xml",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Drug Store News — pharmacy retail, health and beauty, front-end merchandising. Good weekend volume.",
+      "id": "consumer_drug_store_news",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "drugstorenews.com"
+      ],
+      "endpoint": "https://drugstorenews.com/rss.xml",
       "parser": "rss",
       "content_kind": "article"
     },

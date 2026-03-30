@@ -8,6 +8,7 @@
   "digest": {
     "itemCount": 5,
     "maxItemsPerTag": 2,
+    "minDeliveryItemsPerTopic": 3,
     "maxItemsPerSourceDomain": 2,
     "maxDiscoveryCandidateShare": 0.2,
     "catchupWindowMinutes": 720,

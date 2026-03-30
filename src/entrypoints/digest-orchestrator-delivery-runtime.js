@@ -263,9 +263,10 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
   }
 
   function listIncompleteTopics(topicBuckets, subscribedStandardTopics) {
+    const minPerTopic = Math.max(1, Number(CONFIG.digest.minDeliveryItemsPerTopic || DELIVERY_POLICY.target_item_count));
     return (Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : []).filter((topic) => {
       const count = Array.isArray(topicBuckets?.[topic]) ? topicBuckets[topic].length : 0;
-      return count < DELIVERY_POLICY.target_item_count;
+      return count < minPerTopic;
     });
   }
 

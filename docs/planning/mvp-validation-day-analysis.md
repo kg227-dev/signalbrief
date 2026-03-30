@@ -220,9 +220,112 @@ All 7 topics delivered 5 items. Two topics failed depth gate.
 
 ---
 
-## Day 3 — 2026-03-30
+## Day 3 — 2026-03-30 (Sunday)
 
-_Pending._
+### What shipped
+
+| Topic | Items | Candidates | Depth ≥15 | Trusted T1/2 | Strongest source |
+|-------|-------|-----------|-----------|---------------|-----------------|
+| Technology | 5/5 | 42 | YES | 3/5 (60%) | techcrunch.com (13 retained) |
+| Life Sciences | 5/5 | 6 | NO (6) | 3/5 (60%) | fiercebiotech.com (3 retained) |
+| Energy | 5/5 | 11 | NO (11) | 2/5 (40%) | cleantechnica.com (7 retained) |
+| Industrials | 5/5 | 8 | NO (8) | 1/5 (20%) | freightwaves.com (5 retained) |
+| Healthcare | **4/5** | 7 | NO (7) | 4/4 (100%) | modernhealthcare.com (5 retained) |
+| Consumer & Retail | **3/5** | 3 | NO (3) | 1/3 (33%) | modernretail.co (2 retained) |
+| Financial Services | **0/5** | 0 | NO (0) | N/A | 6 fetched, all deduped/filtered |
+
+4/7 topics delivered 5 items. 2 topics underfilled. 1 topic completely empty. **Second consecutive Red day.**
+
+### What failed
+
+1. **Financial Services completely wiped out** — Fetch diagnostics show 6 unique items (5 broker_official from federalregister.gov, 1 broker_publisher_feed). All 6 were either archive-deduped against Day 2 or filtered out during selection. Zero candidates survived to the topic selection stage. This is the first complete zero-delivery for a topic in the validation window.
+
+2. **Consumer & Retail collapsed to 3 candidates** — Down from 18 on Day 2. Only 3 items survived: 1 from retaildive.com and 2 from modernretail.co. The Day 2 sources (consumergoods.com, grocerydive.com, retaildive.com) produced far less on a Sunday. With only 3 candidates available, only 3 items delivered — well below the 5-item shipping contract.
+
+3. **Healthcare still thin at 4/5** — 7 candidates, 4 selected. modernhealthcare.com dominated (5/7 candidates) but source cap (2/2) blocked 3 items. statnews.com contributed 2 items. The pool would have supported 5 items without the source cap, but diversity enforcement cut supply. Same pattern as Day 2.
+
+4. **Sunday candidate volume dropped across the board** — Total candidates fell from 161 (Day 2) to 77 (Day 3). Pool before dedup: 87 (Day 3) vs 206 (Day 2). This is a 62% decline, confirming the weekend compounding effect.
+
+### What worked (Day 2 → Day 3)
+
+1. **Industrials recovered from 3/5 to 5/5**: FreightWaves producing article content again (5 candidates vs 56 non_article on Day 2). This confirms the Day 2 non_article classification was a transient feed issue, not a permanent breakage.
+2. **Energy recovered from 4/5 to 5/5**: powermag.com and canarymedia.com produced fresh Sunday content. Candidate count held at 11 (same as Day 2).
+3. **Dedup much lighter**: Only 9 items removed (vs 45 on Day 2). The Day 1 content is now >48h old and naturally filtered by freshness, so archive dedup has fewer overlapping candidates to remove.
+4. **Zero source failures**: All broker sources returned 200. No transport errors. No degraded topics.
+5. **100% broker backbone**: 97% broker, 3% preferred. Zero discovery candidates.
+
+### Weakest 2 topics
+
+**1. Financial Services** — Complete failure. 6 items fetched but 0 survived to selection. 5 of 6 were federalregister.gov official documents (likely Sunday Federal Register publications that also appeared Saturday). The sole publisher feed item (1 from americanbanker.com) was probably archive-deduped from Day 2. This topic has the shallowest Sunday source pool: American Banker and Banking Dive don't publish on Sundays, and the Federal Register is the only active source — but its items are regulatory notices, not market-moving news.
+
+**2. Consumer & Retail** — Only 3 candidates survived. retaildive.com and modernretail.co published Sunday content, but consumergoods.com and grocerydive.com did not. The 3 items selected are high quality (AI strategy at Shoptalk, home brands/renters trend, E.l.f. Beauty digital strategy), but 3 items doesn't meet the 5-item contract. This topic's source pool is too shallow for weekends.
+
+### Strongest 2 topics
+
+**1. Technology** — 42 candidates, 5/5 delivered. Deep and diverse pool: techcrunch.com (13), cleantechnica.com (7), arstechnica.com (5), federalregister.gov (5), theverge.com (4), go.theregister.com (3), statnews.com (3), technologyreview.com (1), americanbanker.com (1). Selected items include Starcloud $170M raise, Steve Jobs retrospective, bank cyberdefense crisis, Google/BBC opinion, and CDC director challenges — a reasonable mix though not all enterprise-focused.
+
+**2. Industrials** — The comeback topic. From 3/5 (Day 2) to 5/5 (Day 3). FreightWaves back online producing 5 real article candidates. defensenews.com and go.theregister.com provided defense/automation angles. Only concern: TechCrunch robotaxi article is a stretch for Industrials topic fit.
+
+### Missed-story review (top 3)
+
+**10 total flags, down from 14 on Day 2.**
+
+#### True misses — "we should have included this"
+
+1. **"Kailera plots IPO to fund obesity pipeline after one of the biggest raises of 2025"** (Life Sciences, fiercebiotech.com, score 0.872)
+   Source-cap blocked (fiercebiotech.com: 2/2). A major biotech IPO filing is high-signal pharma news. Displaced by two slightly higher-scored FierceBiotech items. Source cap is enforcing diversity but at the cost of missing a material market event.
+
+2. **"DEF sensors no longer required on trucks, other diesel equipment: EPA"** (Industrials, freightwaves.com, score 0.741)
+   Source-cap blocked (freightwaves.com: 2/2). An EPA regulatory change affecting the trucking industry is core Industrials signal. Lost to the 2-per-source cap.
+
+3. **"Why OpenAI really shut down Sora"** (Technology, techcrunch.com, score 0.833)
+   Pool-full cut. A major AI product shutdown story. Scored 0.833 but displaced by items scoring 0.852+ including a public health obituary from STAT and a Google/BBC opinion piece from The Register — neither of which is core enterprise tech.
+
+#### Borderline — "reasonable either way"
+
+4. **"Borderlands Mexico: USMCA review to reshape North American supply chains"** (Industrials, freightwaves.com, score 0.728)
+   Pool-full cut. Important trade/supply chain story but pool already included 5 items. Reasonable exclusion.
+
+5. **"US foreign router ban criticized for being 'industrial policy disguised as cybersecurity'"** (Technology, go.theregister.com, score 0.825)
+   Pool-full cut. Cybersecurity/trade policy intersection. Interesting but pool had stronger items.
+
+#### False positives — "this is noisy flagging"
+
+6. **"Remembering public health pioneer Barry Bloom"** (Technology, statnews.com, score 0.852)
+   Pool-full cut. An obituary from STAT News flagged under Technology. Not technology news at all — spillover from statnews.com being in the Technology broker pool. **Also notable: this item was *selected* as one of the 5 Technology items, which is a bigger problem than the flag itself.**
+
+7. **"4 cloud data practices every healthcare organization should be using"** (Healthcare, modernhealthcare.com, score 0.881)
+   Source-cap blocked. This is a white paper / sponsored content page, not a news story. High score from domain authority.
+
+8. **"AI inference didn't break your architecture – it reveals what comes next"** (Healthcare, modernhealthcare.com, score 0.881)
+   Source-cap blocked. Another white paper / sponsored content page.
+
+9. **"Meeting patients where they are: How collaboration built a replicable model"** (Healthcare, modernhealthcare.com, score 0.881)
+   Source-cap blocked. Publishing partner content (advertorial). Correct exclusion.
+
+### Missed-story flag summary
+
+| Classification | Count | % of 10 | Day 2 comparison |
+|---------------|-------|---------|-----------------|
+| True miss | 3 | 30% | 3 (21%) |
+| Borderline | 2 | 20% | 2 (14%) |
+| False positive | 5 | 50% | 9 (64%) |
+
+**Day-over-day pattern**: False positive rate improved (50% vs 64%) because the weekend's thinner pools produce fewer high-authority non-news items to flag. True miss rate worsened (30% vs 21%) because tighter pools make every source-cap casualty more visible.
+
+### Hypothesis: what's driving Day 3 results
+
+1. **Sunday compounds Saturday's scarcity.** Day 2 had 161 candidates; Day 3 dropped to 77 — a 52% decline. The weekend valley deepens on Sunday because even sources that published a few Saturday items (like American Banker) go completely silent on Sunday. Financial Services' total wipeout is the extreme case.
+
+2. **Financial Services has a single-source-type weekend problem.** On weekdays, americanbanker.com and bankingdive.com drive this topic. On Sunday, neither publishes. The only active source (federalregister.gov) produces regulatory notices that either duplicate prior days or don't survive selection. The topic needs at least one Sunday-active publisher feed or it will fail every Sunday.
+
+3. **Consumer & Retail's source pool is structurally too shallow.** 3 candidates on a Sunday is below the minimum delivery threshold. The topic needs more weekend-active sources or a reduced weekend delivery expectation.
+
+4. **The minDeliveryItemsPerTopic fix (pushed pre-Day 3) will change delivery behavior on Day 4.** Set to 3, it means Healthcare (4 items) and Consumer & Retail (3 items) would now ship. Financial Services (0 items) would still fail. This changes the Day 3 canary delivery picture from potentially 3 underfilled topics to 1 zero-delivery topic.
+
+5. **Sponsored content / white papers are polluting Healthcare's candidate pool.** 3 of 7 Healthcare candidates are modernhealthcare.com sponsored content (white papers and publishing partner pieces). These score high on domain authority (0.881) and consume source-cap slots, displacing real news. The non-news headline filter should catch these.
+
+6. **Technology topic selection is leaking non-tech content.** A STAT News public health obituary (Barry Bloom) was selected as a Technology item. statnews.com items are reaching the Technology pool through RSS feed spillover. The scoring model can't distinguish topic fit from source authority.
 
 ---
 
@@ -254,16 +357,16 @@ _Pending._
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
 |--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | | | | | | 7/7 |
-| Depth ≥15 (7 topics) | 5/7 | **4/7** | | | | | | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | | | | | | ≥80% |
-| Broker/RSS share | 96% | 100% | | | | | | ≥70% |
-| Source success rate | 89% | **98%** | | | | | | ≥90% |
-| Missed-story flags | 19 | 14 | | | | | | 0 |
-| True miss flags | 3 | 3 | | | | | | 0 |
-| Manual intervention | 0 | 0 | | | | | | 0 |
-| Consecutive full days | 0 | 0 | | | | | | 7 |
-| Day color | Red | Red | | | | | | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | | | | | 7/7 |
+| Depth ≥15 (7 topics) | 5/7 | **4/7** | **1/7** | | | | | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | | | | | ≥80% |
+| Broker/RSS share | 96% | 100% | 97% | | | | | ≥70% |
+| Source success rate | 89% | **98%** | 100% | | | | | ≥90% |
+| Missed-story flags | 19 | 14 | 10 | | | | | 0 |
+| True miss flags | 3 | 3 | 3 | | | | | 0 |
+| Manual intervention | 0 | 0 | 0 | | | | | 0 |
+| Consecutive full days | 0 | 0 | 0 | | | | | 7 |
+| Day color | Red | Red | Red | | | | | Green |
 
 ---
 

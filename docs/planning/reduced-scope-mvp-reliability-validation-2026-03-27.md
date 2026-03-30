@@ -161,7 +161,7 @@ The 7-day window passes only if all of the following are true:
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---:|---|---|---|---|
 | Day 1 | 2026-03-28 | Yes | 10 | 0 | 16 | 0 | 0 | 0 | 10 observed in audit; 2 intended-topic misses | KPI bug in admin | KPI bug in admin | KPI bug in admin | 89.36% | 4 | Closed | Scheduler lock reset pre-Day 1; no rerun used to satisfy canaries | Red | Scheduled run executed, but all canaries missed. Audit leaked 8 legacy topics; 9 canaries failed on `normalizeCustomKeyword is not defined`; T6 was withheld because `CONSUMER` did not bucket into `CONSUMER & RETAIL`. |
 | Day 2 | 2026-03-29 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 3 (Industrials 6, Energy 11, Healthcare 12) | ~46% | 100% | 0% | 98.1% (52/53) | 0 | No | 0 | Red | 3 topics underfilled (Industrials 3/5, Energy 4/5, Healthcare 4/5). Consumer broker fix landed — 18 candidates, 5 selected. Weekend stale-rate spike: most sources returned items but 70%+ were >48h old. |
-| Day 3 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
+| Day 3 | 2026-03-30 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 6 (only Technology ≥15; HC 7, LS 6, Energy 11, Ind 8, C&R 3, FinServ 0) | ~52% | 97% | 3% | 100% | 0 | No | 0 | Red | Sunday volume collapse: FinServ 0 candidates (all deduped), C&R only 3, HC only 4/5. Industrials recovered to 5/5. minDeliveryItemsPerTopic=3 fix deployed pre-Day 3 but production ran before deploy. |
 | Day 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 6 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
@@ -287,10 +287,46 @@ Scheduled run `scheduled:2026-03-29T11-02-20-151Z` executed on time. 4/7 MVP top
 
 ### Day 3
 
-- [ ] Pre-send checks complete
-- [ ] Post-send checks complete
-- [ ] Scorecard row completed
-- [ ] Root cause note added if yellow or red
+- [x] Pre-send checks complete
+- [x] Post-send checks complete
+- [x] Scorecard row completed
+- [x] Root cause note added if yellow or red
+
+#### Day 3 Result
+
+`Red`
+
+Scheduled run `scheduled:2026-03-30T11-02-57-080Z` executed on time. 4/7 MVP topics delivered 5 items. Financial Services had 0 candidates post-dedup. Consumer & Retail had only 3 candidates. Healthcare had 4/5.
+
+#### Day 3 What Worked
+
+- **Industrials recovered**: FreightWaves producing real article content again — 5 candidates, 5/5 selected. Day 2's non_article classification was transient.
+- **Energy recovered**: 5/5 from 11 candidates. powermag.com and canarymedia.com publishing Sunday content.
+- **Zero source failures**: 100% broker source success rate. No transport errors, no degraded topics.
+- **Archive dedup lighter**: Only 9 items removed (vs 45 on Day 2). Day 1 content naturally aged past 48h.
+- **100% broker backbone**: 97% broker, 3% preferred. Zero discovery.
+
+#### Day 3 What Failed
+
+- **Financial Services completely wiped out**: 6 items fetched (5 federalregister.gov official, 1 publisher feed) but all 6 were deduped/filtered during selection. Zero candidates in the topic selection stage. americanbanker.com and bankingdive.com do not publish on Sundays.
+- **Consumer & Retail collapsed**: Only 3 candidates survived (1 retaildive.com, 2 modernretail.co). Down from 18 on Day 2. consumergoods.com and grocerydive.com silent on Sunday.
+- **Healthcare still thin**: 7 candidates, 4 selected. modernhealthcare.com dominated (5/7) but 3 blocked by source cap (2/2). 3 of the blocked items were sponsored content/white papers.
+- **Candidate depth cratered**: Only Technology (42) reached depth ≥15. All other topics fell short. Total candidates 77, down 52% from Day 2's 161.
+- **Trusted share still low**: 14/27 selected items (52%) from strong/premium sources. Below 80% target.
+
+#### Day 3 Root Cause Summary
+
+1. **Sunday compounds Saturday's scarcity**: Candidate volume dropped 52% (161 → 77). Sources that published a few Saturday items go completely silent on Sunday.
+2. **Financial Services has no Sunday-active publisher sources**: americanbanker.com and bankingdive.com don't publish Sundays. Federal Register is the only source, and its items are either stale duplicates or regulatory notices that don't survive selection.
+3. **Consumer & Retail source pool too shallow for weekends**: 3 candidates on a Sunday. The topic needs more weekend-active sources.
+4. **modernhealthcare.com sponsored content polluting Healthcare**: 3 of 7 candidates were white papers/advertorials scoring 0.881 on domain authority. These consume source-cap slots and displace real news.
+5. **Technology selection leaking non-tech content**: A STAT News public health obituary was *selected* as one of the 5 Technology items — topic misclassification from RSS feed spillover.
+
+#### Day 3 Observations
+
+- The `minDeliveryItemsPerTopic=3` fix was committed and pushed but may not have reached production before the 07:00 ET scheduled run. If it did deploy, Healthcare (4 items) and Consumer (3 items) would ship; Financial Services (0 items) still fails regardless.
+- Three consecutive Red days. Weekdays (Mon–Fri) need to demonstrate recovery before the validation window can pass.
+- The strategic relevance classifier was enabled in config but its effect on Day 3 selection is not yet visible in the audit format.
 
 ### Day 4
 

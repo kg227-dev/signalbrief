@@ -179,7 +179,12 @@
       ],
       "endpoint": "https://www.modernhealthcare.com/arc/outboundfeeds/rss/",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "url_exclude_patterns": [
+        "/content-studio/",
+        "/white-paper/",
+        "/publishing-partner/"
+      ]
     },
     {
       "_comment": "Becker's Hospital Review — broad health system operational/strategic news.",
@@ -551,7 +556,13 @@
       ],
       "endpoint": "https://www.theverge.com/rss/index.xml",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "title_exclude_patterns": [
+        "readers are buying",
+        "spring sale",
+        "amazon.*sale",
+        "deal[s]?.{0,20}(are|we|you|guide|roundup|sale)"
+      ]
     },
     {
       "_comment": "Wired — broad tech/culture coverage. Disabled: feed dominated by consumer gadget reviews, buying guides, and coupon pages — not enterprise/strategic tech. Pollutes Technology selection.",
@@ -940,6 +951,28 @@
       "content_kind": "article"
     },
     {
+      "_comment": "Finextra Banking — bank, payments, fintech, and regulatory news with strong weekday and early-morning volume. Excludes paid presswire items.",
+      "id": "financial_finextra_banking",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "FINANCIAL SERVICES"
+      ],
+      "family": "financial_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "finextra.com"
+      ],
+      "endpoint": "https://www.finextra.com/rss/channel.aspx?channel=banking",
+      "parser": "rss",
+      "content_kind": "article",
+      "url_exclude_patterns": [
+        "/pressarticle/"
+      ]
+    },
+    {
       "_comment": "Federal Reserve — monetary policy, supervision, capital rule proposals.",
       "id": "financial_fed_press",
       "enabled": true,
@@ -1181,6 +1214,28 @@
       "allow_article_like_listing_urls": true,
       "url_exclude_patterns": [
         "/spons/"
+      ]
+    },
+    {
+      "_comment": "Supermarket News — grocery, merchandising, food retail strategy. Public RSS feed; exclude podcast entries.",
+      "id": "consumer_supermarket_news",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "supermarketnews.com"
+      ],
+      "endpoint": "https://www.supermarketnews.com/rss.xml",
+      "parser": "rss",
+      "content_kind": "article",
+      "title_exclude_patterns": [
+        "podcast"
       ]
     },
     {

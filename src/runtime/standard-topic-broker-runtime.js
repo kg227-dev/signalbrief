@@ -497,6 +497,7 @@ function sanitizeSource(source) {
     parser,
     content_kind: contentKind,
     title_include_patterns: sanitizePatternList(entry.title_include_patterns),
+    title_exclude_patterns: sanitizePatternList(entry.title_exclude_patterns),
     url_exclude_patterns: sanitizePatternList(entry.url_exclude_patterns),
     allow_article_like_listing_urls: entry.allow_article_like_listing_urls === true,
   };
@@ -851,6 +852,10 @@ function buildTitlePatternMatcher(patterns = []) {
   return buildPatternMatcher(patterns, true);
 }
 
+function buildTitleExclusionMatcher(patterns = []) {
+  return buildPatternMatcher(patterns, false);
+}
+
 function buildUrlExclusionMatcher(patterns = []) {
   return buildPatternMatcher(patterns, false);
 }
@@ -948,6 +953,7 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
   const retrievedAt = String(opts?.retrievedAt || "").trim() || new Date().toISOString();
   const maxAgeHours = Number.isFinite(Number(opts?.maxAgeHours)) ? Number(opts.maxAgeHours) : 48;
   const matchesTitle = buildTitlePatternMatcher(source?.title_include_patterns);
+  const titleExcluded = buildTitleExclusionMatcher(source?.title_exclude_patterns);
   const urlExcluded = buildUrlExclusionMatcher(source?.url_exclude_patterns);
   const baseDomain = pickFirstDomain(source?.domains, source?.endpoint);
   const baseAuthority = String(source?.lane || "").trim() === "official"
@@ -974,6 +980,10 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       continue;
     }
     if (urlExcluded(url)) {
+      diagnostics.validation_drop_count += 1;
+      continue;
+    }
+    if (titleExcluded(headline)) {
       diagnostics.validation_drop_count += 1;
       continue;
     }

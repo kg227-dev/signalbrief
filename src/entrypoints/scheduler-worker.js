@@ -21,6 +21,12 @@ function getWorkerConfig() {
   const startupDelayMs = Math.max(0, Number(process.env.DIGEST_STARTUP_DELAY_MS || 3000));
   const runOnStartup = String(process.env.DIGEST_RUN_ON_STARTUP || "1").trim() === "1";
   const runTimeoutMs = Math.max(60 * 1000, Number(process.env.DIGEST_RUN_TIMEOUT_MS || (25 * 60 * 1000)));
+  const inventoryRefreshMs = Math.max(0, Number(process.env.DIGEST_INVENTORY_REFRESH_MS || (4 * 60 * 60 * 1000)));
+  const inventoryRefreshOnStartup = inventoryRefreshMs > 0
+    && String(process.env.DIGEST_INVENTORY_REFRESH_ON_STARTUP || "1").trim() === "1";
+  const inventoryStartupDelayMs = inventoryRefreshOnStartup
+    ? Math.max(60 * 1000, Number(process.env.DIGEST_INVENTORY_STARTUP_DELAY_MS || (startupDelayMs + (60 * 1000))))
+    : 0;
   const rawWorkerArgs = String(process.env.DIGEST_WORKER_ARGS || "")
     .trim()
     .split(/\s+/)
@@ -33,6 +39,9 @@ function getWorkerConfig() {
     startupDelayMs,
     runOnStartup,
     runTimeoutMs,
+    inventoryRefreshMs,
+    inventoryRefreshOnStartup,
+    inventoryStartupDelayMs,
     workerArgs,
   };
 }
@@ -71,6 +80,8 @@ let signalHandlersBound = false;
 let startupTimer = null;
 let intervalTimer = null;
 let controlTimer = null;
+let inventoryStartupTimer = null;
+let inventoryIntervalTimer = null;
 let consecutiveLockUnhealthy = 0;
 let schedulerBlockedState = null;
 let pendingRestartRequest = null;
@@ -414,6 +425,54 @@ function runDigest(trigger, config = getWorkerConfig()) {
   });
 }
 
+function runInventoryRefresh(trigger, config = getWorkerConfig()) {
+  if (checkForRestartRequest(config)) return;
+  if (pendingRestartRequest) return;
+  if (schedulerBlockedState) {
+    log(`skip inventory refresh (${trigger}) — scheduler blocked pending manual reset`);
+    writeHeartbeat(
+      {
+        status: "blocked",
+        trigger,
+        blocked: true,
+        blocked_state: schedulerBlockedState,
+        skip_reason: "lock_unhealthy_blocked",
+      },
+      config
+    );
+    return;
+  }
+  if (runInFlight) {
+    log(`skip inventory refresh (${trigger}) — run already in flight`);
+    writeHeartbeat({ skip_reason: "digest_in_flight" }, config);
+    return;
+  }
+  runInFlight = true;
+  const startedAt = Date.now();
+  const startedIso = nowIso();
+  writeHeartbeat({
+    trigger,
+    started_at: startedIso,
+    status: "running",
+  }, config);
+
+  log(`starting inventory refresh (${trigger})`);
+  runDigestTrigger({
+    source: "scheduler-worker",
+    trigger,
+    timeoutMs: config.runTimeoutMs,
+    extraArgs: [...config.workerArgs, "--inventory-refresh-only"],
+    onStdout: (buf) => process.stdout.write(String(buf)),
+    onStderr: (buf) => process.stderr.write(String(buf)),
+  }).then((outcome) => {
+    runInFlight = false;
+    handleDigestOutcome(outcome, trigger, config, startedAt, startedIso);
+  }).catch((err) => {
+    runInFlight = false;
+    handleDigestError(err, trigger, config, startedAt, startedIso);
+  });
+}
+
 function shutdown(sig, opts = {}) {
   log(`received ${sig}, stopping worker`);
   writeHeartbeat({ status: "stopped", stopped_at: nowIso(), signal: sig });
@@ -432,7 +491,7 @@ function startSchedulerWorker() {
   const controlPollMs = Math.max(2000, Math.min(10000, Math.floor(config.pollMs / 20)));
   bindSignalHandlers();
   log(
-    `boot (poll=${Math.round(config.pollMs / 1000)}s startup=${config.runOnStartup ? "on" : "off"} timeout=${Math.round(config.runTimeoutMs / 1000)}s args=${config.workerArgs.join(" ") || "none"})`
+    `boot (poll=${Math.round(config.pollMs / 1000)}s startup=${config.runOnStartup ? "on" : "off"} inventory=${config.inventoryRefreshMs > 0 ? `${Math.round(config.inventoryRefreshMs / 60000)}m` : "off"} timeout=${Math.round(config.runTimeoutMs / 1000)}s args=${config.workerArgs.join(" ") || "none"})`
   );
   writeHeartbeat({ status: "booting", booted_at: nowIso() }, config);
   checkForRestartRequest(config);
@@ -444,8 +503,14 @@ function startSchedulerWorker() {
     log("startup digest disabled (DIGEST_RUN_ON_STARTUP=0)");
   }
   intervalTimer = setInterval(() => runDigest("interval", config), config.pollMs);
+  if (config.inventoryRefreshMs > 0) {
+    if (config.inventoryRefreshOnStartup) {
+      inventoryStartupTimer = setTimeout(() => runInventoryRefresh("inventory-startup", config), config.inventoryStartupDelayMs);
+    }
+    inventoryIntervalTimer = setInterval(() => runInventoryRefresh("inventory-interval", config), config.inventoryRefreshMs);
+  }
   controlTimer = setInterval(() => checkForRestartRequest(config), controlPollMs);
-  return { startupTimer, intervalTimer, controlTimer };
+  return { startupTimer, intervalTimer, controlTimer, inventoryStartupTimer, inventoryIntervalTimer };
 }
 
 function stopSchedulerWorker() {
@@ -461,6 +526,14 @@ function stopSchedulerWorker() {
     clearInterval(controlTimer);
     controlTimer = null;
   }
+  if (inventoryStartupTimer) {
+    clearTimeout(inventoryStartupTimer);
+    inventoryStartupTimer = null;
+  }
+  if (inventoryIntervalTimer) {
+    clearInterval(inventoryIntervalTimer);
+    inventoryIntervalTimer = null;
+  }
 }
 
 function resetSchedulerWorkerState() {
@@ -470,6 +543,8 @@ function resetSchedulerWorkerState() {
   schedulerBlockedState = null;
   pendingRestartRequest = null;
   lastRestartPendingRequestKey = "";
+  inventoryStartupTimer = null;
+  inventoryIntervalTimer = null;
   return getSchedulerWorkerState();
 }
 
@@ -486,6 +561,7 @@ module.exports = {
   resetSchedulerBlockState,
   writeHeartbeat,
   runDigest,
+  runInventoryRefresh,
   shutdown,
   startSchedulerWorker,
   stopSchedulerWorker,

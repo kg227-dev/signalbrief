@@ -121,6 +121,10 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     options.digestTuningPath || readEnvValue(env, "SIGNALBRIEF_DIGEST_TUNING_PATH"),
     path.join(dataDir, "digest-tuning.json")
   );
+  const brokerCandidateInventoryPath = resolveOptionalPath(
+    options.brokerCandidateInventoryPath || readEnvValue(env, "SIGNALBRIEF_BROKER_CANDIDATE_INVENTORY_PATH"),
+    path.join(dataDir, "broker-candidate-inventory.json")
+  );
   const editorialOverridesPath = resolveOptionalPath(
     options.editorialOverridesPath || readEnvValue(env, "SIGNALBRIEF_EDITORIAL_OVERRIDES_PATH"),
     path.join(dataDir, "editorial-overrides.json")
@@ -150,6 +154,7 @@ function resolveSignalBriefRuntimePaths(options = {}) {
     recoveryQueuePath,
     digestAuditDir,
     digestTuningPath,
+    brokerCandidateInventoryPath,
     editorialOverridesPath,
     legacyDataDir: path.join(appRoot, "data"),
     legacyArchiveDir: path.join(appRoot, "archive"),
@@ -208,6 +213,7 @@ function describeRuntimePathAlignment(runtimePaths) {
     circuit_breaker: deriveComponentRoot(paths.circuitBreakerStatePath, dataRoot),
     incident_store: deriveComponentRoot(paths.incidentStorePath, dataRoot),
     recovery_queue: deriveComponentRoot(paths.recoveryQueuePath, dataRoot),
+    broker_candidate_inventory: deriveComponentRoot(paths.brokerCandidateInventoryPath, dataRoot),
     logs: logRoots.length === 1 ? logRoots[0] : null,
     scheduler: schedulerRoots.length === 1 ? schedulerRoots[0] : null,
   };
@@ -224,6 +230,7 @@ function describeRuntimePathAlignment(runtimePaths) {
   if (componentRoots.circuit_breaker !== dataRoot) divergentComponents.push("circuit_breaker");
   if (componentRoots.incident_store !== dataRoot) divergentComponents.push("incident_store");
   if (componentRoots.recovery_queue !== dataRoot) divergentComponents.push("recovery_queue");
+  if (componentRoots.broker_candidate_inventory !== dataRoot) divergentComponents.push("broker_candidate_inventory");
   if (logRoots.length !== 1 || logRoots[0] !== dataRoot) divergentComponents.push("logs");
   if (schedulerRoots.length !== 1 || schedulerRoots[0] !== dataRoot) divergentComponents.push("scheduler");
 

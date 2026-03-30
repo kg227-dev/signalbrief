@@ -85,6 +85,7 @@ const { createDigestRetryStateRuntime } = require("../runtime/digest-retry-state
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 const { createSourceRegistryRuntime } = require("../runtime/source-policy-registry-runtime");
 const { createStandardTopicBrokerRuntime } = require("../runtime/standard-topic-broker-runtime");
+const { createBrokerCandidateInventoryRuntime } = require("../runtime/broker-candidate-inventory-runtime");
 const { createDigestOrchestratorSpendGuardRuntime } = require("./digest-orchestrator-spend-guard-runtime");
 const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orchestrator-circuit-breaker-runtime");
 const { createDigestOrchestratorAdmissionGateRuntime } = require("./digest-orchestrator-admission-gate-runtime");
@@ -114,10 +115,20 @@ const CIRCUIT_BREAKER_STATE = RUNTIME_PATHS.circuitBreakerStatePath;
 const INCIDENT_STORE = RUNTIME_PATHS.incidentStorePath;
 const DIGEST_TUNING_PATH = RUNTIME_PATHS.digestTuningPath;
 const EDITORIAL_OVERRIDES_PATH = RUNTIME_PATHS.editorialOverridesPath;
+const BROKER_CANDIDATE_INVENTORY_PATH = RUNTIME_PATHS.brokerCandidateInventoryPath;
 const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP_USD || "1.00");
 const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
 const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
+const STANDARD_MVP_TOPIC_TAGS = Object.freeze([
+  "HEALTHCARE",
+  "LIFE SCIENCES",
+  "TECHNOLOGY",
+  "ENERGY",
+  "FINANCIAL SERVICES",
+  "CONSUMER & RETAIL",
+  "INDUSTRIALS",
+]);
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,
@@ -227,15 +238,19 @@ function parseDigestRunArgs(args = [], deps = {}) {
   const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
   const suppressWelcome = args.includes("--suppressWelcome");
   const auditOnly = args.includes("--auditOnly");
+  const inventoryRefreshOnly = args.includes("--inventory-refresh-only");
   const auditTopicTag = normalizeAuditTopicTag(parseCliOptionValue(args, "--auditTopic"));
   const auditDateKey = normalizeAuditDateKey(parseCliOptionValue(args, "--auditDate"));
   const todayEt = normalizeAuditDateKey(formatDateKey(new Date())) || formatEtDateKey(new Date());
   const auditTopicRerun = auditOnly && !!auditTopicTag;
-  const runMode = auditTopicRerun ? "admin_topic_audit_rerun" : "scheduled";
+  const runMode = inventoryRefreshOnly
+    ? "inventory_refresh"
+    : (auditTopicRerun ? "admin_topic_audit_rerun" : "scheduled");
   return {
     dryRun,
     suppressWelcome,
     auditOnly,
+    inventoryRefreshOnly,
     auditTopicTag,
     auditDateKey,
     todayEt,
@@ -1154,11 +1169,15 @@ async function main() {
     suppressWelcome,
     runMode,
     auditOnly,
+    inventoryRefreshOnly,
     auditTopicTag,
     auditDateKey,
     todayEt,
     auditTopicRerun,
   } = runOptions;
+  if (inventoryRefreshOnly && auditOnly) {
+    throw new Error("Inventory refresh runs cannot be combined with --auditOnly");
+  }
   if (auditOnly && !auditTopicRerun) {
     throw new Error("Audit-only digest runs require --auditTopic=TOPIC");
   }
@@ -1204,7 +1223,20 @@ async function main() {
 
   let digestDateKey = auditTopicRerun ? auditDateKey : todayEt;
   let dueUsers = [];
-  if (auditTopicRerun) {
+  let fetchDueUsers = [];
+  if (inventoryRefreshOnly) {
+    fetchDueUsers = [{
+      chatId: `inventory-refresh:${digestDateKey}`,
+      email: "",
+      status: USER_STATUS.ACTIVE,
+      topics: STANDARD_MVP_TOPIC_TAGS.slice(),
+      preferences: {
+        email_enabled: false,
+        depth: "headline_plus_why",
+      },
+    }];
+    log(`=== SignalBrief inventory refresh starting — ${digestDateKey} (${STANDARD_MVP_TOPIC_TAGS.length} topic(s)) ===`);
+  } else if (auditTopicRerun) {
     dueUsers = [{
       chatId: `audit:${auditTopicTag}:${digestDateKey}`,
       email: "",
@@ -1215,6 +1247,7 @@ async function main() {
         depth: "headline_plus_why",
       },
     }];
+    fetchDueUsers = dueUsers.slice();
     log(`=== SignalBrief topic audit rerun starting — ${auditTopicTag} (${digestDateKey}) ===`);
   } else {
     // ── Check who's due BEFORE any API calls ────────────────────────────────
@@ -1258,10 +1291,11 @@ async function main() {
       });
       process.exit(0); // no users due this window
     }
+    fetchDueUsers = dueUsers.slice();
   }
 
   // ── Pre-spend admission gate (scheduled runs only) ─────────────────────────
-  if (!auditOnly) {
+  if (!auditOnly && !inventoryRefreshOnly) {
     const spendGuard = getDigestOrchestratorSpendGuardRuntime();
     const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
     const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
@@ -1306,6 +1340,7 @@ async function main() {
       log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
       dueUsers = gate.eligibleUsers;
     }
+    fetchDueUsers = dueUsers.slice();
   }
 
   if (dryRun) {
@@ -1319,7 +1354,9 @@ async function main() {
     process.exit(0);
   }
 
-  if (!auditTopicRerun) {
+  if (inventoryRefreshOnly) {
+    log(`=== SignalBrief inventory refresh running — ${STANDARD_MVP_TOPIC_TAGS.length} topic(s) ===`);
+  } else if (!auditTopicRerun) {
     log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
   }
 
@@ -1345,6 +1382,12 @@ async function main() {
   if (Object.keys(rawTuning).length > 0) {
     log(`[digest-tuning] overrides active: ${Object.keys(rawTuning).join(", ")}`);
   }
+  const brokerCandidateInventoryRuntime = createBrokerCandidateInventoryRuntime({
+    fs,
+    path,
+    inventoryPath: BROKER_CANDIDATE_INVENTORY_PATH,
+    log,
+  });
   const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
     fs,
     path,
@@ -1397,6 +1440,7 @@ async function main() {
     },
     annotateFetchedItems: annotateEditorialSignals,
     standardTopicBrokerRuntime,
+    brokerCandidateInventoryRuntime,
   });
   const {
     selectionTarget,
@@ -1406,11 +1450,36 @@ async function main() {
     standardFetchCalls,
     fetchDiagnostics,
   } = await fetchRuntime.orchestrateFetch({
-    dueUsers,
+    dueUsers: fetchDueUsers,
     runMode,
     scoringConfig: mergedScoringConfig,
   });
   let allItems = fetchedItems;
+
+  if (inventoryRefreshOnly) {
+    recordRunCost({
+      now,
+      runId,
+      standardFetchCalls,
+      claudeUsage: {},
+      dueUsers: [],
+      deliveredUsers: [],
+      failedUsers: [],
+      publicDigestUrl: "",
+      runValueState: "inventory_refresh",
+      blockedReason: null,
+    });
+    logEvent("info", "digest.run.completed", {
+      provider: "orchestrator",
+      outcome: "inventory_refresh",
+      due_users: 0,
+      delivered_users: 0,
+      failed_users: 0,
+      retained_candidates: Array.isArray(allItems) ? allItems.length : 0,
+    });
+    log(`=== SignalBrief inventory refresh complete — ${Array.isArray(allItems) ? allItems.length : 0} candidate(s) refreshed ===`);
+    return;
+  }
 
   const selectionRuntime = createDigestOrchestratorSelectionRuntime({
     CONFIG,

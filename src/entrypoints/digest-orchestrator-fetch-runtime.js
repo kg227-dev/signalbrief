@@ -23,6 +23,7 @@ const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
 const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_MAX_DISCOVERY_CANDIDATE_SHARE = 0.2;
+const DEFAULT_RETENTION_HOURS_FOR_INVENTORY = 72;
 const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
 // MVP topic set. Regulatory coverage surfaces under the closest sector topic
 // through sector official sources. CONSUMER & RETAIL and INDUSTRIALS added.
@@ -759,6 +760,35 @@ function sortDeepCoverageRetryStates(states, isFetchedItemEligible) {
   });
 }
 
+function preloadBrokerInventoryIntoStates(states, brokerCandidateInventory, helpers = {}) {
+  if (!brokerCandidateInventory) return 0;
+  const normalizeUrlForDedup = typeof helpers.normalizeUrlForDedup === "function" ? helpers.normalizeUrlForDedup : null;
+  const itemEligibilityFn = typeof helpers.isFetchedItemEligible === "function" ? helpers.isFetchedItemEligible : null;
+  const annotateFetched = typeof helpers.annotateFetchedItems === "function" ? helpers.annotateFetchedItems : null;
+  const nowMs = Number.isFinite(Number(helpers.nowMs)) ? Number(helpers.nowMs) : Date.now();
+  const maxAgeHours = Number.isFinite(Number(helpers.maxAgeHours)) ? Number(helpers.maxAgeHours) : 48;
+  let loadedCount = 0;
+  for (const state of (Array.isArray(states) ? states : [])) {
+    const tag = String(state?.topic?.tag || "").trim().toUpperCase();
+    if (!tag) continue;
+    const cachedItems = brokerCandidateInventory.loadRecentTopicItems(tag, { nowMs, maxAgeHours });
+    if (!Array.isArray(cachedItems) || cachedItems.length <= 0) continue;
+    const merged = mergeBrokerItemsIntoState(state, cachedItems, normalizeUrlForDedup, itemEligibilityFn, annotateFetched);
+    loadedCount += Number(merged?.addedUniqueCount || 0);
+  }
+  return loadedCount;
+}
+
+function persistBrokerInventory(brokerCandidateInventory, topicItems, opts = {}) {
+  if (!brokerCandidateInventory) return null;
+  const nowMs = Number.isFinite(Number(opts.nowMs)) ? Number(opts.nowMs) : Date.now();
+  const maxAgeHours = Number.isFinite(Number(opts.maxAgeHours)) ? Number(opts.maxAgeHours) : 48;
+  return brokerCandidateInventory.persistBrokerTopicItems(topicItems, {
+    nowMs,
+    retentionHours: Math.max(DEFAULT_RETENTION_HOURS_FOR_INVENTORY, maxAgeHours + 24),
+  });
+}
+
 function sortTrustedSourceRetryStates(states, annotateFetchedItems, isFetchedItemEligible) {
   return sortTopicStates(states).sort((left, right) => {
     const leftUsable = countUsableItems(left?.items, isFetchedItemEligible);
@@ -1088,6 +1118,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     isFetchedItemEligible,
     annotateFetchedItems,
     standardTopicBrokerRuntime,
+    brokerCandidateInventoryRuntime,
   } = deps || {};
   const logger = typeof log === "function" ? log : () => {};
   const topicNormalizer = typeof normalizeTopicToken === "function"
@@ -1112,6 +1143,11 @@ function createDigestOrchestratorFetchRuntime(deps) {
   const standardTopicBroker = standardTopicBrokerRuntime
     && typeof standardTopicBrokerRuntime.fetchBrokerCandidates === "function"
     ? standardTopicBrokerRuntime
+    : null;
+  const brokerCandidateInventory = brokerCandidateInventoryRuntime
+    && typeof brokerCandidateInventoryRuntime.loadRecentTopicItems === "function"
+    && typeof brokerCandidateInventoryRuntime.persistBrokerTopicItems === "function"
+    ? brokerCandidateInventoryRuntime
     : null;
   const maxFetchConcurrency = resolveFetchConcurrency(CONFIG?.digest);
 
@@ -1398,6 +1434,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const maxAgeHours = Number.isFinite(resolvedMaxAgeHours)
       ? Math.min(48, Math.max(1, resolvedMaxAgeHours))
       : 48;
+    const inventoryRefreshOnly = String(runMode || "").trim() === "inventory_refresh";
     const aggressiveStandardRun = isAggressiveStandardRun(runMode);
     const selectionTarget = resolveSelectionTarget(dueUsers, Number(digestConfig.itemCount || 5));
     const tagPriority = buildTagPriority(dueUsers, topicNormalizer);
@@ -1460,6 +1497,19 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const standardHardLimit = Math.max(0, budgetTracker.hard_calls);
     const standardSoftLimit = Math.max(0, Math.min(standardHardLimit, budgetTracker.soft_calls));
 
+    if (!inventoryRefreshOnly && brokerCandidateInventory) {
+      const inventoryLoadedCount = preloadBrokerInventoryIntoStates(standardStates, brokerCandidateInventory, {
+        normalizeUrlForDedup,
+        isFetchedItemEligible: itemEligibilityFn,
+        annotateFetchedItems: annotateFetched,
+        nowMs: Date.now(),
+        maxAgeHours,
+      });
+      if (inventoryLoadedCount > 0) {
+        logger(`[broker-inventory] preloaded ${inventoryLoadedCount} recent broker candidate(s)`);
+      }
+    }
+
     const standardPhase1States = standardStates.filter((state) => (
       Array.isArray(state?.topic?.queries) && state.topic.queries.length > 0
     ));
@@ -1473,9 +1523,10 @@ function createDigestOrchestratorFetchRuntime(deps) {
     // Topics that reach BROKER_SATURATION_THRESHOLD candidates skip Perplexity entirely.
     let brokerDiagnostics = null;
     if (standardTopicBroker && standardStates.length > 0) {
+      const brokerRetrievedAt = new Date().toISOString();
       const brokerResult = await standardTopicBroker.fetchBrokerCandidates({
         topicStates: standardStates,
-        retrievedAt: new Date().toISOString(),
+        retrievedAt: brokerRetrievedAt,
         maxAgeHours,
       });
       brokerDiagnostics = brokerResult?.diagnostics || null;
@@ -1486,10 +1537,33 @@ function createDigestOrchestratorFetchRuntime(deps) {
           mergeBrokerItemsIntoState(state, brokerItems, normalizeUrlForDedup, itemEligibilityFn, annotateFetched);
         }
       }
+      if (brokerCandidateInventory) {
+        try {
+          persistBrokerInventory(brokerCandidateInventory, brokerResult?.topicItems || {}, {
+            nowMs: Date.now(),
+            maxAgeHours,
+          });
+        } catch (error) {
+          logger(`[broker-inventory] persist failed: ${error.message}`);
+        }
+      }
       const brokerSaturated = standardStates.filter((s) => Number(s.brokerItemCount || 0) >= BROKER_SATURATION_THRESHOLD);
       if (brokerSaturated.length > 0) {
         logger(`Broker-first: ${brokerSaturated.length} topic(s) reached saturation threshold (${BROKER_SATURATION_THRESHOLD}), skipping Perplexity: ${brokerSaturated.map((s) => s.topic.tag).join(", ")}`);
       }
+    }
+    if (inventoryRefreshOnly) {
+      const allItems = standardStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
+      const fetchDiagnostics = buildFetchDiagnostics(standardStates, budgetTracker, maxFetchConcurrency, brokerDiagnostics);
+      logger(`Inventory refresh captured ${allItems.length} broker candidate(s) across ${standardStates.length} topic(s)`);
+      return {
+        selectionTarget,
+        tagPriority,
+        allItems,
+        standardFetchCallsPlanned: 0,
+        standardFetchCalls: 0,
+        fetchDiagnostics,
+      };
     }
     // Filter Perplexity phase1 to topics that are not already broker-saturated.
     const perplexityEligiblePhase1States = allowedPhase1States.filter(

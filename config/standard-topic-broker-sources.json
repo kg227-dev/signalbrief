@@ -1419,9 +1419,9 @@
       ]
     },
     {
-      "_comment": "Industry Week — manufacturing strategy, automation, workforce. Verify feed URL.",
+      "_comment": "Industry Week — manufacturing strategy, automation, workforce.",
       "id": "industrials_industry_week",
-      "enabled": false,
+      "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [
@@ -1438,7 +1438,7 @@
       "content_kind": "article"
     },
     {
-      "_comment": "FreightWaves — freight, trucking, logistics, shipping market intelligence.",
+      "_comment": "FreightWaves — freight, trucking, logistics, shipping market intelligence. Exclude podcast/show/sonar URLs which appear in the RSS feed and classify as non_article.",
       "id": "industrials_freightwaves",
       "enabled": true,
       "tier": 2,
@@ -1455,7 +1455,14 @@
       "endpoint": "https://www.freightwaves.com/news/rss",
       "parser": "rss",
       "content_kind": "article",
-      "allow_article_like_listing_urls": true
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": [
+        "/podcasts/",
+        "/podcast/",
+        "/sonar/",
+        "/shows/",
+        "/show/"
+      ]
     },
     {
       "_comment": "Defense News — defense contracting, DoD budget, aerospace/defense procurement.",
@@ -1496,7 +1503,7 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Construction Dive — construction industry news, project delivery, materials, codes. Industry Dive network.",
+      "_comment": "Construction Dive — construction industry news, project delivery, materials, codes. Industry Dive network. Exclude sponsored content.",
       "id": "industrials_construction_dive",
       "enabled": true,
       "tier": 2,
@@ -1513,12 +1520,15 @@
       "endpoint": "https://www.constructiondive.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
-      "allow_article_like_listing_urls": true
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
     },
     {
       "_comment": "Logistics Management — supply chain, warehousing, transportation, 3PL strategy.",
       "id": "industrials_logistics_management",
-      "enabled": false,
+      "enabled": true,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [

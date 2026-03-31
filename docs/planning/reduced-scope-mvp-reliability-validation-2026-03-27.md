@@ -334,19 +334,19 @@ Scheduled run `scheduled:2026-03-30T11-02-57-080Z` executed on time. 4/7 MVP top
 - [x] Post-send checks complete
 - [x] Scorecard row completed
 - [x] Root cause note added if yellow or red
-- [ ] Run `npm run ops:drill:restore-state -- --latest --clean`
-- [ ] Record restore drill duration
-- [ ] Record restore drill result
+- [x] Run `npm run ops:drill:restore-state -- --latest --clean`
+- [x] Record restore drill duration
+- [x] Record restore drill result
 
 #### Day 4 Restore Drill
 
 | Field | Value |
 |---|---|
-| Drill started at | TBD |
-| Drill completed at | TBD |
-| Duration | TBD |
-| Result | TBD |
-| Notes | Not run yet — schedule before Day 5. |
+| Drill started at | 2026-03-31T13:53:31Z |
+| Drill completed at | 2026-03-31T13:53:31Z |
+| Duration | <1s |
+| Result | PASS |
+| Notes | Archive: `state-backup-20260328-040859-02bc162.tgz`. Verified 101 files, 30.7MB. Temp dir extracted and cleaned successfully. |
 
 #### Day 4 Result
 

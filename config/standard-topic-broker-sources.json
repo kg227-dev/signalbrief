@@ -143,7 +143,7 @@
   },
   "sources": [
     {
-      "_comment": "STAT News — gold standard for health/pharma/biotech journalism. Cross-tagged to both healthcare and life sciences.",
+      "_comment": "STAT News — gold standard for health/pharma/biotech journalism. Cross-tagged to both healthcare and life sciences. STAT+ paywalled items excluded via title_exclude_patterns.",
       "id": "healthcare_stat",
       "enabled": true,
       "tier": 1,
@@ -160,7 +160,10 @@
       ],
       "endpoint": "https://www.statnews.com/feed/",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "title_exclude_patterns": [
+        "^STAT\\+"
+      ]
     },
     {
       "_comment": "Modern Healthcare — leading trade for health systems, payers, hospital strategy.",
@@ -966,9 +969,9 @@
       "content_kind": "article"
     },
     {
-      "_comment": "Reuters Business News — global business and finance newswire. Publishes 7 days/week including weekends.",
+      "_comment": "Reuters Business News — DISABLED: feeds.reuters.com legacy RSS endpoint is dead (status 0 on 2026-03-31). Needs replacement URL before re-enabling.",
       "id": "financial_reuters_business",
-      "enabled": true,
+      "enabled": false,
       "tier": 2,
       "lane": "publisher_feed",
       "topic_tags": [

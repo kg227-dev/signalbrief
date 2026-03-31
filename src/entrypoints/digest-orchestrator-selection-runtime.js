@@ -14,6 +14,30 @@ const { filterLowRelevance, boostHighRelevance } = require("../domains/classific
 const { loadCache } = require("../domains/classification/strategic-relevance-cache");
 const path = require("path");
 
+// Domain-to-topic scope constraints for best-fit reassignment.
+// Items from these source domains are locked to the listed topic tags and will not
+// be reassigned to any topic outside this set, regardless of keyword scoring.
+// Prevents specialist-source items from bleeding into unrelated topic pools
+// (e.g. STAT health/pharma items scoring into TECHNOLOGY via "ai" keywords,
+//  or The Register tech items scoring into FINANCIAL SERVICES via "payments" keywords).
+const DOMAIN_TOPIC_SCOPE = new Map([
+  ["statnews.com", new Set(["HEALTHCARE", "LIFE SCIENCES"])],
+  ["fiercehealthcare.com", new Set(["HEALTHCARE"])],
+  ["modernhealthcare.com", new Set(["HEALTHCARE"])],
+  ["beckershospitalreview.com", new Set(["HEALTHCARE"])],
+  ["fiercebiotech.com", new Set(["LIFE SCIENCES", "HEALTHCARE"])],
+  ["biopharmadive.com", new Set(["LIFE SCIENCES", "HEALTHCARE"])],
+  ["fiercepharma.com", new Set(["LIFE SCIENCES", "HEALTHCARE"])],
+  ["theregister.com", new Set(["TECHNOLOGY"])],
+  ["go.theregister.com", new Set(["TECHNOLOGY"])],
+  ["freightwaves.com", new Set(["INDUSTRIALS"])],
+  ["supplychaindive.com", new Set(["INDUSTRIALS", "CONSUMER & RETAIL"])],
+  ["americanbanker.com", new Set(["FINANCIAL SERVICES"])],
+  ["bankingdive.com", new Set(["FINANCIAL SERVICES"])],
+  ["canarymedia.com", new Set(["ENERGY"])],
+  ["utilitydive.com", new Set(["ENERGY"])],
+]);
+
 function computeItemAgeHours(item, nowMs) {
   const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
   if (!ts) return Infinity;
@@ -219,6 +243,11 @@ function canonicalizeCandidateTopicTags(items = [], opts = {}) {
     const bestScore = Number(scoreBestFitTopicTag(bestTag, fitText) || 0);
     const currentScore = originalTag ? Number(scoreBestFitTopicTag(originalTag, fitText) || 0) : 0;
     if (bestScore <= 0 || bestTag === originalTag || bestScore <= currentScore) return item;
+    // Domain-scope guard: if the source domain is a known specialist, only allow
+    // reassignment to topics within its authoritative scope.
+    const sourceDomain = String(item?.source_domain || "").trim().toLowerCase();
+    const domainScope = DOMAIN_TOPIC_SCOPE.get(sourceDomain);
+    if (domainScope && !domainScope.has(bestTag)) return item;
     bestFitTopicReassignedCount += 1;
     return {
       ...item,

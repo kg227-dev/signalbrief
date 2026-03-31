@@ -162,7 +162,7 @@ The 7-day window passes only if all of the following are true:
 | Day 1 | 2026-03-28 | Yes | 10 | 0 | 16 | 0 | 0 | 0 | 10 observed in audit; 2 intended-topic misses | KPI bug in admin | KPI bug in admin | KPI bug in admin | 89.36% | 4 | Closed | Scheduler lock reset pre-Day 1; no rerun used to satisfy canaries | Red | Scheduled run executed, but all canaries missed. Audit leaked 8 legacy topics; 9 canaries failed on `normalizeCustomKeyword is not defined`; T6 was withheld because `CONSUMER` did not bucket into `CONSUMER & RETAIL`. |
 | Day 2 | 2026-03-29 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 3 (Industrials 6, Energy 11, Healthcare 12) | ~46% | 100% | 0% | 98.1% (52/53) | 0 | No | 0 | Red | 3 topics underfilled (Industrials 3/5, Energy 4/5, Healthcare 4/5). Consumer broker fix landed — 18 candidates, 5 selected. Weekend stale-rate spike: most sources returned items but 70%+ were >48h old. |
 | Day 3 | 2026-03-30 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 6 (only Technology ≥15; HC 7, LS 6, Energy 11, Ind 8, C&R 3, FinServ 0) | ~52% | 97% | 3% | 100% | 0 | No | 0 | Red | Sunday volume collapse: FinServ 0 candidates (all deduped), C&R only 3, HC only 4/5. Industrials recovered to 5/5. minDeliveryItemsPerTopic=3 fix deployed pre-Day 3 but production ran before deploy. |
-| Day 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
+| Day 4 | 2026-03-31 | Yes | 10 | TBD | 7 | 7 | 0 | 0 | 0 | 65.7% | 100% | 0% | 98.3% (58/59) | 0 | No | 0 | Yellow | First full delivery — all 7 topics 5/5. Trusted T1/2 share 65.7% below 80% target. financial_reuters_business fetch failed. Source caps blocked high-scoring stories on americanbanker.com (×8), modernhealthcare.com (×3), freightwaves.com (×3). Cross-topic contamination continues (tech/FinServ, sports/Energy). |
 | Day 5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 6 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
@@ -330,10 +330,10 @@ Scheduled run `scheduled:2026-03-30T11-02-57-080Z` executed on time. 4/7 MVP top
 
 ### Day 4
 
-- [ ] Pre-send checks complete
-- [ ] Post-send checks complete
-- [ ] Scorecard row completed
-- [ ] Root cause note added if yellow or red
+- [x] Pre-send checks complete
+- [x] Post-send checks complete
+- [x] Scorecard row completed
+- [x] Root cause note added if yellow or red
 - [ ] Run `npm run ops:drill:restore-state -- --latest --clean`
 - [ ] Record restore drill duration
 - [ ] Record restore drill result
@@ -346,7 +346,46 @@ Scheduled run `scheduled:2026-03-30T11-02-57-080Z` executed on time. 4/7 MVP top
 | Drill completed at | TBD |
 | Duration | TBD |
 | Result | TBD |
-| Notes |  |
+| Notes | Not run yet — schedule before Day 5. |
+
+#### Day 4 Result
+
+`Yellow`
+
+Scheduled run `scheduled:2026-03-31T11-00-19-655Z` executed on time. First day all 7 topics delivered exactly 5 items. No freshness violations, no manual intervention, 0% discovery, 100% broker backbone. Trusted T1/2 share came in at 65.7% — below the 80% target — making this a yellow rather than a green.
+
+#### Day 4 What Worked
+
+- **First full delivery**: all 7 topics delivered 5/5. First time since Day 1 started.
+- **All 7 topics cleared depth ≥15**: Financial Services 46, Healthcare 35, Life Sciences 33, Technology 137, Industrials 24, Energy 30, Consumer & Retail 39. Total candidates 344, up dramatically from Day 3's 77.
+- **Zero freshness violations**: max selected item age 20.6h; median 7.0h.
+- **100% broker backbone**: 324 publisher_feed + 20 official candidates; 0% discovery.
+- **Near-perfect source reliability**: 58/59 sources succeeded (98.3%). Only failure was `financial_reuters_business` (status 0, fetch failed).
+- **Zero manual intervention**: no resend, regenerate, or rerun required.
+- **Archive dedup functional**: 25 cross-day duplicates removed from pool, 4 history-suppressed. No repetition from prior days in selected set.
+
+#### Day 4 What Failed
+
+- **Trusted T1/2 share: 65.7%** (23/35 items from premium or strong sources). Below 80% target. Breakdown: strong 21, standard 12, premium 2.
+- **Source caps blocking high-scoring stories**: americanbanker.com capped at 3/3 (8 over-quota stories blocked, all tier1), modernhealthcare.com capped at 3/3 (3 blocked), freightwaves.com capped at 3/3 (3 blocked). Source diversity caps are working as designed but are suppressing relevant stories from the most reliable sources.
+- **Cross-topic contamination continues**: `go.theregister.com` Big Tech/Australia digital safety story selected into Financial Services. `canarymedia.com` F1 racing story (`F1 in Japan: Oh no, what have they done to all the fast corners?`) surfaced in Energy missed flags. TechCrunch Silicon Valley congressional race story selected in Technology.
+- **Ars Technica fluoride/utility story in Energy**: `arstechnica.com | Water utility announces it's ditching fluoride` — tangential public health content appearing in the Energy selected set.
+- **Stale-heavy sources**: 880 stale items filtered at fetch stage out of 1,465 parsed (60% stale rate at source level). Worst offenders: `industrials_area_development` 97/100 stale, `energy_canary` 96/100 stale.
+- **financial_pensions_investments**: 26/83 parsed items classified as non_article (fund data tables or listings) — significant noise in the FinServ pool.
+- **76 total non_article items** filtered across all sources; Industrials affected by `financial_pensions_investments` bleed-through.
+- **STAT+ paywalled content selected**: Life Sciences selected 2 STAT+ paywalled stories. User-facing experience is degraded if the subscriber cannot access these.
+
+#### Day 4 Root Cause Summary
+
+1. **Standard-tier dominance suppresses trusted share**: Source caps on the highest-reliability sources (americanbanker, modernhealthcare, freightwaves) force selection to pull from standard-tier sources to fill quota. Caps are correct editorial policy but structural trusted-share pressure exists until the source pool is deeper.
+2. **Cross-topic contamination is a scorer/ranker issue**: The relevance scorer is not sufficiently penalizing content that is topically adjacent but not on-topic (tech news in FinServ, public health/politics in Tech, sports in Energy). This inflates the candidate pool with off-topic items that survive to selection.
+3. **Stale source load is high but absorption is working**: The 880 stale items at fetch show the freshness gate is doing its job, but some sources (energy_canary, industrials_area_development) are dominated by stale content — increasing noise with minimal signal contribution.
+
+#### Day 4 Observations
+
+- First weekday (Monday) run. The volume recovery from 77 → 344 candidates confirms the weekend scarcity hypothesis: Sat/Sun have structurally thinner publishing schedules for these trade publications.
+- Trusted T1/2 share trend: ~83% (D1 adjusted), ~46% (D2), ~52% (D3), 65.7% (D4). Recovering but not yet at target; likely needs either source pool deepening or source cap tuning.
+- The restore drill for Day 4 was not completed — schedule before Day 5 send.
 
 ### Day 5
 

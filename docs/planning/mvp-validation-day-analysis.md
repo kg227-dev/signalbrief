@@ -7,26 +7,27 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
 |--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | | | | | 7/7 |
-| Depth ≥15 (7 topics) | 5/7 | **4/7** | **1/7** | | | | | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | | | | | ≥80% |
-| Broker/RSS share | 96% | 100% | 97% | | | | | ≥70% |
-| Source success rate | 89% | **98%** | 100% | | | | | ≥90% |
-| Missed-story flags | 19 | 14 | 10 | | | | | 0 |
-| True miss flags | 3 | 3 | 3 | | | | | 0 |
-| Manual intervention | 0 | 0 | 0 | | | | | 0 |
-| Consecutive full days | 0 | 0 | 0 | | | | | 7 |
-| Day color | Red | Red | Red | | | | | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | | | | 7/7 |
+| Depth ≥15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | | | | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | | | | ≥80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | | | | ≥70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | | | | ≥90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | | | | 0 |
+| True miss flags | 3 | 3 | 3 | TBD | | | | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | | | | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | | | | 7 |
+| Day color | Red | Red | Red | Yellow | | | | Green |
 
 ## Completed days
 
 - [Day 1 — 2026-03-28](../archive/planning/2026-03/mvp-day-1-2026-03-28.md)
 - [Day 2 — 2026-03-29 (Sunday)](../archive/planning/2026-03/mvp-day-2-2026-03-29.md)
 - [Day 3 — 2026-03-30 (Monday)](../archive/planning/2026-03/mvp-day-3-2026-03-30.md)
+- [Day 4 — 2026-03-31 (Tuesday)](../archive/planning/2026-03/mvp-day-4-2026-03-31.md)
 
 ## Day 4 — 2026-03-31
 
-_Pending._
+See [archive](../archive/planning/2026-03/mvp-day-4-2026-03-31.md). **Yellow.** First full 7/7 delivery. Trusted T1/2 65.7% (below 80%). One source failure (financial_reuters_business). Cross-topic contamination continues.
 
 ## Day 5 — 2026-04-01
 

@@ -34,6 +34,16 @@ function createDigestEmailItemsRuntime(deps) {
       });
   }
 
+  function truncateAtWordBoundary(value, maxChars) {
+    const text = String(value || "").trim();
+    if (!text || !Number.isFinite(maxChars) || maxChars <= 0 || text.length <= maxChars) return text;
+    const hardCut = Math.max(0, Math.min(text.length, Math.floor(maxChars)));
+    const window = text.slice(0, hardCut + 1);
+    const boundary = Math.max(window.lastIndexOf(" "), window.lastIndexOf("\n"), window.lastIndexOf("\t"));
+    const cut = boundary > 40 ? boundary : hardCut;
+    return `${text.slice(0, cut).trimEnd()}…`;
+  }
+
   const EMAIL_FLAG_LABELS = { earnings: "Earnings", guidance: "Guidance", m_and_a: "Deal", regulatory: "Regulatory", leadership: "Leadership", ipo: "IPO" };
 
   function renderEmailSourceBadge(tier) {
@@ -90,8 +100,9 @@ function createDigestEmailItemsRuntime(deps) {
       }
       const summary = String(item.summary || "").trim();
       if (!summary) return "";
-      const truncated = summary.length > 200 ? `${summary.slice(0, 197)}…` : summary;
-      return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(decodeHtmlEntities(truncated))}</div>`;
+      const maxChars = isDeep ? Infinity : 320;
+      const truncated = truncateAtWordBoundary(decodeHtmlEntities(summary), maxChars);
+      return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(truncated)}</div>`;
     })();
 
     const implHtml = (isDeep && item.implications)

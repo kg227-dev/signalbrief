@@ -2396,7 +2396,12 @@ function renderBackboneHealthCard(sourceHealth) {
 
 function renderTopicReadinessCard(topicReadiness) {
   const entries = topicReadiness && typeof topicReadiness === "object"
-    ? Object.entries(topicReadiness)
+    ? Object.entries(topicReadiness).sort((left, right) => {
+        const leftDays = Number(left?.[1]?.days_observed || 0);
+        const rightDays = Number(right?.[1]?.days_observed || 0);
+        if (rightDays !== leftDays) return rightDays - leftDays;
+        return String(left?.[0] || "").localeCompare(String(right?.[0] || ""));
+      })
     : [];
   if (!entries.length) return "";
   return `<div class="digest-audit-card">

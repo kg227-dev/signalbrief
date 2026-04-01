@@ -7,16 +7,16 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
 |--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | | | | 7/7 |
-| Depth ≥15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | | | | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | | | | ≥80% |
-| Broker/RSS share | 96% | 100% | 97% | 100% | | | | ≥70% |
-| Source success rate | 89% | **98%** | 100% | 98.3% | | | | ≥90% |
-| Missed-story flags | 19 | 14 | 10 | 20 | | | | 0 |
-| True miss flags | 3 | 3 | 3 | TBD | | | | 0 |
-| Manual intervention | 0 | 0 | 0 | 0 | | | | 0 |
-| Consecutive full days | 0 | 0 | 0 | 1 | | | | 7 |
-| Day color | Red | Red | Red | Yellow | | | | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | | | 7/7 |
+| Depth ≥15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | | | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | | | ≥80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | | | ≥70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | | | ≥90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | 19 | | | 0 |
+| True miss flags | 3 | 3 | 3 | 6 | 5 | | | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | 0 | | | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | 2 | | | 7 |
+| Day color | Red | Red | Red | Yellow | Yellow | | | Green |
 
 ## Completed days
 
@@ -24,6 +24,7 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 - [Day 2 — 2026-03-29 (Sunday)](../archive/planning/2026-03/mvp-day-2-2026-03-29.md)
 - [Day 3 — 2026-03-30 (Monday)](../archive/planning/2026-03/mvp-day-3-2026-03-30.md)
 - [Day 4 — 2026-03-31 (Tuesday)](../archive/planning/2026-03/mvp-day-4-2026-03-31.md)
+- [Day 5 — 2026-04-01 (Wednesday)](../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
 
 ## Day 4 — 2026-03-31
 
@@ -31,7 +32,7 @@ See [archive](../archive/planning/2026-03/mvp-day-4-2026-03-31.md). **Yellow.** 
 
 ## Day 5 — 2026-04-01
 
-_Pending._
+See [archive](../archive/planning/2026-03/mvp-day-5-2026-04-01.md). **Yellow.** Second consecutive 7/7 delivery and full 10/10 canary send. Trusted T1/2 recovered to 77.1% but still missed target. The main remaining problems are selection quality, not retrieval reliability: FDA compliance pages were selected in Life Sciences, an American Banker house promo was selected in Financial Services, and an off-topic FreightWaves border story led Industrials. The March 31 source-cap raise also did not show up in the scheduled audit, which still reported `3/3` caps.
 
 ## Day 6 — 2026-04-02
 

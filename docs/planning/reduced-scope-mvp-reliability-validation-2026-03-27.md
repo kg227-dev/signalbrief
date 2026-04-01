@@ -162,8 +162,8 @@ The 7-day window passes only if all of the following are true:
 | Day 1 | 2026-03-28 | Yes | 10 | 0 | 16 | 0 | 0 | 0 | 10 observed in audit; 2 intended-topic misses | KPI bug in admin | KPI bug in admin | KPI bug in admin | 89.36% | 4 | Closed | Scheduler lock reset pre-Day 1; no rerun used to satisfy canaries | Red | Scheduled run executed, but all canaries missed. Audit leaked 8 legacy topics; 9 canaries failed on `normalizeCustomKeyword is not defined`; T6 was withheld because `CONSUMER` did not bucket into `CONSUMER & RETAIL`. |
 | Day 2 | 2026-03-29 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 3 (Industrials 6, Energy 11, Healthcare 12) | ~46% | 100% | 0% | 98.1% (52/53) | 0 | No | 0 | Red | 3 topics underfilled (Industrials 3/5, Energy 4/5, Healthcare 4/5). Consumer broker fix landed — 18 candidates, 5 selected. Weekend stale-rate spike: most sources returned items but 70%+ were >48h old. |
 | Day 3 | 2026-03-30 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 6 (only Technology ≥15; HC 7, LS 6, Energy 11, Ind 8, C&R 3, FinServ 0) | ~52% | 97% | 3% | 100% | 0 | No | 0 | Red | Sunday volume collapse: FinServ 0 candidates (all deduped), C&R only 3, HC only 4/5. Industrials recovered to 5/5. minDeliveryItemsPerTopic=3 fix deployed pre-Day 3 but production ran before deploy. |
-| Day 4 | 2026-03-31 | Yes | 10 | TBD | 7 | 7 | 0 | 0 | 0 | 65.7% | 100% | 0% | 98.3% (58/59) | 0 | No | 0 | Yellow | First full delivery — all 7 topics 5/5. Trusted T1/2 share 65.7% below 80% target. financial_reuters_business fetch failed. Source caps blocked high-scoring stories on americanbanker.com (×8), modernhealthcare.com (×3), freightwaves.com (×3). Cross-topic contamination continues (tech/FinServ, sports/Energy). |
-| Day 5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
+| Day 4 | 2026-03-31 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 65.7% | 100% | 0% | 98.3% (58/59) | 0 | No | 0 | Yellow | First full delivery and first full 10/10 canary send. Trusted T1/2 share stayed below target. financial_reuters_business failed and cross-topic contamination was still visible in the selected set. |
+| Day 5 | 2026-04-01 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 77.1% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Second consecutive full day. 613 candidates, 35 selected, all 10 canaries sent. Trusted share still missed target and the selected set still included FDA compliance pages, an American Banker self-promo, and an off-topic FreightWaves border story. |
 | Day 6 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 | Day 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 
@@ -389,10 +389,45 @@ Scheduled run `scheduled:2026-03-31T11-00-19-655Z` executed on time. First day a
 
 ### Day 5
 
-- [ ] Pre-send checks complete
-- [ ] Post-send checks complete
-- [ ] Scorecard row completed
-- [ ] Root cause note added if yellow or red
+- [x] Pre-send checks complete
+- [x] Post-send checks complete
+- [x] Scorecard row completed
+- [x] Root cause note added if yellow or red
+
+#### Day 5 Result
+
+`Yellow`
+
+Scheduled run `scheduled:2026-04-01T11-03-57-403Z` executed on time. All 10 canary digest records exist for `2026-04-01--scheduled.json` and are marked `sent`. All 7 MVP topics delivered `5/5`, all 7 topics cleared the `>=15` depth threshold, and there were no freshness breaches or duplicate URLs versus Day 4. The day remains yellow because trusted T1/2 share was `77.1%`, still below the `>=80%` gate, and the selected set still contains quality misses that do not meet the spirit of the product.
+
+#### Day 5 What Worked
+
+- **Second consecutive full delivery**: 10/10 canaries sent and all 7 MVP topics delivered `5/5`.
+- **Best candidate depth of the window**: 613 total candidates with every topic above the depth gate: Technology 219, Healthcare 95, Financial Services 81, Consumer & Retail 70, Industrials 56, Life Sciences 47, Energy 45.
+- **Perfect backbone and source reliability**: 589 `broker_publisher_feed` candidates, 24 `broker_official` candidates, 0 discovery, and 58/58 broker source fetches succeeded.
+- **Domain-scope guard appears effective**: no Register items selected in Financial Services, no STAT items selected in Technology, and none of the Day 4 cross-topic contamination patterns repeated in the same way.
+- **Freshness and repetition held**: selected item age range was `0.08h` to `22.3h` with an `11.6h` median; 36 archive duplicates were removed, 1 item was history-suppressed, and 0 selected URLs overlapped with Day 4 in the same topic.
+- **No manual intervention**: no resend, rerun, regenerate, or admin repair action was needed.
+
+#### Day 5 What Failed
+
+- **Trusted T1/2 share still missed the gate**: 27/35 selected items (`77.1%`) came from `premium` or `strong` sources. The selected mix was 25 strong, 2 premium, and 8 standard.
+- **The source-cap override did not actually take effect**: the scheduled audit still records `selection_source_cap (americanbanker.com: 3/3)`, `selection_source_cap (freightwaves.com: 3/3)`, and `selection_source_cap (go.theregister.com: 3/3)`. The March 31 cap raise is not reflected in the live scheduled path.
+- **Life Sciences still shipped non-story FDA items**: two FDA compliance/reporting pages were selected. These are not briefing-quality stories.
+- **Financial Services still let self-promotional content through**: `americanbanker.com | Introducing AI Intelligence on American Banker` was selected as one of the 5 FinServ items.
+- **Industrials still selected an off-topic FreightWaves border-enforcement story**: `From liquid meth to live pythons, CBP stops smuggling at the border` won the top Industrials slot on freshness, but it is not an industrials briefing story.
+
+#### Day 5 Root Cause Summary
+
+1. **Reliability is no longer the main blocker**: the system can now fill all 7 topics and send all 10 canaries on back-to-back weekdays without manual help.
+2. **Content-type filtering inside valid domains is still too weak**: authority and freshness still overvalue official database pages, publisher self-promo, and tangentially relevant articles.
+3. **Trusted-share improvement is now constrained by both tier mix and an ineffective cap override**: the strongest operational fixes landed, but the scheduled run still behaved as if `maxItemsPerSourceDomain` were 3, not 5.
+
+#### Day 5 Observations
+
+- Day 5 is the first day where both the scheduled topic contract and the user-delivery contract held on consecutive days.
+- The primary remaining gap has shifted from retrieval reliability to selection quality.
+- The next highest-leverage fixes are content-quality filters and scheduled-path tuning verification, not fetch plumbing.
 
 ### Day 6
 
@@ -420,9 +455,10 @@ Scheduled run `scheduled:2026-03-31T11-00-19-655Z` executed on time. First day a
 | 2026-03-28 | High | Topic naming mismatch | `CONSUMER` selection did not land in `CONSUMER & RETAIL` user buckets | T6 was withheld; M3 underfilled at `10/15` requested items | Production digest records for `email-1774672713028` and `email-1774672713049` | Exact-match delivery bucketing does not reconcile active topic aliases | None | Normalize delivery bucketing/topic tags to the MVP canonical topic names | Yes — fixed Day 1. `CONSUMER & RETAIL` delivered 5/5 on Days 2–4. |
 | 2026-03-28 | Medium | Admin audit KPI math | Trusted-share and broker-share KPIs reported impossible zeros | Operator dashboard is misleading for Day 1 backbone/trust metrics | Selected-item lane/tier breakdown from `data/digest-audit/2026-03-28.json` vs readiness calculations | Readiness builder assumes numeric source tiers and inconsistent fetch counters | Manual inspection of raw audit doc | Fix digest-audit metric calculation before relying on dashboard percentages | Yes — fixed Day 1. KPIs reported real values from Day 2 onward. |
 | 2026-03-31 | Medium | Cross-topic candidate reassignment | Specialist-source items reassigned to wrong topics by keyword scorer (STAT health/AI→TECHNOLOGY, Register tech→FINANCIAL SERVICES) | Off-topic content selected (Big Tech/Australia story in FinServ; AI chatbot story in Tech) | Day 4 audit — go.theregister.com selected in FINANCIAL SERVICES; statnews.com in TECHNOLOGY candidates | `canonicalizeCandidateTopicTags` uses pure keyword scoring with no domain-authority constraint, so "payments" in a tech headline beats TECHNOLOGY score | None during window | Deploy `DOMAIN_TOPIC_SCOPE` guard locking specialist domains to their authoritative topics | Yes — deployed 2026-03-31 (commit f43411b). Active for Day 5. |
-| 2026-03-31 | Medium | Source cap suppressing trusted share | `maxItemsPerSourceDomain=3` blocked 8 americanbanker and 3 modernhealthcare high-scoring items; forced selection into standard-tier sources | Trusted T1/2 share 65.7% on Day 4, below 80% target | Day 4 audit selection_rejection_counts | Global source cap too low for deep strong-tier sources | None | Raise cap | Yes — `maxItemsPerSourceDomain` raised from 3 to 5 in `data/digest-tuning.json` on 2026-03-31. Active for Day 5. |
+| 2026-03-31 | Medium | Source cap suppressing trusted share | `maxItemsPerSourceDomain=3` blocked 8 americanbanker and 3 modernhealthcare high-scoring items; forced selection into standard-tier sources | Trusted T1/2 share 65.7% on Day 4, below 80% target | Day 4 and Day 5 audits; Day 5 still shows `selection_source_cap (...: 3/3)` in the scheduled run | Scheduled path did not reflect the attempted cap raise; tuning override is not active where expected | None | Trace scheduled tuning load and confirm whether `data/digest-tuning.json` is read by the production worker | No — Day 5 audit still shows 3/3 caps. |
 | 2026-03-31 | Low | STAT+ paywalled content in selected set | 2 STAT+ paywalled Life Sciences articles delivered; users without STAT+ subscription cannot read them | Degraded user experience for those 2 items | Day 4 audit Life Sciences selected items | No paywall filter on `healthcare_stat` source | None | Add title_exclude_patterns | Yes — `title_exclude_patterns: ["^STAT\\+"]` added to healthcare_stat on 2026-03-31 (commit f43411b). Active for Day 5. |
 | 2026-03-31 | Low | financial_reuters_business fetch failure | `feeds.reuters.com` legacy RSS endpoint dead (status 0) | No Reuters candidates in FinServ pool | Day 4 audit source diagnostics: 1 failure, financial_reuters_business | Legacy feedburner-era RSS endpoint deprecated by Reuters | None | Disable source | Yes — source disabled 2026-03-31 (commit f43411b). FinServ had 46 candidates without it on Day 4; no delivery impact expected. Needs replacement URL before re-enabling. |
+| 2026-04-01 | Medium | Official/source-content quality filter gap | Two FDA compliance/reporting pages were selected into Life Sciences and an American Banker house-promo was selected into Financial Services | No delivery failure, but editorial quality is below the product promise | Day 5 audit selected items for LIFE SCIENCES and FINANCIAL SERVICES | Authority-based scoring still overpowers story-shape filtering for official database pages and publisher self-promotional content | None | Add title/content filters for FDA compliance list pages and publisher self-promotional headlines | No |
 
 ## Scenario Handling Notes
 

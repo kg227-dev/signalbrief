@@ -27,11 +27,13 @@ async function main() {
     version: 2,
     lanes: {
       publisher_feed: { enabled: true },
-      official: { enabled: false },
+      official: { enabled: true },
       perplexity_discovery: { enabled: false },
     },
     topics: {
       HEALTHCARE: { enabled: true, lanes: { publisher_feed: true, official: false } },
+      "LIFE SCIENCES": { enabled: true, lanes: { publisher_feed: true, official: true } },
+      "FINANCIAL SERVICES": { enabled: true, lanes: { publisher_feed: true, official: true } },
       TECHNOLOGY: { enabled: true, lanes: { publisher_feed: true, official: false } },
     },
     families: {},
@@ -65,6 +67,74 @@ async function main() {
         parser: "rss",
         content_kind: "article",
         title_exclude_patterns: ["spring sale", "readers are buying"],
+      },
+      {
+        id: "life_fda_drugs",
+        enabled: true,
+        tier: 1,
+        lane: "official",
+        topic_tags: ["LIFE SCIENCES"],
+        family: "life_sciences_official",
+        source_kind: "primary_official",
+        source_family: "official",
+        domains: ["fda.gov"],
+        endpoint: "https://fda-drugs.example/feed",
+        parser: "rss",
+        content_kind: "official_document",
+        title_include_patterns: ["approval", "guidance", "drug"],
+        title_exclude_patterns: [
+          "^what's new",
+          "^novel drug approvals for",
+          "^new drugs at fda",
+          "^what's new related to",
+          "^cares act drug shortage mitigation efforts",
+          "^companies that have not submitted drug amount reports",
+          "^drug amount reports",
+          "^drug shortage mitigation efforts",
+        ],
+      },
+      {
+        id: "life_fda_biologics",
+        enabled: true,
+        tier: 1,
+        lane: "official",
+        topic_tags: ["LIFE SCIENCES"],
+        family: "life_sciences_official",
+        source_kind: "primary_official",
+        source_family: "official",
+        domains: ["fda.gov"],
+        endpoint: "https://fda-biologics.example/feed",
+        parser: "rss",
+        content_kind: "official_document",
+        title_include_patterns: ["approval", "guidance", "biologics"],
+        title_exclude_patterns: [
+          "^what's new",
+          "^novel drug approvals for",
+          "^new drugs at fda",
+          "^what's new related to",
+          "^cares act drug shortage mitigation efforts",
+          "^companies that have not submitted drug amount reports",
+          "^drug amount reports",
+          "^drug shortage mitigation efforts",
+        ],
+      },
+      {
+        id: "financial_american_banker",
+        enabled: true,
+        tier: 1,
+        lane: "publisher_feed",
+        topic_tags: ["FINANCIAL SERVICES"],
+        family: "financial_reported",
+        source_kind: "reported_media",
+        source_family: "reported",
+        domains: ["americanbanker.com"],
+        endpoint: "https://ab.example/feed",
+        parser: "rss",
+        content_kind: "article",
+        allow_article_like_listing_urls: true,
+        title_exclude_patterns: [
+          "^introducing .* on american banker$",
+        ],
       },
     ],
   };
@@ -101,6 +171,48 @@ async function main() {
         description: "Legitimate technology story.",
       },
     ])],
+    ["https://fda-drugs.example/feed", buildRss([
+      {
+        title: "CARES Act drug shortage mitigation efforts",
+        url: "https://www.fda.gov/drugs/drug-shortage-mitigation-efforts",
+        pubDate: "Mon, 30 Mar 2026 08:10:00 GMT",
+        description: "Compliance list page.",
+      },
+      {
+        title: "FDA approval for new treatment for rare disease",
+        url: "https://www.fda.gov/drugs/drug-approvals/fda-approves-rare-disease-treatment",
+        pubDate: "Mon, 30 Mar 2026 09:10:00 GMT",
+        description: "Legitimate approval item.",
+      },
+    ])],
+    ["https://fda-biologics.example/feed", buildRss([
+      {
+        title: "Companies that have not submitted drug amount reports",
+        url: "https://www.fda.gov/biologics/reporting/drug-amount-reports",
+        pubDate: "Mon, 30 Mar 2026 08:20:00 GMT",
+        description: "Compliance list page.",
+      },
+      {
+        title: "FDA biologics guidance for cell therapy for autoimmune disease",
+        url: "https://www.fda.gov/biologics/cell-therapy/authorization-autoimmune-disease",
+        pubDate: "Mon, 30 Mar 2026 09:20:00 GMT",
+        description: "Legitimate biologics item.",
+      },
+    ])],
+    ["https://ab.example/feed", buildRss([
+      {
+        title: "Introducing AI Intelligence on American Banker",
+        url: "https://www.americanbanker.com/news/introducing-ai-intelligence-on-american-banker",
+        pubDate: "Mon, 30 Mar 2026 08:40:00 GMT",
+        description: "House promo.",
+      },
+      {
+        title: "Banks weigh new deposit growth strategy",
+        url: "https://www.americanbanker.com/news/banks-weigh-new-deposit-growth-strategy",
+        pubDate: "Mon, 30 Mar 2026 09:40:00 GMT",
+        description: "Legitimate banking story.",
+      },
+    ])],
   ]);
 
   const runtime = createStandardTopicBrokerRuntime({
@@ -116,20 +228,37 @@ async function main() {
   });
 
   const result = await runtime.fetchBrokerCandidates({
-    topicStates: [
-      { topic: { tag: "HEALTHCARE" } },
-      { topic: { tag: "TECHNOLOGY" } },
-    ],
+      topicStates: [
+        { topic: { tag: "HEALTHCARE" } },
+        { topic: { tag: "LIFE SCIENCES" } },
+        { topic: { tag: "FINANCIAL SERVICES" } },
+        { topic: { tag: "TECHNOLOGY" } },
+      ],
     retrievedAt: "2026-03-30T12:00:00.000Z",
     maxAgeHours: 48,
   });
 
   const healthcareUrls = (result.topicItems.HEALTHCARE || []).map((entry) => entry.url);
+  const lifeScienceUrls = (result.topicItems["LIFE SCIENCES"] || []).map((entry) => entry.url);
+  const financialUrls = (result.topicItems["FINANCIAL SERVICES"] || []).map((entry) => entry.url);
   const technologyUrls = (result.topicItems.TECHNOLOGY || []).map((entry) => entry.url);
   assert.deepStrictEqual(
     healthcareUrls,
     ["https://www.modernhealthcare.com/providers/outpatient-expansion"],
     "url exclusion patterns should drop Modern Healthcare content studio entries"
+  );
+  assert.deepStrictEqual(
+    lifeScienceUrls,
+    [
+      "https://www.fda.gov/drugs/drug-approvals/fda-approves-rare-disease-treatment",
+      "https://www.fda.gov/biologics/cell-therapy/authorization-autoimmune-disease",
+    ],
+    "FDA compliance/listing pages should be excluded from Life Sciences feeds"
+  );
+  assert.deepStrictEqual(
+    financialUrls,
+    ["https://www.americanbanker.com/news/banks-weigh-new-deposit-growth-strategy"],
+    "American Banker house promos should be excluded from Financial Services feeds"
   );
   assert.deepStrictEqual(
     technologyUrls,
@@ -139,6 +268,9 @@ async function main() {
 
   const bySource = new Map(result.diagnostics.source_diagnostics.map((entry) => [entry.id, entry]));
   assert.strictEqual(Number(bySource.get("healthcare_modern_healthcare")?.validation_drop_count || 0), 1, "content studio URL should count as a validation drop");
+  assert.strictEqual(Number(bySource.get("life_fda_drugs")?.validation_drop_count || 0), 1, "FDA compliance page should count as a validation drop");
+  assert.strictEqual(Number(bySource.get("life_fda_biologics")?.validation_drop_count || 0), 1, "FDA compliance page should count as a validation drop");
+  assert.strictEqual(Number(bySource.get("financial_american_banker")?.validation_drop_count || 0), 1, "American Banker promo should count as a validation drop");
   assert.strictEqual(Number(bySource.get("technology_the_verge")?.validation_drop_count || 0), 1, "Verge sale title should count as a validation drop");
 
   console.log("standard topic broker applies source-level title and url exclusions ✓");

@@ -482,7 +482,16 @@
         "^what's new",
         "^novel drug approvals for",
         "^new drugs at fda",
-        "^what's new related to"
+        "^what's new related to",
+        "^cares act drug shortage mitigation efforts",
+        "^companies that have not submitted drug amount reports",
+        "^drug amount reports",
+        "^drug shortage mitigation efforts"
+      ],
+      "url_exclude_patterns": [
+        "/drug-shortage/",
+        "/drug-shortages/",
+        "/drug-amount-reports/"
       ]
     },
     {
@@ -518,7 +527,16 @@
         "^what's new",
         "^novel drug approvals for",
         "^new drugs at fda",
-        "^what's new related to"
+        "^what's new related to",
+        "^cares act drug shortage mitigation efforts",
+        "^companies that have not submitted drug amount reports",
+        "^drug amount reports",
+        "^drug shortage mitigation efforts"
+      ],
+      "url_exclude_patterns": [
+        "/drug-shortage/",
+        "/drug-shortages/",
+        "/drug-amount-reports/"
       ]
     },
     {
@@ -721,6 +739,9 @@
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
+      "title_exclude_patterns": [
+        "^introducing .* on american banker$"
+      ],
       "url_exclude_patterns": [
         "/spons/"
       ]

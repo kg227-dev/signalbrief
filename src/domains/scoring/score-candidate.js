@@ -3,22 +3,24 @@
 /**
  * SignalBrief MVP — Per-item candidate scoring formula.
  *
- * Formula (spec §2.4):
- *   score = (freshness × 0.35) + (source_tier × 0.35) + (lane_bonus × 0.15) + (novelty × 0.15)
+ * Formula (selection quality):
+ *   score = (freshness × 0.35) + (source_tier × 0.30) + (lane_bonus × 0.15) + (topic_fit × 0.10) + (novelty × 0.10)
  *
  * Every component is [0,1]. Final score is [0,1].
  * All components are preserved on the candidate so the operator can inspect
  * exactly why any item scored what it did.
  *
  * Weights and per-tier/lane values are configurable via scoringConfig.
- * Defaults match the spec exactly.
+ * The default blend keeps topic fit visible in selection while preserving the
+ * reduced-scope MVP freshness/source hierarchy.
  */
 
 const DEFAULT_WEIGHTS = Object.freeze({
   freshness: 0.35,
-  source_tier: 0.35,
+  source_tier: 0.30,
   lane_bonus: 0.15,
-  novelty: 0.15,
+  topic_fit: 0.10,
+  novelty: 0.10,
 });
 
 // Tier scores: 1=gold, 2=good, 3=supplemental, unknown=0.2
@@ -65,6 +67,7 @@ function resolveScoringConfig(config = {}) {
       freshness: Number(weights.freshness ?? DEFAULT_WEIGHTS.freshness),
       source_tier: Number(weights.source_tier ?? DEFAULT_WEIGHTS.source_tier),
       lane_bonus: Number(weights.lane_bonus ?? DEFAULT_WEIGHTS.lane_bonus),
+      topic_fit: Number(weights.topic_fit ?? DEFAULT_WEIGHTS.topic_fit),
       novelty: Number(weights.novelty ?? DEFAULT_WEIGHTS.novelty),
     },
     tierScores: { ...DEFAULT_TIER_SCORES, ...tierScores },
@@ -175,12 +178,25 @@ function computeNoveltyScore(item) {
   return 0.8;
 }
 
+function computeTopicFitScore(item) {
+  const topicFitRaw = Number(item?.topic_fit);
+  if (Number.isFinite(topicFitRaw)) {
+    return clamp(topicFitRaw, 0, 1);
+  }
+
+  const band = String(item?.topic_fit_band || "").trim().toLowerCase();
+  if (band === "high") return 0.9;
+  if (band === "medium") return 0.6;
+  if (band === "low") return 0.2;
+  return 0.5;
+}
+
 /**
  * Score a single candidate item.
  *
  * Returns the item with score fields attached:
  *   item._score        — final weighted score [0,1]
- *   item._score_components — { freshness, source_tier, lane_bonus, novelty }
+ *   item._score_components — { freshness, source_tier, lane_bonus, topic_fit, novelty }
  *   item._score_reasons    — human-readable explanation strings
  *
  * Attach rather than replace so the caller can inspect or override.
@@ -195,12 +211,14 @@ function scoreCandidate(item, opts = {}) {
   const freshness = computeFreshnessScore(item, nowMs, cfg.maxAgeHours);
   const sourceTier = computeSourceTierScore(item, cfg.tierScores);
   const laneBonus = computeLaneBonusScore(item, cfg.laneBonuses);
+  const topicFit = computeTopicFitScore(item);
   const novelty = computeNoveltyScore(item);
 
   const score = clamp(
     freshness * w.freshness
     + sourceTier * w.source_tier
     + laneBonus * w.lane_bonus
+    + topicFit * w.topic_fit
     + novelty * w.novelty,
     0, 1
   );
@@ -210,6 +228,7 @@ function scoreCandidate(item, opts = {}) {
     `freshness=${freshness.toFixed(3)} (weight ${w.freshness})`,
     `source_tier=${sourceTier.toFixed(3)} (weight ${w.source_tier}, tier=${item?.source_tier ?? "unknown"})`,
     `lane_bonus=${laneBonus.toFixed(3)} (weight ${w.lane_bonus}, lane=${item?.retrieval_origin || item?.retrieval_lane || "unknown"})`,
+    `topic_fit=${topicFit.toFixed(3)} (weight ${w.topic_fit}, fit=${item?.topic_fit_band || item?.topic_fit || "unknown"})`,
     `novelty=${novelty.toFixed(3)} (weight ${w.novelty})`,
   ];
 
@@ -220,6 +239,7 @@ function scoreCandidate(item, opts = {}) {
       freshness: Number(freshness.toFixed(4)),
       source_tier: Number(sourceTier.toFixed(4)),
       lane_bonus: Number(laneBonus.toFixed(4)),
+      topic_fit: Number(topicFit.toFixed(4)),
       novelty: Number(novelty.toFixed(4)),
     },
     _score_reasons: reasons,
@@ -290,6 +310,7 @@ module.exports = {
   computeFreshnessScore,
   computeSourceTierScore,
   computeLaneBonusScore,
+  computeTopicFitScore,
   computeNoveltyScore,
   DEFAULT_WEIGHTS,
   DEFAULT_TIER_SCORES,

@@ -551,7 +551,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     }
 
     // MVP transparent scoring: score every candidate before selection.
-    // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
+    // The formula emphasizes freshness, source quality, lane quality, topic fit, and novelty.
     // Scored items are sorted by _score descending so the selection policy
     // always sees the highest-scoring items first.
     const scoringConfig = paramScoringConfig && typeof paramScoringConfig === "object"
@@ -594,19 +594,20 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       byTag.get(topicTag).push(item);
     }
 
+    const effectiveMaxItemsPerSourceDomain = (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
+      ? paramScoringConfig.maxItemsPerSourceDomain
+      : CONFIG.digest.maxItemsPerSourceDomain;
+
     // Select per topic with a controlled fallback hierarchy that never exceeds 48h.
     const perTopicSelected = [];
     let totalDiscoveryCapped = 0;
     const topicSelectionAudit = [];
     const selectionRejectionCounts = Object.create(null);
     for (const [topicTag, topicItems] of byTag.entries()) {
-      const maxItemsPerSourceDomain = (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
-        ? paramScoringConfig.maxItemsPerSourceDomain
-        : CONFIG.digest.maxItemsPerSourceDomain;
       const topicSelection = selectTopicItemsWithFallback({
         topicItems,
         itemsPerTopic,
-        maxItemsPerSourceDomain,
+        maxItemsPerSourceDomain: effectiveMaxItemsPerSourceDomain,
         maxDiscoveryPerTopic,
         nowMs,
       });
@@ -683,7 +684,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       throw new Error("No live items available after freshness and selection filters; digest aborted");
     }
 
-    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 3)})`);
+    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(effectiveMaxItemsPerSourceDomain || 3)})`);
 
     return {
       selected,
@@ -708,6 +709,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         candidate_pool_after_classification: classificationEnabled ? scoringInput.length : null,
         storyline_cluster_removed_count: storylineClusterRemovedCount,
         best_fit_topic_reassigned_count: bestFitTopicReassignedCount,
+        effective_max_items_per_source_domain: Number(effectiveMaxItemsPerSourceDomain || 3),
         candidate_pool_scored: postScoreItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
         stale_removed_count: Math.max(0, Number(staleRemoved || 0)),

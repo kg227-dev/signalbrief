@@ -29,7 +29,7 @@ const NUMERIC_KEYS = new Set([
 
 const OBJECT_KEYS = new Set(["weights", "laneBonuses", "tierScores"]);
 
-const WEIGHT_COMPONENT_KEYS = ["freshness", "source_tier", "lane_bonus", "novelty"];
+const WEIGHT_COMPONENT_KEYS = ["freshness", "source_tier", "lane_bonus", "topic_fit", "novelty"];
 
 function pickAllowedTuningEntries(tuning) {
   const safeTuning = (tuning && typeof tuning === "object" && !Array.isArray(tuning)) ? tuning : {};

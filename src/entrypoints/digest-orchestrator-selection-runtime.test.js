@@ -5,6 +5,7 @@ const {
   createDigestOrchestratorSelectionRuntime,
   prepareSelectionCandidates,
 } = require("./digest-orchestrator-selection-runtime");
+const { scoreCandidates } = require("../domains/scoring/score-candidate");
 const { articleAgeTooOld } = require("../digest/runtime/digest-data-fetch-items-runtime");
 
 function makeDeps(overrides = {}) {
@@ -308,6 +309,68 @@ async function run() {
     passed++;
   } catch (e) {
     console.error("✗ Test 7:", e.message);
+    failed++;
+  }
+
+  // Test 8: topic fit should help break ties in favor of better-fit items
+  try {
+    const scored = scoreCandidates([
+      {
+        ...itemAgedHours(2, "TECHNOLOGY", "https://fit.example.com/low"),
+        source_domain: "fit.example.com",
+        topic_fit: 0.12,
+        topic_fit_band: "low",
+      },
+      {
+        ...itemAgedHours(2, "TECHNOLOGY", "https://fit.example.com/high"),
+        source_domain: "fit.example.com",
+        topic_fit: 0.92,
+        topic_fit_band: "high",
+      },
+    ], {
+      scoringConfig: {},
+    });
+    assert.strictEqual(scored[0].url, "https://fit.example.com/high", "higher topic-fit item should score first");
+    console.log("✓ Test 8: topic fit influences scoring order");
+    passed++;
+  } catch (e) {
+    console.error("✗ Test 8:", e.message);
+    failed++;
+  }
+
+  // Test 9: maxItemsPerSourceDomain tuning is honored by the topic selector
+  try {
+    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps({
+      selectItemsDetailed: (items, opts) => ({
+        selected: items.slice(0, opts.maxItems),
+        rejected: items.slice(opts.maxItems).map((item) => ({ item, reason: "selection_not_selected" })),
+      }),
+    }));
+    const pool = Array.from({ length: 6 }, (_, index) => ({
+      ...itemAgedHours(1 + index * 0.1, "TECHNOLOGY", `https://caps.example.com/${index + 1}`),
+      source_domain: "caps.example.com",
+      source_type: "reported_media",
+      topic_fit: 0.9,
+      topic_fit_band: "high",
+    }));
+    const result = await runtime.selectForEnrichment({
+      allItems: pool,
+      selectionTarget: 5,
+      customTags: [],
+      tagPriority: {},
+      runMode: "scheduled",
+      digestDateKey: "2026-03-25",
+      dueUsersCount: 1,
+      standardFetchCallsPlanned: 1,
+      scoringConfig: { maxItemsPerSourceDomain: 2 },
+    });
+    assert.strictEqual(result.selected.length, 2, "should respect the tuned source-domain cap");
+    const topicAudit = result.selectionDiagnostics.topic_selection_audit[0];
+    assert.strictEqual(topicAudit.rejection_reason_counts["selection_source_cap (caps.example.com: 2/2)"], 4, "should record the tuned source cap in audit output");
+    console.log("✓ Test 9: selection honors tuned source-domain cap");
+    passed++;
+  } catch (e) {
+    console.error("✗ Test 9:", e.message);
     failed++;
   }
 

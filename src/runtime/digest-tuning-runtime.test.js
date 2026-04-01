@@ -48,12 +48,15 @@ const {
     maxItemsPerSourceDomain: 2,
     crossDayDedupDays: 3,
     historyLookbackDays: 7,
-    weights: { freshness: 0.4, source_tier: 0.3, lane_bonus: 0.15, novelty: 0.15 },
+    weights: { freshness: 0.4, source_tier: 0.3, lane_bonus: 0.15, topic_fit: 0.05, novelty: 0.1 },
     laneBonuses: { rss: 0.8 },
     tierScores: { "1": 1.0 },
   });
   assert.strictEqual(ok, true, "valid tuning passes validation");
   assert.strictEqual(errors.length, 0, "no errors for valid input");
+  const { ok: topicFitOk, errors: topicFitErrors } = validateDigestTuning({ weights: { topic_fit: 0.05 } });
+  assert.strictEqual(topicFitOk, true, "topic_fit weight should be accepted");
+  assert.strictEqual(topicFitErrors.length, 0, "topic_fit weight should not produce validation errors");
 
   // Unknown key is rejected
   const { ok: badOk, errors: badErrors } = validateDigestTuning({ unknownKey: 123 });
@@ -66,7 +69,7 @@ const {
   assert.strictEqual(maxAgeErrors.length, 0, "no errors for valid maxAgeHours");
 
   // Weights with out-of-range value is rejected
-  const { ok: wOk, errors: wErrors } = validateDigestTuning({ weights: { freshness: 2.0, source_tier: 0.35, lane_bonus: 0.15, novelty: 0.15 } });
+  const { ok: wOk, errors: wErrors } = validateDigestTuning({ weights: { freshness: 2.0, source_tier: 0.35, lane_bonus: 0.15, topic_fit: 0.1, novelty: 0.15 } });
   assert.strictEqual(wOk, false, "out-of-range weight fails");
   assert.ok(wErrors.some((e) => e.includes("freshness")), "error mentions freshness");
 

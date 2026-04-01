@@ -70,15 +70,29 @@ function maybeDecodeUriComponent(value) {
 }
 
 function decodeHtmlEntities(value) {
+  const namedEntities = {
+    amp: "&",
+    apos: "'",
+    nbsp: " ",
+    quot: "\"",
+    lt: "<",
+    gt: ">",
+    ldquo: "“",
+    rdquo: "”",
+    lsquo: "‘",
+    rsquo: "’",
+    hellip: "…",
+    ndash: "–",
+    mdash: "—",
+  };
   return String(value || "")
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, "\"")
-    .replace(/&#0*39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&nbsp;/gi, " ");
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-z]+);/gi, (match, entity) => {
+      const key = String(entity || "").toLowerCase();
+      return Object.prototype.hasOwnProperty.call(namedEntities, key) ? namedEntities[key] : match;
+    });
 }
 
 function stripTags(value) {
@@ -1008,7 +1022,7 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
     })()) || baseDomain;
     const itemBase = {
       headline,
-      summary: normalizeWhitespace(entry?.summary || entry?.description || headline),
+      summary: normalizeWhitespace(decodeHtmlEntities(entry?.summary || entry?.description || headline)),
       url,
       canonical_url: canonicalUrl,
       published_date: publishedDate,

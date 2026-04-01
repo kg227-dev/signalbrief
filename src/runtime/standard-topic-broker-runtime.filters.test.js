@@ -78,7 +78,7 @@ async function main() {
         title: "Hospital system expands outpatient footprint",
         url: "https://www.modernhealthcare.com/providers/outpatient-expansion",
         pubDate: "Mon, 30 Mar 2026 09:00:00 GMT",
-        description: "Real hospital strategy story.",
+        description: "The provider remains focused on what it calls &ldquo;stringent&rdquo; inventory practices.",
       },
       {
         title: "4 cloud data practices every healthcare organization should be using",
@@ -126,10 +126,15 @@ async function main() {
 
   const healthcareUrls = (result.topicItems.HEALTHCARE || []).map((entry) => entry.url);
   const technologyUrls = (result.topicItems.TECHNOLOGY || []).map((entry) => entry.url);
+  const healthcareSummary = (result.topicItems.HEALTHCARE || [])[0]?.summary || "";
   assert.deepStrictEqual(
     healthcareUrls,
     ["https://www.modernhealthcare.com/providers/outpatient-expansion"],
     "url exclusion patterns should drop Modern Healthcare content studio entries"
+  );
+  assert.ok(
+    healthcareSummary.includes("“stringent”"),
+    "summary text should decode HTML entities before storing"
   );
   assert.deepStrictEqual(
     technologyUrls,

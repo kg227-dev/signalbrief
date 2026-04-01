@@ -8,6 +8,32 @@ function createDigestEmailItemsRuntime(deps) {
     escapeHtml,
   } = deps;
 
+  function decodeHtmlEntities(value) {
+    const namedEntities = {
+      amp: "&",
+      apos: "'",
+      nbsp: " ",
+      quot: "\"",
+      lt: "<",
+      gt: ">",
+      ldquo: "“",
+      rdquo: "”",
+      lsquo: "‘",
+      rsquo: "’",
+      hellip: "…",
+      ndash: "–",
+      mdash: "—",
+    };
+    return String(value || "")
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+      .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+      .replace(/&([a-z]+);/gi, (match, entity) => {
+        const key = String(entity || "").toLowerCase();
+        return Object.prototype.hasOwnProperty.call(namedEntities, key) ? namedEntities[key] : match;
+      });
+  }
+
   const EMAIL_FLAG_LABELS = { earnings: "Earnings", guidance: "Guidance", m_and_a: "Deal", regulatory: "Regulatory", leadership: "Leadership", ipo: "IPO" };
 
   function renderEmailSourceBadge(tier) {
@@ -60,12 +86,12 @@ function createDigestEmailItemsRuntime(deps) {
     const bodyHtml = (() => {
       const wim = item.wim || "";
       if (wim) {
-        return `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${wim}</div>`;
+        return `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${escapeHtml(decodeHtmlEntities(wim))}</div>`;
       }
       const summary = String(item.summary || "").trim();
       if (!summary) return "";
       const truncated = summary.length > 200 ? `${summary.slice(0, 197)}…` : summary;
-      return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(truncated)}</div>`;
+      return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(decodeHtmlEntities(truncated))}</div>`;
     })();
 
     const implHtml = (isDeep && item.implications)
@@ -95,7 +121,7 @@ function createDigestEmailItemsRuntime(deps) {
         </table>
         ${flagsHtml}
         <a href="${trackedLinkUrl}" style="text-decoration:none;color:inherit;">
-          <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;font-family:'Playfair Display',Georgia,serif;">${item.headline}</div>
+          <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;font-family:'Playfair Display',Georgia,serif;">${escapeHtml(decodeHtmlEntities(item.headline))}</div>
         </a>
         ${bodyHtml}
         ${implHtml}

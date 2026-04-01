@@ -898,6 +898,23 @@ function isNonNewsHeadline(headline) {
   return NON_NEWS_HEADLINE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function isLikelyPromotionalHub(headline, summary) {
+  const title = normalizeWhitespace(decodeHtmlEntities(headline)).toLowerCase();
+  if (!title) return false;
+  const body = normalizeWhitespace(decodeHtmlEntities(summary)).toLowerCase();
+  const combined = `${title} ${body}`.trim();
+  if (!combined) return false;
+  return [
+    /\bresearch,\s*insights?\s+and\s+data\b/i,
+    /\bcan now be found in a new location\b/i,
+    /\bnew location on\b/i,
+    /\bresource center\b/i,
+    /\bcontent hub\b/i,
+    /\bsection launch\b/i,
+    /\bintroducing\b.+\b(?:hub|section|center|resource|intelligence)\b/i,
+  ].some((pattern) => pattern.test(combined));
+}
+
 function officialListingUrlLooksArticleLike(url) {
   try {
     const parsed = new URL(String(url || "").trim());
@@ -1009,7 +1026,10 @@ function buildNormalizedItemsForSource(source, entries, opts = {}) {
       diagnostics.validation_drop_count += 1;
       continue;
     }
-    if (String(source?.lane || "").trim() === "publisher_feed" && isNonNewsHeadline(headline)) {
+    if (
+      String(source?.lane || "").trim() === "publisher_feed"
+      && (isNonNewsHeadline(headline) || isLikelyPromotionalHub(headline, entry?.summary || entry?.description || ""))
+    ) {
       diagnostics.validation_drop_count += 1;
       continue;
     }

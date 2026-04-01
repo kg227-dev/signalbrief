@@ -33,6 +33,7 @@ async function main() {
     topics: {
       HEALTHCARE: { enabled: true, lanes: { publisher_feed: true, official: false } },
       TECHNOLOGY: { enabled: true, lanes: { publisher_feed: true, official: false } },
+      "FINANCIAL SERVICES": { enabled: true, lanes: { publisher_feed: true, official: false } },
     },
     families: {},
     sources: [
@@ -65,6 +66,25 @@ async function main() {
         parser: "rss",
         content_kind: "article",
         title_exclude_patterns: ["spring sale", "readers are buying"],
+      },
+      {
+        id: "financial_american_banker",
+        enabled: true,
+        tier: 1,
+        lane: "publisher_feed",
+        topic_tags: ["FINANCIAL SERVICES"],
+        family: "financial_reported",
+        source_kind: "reported_media",
+        source_family: "reported",
+        domains: ["americanbanker.com"],
+        endpoint: "https://americanbanker.example/feed",
+        parser: "rss",
+        content_kind: "article",
+        allow_article_like_listing_urls: true,
+        title_exclude_patterns: [
+          "^Introducing\\b.*\\bon American Banker\\b",
+          "^Introducing\\b.*\\bAmerican Banker\\b",
+        ],
       },
     ],
   };
@@ -101,6 +121,20 @@ async function main() {
         description: "Legitimate technology story.",
       },
     ])],
+    ["https://americanbanker.example/feed", buildRss([
+      {
+        title: "Introducing AI Intelligence on American Banker",
+        url: "https://www.americanbanker.com/news/ai-intelligence",
+        pubDate: "Mon, 30 Mar 2026 08:45:00 GMT",
+        description: "Research, insights and data on how banks and financial institutions are using AI can now be found in a new location on American Banker.",
+      },
+      {
+        title: "Banks add new account-opening tools",
+        url: "https://www.americanbanker.com/news/banks-add-new-account-opening-tools",
+        pubDate: "Mon, 30 Mar 2026 09:00:00 GMT",
+        description: "Legitimate financial services story.",
+      },
+    ])],
   ]);
 
   const runtime = createStandardTopicBrokerRuntime({
@@ -119,6 +153,7 @@ async function main() {
     topicStates: [
       { topic: { tag: "HEALTHCARE" } },
       { topic: { tag: "TECHNOLOGY" } },
+      { topic: { tag: "FINANCIAL SERVICES" } },
     ],
     retrievedAt: "2026-03-30T12:00:00.000Z",
     maxAgeHours: 48,
@@ -126,6 +161,7 @@ async function main() {
 
   const healthcareUrls = (result.topicItems.HEALTHCARE || []).map((entry) => entry.url);
   const technologyUrls = (result.topicItems.TECHNOLOGY || []).map((entry) => entry.url);
+  const financialUrls = (result.topicItems["FINANCIAL SERVICES"] || []).map((entry) => entry.url);
   const healthcareSummary = (result.topicItems.HEALTHCARE || [])[0]?.summary || "";
   assert.deepStrictEqual(
     healthcareUrls,
@@ -141,10 +177,16 @@ async function main() {
     ["https://www.theverge.com/tech/enterprise-ai-controls"],
     "title exclusion patterns should drop Verge sale/deals roundup entries"
   );
+  assert.deepStrictEqual(
+    financialUrls,
+    ["https://www.americanbanker.com/news/banks-add-new-account-opening-tools"],
+    "promo hub titles and summaries should be filtered out before selection"
+  );
 
   const bySource = new Map(result.diagnostics.source_diagnostics.map((entry) => [entry.id, entry]));
   assert.strictEqual(Number(bySource.get("healthcare_modern_healthcare")?.validation_drop_count || 0), 1, "content studio URL should count as a validation drop");
   assert.strictEqual(Number(bySource.get("technology_the_verge")?.validation_drop_count || 0), 1, "Verge sale title should count as a validation drop");
+  assert.strictEqual(Number(bySource.get("financial_american_banker")?.validation_drop_count || 0), 1, "promo hub American Banker item should count as a validation drop");
 
   console.log("standard topic broker applies source-level title and url exclusions ✓");
 }

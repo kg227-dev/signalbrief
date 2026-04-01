@@ -924,6 +924,10 @@
       "endpoint": "https://www.americanbanker.com/feed.rss",
       "parser": "rss",
       "content_kind": "article",
+      "title_exclude_patterns": [
+        "^Introducing\\b.*\\bon American Banker\\b",
+        "^Introducing\\b.*\\bAmerican Banker\\b"
+      ],
       "allow_article_like_listing_urls": true
     },
     {

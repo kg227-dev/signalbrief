@@ -164,7 +164,7 @@ The 7-day window passes only if all of the following are true:
 | Day 3 | 2026-03-30 | Yes | 10 | TBD | 7 | 4 | 0 | 0 | 6 (only Technology ≥15; HC 7, LS 6, Energy 11, Ind 8, C&R 3, FinServ 0) | ~52% | 97% | 3% | 100% | 0 | No | 0 | Red | Sunday volume collapse: FinServ 0 candidates (all deduped), C&R only 3, HC only 4/5. Industrials recovered to 5/5. minDeliveryItemsPerTopic=3 fix deployed pre-Day 3 but production ran before deploy. |
 | Day 4 | 2026-03-31 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 65.7% | 100% | 0% | 98.3% (58/59) | 0 | No | 0 | Yellow | First full delivery and first full 10/10 canary send. Trusted T1/2 share stayed below target. financial_reuters_business failed and cross-topic contamination was still visible in the selected set. |
 | Day 5 | 2026-04-01 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 77.1% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Second consecutive full day. 613 candidates, 35 selected, all 10 canaries sent. Trusted share still missed target and the selected set still included FDA compliance pages, an American Banker self-promo, and an off-topic FreightWaves border story. |
-| Day 6 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
+| Day 6 | 2026-04-02 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 80.0% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Operationally the strongest day yet: 642 candidates, 35 selected, all 10 canaries delivered, and every hard fill/freshness/backbone gate passed. Still not green: selected-set quality remains mixed and all 80 stored scheduled items had null `wim` / `wim_brief`, indicating a likely deep-mode writeup regression. |
 | Day 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
 
 ## Daily Runbook
@@ -431,10 +431,45 @@ Scheduled run `scheduled:2026-04-01T11-03-57-403Z` executed on time. All 10 cana
 
 ### Day 6
 
-- [ ] Pre-send checks complete
-- [ ] Post-send checks complete
-- [ ] Scorecard row completed
-- [ ] Root cause note added if yellow or red
+- [x] Pre-send checks complete
+- [x] Post-send checks complete
+- [x] Scorecard row completed
+- [x] Root cause note added if yellow or red
+
+#### Day 6 Result
+
+`Yellow`
+
+Scheduled run `scheduled:2026-04-02T11-00-33-622Z` executed on time. All 10 canary digest records exist for `2026-04-02--scheduled.json` and are marked `status=sent` with `delivery_outcome=delivered`. All 7 MVP topics delivered `5/5`, all 7 topics cleared the `>=15` depth threshold, there were no freshness breaches, and there were 0 duplicate URLs versus Day 5 in the same topic. Operationally, Day 6 hit every hard numeric gate in the validation plan. It is still yellow because the selected-set quality is not yet clean enough and the stored scheduled canary records show `0/80` items with populated `wim` or `wim_brief`, which is a likely deep-mode content regression rather than a success signal.
+
+#### Day 6 What Worked
+
+- **First day to hit every hard operational gate**: 7/7 topics at `5/5`, 10/10 canaries delivered, 80.0% trusted T1/2 share, 100% broker share, 0% discovery, 58/58 source fetches successful, 0 freshness violations, and 0 duplicate URLs vs Day 5.
+- **Strong weekday candidate depth**: 642 total candidates with every topic above the depth gate: Technology 233, Healthcare 102, Financial Services 89, Industrials 61, Consumer & Retail 61, Energy 50, and Life Sciences 46.
+- **No legacy-scope leakage**: the audit stayed cleanly inside the 7 MVP topic keys.
+- **Financial Services is consistently healthy now**: 89 candidates, 5/5 delivered, 100% trusted, and the selected set stayed inside the sector.
+- **No manual intervention**: no resend, rerun, regenerate, or admin repair action was needed.
+
+#### Day 6 What Failed
+
+- **Strategic writeups appear missing in the scheduled output path**: all 10 canary digest records were delivered, but all 80 stored items have `wim=null` and `wim_brief=null`. Every canary digest record remained `quality_band=poor`, with scores between `43.9` and `50.8`.
+- **Life Sciences still selected FDA database / alert content**: the top selected item was `fda.gov | Frequently requested or proactively posted drug-specific and other records`, followed by two more FDA alert/recall pages.
+- **Technology still shows official-topic contamination**: `fda.gov | FDA issues final decision to withdraw approval of Pepaxto (melphalan flufenamide)` was selected into TECHNOLOGY.
+- **Energy still shows cross-topic contamination**: the selected set included both an FDA inhalant warning and a Verge / Uber EV-incentive story, neither of which is a clean Energy briefing lead.
+- **Healthcare still leans too much on commentary / feature content**: the selected set included a STAT opinion piece and a radiology deepfake challenge story despite a 102-candidate pool.
+- **The source-cap issue is still live**: the Day 6 audit still records `selection_source_cap (americanbanker.com: 3/3)` and `selection_source_cap (fda.gov: 3/3)`, so the attempted cap override still is not active in the scheduled path.
+
+#### Day 6 Root Cause Summary
+
+1. **The validation bottleneck has shifted from reliability to ranking and output quality.** Day 6 proves the fetch, freshness, depth, and delivery path can hold on a healthy weekday.
+2. **Authority is still overpowering story shape and sector fit.** Official FDA content can still win in the wrong topics or in the wrong content form.
+3. **The new writeup validation/repair work likely introduced a scheduled-path persistence or acceptance problem.** The scheduled records retained no `wim` or `wim_brief`, which means the strategic layer is not surviving the live path in a way users can benefit from.
+
+#### Day 6 Observations
+
+- Day 6 is the first day that would count as green if the product were judged only on fill, freshness, backbone, and source-success mechanics.
+- It still does not qualify as a product-quality green because topic purity and deep-mode strategic context remain visibly weak.
+- The next highest-leverage work is no longer retrieval plumbing. It is output-path debugging for `wim` persistence plus stronger filters for official/off-topic content inside healthy pools.
 
 ### Day 7
 
@@ -455,10 +490,11 @@ Scheduled run `scheduled:2026-04-01T11-03-57-403Z` executed on time. All 10 cana
 | 2026-03-28 | High | Topic naming mismatch | `CONSUMER` selection did not land in `CONSUMER & RETAIL` user buckets | T6 was withheld; M3 underfilled at `10/15` requested items | Production digest records for `email-1774672713028` and `email-1774672713049` | Exact-match delivery bucketing does not reconcile active topic aliases | None | Normalize delivery bucketing/topic tags to the MVP canonical topic names | Yes — fixed Day 1. `CONSUMER & RETAIL` delivered 5/5 on Days 2–4. |
 | 2026-03-28 | Medium | Admin audit KPI math | Trusted-share and broker-share KPIs reported impossible zeros | Operator dashboard is misleading for Day 1 backbone/trust metrics | Selected-item lane/tier breakdown from `data/digest-audit/2026-03-28.json` vs readiness calculations | Readiness builder assumes numeric source tiers and inconsistent fetch counters | Manual inspection of raw audit doc | Fix digest-audit metric calculation before relying on dashboard percentages | Yes — fixed Day 1. KPIs reported real values from Day 2 onward. |
 | 2026-03-31 | Medium | Cross-topic candidate reassignment | Specialist-source items reassigned to wrong topics by keyword scorer (STAT health/AI→TECHNOLOGY, Register tech→FINANCIAL SERVICES) | Off-topic content selected (Big Tech/Australia story in FinServ; AI chatbot story in Tech) | Day 4 audit — go.theregister.com selected in FINANCIAL SERVICES; statnews.com in TECHNOLOGY candidates | `canonicalizeCandidateTopicTags` uses pure keyword scoring with no domain-authority constraint, so "payments" in a tech headline beats TECHNOLOGY score | None during window | Deploy `DOMAIN_TOPIC_SCOPE` guard locking specialist domains to their authoritative topics | Yes — deployed 2026-03-31 (commit f43411b). Active for Day 5. |
-| 2026-03-31 | Medium | Source cap suppressing trusted share | `maxItemsPerSourceDomain=3` blocked 8 americanbanker and 3 modernhealthcare high-scoring items; forced selection into standard-tier sources | Trusted T1/2 share 65.7% on Day 4, below 80% target | Day 4 and Day 5 audits; Day 5 still shows `selection_source_cap (...: 3/3)` in the scheduled run | Scheduled path did not reflect the attempted cap raise; tuning override is not active where expected | None | Trace scheduled tuning load and confirm whether `data/digest-tuning.json` is read by the production worker | No — Day 5 audit still shows 3/3 caps. |
+| 2026-03-31 | Medium | Source cap suppressing trusted share | `maxItemsPerSourceDomain=3` blocked 8 americanbanker and 3 modernhealthcare high-scoring items; forced selection into standard-tier sources | Trusted T1/2 share 65.7% on Day 4, below 80% target | Day 4, Day 5, and Day 6 audits; Day 6 still shows `selection_source_cap (americanbanker.com: 3/3)` and `selection_source_cap (fda.gov: 3/3)` in the scheduled run | Scheduled path did not reflect the attempted cap raise; tuning override is not active where expected | None | Trace scheduled tuning load and confirm whether `data/digest-tuning.json` is read by the production worker | No — Day 6 audit still shows 3/3 caps. |
 | 2026-03-31 | Low | STAT+ paywalled content in selected set | 2 STAT+ paywalled Life Sciences articles delivered; users without STAT+ subscription cannot read them | Degraded user experience for those 2 items | Day 4 audit Life Sciences selected items | No paywall filter on `healthcare_stat` source | None | Add title_exclude_patterns | Yes — `title_exclude_patterns: ["^STAT\\+"]` added to healthcare_stat on 2026-03-31 (commit f43411b). Active for Day 5. |
 | 2026-03-31 | Low | financial_reuters_business fetch failure | `feeds.reuters.com` legacy RSS endpoint dead (status 0) | No Reuters candidates in FinServ pool | Day 4 audit source diagnostics: 1 failure, financial_reuters_business | Legacy feedburner-era RSS endpoint deprecated by Reuters | None | Disable source | Yes — source disabled 2026-03-31 (commit f43411b). FinServ had 46 candidates without it on Day 4; no delivery impact expected. Needs replacement URL before re-enabling. |
-| 2026-04-01 | Medium | Official/source-content quality filter gap | Two FDA compliance/reporting pages were selected into Life Sciences and an American Banker house-promo was selected into Financial Services | No delivery failure, but editorial quality is below the product promise | Day 5 audit selected items for LIFE SCIENCES and FINANCIAL SERVICES | Authority-based scoring still overpowers story-shape filtering for official database pages and publisher self-promotional content | None | Add title/content filters for FDA compliance list pages and publisher self-promotional headlines | No |
+| 2026-04-01 | Medium | Official/source-content quality filter gap | Two FDA compliance/reporting pages were selected into Life Sciences and an American Banker house-promo was selected into Financial Services | No delivery failure, but editorial quality is below the product promise | Day 5 audit selected items for LIFE SCIENCES and FINANCIAL SERVICES; Day 6 expanded the evidence to FDA content selected in LIFE SCIENCES, TECHNOLOGY, and ENERGY | Authority-based scoring still overpowers story-shape filtering for official database pages and publisher self-promotional content | None | Add title/content filters for FDA compliance list pages and publisher self-promotional headlines | No |
+| 2026-04-02 | High | Scheduled strategic-writeup persistence / validation | All 10 canary digests were delivered, but all 80 stored scheduled items had `wim=null` and `wim_brief=null` | Deep-mode users likely received little or no "why it matters" text despite successful sends | Production digest records under `data/digest-records/email-177467271*/2026-04-02--scheduled.json` | The new writeup validator / repair path or the scheduled persistence path is dropping enriched writeup fields before or during delivery | None | Trace scheduled enrichment -> persistence -> render path and restore populated `wim` / `wim_brief` in live sends before Day 7 | No |
 
 ## Scenario Handling Notes
 

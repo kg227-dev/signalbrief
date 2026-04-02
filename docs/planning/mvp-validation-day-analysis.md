@@ -7,16 +7,16 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
 |--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | | | 7/7 |
-| Depth ≥15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | | | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | | | ≥80% |
-| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | | | ≥70% |
-| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | | | ≥90% |
-| Missed-story flags | 19 | 14 | 10 | 20 | 19 | | | 0 |
-| True miss flags | 3 | 3 | 3 | 6 | 5 | | | 0 |
-| Manual intervention | 0 | 0 | 0 | 0 | 0 | | | 0 |
-| Consecutive full days | 0 | 0 | 0 | 1 | 2 | | | 7 |
-| Day color | Red | Red | Red | Yellow | Yellow | | | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | | 7/7 |
+| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | | >=80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | | >=70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | | >=90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | | 0 |
+| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | | 7 |
+| Day color | Red | Red | Red | Yellow | Yellow | Yellow | | Green |
 
 ## Completed days
 
@@ -25,6 +25,7 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 - [Day 3 — 2026-03-30 (Monday)](../archive/planning/2026-03/mvp-day-3-2026-03-30.md)
 - [Day 4 — 2026-03-31 (Tuesday)](../archive/planning/2026-03/mvp-day-4-2026-03-31.md)
 - [Day 5 — 2026-04-01 (Wednesday)](../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
+- [Day 6 — 2026-04-02 (Thursday)](../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
 
 ## Day 4 — 2026-03-31
 
@@ -36,7 +37,7 @@ See [archive](../archive/planning/2026-03/mvp-day-5-2026-04-01.md). **Yellow.** 
 
 ## Day 6 — 2026-04-02
 
-_Pending._
+See [archive](../archive/planning/2026-03/mvp-day-6-2026-04-02.md). **Yellow.** Day 6 is the first day that hit all of the hard operational gates at once: 7/7 topics at 5 items, 7/7 topics above the depth gate, 10/10 canaries delivered, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 0 duplicate URLs vs Day 5. It is still not a true green day. The selected set remains quality-mixed, with FDA/official content still leaking into Life Sciences, Technology, and Energy, and the stored scheduled canary records show `0/80` populated `wim` / `wim_brief` fields, which is a likely deep-mode content regression rather than a clean strategic-writeup win.
 
 ## Day 7 — 2026-04-03
 

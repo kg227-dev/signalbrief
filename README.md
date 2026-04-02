@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/readme-hero.svg" alt="SignalBrief hero" width="920">
+  <img src=".github/assets/readme-hero.svg" alt="SignalBrief hero" width="860">
 </p>
 
 SignalBrief is built for people who need to walk into the day informed without burning the morning on tab sprawl.
@@ -21,7 +21,7 @@ SignalBrief is built for people who need to walk into the day informed without b
 Instead of juggling tabs, feeds, newsletters, and search results, SignalBrief delivers a tight briefing built from trusted trade and official sources, with clear context on why each story matters and a reading depth that matches your day.
 
 <p align="center">
-  <img src=".github/assets/readme-overview.svg" alt="SignalBrief overview" width="920">
+  <img src=".github/assets/readme-overview.svg" alt="SignalBrief digest preview" width="920">
 </p>
 
 ## Why SignalBrief

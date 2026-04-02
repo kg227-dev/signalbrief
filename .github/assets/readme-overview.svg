@@ -1,40 +1,74 @@
-<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="520" rx="28" fill="#F5F0E8"/>
-  <rect x="42" y="42" width="1116" height="436" rx="28" fill="#FBF7F1" stroke="#E2D7C7"/>
+<svg width="1200" height="1180" viewBox="0 0 1200 1180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="1180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2EEE7"/>
+      <stop offset="1" stop-color="#E9E3D9"/>
+    </linearGradient>
+    <filter id="shadow" x="48" y="30" width="1104" height="1120" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#6F6150" flood-opacity="0.12"/>
+    </filter>
+  </defs>
 
-  <text x="600" y="108" text-anchor="middle" fill="#1F1B17" font-size="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700">How SignalBrief fits into the morning</text>
-  <text x="600" y="142" text-anchor="middle" fill="#6A6359" font-size="18" font-family="Inter, Arial, sans-serif">Less tab sprawl. A clearer read. A briefing that gets to the point.</text>
+  <rect width="1200" height="1180" fill="url(#bg)"/>
 
-  <rect x="84" y="188" width="320" height="224" rx="24" fill="#FFFDFC" stroke="#E2D7C7"/>
-  <rect x="110" y="214" width="130" height="30" rx="15" fill="#E4ECFA"/>
-  <text x="175" y="234" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">1. Choose sectors</text>
-  <text x="110" y="296" fill="#201B17" font-size="26" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Pick the lanes that matter</text>
-  <text x="110" y="334" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">Follow one to three sectors without building</text>
-  <text x="110" y="360" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">a stack of newsletters, feeds, and tabs.</text>
-  <rect x="110" y="382" width="102" height="32" rx="16" fill="#E7EDE4"/>
-  <text x="161" y="403" text-anchor="middle" fill="#5C7C41" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Healthcare</text>
-  <rect x="220" y="382" width="112" height="32" rx="16" fill="#E4ECFA"/>
-  <text x="276" y="403" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Technology</text>
+  <g filter="url(#shadow)">
+    <rect x="82" y="44" width="1036" height="1068" rx="28" fill="#FFFEFC"/>
+  </g>
 
-  <rect x="440" y="188" width="320" height="224" rx="24" fill="#FFFDFC" stroke="#E2D7C7"/>
-  <rect x="466" y="214" width="142" height="30" rx="15" fill="#F0E5D5"/>
-  <text x="537" y="234" text-anchor="middle" fill="#A36612" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">2. Pick your depth</text>
-  <text x="466" y="296" fill="#201B17" font-size="26" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Read it your way</text>
-  <text x="466" y="334" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">Scan for speed, Brief for the takeaway,</text>
-  <text x="466" y="360" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">or Deep for the strategic why-it-matters.</text>
-  <rect x="466" y="382" width="76" height="32" rx="16" fill="#ECE3D6"/>
-  <text x="504" y="403" text-anchor="middle" fill="#5A5147" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Scan</text>
-  <rect x="552" y="382" width="82" height="32" rx="16" fill="#F0E5D5"/>
-  <text x="593" y="403" text-anchor="middle" fill="#A36612" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Brief</text>
-  <rect x="644" y="382" width="76" height="32" rx="16" fill="#E4ECFA"/>
-  <text x="682" y="403" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Deep</text>
+  <circle cx="132" cy="94" r="7" fill="#C9780A"/>
+  <circle cx="132" cy="66" r="7" fill="#C9780A"/>
+  <circle cx="118" cy="80" r="7" fill="#C9780A"/>
+  <circle cx="146" cy="80" r="7" fill="#C9780A"/>
+  <text x="164" y="92" fill="#211C18" font-size="36" font-family="Georgia, 'Times New Roman', serif" font-weight="400">SignalBrief</text>
+  <text x="130" y="132" fill="#6A6258" font-size="20" font-family="Inter, Arial, sans-serif">Saturday, March 1, 2026  •  Today's brief  •  4 min read</text>
+  <line x1="82" y1="164" x2="1118" y2="164" stroke="#EAE2D8"/>
 
-  <rect x="796" y="188" width="320" height="224" rx="24" fill="#FFFDFC" stroke="#E2D7C7"/>
-  <rect x="822" y="214" width="146" height="30" rx="15" fill="#E7EDE4"/>
-  <text x="895" y="234" text-anchor="middle" fill="#5C7C41" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">3. Start informed</text>
-  <text x="822" y="296" fill="#201B17" font-size="26" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Wake up with the brief</text>
-  <text x="822" y="334" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">Fresh signals from trusted trade and official</text>
-  <text x="822" y="360" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">sources, delivered before the day gets noisy.</text>
-  <rect x="822" y="382" width="212" height="34" rx="17" fill="#F4ECDD"/>
-  <text x="928" y="404" text-anchor="middle" fill="#4A4238" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">5 selected signals per topic, every morning</text>
+  <text x="130" y="226" fill="#2E54B4" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1.8">TODAY'S SIGNALS</text>
+
+  <text x="130" y="278" fill="#524A43" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">1</text>
+  <rect x="160" y="258" width="116" height="24" rx="12" fill="#CFF5DF"/>
+  <text x="218" y="275" text-anchor="middle" fill="#0D7A4A" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">HEALTHCARE</text>
+  <text x="292" y="278" fill="#47413B" font-size="20" font-family="Inter, Arial, sans-serif">CMS Finalizes Hospital Price Transparency Rules With Enforcement Teeth</text>
+
+  <text x="130" y="318" fill="#524A43" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">2</text>
+  <rect x="160" y="298" width="106" height="24" rx="12" fill="#DCE8FE"/>
+  <text x="213" y="315" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">TECHNOLOGY</text>
+  <text x="282" y="318" fill="#47413B" font-size="20" font-family="Inter, Arial, sans-serif">Microsoft Embeds Copilot Directly Into Azure Data Factory Pipelines</text>
+
+  <text x="130" y="358" fill="#524A43" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">3</text>
+  <rect x="160" y="338" width="174" height="24" rx="12" fill="#DDF0FD"/>
+  <text x="247" y="355" text-anchor="middle" fill="#15689B" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">FINANCIAL SERVICES</text>
+  <text x="350" y="358" fill="#47413B" font-size="20" font-family="Inter, Arial, sans-serif">Fed Holds Rates, Signals Two Cuts Possible Before Year End</text>
+
+  <line x1="82" y1="398" x2="1118" y2="398" stroke="#EAE2D8"/>
+
+  <text x="130" y="458" fill="#524A43" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">1</text>
+  <rect x="150" y="438" width="116" height="24" rx="12" fill="#CFF5DF"/>
+  <text x="208" y="455" text-anchor="middle" fill="#0D7A4A" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">HEALTHCARE</text>
+  <rect x="1022" y="434" width="54" height="28" rx="14" fill="#1EB25A"/>
+  <text x="1049" y="453" text-anchor="middle" fill="white" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">9.2</text>
+
+  <text x="130" y="520" fill="#1F1B18" font-size="30" font-family="Georgia, 'Times New Roman', serif" font-weight="700">CMS Finalizes Hospital Price Transparency Rules With Enforcement Teeth</text>
+  <text x="130" y="570" fill="#2B2622" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700">Hospitals that continue masking negotiated rates now face daily fines scaled to bed count.</text>
+  <text x="915" y="570" fill="#4F4840" font-size="22" font-family="Inter, Arial, sans-serif">The rule closes the</text>
+  <text x="130" y="608" fill="#4F4840" font-size="22" font-family="Inter, Arial, sans-serif">audit gap that let most systems delay compliance for three years.</text>
+  <text x="130" y="658" fill="#6B635A" font-size="19" font-family="Inter, Arial, sans-serif">Health systems still running opaque chargemasters should accelerate vendor negotiations before enforcement begins. The</text>
+  <text x="130" y="692" fill="#6B635A" font-size="19" font-family="Inter, Arial, sans-serif">window to reset contracts quietly is closing.</text>
+  <text x="130" y="740" fill="#2E54B4" font-size="19" font-family="Inter, Arial, sans-serif" font-weight="700">Read more →</text>
+
+  <line x1="130" y1="790" x2="1070" y2="790" stroke="#EAE2D8"/>
+
+  <text x="130" y="848" fill="#524A43" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">2</text>
+  <rect x="150" y="828" width="116" height="24" rx="12" fill="#DCE8FE"/>
+  <text x="208" y="845" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">TECHNOLOGY</text>
+  <rect x="1022" y="824" width="54" height="28" rx="14" fill="#27C268"/>
+  <text x="1049" y="843" text-anchor="middle" fill="white" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">8.7</text>
+
+  <text x="130" y="910" fill="#1F1B18" font-size="30" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Microsoft Embeds Copilot Directly Into Azure Data Factory Pipelines</text>
+  <text x="130" y="960" fill="#2B2622" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700">Enterprise data teams can now generate and debug ETL pipelines in plain language.</text>
+  <text x="1030" y="960" fill="#4F4840" font-size="22" font-family="Inter, Arial, sans-serif">The</text>
+  <text x="130" y="998" fill="#4F4840" font-size="22" font-family="Inter, Arial, sans-serif">integration targets the 60% of pipeline failures that originate in configuration errors.</text>
+  <text x="130" y="1048" fill="#6B635A" font-size="19" font-family="Inter, Arial, sans-serif">IT organizations still evaluating AI tooling for data engineering now have a production-grade answer from their existing</text>
+  <text x="130" y="1082" fill="#6B635A" font-size="19" font-family="Inter, Arial, sans-serif">vendor. The build-vs-buy calculus just shifted.</text>
+  <text x="130" y="1128" fill="#2E54B4" font-size="19" font-family="Inter, Arial, sans-serif" font-weight="700">Read more →</text>
 </svg>

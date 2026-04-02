@@ -1,51 +1,40 @@
-<svg width="1600" height="680" viewBox="0 0 1600 680" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1600" height="680" rx="36" fill="#F5F0E8"/>
-  <rect x="70" y="70" width="1460" height="540" rx="30" fill="#FBF7F1" stroke="#E3D8C8"/>
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="520" rx="28" fill="#F5F0E8"/>
+  <rect x="42" y="42" width="1116" height="436" rx="28" fill="#FBF7F1" stroke="#E2D7C7"/>
 
-  <text x="800" y="140" text-anchor="middle" fill="#1E1A16" font-size="42" font-family="Georgia, 'Times New Roman', serif" font-weight="700">How SignalBrief fits into the morning</text>
-  <text x="800" y="184" text-anchor="middle" fill="#6B645B" font-size="22" font-family="Inter, Arial, sans-serif">A faster read, a clearer briefing, and less time lost to scattered sources.</text>
+  <text x="600" y="108" text-anchor="middle" fill="#1F1B17" font-size="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700">How SignalBrief fits into the morning</text>
+  <text x="600" y="142" text-anchor="middle" fill="#6A6359" font-size="18" font-family="Inter, Arial, sans-serif">Less tab sprawl. A clearer read. A briefing that gets to the point.</text>
 
-  <g>
-    <rect x="126" y="238" width="410" height="282" rx="26" fill="#FFFDFC" stroke="#E3D8C8"/>
-    <rect x="156" y="270" width="140" height="34" rx="17" fill="#E5EEF9"/>
-    <text x="226" y="292" text-anchor="middle" fill="#2F54B1" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">1. Choose sectors</text>
-    <text x="156" y="350" fill="#1F1B17" font-size="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Pick the lanes that matter</text>
-    <text x="156" y="394" fill="#5F584F" font-size="19" font-family="Inter, Arial, sans-serif">Follow one to three sectors without building a stack</text>
-    <text x="156" y="422" fill="#5F584F" font-size="19" font-family="Inter, Arial, sans-serif">of newsletters, feeds, and bookmarked tabs.</text>
+  <rect x="84" y="188" width="320" height="224" rx="24" fill="#FFFDFC" stroke="#E2D7C7"/>
+  <rect x="110" y="214" width="130" height="30" rx="15" fill="#E4ECFA"/>
+  <text x="175" y="234" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">1. Choose sectors</text>
+  <text x="110" y="296" fill="#201B17" font-size="26" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Pick the lanes that matter</text>
+  <text x="110" y="334" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">Follow one to three sectors without building</text>
+  <text x="110" y="360" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">a stack of newsletters, feeds, and tabs.</text>
+  <rect x="110" y="382" width="102" height="32" rx="16" fill="#E7EDE4"/>
+  <text x="161" y="403" text-anchor="middle" fill="#5C7C41" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Healthcare</text>
+  <rect x="220" y="382" width="112" height="32" rx="16" fill="#E4ECFA"/>
+  <text x="276" y="403" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Technology</text>
 
-    <rect x="156" y="456" width="114" height="34" rx="17" fill="#E9F0E5"/>
-    <text x="213" y="478" text-anchor="middle" fill="#5B7B42" font-size="15" font-family="Inter, Arial, sans-serif" font-weight="700">Healthcare</text>
-    <rect x="282" y="456" width="128" height="34" rx="17" fill="#E5EEF9"/>
-    <text x="346" y="478" text-anchor="middle" fill="#2F54B1" font-size="15" font-family="Inter, Arial, sans-serif" font-weight="700">Technology</text>
-    <rect x="156" y="502" width="162" height="34" rx="17" fill="#F0E6D6"/>
-    <text x="237" y="524" text-anchor="middle" fill="#A36512" font-size="15" font-family="Inter, Arial, sans-serif" font-weight="700">Financial Services</text>
-  </g>
+  <rect x="440" y="188" width="320" height="224" rx="24" fill="#FFFDFC" stroke="#E2D7C7"/>
+  <rect x="466" y="214" width="142" height="30" rx="15" fill="#F0E5D5"/>
+  <text x="537" y="234" text-anchor="middle" fill="#A36612" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">2. Pick your depth</text>
+  <text x="466" y="296" fill="#201B17" font-size="26" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Read it your way</text>
+  <text x="466" y="334" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">Scan for speed, Brief for the takeaway,</text>
+  <text x="466" y="360" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">or Deep for the strategic why-it-matters.</text>
+  <rect x="466" y="382" width="76" height="32" rx="16" fill="#ECE3D6"/>
+  <text x="504" y="403" text-anchor="middle" fill="#5A5147" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Scan</text>
+  <rect x="552" y="382" width="82" height="32" rx="16" fill="#F0E5D5"/>
+  <text x="593" y="403" text-anchor="middle" fill="#A36612" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Brief</text>
+  <rect x="644" y="382" width="76" height="32" rx="16" fill="#E4ECFA"/>
+  <text x="682" y="403" text-anchor="middle" fill="#2E54B4" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">Deep</text>
 
-  <g>
-    <rect x="595" y="238" width="410" height="282" rx="26" fill="#FFFDFC" stroke="#E3D8C8"/>
-    <rect x="625" y="270" width="154" height="34" rx="17" fill="#F0E6D6"/>
-    <text x="702" y="292" text-anchor="middle" fill="#A36512" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">2. Pick your depth</text>
-    <text x="625" y="350" fill="#1F1B17" font-size="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Read it your way</text>
-    <text x="625" y="394" fill="#5F584F" font-size="19" font-family="Inter, Arial, sans-serif">Scan for speed, Brief for the takeaway, or Deep for</text>
-    <text x="625" y="422" fill="#5F584F" font-size="19" font-family="Inter, Arial, sans-serif">the strategic why-it-matters under the same stories.</text>
-
-    <rect x="625" y="458" width="96" height="40" rx="20" fill="#ECE4D7"/>
-    <text x="673" y="484" text-anchor="middle" fill="#5B544B" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Scan</text>
-    <rect x="735" y="458" width="106" height="40" rx="20" fill="#F0E6D6"/>
-    <text x="788" y="484" text-anchor="middle" fill="#A36512" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Brief</text>
-    <rect x="855" y="458" width="96" height="40" rx="20" fill="#E5EEF9"/>
-    <text x="903" y="484" text-anchor="middle" fill="#2F54B1" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Deep</text>
-  </g>
-
-  <g>
-    <rect x="1064" y="238" width="410" height="282" rx="26" fill="#FFFDFC" stroke="#E3D8C8"/>
-    <rect x="1094" y="270" width="170" height="34" rx="17" fill="#E7EFE4"/>
-    <text x="1179" y="292" text-anchor="middle" fill="#5B7B42" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">3. Start informed</text>
-    <text x="1094" y="350" fill="#1F1B17" font-size="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Wake up with the brief</text>
-    <text x="1094" y="394" fill="#5F584F" font-size="19" font-family="Inter, Arial, sans-serif">Fresh signals, selected from trusted trade and official</text>
-    <text x="1094" y="422" fill="#5F584F" font-size="19" font-family="Inter, Arial, sans-serif">sources, delivered before the day gets noisy.</text>
-
-    <rect x="1094" y="458" width="290" height="44" rx="22" fill="#F5EFE5"/>
-    <text x="1239" y="486" text-anchor="middle" fill="#4D453B" font-size="17" font-family="Inter, Arial, sans-serif" font-weight="700">5 selected signals per topic, every morning</text>
-  </g>
+  <rect x="796" y="188" width="320" height="224" rx="24" fill="#FFFDFC" stroke="#E2D7C7"/>
+  <rect x="822" y="214" width="146" height="30" rx="15" fill="#E7EDE4"/>
+  <text x="895" y="234" text-anchor="middle" fill="#5C7C41" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">3. Start informed</text>
+  <text x="822" y="296" fill="#201B17" font-size="26" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Wake up with the brief</text>
+  <text x="822" y="334" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">Fresh signals from trusted trade and official</text>
+  <text x="822" y="360" fill="#5C554C" font-size="17" font-family="Inter, Arial, sans-serif">sources, delivered before the day gets noisy.</text>
+  <rect x="822" y="382" width="212" height="34" rx="17" fill="#F4ECDD"/>
+  <text x="928" y="404" text-anchor="middle" fill="#4A4238" font-size="14" font-family="Inter, Arial, sans-serif" font-weight="700">5 selected signals per topic, every morning</text>
 </svg>

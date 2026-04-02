@@ -1,17 +1,19 @@
-<p align="center">
-  <img src=".github/assets/readme-hero.svg" alt="SignalBrief hero" width="100%">
-</p>
-
-<p align="center">
-  <a href="https://getsignalbrief.com">Website</a>
-  ·
-  <a href="https://getsignalbrief.com/signup">Start Your Brief</a>
-  ·
-  <a href="./docs/INDEX.md">Documentation</a>
-</p>
+<h1 align="center">SignalBrief</h1>
 
 <p align="center">
   <strong>The daily sector briefing for operators, investors, consultants, and strategy teams.</strong>
+</p>
+
+<p align="center">
+  <a href="https://getsignalbrief.com"><strong>Website</strong></a>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://getsignalbrief.com/signup"><strong>Start Your Brief</strong></a>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="./docs/INDEX.md"><strong>Documentation</strong></a>
+</p>
+
+<p align="center">
+  <img src=".github/assets/readme-hero.svg" alt="SignalBrief hero" width="920">
 </p>
 
 SignalBrief is built for people who need to walk into the day informed without burning the morning on tab sprawl.
@@ -19,7 +21,7 @@ SignalBrief is built for people who need to walk into the day informed without b
 Instead of juggling tabs, feeds, newsletters, and search results, SignalBrief delivers a tight briefing built from trusted trade and official sources, with clear context on why each story matters and a reading depth that matches your day.
 
 <p align="center">
-  <img src=".github/assets/readme-overview.svg" alt="SignalBrief overview" width="100%">
+  <img src=".github/assets/readme-overview.svg" alt="SignalBrief overview" width="920">
 </p>
 
 ## Why SignalBrief

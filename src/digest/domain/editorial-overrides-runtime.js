@@ -27,12 +27,14 @@ function loadEditorialOverrides(overridesPath, fs) {
   try {
     raw = fs.readFileSync(String(overridesPath || ""), "utf8");
   } catch (_) {
+    // Intentionally silent: missing or unreadable overrides should behave like no overrides.
     return emptyOverrides();
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (_) {
+    // Intentionally silent: malformed overrides should not block digest generation.
     return emptyOverrides();
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return emptyOverrides();

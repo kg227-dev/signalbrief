@@ -5,7 +5,7 @@ const {
   validateDigestTuning,
   ALLOWED_TUNING_KEYS,
   LOCKED_TUNING_KEYS,
-} = require("../../src/runtime/digest-tuning-runtime");
+} = require("../../../src/runtime/digest-tuning-runtime");
 
 /**
  * GET  /api/admin/digest-tuning  — read current overrides

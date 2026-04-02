@@ -3,13 +3,12 @@
 const path = require("path");
 
 const { MVP_TOPIC_TAGS, isMvpTopic } = require("../platform/config/mvp-topics");
+const { STANDARD_TOPIC_BROKER_DEFAULTS } = require("../platform/config/provider-defaults");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
 const { normalizeTopicToken, topicsRelated, canonicalizeMvpTopicTag } = require("./topic-normalization-runtime");
 
-const DEFAULT_TIMEOUT_MS = 12_000;
-const DEFAULT_MAX_BYTES = 512_000;
 const ALLOWED_LANES = new Set(["perplexity_discovery", "publisher_feed", "official"]);
 const ALLOWED_SOURCE_KINDS = new Set(["reported_media", "trade_specialist", "primary_official"]);
 const ALLOWED_CONTENT_KINDS = new Set(["article", "official_document", "filing"]);
@@ -722,8 +721,8 @@ function buildInitialDiagnostics(activeTopicTags = []) {
 }
 
 async function defaultFetchEndpoint(url, opts = {}) {
-  const timeoutMs = Math.max(1_000, Number(opts?.timeoutMs || DEFAULT_TIMEOUT_MS));
-  const maxBytes = Math.max(8_192, Number(opts?.maxBytes || DEFAULT_MAX_BYTES));
+  const timeoutMs = Math.max(1_000, Number(opts?.timeoutMs || STANDARD_TOPIC_BROKER_DEFAULTS.timeoutMs));
+  const maxBytes = Math.max(8_192, Number(opts?.maxBytes || STANDARD_TOPIC_BROKER_DEFAULTS.maxBytes));
   const accept = String(opts?.accept || "").trim() || "*/*";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

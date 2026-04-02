@@ -1,3 +1,5 @@
+const { isDebugWebServerEnabled } = require("../server-runtime-env-runtime");
+
 function appendJsonLineLog({ fs, path, filePath, entry, label }) {
   try {
     const dir = path.dirname(filePath);
@@ -44,7 +46,7 @@ function readJsonLineTail({ fs, filePath, limit = 30, maxBytes = 512 * 1024 }) {
         const parsed = JSON.parse(lines[i]);
         if (parsed) out.push(parsed);
       } catch (err) {
-        if (process.env.DEBUG_WEB_SERVER === "1") {
+        if (isDebugWebServerEnabled()) {
           console.warn(`[web] skipping malformed JSONL line in ${filePath}: ${err.message}`);
         }
       }

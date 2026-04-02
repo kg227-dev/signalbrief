@@ -77,6 +77,8 @@ const {
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
   getWebAssetVersion,
+  isAllowExampleSignupsEnabled,
+  getNodeEnv,
 } = require("./server-runtime-env-runtime");
 const {
   INDUSTRY_TOPICS,
@@ -152,7 +154,7 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
   path,
   appRoot: APP_ROOT,
   env: process.env,
-  nodeEnv: process.env.NODE_ENV,
+  nodeEnv: getNodeEnv(),
   standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
@@ -160,7 +162,7 @@ const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
   fs,
   appRoot: APP_ROOT,
   env: process.env,
-  nodeEnv: process.env.NODE_ENV,
+  nodeEnv: getNodeEnv(),
   standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
@@ -223,10 +225,7 @@ const sendMagicLinkEmail = createSendMagicLinkEmail({
   getBaseUrl,
 });
 
-const allowExampleSignups = (
-  String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
-  || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
-);
+const allowExampleSignups = isAllowExampleSignupsEnabled();
 
 let digestEmailTemplateCache = null;
 let digestFormattingRuntimeCache = null;

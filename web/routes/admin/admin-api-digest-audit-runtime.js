@@ -7,7 +7,7 @@ const {
   classifyLane,
   loadRecentAuditDocs,
 } = require("./admin-api-source-health-runtime");
-const { isStandardMvpTopicTag } = require("../../src/runtime/topic-normalization-runtime");
+const { isStandardMvpTopicTag } = require("../../../src/runtime/topic-normalization-runtime");
 
 function pct(part, whole) {
   const numerator = Number(part || 0);

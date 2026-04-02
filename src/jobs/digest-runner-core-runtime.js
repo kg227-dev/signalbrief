@@ -2,6 +2,14 @@
 
 const path = require("path");
 const {
+  getDigestLockStaleMs,
+  getDigestRunnerPollMinMs,
+  getDigestRunnerPollMaxMs,
+  getDigestRunnerStartConfirmMs,
+  getDigestRunnerStartConfirmPollMs,
+  isDigestRunnerDebugEnabled,
+} = require("../runtime/config-provider");
+const {
   LOCK_STATES,
   readDigestLockState,
   clearDigestLockFile,
@@ -66,36 +74,27 @@ const {
 } = digestRunnerSpawnRuntime;
 
 function getDigestRunLockStaleMs() {
-  return Math.max(
-    5 * 60 * 1000,
-    Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000))
-  );
+  return getDigestLockStaleMs();
 }
 
 function getAdmissionPollMinMs() {
-  return Math.max(250, Number(process.env.DIGEST_RUNNER_POLL_MIN_MS || 1000));
+  return getDigestRunnerPollMinMs();
 }
 
 function getAdmissionPollMaxMs() {
-  return Math.max(getAdmissionPollMinMs(), Number(process.env.DIGEST_RUNNER_POLL_MAX_MS || 8000));
+  return getDigestRunnerPollMaxMs();
 }
 
 function getStartConfirmTimeoutMs() {
-  return Math.max(
-    500,
-    Number(process.env.DIGEST_RUNNER_START_CONFIRM_MS || process.env.DIGEST_RUNNER_QUEUE_CONFIRM_MS || START_CONFIRM_TIMEOUT_MS)
-  );
+  return Math.max(500, getDigestRunnerStartConfirmMs() || START_CONFIRM_TIMEOUT_MS);
 }
 
 function getStartConfirmPollMs() {
-  return Math.max(
-    50,
-    Number(process.env.DIGEST_RUNNER_START_CONFIRM_POLL_MS || process.env.DIGEST_RUNNER_QUEUE_CONFIRM_POLL_MS || START_CONFIRM_POLL_MS)
-  );
+  return Math.max(50, getDigestRunnerStartConfirmPollMs() || START_CONFIRM_POLL_MS);
 }
 
 function isDigestRunnerDebug() {
-  return process.env.DEBUG_DIGEST_RUNNER === "1";
+  return isDigestRunnerDebugEnabled();
 }
 
 function createRunnerState() {

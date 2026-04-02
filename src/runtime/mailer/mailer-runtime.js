@@ -15,18 +15,19 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { loadConfig } = require("../config-provider");
+const {
+  loadConfig,
+  getMailerTimeoutMs,
+  getBaseUrl,
+  getUnsubscribeSigningSecretOverride,
+} = require("../config-provider");
 const { createLifecycleMailer } = require("../mailer-lifecycle-runtime");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..", "..");
 const WELCOME_TEMPLATE_PATH = path.join(APP_ROOT, "templates", "welcome.html");
 let welcomeTemplateCache = null;
 
-const MAILER_TIMEOUT_MS = Math.max(1000, Number(process.env.SIGNALBRIEF_MAILER_TIMEOUT_MS || 15000));
-
-function getBaseUrl() {
-  return process.env.BASE_URL || "https://getsignalbrief.com";
-}
+const MAILER_TIMEOUT_MS = getMailerTimeoutMs();
 
 function getConfig() {
   return loadConfig();
@@ -59,7 +60,7 @@ function normalizeUnsubEmail(email) {
 
 function getUnsubscribeSigningSecret() {
   const keys = getConfigKeys();
-  const explicit = String(process.env.SIGNALBRIEF_UNSUBSCRIBE_SIGNING_SECRET || "").trim()
+  const explicit = getUnsubscribeSigningSecretOverride()
     || String(keys.unsubscribeSigningSecret || "").trim();
   if (explicit) return explicit;
   const adminHash = String(getConfig()?.admin?.passwordHash || "").trim();

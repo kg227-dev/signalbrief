@@ -7,7 +7,7 @@ const {
   assertModuleExports,
 } = require("../../../../test-support/module-contract-helper.js");
 
-const TARGET_REL = "web/routes/admin-api.js";
+const TARGET_REL = "web/routes/admin/admin-api.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);

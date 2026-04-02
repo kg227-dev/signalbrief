@@ -9,7 +9,19 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { MVP_TOPIC_TAGS: STANDARD_MVP_TOPIC_TAGS } = require("../platform/config/mvp-topics");
-const { loadConfig } = require("../platform/config");
+const {
+  loadConfig,
+  getBaseUrl,
+  getNodeEnv,
+  isAllowExampleSignupsEnabled,
+  isDigestDryRunEnabled,
+  getOpsAlertEmail,
+  getDigestTriggerSource,
+  getRollingZeroValueCapUsd,
+  getDailyZeroValueCapUsd,
+  getRollingZeroValueWindowHours,
+  getDigestLockStaleMs,
+} = require("../platform/config");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const { createStore, USER_STATUS } = require("../platform/store");
@@ -117,16 +129,16 @@ const INCIDENT_STORE = RUNTIME_PATHS.incidentStorePath;
 const DIGEST_TUNING_PATH = RUNTIME_PATHS.digestTuningPath;
 const EDITORIAL_OVERRIDES_PATH = RUNTIME_PATHS.editorialOverridesPath;
 const BROKER_CANDIDATE_INVENTORY_PATH = RUNTIME_PATHS.brokerCandidateInventoryPath;
-const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP_USD || "1.00");
-const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
-const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
-const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
+const ROLLING_ZERO_VALUE_CAP_USD = getRollingZeroValueCapUsd();
+const DAILY_ZERO_VALUE_CAP_USD = getDailyZeroValueCapUsd();
+const ROLLING_ZERO_VALUE_WINDOW_HOURS = getRollingZeroValueWindowHours();
+const DIGEST_LOCK_STALE_MS = getDigestLockStaleMs();
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,
   appRoot: APP_ROOT,
   env: process.env,
-  nodeEnv: process.env.NODE_ENV,
+  nodeEnv: getNodeEnv(),
   standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
   bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
 });
@@ -173,10 +185,6 @@ function getEmailTemplate() {
     emailTemplateCache = fs.readFileSync(path.join(APP_ROOT, "templates/email.html"), "utf8");
   }
   return emailTemplateCache;
-}
-
-function getBaseUrl() {
-  return process.env.BASE_URL || "https://getsignalbrief.com";
 }
 
 function ensureDigestRuntimeBootstrap() {
@@ -227,7 +235,7 @@ function parseDigestRunArgs(args = [], deps = {}) {
   const formatDateKey = typeof deps.formatEtDateKey === "function"
     ? deps.formatEtDateKey
     : ((value) => String(value instanceof Date ? value.toISOString().slice(0, 10) : ""));
-  const dryRun = args.includes("--dry-run") || process.env.DIGEST_DRY_RUN === "1";
+  const dryRun = args.includes("--dry-run") || isDigestDryRunEnabled();
   const suppressWelcome = args.includes("--suppressWelcome");
   const auditOnly = args.includes("--auditOnly");
   const inventoryRefreshOnly = args.includes("--inventory-refresh-only");
@@ -308,7 +316,7 @@ function getDigestOrchestratorIncidentRuntime() {
       incidentStorePath: INCIDENT_STORE,
       log,
       formatEtDateKey,
-      resolveOpsAlertTarget: () => process.env.OPS_ALERT_EMAIL || CONFIG?.admin?.email || null,
+      resolveOpsAlertTarget: () => getOpsAlertEmail() || CONFIG?.admin?.email || null,
       sendOpsAlert,
     });
   }
@@ -1090,7 +1098,7 @@ function prepareStorylinePool(...args) {
 // ── 6. Send ops alerts via configured transport ───────────────────────────────
 
 async function sendOpsAlert(text, targetEmail, extra = {}) {
-  const target = String(targetEmail || process.env.OPS_ALERT_EMAIL || CONFIG?.admin?.email || "").trim();
+  const target = String(targetEmail || getOpsAlertEmail() || CONFIG?.admin?.email || "").trim();
   const message = String(text || "").trim();
   if (!target || !message) return;
   logEvent("info", "digest.delivery.ops_alert", {
@@ -1190,10 +1198,7 @@ async function main() {
     mode: runMode,
     target_chat_id: null,
   });
-  const allowExampleEmails = (
-    String(process.env.ALLOW_EXAMPLE_SIGNUPS || "").trim() === "1"
-    || String(process.env.NODE_ENV || "").toLowerCase() !== "production"
-  );
+  const allowExampleEmails = isAllowExampleSignupsEnabled();
 
   const lock = acquireDigestLock(runMode);
   if (!lock.ok) {
@@ -1353,7 +1358,7 @@ async function main() {
   }
 
   const now = new Date();
-  const triggerSource = String(process.env.SIGNALBRIEF_DIGEST_TRIGGER_SOURCE || "").trim();
+  const triggerSource = getDigestTriggerSource();
   const deliveryMode = resolveDeliveryModeFromTrigger(triggerSource);
   const deliveryEventSource = resolveDeliveryEventSource(deliveryMode);
   const dateStr = now.toLocaleDateString("en-US", {
@@ -1385,7 +1390,7 @@ async function main() {
     path,
     appRoot: APP_ROOT,
     env: process.env,
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: getNodeEnv(),
     standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
     bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
     log,

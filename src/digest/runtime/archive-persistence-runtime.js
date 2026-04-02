@@ -34,6 +34,7 @@ function createArchivePersistenceRuntime(deps) {
       const parsed = JSON.parse(fs.readFileSync(indexPath, "utf8"));
       return normalizeArchiveDateList(parsed?.dates);
     } catch {
+      // Intentionally silent: a corrupt archive index should not block archive reads.
       return [];
     }
   }
@@ -53,7 +54,7 @@ function createArchivePersistenceRuntime(deps) {
       try {
         if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
       } catch {
-        // best-effort temp cleanup
+        // Intentionally silent: temp-file cleanup is best-effort after a failed archive-index write.
       }
     }
   }

@@ -95,7 +95,7 @@ function createStructuredLogger(options = {}) {
       try {
         fs.appendFileSync(filePath, `${line}\n`);
       } catch {
-        // best-effort file append
+        // Intentionally silent: console/stdout logging remains authoritative if file append fails.
       }
     }
 

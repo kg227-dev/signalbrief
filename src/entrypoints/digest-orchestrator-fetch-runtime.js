@@ -1,5 +1,10 @@
 "use strict";
 
+const { getPerplexityMaxConcurrentFetchesOverride } = require("../runtime/config-provider");
+const {
+  FETCH_ORCHESTRATOR_DEFAULTS,
+  PERPLEXITY_PROVIDER_DEFAULTS,
+} = require("../platform/config/provider-defaults");
 const { MVP_TOPIC_TAGS, isMvpTopic } = require("../platform/config/mvp-topics");
 const { normalizeSourcePolicyDomain } = require("../runtime/source-policy-registry-runtime");
 const { canonicalizeMvpTopicTag } = require("../runtime/topic-normalization-runtime");
@@ -19,9 +24,6 @@ const DEFAULT_SEARCH_BUDGET = Object.freeze({
     hard_calls: 36,
   }),
 });
-const DEFAULT_MAX_FETCH_CONCURRENCY = 4;
-const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 1_250;
-const DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS = 20_000;
 const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_MAX_DISCOVERY_CANDIDATE_SHARE = 0.2;
 const DEFAULT_RETENTION_HOURS_FOR_INVENTORY = 72;
@@ -270,8 +272,8 @@ function applyRunModeSearchBudgetOverrides(searchBudget, { runMode, standardTopi
 function resolveFetchConcurrency(digestConfig) {
   const configured = digestConfig?.providerResilience?.perplexity?.maxConcurrentFetches;
   return toBoundedInt(
-    process.env.SIGNALBRIEF_PERPLEXITY_MAX_CONCURRENT_FETCHES || configured,
-    DEFAULT_MAX_FETCH_CONCURRENCY,
+    getPerplexityMaxConcurrentFetchesOverride() || configured,
+    PERPLEXITY_PROVIDER_DEFAULTS.maxConcurrentFetches,
     { min: 1, max: 24 }
   );
 }
@@ -1180,11 +1182,11 @@ function createDigestOrchestratorFetchRuntime(deps) {
       DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX,
       Math.max(0, Number(budgetTracker?.rate_limit_backoff_level || 0)) + 1
     );
-    const adaptiveDelayMs = DEFAULT_RATE_LIMIT_COOLDOWN_MS
+    const adaptiveDelayMs = FETCH_ORCHESTRATOR_DEFAULTS.rateLimitCooldownMs
       * Math.max(1, rateLimitCount)
       * Math.max(1, Number(budgetTracker.rate_limit_backoff_level || 1));
     const delayMs = Math.min(
-      DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS,
+      FETCH_ORCHESTRATOR_DEFAULTS.rateLimitMaxCooldownMs,
       Math.max(retryAfterMs, adaptiveDelayMs)
     );
     budgetTracker.rate_limit_cooldown_ms = Number(budgetTracker?.rate_limit_cooldown_ms || 0) + delayMs;

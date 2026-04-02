@@ -65,11 +65,11 @@
         toggle.setAttribute("aria-pressed", isDark ? "true" : "false");
       }
     }
-    try { if (localStorage.getItem("sbDark") === "1") apply(true); } catch(e) {}
+    try { if (localStorage.getItem("sbDark") === "1") apply(true); } catch(e) { /* Intentionally silent: localStorage may be unavailable. */ }
     if (toggle) toggle.onclick = function() {
       var isDark = !document.body.classList.contains("dark");
       apply(isDark);
-      try { localStorage.setItem("sbDark", isDark ? "1" : "0"); } catch(e) {}
+      try { localStorage.setItem("sbDark", isDark ? "1" : "0"); } catch(e) { /* Intentionally silent: theme persistence is optional. */ }
     };
   })();
 

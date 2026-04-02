@@ -4,11 +4,14 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 
-const TARGET_REL = "web/routes/core-api-bookmarks-actions-runtime.js";
-const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
+const TARGET_RELS = [
+  "web/routes/core-api-bookmarks-actions-runtime.js",
+  "web/routes/core/core-api-bookmarks-actions-runtime.js",
+  "web/routes/core/core-api-bookmarks-runtime.js",
+];
 
 assert.ok(
-  !fs.existsSync(TARGET_PATH),
+  TARGET_RELS.every((targetRel) => !fs.existsSync(path.join(process.cwd(), targetRel))),
   "bookmark actions route should remain removed from the active web API path in the email-only MVP"
 );
 

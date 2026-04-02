@@ -33,7 +33,7 @@ const { createDigestOrchestratorEnrichmentRuntime } = require("../../entrypoints
 const { createDigestOrchestratorFetchRuntime } = require("../../entrypoints/digest-orchestrator-fetch-runtime");
 const { createDigestOrchestratorTransportRuntime } = require("../../entrypoints/digest-orchestrator-transport-runtime");
 const { articleAgeTooOld } = require("../../digest/runtime/digest-data-fetch-items-runtime");
-const { loadConfig } = require("../../runtime/config-provider");
+const { loadConfig, getBaseUrl, getNodeEnv } = require("../../runtime/config-provider");
 const {
   createPreferredSourceRegistryRuntime,
   buildPreferredDomainShortlist,
@@ -665,7 +665,7 @@ function createEvalServices() {
   const runtimePaths = resolveSignalBriefRuntimePaths({
     appRoot: path.resolve(__dirname, "..", "..", ".."),
     env: process.env,
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: getNodeEnv(),
   });
   const transportRuntime = createDigestOrchestratorTransportRuntime({
     https,
@@ -677,7 +677,7 @@ function createEvalServices() {
     path,
     appRoot: runtimePaths.appRoot,
     env: process.env,
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: getNodeEnv(),
     standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
     bundledStandardTopicBrokerSourcesPath: path.join(runtimePaths.appRoot, "config", "standard-topic-broker-sources.json"),
   });
@@ -685,7 +685,7 @@ function createEvalServices() {
     fs,
     appRoot: runtimePaths.appRoot,
     env: process.env,
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: getNodeEnv(),
     preferredSourcesPath: runtimePaths.preferredSourcesPath,
     standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
     bundledStandardTopicBrokerSourcesPath: path.join(runtimePaths.appRoot, "config", "standard-topic-broker-sources.json"),
@@ -695,7 +695,7 @@ function createEvalServices() {
     path,
     appRoot: runtimePaths.appRoot,
     env: process.env,
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: getNodeEnv(),
     standardTopicBrokerSourcesPath: runtimePaths.standardTopicBrokerSourcesPath,
     bundledStandardTopicBrokerSourcesPath: path.join(runtimePaths.appRoot, "config", "standard-topic-broker-sources.json"),
     log,
@@ -732,7 +732,7 @@ function createEvalServices() {
   const formattingRuntime = createDigestFormattingRuntime({
     CONFIG,
     EMAIL_TEMPLATE: "",
-    BASE_URL: process.env.BASE_URL || "https://getsignalbrief.com",
+    BASE_URL: getBaseUrl(),
     httpsPostWithRetry,
     buildPublicDigestUrl: () => "",
     normalizeTopicToken,
@@ -1614,7 +1614,7 @@ async function runRetrievalEval(options = {}) {
   const storage = options.storage || createRetrievalEvalStorageRuntime({
     appRoot: services.runtimePaths.appRoot,
     env: process.env,
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: getNodeEnv(),
   });
   storage.ensureRoot();
   let budget = storage.loadBudget();

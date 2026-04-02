@@ -35,16 +35,16 @@ assert.ok(
   !serverRuntimeSource.includes('require("./api/core")')
     && !serverRuntimeSource.includes('require("./api/admin")')
     && !serverRuntimeSource.includes('require("./api/public")')
-    && !serverRuntimeSource.includes('require("./routes/core-api")')
-    && !serverRuntimeSource.includes('require("./routes/admin-api")')
+    && !serverRuntimeSource.includes('require("./routes/core/core-api")')
+    && !serverRuntimeSource.includes('require("./routes/admin/admin-api")')
     && !serverRuntimeSource.includes('require("./routes/public-static")'),
   "server-runtime.js should not directly import domain route handlers"
 );
 
 const depsSource = readSource("web/server-runtime-deps-runtime.js");
 assert.ok(
-  depsSource.includes('require("./routes/core-api")')
-    && depsSource.includes('require("./routes/admin-api")')
+  depsSource.includes('require("./routes/core/core-api")')
+    && depsSource.includes('require("./routes/admin/admin-api")')
     && depsSource.includes('require("./routes/public-static")'),
   "server-runtime-deps-runtime.js should remain the only route-handler composition boundary"
 );
@@ -70,7 +70,7 @@ const coreRegistrySource = readSource("web/server-runtime-core-registry-runtime.
 assert.ok(
   !coreRegistrySource.includes('require("./api/admin")')
     && !coreRegistrySource.includes('require("./api/public")')
-    && !coreRegistrySource.includes('require("./routes/admin-api")')
+    && !coreRegistrySource.includes('require("./routes/admin/admin-api")')
     && !coreRegistrySource.includes('require("./routes/public-static")'),
   "core registry should stay route-dependency only and avoid cross-route imports"
 );
@@ -79,7 +79,7 @@ const adminRegistrySource = readSource("web/server-runtime-admin-registry-runtim
 assert.ok(
   !adminRegistrySource.includes('require("./api/core")')
     && !adminRegistrySource.includes('require("./api/public")')
-    && !adminRegistrySource.includes('require("./routes/core-api")')
+    && !adminRegistrySource.includes('require("./routes/core/core-api")')
     && !adminRegistrySource.includes('require("./routes/public-static")'),
   "admin registry should stay route-dependency only and avoid cross-route imports"
 );
@@ -88,8 +88,8 @@ const publicRegistrySource = readSource("web/server-runtime-public-registry-runt
 assert.ok(
   !publicRegistrySource.includes('require("./api/core")')
     && !publicRegistrySource.includes('require("./api/admin")')
-    && !publicRegistrySource.includes('require("./routes/core-api")')
-    && !publicRegistrySource.includes('require("./routes/admin-api")'),
+    && !publicRegistrySource.includes('require("./routes/core/core-api")')
+    && !publicRegistrySource.includes('require("./routes/admin/admin-api")'),
   "public registry should stay route-dependency only and avoid cross-route imports"
 );
 
@@ -98,8 +98,8 @@ assert.ok(
   !routeBootstrapSource.includes('require("./api/core")')
     && !routeBootstrapSource.includes('require("./api/admin")')
     && !routeBootstrapSource.includes('require("./api/public")')
-    && !routeBootstrapSource.includes('require("./routes/core-api")')
-    && !routeBootstrapSource.includes('require("./routes/admin-api")')
+    && !routeBootstrapSource.includes('require("./routes/core/core-api")')
+    && !routeBootstrapSource.includes('require("./routes/admin/admin-api")')
     && !routeBootstrapSource.includes('require("./routes/public-static")'),
   "server-runtime-route-bootstrap-runtime.js should only dispatch handlers, not import domain handlers"
 );
@@ -109,8 +109,8 @@ assert.ok(
   !requestPolicySource.includes('require("./api/core")')
     && !requestPolicySource.includes('require("./api/admin")')
     && !requestPolicySource.includes('require("./api/public")')
-    && !requestPolicySource.includes('require("./routes/core-api")')
-    && !requestPolicySource.includes('require("./routes/admin-api")')
+    && !requestPolicySource.includes('require("./routes/core/core-api")')
+    && !requestPolicySource.includes('require("./routes/admin/admin-api")')
     && !requestPolicySource.includes('require("./routes/public-static")'),
   "server-runtime-request-policy-runtime.js should remain transport-policy only"
 );

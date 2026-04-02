@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isDebugWebServerEnabled } = require("./server-runtime-env-runtime");
 
 const MIME = {
   ".html": "text/html",
@@ -80,7 +81,7 @@ function readBody(req) {
       }
     });
     req.on("error", (error) => {
-      if (process.env.DEBUG_WEB_SERVER === "1") {
+      if (isDebugWebServerEnabled()) {
         console.warn(`[web] request body read error: ${error.message}`);
       }
       settle({ ok: false, code: "body_read_error" });

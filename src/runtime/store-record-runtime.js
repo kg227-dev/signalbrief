@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readEnvBoolean } = require("./config-provider");
 
 // Atomic write: write to .tmp then rename — prevents partial-write corruption.
 function writeUserFileAtomic(filePath, data) {
@@ -121,7 +122,7 @@ function createStoreRecordRuntime(deps) {
           writeUserFileAtomic(filePath, backfilled);
           tokenIndex.set(backfilled.token, chatId);
         } catch (err) {
-          if (process.env.STORE_DEBUG === "1") {
+          if (readEnvBoolean(["STORE_DEBUG"], false)) {
             console.warn(`[store] skipping unreadable user file ${fileName}: ${err.message}`);
           }
         }

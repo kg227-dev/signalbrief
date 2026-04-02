@@ -3,7 +3,7 @@
 const {
   buildSourceRegistryOverview,
   buildSourceRegistryDomainDetail,
-} = require("../services/admin-source-registry-runtime");
+} = require("../../services/admin-source-registry-runtime");
 const {
   normalizeSourcePolicyDomain,
   normalizeSourceIdentityKey,
@@ -15,7 +15,7 @@ const {
   sanitizeSourceType,
   sanitizeTierOverride,
   sanitizeTopicFitMap,
-} = require("../../src/runtime/source-policy-registry-runtime");
+} = require("../../../src/runtime/source-policy-registry-runtime");
 
 function parseLimitParam(url) {
   const requested = parseInt(url.searchParams.get("limit"), 10);

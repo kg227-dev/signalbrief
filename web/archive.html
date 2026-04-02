@@ -1182,11 +1182,11 @@ init();
     document.body.classList.toggle('dark', isDark);
     if (toggle) toggle.textContent = isDark ? '☀️' : '🌙';
   }
-  try { if (localStorage.getItem('sbDark') === '1') apply(true); } catch(e) {}
+  try { if (localStorage.getItem('sbDark') === '1') apply(true); } catch(e) { /* Intentionally silent: localStorage may be unavailable. */ }
   if (toggle) toggle.addEventListener('click', function() {
     var isDark = !document.body.classList.contains('dark');
     apply(isDark);
-    try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) {}
+    try { localStorage.setItem('sbDark', isDark ? '1' : '0'); } catch(e) { /* Intentionally silent: theme persistence is optional. */ }
   });
 })();
 </script>

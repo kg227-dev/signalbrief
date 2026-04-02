@@ -2,6 +2,11 @@
 
 All tests use the Node.js built-in test runner (`node --test`) with no external test framework dependencies. The dominant pattern is the **contract test**: each file verifies that a production module parses without syntax errors, exports a non-null object or function, and (for more complex modules) exposes the specific named exports and runtime behaviors that the rest of the system depends on. The shared test utility is `test-support/module-contract-helper.js`, which provides three helpers — `assertNodeSyntaxFile`, `assertModuleExports`, and `assertSourceIncludesFile` — used by nearly every file in this directory. Tests that go beyond surface checks exercise behavior directly against a real (but isolated) runtime, using temp directories and in-process stubs rather than mocks.
 
+Sidecar test convention:
+- Keep sidecar tests next to source only when they capture tightly-coupled feature variants or regression invariants such as `.deprecatedFieldsRemoved.test.js`, `.emailOnlyMvp.test.js`, `.fixedCountMvp.test.js`, or route-specific behavior toggles.
+- Keep module-shape and import-surface assertions in `tests/contracts/`, even when the production module also has sidecar behavior tests.
+- When a file is split, move any pure export/syntax assertions with the new module boundary instead of duplicating them in both places.
+
 ---
 
 ## 1. Entrypoint Contracts
@@ -118,10 +123,10 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 |---|---|---|---|
 | Admin UI surfaces | 9 | Admin stats (delivery, roster, runs), admin UI panels (CEO status, cost outlook, source registry, status actions, digest quality render, runs table, user debug) | `web/index.js`, `web/preferences-*.js`, `web/settings-*.js` |
 | Preferences | 5 | Preferences runtime, shared, state runtime, topic runtime, settings runtime — export surfaces and (for some) basic state transitions | `web/preferences-runtime.js`, `web/preferences-state-runtime.js`, `web/preferences-topic-runtime.js`, `web/settings-runtime.js` |
-| Archive | 2 | Archive digest stats runtime and archive UI custom tags rendering | `web/routes/core-api-archive-runtime.js` |
+| Archive | 2 | Archive digest stats runtime and archive UI custom tags rendering | `web/routes/core/core-api-archive-runtime.js` |
 | Server runtime | 9 | Auth session policy, boundary contracts, dependency registries, deps, logging, request policy, route bootstrap, scheduler control, server utils | `web/server-runtime.js`, `web/server-*.js` |
 | Server entrypoint | 1 | Full behavioral contract for `web/server.js`: bootstrap sequence, request delegation, listen port, startup log event | `web/server.js`, `web/server-runtime.js` |
-| Admin API payload / actions | 3 | Admin API stats payload shape and users actions runtime | `web/routes/admin-api.js`, `web/services/admin-ops.js` |
+| Admin API payload / actions | 3 | Admin API stats payload shape and users actions runtime | `web/routes/admin/admin-api.js`, `web/services/admin-ops.js` |
 | Settings UI | 2 | Settings UI runtime and settings UI topic actions runtime | `web/settings-ui-runtime.js`, `web/settings-ui-topic-actions-runtime.js` |
 | Web index | 1 | Web index export surface | `web/index.js` |
 
@@ -129,7 +134,7 @@ All tests use the Node.js built-in test runner (`node --test`) with no external 
 
 | Directory | File Count | What It Tests | Key Dependencies |
 |---|---|---|---|
-| `web-api/routes/` | 11 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, engagement, health, unsubscribe, source registry, admin email messaging, and legacy bookmark-removal routes | `web/routes/core-api.js`, `web/routes/admin-api.js`, `web/routes/public-static.js`, `web/routes/core-api-*-runtime.js`, `web/routes/admin-api-source-registry-runtime.js`, `web/routes/admin-api-message-actions-runtime.js` |
+| `web-api/routes/` | 11 | Export surfaces for core and admin route modules; behavioral contracts for archive, availability, engagement, health, unsubscribe, source registry, admin email messaging, and legacy bookmark-removal routes | `web/routes/core/core-api.js`, `web/routes/admin/admin-api.js`, `web/routes/public-static.js`, `web/routes/core/core-api-*-runtime.js`, `web/routes/admin/admin-api-source-registry-runtime.js`, `web/routes/admin/admin-api-message-actions-runtime.js` |
 
 ### Service tests — `tests/contracts/web-api/services/` (15 files)
 

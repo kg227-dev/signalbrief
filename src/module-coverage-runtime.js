@@ -37,8 +37,8 @@ const harnessSuiteEndToEnd = require("../test-harness/suites/end-to-end-runtime"
 const harnessSuiteRelevanceScoring = require("../test-harness/suites/relevance-scoring-runtime");
 const topicDomain = require("./digest/domain/topic-domain-runtime");
 const adminAuth = require("../web/admin-auth");
-const adminApiRoutes = require("../web/routes/admin-api");
-const coreApiRoutes = require("../web/routes/core-api");
+const adminApiRoutes = require("../web/routes/admin/admin-api");
+const coreApiRoutes = require("../web/routes/core/core-api");
 const adminOpsService = require("../web/services/admin-ops");
 const archiveScoringService = require("../web/services/archive-scoring");
 const deliverySchedule = require("../web/services/delivery-schedule");
@@ -169,8 +169,8 @@ const LOADED_MODULES = [
   ["test-harness/suites/relevance-scoring-runtime.js", harnessSuiteRelevanceScoring],
   ["src/digest/domain/topic-domain-runtime.js", topicDomain],
   ["web/admin-auth.js", adminAuth],
-  ["web/routes/admin-api.js", adminApiRoutes],
-  ["web/routes/core-api.js", coreApiRoutes],
+  ["web/routes/admin/admin-api.js", adminApiRoutes],
+  ["web/routes/core/core-api.js", coreApiRoutes],
   ["web/services/admin-ops.js", adminOpsService],
   ["web/services/archive-scoring.js", archiveScoringService],
   ["web/services/delivery-schedule.js", deliverySchedule],

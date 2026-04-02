@@ -3,7 +3,7 @@
 const {
   loadEditorialOverrides,
   saveEditorialOverrides,
-} = require("../../src/digest/domain/editorial-overrides-runtime");
+} = require("../../../src/digest/domain/editorial-overrides-runtime");
 
 const PREFIX = "/api/admin/editorial-overrides";
 

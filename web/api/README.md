@@ -4,6 +4,8 @@ See [Repository Map](../../docs/repository-map.md) and [SPEC.md](../../SPEC.md) 
 
 Canonical HTTP API grouping.
 
-- `admin/`: authenticated admin route handlers
-- `core/`: user-facing API routes (`/api/*`)
-- `public/`: static/public route handling
+- `routes/admin/`: authenticated admin route handlers
+- `routes/core/`: user-facing API routes (`/api/*`)
+- `routes/public-static.js`: static/public route handling
+
+`web/api/` is documentation-only. The concrete runtime modules live under `web/routes/`.

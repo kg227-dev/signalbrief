@@ -8,6 +8,17 @@
  */
 const fs = require("fs");
 const path = require("path");
+const {
+  getSchedulerPollMs,
+  getSchedulerStartupDelayMs,
+  isSchedulerRunOnStartupEnabled,
+  getSchedulerRunTimeoutMs,
+  getInventoryRefreshMs,
+  isInventoryRefreshOnStartupEnabled,
+  getInventoryStartupDelayMs,
+  getDigestWorkerArgsEnv,
+  getDigestLockUnhealthyBlockThreshold,
+} = require("../runtime/config-provider");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");
 const {
   DIGEST_LOCK_EXIT_CODE,
@@ -22,17 +33,17 @@ function getWorkerConfig() {
   });
   const heartbeatFile = runtimePaths.schedulerHeartbeatPath;
   const controlFile = runtimePaths.schedulerControlPath;
-  const pollMs = Math.max(60 * 1000, Number(process.env.DIGEST_POLL_MS || (5 * 60 * 1000)));
-  const startupDelayMs = Math.max(0, Number(process.env.DIGEST_STARTUP_DELAY_MS || 3000));
-  const runOnStartup = String(process.env.DIGEST_RUN_ON_STARTUP || "1").trim() === "1";
-  const runTimeoutMs = Math.max(60 * 1000, Number(process.env.DIGEST_RUN_TIMEOUT_MS || (25 * 60 * 1000)));
-  const inventoryRefreshMs = Math.max(0, Number(process.env.DIGEST_INVENTORY_REFRESH_MS || (4 * 60 * 60 * 1000)));
+  const pollMs = getSchedulerPollMs();
+  const startupDelayMs = getSchedulerStartupDelayMs();
+  const runOnStartup = isSchedulerRunOnStartupEnabled();
+  const runTimeoutMs = getSchedulerRunTimeoutMs();
+  const inventoryRefreshMs = getInventoryRefreshMs();
   const inventoryRefreshOnStartup = inventoryRefreshMs > 0
-    && String(process.env.DIGEST_INVENTORY_REFRESH_ON_STARTUP || "1").trim() === "1";
+    && isInventoryRefreshOnStartupEnabled();
   const inventoryStartupDelayMs = inventoryRefreshOnStartup
-    ? Math.max(60 * 1000, Number(process.env.DIGEST_INVENTORY_STARTUP_DELAY_MS || (startupDelayMs + (60 * 1000))))
+    ? getInventoryStartupDelayMs(startupDelayMs + (60 * 1000))
     : 0;
-  const rawWorkerArgs = String(process.env.DIGEST_WORKER_ARGS || "")
+  const rawWorkerArgs = String(getDigestWorkerArgsEnv() || "")
     .trim()
     .split(/\s+/)
     .filter(Boolean);
@@ -93,7 +104,7 @@ let pendingRestartRequest = null;
 let lastRestartPendingRequestKey = "";
 
 function getLockUnhealthyBlockThreshold() {
-  return Math.max(1, Number(process.env.DIGEST_LOCK_UNHEALTHY_BLOCK_THRESHOLD || 3));
+  return getDigestLockUnhealthyBlockThreshold();
 }
 
 function getBlockedSnapshot() {

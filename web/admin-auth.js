@@ -1,7 +1,7 @@
 const crypto = require("crypto");
+const { isAdminLocalBypassEnabled } = require("./server-runtime-env-runtime");
 
 const ADMIN_SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-const NON_PROD_RUNTIME_VALUES = new Set(["development", "dev", "test", "local", "ci"]);
 const READ_ONLY_METHODS = new Set(["GET", "HEAD"]);
 const LOCAL_BYPASS_HTML_ROUTES = new Set([
   "/admin",
@@ -33,28 +33,6 @@ let ADMIN_AUTH_STATE = createAdminAuthState();
 function resetAdminAuthState() {
   ADMIN_AUTH_STATE = createAdminAuthState();
   return ADMIN_AUTH_STATE;
-}
-
-function normalizeEnvName(value) {
-  return String(value || "").toLowerCase().trim();
-}
-
-function resolveRuntimeEnv() {
-  return (
-    normalizeEnvName(process.env.NODE_ENV)
-    || normalizeEnvName(process.env.SIGNALBRIEF_ENV)
-    || normalizeEnvName(process.env.DEPLOY_ENV)
-    || normalizeEnvName(process.env.APP_ENV)
-  );
-}
-
-function isExplicitNonProductionRuntime() {
-  return NON_PROD_RUNTIME_VALUES.has(resolveRuntimeEnv());
-}
-
-function isAdminLocalBypassEnabled() {
-  return process.env.ADMIN_LOCAL_BYPASS === "1"
-    && isExplicitNonProductionRuntime();
 }
 
 function pruneAdminSessions(now = Date.now()) {

@@ -10,9 +10,13 @@ const {
 const TARGET_REL = "web/services/admin-source-registry-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 const STORYLINE_RUNTIME_PATH = require.resolve(path.join(process.cwd(), "src/digest/domain/storyline-domain-runtime.js"));
+const METRICS_RUNTIME_PATH = require.resolve(path.join(process.cwd(), "web/services/admin-source-registry-metrics-runtime.js"));
+const SUMMARY_RUNTIME_PATH = require.resolve(path.join(process.cwd(), "web/services/admin-source-registry-summary-runtime.js"));
 assertNodeSyntaxFile(TARGET_PATH);
 delete require.cache[TARGET_PATH];
 delete require.cache[STORYLINE_RUNTIME_PATH];
+delete require.cache[METRICS_RUNTIME_PATH];
+delete require.cache[SUMMARY_RUNTIME_PATH];
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 const {

@@ -1,32 +1,33 @@
+const { isDebugWebServerEnabled } = require("../../server-runtime-env-runtime");
 const {
   buildReferrals,
   buildEngagementMetrics,
-} = require("../services/admin-stats-referrals");
+} = require("../../services/admin-stats-referrals");
 const {
   buildMonthRunSummary,
   buildPerUserCostRollup,
   buildTrailingWindowCostSummary,
   buildProjectedWindowCostSummary,
-} = require("../services/admin-stats-costs");
+} = require("../../services/admin-stats-costs");
 const {
   enrichRunsWithDigestMetadata,
   expandRunsByRecipient,
-} = require("../services/admin-stats-runs");
+} = require("../../services/admin-stats-runs");
 const {
   buildAdminRoster,
   buildDeliveryWarnings,
-} = require("../services/admin-stats-roster");
+} = require("../../services/admin-stats-roster");
 const {
   buildDeliveryReliabilitySnapshot,
   buildDeliveryOperationsSnapshot,
-} = require("../services/admin-stats-delivery");
-const { summarizeRosterQuality } = require("../services/admin-stats-quality");
+} = require("../../services/admin-stats-delivery");
+const { summarizeRosterQuality } = require("../../services/admin-stats-quality");
 const {
   mapAdminMessages,
   buildSummaryPayload,
   buildHealthPayload,
 } = require("./admin-api-stats-payload-runtime");
-const { buildDigestInsights } = require("../services/admin-digest-insights-runtime");
+const { buildDigestInsights } = require("../../services/admin-digest-insights-runtime");
 
 function resolveSchedulerHeartbeatLoader({
   getCachedOrRefreshSchedulerHeartbeat,
@@ -52,7 +53,7 @@ function emitIgnoredBackfillSafe({
       max_age_days: 45,
     }) || fallback;
   } catch (error) {
-    if (process.env.DEBUG_WEB_SERVER === "1") {
+    if (isDebugWebServerEnabled()) {
       console.warn(`[web] ignored-events backfill failed: ${error.message}`);
     }
     return fallback;

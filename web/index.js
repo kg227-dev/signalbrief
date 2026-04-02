@@ -244,7 +244,9 @@ function toggleDark() {
   if (toggle) toggle.textContent = isDark ? "☀️" : "🌙";
   try {
     localStorage.setItem("sbDark", isDark ? "1" : "0");
-  } catch {}
+  } catch {
+    // Intentionally silent: dark-mode persistence should not fail the page interaction.
+  }
 }
 
 function initDarkModeToggleBinding() {
@@ -269,7 +271,9 @@ function initDarkModeState() {
       const toggle = document.getElementById("darkToggle");
       if (toggle) toggle.textContent = "☀️";
     }
-  } catch {}
+  } catch {
+    // Intentionally silent: missing localStorage support should fall back to the default theme.
+  }
 }
 
 // Keep compatibility with any cached HTML still using inline onclick.

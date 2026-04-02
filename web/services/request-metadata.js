@@ -1,3 +1,5 @@
+const { isDebugWebServerEnabled } = require("../server-runtime-env-runtime");
+
 function getClientIp(req) {
   return (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "")
     .split(",")[0]
@@ -16,7 +18,7 @@ function getRequestScheme(req) {
       const scheme = String(parsed?.scheme || "").toLowerCase();
       if (scheme === "http" || scheme === "https") return scheme;
     } catch (err) {
-      if (process.env.DEBUG_WEB_SERVER === "1") {
+      if (isDebugWebServerEnabled()) {
         console.warn(`[web] malformed cf-visitor header ignored: ${err.message}`);
       }
     }

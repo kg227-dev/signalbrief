@@ -51,12 +51,14 @@ function loadDigestTuning(tuningPath, fs) {
   try {
     raw = fs.readFileSync(String(tuningPath || ""), "utf8");
   } catch (_) {
+    // Intentionally silent: missing or unreadable tuning should fall back to base scoring config.
     return {};
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (_) {
+    // Intentionally silent: malformed tuning should not break digest generation.
     return {};
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};

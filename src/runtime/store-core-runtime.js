@@ -8,6 +8,13 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const {
+  getNodeEnv,
+  getStoreBackendOverride,
+  getStoreCanaryChatIdsEnv,
+  getStoreCanaryMirrorWritesEnv,
+  getStoreSqlitePathOverride,
+} = require("./config-provider");
 const { createDefaultUser, normalizeUserRecord } = require("./user-contract-runtime");
 const { createFileStoreAdapter } = require("./store-adapter-file-runtime");
 const { assertStoreAdapterContract } = require("./store-adapter-contract-runtime");
@@ -32,13 +39,13 @@ function resolveStoreBackend(options = {}) {
   if (typeof options.backend === "string" && options.backend.trim()) {
     return normalizeStoreBackend(options.backend);
   }
-  const envOverride = String(process.env.SIGNALBRIEF_STORE_BACKEND || "").trim();
+  const envOverride = getStoreBackendOverride();
   if (envOverride) return normalizeStoreBackend(envOverride);
 
   const nodeEnv = String(
     (typeof options.nodeEnv === "string" && options.nodeEnv)
       ? options.nodeEnv
-      : (process.env.NODE_ENV || "")
+      : getNodeEnv()
   ).toLowerCase().trim();
   if (nodeEnv === "production") return "sqlite";
   return "file";
@@ -68,12 +75,12 @@ function resolveCanaryChatIds(options = {}) {
   if (typeof options.canaryChatIds === "string" && options.canaryChatIds.trim()) {
     return parseCanaryChatIds(options.canaryChatIds);
   }
-  return parseCanaryChatIds(process.env.SIGNALBRIEF_STORE_CANARY_CHAT_IDS);
+  return parseCanaryChatIds(getStoreCanaryChatIdsEnv());
 }
 
 function resolveCanaryMirrorWrites(options = {}) {
   if (typeof options.canaryMirrorWrites === "boolean") return options.canaryMirrorWrites;
-  const envRaw = String(process.env.SIGNALBRIEF_STORE_CANARY_MIRROR_WRITES || "").trim().toLowerCase();
+  const envRaw = getStoreCanaryMirrorWritesEnv().toLowerCase();
   if (envRaw === "0" || envRaw === "false" || envRaw === "no") return false;
   return true;
 }
@@ -108,7 +115,7 @@ function createStore(options = {}) {
   const resolveSqlitePath = () => resolveSignalBriefRuntimePaths({
     env: process.env,
     dataDir: currentDataDir(),
-    sqlitePath: options.sqlitePath || process.env.SIGNALBRIEF_SQLITE_PATH || "",
+    sqlitePath: options.sqlitePath || getStoreSqlitePathOverride() || "",
   }).sqlitePath;
   if (backend === "canary") {
     return createCanaryStoreRuntime({

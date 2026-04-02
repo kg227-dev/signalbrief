@@ -1,49 +1,32 @@
 "use strict";
 
 const path = require("path");
-const fs = require("fs");
 const assert = require("assert");
 const { assertNodeSyntaxFile, assertModuleExports } = require("../../../test-support/module-contract-helper.js");
 
-const TARGET_REL = "web/routes/admin-api-users-actions-runtime.js";
+const TARGET_REL = "web/routes/admin/admin-api-users-actions-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
+const DIGEST_HELPER_REL = "web/routes/admin/admin-api-users-digest-actions-runtime.js";
+const DIGEST_HELPER_PATH = path.join(process.cwd(), DIGEST_HELPER_REL);
+const LIFECYCLE_HELPER_REL = "web/routes/admin/admin-api-users-lifecycle-actions-runtime.js";
+const LIFECYCLE_HELPER_PATH = path.join(process.cwd(), LIFECYCLE_HELPER_REL);
+const QUERY_HELPER_REL = "web/routes/admin/admin-api-users-query-actions-runtime.js";
+const QUERY_HELPER_PATH = path.join(process.cwd(), QUERY_HELPER_REL);
 assertNodeSyntaxFile(TARGET_PATH);
+assertNodeSyntaxFile(DIGEST_HELPER_PATH);
+assertNodeSyntaxFile(LIFECYCLE_HELPER_PATH);
+assertNodeSyntaxFile(QUERY_HELPER_PATH);
 assertModuleExports(() => require(TARGET_PATH), TARGET_REL);
+assertModuleExports(() => require(DIGEST_HELPER_PATH), DIGEST_HELPER_REL);
+assertModuleExports(() => require(LIFECYCLE_HELPER_PATH), LIFECYCLE_HELPER_REL);
+assertModuleExports(() => require(QUERY_HELPER_PATH), QUERY_HELPER_REL);
 
 const {
   handleSetUserStatusRoute,
   handleRegenerateDigestRoute,
   handleResendDigestRoute,
+  handleDeleteUserRoute,
 } = require(TARGET_PATH);
-
-const source = fs.readFileSync(TARGET_PATH, "utf8");
-if (!source.includes('message: "Subscriber already deleted"')) {
-  throw new Error("delete-user handler should return an idempotent already-deleted message");
-}
-if (!source.includes('json(res, { error: "user not found" }, 404);')) {
-  throw new Error("non-delete user operations should still return user not found");
-}
-if (!source.includes("latest_digest_record: latestDigestRecord")) {
-  throw new Error("user-by-email handler should expose the latest digest record for admin debug");
-}
-if (!source.includes("archive_digest_count: archiveDigestCount")) {
-  throw new Error("user-by-email handler should expose the canonical archive digest count");
-}
-if (!source.includes("recent_digests: recentDigestRows")) {
-  throw new Error("user-by-email handler should expose recent digest outcomes for admin review");
-}
-if (!source.includes('action: "resend_digest_precise"')) {
-  throw new Error("admin user actions should audit precise digest resends");
-}
-if (!source.includes('message: "Stored digest snapshot resent"')) {
-  throw new Error("precise digest resend handler should return a clear success message");
-}
-if (!source.includes('action: "regenerate_digest_summaries"')) {
-  throw new Error("admin user actions should audit digest summary regeneration");
-}
-if (!source.includes('message: "Stored digest summaries regenerated"')) {
-  throw new Error("digest summary regeneration handler should return a clear success message");
-}
 
 function buildCtx(body) {
   return {
@@ -298,6 +281,24 @@ async function testRegenerateSummariesRejectsThinSnapshot() {
   assert.strictEqual(actions[0].success, false);
 }
 
+async function testDeleteUserRemainsIdempotent() {
+  const ctx = buildCtx({ email: "missing@example.com", confirm: "DELETE" });
+  await handleDeleteUserRoute({
+    ctx,
+    deps: {
+      json,
+      isAdminAuthed: () => true,
+      requireJsonBody: async () => ctx.body,
+      allUsers: () => [],
+      deleteUser: () => ({ ok: true }),
+      logAdminActionEvent: () => {},
+    },
+  });
+
+  assert.strictEqual(ctx.res.statusCode, 200);
+  assert.strictEqual(ctx.res.body.message, "Subscriber already deleted");
+}
+
 Promise.resolve()
   .then(testResubscribeRestoresChannels)
   .then(testUnsubscribeBacksUpChannels)
@@ -305,6 +306,7 @@ Promise.resolve()
   .then(testPreciseResendRejectsThinSnapshot)
   .then(testRegenerateSummariesUsesStoredSnapshot)
   .then(testRegenerateSummariesRejectsThinSnapshot)
+  .then(testDeleteUserRemainsIdempotent)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

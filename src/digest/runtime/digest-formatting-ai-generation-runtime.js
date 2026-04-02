@@ -36,6 +36,7 @@ Reply with ONLY the subject line, no quotes, no explanation.`;
       }
       return { subject: text, usage };
     } catch {
+      // Intentionally silent: subject generation is best-effort and falls back to a deterministic label.
       return { subject: fallback, usage: { input_tokens: 0, output_tokens: 0 } };
     }
   }
@@ -60,6 +61,7 @@ Reply with ONLY the sentence, no quotes.`;
       }
       return { note: text, usage };
     } catch {
+      // Intentionally silent: editorial-note generation is optional and should not fail the digest.
       return { note: "", usage: { input_tokens: 0, output_tokens: 0 } };
     }
   }

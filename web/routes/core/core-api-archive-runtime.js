@@ -1,11 +1,12 @@
+const { isDebugWebServerEnabled } = require("../../server-runtime-env-runtime");
 const {
   buildDeliveredItemsByDate,
   loadDeliveredSnapshotForDate,
   resolveAllowedArchiveDatesForUser,
   resolveDeliveredDigestItems,
   sortArchiveDatesDescending,
-} = require("../services/archive-digest-stats-runtime");
-const { sortDigestItemsByScoreDescending } = require("../../src/digest/runtime/digest-item-ordering-runtime");
+} = require("../../services/archive-digest-stats-runtime");
+const { sortDigestItemsByScoreDescending } = require("../../../src/digest/runtime/digest-item-ordering-runtime");
 
 function mapArchiveItem(item, userTopics, archiveRelevanceScore) {
   return {
@@ -121,7 +122,7 @@ function handleArchiveAllRoute(ctx, deps) {
         });
       });
     } catch (error) {
-      if (process.env.DEBUG_WEB_SERVER === "1") {
+      if (isDebugWebServerEnabled()) {
         console.warn(`[web] skipping malformed archive file ${dateKey}: ${error.message}`);
       }
     }

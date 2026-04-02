@@ -1,12 +1,16 @@
 "use strict";
 
+const { getAnthropicProviderEnvOverrides } = require("../../runtime/config-provider");
 const { buildDigestDataEnrichPrompt } = require("./digest-data-enrich-prompt-runtime");
-const { parseJsonArrayLenient, normalizeEnrichedItems } = require("./digest-data-enrich-result-runtime");
-
-const DEFAULT_ANTHROPIC_TIMEOUT_MS = 30_000;
-const DEFAULT_ANTHROPIC_RETRIES = 2;
-const DEFAULT_ANTHROPIC_RETRY_DELAY_MS = 1_200;
-const DEFAULT_ANTHROPIC_RETRY_STATUS_CODES = Object.freeze([429, 500, 502, 503, 504]);
+const {
+  buildDigestDataEnrichRepairPrompt,
+} = require("./digest-data-enrich-prompt-runtime");
+const {
+  parseJsonArrayLenient,
+  normalizeEnrichedItems,
+  validateStrategicWriteup,
+} = require("./digest-data-enrich-result-runtime");
+const { ANTHROPIC_PROVIDER_DEFAULTS } = require("../../platform/config/provider-defaults");
 
 function toBoundedInt(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   const parsed = Number(value);
@@ -33,25 +37,26 @@ function normalizeStatusCodes(rawValue, fallback) {
 
 function resolveAnthropicResilience(configDigest) {
   const configured = configDigest?.providerResilience?.anthropic || {};
+  const env = getAnthropicProviderEnvOverrides();
   return {
     timeoutMs: toBoundedInt(
-      process.env.SIGNALBRIEF_ANTHROPIC_TIMEOUT_MS || configured.timeoutMs,
-      DEFAULT_ANTHROPIC_TIMEOUT_MS,
+      env.timeoutMs || configured.timeoutMs,
+      ANTHROPIC_PROVIDER_DEFAULTS.timeoutMs,
       { min: 1_000, max: 180_000 }
     ),
     retries: toBoundedInt(
-      process.env.SIGNALBRIEF_ANTHROPIC_RETRIES || configured.retries,
-      DEFAULT_ANTHROPIC_RETRIES,
+      env.retries || configured.retries,
+      ANTHROPIC_PROVIDER_DEFAULTS.retries,
       { min: 0, max: 8 }
     ),
     retryDelayMs: toBoundedInt(
-      process.env.SIGNALBRIEF_ANTHROPIC_RETRY_DELAY_MS || configured.retryDelayMs,
-      DEFAULT_ANTHROPIC_RETRY_DELAY_MS,
+      env.retryDelayMs || configured.retryDelayMs,
+      ANTHROPIC_PROVIDER_DEFAULTS.retryDelayMs,
       { min: 100, max: 60_000 }
     ),
     retryStatusCodes: normalizeStatusCodes(
-      process.env.SIGNALBRIEF_ANTHROPIC_RETRY_STATUS_CODES || configured.retryStatusCodes,
-      DEFAULT_ANTHROPIC_RETRY_STATUS_CODES
+      env.retryStatusCodes || configured.retryStatusCodes,
+      ANTHROPIC_PROVIDER_DEFAULTS.retryStatusCodes
     ),
   };
 }

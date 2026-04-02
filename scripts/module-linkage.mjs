@@ -106,8 +106,8 @@ import "../web/index.js";
 import "../web/preferences-runtime.js";
 import "../web/preferences-state-runtime.js";
 import "../web/preferences-shared.js";
-import "../web/routes/admin-api.js";
-import "../web/routes/core-api.js";
+import "../web/routes/admin/admin-api.js";
+import "../web/routes/core/core-api.js";
 import "../web/routes/public-static.js";
 import "../web/server.js";
 import "../web/services/admin-ops.js";
@@ -228,8 +228,8 @@ export const dependencyLinks = [
   "web/preferences-runtime.js",
   "web/preferences-state-runtime.js",
   "web/preferences-shared.js",
-  "web/routes/admin-api.js",
-  "web/routes/core-api.js",
+  "web/routes/admin/admin-api.js",
+  "web/routes/core/core-api.js",
   "web/routes/public-static.js",
   "web/server.js",
   "web/services/admin-ops.js",

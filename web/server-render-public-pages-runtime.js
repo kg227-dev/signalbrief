@@ -24,6 +24,7 @@ function createRenderPublicPages(deps) {
       parsed.hash = "";
       return parsed.toString().replace(/\/+$/, "");
     } catch {
+      // Intentionally silent: invalid base URLs fall back to the local default for rendering.
       return "http://localhost:3003";
     }
   }
@@ -369,7 +370,9 @@ ${isPersonalized ? `<script>
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: token, digest_id: digestId, item_index: Number(itemIndex), feedback_type: type }),
-    }).catch(function() {});
+    }).catch(function() {
+      // Intentionally silent: feedback capture should not interrupt reading the digest page.
+    });
   }
   document.querySelectorAll(".feedback-row").forEach(function(row) {
     var idx = row.dataset.item;

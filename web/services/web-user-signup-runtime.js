@@ -1,3 +1,4 @@
+const { isDebugWebServerEnabled } = require("../server-runtime-env-runtime");
 const {
   parseSignupInput,
   findSignupConflict,
@@ -77,7 +78,7 @@ function createSignupHandler({
       sendReferralThankYou,
       sendWelcomeEmail,
     });
-    if (sideEffectFailures.length && process.env.DEBUG_WEB_SERVER === "1") {
+    if (sideEffectFailures.length && isDebugWebServerEnabled()) {
       console.warn(`[signup] side effects degraded for ${chatId}:`, sideEffectFailures);
     }
 

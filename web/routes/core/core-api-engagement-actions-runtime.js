@@ -1,3 +1,5 @@
+const { isDebugWebServerEnabled } = require("../../server-runtime-env-runtime");
+
 function buildFallbackDateKey(toEtDateKey) {
   const nowIso = new Date().toISOString();
   return toEtDateKey(nowIso) || nowIso.slice(0, 10);
@@ -48,7 +50,7 @@ function handleTrackingPixelRoute({ ctx, deps }) {
       writeUser(user.chatId, updated);
     }
   } catch (error) {
-    if (process.env.DEBUG_WEB_SERVER === "1") {
+    if (isDebugWebServerEnabled()) {
       console.warn(`[web] tracking pixel processing failed: ${error.message}`);
     }
   }

@@ -1,4 +1,4 @@
-const { USER_STATUS } = require("../../src/platform/store");
+const { USER_STATUS } = require("../../../src/platform/store");
 
 function buildResolveOneClickToken(findUserByToken) {
   return (rawToken) => {

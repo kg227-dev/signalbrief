@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  getPerplexityProviderEnvOverrides,
+  isStandardEvidenceResolverEnabled,
+} = require("../../runtime/config-provider");
+const { PERPLEXITY_PROVIDER_DEFAULTS } = require("../../platform/config/provider-defaults");
 const { normalizeSourcePolicyDomain } = require("../../runtime/source-policy-registry-runtime");
 const { parseRetryAfterMs } = require("../../entrypoints/digest-orchestrator-transport-runtime");
 const { getTopicQueries, buildSearchRequest } = require("./digest-data-fetch-request-runtime");
@@ -16,11 +21,6 @@ const {
   articleAgeTooOld,
 } = require("./digest-data-fetch-items-runtime");
 const { createDigestSearchEvidenceResolverRuntime } = require("./digest-search-evidence-resolver-runtime");
-
-const DEFAULT_PERPLEXITY_TIMEOUT_MS = 25_000;
-const DEFAULT_PERPLEXITY_RETRIES = 2;
-const DEFAULT_PERPLEXITY_RETRY_DELAY_MS = 1_200;
-const DEFAULT_PERPLEXITY_RETRY_STATUS_CODES = Object.freeze([429, 500, 502, 503, 504]);
 
 function toBoundedInt(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   const parsed = Number(value);
@@ -47,25 +47,26 @@ function normalizeStatusCodes(rawValue, fallback) {
 
 function resolvePerplexityResilience(configDigest) {
   const configured = configDigest?.providerResilience?.perplexity || {};
+  const env = getPerplexityProviderEnvOverrides();
   return {
     timeoutMs: toBoundedInt(
-      process.env.SIGNALBRIEF_PERPLEXITY_TIMEOUT_MS || configured.timeoutMs,
-      DEFAULT_PERPLEXITY_TIMEOUT_MS,
+      env.timeoutMs || configured.timeoutMs,
+      PERPLEXITY_PROVIDER_DEFAULTS.timeoutMs,
       { min: 1_000, max: 180_000 }
     ),
     retries: toBoundedInt(
-      process.env.SIGNALBRIEF_PERPLEXITY_RETRIES || configured.retries,
-      DEFAULT_PERPLEXITY_RETRIES,
+      env.retries || configured.retries,
+      PERPLEXITY_PROVIDER_DEFAULTS.retries,
       { min: 0, max: 8 }
     ),
     retryDelayMs: toBoundedInt(
-      process.env.SIGNALBRIEF_PERPLEXITY_RETRY_DELAY_MS || configured.retryDelayMs,
-      DEFAULT_PERPLEXITY_RETRY_DELAY_MS,
+      env.retryDelayMs || configured.retryDelayMs,
+      PERPLEXITY_PROVIDER_DEFAULTS.retryDelayMs,
       { min: 100, max: 60_000 }
     ),
     retryStatusCodes: normalizeStatusCodes(
-      process.env.SIGNALBRIEF_PERPLEXITY_RETRY_STATUS_CODES || configured.retryStatusCodes,
-      DEFAULT_PERPLEXITY_RETRY_STATUS_CODES
+      env.retryStatusCodes || configured.retryStatusCodes,
+      PERPLEXITY_PROVIDER_DEFAULTS.retryStatusCodes
     ),
   };
 }
@@ -248,7 +249,7 @@ function createDigestDataFetchRuntime(deps) {
     : createDigestSearchEvidenceResolverRuntime({ log });
   const evidenceResolverEnabled = deps?.enableSearchEvidenceResolver === true
     || (searchEvidenceResolverRuntime && typeof searchEvidenceResolverRuntime.resolveSearchEvidenceUrls === "function")
-    || String(process.env.SIGNALBRIEF_ENABLE_STANDARD_EVIDENCE_RESOLVER || "").trim() === "1";
+    || isStandardEvidenceResolverEnabled();
 
   async function runFetchPass({
     topic,

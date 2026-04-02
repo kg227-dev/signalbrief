@@ -1,5 +1,6 @@
 "use strict";
 
+const { SEARCH_EVIDENCE_RESOLVER_DEFAULTS } = require("../../platform/config/provider-defaults");
 const { normalizeSourcePolicyDomain } = require("../../runtime/source-policy-registry-runtime");
 const {
   MAX_ARTICLE_AGE_HOURS,
@@ -11,10 +12,6 @@ const {
   normalizeSearchResultHeadline,
 } = require("./digest-data-fetch-items-runtime");
 
-const DEFAULT_TIMEOUT_MS = 12_000;
-const DEFAULT_MAX_FETCH_BYTES = 256_000;
-const DEFAULT_STANDARD_MAX_URLS = 3;
-const TECHNOLOGY_MAX_URLS = 5;
 const TECHNOLOGY_EXTRA_TRUSTED_DOMAINS = Object.freeze([
   "techcrunch.com",
   "techtarget.com",
@@ -196,7 +193,7 @@ function candidateScore(searchResult, opts = {}) {
 }
 
 function selectCandidateSearchResults(searchResults, opts = {}) {
-  const maxUrls = Math.max(1, Number(opts?.maxUrls || DEFAULT_STANDARD_MAX_URLS));
+  const maxUrls = Math.max(1, Number(opts?.maxUrls || SEARCH_EVIDENCE_RESOLVER_DEFAULTS.standardMaxUrls));
   const out = [];
   const seen = new Set();
   for (const result of (Array.isArray(searchResults) ? searchResults : [])
@@ -220,8 +217,8 @@ function selectCandidateSearchResults(searchResults, opts = {}) {
 }
 
 async function defaultFetchUrl(url, opts = {}) {
-  const timeoutMs = Math.max(1_000, Number(opts?.timeoutMs || DEFAULT_TIMEOUT_MS));
-  const maxBytes = Math.max(8_192, Number(opts?.maxBytes || DEFAULT_MAX_FETCH_BYTES));
+  const timeoutMs = Math.max(1_000, Number(opts?.timeoutMs || SEARCH_EVIDENCE_RESOLVER_DEFAULTS.timeoutMs));
+  const maxBytes = Math.max(8_192, Number(opts?.maxBytes || SEARCH_EVIDENCE_RESOLVER_DEFAULTS.maxFetchBytes));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -322,7 +319,9 @@ function createDigestSearchEvidenceResolverRuntime(deps = {}) {
   async function resolveSearchEvidenceUrls(searchResults, opts = {}) {
     const topicTag = String(opts?.topicTag || "").trim().toUpperCase();
     const maxAgeHours = Number.isFinite(Number(opts?.maxAgeHours)) ? Number(opts.maxAgeHours) : MAX_ARTICLE_AGE_HOURS;
-    const maxUrls = topicTag === "TECHNOLOGY" ? TECHNOLOGY_MAX_URLS : DEFAULT_STANDARD_MAX_URLS;
+    const maxUrls = topicTag === "TECHNOLOGY"
+      ? SEARCH_EVIDENCE_RESOLVER_DEFAULTS.technologyMaxUrls
+      : SEARCH_EVIDENCE_RESOLVER_DEFAULTS.standardMaxUrls;
     const extraTrustedDomains = topicTag === "TECHNOLOGY"
       ? TECHNOLOGY_EXTRA_TRUSTED_DOMAINS.slice()
       : [];

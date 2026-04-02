@@ -1,11 +1,20 @@
 const fs = require("fs");
 const path = require("path");
+const {
+  readEnvBoolean,
+  readEnvNumber,
+  readEnvString,
+  getBaseUrl: getConfiguredBaseUrl,
+  getNodeEnv,
+  isProductionRuntime,
+} = require("../src/runtime/config-provider");
 const { resolveSignalBriefRuntimePaths } = require("../src/runtime/runtime-state-paths-runtime");
 
 const WEB_DIR = __dirname;
 const APP_ROOT = path.resolve(__dirname, "..");
 const CANONICAL_HOST = "getsignalbrief.com";
 const PUBLIC_HOSTS = new Set([CANONICAL_HOST, `www.${CANONICAL_HOST}`]);
+const NON_PROD_RUNTIME_VALUES = new Set(["development", "dev", "test", "local", "ci"]);
 
 function normalizeOrigin(rawOrigin) {
   const value = String(rawOrigin || "").trim();
@@ -18,20 +27,16 @@ function normalizeOrigin(rawOrigin) {
 }
 
 function getServerPort() {
-  const parsed = parseInt(process.env.PORT, 10);
+  const parsed = readEnvNumber(["PORT"], 3003);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 3003;
 }
 
 function getBaseUrl() {
-  return process.env.BASE_URL || `http://localhost:${getServerPort()}`;
+  return getConfiguredBaseUrl(`http://localhost:${getServerPort()}`);
 }
 
 function getTrustedCorsOrigins() {
-  const configured = String(
-    process.env.TRUSTED_CORS_ORIGINS
-    || process.env.CORS_ALLOWED_ORIGINS
-    || ""
-  ).trim();
+  const configured = readEnvString(["TRUSTED_CORS_ORIGINS", "CORS_ALLOWED_ORIGINS"], "");
   if (configured) {
     return new Set(
       configured
@@ -74,11 +79,11 @@ function sanitizeAssetVersion(raw) {
 }
 
 function getWebAssetVersion() {
-  const explicit = sanitizeAssetVersion(
-    process.env.WEB_ASSET_VERSION
-    || process.env.RELEASE_VERSION
-    || process.env.SIGNALBRIEF_BUILD_ID
-  );
+  const explicit = sanitizeAssetVersion(readEnvString([
+    "WEB_ASSET_VERSION",
+    "RELEASE_VERSION",
+    "SIGNALBRIEF_BUILD_ID",
+  ], ""));
   if (explicit) return explicit;
 
   const candidates = [
@@ -106,6 +111,34 @@ function getWebAssetVersion() {
   return "dev";
 }
 
+function isDebugWebServerEnabled() {
+  return readEnvBoolean(["DEBUG_WEB_SERVER"], false);
+}
+
+function normalizeEnvName(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function resolveRuntimeEnvName() {
+  return (
+    normalizeEnvName(getNodeEnv())
+    || normalizeEnvName(readEnvString(["SIGNALBRIEF_ENV", "DEPLOY_ENV", "APP_ENV"], ""))
+  );
+}
+
+function isExplicitNonProductionRuntime() {
+  return NON_PROD_RUNTIME_VALUES.has(resolveRuntimeEnvName());
+}
+
+function isAdminLocalBypassEnabled() {
+  return readEnvBoolean(["ADMIN_LOCAL_BYPASS"], false)
+    && isExplicitNonProductionRuntime();
+}
+
+function isAllowExampleSignupsEnabled() {
+  return readEnvBoolean(["ALLOW_EXAMPLE_SIGNUPS"], false) || !isProductionRuntime();
+}
+
 module.exports = {
   WEB_DIR,
   APP_ROOT,
@@ -117,4 +150,10 @@ module.exports = {
   getSchedulerHeartbeatFile,
   getSchedulerControlFile,
   getWebAssetVersion,
+  isDebugWebServerEnabled,
+  resolveRuntimeEnvName,
+  isExplicitNonProductionRuntime,
+  isAdminLocalBypassEnabled,
+  isAllowExampleSignupsEnabled,
+  getNodeEnv,
 };

@@ -11,6 +11,7 @@ function normalizeCanonicalUrl(value) {
     }
     return parsed.toString().toLowerCase();
   } catch {
+    // Intentionally silent: invalid URLs are normalized as best-effort lowercase strings.
     return raw.toLowerCase();
   }
 }

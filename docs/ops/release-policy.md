@@ -1,8 +1,8 @@
 # SignalBrief Release Policy
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
-Last updated: **March 12, 2026**
+Last updated: **April 2, 2026**
 
 ## Purpose
 
@@ -39,6 +39,12 @@ Promotion gate behavior in tooling:
 - `ops:deploy:prod` now defaults to the CI-built image for that SHA; source-build deploys are emergency-only via `npm run ops:deploy:prod:emergency-source` or `--emergency-source-build`.
 - `ops:deploy:prod` can now assert `runtime_state.store_backend` and `runtime_state.store_sqlite_path` during verification when store-cutover flags are supplied.
 - Default freshness window is 24h (`DEPLOY_STAGING_ARTIFACT_MAX_AGE_MINUTES` or `--staging-artifact-max-age-minutes` to override).
+
+Image deploy notes:
+
+- CI builds one app image per commit SHA.
+- Production should pull that exact image and start services without a remote source build.
+- If the image path is unavailable during an incident, `--emergency-source-build` is the explicit fallback, not a silent default.
 
 ## Hotfix Path
 

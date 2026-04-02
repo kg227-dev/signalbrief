@@ -1,6 +1,6 @@
 # Archive Policy
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
 This directory holds historical docs that are kept for provenance, source material, and decision context.
 
@@ -15,3 +15,4 @@ Current archive areas:
 
 - [Planning Archive — March 2026](./planning/2026-03/README.md)
 - [Marketing Archive — March 2026](./marketing/2026-03/README.md)
+- [Strategy Archive — March 2026](./strategy/2026-03/README.md)

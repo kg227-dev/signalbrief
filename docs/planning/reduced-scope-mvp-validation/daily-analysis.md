@@ -20,24 +20,24 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 ## Completed days
 
-- [Day 1 — 2026-03-28](../archive/planning/2026-03/mvp-day-1-2026-03-28.md)
-- [Day 2 — 2026-03-29 (Sunday)](../archive/planning/2026-03/mvp-day-2-2026-03-29.md)
-- [Day 3 — 2026-03-30 (Monday)](../archive/planning/2026-03/mvp-day-3-2026-03-30.md)
-- [Day 4 — 2026-03-31 (Tuesday)](../archive/planning/2026-03/mvp-day-4-2026-03-31.md)
-- [Day 5 — 2026-04-01 (Wednesday)](../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
-- [Day 6 — 2026-04-02 (Thursday)](../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
+- [Day 1 — 2026-03-28](../../archive/planning/2026-03/mvp-day-1-2026-03-28.md)
+- [Day 2 — 2026-03-29 (Sunday)](../../archive/planning/2026-03/mvp-day-2-2026-03-29.md)
+- [Day 3 — 2026-03-30 (Monday)](../../archive/planning/2026-03/mvp-day-3-2026-03-30.md)
+- [Day 4 — 2026-03-31 (Tuesday)](../../archive/planning/2026-03/mvp-day-4-2026-03-31.md)
+- [Day 5 — 2026-04-01 (Wednesday)](../../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
+- [Day 6 — 2026-04-02 (Thursday)](../../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
 
 ## Day 4 — 2026-03-31
 
-See [archive](../archive/planning/2026-03/mvp-day-4-2026-03-31.md). **Yellow.** First full 7/7 delivery. Trusted T1/2 65.7% (below 80%). One source failure (financial_reuters_business). Cross-topic contamination continues.
+See [archive](../../archive/planning/2026-03/mvp-day-4-2026-03-31.md). **Yellow.** First full 7/7 delivery. Trusted T1/2 65.7% (below 80%). One source failure (financial_reuters_business). Cross-topic contamination continues.
 
 ## Day 5 — 2026-04-01
 
-See [archive](../archive/planning/2026-03/mvp-day-5-2026-04-01.md). **Yellow.** Second consecutive 7/7 delivery and full 10/10 canary send. Trusted T1/2 recovered to 77.1% but still missed target. The main remaining problems are selection quality, not retrieval reliability: FDA compliance pages were selected in Life Sciences, an American Banker house promo was selected in Financial Services, and an off-topic FreightWaves border story led Industrials. The March 31 source-cap raise also did not show up in the scheduled audit, which still reported `3/3` caps.
+See [archive](../../archive/planning/2026-03/mvp-day-5-2026-04-01.md). **Yellow.** Second consecutive 7/7 delivery and full 10/10 canary send. Trusted T1/2 recovered to 77.1% but still missed target. The main remaining problems are selection quality, not retrieval reliability: FDA compliance pages were selected in Life Sciences, an American Banker house promo was selected in Financial Services, and an off-topic FreightWaves border story led Industrials. The March 31 source-cap raise also did not show up in the scheduled audit, which still reported `3/3` caps.
 
 ## Day 6 — 2026-04-02
 
-See [archive](../archive/planning/2026-03/mvp-day-6-2026-04-02.md). **Yellow.** Day 6 is the first day that hit all of the hard operational gates at once: 7/7 topics at 5 items, 7/7 topics above the depth gate, 10/10 canaries delivered, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 0 duplicate URLs vs Day 5. It is still not a true green day. The selected set remains quality-mixed, with FDA/official content still leaking into Life Sciences, Technology, and Energy, and the stored scheduled canary records show `0/80` populated `wim` / `wim_brief` fields, which is a likely deep-mode content regression rather than a clean strategic-writeup win.
+See [archive](../../archive/planning/2026-03/mvp-day-6-2026-04-02.md). **Yellow.** Day 6 is the first day that hit all of the hard operational gates at once: 7/7 topics at 5 items, 7/7 topics above the depth gate, 10/10 canaries delivered, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 0 duplicate URLs vs Day 5. It is still not a true green day. The selected set remains quality-mixed, with FDA/official content still leaking into Life Sciences, Technology, and Energy, and the stored scheduled canary records show `0/80` populated `wim` / `wim_brief` fields, which is a likely deep-mode content regression rather than a clean strategic-writeup win.
 
 Day 7 prep is now explicit: restore non-empty deep-mode body text even when scheduled writeups are missing, downgrade FDA from primary weighting, and promote FierceBiotech/FiercePharma so Life Sciences quality is driven more by trade reporting than official FDA filler. The next live check is whether Day 7 still stores null writeups and whether FDA share actually drops in the selected set.
 

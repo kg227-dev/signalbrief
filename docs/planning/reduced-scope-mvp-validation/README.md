@@ -11,8 +11,8 @@ This is a fresh standalone validation artifact. It is intentionally separate fro
 
 ## Source of Truth
 
-- [Reduced-Scope MVP](/docs/planning/reduced-scope-mvp.md)
-- March 27, 2026 QA audit conclusions embedded at the top of the active reduced-scope MVP doc
+- [Reduced-Scope MVP](../../reduced-scope-mvp.md)
+- [Archived March 27 audit and build plan](../../archive/planning/2026-03/reduced-scope-mvp-audit-and-build-plan-2026-03-27.md)
 
 ## Validation Boundaries
 

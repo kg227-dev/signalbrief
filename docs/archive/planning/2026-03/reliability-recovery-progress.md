@@ -1,6 +1,6 @@
 # SignalBrief Reliability Recovery — Progress Tracker
 
-> Recovery plan: [V3 plan](../docs/SPEC.md) | Implementation plan: [Phase 1 plan](superpowers/plans/2026-03-23-reliability-phase1.md)
+> Recovery plan: [SPEC](../../../../SPEC.md) | Implementation plan: [Phase 1 plan](./superpowers/plans/2026-03-23-reliability-phase1.md)
 > Started: 2026-03-23
 
 ---

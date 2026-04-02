@@ -1,6 +1,6 @@
 # Marketing Metrics
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
 This is the live KPI snapshot doc for marketing and growth. Historical marketing snapshots remain under [`docs/archive/marketing/2026-03/`](../archive/marketing/2026-03/README.md).
 
@@ -8,6 +8,10 @@ Related docs:
 
 - [Marketing Strategy](./marketing-strategy.md)
 - [Marketing Execution Playbook](./marketing-execution-playbook.md)
+
+## Latest Recorded Snapshot
+
+The latest metrics captured in-repo are still from the week of March 17, 2026. Until a fresher weekly report is written, treat this file as a routed last-known snapshot, not as current-week truth.
 
 ## Week of March 17, 2026
 
@@ -31,3 +35,8 @@ Zero new signups this week and digest delivery was minimal. Only two production 
 ### API Cost Last 7 Days
 
 - `$0.08`
+
+## Update Rule
+
+- replace the snapshot above when a newer weekly measurement is available
+- archive point-in-time campaign or experiment notes under `docs/archive/marketing/`

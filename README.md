@@ -59,7 +59,7 @@ Primary processes:
 
 Start here:
 - [Documentation Index](./docs/INDEX.md)
-- [Reduced-Scope MVP Spec](./docs/planning/reduced-scope-mvp.md)
+- [Reduced-Scope MVP Spec](./docs/reduced-scope-mvp.md)
 - [Format Rules](./FORMAT-RULES.md)
 - [Features and Backlog](./docs/features.md)
 
@@ -74,8 +74,11 @@ Ops:
 - [Production Cutover Runbook](./docs/ops/production-cutover-ubuntu.md)
 - [Reliability Floor Runbook](./docs/ops/reliability-floor-runbook.md)
 - [Release Policy](./docs/ops/release-policy.md)
+- [Source Quality Registry](./docs/ops/source-quality-registry.md)
+- [Retrieval Eval Worklog](./docs/ops/retrieval-eval-worklog.md)
 
 Historical material:
 - [Archive Policy](./docs/archive/README.md)
 - [March 2026 Planning Archive](./docs/archive/planning/2026-03/README.md)
 - [March 2026 Marketing Archive](./docs/archive/marketing/2026-03/README.md)
+- [March 2026 Strategy Archive](./docs/archive/strategy/2026-03/README.md)

@@ -1,3 +1,5 @@
+> Archived on April 2, 2026. Live successor: [Reduced-Scope MVP](../../../reduced-scope-mvp.md)
+
 ## 2026-03-27 Update — QA Audit Against Current Codebase
 
 Audit basis: `reduced-scope-mvp.md` against the merged/deployed code at commit `c2492f70d63edeef8d2e96b3964f619654ba4125`.

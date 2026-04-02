@@ -1,16 +1,16 @@
 # Source Registry Manual Review
 
 *Created: 2026-03-30*
-*Scope: active broker roster in [standard-topic-broker-sources.json](/Users/kushgulati/Desktop/signalbrief/config/standard-topic-broker-sources.json)*
+*Scope: active broker roster in [standard-topic-broker-sources.json](../../../config/standard-topic-broker-sources.json)*
 
 ## Ground Truth
 
-- This sheet reflects the checked-in broker roster in [standard-topic-broker-sources.json](/Users/kushgulati/Desktop/signalbrief/config/standard-topic-broker-sources.json).
+- This sheet reflects the checked-in broker roster in [standard-topic-broker-sources.json](../../../config/standard-topic-broker-sources.json).
 - There is no local `data/standard-topic-broker-sources.json` override at the moment, so the checked-in config is the active roster definition.
 - Recommendations below are based on:
   - the current registry config
-  - Day 1-3 production audit evidence summarized in [mvp-validation-day-analysis.md](/Users/kushgulati/Desktop/signalbrief/docs/planning/mvp-validation-day-analysis.md)
-  - the current validation tracker in [reduced-scope-mvp-reliability-validation-2026-03-27.md](/Users/kushgulati/Desktop/signalbrief/docs/planning/reduced-scope-mvp-reliability-validation-2026-03-27.md)
+  - Day 1-3 production audit evidence summarized in [daily-analysis.md](./daily-analysis.md)
+  - the current validation tracker in [Reduced-Scope MVP Validation](./README.md)
 
 ## How To Use This
 

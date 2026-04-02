@@ -1,6 +1,6 @@
 # First 30 Minutes
 
-*Last reviewed: March 13, 2026*
+*Last reviewed: April 2, 2026*
 
 Goal: boot the app, run the baseline checks, and trace one request end-to-end.
 
@@ -23,7 +23,6 @@ If you want individual processes instead:
 
 ```bash
 npm run web
-npm run bot
 npm run worker
 ```
 
@@ -48,9 +47,9 @@ Follow this path for a typical user-facing API request:
    - `web/server.js`
    - `web/server-runtime.js`
 2. Route registration:
-   - `web/api/core/index.js`
+   - `web/routes/core/core-api.js`
 3. Route handler implementation:
-   - `web/routes/core-api.js`
+   - `web/routes/core/core-api.js`
 4. Service layer:
    - `web/services/web-user-handlers.js`
    - `web/services/request-metadata.js`

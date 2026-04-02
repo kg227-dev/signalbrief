@@ -231,7 +231,7 @@ If VM runtime fails:
 3. Trigger a scheduled recovery run:
 
 ```bash
-cd /Users/kushgulati/Desktop/signalbrief
+cd <local-repo-path>
 node src/entrypoints/digest.js
 ```
 

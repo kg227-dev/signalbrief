@@ -1,6 +1,6 @@
 # Marketing Execution Playbook
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
 This is the canonical execution playbook for outreach, lifecycle messaging, community seeding, and content cadence. March 2026 source materials are archived under [`docs/archive/marketing/2026-03/`](../archive/marketing/2026-03/README.md).
 
@@ -26,7 +26,7 @@ Priority channels:
 Default outreach shape:
 
 - make the audience fit explicit
-- describe the product as a morning briefing, not a generic AI newsletter
+- describe the product as a scheduled sector briefing, not a generic AI newsletter
 - ask for a short trial and honest feedback
 - follow up once after 48 hours, then stop
 
@@ -81,15 +81,15 @@ Best-fit channels from the current source material:
 Default cadence:
 
 - three LinkedIn posts per week
-- use a real signal or public digest example whenever possible
-- alternate between pain-first, demo-in-public, and referral/social-proof formats
+- use a real signal, screenshot, or retained-reader insight whenever possible
+- alternate between pain-first, workflow-proof, and referral/social-proof formats
 
 Content rules:
 
 - specific beats generic
 - one concrete example beats abstract product claims
 - end with a clear but low-friction CTA
-- reuse public digest pages as proof, not just as promotion
+- use live product proof that actually exists: screenshots, forwarded-email examples, testimonials, or operator observations
 
 ## Execution Guardrails
 

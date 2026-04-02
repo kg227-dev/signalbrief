@@ -1,8 +1,8 @@
 # Reliability Floor Runbook
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
-Last updated: **March 11, 2026**
+Last updated: **April 2, 2026**
 
 ## Purpose
 
@@ -16,7 +16,7 @@ This runbook covers:
 
 ## Scope
 
-- Runtime topology: single Ubuntu VM with Docker Compose (`web`, `bot`, `worker`)
+- Runtime topology: single Ubuntu VM with Docker Compose (`web`, `worker`)
 - State paths: `/opt/signalbrief/app/data`, `/opt/signalbrief/app/archive`
 - Backup scripts:
   - `npm run ops:backup:state`
@@ -131,7 +131,7 @@ Use only when live state is corrupted/lost and service behavior is degraded.
 
 ```bash
 cd /opt/signalbrief/app
-docker compose stop web bot worker
+docker compose stop web worker
 ```
 
 3. Extract backup to staging directory:
@@ -153,7 +153,7 @@ cp -R /tmp/signalbrief-restore-live/archive /opt/signalbrief/app/archive
 
 ```bash
 cd /opt/signalbrief/app
-docker compose up -d web bot worker
+docker compose up -d web worker
 ```
 
 6. Verify runtime:

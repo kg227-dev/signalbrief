@@ -1,8 +1,8 @@
 # SignalBrief — Current Product / System Contract
 
-Last reviewed: March 27, 2026
+Last reviewed: April 2, 2026
 
-This file describes the live reduced-scope MVP. Historical pre-MVP behavior is archived under [`docs/archive/`](./docs/archive/README.md). The product source of truth is [`docs/planning/reduced-scope-mvp.md`](./docs/planning/reduced-scope-mvp.md).
+This file describes the live reduced-scope MVP. Historical pre-MVP behavior is archived under [`docs/archive/`](./docs/archive/README.md). The product source of truth is [`docs/reduced-scope-mvp.md`](./docs/reduced-scope-mvp.md).
 
 ## Product Definition
 

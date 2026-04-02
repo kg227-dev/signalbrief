@@ -1,72 +1,85 @@
 # SignalBrief Format Rules
-*Locked from Batch 1 feedback — Feb 28 2026 | Updated for 17-topic architecture + Batch 7 format*
 
-## Item Format (Telegram)
+*Last reviewed: April 2, 2026*
+
+This file defines the live output rules for the reduced-scope, email-only MVP.
+
+## Product Invariants
+
+- Email is the only delivery surface.
+- Users subscribe to `1-3` standard topics.
+- Each subscribed topic can deliver up to `5` items per scheduled digest.
+- Items older than `48 hours` are ineligible.
+- A story should appear under one best-fit topic only.
+- Depth mode changes writeup length, not topic selection.
+
+## Supported Topics
+
+- `HEALTHCARE`
+- `LIFE SCIENCES`
+- `TECHNOLOGY`
+- `ENERGY`
+- `FINANCIAL SERVICES`
+- `CONSUMER & RETAIL`
+- `INDUSTRIALS`
+
+## Digest Structure
+
+- Group items by subscribed topic.
+- Keep topic sections clearly labeled.
+- Preserve a stable order inside each topic section once items are selected.
+- Withhold underfilled topic sections rather than padding with weak or off-topic stories.
+
+## Item Rules
+
+- Use a factual headline with no hype, teaser language, or clickbait framing.
+- Show one clean source attribution per item, linked to the article URL.
+- Keep each item grounded in the selected article. Do not invent implications that the source does not support.
+- When an item is older than 24 hours but still inside the 48-hour window, show a simple freshness cue such as `24h ago` or `2d ago`.
+- Avoid repeated items across consecutive days unless there is a materially new development.
+
+## Depth Modes
+
+### Scan
+
+- Headline
+- Source link
+
+### Brief
+
+- Headline
+- One-line takeaway
+- Source link
+
+### Deep
+
+- Headline
+- Short factual lede
+- `2-3` sentence strategic why-it-matters explanation
+- Source link
+
+## Writing Rules
+
+- Start with the most decision-useful fact.
+- The first sentence of the analysis should explain why the item matters to a strategy-oriented reader.
+- Keep analysis specific, implication-forward, and grounded in the reported event.
+- Prefer concrete business impact over generic commentary.
+- Do not write as if SignalBrief is a chat assistant. Write as a briefing product.
+
+## Subject Line Rules
+
+- Include the day/date plus `2-3` concrete signal teasers.
+- Teasers should reference the actual selected story set, not generic topic names.
+- Keep the subject line readable on mobile; trim before it becomes a headline dump.
+
+Example:
+
+```text
+SignalBrief — Thu, Apr 2 | FDA gene therapy move, grid capex jumps, bank fee pressure
 ```
-[N]⃣ *[VERTICAL×SUBTAG]* Headline
-_First sentence of "why it matters." (250-char cap)_
-→ source.com
-```
 
-## Rules
-1. **Number items** with keycap emojis: 1⃣ 2⃣ 3⃣ etc.
-2. **Max 2 items per tag** — never stack same-tag items adjacently. Interleave verticals.
-3. **Links**: `→ domain.com` — clean, no emoji, direct article URL (not homepage).
-4. **5 items default**, configurable 5/10 per user.
-5. **Freshness signal**: add `(2d ago)` only when item is >24h old. Nothing if today.
-6. **Every item must have a strategic so-what** — one clause answering "why should a strategy consultant care about this tomorrow morning?" Specific, implication-forward, not generic. Displayed as italic WIM sentence in Telegram, full paragraph in email.
-7. **Cross-vertical tags** (×) are a feature: `[AI×TECH]`, `[PE×M&A]`, `[POLICY×REGULATORY]`
-8. **WIM sentence**: strip all HTML before splitting on sentence boundaries. First sentence only, hard cap at 250 chars. Use `(?<=[.!?])\s+(?=[A-Z])` to split (avoids firing on abbreviations like `vs.`). Never send multiple Telegram messages — shorten rather than split.
-9. **Single message always** — if content exceeds 4096 chars, shorten WIM sentences. Do not paginate or split digest across multiple messages.
+## Footer Rules
 
-## Email-Specific Rules
-1. **Quick-scan header**: TODAY'S SIGNALS bar before items. 10-second read.
-2. **Item length**: factual lede + 2-3 sentence "why it matters" = 4-5 sentences total.
-3. **Lead story**: `★ LEAD` — slightly more room, left blue border accent.
-4. **Subject line**: date + 3 punchy topic teasers.
-   e.g. `SignalBrief — Mon, Mar 3 | OpenAI's enterprise push, PE deal drought ends, DOGE cuts bite`
-5. **"Why it matters" first clause**: bold (`<strong>`) — speed-reader anchor.
-6. **Relevance badge**: color-coded score shown on each item (green >8.5, yellow >5.0, orange >3.5, red <3.5).
-7. **Footer**: Forward CTA button (primary growth vector), preferences link, unsubscribe.
-
-## Header
-```
-☀️ SignalBrief — [Day, Mon DD]
-Your daily signal across AI, strategy, and business
-```
-
-## Footer (Telegram — short version after 5 digests)
-```
-───
-📧 Deeper takes in your email
-💾 save [#] · 📊 more/less [topic] · ⚙️ settings
-```
-
-## Topic Tags Reference (17 total)
-
-### Industries (10)
-| Tag | Covers |
-|-----|--------|
-| `HEALTHCARE` | Payers, providers, pharma, FDA, clinical AI |
-| `FINANCIAL SERVICES` | Banking, fintech, insurance, capital markets |
-| `PE×M&A` | Private equity, deal flow, leveraged buyouts, M&A activity |
-| `ENERGY` | Transition, utilities, grid, industrials, IRA |
-| `CONSUMER` | Retail, DTC, brand, supply chain, consumer trends |
-| `LIFE SCIENCES` | Biotech, medical devices, genomics, drug pipelines |
-| `TECHNOLOGY` | Enterprise tech, SaaS, cloud infrastructure |
-| `INDUSTRIALS` | Manufacturing, logistics, automation, supply chain |
-| `REAL ESTATE` | CRE, proptech, construction, data centers |
-| `PUBLIC SECTOR` | Government, defense, federal procurement, municipalities |
-
-### Capabilities (7)
-| Tag | Covers |
-|-----|--------|
-| `AI×TECH` | Enterprise AI, foundation models, infrastructure, Big Tech |
-| `STRATEGY` | Consulting, corporate strategy, transformation, firm moves |
-| `POLICY×REGULATORY` | Federal regulation, antitrust, trade, DOGE, budget |
-| `SUSTAINABILITY` | ESG, net zero, carbon, climate policy, reporting |
-| `DIGITAL` | Digital transformation, platforms, product strategy |
-| `M&A ADVISORY` | Deal advisory, integration, synergy capture, valuation |
-| `TALENT` | Workforce trends, hiring, org restructuring, compensation |
-
-Custom tags supported: `GLP-1`, `DOGE`, `quantum`, `defense`, etc.
+- Include preferences/settings access.
+- Include unsubscribe access.
+- Include any forward/share CTA only if it is actually supported by the current product surface.

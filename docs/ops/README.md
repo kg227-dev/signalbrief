@@ -1,8 +1,8 @@
 # Ops Hub
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
-This directory is the live home for deployment, recovery, release control, and credential operations.
+This directory is the live home for deployment, recovery, release control, credential operations, and operator-quality loops.
 
 ## Runtime Config And Secrets
 
@@ -27,6 +27,12 @@ npm run ops:release:window-check
 npm run ops:rollback:sha -- --rollback-sha <sha>
 ```
 
+Image-first deploy policy:
+
+- normal production deploys promote the CI-built image for the target SHA
+- source-build deploys are emergency-only via `npm run ops:deploy:prod:emergency-source`
+- the archived image migration note now lives in [Archive → Planning → March 2026](../archive/planning/2026-03/image-based-deploy-plan.md)
+
 ## State Protection And Recovery
 
 - [Reliability Floor Runbook](./reliability-floor-runbook.md) — backups, restore drills, and incident restore flow
@@ -45,6 +51,11 @@ npm run ops:store:full-enable-validate
 npm run ops:deploy:prod:store:sqlite
 npm run ops:drill:restore-state -- --latest --clean
 ```
+
+## Source And Retrieval Quality
+
+- [Source Quality Registry](./source-quality-registry.md) — live source-governance rules and operator loop
+- [Retrieval Eval Worklog](./retrieval-eval-worklog.md) — live retrieval-eval summary and routing
 
 ## Security And Credential Hygiene
 

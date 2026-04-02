@@ -1,6 +1,6 @@
 # Marketing Strategy
 
-*Last reviewed: March 20, 2026*
+*Last reviewed: April 2, 2026*
 
 This is the canonical marketing strategy doc. Source materials from the March 2026 planning burst are archived under [`docs/archive/marketing/2026-03/`](../archive/marketing/2026-03/README.md).
 
@@ -18,7 +18,7 @@ These users have the same underlying problem: they cover multiple sectors, need 
 
 ## Positioning
 
-SignalBrief is the personalized morning briefing for people who work across sectors professionally.
+SignalBrief is the morning email briefing for people who need fast, cross-sector situational awareness for work.
 
 Core promise:
 
@@ -28,21 +28,21 @@ Core promise:
 
 Competitive angle:
 
-- Morning Brew and similar products are broad but not personalized.
+- Morning Brew and similar products are broad but not sector-selective.
 - Axios-style products are concise but beat-specific.
-- AI summarizers save time but usually do not deliver analyst-grade implications.
+- generic AI summarizers save time but usually do not deliver analyst-grade implications.
 
 The positioning line to protect:
 
-> SignalBrief tells you what matters for your sectors, not what happened for everyone.
+> SignalBrief tells you what matters for your sectors before the workday starts.
 
 ## Product-Led Growth Priorities
 
 Use the current product strengths in messaging:
 
-- immediate proof of value through the current signup and digest experience
-- public digest pages as demos of the product in action
-- custom topics and feedback loops as evidence of real personalization
+- immediate proof of value through the current signup and scheduled email experience
+- 7 standard sector briefs instead of a sprawling topic catalog
+- strategy-oriented writeups rather than raw headline aggregation
 
 Near-term site and message priorities:
 
@@ -51,9 +51,9 @@ Near-term site and message priorities:
 2. Conversion trust
    Add real testimonials or company proof only when genuine evidence exists.
 3. Search capture
-   Publish and index consultant-specific and sector-specific content.
+   Publish and index a small number of high-intent sector and workflow pages.
 4. Referral loop
-   Make sharing and colleague referral easier from the product surface.
+   Make forwarding and colleague referral easier from the email product itself.
 
 ## SEO And Content Priorities
 
@@ -63,15 +63,15 @@ Current focus:
 
 - keyword-rich homepage H1, title, and meta description
 - FAQ content plus `FAQPage` schema
-- explicit indexing posture for public digest pages
 - a small number of high-intent pages rather than a large generic blog
+- proof assets that can be generated from actual live emails, screenshots, or testimonials
 
 Priority content themes:
 
 - morning briefing for strategy professionals
 - consultant newsletter alternatives
 - staying current across multiple sectors
-- public digest pages that prove the product output
+- daily sector brief for strategy and corp-dev teams
 
 ## KPI Definitions
 
@@ -95,7 +95,7 @@ Interpretation rules:
 
 - sharpen homepage messaging
 - run direct outreach and collect real user feedback
-- make public digest pages usable as acquisition assets
+- tighten the signup-to-first-email value loop
 
 ### Days 31-60
 

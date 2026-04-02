@@ -1,0 +1,119 @@
+<svg width="1600" height="920" viewBox="0 0 1600 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="60" x2="1460" y2="860" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4EFE7"/>
+      <stop offset="1" stop-color="#E7E0D5"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="960" y1="120" x2="1440" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDFC"/>
+      <stop offset="1" stop-color="#F7F1E8"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#4467C8"/>
+      <stop offset="1" stop-color="#274896"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1600" height="920" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#6A5B45" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="920" rx="40" fill="url(#bg)"/>
+  <circle cx="1320" cy="178" r="98" fill="#3B5FC0" fill-opacity="0.08"/>
+  <circle cx="118" cy="760" r="164" fill="#C2770A" fill-opacity="0.08"/>
+  <circle cx="1510" cy="820" r="126" fill="#6D5C47" fill-opacity="0.06"/>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="72" width="1456" height="776" rx="30" fill="#FBF7F1" fill-opacity="0.78"/>
+  </g>
+
+  <g>
+    <rect x="132" y="140" width="170" height="42" rx="21" fill="#E6DDCE"/>
+    <text x="217" y="166" text-anchor="middle" fill="#6B645B" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600" letter-spacing="1.8">SIGNALBRIEF</text>
+  </g>
+
+  <text x="132" y="270" fill="#201C18" font-size="78" font-family="Georgia, 'Times New Roman', serif" font-weight="700">
+    Daily sector briefings
+  </text>
+  <text x="132" y="350" fill="#201C18" font-size="78" font-family="Georgia, 'Times New Roman', serif" font-weight="700">
+    that help you start sharp
+  </text>
+
+  <text x="132" y="420" fill="#5B544B" font-size="28" font-family="Inter, Arial, sans-serif">
+    SignalBrief gives operators, investors, consultants, and strategy teams
+  </text>
+  <text x="132" y="460" fill="#5B544B" font-size="28" font-family="Inter, Arial, sans-serif">
+    a tighter morning read: trusted sources, clear context, and just enough depth.
+  </text>
+
+  <g>
+    <rect x="132" y="528" width="178" height="54" rx="27" fill="url(#accent)"/>
+    <text x="221" y="562" text-anchor="middle" fill="white" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700">Start your brief</text>
+
+    <rect x="330" y="528" width="162" height="54" rx="27" fill="#ECE4D7"/>
+    <text x="411" y="562" text-anchor="middle" fill="#3B352D" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700">View docs</text>
+  </g>
+
+  <g>
+    <rect x="132" y="634" width="146" height="44" rx="22" fill="#E5EEF9"/>
+    <text x="205" y="661" text-anchor="middle" fill="#2F54B1" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="700">7 sectors</text>
+
+    <rect x="292" y="634" width="180" height="44" rx="22" fill="#F1E5D6"/>
+    <text x="382" y="661" text-anchor="middle" fill="#A36512" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="700">3 depth modes</text>
+
+    <rect x="486" y="634" width="214" height="44" rx="22" fill="#E6ECE4"/>
+    <text x="593" y="661" text-anchor="middle" fill="#5A7A3E" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="700">Fresh every morning</text>
+  </g>
+
+  <g>
+    <text x="132" y="740" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Healthcare</text>
+    <circle cx="255" cy="732" r="4.5" fill="#B7AA97"/>
+    <text x="275" y="740" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Life Sciences</text>
+    <circle cx="433" cy="732" r="4.5" fill="#B7AA97"/>
+    <text x="453" y="740" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Technology</text>
+    <circle cx="576" cy="732" r="4.5" fill="#B7AA97"/>
+    <text x="596" y="740" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Energy</text>
+  </g>
+  <g>
+    <text x="132" y="778" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Financial Services</text>
+    <circle cx="316" cy="770" r="4.5" fill="#B7AA97"/>
+    <text x="336" y="778" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Consumer &amp; Retail</text>
+    <circle cx="546" cy="770" r="4.5" fill="#B7AA97"/>
+    <text x="566" y="778" fill="#7B7368" font-size="22" font-family="Inter, Arial, sans-serif">Industrials</text>
+  </g>
+
+  <g>
+    <rect x="914" y="132" width="500" height="650" rx="32" fill="url(#panel)" stroke="#DCCFBC"/>
+    <rect x="954" y="172" width="420" height="70" rx="22" fill="#F3EBDD"/>
+    <text x="998" y="214" fill="#3C352D" font-size="28" font-family="Georgia, 'Times New Roman', serif" font-weight="700">Today’s brief</text>
+    <text x="1268" y="214" fill="#857C70" font-size="18" font-family="Inter, Arial, sans-serif">07:00 ET</text>
+
+    <rect x="954" y="270" width="192" height="34" rx="17" fill="#E5EEF9"/>
+    <text x="1050" y="292" text-anchor="middle" fill="#2F54B1" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Technology</text>
+
+    <rect x="954" y="322" width="380" height="108" rx="24" fill="#FFFCF8" stroke="#E3D9CB"/>
+    <text x="984" y="360" fill="#211D18" font-size="24" font-family="Georgia, 'Times New Roman', serif" font-weight="700">OpenAI expands enterprise rollout</text>
+    <text x="984" y="392" fill="#595248" font-size="17" font-family="Inter, Arial, sans-serif">A tighter distribution push signals where AI budgets</text>
+    <text x="984" y="416" fill="#595248" font-size="17" font-family="Inter, Arial, sans-serif">are consolidating and who owns workflow demand.</text>
+
+    <rect x="954" y="454" width="192" height="34" rx="17" fill="#E7EFE4"/>
+    <text x="1050" y="476" text-anchor="middle" fill="#5E7C42" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Healthcare</text>
+
+    <rect x="954" y="506" width="380" height="96" rx="24" fill="#FFFCF8" stroke="#E3D9CB"/>
+    <text x="984" y="544" fill="#211D18" font-size="23" font-family="Georgia, 'Times New Roman', serif" font-weight="700">CMS changes reimbursement timetable</text>
+    <text x="984" y="576" fill="#595248" font-size="17" font-family="Inter, Arial, sans-serif">Provider economics shift faster when timing moves</text>
+    <text x="984" y="600" fill="#595248" font-size="17" font-family="Inter, Arial, sans-serif">before operating plans have already locked in.</text>
+
+    <g>
+      <rect x="954" y="632" width="130" height="34" rx="17" fill="#ECE4D7"/>
+      <text x="1019" y="654" text-anchor="middle" fill="#5A5147" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Scan</text>
+
+      <rect x="1096" y="632" width="130" height="34" rx="17" fill="#F0E6D6"/>
+      <text x="1161" y="654" text-anchor="middle" fill="#A36512" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Brief</text>
+
+      <rect x="1238" y="632" width="130" height="34" rx="17" fill="#E5EEF9"/>
+      <text x="1303" y="654" text-anchor="middle" fill="#2F54B1" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700">Deep</text>
+    </g>
+
+    <text x="954" y="722" fill="#776D61" font-size="18" font-family="Inter, Arial, sans-serif">Trusted trade and official sources. Clear context. No tab sprawl.</text>
+  </g>
+</svg>

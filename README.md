@@ -1,20 +1,66 @@
-# SignalBrief
+<p align="center">
+  <img src=".github/assets/readme-hero.svg" alt="SignalBrief hero" width="100%">
+</p>
 
-SignalBrief is a reduced-scope, email-only digest product.
+<p align="center">
+  <a href="https://getsignalbrief.com">Website</a>
+  ·
+  <a href="https://getsignalbrief.com/signup">Start Your Brief</a>
+  ·
+  <a href="./docs/INDEX.md">Documentation</a>
+</p>
 
-Current product shape:
-- 7 standard topics only: `HEALTHCARE`, `LIFE SCIENCES`, `TECHNOLOGY`, `ENERGY`, `FINANCIAL SERVICES`, `CONSUMER & RETAIL`, `INDUSTRIALS`
-- users choose 1-3 topics
-- each subscribed topic gets up to 5 selected items per day
-- freshness is hard-capped at 48 hours
-- each story is assigned to one best-fit topic only
-- RSS/direct feeds are the backbone; discovery/search is supplemental
-- delivery is scheduled email only
+<p align="center">
+  <strong>The daily sector briefing for operators, investors, consultants, and strategy teams.</strong>
+</p>
 
-## Quick Start
+SignalBrief is built for people who need to walk into the day informed without burning the morning on tab sprawl.
+
+Instead of juggling tabs, feeds, newsletters, and search results, SignalBrief delivers a tight briefing built from trusted trade and official sources, with clear context on why each story matters and a reading depth that matches your day.
+
+<p align="center">
+  <img src=".github/assets/readme-overview.svg" alt="SignalBrief overview" width="100%">
+</p>
+
+## Why SignalBrief
+
+- A better morning read: five selected signals per topic instead of a pile of links.
+- Built for professionals: written for people who need to sound informed, not casually updated.
+- Trusted source mix: trade press and official sources first, with discovery used to fill gaps rather than define the product.
+- Flexible depth: the same selected stories can be read in `Scan`, `Brief`, or `Deep` mode.
+
+## What You Get
+
+| SignalBrief experience | What it means |
+| --- | --- |
+| `1-3` sectors | Build a briefing around the lanes you actually care about |
+| `5` selected signals per topic | A concise, high-signal read instead of a headline firehose |
+| `Scan`, `Brief`, or `Deep` | Move fast or go deeper without changing the story set |
+| Fresh every morning | Built for the start of the workday, not end-of-day catch-up |
+
+## Sector Coverage
+
+`HEALTHCARE` · `LIFE SCIENCES` · `TECHNOLOGY` · `ENERGY` · `FINANCIAL SERVICES` · `CONSUMER & RETAIL` · `INDUSTRIALS`
+
+## How It Works
+
+1. Choose the sectors you want to follow.
+2. Pick the reading depth that fits your workflow.
+3. Get a daily email briefing built from curated source inputs and relevance scoring.
+4. Open a brief that helps you get oriented quickly and go deeper when needed.
+
+## Built For
+
+- operators who need to see what is moving their market before meetings begin
+- strategy and corp-dev teams covering multiple sectors at once
+- investors and analysts who want a tighter, more usable morning signal set
+- consultants who need to walk in informed without doing a full pre-market reading marathon
+
+## Run Locally
 
 Requirements:
-- Node.js 22+
+
+- Node.js `22+`
 - `.env` with required `SIGNALBRIEF_*` secrets
 - `config.json` optional for local non-secret overrides
 
@@ -51,6 +97,7 @@ scheduler-worker -> digest orchestrator -> topic selection -> email delivery
 ```
 
 Primary processes:
+
 - `src/entrypoints/scheduler-worker.js`
 - `src/entrypoints/digest.js`
 - `web/server.js`
@@ -58,18 +105,21 @@ Primary processes:
 ## Documentation
 
 Start here:
+
 - [Documentation Index](./docs/INDEX.md)
-- [Reduced-Scope MVP Spec](./docs/reduced-scope-mvp.md)
+- [Product Spec](./docs/reduced-scope-mvp.md)
 - [Format Rules](./FORMAT-RULES.md)
 - [Features and Backlog](./docs/features.md)
 
 Engineering reference:
+
 - [Repository Map](./docs/repository-map.md)
 - [First 30 Minutes](./docs/onboarding-first-30-minutes.md)
 - [Change-to-Test Map](./docs/change-to-test-map.md)
 - [Path and Import Rules](./docs/contributing-path-rules.md)
 
 Ops:
+
 - [Ops Hub](./docs/ops/README.md)
 - [Production Cutover Runbook](./docs/ops/production-cutover-ubuntu.md)
 - [Reliability Floor Runbook](./docs/ops/reliability-floor-runbook.md)
@@ -78,6 +128,7 @@ Ops:
 - [Retrieval Eval Worklog](./docs/ops/retrieval-eval-worklog.md)
 
 Historical material:
+
 - [Archive Policy](./docs/archive/README.md)
 - [March 2026 Planning Archive](./docs/archive/planning/2026-03/README.md)
 - [March 2026 Marketing Archive](./docs/archive/marketing/2026-03/README.md)

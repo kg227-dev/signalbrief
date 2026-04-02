@@ -17,10 +17,10 @@ assertModuleExports(() => runtime, TARGET_REL);
 function testBuildQuickScan() {
   const quickScan = buildQuickScan([
     { headline: "Deal Desk: Mega merger announced" },
-    { headline: "AI shakeup - board update" },
+    { headline: "AI shakeup — board update" },
   ]);
-  assert.ok(quickScan.includes("Deal Desk"), "quick scan should keep left headline segment");
-  assert.ok(quickScan.includes("AI shakeup - board update"), "quick scan should retain plain headlines");
+  assert.ok(quickScan.includes("Deal Desk: Mega merger announced"), "quick scan should preserve the full headline");
+  assert.ok(quickScan.includes("AI shakeup — board update"), "quick scan should preserve em dash headlines");
   assert.ok(quickScan.includes(" · "), "quick scan should use readable separators");
   assert.ok(!quickScan.includes("&nbsp;"), "quick scan should not include HTML entities");
   assert.ok(!quickScan.includes("&middot;"), "quick scan should not include HTML entities");

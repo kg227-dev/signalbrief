@@ -16,6 +16,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
   const sentEmailOrders = [];
+  const sentQuickScanRows = [];
   const snapshotOrders = [];
   const recordPayloads = [];
   const qualityOrders = [];
@@ -52,7 +53,7 @@ assertModuleExports(() => runtime, TARGET_REL);
         },
         {
           tag: "SUSTAINABILITY",
-          headline: "Highest scored item",
+          headline: "Opinion: Highest scored item — with context",
           summary: "Summary",
           url: "https://example.com/high",
           source: "Example",
@@ -67,7 +68,7 @@ assertModuleExports(() => runtime, TARGET_REL);
         },
         {
           tag: "ENERGY",
-          headline: "Middle scored item",
+          headline: "Beyond detection — Middle scored item",
           summary: "Summary",
           url: "https://example.com/mid",
           source: "Example",
@@ -145,8 +146,9 @@ assertModuleExports(() => runtime, TARGET_REL);
     },
     generateLeadSubjectLine: async () => ({ subject: "Subject", usage: {} }),
     generateEditorialNote: async () => ({ note: "", usage: {} }),
-    buildEmail: (items) => {
+    buildEmail: (items, _dateStr, quickScanRows) => {
       sentEmailOrders.push(items.map((item) => item.headline));
+      sentQuickScanRows.push(quickScanRows);
       return "<html></html>";
     },
     buildOpenTrackingPixel: () => "",
@@ -187,7 +189,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       },
       {
         tag: "TECHNOLOGY",
-        headline: "Highest scored item",
+        headline: "Opinion: Highest scored item — with context",
         summary: "Summary",
         url: "https://example.com/high",
         source: "Example",
@@ -196,7 +198,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       },
       {
         tag: "TECHNOLOGY",
-        headline: "Middle scored item",
+        headline: "Beyond detection — Middle scored item",
         summary: "Summary",
         url: "https://example.com/mid",
         source: "Example",
@@ -245,19 +247,47 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(result.deliveredUsers[0].available_count, 5);
   assert.deepStrictEqual(
     qualityOrders[0],
-    ["Highest scored item", "Middle scored item", "Fourth scored item", "Lower scored item", "Fifth scored item"]
+    [
+      "Opinion: Highest scored item — with context",
+      "Beyond detection — Middle scored item",
+      "Fourth scored item",
+      "Lower scored item",
+      "Fifth scored item",
+    ]
   );
   assert.deepStrictEqual(
     sentEmailOrders[0],
-    ["Highest scored item", "Middle scored item", "Fourth scored item", "Lower scored item", "Fifth scored item"]
+    [
+      "Opinion: Highest scored item — with context",
+      "Beyond detection — Middle scored item",
+      "Fourth scored item",
+      "Lower scored item",
+      "Fifth scored item",
+    ]
   );
   assert.ok(snapshotOrders.some((order) => (
     Array.isArray(order)
-    && order.join("|") === "Highest scored item|Middle scored item|Fourth scored item|Lower scored item|Fifth scored item"
+    && order.join("|") === "Opinion: Highest scored item — with context|Beyond detection — Middle scored item|Fourth scored item|Lower scored item|Fifth scored item"
   )));
   const sentRecord = recordPayloads.find((payload) => payload?.status === "sent");
   assert.ok(sentRecord, "delivery runtime should write a sent delivery record");
   assert.strictEqual(sentRecord.delivery_outcome, "delivered");
+  assert.ok(
+    sentRecord.quick_scan.includes("Opinion: Highest scored item — with context"),
+    "delivery quick scan should preserve colon and dash headlines"
+  );
+  assert.ok(
+    sentRecord.quick_scan.includes("Beyond detection — Middle scored item"),
+    "delivery quick scan should preserve em dash headlines"
+  );
+  assert.ok(
+    sentQuickScanRows[0].includes("Opinion: Highest scored item — with context"),
+    "email quick scan rows should preserve colon headlines"
+  );
+  assert.ok(
+    sentQuickScanRows[0].includes("Beyond detection — Middle scored item"),
+    "email quick scan rows should preserve em dash headlines"
+  );
   assert.strictEqual(sentRecord.selected_count, 5);
   assert.strictEqual(sentRecord.available_count, 5);
   assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "high_confidence_count"));

@@ -1,5 +1,6 @@
 "use strict";
 
+const { normalizeDigestHeadlinePreview } = require("../digest/runtime/digest-headline-preview-runtime");
 const { sortDigestItemsByScoreDescending } = require("../digest/runtime/digest-item-ordering-runtime");
 const {
   DELIVERY_POLICY,
@@ -40,7 +41,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
   function buildQuickScanText(items) {
     return (Array.isArray(items) ? items : [])
-      .map((item) => stripInlineHtml(item?.headline || "").split(":")[0].split("—")[0].trim())
+      .map((item) => normalizeDigestHeadlinePreview(stripInlineHtml(item?.headline || "")))
       .filter(Boolean)
       .join(" · ");
   }
@@ -272,7 +273,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
   function buildUserQuickScanRows(items) {
     return items.map((item, idx) => {
-      const short = stripInlineHtml(item.headline).split(":")[0].split("—")[0].trim();
+      const short = normalizeDigestHeadlinePreview(stripInlineHtml(item?.headline || ""));
       const topic = topicVisual(item.tag);
       const safeTag = escapeHtml(String(item.tag || "News"));
       const safeShort = escapeHtml(short);

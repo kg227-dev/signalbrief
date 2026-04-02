@@ -37,6 +37,9 @@ const {
   createDigestOrchestratorTransportRuntime,
 } = require("../src/entrypoints/digest-orchestrator-transport-runtime");
 const {
+  normalizeDigestHeadlinePreview,
+} = require("../src/digest/runtime/digest-headline-preview-runtime");
+const {
   digestRunStatus,
   startDigestTrigger,
 } = require("../src/jobs/digest-runner-runtime");
@@ -296,7 +299,7 @@ function formatDigestDateLabelFromKey(dateKey) {
 
 function buildFallbackQuickScan(items = []) {
   return (Array.isArray(items) ? items : [])
-    .map((item) => String(item?.headline || "").split(":")[0].split("—")[0].trim())
+    .map((item) => normalizeDigestHeadlinePreview(item?.headline || ""))
     .filter(Boolean)
     .slice(0, 5)
     .join(" · ");

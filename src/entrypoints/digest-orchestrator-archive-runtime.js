@@ -1,8 +1,10 @@
 "use strict";
 
+const { normalizeDigestHeadlinePreview } = require("../digest/runtime/digest-headline-preview-runtime");
+
 function buildQuickScan(items) {
   return (Array.isArray(items) ? items : [])
-    .map((item) => String(item?.headline || "").split(":")[0].split("—")[0].trim())
+    .map((item) => normalizeDigestHeadlinePreview(item?.headline || ""))
     .filter(Boolean)
     .join(" · ");
 }

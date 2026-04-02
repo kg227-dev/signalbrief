@@ -51,4 +51,18 @@ const deepHtml = runtime.renderDigestItemHtml({
 assert.ok(deepHtml.includes("strategic fallback punchline"), "deep emails should prefer wim_brief over raw summary fallback");
 assert.ok(!deepHtml.includes("old short cutoff"), "deep emails should not fall back to raw summary text");
 
+const deepSummaryFallbackHtml = runtime.renderDigestItemHtml({
+  tag: "HEALTHCARE",
+  headline: "Fallback summaries should still render in deep mode",
+  summary: "This summary should appear when both why-it-matters fields are missing so deep digests never ship blank cards.",
+  wim: null,
+  wim_brief: null,
+  source: "modernhealthcare.com",
+  source_tier: "strong",
+  published_date: "2026-04-01T10:00:00.000Z",
+  relevanceScore: 8.0,
+}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
+
+assert.ok(deepSummaryFallbackHtml.includes("This summary should appear"), "deep emails should fall back to source summary when no why-it-matters fields are available");
+
 console.log("email item rendering decodes HTML entities ✓");

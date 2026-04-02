@@ -103,8 +103,8 @@ function createDigestEmailItemsRuntime(deps) {
         return `<div style="font-size:15px;color:${isDeep ? "#111827" : "#6B7280"};line-height:1.65;margin-bottom:12px;">${escapeHtml(decodeHtmlEntities(brief))}</div>`;
       }
       const summary = String(item.summary || "").trim();
-      if (!summary || isDeep) return "";
-      const maxChars = isDeep ? Infinity : 320;
+      if (!summary) return "";
+      const maxChars = isDeep ? 520 : 320;
       const truncated = truncateAtWordBoundary(decodeHtmlEntities(summary), maxChars);
       return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(truncated)}</div>`;
     })();

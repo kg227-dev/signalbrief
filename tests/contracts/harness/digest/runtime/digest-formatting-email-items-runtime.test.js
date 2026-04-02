@@ -54,3 +54,14 @@ const noWimHtml = emailItemsRuntime.renderDigestItemHtml({
 assert.ok(noWimHtml.includes("strategic fallback punchline"), "email item should fall back to wim_brief in deep mode");
 assert.ok(!noWimHtml.includes("A short summary"), "email item should not show source summary in deep mode when wim is absent");
 assert.ok(!noWimHtml.includes("Why it matters."), "email item should not show wim when it is null");
+
+const noWriteupHtml = emailItemsRuntime.renderDigestItemHtml({
+  tag: "HEALTHCARE",
+  headline: "Blank deep cards should not ship",
+  summary: "A source summary should render when scheduled writeups are missing so users still get context under the headline.",
+  wim: null,
+  wim_brief: null,
+  source: "modernhealthcare.com",
+  url: "https://example.com/healthcare",
+}, 0, { depth: "headline_plus_why" });
+assert.ok(noWriteupHtml.includes("A source summary should render"), "email item should fall back to summary in deep mode when no writeup fields are available");

@@ -39,6 +39,8 @@ See [archive](../archive/planning/2026-03/mvp-day-5-2026-04-01.md). **Yellow.** 
 
 See [archive](../archive/planning/2026-03/mvp-day-6-2026-04-02.md). **Yellow.** Day 6 is the first day that hit all of the hard operational gates at once: 7/7 topics at 5 items, 7/7 topics above the depth gate, 10/10 canaries delivered, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 0 duplicate URLs vs Day 5. It is still not a true green day. The selected set remains quality-mixed, with FDA/official content still leaking into Life Sciences, Technology, and Energy, and the stored scheduled canary records show `0/80` populated `wim` / `wim_brief` fields, which is a likely deep-mode content regression rather than a clean strategic-writeup win.
 
+Day 7 prep is now explicit: restore non-empty deep-mode body text even when scheduled writeups are missing, downgrade FDA from primary weighting, and promote FierceBiotech/FiercePharma so Life Sciences quality is driven more by trade reporting than official FDA filler. The next live check is whether Day 7 still stores null writeups and whether FDA share actually drops in the selected set.
+
 ## Day 7 — 2026-04-03
 
 _Pending._

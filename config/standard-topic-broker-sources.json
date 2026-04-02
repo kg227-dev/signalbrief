@@ -236,7 +236,7 @@
       "_comment": "FDA Press Releases — primary official for drug/device approvals, warnings, guidance.",
       "id": "healthcare_fda_press",
       "enabled": true,
-      "tier": 1,
+      "tier": 3,
       "lane": "official",
       "topic_tags": [
         "HEALTHCARE"
@@ -260,6 +260,15 @@
         "clearance",
         "authorized",
         "settlement"
+      ],
+      "title_exclude_patterns": [
+        "^frequently requested or proactively posted",
+        "^companies that have not submitted",
+        "^fda warns consumers not to",
+        "^fda alerts customers to",
+        "drug amount reports",
+        "hidden drug ingredients",
+        "shortage mitigation efforts"
       ]
     },
     {
@@ -295,7 +304,7 @@
       "_comment": "FDA MedWatch — drug safety alerts, recalls, adverse events.",
       "id": "healthcare_fda_medwatch",
       "enabled": true,
-      "tier": 1,
+      "tier": 3,
       "lane": "official",
       "topic_tags": [
         "HEALTHCARE"
@@ -323,7 +332,7 @@
       "_comment": "FierceBiotech — strong biotech/drug development trade coverage.",
       "id": "life_fiercebiotech",
       "enabled": true,
-      "tier": 2,
+      "tier": 1,
       "lane": "publisher_feed",
       "topic_tags": [
         "LIFE SCIENCES"
@@ -342,7 +351,7 @@
       "_comment": "FiercePharma — pharma commercialization, drug launches, market news.",
       "id": "life_fiercepharma",
       "enabled": true,
-      "tier": 2,
+      "tier": 1,
       "lane": "publisher_feed",
       "topic_tags": [
         "LIFE SCIENCES"
@@ -453,7 +462,7 @@
       "_comment": "FDA Drugs RSS — drug approvals, clinical holds, label changes.",
       "id": "life_fda_drugs",
       "enabled": true,
-      "tier": 1,
+      "tier": 3,
       "lane": "official",
       "topic_tags": [
         "LIFE SCIENCES"
@@ -482,14 +491,21 @@
         "^what's new",
         "^novel drug approvals for",
         "^new drugs at fda",
-        "^what's new related to"
+        "^what's new related to",
+        "^frequently requested or proactively posted",
+        "^companies that have not submitted",
+        "^fda warns consumers not to",
+        "^fda alerts customers to",
+        "drug amount reports",
+        "hidden drug ingredients",
+        "shortage mitigation efforts"
       ]
     },
     {
       "_comment": "FDA Biologics RSS — biologic and cell/gene therapy approvals.",
       "id": "life_fda_biologics",
       "enabled": true,
-      "tier": 1,
+      "tier": 3,
       "lane": "official",
       "topic_tags": [
         "LIFE SCIENCES"
@@ -518,7 +534,14 @@
         "^what's new",
         "^novel drug approvals for",
         "^new drugs at fda",
-        "^what's new related to"
+        "^what's new related to",
+        "^frequently requested or proactively posted",
+        "^companies that have not submitted",
+        "^fda warns consumers not to",
+        "^fda alerts customers to",
+        "drug amount reports",
+        "hidden drug ingredients",
+        "shortage mitigation efforts"
       ]
     },
     {

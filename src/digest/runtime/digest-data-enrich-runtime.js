@@ -81,6 +81,31 @@ function degradedResult(items, usage, degradation) {
   };
 }
 
+function collectWeakWriteupIndexes(items = []) {
+  const { validateStrategicWriteup: validateWriteup } = require("./digest-data-enrich-result-runtime");
+  const weak = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const check = validateWriteup(item, item);
+    if (!check.ok) weak.push({ index, reasons: check.reasons.slice() });
+  }
+  return weak;
+}
+
+function mergeRepairedItems(baseItems = [], repairedItems = [], weakIndexes = []) {
+  const out = Array.isArray(baseItems) ? baseItems.map((item) => ({ ...item })) : [];
+  for (let i = 0; i < weakIndexes.length; i += 1) {
+    const targetIndex = Number(weakIndexes[i]?.index);
+    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= out.length) continue;
+    if (!repairedItems[i]) continue;
+    out[targetIndex] = {
+      ...out[targetIndex],
+      ...repairedItems[i],
+    };
+  }
+  return out;
+}
+
 function createDigestDataEnrichRuntime(deps) {
   const {
     CONFIG,
@@ -148,8 +173,53 @@ function createDigestDataEnrichRuntime(deps) {
     try {
       const enriched = parseJsonArrayLenient(res.body?.content?.[0]?.text || "[]");
       if (!Array.isArray(enriched)) throw new Error("Claude response was not a JSON array");
+      let normalized = normalizeEnrichedItems(items, enriched, { validateWriteups: true });
+      const weakIndexes = collectWeakWriteupIndexes(normalized);
+      if (weakIndexes.length > 0) {
+        log(`Claude writeup repair: retrying ${weakIndexes.length}/${items.length} weak item(s)`);
+        try {
+          const { buildDigestDataEnrichRepairPrompt: buildRepairPrompt } = require("./digest-data-enrich-prompt-runtime");
+          const repairItems = weakIndexes.map(({ index, reasons }) => ({
+            ...items[index],
+            failed_writeup_reasons: reasons,
+            prior_wim: normalized[index]?.wim || null,
+            prior_wim_brief: normalized[index]?.wim_brief || null,
+          }));
+          const repairRes = await httpsPostWithRetry(
+            "api.anthropic.com",
+            "/v1/messages",
+            {
+              "Content-Type": "application/json",
+              "x-api-key": CONFIG.keys.anthropic,
+              "anthropic-version": "2023-06-01",
+            },
+            {
+              model: enrichModel,
+              max_tokens: 2200,
+              messages: [{ role: "user", content: buildRepairPrompt(repairItems) }],
+            },
+            {
+              retries: providerPolicy.retries,
+              retryDelayMs: providerPolicy.retryDelayMs,
+              timeoutMs: providerPolicy.timeoutMs,
+              retryStatusCodes: providerPolicy.retryStatusCodes,
+            }
+          );
+          if (Number(repairRes?.status || 0) < 400) {
+            const repaired = parseJsonArrayLenient(repairRes.body?.content?.[0]?.text || "[]");
+            if (Array.isArray(repaired)) {
+              const repairedNormalized = normalizeEnrichedItems(repairItems, repaired, { validateWriteups: true });
+              normalized = mergeRepairedItems(normalized, repairedNormalized, weakIndexes);
+              usage.input_tokens += Number(repairRes.body?.usage?.input_tokens || 0);
+              usage.output_tokens += Number(repairRes.body?.usage?.output_tokens || 0);
+            }
+          }
+        } catch (err) {
+          log(`Claude writeup repair skipped: ${String(err?.message || err).slice(0, 180)}`);
+        }
+      }
       return {
-        items: normalizeEnrichedItems(items, enriched),
+        items: normalized,
         usage,
         degraded: false,
         degradation: null,

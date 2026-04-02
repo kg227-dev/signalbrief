@@ -41,14 +41,16 @@ assert.ok(!html.includes("Summary text."), "email item should not render raw sum
 assert.ok(!html.includes("Why included:"), "email item should not render why_shown text");
 assert.ok(!html.includes("Lower confidence"), "email item should not render lower-confidence badges in the active MVP email path");
 
-// summary fallback when wim is absent
+// deep mode should not masquerade source summary as why-it-matters copy
 const noWimHtml = emailItemsRuntime.renderDigestItemHtml({
   tag: "AI",
   headline: "Some headline",
   summary: "A short summary that describes the article.",
   wim: null,
+  wim_brief: "A tighter strategic fallback punchline.",
   source: "example.com",
   url: "https://example.com/article",
 }, 0, { depth: "headline_plus_why" });
-assert.ok(noWimHtml.includes("A short summary"), "email item should show summary when wim is absent");
+assert.ok(noWimHtml.includes("strategic fallback punchline"), "email item should fall back to wim_brief in deep mode");
+assert.ok(!noWimHtml.includes("A short summary"), "email item should not show source summary in deep mode when wim is absent");
 assert.ok(!noWimHtml.includes("Why it matters."), "email item should not show wim when it is null");

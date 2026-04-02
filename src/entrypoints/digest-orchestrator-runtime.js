@@ -3,12 +3,11 @@
 
 const fs = require("fs");
 const path = require("path");
-const { loadConfig } = require("../runtime/config-provider");
+const { loadConfig, getBaseUrl: loadBaseUrl } = require("../runtime/config-provider");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 let configCache = null;
 let emailTemplateCache = null;
-
 function getConfig() {
   if (!configCache) configCache = loadConfig();
   return configCache;
@@ -22,7 +21,7 @@ function getEmailTemplate() {
 }
 
 function getBaseUrl() {
-  return process.env.BASE_URL || "https://getsignalbrief.com";
+  return loadBaseUrl();
 }
 
 // Keep seam dependency explicit in this facade for contract verification.

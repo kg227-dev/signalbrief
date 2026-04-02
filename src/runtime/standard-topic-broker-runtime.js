@@ -2,6 +2,7 @@
 
 const path = require("path");
 
+const { MVP_TOPIC_TAGS, isMvpTopic } = require("../platform/config/mvp-topics");
 const { resolveSignalBriefRuntimePaths } = require("./runtime-state-paths-runtime");
 const { normalizeSourcePolicyDomain } = require("./source-policy-registry-runtime");
 const { classifyUrlShape } = require("../digest/runtime/digest-data-fetch-items-runtime");
@@ -9,17 +10,6 @@ const { normalizeTopicToken, topicsRelated, canonicalizeMvpTopicTag } = require(
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 512_000;
-// MVP topic set: 7 topics. Regulatory coverage now rolls into the closest sector topic;
-// surface through sector-specific official sources tagged to their relevant topics.
-const PHASE1_TOPIC_TAGS = new Set([
-  "HEALTHCARE",
-  "LIFE SCIENCES",
-  "TECHNOLOGY",
-  "ENERGY",
-  "FINANCIAL SERVICES",
-  "CONSUMER & RETAIL",
-  "INDUSTRIALS",
-]);
 const ALLOWED_LANES = new Set(["perplexity_discovery", "publisher_feed", "official"]);
 const ALLOWED_SOURCE_KINDS = new Set(["reported_media", "trade_specialist", "primary_official"]);
 const ALLOWED_CONTENT_KINDS = new Set(["article", "official_document", "filing"]);
@@ -444,7 +434,7 @@ function sanitizeTopicMap(rawTopics = {}) {
   const out = {};
   for (const [rawTag, rawConfig] of Object.entries(rawTopics && typeof rawTopics === "object" ? rawTopics : {})) {
     const tag = normalizeTopicTag(rawTag);
-    if (!tag || !PHASE1_TOPIC_TAGS.has(tag)) continue;
+    if (!isMvpTopic(tag)) continue;
     const cfg = rawConfig && typeof rawConfig === "object" ? rawConfig : {};
     const lanes = cfg.lanes && typeof cfg.lanes === "object" ? cfg.lanes : {};
     out[tag] = {
@@ -485,7 +475,7 @@ function sanitizeSource(source) {
   const endpoint = String(entry.endpoint || "").trim();
   const topicTags = Array.from(new Set((Array.isArray(entry.topic_tags) ? entry.topic_tags : [])
     .map(normalizeTopicTag)
-    .filter((tag) => PHASE1_TOPIC_TAGS.has(tag))));
+    .filter((tag) => isMvpTopic(tag))));
   const domains = Array.from(new Set((Array.isArray(entry.domains) ? entry.domains : [])
     .map((value) => normalizeSourcePolicyDomain(value))
     .filter(Boolean)));
@@ -539,7 +529,7 @@ function sanitizeBrokerConfig(rawConfig = {}) {
 function buildBrokerDomainList(config, topicTag, lane) {
   const normalizedTopicTag = normalizeTopicTag(topicTag);
   const normalizedLane = String(lane || "").trim();
-  if (!normalizedTopicTag || !PHASE1_TOPIC_TAGS.has(normalizedTopicTag)) return [];
+  if (!isMvpTopic(normalizedTopicTag)) return [];
   if (!ALLOWED_LANES.has(normalizedLane)) return [];
   if (!topicLaneEnabled(config, normalizedTopicTag, normalizedLane)) return [];
   const domains = [];
@@ -565,7 +555,7 @@ function buildBrokerDomainList(config, topicTag, lane) {
 function buildBrokerPreferredTopicEntriesFromConfig(configRaw) {
   const config = sanitizeBrokerConfig(configRaw || {});
   const topics = {};
-  for (const topicTag of PHASE1_TOPIC_TAGS) {
+  for (const topicTag of MVP_TOPIC_TAGS) {
     const reported = buildBrokerDomainList(config, topicTag, "publisher_feed");
     const official = buildBrokerDomainList(config, topicTag, "official");
     if (!reported.length && !official.length) continue;
@@ -579,7 +569,7 @@ function buildBrokerPreferredTopicEntriesFromConfig(configRaw) {
 
 function buildBrokerPreferredDomainShortlistFromConfig(config, options = {}) {
   const topicTag = normalizeTopicTag(options?.topicTag);
-  if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) return null;
+  if (!isMvpTopic(topicTag)) return null;
   const maxDomains = Math.max(1, Number(options?.maxDomains || 20));
   const officialDomains = buildBrokerDomainList(config, topicTag, "official");
   const reportedDomains = buildBrokerDomainList(config, topicTag, "publisher_feed");
@@ -597,7 +587,7 @@ function buildBrokerPreferredDomainShortlistFromConfig(config, options = {}) {
 
 function buildBrokerPreferredSourceFamilyShortlistsFromConfig(config, options = {}) {
   const topicTag = normalizeTopicTag(options?.topicTag);
-  if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) return null;
+  if (!isMvpTopic(topicTag)) return null;
   const maxDomains = Math.max(1, Number(options?.maxDomains || 20));
   const reportedDomains = buildBrokerDomainList(config, topicTag, "publisher_feed").slice(0, maxDomains);
   const officialDomains = buildBrokerDomainList(config, topicTag, "official").slice(0, maxDomains);
@@ -651,7 +641,7 @@ function matchPreferredSourceFromBrokerConfig(configRaw, sourceDomain, topicTag,
     }
   }
 
-  for (const candidateTopicTag of PHASE1_TOPIC_TAGS) {
+  for (const candidateTopicTag of MVP_TOPIC_TAGS) {
     const candidateTopicKey = normalizeTopicToken(candidateTopicTag);
     if (!candidateTopicKey) continue;
     if (normalizedTopic !== candidateTopicKey && !topicsRelated(normalizedTopic, candidateTopicKey)) continue;
@@ -1161,7 +1151,7 @@ function createStandardTopicBrokerRuntime(options = {}) {
 
   function updateBrokerTopicConfig(input = {}) {
     const topicTag = normalizeTopicTag(input?.topicTag || input?.topic);
-    if (!topicTag || !PHASE1_TOPIC_TAGS.has(topicTag)) {
+    if (!isMvpTopic(topicTag)) {
       throw new Error("valid standard-topic broker topic required");
     }
 

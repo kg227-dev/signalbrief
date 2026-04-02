@@ -1,5 +1,6 @@
 "use strict";
 
+const { MVP_TOPIC_TAGS, isMvpTopic } = require("../platform/config/mvp-topics");
 const { normalizeSourcePolicyDomain } = require("../runtime/source-policy-registry-runtime");
 const { canonicalizeMvpTopicTag } = require("../runtime/topic-normalization-runtime");
 const { scoreCandidate } = require("../domains/scoring/score-candidate");
@@ -25,19 +26,7 @@ const DEFAULT_RATE_LIMIT_BACKOFF_LEVEL_MAX = 3;
 const DEFAULT_MAX_DISCOVERY_CANDIDATE_SHARE = 0.2;
 const DEFAULT_RETENTION_HOURS_FOR_INVENTORY = 72;
 const STANDARD_ONLY_AGGRESSIVE_RUN_MODES = new Set(["standard_topics", "standard_phase1"]);
-// MVP topic set. Regulatory coverage surfaces under the closest sector topic
-// through sector official sources. CONSUMER & RETAIL and INDUSTRIALS added.
-const PHASE1_STANDARD_TOPIC_TAGS = new Set([
-  "HEALTHCARE",
-  "LIFE SCIENCES",
-  "TECHNOLOGY",
-  "ENERGY",
-  "FINANCIAL SERVICES",
-  "CONSUMER & RETAIL",
-  "INDUSTRIALS",
-]);
-// Alias — all standard-run paths use the same MVP set, preventing drift.
-const ALL_STANDARD_TOPIC_TAGS = PHASE1_STANDARD_TOPIC_TAGS;
+const PHASE1_STANDARD_TOPIC_TAGS = new Set(MVP_TOPIC_TAGS);
 const PHASE1_FOCUS_STANDARD_TOPIC_TAGS = new Set([
   "TECHNOLOGY",
   "ENERGY",
@@ -87,15 +76,7 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "procurement tariff trade industrial supply chain last 48 hours",
   ]),
 });
-const TRACKED_DEEP_STANDARD_TAGS = new Set([
-  "HEALTHCARE",
-  "LIFE SCIENCES",
-  "TECHNOLOGY",
-  "ENERGY",
-  "FINANCIAL SERVICES",
-  "CONSUMER & RETAIL",
-  "INDUSTRIALS",
-]);
+const TRACKED_DEEP_STANDARD_TAGS = new Set(MVP_TOPIC_TAGS);
 const FULL_EXHAUST_STANDARD_TAGS = new Set([
   "HEALTHCARE",
   "LIFE SCIENCES",
@@ -205,7 +186,7 @@ function buildAllStandardTagSet(dueUsers = [], normalizeTopicToken = (value) => 
   const focused = new Set();
   for (const topic of flattenDueUserTopics(dueUsers)) {
     const key = canonicalizeMvpTopicTag(topic) || String(normalized(topic) || "").trim().toUpperCase();
-    if (!key || !ALL_STANDARD_TOPIC_TAGS.has(key)) continue;
+    if (!isMvpTopic(key)) continue;
     focused.add(key);
   }
   return focused;

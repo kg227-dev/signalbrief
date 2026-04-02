@@ -1,14 +1,11 @@
 "use strict";
 
-const STANDARD_MVP_TOPIC_TAGS = Object.freeze([
-  "HEALTHCARE",
-  "LIFE SCIENCES",
-  "TECHNOLOGY",
-  "ENERGY",
-  "FINANCIAL SERVICES",
-  "CONSUMER & RETAIL",
-  "INDUSTRIALS",
-]);
+const {
+  MVP_TOPIC_TAGS,
+  isMvpTopic,
+} = require("../platform/config/mvp-topics");
+
+const STANDARD_MVP_TOPIC_TAGS = MVP_TOPIC_TAGS;
 
 function normalizeMatchText(value) {
   return String(value || "")
@@ -37,7 +34,7 @@ function canonicalizeMvpTopicTag(value) {
 }
 
 function isStandardMvpTopicTag(value) {
-  return Boolean(canonicalizeMvpTopicTag(value));
+  return isMvpTopic(canonicalizeMvpTopicTag(value));
 }
 
 const RELATED_TOPIC_GROUPS = Object.freeze([

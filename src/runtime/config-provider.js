@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
+const { MVP_TOPIC_TAGS } = require("../platform/config/mvp-topics");
 const { validateConfigSchema } = require("./config-schema-runtime");
 const {
-  STANDARD_MVP_TOPIC_TAGS,
   canonicalizeMvpTopicTag,
 } = require("./topic-normalization-runtime");
 
@@ -95,7 +95,7 @@ function normalizeMvpTopics(rawTopics) {
       queries: normalizeTopicQueries(rawTopic?.queries),
     });
   }
-  return STANDARD_MVP_TOPIC_TAGS
+  return MVP_TOPIC_TAGS
     .filter((tag) => byTag.has(tag))
     .map((tag) => byTag.get(tag));
 }

@@ -1,5 +1,10 @@
 "use strict";
 
+/**
+ * @module src/domains/digest
+ * Canonical digest domain aggregation surface for entrypoints and web runtime wiring.
+ * Import this barrel for digest-domain functionality; the topic domain stays lazy-loaded here to avoid circular imports.
+ */
 const digestPipeline = require("../../digest/application/digest-pipeline-seam-runtime");
 const digestPolicy = require("../../digest/domain/digest-policy-domain-runtime");
 const repeatDedup = require("../../digest/domain/repeat-dedup-domain-runtime");

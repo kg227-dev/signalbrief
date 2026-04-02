@@ -108,10 +108,7 @@ Concrete I/O implementations for data fetching, enrichment, formatting, and arch
 
 | File | Purpose | Output | Dependencies |
 |------|---------|--------|--------------|
-| `digest/runtime/digest-formatting-topic-runtime.js` | Composes visual and learning sub-runtimes into a single topic formatting factory | `{ topicVisual, formatTopicDisplay, buildLearningSummary }` | `./digest-formatting-topic-visual-runtime`, `./digest-formatting-topic-learning-runtime` |
-| `digest/runtime/digest-formatting-topic-display-runtime.js` | Converts a raw topic slug into a title-cased display label | Display label string | None |
-| `digest/runtime/digest-formatting-topic-learning-runtime.js` | Formats per-topic weight adjustments into a human-readable learning summary for digest headers | Summary string | `./digest-formatting-topic-display-runtime` |
-| `digest/runtime/digest-formatting-topic-visual-runtime.js` | Maps topic tokens to emoji/color visual identifiers; formats topics for display | `{ topicVisual, formatTopicDisplay }` | `./digest-formatting-topic-display-runtime` |
+| `digest/runtime/digest-formatting-topic-runtime.js` | Canonical topic formatting runtime: maps topic tokens to visuals, normalizes display labels, and renders learning summaries | `{ topicVisual, formatTopicDisplay, buildLearningSummary }` | Injected `normalizeTopicToken` |
 
 ### General
 

@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const { MVP_TOPIC_TAGS: STANDARD_MVP_TOPIC_TAGS } = require("../platform/config/mvp-topics");
 const { loadConfig } = require("../platform/config");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
@@ -120,15 +121,6 @@ const ROLLING_ZERO_VALUE_CAP_USD = parseFloat(process.env.ROLLING_ZERO_VALUE_CAP
 const DAILY_ZERO_VALUE_CAP_USD = parseFloat(process.env.DAILY_ZERO_VALUE_CAP_USD || "2.50");
 const ROLLING_ZERO_VALUE_WINDOW_HOURS = parseInt(process.env.ROLLING_ZERO_VALUE_WINDOW_HOURS || "6", 10);
 const DIGEST_LOCK_STALE_MS = Math.max(5 * 60 * 1000, Number(process.env.DIGEST_LOCK_STALE_MS || (2 * 60 * 60 * 1000)));
-const STANDARD_MVP_TOPIC_TAGS = Object.freeze([
-  "HEALTHCARE",
-  "LIFE SCIENCES",
-  "TECHNOLOGY",
-  "ENERGY",
-  "FINANCIAL SERVICES",
-  "CONSUMER & RETAIL",
-  "INDUSTRIALS",
-]);
 const sourceRegistryRuntime = createSourceRegistryRuntime({
   fs,
   path,

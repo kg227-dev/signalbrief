@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 "use strict";
 
+/**
+ * @module src/entrypoints/scheduler-worker
+ * Long-running scheduler worker entrypoint that manages heartbeat state and recurring digest triggers.
+ * Import this module for worker lifecycle helpers; execute it directly to run the scheduler daemon.
+ */
 const fs = require("fs");
 const path = require("path");
 const { resolveSignalBriefRuntimePaths } = require("../runtime/runtime-state-paths-runtime");

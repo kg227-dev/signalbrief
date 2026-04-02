@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * SignalBrief Web entrypoint.
- * Keeps process bootstrap separate from route/dependency runtime wiring.
+ * @module web/server
+ * Web server entrypoint that boots HTTP transport around `web/server-runtime`.
+ * Import this module for server startup in tests and tooling; execute it directly to run the web process.
  */
 
 const http = require("http");

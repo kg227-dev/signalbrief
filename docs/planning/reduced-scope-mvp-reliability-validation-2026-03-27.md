@@ -478,6 +478,29 @@ Scheduled run `scheduled:2026-04-02T11-00-33-622Z` executed on time. All 10 cana
 - **Promote FierceBiotech and FiercePharma**: both were upgraded to Tier 1 to improve Life Sciences quality and reduce dependence on FDA official feeds. Day 7 should confirm they win more of the selected set.
 - **Watch the remaining risk**: this patch prevents empty cards and lowers FDA weight, but it does not prove the scheduled writeup generator is healthy. If Day 7 still stores `wim=null`/`wim_brief=null` widely, the deeper enrichment/persistence bug remains open even if the user-facing blank-card symptom is masked.
 
+#### Day 7 Preflight Snapshot
+
+Completed on 2026-04-02 after deploy `445db94`.
+
+- **Live registry verified on production**: `healthcare_fda_press`, `healthcare_fda_medwatch`, `life_fda_drugs`, and `life_fda_biologics` are all Tier 3 in `/opt/signalbrief/app/config/standard-topic-broker-sources.json`.
+- **Live registry verified on production**: `life_fiercebiotech` and `life_fiercepharma` are both Tier 1 in `/opt/signalbrief/app/config/standard-topic-broker-sources.json`.
+- **Renderer fail-safe deployed**: deep-mode emails now render a summary paragraph when `wim` and `wim_brief` are both absent, so blank cards should not recur even if the scheduled writeup path still fails underneath.
+- **Validation command state**: `npm test`, `npm run smoke:worker`, and `npm run smoke:admin-scheduler` all passed against the deployed patch.
+
+#### Day 7 Morning Readout Checklist
+
+- Pull `GET /api/health/scheduler` before the send window and confirm `ok=true`, `blocked=false`.
+- Pull `GET /api/admin/digest-audit?date=2026-04-03` after the scheduled run.
+- Inspect the 10 canary digest records for `2026-04-03--scheduled.json`.
+- Spot-check at least the three deep canaries: `T1`, `T2`, and `M3`.
+
+#### Day 7 Expected Outcomes
+
+- **Deep body text**: no deep-mode card should ship with headline-only rendering. Every deep item should show `wim`, `wim_brief`, or a summary paragraph.
+- **Life Sciences source mix**: FierceBiotech, FiercePharma, STAT, Endpoints, and other trade sources should account for more of the 5 selected items; FDA should no longer dominate the set.
+- **Healthcare source mix**: FDA should appear only when it is clearly more useful than specialist trade reporting, not as routine filler.
+- **Failure threshold**: if Day 7 still stores widespread `wim=null` and `wim_brief=null`, treat the blank-card symptom as mitigated but the scheduled enrichment bug as still open.
+
 ### Day 7
 
 - [ ] Pre-send checks complete

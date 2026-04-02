@@ -43,7 +43,11 @@ Day 7 prep is now explicit: restore non-empty deep-mode body text even when sche
 
 ## Day 7 — 2026-04-03
 
-_Pending._
+Pending. Preflight is complete on production after deploy `445db94`: FDA official feeds are live at Tier 3, FierceBiotech/FiercePharma are live at Tier 1, and deep-mode emails now have a summary fallback so blank cards should not recur. The Day 7 decision points are straightforward:
+
+- do deep canaries show non-empty body text under every headline?
+- does FDA stop dominating Life Sciences / Healthcare selected sets?
+- do stored scheduled records still show mass-null `wim` / `wim_brief`, which would prove the deeper enrichment path is still broken underneath the renderer fix?
 
 ---
 

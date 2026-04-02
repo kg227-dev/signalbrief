@@ -44,6 +44,48 @@ function createDigestEmailItemsRuntime(deps) {
     return `${text.slice(0, cut).trimEnd()}…`;
   }
 
+  function splitSentences(value) {
+    return String(value || "")
+      .trim()
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+  }
+
+  function normalizeComparableText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  const DEEP_FALLBACK_LENSES = {
+    "HEALTHCARE": "For healthcare operators, this matters for care delivery, reimbursement exposure, and provider economics.",
+    "LIFE SCIENCES": "For life sciences teams, this matters for regulatory timing, development risk, and commercial potential.",
+    "TECHNOLOGY": "For technology operators, this matters for product roadmaps, infrastructure demand, and competitive positioning.",
+    "ENERGY": "For energy operators, this matters for power pricing, project economics, and regulatory exposure.",
+    "FINANCIAL SERVICES": "For financial services teams, this matters for funding costs, compliance exposure, and revenue mix.",
+    "CONSUMER & RETAIL": "For consumer operators, this matters for demand, pricing power, inventory, and channel strategy.",
+    "INDUSTRIALS": "For industrial teams, this matters for capacity, shipping flows, input costs, and operational execution.",
+  };
+
+  function buildDeepFallbackCopy(item) {
+    const decodedHeadline = decodeHtmlEntities(item?.headline || "");
+    const decodedSummary = decodeHtmlEntities(item?.summary || "");
+    const headlineKey = normalizeComparableText(decodedHeadline);
+    const summaryKey = normalizeComparableText(decodedSummary);
+    const lens = DEEP_FALLBACK_LENSES[String(item?.tag || "").trim()] || "For operators, this matters for near-term execution, economics, and competitive positioning.";
+    const leadSentences = splitSentences(decodedSummary);
+    const lead = leadSentences[0] || decodedSummary.trim();
+    const leadTrimmed = truncateAtWordBoundary(lead, 220);
+    if (!leadTrimmed || !summaryKey || summaryKey === headlineKey) {
+      return lens;
+    }
+    const leadWithPunctuation = /[.!?…]$/.test(leadTrimmed) ? leadTrimmed : `${leadTrimmed}.`;
+    return `${leadWithPunctuation} ${lens}`;
+  }
+
   const EMAIL_FLAG_LABELS = { earnings: "Earnings", guidance: "Guidance", m_and_a: "Deal", regulatory: "Regulatory", leadership: "Leadership", ipo: "IPO" };
 
   function renderEmailSourceBadge(tier) {
@@ -104,9 +146,12 @@ function createDigestEmailItemsRuntime(deps) {
       }
       const summary = String(item.summary || "").trim();
       if (!summary) return "";
-      const maxChars = isDeep ? 520 : 320;
-      const truncated = truncateAtWordBoundary(decodeHtmlEntities(summary), maxChars);
-      return `<div style="font-size:15px;color:#6B7280;line-height:1.65;margin-bottom:12px;">${escapeHtml(truncated)}</div>`;
+      const fallback = isDeep
+        ? buildDeepFallbackCopy(item)
+        : truncateAtWordBoundary(decodeHtmlEntities(summary), 320);
+      const color = isDeep ? "#111827" : "#6B7280";
+      const truncated = truncateAtWordBoundary(fallback, isDeep ? 420 : 320);
+      return `<div style="font-size:15px;color:${color};line-height:1.65;margin-bottom:12px;">${escapeHtml(truncated)}</div>`;
     })();
 
     const implHtml = (isDeep && item.implications)

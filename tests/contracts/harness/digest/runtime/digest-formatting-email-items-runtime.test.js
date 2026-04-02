@@ -65,3 +65,15 @@ const noWriteupHtml = emailItemsRuntime.renderDigestItemHtml({
   url: "https://example.com/healthcare",
 }, 0, { depth: "headline_plus_why" });
 assert.ok(noWriteupHtml.includes("A source summary should render"), "email item should fall back to summary in deep mode when no writeup fields are available");
+assert.ok(noWriteupHtml.includes("For healthcare operators"), "email item should add a strategic lens in deep mode when no writeup fields are available");
+
+const duplicateFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
+  tag: "LIFE SCIENCES",
+  headline: "Frequently requested or proactively posted drug-specific and other records",
+  summary: "Frequently requested or proactively posted drug-specific and other records",
+  wim: null,
+  wim_brief: null,
+  source: "fda.gov",
+  url: "https://example.com/fda",
+}, 0, { depth: "headline_plus_why" });
+assert.ok(duplicateFallbackHtml.includes("For life sciences teams"), "email item should use a strategic lens when summary duplicates the headline");

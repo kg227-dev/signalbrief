@@ -64,5 +64,21 @@ const deepSummaryFallbackHtml = runtime.renderDigestItemHtml({
 }, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
 
 assert.ok(deepSummaryFallbackHtml.includes("This summary should appear"), "deep emails should fall back to source summary when no why-it-matters fields are available");
+assert.ok(deepSummaryFallbackHtml.includes("For healthcare operators"), "deep emails should add a strategic lens when no why-it-matters fields are available");
+
+const duplicatedSummaryHtml = runtime.renderDigestItemHtml({
+  tag: "LIFE SCIENCES",
+  headline: "Frequently requested or proactively posted drug-specific and other records",
+  summary: "Frequently requested or proactively posted drug-specific and other records",
+  wim: null,
+  wim_brief: null,
+  source: "fda.gov",
+  source_tier: "premium",
+  published_date: "2026-04-01T10:00:00.000Z",
+  relevanceScore: 6.2,
+}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
+
+assert.ok(duplicatedSummaryHtml.includes("For life sciences teams"), "deep fallback should use a strategic lens when summary just repeats the headline");
+assert.ok(!duplicatedSummaryHtml.includes("Frequently requested or proactively posted drug-specific and other records</div><div"), "deep fallback should not just restate the headline as body text");
 
 console.log("email item rendering decodes HTML entities ✓");

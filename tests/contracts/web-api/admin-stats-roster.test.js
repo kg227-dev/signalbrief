@@ -50,6 +50,7 @@ const { buildAdminRoster } = require(TARGET_PATH);
       mode: "scheduled",
       date_et: "2026-03-21",
       run_at_utc: "2026-03-21T11:03:08.850Z",
+      digest_url: "https://getsignalbrief.com/digest/2026-03-21",
       sent_items: [
         { headline: "Story one", tag: "TECHNOLOGY", url: "https://example.com/1" },
         { headline: "Story two", tag: "AI TECH", url: "https://example.com/2" },
@@ -65,5 +66,6 @@ const { buildAdminRoster } = require(TARGET_PATH);
   assert.strictEqual(roster[0].last_digest, "2026-03-21");
   assert.strictEqual(roster[0].last_scheduled_digest, "2026-03-21");
   assert.strictEqual(roster[0].last_scheduled_digest_item_count, 2);
+  assert.strictEqual(roster[0].last_scheduled_digest_url, "https://getsignalbrief.com/digest/2026-03-21");
   assert.strictEqual(roster[0].last_digest_item_count, 2);
 })();

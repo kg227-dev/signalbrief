@@ -155,6 +155,7 @@ function buildAdminRosterEntry({
     ? (Array.isArray(anyRecentRow?.sent_items) ? anyRecentRow.sent_items : [])
     : (Array.isArray(user.last_digest_items) ? user.last_digest_items : []);
   const recentScheduledAt = String(recentScheduledRow?.run_at_utc || recentScheduledRow?.sent_at_utc || "").trim() || null;
+  const recentScheduledDigestUrl = String(recentScheduledRow?.digest_url || "").trim() || "";
   const qualityTrend = computeQualityTrend(user.quality_history || []);
   const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
   const daysLabel = formatDaysLabel(allowedDays);
@@ -186,6 +187,7 @@ function buildAdminRosterEntry({
     last_digest_preview: buildLastDigestPreview({ last_digest_items: effectiveLastDigestItems }),
     last_digest_item_count: effectiveLastDigestItems.length,
     last_scheduled_digest_item_count: Array.isArray(recentScheduledRow?.sent_items) ? recentScheduledRow.sent_items.length : 0,
+    last_scheduled_digest_url: recentScheduledDigestUrl,
     days_missed: user.status === "active" ? calcDaysMissed(effectiveLastDigestAt, allowedDays) : 0,
     delivery_time: formatDeliveryTimeLabel(prefs.delivery_time || "07:00"),
     delivery_time_raw: prefs.delivery_time || "07:00",

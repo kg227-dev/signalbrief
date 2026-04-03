@@ -119,6 +119,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
       buildSourceRegistryMap,
       setAdminSourceRegistry,
       buildRecentDigestsExport,
+      sourceRegistryPath,
       query: url.searchParams.get("query") || "",
       limit: parseLimitParam(url),
     });

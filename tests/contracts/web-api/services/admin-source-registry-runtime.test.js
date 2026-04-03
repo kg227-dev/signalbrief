@@ -257,6 +257,7 @@ const {
       recentDigestsCalls.push(options);
       return { rows, window: { all_time: true, days: null } };
     },
+    sourceRegistryPath: "/tmp/standard-topic-broker-sources.json",
     preferredSourcesPath: "/tmp/preferred-sources.json",
     query: "benzinga",
     limit: 10,
@@ -273,7 +274,14 @@ const {
   assert.strictEqual(overview.broker_config.topic_count, 1);
   assert.strictEqual(overview.broker_config.enabled_source_count, 2);
   assert.strictEqual(overview.broker_config.topics[0].topic_key, "healthcare");
+  assert.ok(Array.isArray(overview.broker_config.domains));
+  assert.strictEqual(overview.broker_config.domains[0].domain, "fda.gov");
   assert.strictEqual(overview.broker_config.sources[0].id, "fda_rss");
+  assert.strictEqual(overview.governance_registry.source_of_truth, "standard_topic_broker.governance");
+  assert.strictEqual(overview.governance_registry.active_path, "/tmp/standard-topic-broker-sources.json");
+  assert.strictEqual(overview.governance_registry.domain_count, 1);
+  assert.strictEqual(overview.governance_registry.identity_count, 1);
+  assert.strictEqual(overview.governance_registry.is_effectively_empty, false);
   assert.strictEqual(overview.curation_queues.specialist_candidates[0].domain, "pharmavoice.com");
   assert.strictEqual(overview.curation_queues.derivative_winners[0].domain, "benzinga.com");
   assert.strictEqual(overview.curation_queues.platform_ambiguity[0].domain, "youtube.com");

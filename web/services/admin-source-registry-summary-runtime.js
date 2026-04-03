@@ -107,6 +107,9 @@ function summarizeBrokerConfig(inspectStandardTopicBrokerConfig) {
       source_kind: String(source?.source_kind || "").trim(),
       source_family: String(source?.source_family || "").trim(),
       endpoint: String(source?.endpoint || "").trim(),
+      title_include_pattern_count: Array.isArray(source?.title_include_patterns) ? source.title_include_patterns.length : 0,
+      title_exclude_pattern_count: Array.isArray(source?.title_exclude_patterns) ? source.title_exclude_patterns.length : 0,
+      url_exclude_pattern_count: Array.isArray(source?.url_exclude_patterns) ? source.url_exclude_patterns.length : 0,
     }))
     .filter((source) => source.id)
     .sort((left, right) => {
@@ -144,6 +147,59 @@ function summarizeBrokerConfig(inspectStandardTopicBrokerConfig) {
     })
     .sort((left, right) => String(left.topic_key || "").localeCompare(String(right.topic_key || "")));
 
+  const domainMap = new Map();
+  sources.forEach((source) => {
+    const domains = Array.isArray(source.domains) ? source.domains : [];
+    domains.forEach((domain) => {
+      const key = String(domain || "").trim().toLowerCase();
+      if (!key) return;
+      const existing = domainMap.get(key) || {
+        domain: key,
+        source_count: 0,
+        enabled_source_count: 0,
+        disabled_source_count: 0,
+        tier_counts: { 1: 0, 2: 0, 3: 0 },
+        topics: new Set(),
+        lanes: new Set(),
+        source_ids: [],
+        filter_source_count: 0,
+      };
+      existing.source_count += 1;
+      if (source.enabled !== false) existing.enabled_source_count += 1;
+      else existing.disabled_source_count += 1;
+      if ([1, 2, 3].includes(Number(source.tier || 0))) existing.tier_counts[Number(source.tier)] += 1;
+      existing.source_ids.push(source.id);
+      existing.lanes.add(String(source.lane || "").trim());
+      (Array.isArray(source.topic_keys) ? source.topic_keys : []).forEach((topicKey) => {
+        const normalizedTopic = String(topicKey || "").trim();
+        if (normalizedTopic) existing.topics.add(normalizedTopic);
+      });
+      const filterCount = Math.max(
+        0,
+        Number(source.title_include_pattern_count || 0)
+        + Number(source.title_exclude_pattern_count || 0)
+        + Number(source.url_exclude_pattern_count || 0)
+      );
+      if (filterCount > 0) existing.filter_source_count += 1;
+      domainMap.set(key, existing);
+    });
+  });
+
+  const domains = Array.from(domainMap.values())
+    .map((entry) => ({
+      domain: entry.domain,
+      source_count: entry.source_count,
+      enabled_source_count: entry.enabled_source_count,
+      disabled_source_count: entry.disabled_source_count,
+      tier_counts: entry.tier_counts,
+      topics: Array.from(entry.topics).sort((left, right) => left.localeCompare(right)),
+      lanes: Array.from(entry.lanes).sort((left, right) => left.localeCompare(right)),
+      source_ids: entry.source_ids.slice().sort((left, right) => left.localeCompare(right)),
+      filter_source_count: entry.filter_source_count,
+      effective_policy: explainSourcePolicy(entry.domain),
+    }))
+    .sort((left, right) => String(left.domain || "").localeCompare(String(right.domain || "")));
+
   return {
     source_of_truth: "standard_topic_broker",
     source_mode: String(snapshot?.source_mode || "runtime").trim() || "runtime",
@@ -155,6 +211,7 @@ function summarizeBrokerConfig(inspectStandardTopicBrokerConfig) {
     enabled_source_count: sources.filter((source) => source.enabled !== false).length,
     topics,
     sources,
+    domains,
   };
 }
 

@@ -166,6 +166,43 @@ body.dark .curation-queue-card { background:rgba(255,255,255,0.03); }
   display:inline-flex; align-items:center; justify-content:center; min-width:28px; padding:4px 8px;
   border-radius:999px; background:var(--accent-light); color:var(--accent); font-size:11px; font-weight:700;
 }
+.source-truth-grid {
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:14px;
+}
+.source-truth-card {
+  border:1px solid var(--border-subtle); border-radius:10px; background:#FAFAFB; padding:14px;
+}
+body.dark .source-truth-card { background:rgba(255,255,255,0.03); }
+.source-truth-kicker {
+  font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary);
+}
+.source-truth-headline {
+  margin-top:8px; font-size:18px; font-weight:700; color:var(--text);
+}
+.source-truth-copy, .source-truth-line {
+  margin-top:6px; font-size:12px; color:var(--text-secondary); line-height:1.5;
+}
+.source-highlight-list {
+  display:flex; flex-direction:column; gap:10px; margin-top:12px;
+}
+.source-highlight-item {
+  padding-top:10px; border-top:1px solid var(--border-subtle);
+}
+.source-highlight-item:first-child {
+  padding-top:0; border-top:none;
+}
+.source-highlight-item-title {
+  font-size:12px; font-weight:700; color:var(--text);
+}
+.source-highlight-item-copy {
+  margin-top:4px; font-size:11px; color:var(--text-secondary); line-height:1.45;
+}
+.source-highlight-empty {
+  margin-top:10px; font-size:12px; color:var(--text-secondary);
+}
+.broker-pill-row {
+  display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;
+}
 .toast-wrap {
   position:fixed; right:20px; bottom:20px; z-index:1000; display:flex; flex-direction:column; gap:10px; max-width:min(360px, calc(100vw - 32px));
 }
@@ -202,6 +239,7 @@ body.dark .modal-close { background:var(--card); }
   .layout-grid { grid-template-columns:1fr; }
   .preferred-summary-grid { grid-template-columns:1fr; }
   .curation-queue-grid { grid-template-columns:1fr; }
+  .source-truth-grid { grid-template-columns:1fr; }
 }
 </style>
 </head>
@@ -281,13 +319,24 @@ body.dark .modal-close { background:var(--card); }
     <div id="curationQueuesPanelBody" class="empty">Loading curation queues…</div>
   </div>
 
+  <div class="card" style="margin-bottom:28px;">
+    <div class="section-head">
+      <div>
+        <div class="section-title" style="margin-bottom:0;">Source-of-truth status</div>
+        <div class="section-subcopy">Broker roster state is live. Governance overrides are embedded in that same broker file, so empty governance counts do not mean the broker roster is stale.</div>
+      </div>
+    </div>
+    <div id="sourceOfTruthPanelBody" class="empty">Loading source-of-truth status…</div>
+  </div>
+
   <div class="table-toolbar" style="margin-bottom:10px;">
     <div>
       <div class="section-title" style="margin-bottom:0;">Source governance (all tracked history)</div>
+      <div class="table-meta" style="margin-top:3px;">This table now merges broker roster state, tracked digest metrics, and explicit governance overrides.</div>
       <div id="suggestionsCount" class="table-meta" style="margin-top:3px;"></div>
     </div>
     <div class="table-toolbar-controls">
-      <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, reason, or note…" oninput="filterSuggestions()">
+      <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, broker source id, reason, or note…" oninput="filterSuggestions()">
       <button class="table-action-link" type="button" onclick="exportSuggestionsCSV()">Export CSV</button>
     </div>
   </div>
@@ -658,6 +707,210 @@ function renderCurationQueues(overview) {
       </div>
     </div>`;
 }
+function buildBrokerDomainMap(brokerConfig) {
+  const out = new Map();
+  const domainSummaries = Array.isArray(brokerConfig?.domains) ? brokerConfig.domains : [];
+  domainSummaries.forEach((entry) => {
+    const normalizedDomain = String(entry?.domain || "").trim().toLowerCase();
+    if (!normalizedDomain) return;
+    out.set(normalizedDomain, {
+      domain: normalizedDomain,
+      source_ids: [],
+      active_source_count: 0,
+      disabled_source_count: 0,
+      tier_counts: { 1: 0, 2: 0, 3: 0 },
+      topics: new Set(),
+      lanes: new Set(),
+      filter_source_ids: [],
+      sources: [],
+      effective_policy: entry?.effective_policy || null,
+    });
+  });
+  const sources = Array.isArray(brokerConfig?.sources) ? brokerConfig.sources : [];
+  sources.forEach((source) => {
+    const domains = Array.isArray(source?.domains) ? source.domains : [];
+    domains.forEach((domain) => {
+      const normalizedDomain = String(domain || "").trim().toLowerCase();
+      if (!normalizedDomain) return;
+      const existing = out.get(normalizedDomain) || {
+        domain: normalizedDomain,
+        source_ids: [],
+        active_source_count: 0,
+        disabled_source_count: 0,
+        tier_counts: { 1: 0, 2: 0, 3: 0 },
+        topics: new Set(),
+        lanes: new Set(),
+        filter_source_ids: [],
+        sources: [],
+        effective_policy: null,
+      };
+      const tier = Number(source?.tier || 2);
+      const filterCount = Math.max(
+        0,
+        Number(source?.title_include_pattern_count || 0)
+        + Number(source?.title_exclude_pattern_count || 0)
+        + Number(source?.url_exclude_pattern_count || 0)
+      );
+      existing.source_ids.push(String(source?.id || "").trim());
+      if (source?.enabled !== false) existing.active_source_count += 1;
+      else existing.disabled_source_count += 1;
+      if ([1, 2, 3].includes(tier)) existing.tier_counts[tier] += 1;
+      existing.lanes.add(brokerLaneLabel(source?.lane));
+      (Array.isArray(source?.topic_keys) ? source.topic_keys : []).forEach((topic) => {
+        const normalizedTopic = String(topic || "").trim();
+        if (normalizedTopic) existing.topics.add(normalizedTopic);
+      });
+      if (filterCount > 0) existing.filter_source_ids.push(String(source?.id || "").trim());
+      existing.sources.push({
+        id: String(source?.id || "").trim(),
+        enabled: source?.enabled !== false,
+        tier,
+        lane: brokerLaneLabel(source?.lane),
+        topics: Array.isArray(source?.topic_keys) ? source.topic_keys.slice() : [],
+        filter_count: filterCount,
+      });
+      out.set(normalizedDomain, existing);
+    });
+  });
+  return out;
+}
+function formatBrokerTierCounts(summary) {
+  if (!summary) return "No broker sources";
+  const parts = [];
+  if (summary.tier_counts?.[1] > 0) parts.push(`T1 ${summary.tier_counts[1]}`);
+  if (summary.tier_counts?.[2] > 0) parts.push(`T2 ${summary.tier_counts[2]}`);
+  if (summary.tier_counts?.[3] > 0) parts.push(`T3 ${summary.tier_counts[3]}`);
+  return parts.length ? parts.join(" · ") : "No tiered broker sources";
+}
+function formatBrokerSourceSummary(summary) {
+  if (!summary) return "No broker roster entry";
+  const lanes = Array.from(summary.lanes || []).slice(0, 2).join(", ") || "unknown lane";
+  const topics = Array.from(summary.topics || []).slice(0, 3).join(", ") || "no topic";
+  return `${Math.max(0, Number(summary.active_source_count || 0))} active · ${formatBrokerTierCounts(summary)} · ${lanes} · ${topics}`;
+}
+function getBrokerSummaryValues(summary, key) {
+  const value = summary?.[key];
+  if (Array.isArray(value)) return value;
+  if (value && typeof value[Symbol.iterator] === "function") return Array.from(value);
+  return [];
+}
+function buildBrokerHighlightGroups(brokerConfig) {
+  const sources = (Array.isArray(brokerConfig?.sources) ? brokerConfig.sources : []).slice();
+  const sortById = (left, right) => String(left?.id || "").localeCompare(String(right?.id || ""));
+  const describeSource = (source) => {
+    const topicText = (Array.isArray(source?.topic_keys) ? source.topic_keys : []).slice(0, 2).join(", ") || "no topic";
+    const parts = [`tier ${Number(source?.tier || 2)}`, brokerLaneLabel(source?.lane), topicText];
+    const filterCount = Math.max(
+      0,
+      Number(source?.title_include_pattern_count || 0)
+      + Number(source?.title_exclude_pattern_count || 0)
+      + Number(source?.url_exclude_pattern_count || 0)
+    );
+    if (filterCount > 0) parts.push(`${filterCount} filter${filterCount === 1 ? "" : "s"}`);
+    return {
+      title: String(source?.id || "unknown").trim() || "unknown",
+      copy: parts.join(" · "),
+    };
+  };
+  return [
+    {
+      title: "Tier 1 broker sources",
+      copy: "Current highest-priority broker entries exposed directly from the live broker config.",
+      items: sources
+        .filter((source) => source?.enabled !== false && Number(source?.tier || 0) === 1)
+        .sort(sortById)
+        .slice(0, 6)
+        .map(describeSource),
+    },
+    {
+      title: "Supplemental official sources",
+      copy: "Official broker entries currently set to tier 3, which is where constrained regulator feeds show up.",
+      items: sources
+        .filter((source) => source?.enabled !== false && source?.lane === "official" && Number(source?.tier || 0) === 3)
+        .sort(sortById)
+        .slice(0, 6)
+        .map(describeSource),
+    },
+    {
+      title: "Filtered broker feeds",
+      copy: "Broker sources carrying include or exclude patterns, which is where title junk suppression is visible.",
+      items: sources
+        .filter((source) => {
+          const filterCount = Math.max(
+            0,
+            Number(source?.title_include_pattern_count || 0)
+            + Number(source?.title_exclude_pattern_count || 0)
+            + Number(source?.url_exclude_pattern_count || 0)
+          );
+          return filterCount > 0;
+        })
+        .sort(sortById)
+        .slice(0, 6)
+        .map(describeSource),
+    },
+  ];
+}
+function renderBrokerHighlightGroups(brokerConfig) {
+  const groups = buildBrokerHighlightGroups(brokerConfig);
+  return groups.map((group) => `
+    <div class="source-truth-card">
+      <div class="source-truth-kicker">${esc(group.title)}</div>
+      <div class="source-truth-copy">${esc(group.copy)}</div>
+      ${group.items.length ? `
+        <div class="source-highlight-list">
+          ${group.items.map((item) => `
+            <div class="source-highlight-item">
+              <div class="source-highlight-item-title mono">${esc(item.title)}</div>
+              <div class="source-highlight-item-copy">${esc(item.copy)}</div>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="source-highlight-empty">No matching broker sources.</div>`}
+    </div>
+  `).join("");
+}
+function renderSourceOfTruthSummary(overview) {
+  const container = document.getElementById("sourceOfTruthPanelBody");
+  if (!container) return;
+  const brokerConfig = overview?.broker_config || null;
+  const governance = overview?.governance_registry || null;
+  if (!brokerConfig || typeof brokerConfig !== "object") {
+    container.innerHTML = `<div class="empty">Broker source-of-truth details unavailable.</div>`;
+    return;
+  }
+  const brokerMode = String(brokerConfig?.source_mode || "runtime").trim();
+  const brokerModeLabel = brokerMode === "bundled" ? "Bundled broker config" : "Runtime broker config";
+  const governanceHeadline = governance
+    ? `${Math.max(0, Number(governance.domain_count || 0))} domains · ${Math.max(0, Number(governance.identity_count || 0))} identities`
+    : "No governance data";
+  const governanceCopy = governance?.is_effectively_empty === true
+    ? "Governance overrides are effectively empty right now, so the tables below lean on tracked metrics unless you create an explicit override."
+    : "Governance overrides live inside the active broker file and are applied on top of the broker roster.";
+  container.innerHTML = `
+    <div class="source-truth-grid">
+      <div class="source-truth-card">
+        <div class="source-truth-kicker">Broker roster</div>
+        <div class="source-truth-headline">${esc(brokerModeLabel)}</div>
+        <div class="source-truth-copy">Live source control plane at ${brokerConfig.active_path ? `<span class="mono">${esc(brokerConfig.active_path)}</span>` : "an unavailable path"}.</div>
+        <div class="source-truth-line">${Math.max(0, Number(brokerConfig.topic_count || 0))} topics · ${Math.max(0, Number(brokerConfig.source_count || 0))} sources · ${Math.max(0, Number(brokerConfig.enabled_source_count || 0))} active</div>
+      </div>
+      <div class="source-truth-card">
+        <div class="source-truth-kicker">Governance overrides</div>
+        <div class="source-truth-headline">${esc(governanceHeadline)}</div>
+        <div class="source-truth-copy">${esc(governanceCopy)}</div>
+        <div class="source-truth-line">${governance?.updated_at ? `Last updated ${esc(formatEtTimestamp(governance.updated_at))}` : "No saved governance update yet."}</div>
+      </div>
+      <div class="source-truth-card">
+        <div class="source-truth-kicker">Main table coverage</div>
+        <div class="source-truth-headline">${Math.max(0, Number(overview?.suggestion_count || 0))} tracked suggestions</div>
+        <div class="source-truth-copy">${Math.max(0, Number(overview?.override_count || 0))} direct governance override${Number(overview?.override_count || 0) === 1 ? "" : "s"} plus broker-only domains from the live roster now surface below.</div>
+        <div class="source-truth-line">Search by domain, broker source id, tracked reason, or governance note.</div>
+      </div>
+    </div>
+    <div class="source-truth-grid">
+      ${renderBrokerHighlightGroups(brokerConfig)}
+    </div>`;
+}
 const SUGGESTION_POLICY_SORT_ORDER = Object.freeze({
   preferred: 0,
   allowed: 1,
@@ -794,31 +1047,66 @@ function getTopicFitSortScore(topicFit) {
   }
   return score;
 }
+function getBrokerRosterReason(row) {
+  const summary = row?.broker_summary || null;
+  if (!summary) return "";
+  if (summary.filter_source_ids && summary.filter_source_ids.length) {
+    return `Broker roster source with ${summary.filter_source_ids.length} filtered feed${summary.filter_source_ids.length === 1 ? "" : "s"}`;
+  }
+  return `Broker roster source (${Math.max(0, Number(summary.active_source_count || 0))} active)`;
+}
 function getGovernanceReasonText(row) {
   const overrideNote = String(row?.admin_override?.note || row?.note || "").trim();
   if (overrideNote) return overrideNote;
-  return String(row?.suggested_reason || "Tracked source activity");
+  const suggestedReason = String(row?.suggested_reason || "").trim();
+  if (suggestedReason) return suggestedReason;
+  const brokerReason = getBrokerRosterReason(row);
+  if (brokerReason) return brokerReason;
+  return "Tracked source activity";
+}
+function renderBrokerSourceBadge(source) {
+  const label = String(source?.id || "").trim() || "unknown";
+  const tier = [1, 2, 3].includes(Number(source?.tier || 0)) ? `T${Number(source.tier)}` : "T?";
+  const filterText = Number(source?.filter_count || 0) > 0 ? ` · ${Number(source.filter_count)}f` : "";
+  const tone = source?.enabled !== false ? "var(--accent)" : "var(--text-secondary)";
+  const bg = source?.enabled !== false ? "var(--accent-light)" : "rgba(0,0,0,0.05)";
+  return `<span style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:${bg};color:${tone};font-size:11px;font-weight:600;">${esc(label)} · ${tier}${filterText}</span>`;
+}
+function renderBrokerRosterCell(row) {
+  const summary = row?.broker_summary || null;
+  if (!summary) return `<td style="font-size:12px;color:var(--text-secondary);">Not in live broker roster.</td>`;
+  const topics = Array.from(summary.topics || []).slice(0, 3).join(", ") || "—";
+  return `<td style="font-size:12px;color:var(--text-2);">
+    ${esc(formatBrokerSourceSummary(summary))}
+    <div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">topics ${esc(topics)}</div>
+    <div class="broker-pill-row">${summary.sources.slice(0, 3).map(renderBrokerSourceBadge).join("")}</div>
+  </td>`;
 }
 function buildGovernanceRows(overview) {
   const suggestions = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
   const overrides = Array.isArray(overview?.overrides) ? overview.overrides : [];
+  const brokerDomainMap = buildBrokerDomainMap(overview?.broker_config || null);
   const rowsByDomain = new Map();
 
   suggestions.forEach((row) => {
-    const domain = String(row?.domain || "").trim();
+    const domain = String(row?.domain || "").trim().toLowerCase();
     if (!domain) return;
+    const brokerSummary = brokerDomainMap.get(domain) || null;
     rowsByDomain.set(domain, {
       ...row,
       domain,
       admin_override: row?.admin_override || null,
+      broker_summary: brokerSummary,
+      effective_policy: row?.effective_policy || brokerSummary?.effective_policy || {},
     });
   });
 
   overrides.forEach((override) => {
-    const domain = String(override?.domain || "").trim();
+    const domain = String(override?.domain || "").trim().toLowerCase();
     if (!domain) return;
     const existing = rowsByDomain.get(domain) || {};
     const recent = override?.recent_metrics || {};
+    const brokerSummary = existing.broker_summary || brokerDomainMap.get(domain) || null;
     rowsByDomain.set(domain, {
       ...existing,
       domain,
@@ -832,11 +1120,30 @@ function buildGovernanceRows(overview) {
       top_tags: Array.isArray(existing.top_tags) && existing.top_tags.length
         ? existing.top_tags
         : (Array.isArray(recent.top_tags) ? recent.top_tags : []),
-      effective_policy: override?.effective_policy || existing.effective_policy || {},
+      effective_policy: override?.effective_policy || existing.effective_policy || brokerSummary?.effective_policy || {},
       admin_override: override,
       suggested_reason: existing.suggested_reason || "Active source override",
       updated_at: String(override?.updated_at || existing.updated_at || "").trim() || null,
       updated_by: String(override?.updated_by || existing.updated_by || "").trim() || "",
+      broker_summary: brokerSummary,
+    });
+  });
+
+  brokerDomainMap.forEach((summary, domain) => {
+    const existing = rowsByDomain.get(domain) || {};
+    rowsByDomain.set(domain, {
+      ...existing,
+      domain,
+      send_count: existing.send_count != null ? existing.send_count : 0,
+      weak_source_item_count: existing.weak_source_item_count != null ? existing.weak_source_item_count : 0,
+      poor_digest_item_count: existing.poor_digest_item_count != null ? existing.poor_digest_item_count : 0,
+      top_tags: Array.isArray(existing.top_tags) ? existing.top_tags : [],
+      effective_policy: existing.effective_policy && Object.keys(existing.effective_policy).length
+        ? existing.effective_policy
+        : (summary.effective_policy || {}),
+      admin_override: existing.admin_override || null,
+      suggested_reason: existing.suggested_reason || "",
+      broker_summary: summary,
     });
   });
 
@@ -848,11 +1155,11 @@ function getSuggestionSortValue(row, key) {
     case "domain":
       return String(row?.domain || "").toLowerCase();
     case "classification":
-      return String(formatSourceClassificationSummary(effective) || "").toLowerCase();
+      return String(formatBrokerSourceSummary(row?.broker_summary || null) || formatSourceClassificationSummary(effective) || "").toLowerCase();
     case "policy":
       return Number(SUGGESTION_POLICY_SORT_ORDER[String(effective?.source_policy || "").trim().toLowerCase()] ?? 99);
     case "tracked_sends":
-      return Math.max(0, Number(row?.send_count || 0));
+      return Math.max(0, Number(row?.send_count || 0)) * 100 + Math.max(0, Number(row?.broker_summary?.active_source_count || 0));
     case "review_state":
       return Number(SUGGESTION_REVIEW_SORT_ORDER[String(effective?.review_status || "").trim().toLowerCase()] ?? 99);
     case "topic_fit":
@@ -887,12 +1194,12 @@ function renderSuggestionsHeaderRow() {
   if (!row) return;
   row.innerHTML = [
     renderSuggestionsSortHeader("Domain", "domain"),
-    renderSuggestionsSortHeader("Classification", "classification"),
-    renderSuggestionsSortHeader("Policy", "policy"),
+    renderSuggestionsSortHeader("Broker roster", "classification"),
+    renderSuggestionsSortHeader("Governance policy", "policy"),
     renderSuggestionsSortHeader("Tracked sends", "tracked_sends"),
     renderSuggestionsSortHeader("Review state", "review_state"),
     renderSuggestionsSortHeader("Topic fit", "topic_fit"),
-    renderSuggestionsSortHeader("Reason", "reason"),
+    renderSuggestionsSortHeader("Why surfaced", "reason"),
   ].join("");
 }
 function toggleSuggestionsSort(key) {
@@ -953,6 +1260,9 @@ function renderSuggestionReasonCell(row) {
   const overrideMeta = override
     ? `Override active${override.updated_at ? ` · ${formatEtTimestamp(override.updated_at)}` : ""}${override.updated_by ? ` · ${override.updated_by}` : ""}`
     : "";
+  const brokerMeta = row?.broker_summary
+    ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">Broker ${Math.max(0, Number(row.broker_summary.active_source_count || 0))} active · ${formatBrokerTierCounts(row.broker_summary)}</div>`
+    : "";
   const surfacedReason = override && row?.suggested_reason
     ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">Surfaced because: ${esc(row.suggested_reason)}</div>`
     : "";
@@ -962,14 +1272,14 @@ function renderSuggestionReasonCell(row) {
         <div id="${getSourceAuditElementId(row.domain)}" style="display:none;margin-top:8px;font-size:11px;color:var(--text-secondary);"></div>
       </div>`
     : "";
-  return `<td style="font-size:12px;color:var(--text-2);">${esc(reason)}${overrideMeta ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(overrideMeta)}</div>` : ""}${surfacedReason}${auditControl}</td>`;
+  return `<td style="font-size:12px;color:var(--text-2);">${esc(reason)}${overrideMeta ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(overrideMeta)}</div>` : ""}${brokerMeta}${surfacedReason}${auditControl}</td>`;
 }
 function renderSuggestionRow(row) {
   const effective = row.effective_policy || {};
   return `<tr>
     <td><button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button></td>
-    <td style="font-size:12px;color:var(--text-2);">${esc(formatSourceClassificationSummary(effective))}<div style="margin-top:4px;">${renderSourceTierPill(effective.source_tier, effective.hard_block)}</div></td>
-    <td>${renderPolicyPill(effective.source_policy)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatRankingEffectSummary(effective.policy_effects))}</div></td>
+    ${renderBrokerRosterCell(row)}
+    <td>${renderPolicyPill(effective.source_policy)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatSourceClassificationSummary(effective))}</div><div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatRankingEffectSummary(effective.policy_effects))}</div></td>
     <td class="mono">${Math.max(0, Number(row.send_count || 0))}</td>
     <td>${renderReviewPill(effective.review_status)}<div style="margin-top:4px;font-size:11px;color:${Number(row.weak_source_item_count || 0) > 0 ? "var(--red)" : "var(--text-secondary)"};">weak exposure ${Math.max(0, Number(row.weak_source_item_count || 0))}</div></td>
     <td style="font-size:12px;color:var(--text-secondary);">${esc(formatTopicFitSummary(effective.topic_fit_map))}</td>
@@ -987,6 +1297,8 @@ function filterSuggestions() {
   renderSuggestionsHeaderRow();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
+    getBrokerSummaryValues(r?.broker_summary, "source_ids").join(" ").toLowerCase().includes(q) ||
+    getBrokerSummaryValues(r?.broker_summary, "topics").join(" ").toLowerCase().includes(q) ||
     getGovernanceReasonText(r).toLowerCase().includes(q) ||
     (r.suggested_reason || "").toLowerCase().includes(q) ||
     (r.admin_override?.note || "").toLowerCase().includes(q) ||
@@ -996,7 +1308,7 @@ function filterSuggestions() {
   if (!body) return;
   body.innerHTML = sortedRows.length
     ? sortedRows.map(renderSuggestionRow).join("")
-    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No tracked or overridden sources yet."}</td></tr>`;
+    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No broker, tracked, or overridden sources yet."}</td></tr>`;
   if (countEl) countEl.textContent = q
     ? `${sortedRows.length} of ${_allSuggestions.length} sources`
     : `${_allSuggestions.length} source${_allSuggestions.length !== 1 ? "s" : ""}`;
@@ -1031,29 +1343,44 @@ function exportSuggestionsCSV() {
   const q = (document.getElementById("suggestionsSearch")?.value || "").toLowerCase().trim();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
+    getBrokerSummaryValues(r?.broker_summary, "source_ids").join(" ").toLowerCase().includes(q) ||
+    getBrokerSummaryValues(r?.broker_summary, "topics").join(" ").toLowerCase().includes(q) ||
     getGovernanceReasonText(r).toLowerCase().includes(q) ||
     (r.suggested_reason || "").toLowerCase().includes(q)
   ) : _allSuggestions;
-  const header = ["Domain","Source Type","Policy","Review Status","Legacy Tier","Authority","Tracked Sends","Weak Exposure","Topic Fit","Reason","Suggested Reason","Override Updated","Override By"];
+  const header = ["Domain","Broker Sources","Broker Topics","Broker Tier Counts","Source Type","Policy","Review Status","Legacy Tier","Authority","Tracked Sends","Weak Exposure","Topic Fit","Reason","Suggested Reason","Override Updated","Override By"];
   const csv = [header, ...rows.map(r => {
     const e = r.effective_policy || {};
-    return [r.domain||"", e.source_type||"", e.source_policy||"", e.review_status||"", e.source_tier||"",
+    const broker = r.broker_summary || null;
+    return [
+      r.domain || "",
+      getBrokerSummaryValues(broker, "source_ids").join(" | "),
+      getBrokerSummaryValues(broker, "topics").join(" | "),
+      broker ? formatBrokerTierCounts(broker) : "",
+      e.source_type || "",
+      e.source_policy || "",
+      e.review_status || "",
+      e.source_tier || "",
       e.source_authority!=null?Number(e.source_authority).toFixed(2):"",
       Math.max(0,Number(r.send_count||0)), Math.max(0,Number(r.weak_source_item_count||0)),
       formatTopicFitSummary(e.topic_fit_map),
       getGovernanceReasonText(r),
-      r.suggested_reason||"Tracked source activity",
+      r.suggested_reason||getBrokerRosterReason(r)||"Tracked source activity",
       formatEtTimestamp(r.admin_override?.updated_at || r.updated_at),
-      r.admin_override?.updated_by || r.updated_by || ""];
+      r.admin_override?.updated_by || r.updated_by || "",
+    ];
   })].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   downloadCSV(csv, "source-governance.csv");
 }
 function renderSourceRegistryInspector(detail, overview) {
   const container = document.getElementById("sourceRegistryInspector");
   if (!container) return;
-  const sourcePath = overview && overview.source_registry_path ? `Registry file: ${overview.source_registry_path}` : "";
+  const governancePath = overview?.governance_registry?.active_path || overview?.source_registry_path || "";
+  const governanceHint = governancePath
+    ? `Governance overrides live in broker config: ${governancePath}`
+    : "Governance overrides live inside the active broker config.";
   if (!detail) {
-    container.innerHTML = `<div class="table-meta">${esc(sourcePath || "Search for a domain to inspect its effective policy and recent impact.")}</div>`;
+    container.innerHTML = `<div class="table-meta">${esc(governanceHint)} Search for a domain to inspect its effective policy and recent impact.</div>`;
     return;
   }
   const policy = detail.effective_policy || {};
@@ -1077,7 +1404,7 @@ function renderSourceRegistryInspector(detail, overview) {
     <div class="table-toolbar" style="margin-bottom:16px;">
       <div>
         <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
-        <div class="subscriber-sub">${sourcePath ? esc(sourcePath) : "Global source governance registry"} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
+        <div class="subscriber-sub">${esc(governanceHint)} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
       </div>
       <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · tracked sends ${Math.max(0, Number(recent.send_count || 0))}</div>
     </div>
@@ -1370,6 +1697,7 @@ async function loadSourceRegistryOverview(silent = true) {
   latestSourceRegistryOverview = data;
   renderPreferredSourcesConfig(data);
   renderCurationQueues(data);
+  renderSourceOfTruthSummary(data);
   renderSourceRegistrySuggestions(data);
   return data;
 }

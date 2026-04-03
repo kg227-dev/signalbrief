@@ -23,26 +23,41 @@ function buildSourceRegistryOverview({
   buildSourceRegistryMap,
   setAdminSourceRegistry,
   buildRecentDigestsExport,
+  sourceRegistryPath,
   query,
   limit = 20,
 }) {
   const registry = refreshEffectiveRegistry(loadSourceRegistry, buildSourceRegistryMap, setAdminSourceRegistry);
+  const brokerConfig = summarizeBrokerConfig(inspectStandardTopicBrokerConfig);
+  const preferredSources = summarizePreferredSourceCompatibilityView(inspectStandardTopicBrokerConfig);
   const recent = typeof buildRecentDigestsExport === "function"
     ? buildRecentDigestsExport({ all_time: true })
     : { rows: [] };
   const metricsMap = buildRecentDomainMetrics(recent.rows);
   const { suggestions, overrides } = buildOverviewRows(metricsMap, registry.domains || {}, query, Math.max(1, Number(limit || 20)));
   const curationQueues = buildCurationQueues(metricsMap, recent.rows, Math.max(4, Math.min(12, Number(limit || 20))));
+  const governanceDomainCount = Object.keys(registry.domains || {}).length;
+  const governanceIdentityCount = Object.keys(registry.identities || {}).length;
+  const governanceActivePath = String(sourceRegistryPath || brokerConfig?.active_path || "").trim() || null;
   return {
     generated_at: new Date().toISOString(),
     history_scope: recent?.window?.all_time === true ? "all_time" : "windowed",
     days: recent?.window?.days ?? null,
     query: String(query || "").trim() || null,
     source_registry_path: null,
-    preferred_sources: summarizePreferredSourceCompatibilityView(inspectStandardTopicBrokerConfig),
-    broker_config: summarizeBrokerConfig(inspectStandardTopicBrokerConfig),
+    preferred_sources: preferredSources,
+    broker_config: brokerConfig,
+    governance_registry: {
+      source_of_truth: "standard_topic_broker.governance",
+      source_mode: String(brokerConfig?.source_mode || "runtime").trim() || "runtime",
+      active_path: governanceActivePath,
+      domain_count: governanceDomainCount,
+      identity_count: governanceIdentityCount,
+      updated_at: String(registry.updated_at || "").trim() || null,
+      is_effectively_empty: governanceDomainCount <= 0 && governanceIdentityCount <= 0,
+    },
     curation_queues: curationQueues,
-    override_count: Object.keys(registry.domains || {}).length,
+    override_count: governanceDomainCount,
     suggestion_count: suggestions.length,
     overrides,
     suggestions,

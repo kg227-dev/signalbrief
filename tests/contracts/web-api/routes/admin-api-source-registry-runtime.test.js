@@ -199,6 +199,9 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.strictEqual(payload.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
     assert.strictEqual(payload.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
     assert.strictEqual(payload.broker_config.topic_count, 1);
+    assert.ok(Array.isArray(payload.broker_config.domains));
+    assert.strictEqual(payload.governance_registry.source_of_truth, "standard_topic_broker.governance");
+    assert.strictEqual(payload.governance_registry.active_path, "/tmp/source-registry.json");
     assert.strictEqual(payload.broker_config.sources[0].id, "stat_rss");
   }
 

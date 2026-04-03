@@ -68,6 +68,7 @@ async function flushMicrotasks() {
     "sourceRegistryInspector",
     "preferredSourcesPanelBody",
     "curationQueuesPanelBody",
+    "sourceOfTruthPanelBody",
     "sourceRegistrySuggestionsHeaderRow",
     "sourceRegistrySuggestionsBody",
     "suggestionsCount",
@@ -100,6 +101,34 @@ async function flushMicrotasks() {
     topic_count: 1,
     source_count: 1,
     enabled_source_count: 1,
+    domains: [
+      {
+        domain: "statnews.com",
+        source_count: 1,
+        enabled_source_count: 1,
+        disabled_source_count: 0,
+        tier_counts: { 1: 0, 2: 1, 3: 0 },
+        topics: ["healthcare"],
+        lanes: ["publisher_feed"],
+        source_ids: ["stat_rss"],
+        filter_source_count: 0,
+        effective_policy: {
+          source_type: "reported_media",
+          source_tier: "strong",
+          source_policy: "preferred",
+          review_status: "reviewed",
+          topic_fit_map: {
+            healthcare: "high",
+          },
+          policy_effects: {
+            lead_eligible: true,
+            exposure_cap: null,
+            requires_corroboration: false,
+            score_multiplier: 1.04,
+          },
+        },
+      },
+    ],
     topics: [
       {
         topic_tag: "HEALTHCARE",
@@ -314,6 +343,14 @@ async function flushMicrotasks() {
           },
           suggestions: [],
           overrides: [],
+          governance_registry: {
+            source_of_truth: "standard_topic_broker.governance",
+            active_path: "/app/data/standard-topic-broker-sources.json",
+            domain_count: 0,
+            identity_count: 0,
+            updated_at: null,
+            is_effectively_empty: true,
+          },
           curation_queues: {
             specialist_candidates: [
               {
@@ -470,6 +507,14 @@ async function flushMicrotasks() {
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("Standard-topic source of truth: broker config"),
     "broker inventory panel should explain that standard-topic control comes from broker config"
+  );
+  assert.ok(
+    elements.get("sourceOfTruthPanelBody").innerHTML.includes("Governance overrides are effectively empty right now"),
+    "source-of-truth panel should explain when governance overrides are empty"
+  );
+  assert.ok(
+    elements.get("sourceOfTruthPanelBody").innerHTML.includes("/app/data/standard-topic-broker-sources.json"),
+    "source-of-truth panel should expose the active broker config path"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("MVP topic controls"),

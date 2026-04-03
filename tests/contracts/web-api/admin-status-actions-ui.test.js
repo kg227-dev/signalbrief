@@ -15,12 +15,17 @@ const adminSnippets = [
   'confirmLabel: "Resubscribe"',
   '>resume</button>',
   '>resubscribe</button>',
+  '>view archive</a>',
 ];
 
 for (const snippet of adminSnippets) {
   if (!adminSource.includes(snippet)) {
     throw new Error(`admin subscriber actions UI is missing required snippet: ${snippet}`);
   }
+}
+
+if (adminSource.includes(">view digests</a>")) {
+  throw new Error("admin subscriber actions UI should label archive access as view archive");
 }
 
 const adminUserSnippets = [

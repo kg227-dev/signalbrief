@@ -3955,7 +3955,7 @@ function renderSubscriberDrawer(u) {
   const settingsHref = normalizeAdminActionHref(u.settings_url);
   if (settingsHref) actionParts.push(`<a class="table-action-link" href="${esc(settingsHref)}" target="_blank" rel="noopener">edit prefs</a>`);
   const archiveHref = normalizeAdminActionHref(u.archive_url);
-  if (archiveHref) actionParts.push(`<a class="table-action-link" href="${esc(archiveHref)}" target="_blank" rel="noopener">view digests</a>`);
+  if (archiveHref) actionParts.push(`<a class="table-action-link" href="${esc(archiveHref)}" target="_blank" rel="noopener">view archive</a>`);
   const caps = getSendCapabilities(u);
   if (caps.canAnyMessage) {
     actionParts.push(`<button class="send-btn" onclick='openSendModal(${JSON.stringify(u.email || "")}, ${JSON.stringify(u.chat_id || "")})'>Send ▾</button>`);

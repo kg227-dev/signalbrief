@@ -165,7 +165,7 @@ The 7-day window passes only if all of the following are true:
 | Day 4 | 2026-03-31 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 65.7% | 100% | 0% | 98.3% (58/59) | 0 | No | 0 | Yellow | First full delivery and first full 10/10 canary send. Trusted T1/2 share stayed below target. financial_reuters_business failed and cross-topic contamination was still visible in the selected set. |
 | Day 5 | 2026-04-01 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 77.1% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Second consecutive full day. 613 candidates, 35 selected, all 10 canaries sent. Trusted share still missed target and the selected set still included FDA compliance pages, an American Banker self-promo, and an off-topic FreightWaves border story. |
 | Day 6 | 2026-04-02 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 80.0% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Operationally the strongest day yet: 642 candidates, 35 selected, all 10 canaries delivered, and every hard fill/freshness/backbone gate passed. Still not green: selected-set quality remains mixed and all 80 stored scheduled items had null `wim` / `wim_brief`, indicating a likely deep-mode writeup regression. |
-| Day 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |  |
+| Day 7 | 2026-04-03 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 80.0% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Fourth straight full day. All 10 canaries delivered and every item had visible body text via summary fallback, but all 80 stored scheduled items still had `wim=null` / `wim_brief=null` and official-content leakage remained visible in Life Sciences, Consumer & Retail, Financial Services, and Healthcare. |
 
 ## Daily Runbook
 
@@ -503,13 +503,48 @@ Completed on 2026-04-02 after deploy `445db94`.
 
 ### Day 7
 
-- [ ] Pre-send checks complete
-- [ ] Post-send checks complete
-- [ ] Scorecard row completed
-- [ ] Root cause note added if yellow or red
+- [x] Pre-send checks complete
+- [x] Post-send checks complete
+- [x] Scorecard row completed
+- [x] Root cause note added if yellow or red
 - [ ] Re-run `npm run eval:retrieval -- --historical-days=14`
 - [ ] Compare against Day 0 baseline
-- [ ] Record final verdict
+- [x] Record final verdict
+
+#### Day 7 Result
+
+`Yellow`
+
+Scheduled run `scheduled:2026-04-03T11-04-03-978Z` executed on time. All 10 canary digest records exist for `2026-04-03--scheduled.json` and are marked `status=sent` with `delivery_outcome=delivered`. All 7 MVP topics delivered `5/5`, all 7 topics cleared the `>=15` depth threshold, there were no freshness breaches, no duplicate URLs versus Day 6, trusted T1/2 share held at `80.0%`, broker share remained `100%`, and source success held at `58/58`. The day remains yellow because the strategic-writeup path is still broken underneath the renderer mitigation and the selected set still contains too much official and opinion-style filler for a true product-quality green.
+
+#### Day 7 What Worked
+
+- **Fourth consecutive mechanically healthy weekday**: 618 candidates, 35 selected, 7/7 topics at `5/5`, 7/7 topics above the depth gate, 0 freshness violations, and 0 duplicate URLs versus Day 6.
+- **All 10 canaries delivered cleanly**: every canary digest record for `2026-04-03--scheduled.json` is `status=sent` with `delivery_outcome=delivered`.
+- **Blank-card symptom is mitigated**: all 10 scheduled canary records show `with_summary>0` for every delivered item and `empty_body_risk=0`, so deep cards no longer ship headline-only when `wim` is absent.
+- **Source reliability and backbone stayed strong**: the broker fetched `428` publisher-feed candidates and `26` official candidates, with `58/58` source fetches succeeding and 0 discovery dependence in the selected set.
+- **Healthcare FDA downgrade partly worked**: `healthcare_fda_press` and `healthcare_fda_medwatch` retained 0 usable items on Day 7, and no FDA item was selected into Healthcare.
+
+#### Day 7 What Failed
+
+- **The scheduled strategic-writeup path is still broken**: all 10 canary records still show `0/80` populated `wim` and `wim_brief` fields. The renderer fallback prevented blanks, but the product is still not generating or persisting real "why it matters" copy in the live scheduled path.
+- **Life Sciences still over-selected FDA**: 3 of the 5 selected Life Sciences items came from `fda.gov`, including `Drug Safety Communications`, even though the Day 7 retained pool included `life_fiercebiotech` (12 retained), `life_fiercepharma` (11 retained), and `life_endpoints` (24 retained).
+- **Official-content leakage remains broader than FDA**: Financial Services selected a `cms.gov` hospice wage-index rule item, Healthcare selected a CMS psychiatric-facility proposed rule, and Consumer & Retail selected an FDA recall. The sector routing is cleaner than Day 1, but official-content ranking is still too permissive.
+- **Healthcare still leans on commentary/opinion**: two of the five selected Healthcare items were STAT opinion pieces despite a 99-candidate pool.
+- **Technology remains noisy and consumer-tech-heavy**: the selected Technology set leaned on Ars/Register general-interest items like moon missions, Y2K nostalgia, and billboard vandalism rather than a cleaner enterprise or product/industry mix.
+- **Source-cap pressure remains live**: Day 7 still logged `selection_source_cap (americanbanker.com: 3/3)` five times and `selection_source_cap (fda.gov: 3/3)` five times.
+
+#### Day 7 Root Cause Summary
+
+1. **The renderer fix solved the symptom, not the underlying writeup bug.** Scheduled delivery can now show body text because summary fallback is present, but enriched `wim` fields are still being dropped before or during persistence.
+2. **Official authority is still beating trade usefulness in ranking.** Downgrading FDA helped Healthcare fetch quality, but it did not stop FDA from winning 3 Life Sciences slots or prevent CMS/FDA items from leaking into other topics.
+3. **The candidate pool improved more than the winners improved.** FierceBiotech, FiercePharma, and Endpoints materially strengthened the Day 7 Life Sciences pool, but the selector still preferred official FDA items over those trade stories.
+
+#### Day 7 Observations
+
+- Day 7 confirms the system is mechanically stable on weekdays after the Day 1-3 recovery work. The operational reliability problem has largely been solved.
+- The remaining blockers are editorial and output-path quality: writeup persistence, official-content penalties, and stronger topic-fit / content-shape filtering.
+- By the current validation rules, the 7-day window cannot pass. Days 1-3 were red, and Days 4-7 remained yellow even after the system became operationally stable.
 
 ## Issue Log
 
@@ -526,6 +561,7 @@ Completed on 2026-04-02 after deploy `445db94`.
 | 2026-04-01 | Medium | Official/source-content quality filter gap | Two FDA compliance/reporting pages were selected into Life Sciences and an American Banker house-promo was selected into Financial Services | No delivery failure, but editorial quality is below the product promise | Day 5 audit selected items for LIFE SCIENCES and FINANCIAL SERVICES; Day 6 expanded the evidence to FDA content selected in LIFE SCIENCES, TECHNOLOGY, and ENERGY | Authority-based scoring still overpowers story-shape filtering for official database pages and publisher self-promotional content | None | Add title/content filters for FDA compliance list pages and publisher self-promotional headlines | No |
 | 2026-04-02 | High | Scheduled strategic-writeup persistence / validation | All 10 canary digests were delivered, but all 80 stored scheduled items had `wim=null` and `wim_brief=null` | Deep-mode users likely received little or no "why it matters" text despite successful sends | Production digest records under `data/digest-records/email-177467271*/2026-04-02--scheduled.json` | The new writeup validator / repair path or the scheduled persistence path is dropping enriched writeup fields before or during delivery | Day 6 patch restores deep-mode summary fallback so blank cards cannot ship even when writeups are missing | Verify Day 7 deep-mode sends have non-empty body text and confirm whether `wim`/`wim_brief` are still missing in stored scheduled records | No |
 | 2026-04-02 | Medium | FDA source weighting / filtering | FDA official feeds still produced low-value list, recall, and compliance items in Healthcare and Life Sciences | Selected-set quality remained below the product promise despite strong delivery metrics | Day 6 audit selected-item review plus scheduled canary screenshots | FDA remained Tier 1 and its include/exclude filters were too permissive relative to specialist trade sources | Day 6 patch downgraded FDA sources to Tier 3 and upgraded FierceBiotech/FiercePharma to Tier 1 | Verify Day 7 selected sets show lower FDA share and higher Fierce share in Life Sciences / Healthcare | No |
+| 2026-04-03 | Medium | Official-content ranking still beating trade stories | Day 7 still selected 6 official items across the 35-item set, including 3 FDA Life Sciences items, 1 FDA Consumer recall, and CMS rule items in Financial Services and Healthcare | Digests are mechanically full but still feel less strategic than the MVP promise | Day 7 production audit `scheduled:2026-04-03T11-04-03-978Z`; selected items in LIFE SCIENCES, CONSUMER & RETAIL, FINANCIAL SERVICES, and HEALTHCARE | Official-document authority and freshness are still outranking better trade-reporting candidates in the live selector | None during the Day 7 window beyond earlier FDA tier downgrades | Add stronger penalties / hard filters for recalls, safety notices, list pages, and generic rulemaking items when trade reporting is available in-pool | No |
 
 ## Scenario Handling Notes
 
@@ -583,12 +619,12 @@ Completed on 2026-04-02 after deploy `445db94`.
 
 | Field | Value |
 |---|---|
-| Day 0 retrieval-eval baseline | TBD |
-| Day 7 retrieval-eval result | TBD |
-| Red days | TBD |
-| Yellow days | TBD |
-| Green days | TBD |
-| Final verdict | TBD |
+| Day 0 retrieval-eval baseline | `completed_with_errors`, overall score `0`, broker produced `306` candidates across 6 MVP topics |
+| Day 7 retrieval-eval result | Not rerun in this Day 7 audit update |
+| Red days | 3 |
+| Yellow days | 4 |
+| Green days | 0 |
+| Final verdict | `FAIL` |
 
 ### Final Verdict Rules
 
@@ -598,7 +634,12 @@ Completed on 2026-04-02 after deploy `445db94`.
 
 ### Final Operator Notes
 
-TBD
+The scheduled product path is much more reliable than it was at the start of the window, but it did not pass the reduced-scope MVP validation cleanly. The final week split is clear:
+
+- **Reliability recovered**: Days 4-7 all delivered 7/7 topics and 10/10 canaries without manual intervention.
+- **Product quality did not recover enough**: the strategic-writeup path still persisted `wim=null` / `wim_brief=null` on Day 7, and official/noisy content still won too many selected slots.
+
+The next work should be constrained to three areas: trace scheduled enrichment/persistence for `wim`, hard-penalize or exclude official recall/list/rule filler when trade coverage exists, and tighten topic-fit/content-shape filtering in Technology, Healthcare, and Life Sciences.
 
 ## What This Validation Does Not Prove
 

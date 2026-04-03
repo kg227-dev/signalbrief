@@ -7,16 +7,16 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
 |--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | | 7/7 |
-| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | | >=80% |
-| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | | >=70% |
-| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | | >=90% |
-| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | | 0 |
-| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | | 0 |
-| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | | 0 |
-| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | | 7 |
-| Day color | Red | Red | Red | Yellow | Yellow | Yellow | | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | 7/7 |
+| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | >=80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | >=70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | >=90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | 0 |
+| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | 7 |
+| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | Green |
 
 ## Completed days
 
@@ -26,6 +26,7 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 - [Day 4 — 2026-03-31 (Tuesday)](../../archive/planning/2026-03/mvp-day-4-2026-03-31.md)
 - [Day 5 — 2026-04-01 (Wednesday)](../../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
 - [Day 6 — 2026-04-02 (Thursday)](../../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
+- [Day 7 — 2026-04-03 (Friday)](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md)
 
 ## Day 4 — 2026-03-31
 
@@ -43,11 +44,7 @@ Day 7 prep is now explicit: restore non-empty deep-mode body text even when sche
 
 ## Day 7 — 2026-04-03
 
-Pending. Preflight is complete on production after deploy `445db94`: FDA official feeds are live at Tier 3, FierceBiotech/FiercePharma are live at Tier 1, and deep-mode emails now have a summary fallback so blank cards should not recur. The Day 7 decision points are straightforward:
-
-- do deep canaries show non-empty body text under every headline?
-- does FDA stop dominating Life Sciences / Healthcare selected sets?
-- do stored scheduled records still show mass-null `wim` / `wim_brief`, which would prove the deeper enrichment path is still broken underneath the renderer fix?
+See [archive](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md). **Yellow.** Day 7 closed the week with a fourth consecutive mechanically healthy weekday: 618 candidates, 35 selected, 7/7 topics at 5 items, 7/7 topics above the depth gate, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 10/10 canaries delivered. It is still not green. The renderer mitigation worked, so no deep card shipped blank, but all 10 scheduled canary records still stored `0/80` populated `wim` / `wim_brief` fields. The selected set also still shows official-content leakage: Life Sciences selected 3 FDA items, Consumer & Retail selected an FDA recall, Financial Services selected a CMS rule item, and Healthcare still leaned on STAT opinion plus CMS rulemaking despite a deep trade pool. FierceBiotech and FiercePharma improved the Life Sciences candidate pool, but they still did not win any of the 5 selected slots.
 
 ---
 

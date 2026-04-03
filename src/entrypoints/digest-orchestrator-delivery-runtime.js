@@ -3,6 +3,10 @@
 const { normalizeDigestHeadlinePreview } = require("../digest/runtime/digest-headline-preview-runtime");
 const { sortDigestItemsByScoreDescending } = require("../digest/runtime/digest-item-ordering-runtime");
 const {
+  evaluateFinalDigestAssembly,
+  resolveStrictQualityConfig,
+} = require("../digest/domain/strict-quality-domain-runtime");
+const {
   DELIVERY_POLICY,
   classifyRetryFailureClass,
   computeRetryDelayMinutes,
@@ -108,6 +112,13 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       score_breakdown: item?.score_breakdown && typeof item.score_breakdown === "object"
         ? { ...item.score_breakdown }
         : null,
+      strict_quality: item?.strict_quality && typeof item.strict_quality === "object"
+        ? { ...item.strict_quality }
+        : null,
+      exception_used: item?.exception_used === true,
+      exception_reason: item?.exception_reason || null,
+      follow_up_allowed: item?.follow_up_allowed === true,
+      inclusion_reason: item?.inclusion_reason || null,
     }));
   }
 
@@ -158,6 +169,19 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       writeup_dropped_share_pct: deliveryDiagnostics.writeup_dropped_share_pct,
       writeup_allow_underfill_topic_tags: Array.isArray(deliveryDiagnostics.writeup_allow_underfill_topic_tags)
         ? deliveryDiagnostics.writeup_allow_underfill_topic_tags.slice()
+        : [],
+      surviving_topic_bucket_count: Number.isFinite(Number(deliveryDiagnostics.surviving_topic_bucket_count))
+        ? Number(deliveryDiagnostics.surviving_topic_bucket_count)
+        : null,
+      strict_quality_exception_count: Number.isFinite(Number(deliveryDiagnostics.strict_quality_exception_count))
+        ? Number(deliveryDiagnostics.strict_quality_exception_count)
+        : null,
+      extreme_underfill: deliveryDiagnostics.extreme_underfill === true,
+      blocked_topic_list: Array.isArray(deliveryDiagnostics.blocked_topic_list)
+        ? deliveryDiagnostics.blocked_topic_list.map((row) => ({
+            tag: row?.tag || null,
+            reason: row?.reason || null,
+          }))
         : [],
     };
   }
@@ -262,6 +286,30 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     return (Array.isArray(items) ? items : []).filter((item) => allowed.has(String(item?.tag || "").trim()));
   }
 
+  function filterTopicBucketsForSubscribedTopics(topicBuckets, subscribedStandardTopics) {
+    const allowed = Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : [];
+    const out = Object.create(null);
+    for (const topic of allowed) {
+      const normalizedTopic = String(topic || "").trim();
+      if (!normalizedTopic) continue;
+      out[normalizedTopic] = Array.isArray(topicBuckets?.[normalizedTopic])
+        ? topicBuckets[normalizedTopic].slice()
+        : [];
+    }
+    return out;
+  }
+
+  function groupFlatItemsByTopic(items = {}) {
+    const grouped = Object.create(null);
+    for (const item of (Array.isArray(items) ? items : [])) {
+      const tag = String(item?.tag || "").trim().toUpperCase();
+      if (!tag) continue;
+      if (!grouped[tag]) grouped[tag] = [];
+      grouped[tag].push(item);
+    }
+    return grouped;
+  }
+
   function flattenTopicBuckets(topicBuckets, subscribedStandardTopics) {
     const orderedTopics = Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : [];
     const flattened = [];
@@ -280,6 +328,26 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       selected_count: selectedItems.length,
       delivery_eligible: deliveryEligible,
       topic_buckets: topicBuckets,
+    };
+  }
+
+  function buildStrictDeliverySelection(assembly = {}) {
+    const items = Array.isArray(assembly?.items) ? assembly.items.slice() : [];
+    const topicBuckets = assembly?.topic_buckets && typeof assembly.topic_buckets === "object"
+      ? Object.fromEntries(
+          Object.entries(assembly.topic_buckets).map(([tag, bucketItems]) => [tag, Array.isArray(bucketItems) ? bucketItems.slice() : []])
+        )
+      : {};
+    return {
+      items,
+      available_count: items.length,
+      selected_count: items.length,
+      delivery_eligible: assembly?.delivery_eligible === true,
+      topic_buckets: topicBuckets,
+      blocked_topics: Array.isArray(assembly?.blocked_topics) ? assembly.blocked_topics.slice() : [],
+      surviving_topic_bucket_count: Math.max(0, Number(assembly?.surviving_topic_bucket_count || 0)),
+      extreme_underfill: assembly?.extreme_underfill === true,
+      strict_quality_exception_count: Math.max(0, Number(assembly?.total_exceptions_used || 0)),
     };
   }
 
@@ -317,6 +385,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     const {
       dueUsers,
       enriched,
+      finalSelectedByTopic,
       now,
       shortDate,
       dateStr,
@@ -336,6 +405,13 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       repetitionNote,
       writeupDiagnostics,
     } = params;
+    const strictQualityConfig = resolveStrictQualityConfig(CONFIG.digest || {});
+    const strictQualityEnabled = strictQualityConfig.enabled === true;
+    const runtimeTopicBuckets = finalSelectedByTopic && typeof finalSelectedByTopic === "object"
+      ? Object.fromEntries(
+          Object.entries(finalSelectedByTopic).map(([tag, items]) => [String(tag || "").trim().toUpperCase(), Array.isArray(items) ? items.slice() : []])
+        )
+      : groupFlatItemsByTopic(enriched);
 
     const deliveredUsers = [];
     const failedUsers = [];
@@ -391,26 +467,62 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         const wasFiltered = false;
         const subscribedStandardTopics = getSubscribedStandardTopics(user);
         requestedItemCount = getRequestedItemCount(subscribedStandardTopics);
-        const userItems = filterItemsForSubscribedTopics(enriched, subscribedStandardTopics);
-        const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, DELIVERY_POLICY.target_item_count);
-        const bucketItems = flattenTopicBuckets(topicBuckets, subscribedStandardTopics);
-        const incompleteTopics = listIncompleteTopics(topicBuckets, subscribedStandardTopics, {
-          allowUnderfillTopicTags: Array.isArray(writeupDiagnostics?.allow_underfill_topic_tags)
-            ? writeupDiagnostics.allow_underfill_topic_tags
-            : [],
-        });
-        deliveryDiagnostics = {
-          ...(runDiagnostics && typeof runDiagnostics === "object" ? runDiagnostics : {}),
-          requested_count: requestedItemCount,
-          candidate_pool_before_dedup: Array.isArray(enriched) ? enriched.length : 0,
-          candidate_pool_after_dedup: userItems.length,
-          thin_pool: incompleteTopics.length > 0 || requestedItemCount === 0,
-          dominant_failure_mode: incompleteTopics.length > 0
-            ? "underfilled_topic_bucket"
-            : (requestedItemCount === 0 ? "no_standard_topics" : null),
-        };
-        deliverySelection = buildDeliverySelection(bucketItems, topicBuckets, requestedItemCount, incompleteTopics);
-        const candidateDisplayItems = sortDigestItemsByScoreDescending(applyDigestDepth(userItems, depth));
+        const strictUserTopicBuckets = filterTopicBucketsForSubscribedTopics(runtimeTopicBuckets, subscribedStandardTopics);
+        const strictUserItems = flattenTopicBuckets(strictUserTopicBuckets, subscribedStandardTopics);
+        const userItems = strictQualityEnabled
+          ? strictUserItems
+          : filterItemsForSubscribedTopics(enriched, subscribedStandardTopics);
+        let candidateDisplayItems = [];
+        if (strictQualityEnabled) {
+          const strictAssembly = evaluateFinalDigestAssembly(strictUserTopicBuckets, {
+            strictQualityConfig,
+            configDigest: CONFIG.digest || {},
+            subscribedTopics: subscribedStandardTopics,
+            maxItemsPerSourceDomain: CONFIG.digest?.maxItemsPerSourceDomain || 2,
+            nowMs: now.getTime(),
+          });
+          deliverySelection = buildStrictDeliverySelection(strictAssembly);
+          deliveryDiagnostics = {
+            ...(runDiagnostics && typeof runDiagnostics === "object" ? runDiagnostics : {}),
+            requested_count: requestedItemCount,
+            candidate_pool_before_dedup: Array.isArray(enriched) ? enriched.length : 0,
+            candidate_pool_after_dedup: strictUserItems.length,
+            thin_pool: deliverySelection.items.length < requestedItemCount,
+            dominant_failure_mode: requestedItemCount === 0
+              ? "no_standard_topics"
+              : (deliverySelection.delivery_eligible ? null : "strict_quality_blocked"),
+            surviving_topic_bucket_count: deliverySelection.surviving_topic_bucket_count,
+            strict_quality_exception_count: deliverySelection.strict_quality_exception_count,
+            extreme_underfill: deliverySelection.extreme_underfill,
+            blocked_topic_list: Array.isArray(deliverySelection.blocked_topics)
+              ? deliverySelection.blocked_topics.slice()
+              : [],
+          };
+          candidateDisplayItems = sortDigestItemsByScoreDescending(applyDigestDepth(
+            deliverySelection.delivery_eligible ? deliverySelection.items : strictUserItems,
+            depth
+          ));
+        } else {
+          const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, DELIVERY_POLICY.target_item_count);
+          const bucketItems = flattenTopicBuckets(topicBuckets, subscribedStandardTopics);
+          const incompleteTopics = listIncompleteTopics(topicBuckets, subscribedStandardTopics, {
+            allowUnderfillTopicTags: Array.isArray(writeupDiagnostics?.allow_underfill_topic_tags)
+              ? writeupDiagnostics.allow_underfill_topic_tags
+              : [],
+          });
+          deliveryDiagnostics = {
+            ...(runDiagnostics && typeof runDiagnostics === "object" ? runDiagnostics : {}),
+            requested_count: requestedItemCount,
+            candidate_pool_before_dedup: Array.isArray(enriched) ? enriched.length : 0,
+            candidate_pool_after_dedup: userItems.length,
+            thin_pool: incompleteTopics.length > 0 || requestedItemCount === 0,
+            dominant_failure_mode: incompleteTopics.length > 0
+              ? "underfilled_topic_bucket"
+              : (requestedItemCount === 0 ? "no_standard_topics" : null),
+          };
+          deliverySelection = buildDeliverySelection(bucketItems, topicBuckets, requestedItemCount, incompleteTopics);
+          candidateDisplayItems = sortDigestItemsByScoreDescending(applyDigestDepth(userItems, depth));
+        }
         const previousDigestItems = Array.isArray(user.last_digest_items) ? user.last_digest_items : [];
         const candidateDigestQuality = computeDigestQualityScore({
           items: candidateDisplayItems,
@@ -483,16 +595,18 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         if (!deliveryEligible) {
           const failureClass = requestedItemCount <= 0
             ? "no_standard_topics"
-            : classifyRetryFailureClass({
-              diagnostics: {
-                thin_pool: deliveryDiagnostics.thin_pool,
-                dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
-                provider_429_count: deliveryDiagnostics.provider_429_count,
-                transport_errors: deliveryDiagnostics.provider_transport_errors,
-                provider_degraded: deliveryDiagnostics.provider_degraded,
-              },
-              availableCandidateCount: userItems.length,
-            });
+            : (strictQualityEnabled
+              ? String(deliveryDiagnostics.dominant_failure_mode || "no_passing_topic_buckets")
+              : classifyRetryFailureClass({
+                diagnostics: {
+                  thin_pool: deliveryDiagnostics.thin_pool,
+                  dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+                  provider_429_count: deliveryDiagnostics.provider_429_count,
+                  transport_errors: deliveryDiagnostics.provider_transport_errors,
+                  provider_degraded: deliveryDiagnostics.provider_degraded,
+                },
+                availableCandidateCount: userItems.length,
+              }));
           const retryableScheduledAttempt = deliveryMode === "scheduled"
             && attemptCount === 1
             && isRetryEligibleFailureClass(failureClass);
@@ -578,7 +692,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
 
         // --- quality floor guard: withhold delivery if quality is too low ---
         const minDeliveryQualityScore = Number(CONFIG.digest?.minDeliveryQualityScore ?? 25);
-        if (deliveryItems.length === 0 || digestQuality.score < minDeliveryQualityScore) {
+        if (!strictQualityEnabled && (deliveryItems.length === 0 || digestQuality.score < minDeliveryQualityScore)) {
           const withholdReason = deliveryItems.length === 0 ? "empty_items" : "quality_below_floor";
           log(`  skip delivery for ${user.email || userId}: ${withholdReason} (score=${digestQuality.score}, min=${minDeliveryQualityScore})`);
           scheduleRetryState({

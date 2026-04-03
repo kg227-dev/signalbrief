@@ -2250,6 +2250,15 @@ function renderDigestAuditCandidate(candidate) {
   const tone = selected ? "var(--green)" : "var(--text-secondary)";
   const writeupStatus = String(candidate?.writeup_status || "").trim() || (selected ? "selected" : "");
   const writeupReasons = Array.isArray(candidate?.writeup_rejection_reasons) ? candidate.writeup_rejection_reasons : [];
+  const strictQuality = candidate?.strict_quality && typeof candidate.strict_quality === "object"
+    ? candidate.strict_quality
+    : null;
+  const strictRejectedRule = candidate?.rejected_rule || strictQuality?.rejected_rule || "";
+  const strictRejectedReason = candidate?.rejected_reason || strictQuality?.rejected_reason || "";
+  const strictException = candidate?.exception_used === true || strictQuality?.exception_used === true;
+  const followUpAllowed = candidate?.follow_up_allowed === true || strictQuality?.follow_up_allowed === true;
+  const majorStoryCandidate = candidate?.major_story_candidate === true || strictQuality?.major_story_candidate === true;
+  const majorStoryBlockReason = candidate?.major_story_block_reason || strictQuality?.major_story_block_reason || "";
   return `<div class="digest-audit-item">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
       <div style="min-width:0;">
@@ -2263,8 +2272,14 @@ function renderDigestAuditCandidate(candidate) {
       ${renderDigestAuditSummaryPill("Reason", reason)}
       ${candidate?.source_tier != null ? renderDigestAuditSummaryPill("Tier", String(candidate.source_tier)) : ""}
       ${writeupStatus ? renderDigestAuditSummaryPill("Writeup", writeupStatus, writeupStatus === "failed_dropped" ? "var(--red)" : "var(--green)") : ""}
+      ${strictRejectedRule ? renderDigestAuditSummaryPill("Rule", strictRejectedRule, selected ? "var(--green)" : "var(--yellow)") : ""}
+      ${strictException ? renderDigestAuditSummaryPill("Exception", "used", "var(--yellow)") : ""}
+      ${followUpAllowed ? renderDigestAuditSummaryPill("Follow-up", "allowed", "var(--green)") : ""}
+      ${majorStoryCandidate ? renderDigestAuditSummaryPill("Major story", "candidate", "var(--yellow)") : ""}
     </div>
     ${writeupReasons.length ? `<div class="subscriber-sub" style="margin-top:6px;">${esc(writeupReasons.join(" · "))}</div>` : ""}
+    ${strictRejectedReason ? `<div class="subscriber-sub" style="margin-top:6px;">Strict reason: ${esc(strictRejectedReason)}</div>` : ""}
+    ${majorStoryBlockReason ? `<div class="subscriber-sub" style="margin-top:6px;">Major-story block: ${esc(majorStoryBlockReason)}</div>` : ""}
   </div>`;
 }
 
@@ -2525,6 +2540,8 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
   const visibleCandidates = (Array.isArray(topic?.candidates) ? topic.candidates : []).slice(0, 12);
   const hiddenCount = Math.max(0, Number((topic?.candidates || []).length) - visibleCandidates.length);
   const missedStoryFlags = Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags : [];
+  const strictQuality = topic?.strict_quality && typeof topic.strict_quality === "object" ? topic.strict_quality : null;
+  const majorStory = strictQuality?.major_story && typeof strictQuality.major_story === "object" ? strictQuality.major_story : null;
   const lanePills = Object.entries(laneBreakdown).map(([lane, count]) => renderDigestAuditSummaryPill(lane, String(count)));
   const rejectionPills = Object.entries(rejectionCounts).map(([reason, count]) => renderDigestAuditSummaryPill(reason, String(count)));
   const coverageStatus = String(fetchTopic?.coverage_status || "").trim() || "unknown";
@@ -2550,11 +2567,29 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
       ${renderDigestAuditSummaryPill("Broker", `${Number(fetchTopic?.broker_item_count || 0)} kept`, "var(--green)")}
       ${renderDigestAuditSummaryPill("Discovery", `${Number(fetchTopic?.discovery_item_count || 0)} kept`, "var(--yellow)")}
       ${renderDigestAuditSummaryPill("Discovery capped", String(Number(fetchTopic?.discovery_capped_count || 0)), "var(--red)")}
+      ${strictQuality ? renderDigestAuditSummaryPill("Bucket", strictQuality.pass === false ? "blocked" : "ready", strictQuality.pass === false ? "var(--red)" : "var(--green)") : ""}
+      ${strictQuality?.block_reason ? renderDigestAuditSummaryPill("Block", strictQuality.block_reason, "var(--red)") : ""}
     </div>
+    ${strictQuality ? `<div class="digest-audit-row" style="margin-bottom:10px;">
+      ${renderDigestAuditSummaryPill("Backfill attempts", String(Number(strictQuality.backfill_attempt_count || 0)))}
+      ${renderDigestAuditSummaryPill("Underfill", String(Number(strictQuality.underfill_count || 0)), Number(strictQuality.underfill_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+      ${renderDigestAuditSummaryPill("Lead", String(strictQuality.lead_item_reason || "none"))}
+      ${renderDigestAuditSummaryPill("Signal density", Number.isFinite(Number(strictQuality.signal_density)) ? Number(strictQuality.signal_density).toFixed(2) : "—")}
+      ${renderDigestAuditSummaryPill("Exceptions", String(Number(strictQuality.exception_count || 0)), Number(strictQuality.exception_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+    </div>` : ""}
+    ${majorStory ? `<div class="digest-audit-row" style="margin-bottom:10px;">
+      ${renderDigestAuditSummaryPill("Major stories detected", String(Number(majorStory.detected_count || 0)), Number(majorStory.detected_count || 0) > 0 ? "var(--yellow)" : "var(--text-secondary)")}
+      ${renderDigestAuditSummaryPill("Major-story swaps", String(Number(majorStory.swap_count || 0)), Number(majorStory.swap_count || 0) > 0 ? "var(--green)" : "var(--text-secondary)")}
+      ${renderDigestAuditSummaryPill("Major-story blocked", String(Number(majorStory.blocked_count || 0)), Number(majorStory.blocked_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+    </div>` : ""}
     ${lanePills.length ? `<div class="digest-audit-row" style="margin-bottom:10px;">${lanePills.join("")}</div>` : ""}
     ${missedStoryFlags.length ? `<div style="margin-bottom:10px;">
       <div class="subscriber-sub" style="font-weight:700;color:var(--yellow);margin-bottom:8px;">Missed-story watch</div>
       <div class="digest-audit-item-list">${missedStoryFlags.map((flag) => renderMissedStoryFlag(flag)).join("")}</div>
+    </div>` : ""}
+    ${majorStory && Array.isArray(majorStory.blocked_candidates) && majorStory.blocked_candidates.length ? `<div style="margin-bottom:10px;">
+      <div class="subscriber-sub" style="font-weight:700;color:var(--yellow);margin-bottom:8px;">Blocked major-story candidates</div>
+      <div class="digest-audit-item-list">${majorStory.blocked_candidates.map((flag) => renderDigestAuditConcern(`${flag.headline || "Untitled"} · ${flag.reason || "blocked"}`)).join("")}</div>
     </div>` : ""}
     <div class="digest-audit-item-list">
       ${selectedCandidates.length ? selectedCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No selected items captured for this topic.</div>`}
@@ -2599,6 +2634,9 @@ function renderDigestAuditPanel() {
     : null;
   const writeup = summary.writeup && typeof summary.writeup === "object"
     ? summary.writeup
+    : null;
+  const strictQuality = summary.strict_quality && typeof summary.strict_quality === "object"
+    ? summary.strict_quality
     : null;
   const topicReadiness = data.topic_readiness && typeof data.topic_readiness === "object"
     ? data.topic_readiness
@@ -2649,12 +2687,21 @@ function renderDigestAuditPanel() {
           <div class="digest-audit-kpi-label">Missed-story flags</div>
           <div class="digest-audit-kpi-value">${Math.max(0, Number(summary.missed_story_flag_count || 0))}</div>
         </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Blocked topic buckets</div>
+          <div class="digest-audit-kpi-value">${Math.max(0, Number(summary.blocked_topic_bucket_count || 0))}</div>
+        </div>
+        <div class="digest-audit-kpi">
+          <div class="digest-audit-kpi-label">Major-story swaps</div>
+          <div class="digest-audit-kpi-value">${Math.max(0, Number(strictQuality?.major_story?.swap_count || 0))}</div>
+        </div>
       </div>
       <div class="digest-audit-row" style="margin-top:12px;">
         ${renderDigestAuditSummaryPill("Archive dedup removed", String(Number(summary.dedup_removed || 0)))}
         ${renderDigestAuditSummaryPill("History suppressed", String(Number(summary.history_suppressed || 0)))}
         ${renderDigestAuditSummaryPill("Continuation removed", String(Number(summary.continuation_removed || 0)))}
         ${renderDigestAuditSummaryPill("Selected discovery capped", String(Number(summary.discovery_capped || 0)))}
+        ${strictQuality?.prefilter ? renderDigestAuditSummaryPill("Prefilter removed", String(Number(strictQuality.prefilter.removed_count || 0)), Number(strictQuality.prefilter.removed_count || 0) > 0 ? "var(--yellow)" : "var(--green)") : ""}
       </div>
     </div>
     <div class="digest-audit-topic-list">

@@ -1,5 +1,13 @@
 "use strict";
 
+const {
+  evaluateFinalDigestAssembly,
+  evaluateTopicBucketShipReady,
+  evaluateTopicItem,
+  isMajorStoryCandidate,
+  resolveStrictQualityConfig,
+} = require("../digest/domain/strict-quality-domain-runtime");
+
 function cloneCountMap(rawValue) {
   const out = Object.create(null);
   const entries = rawValue && typeof rawValue === "object" ? Object.entries(rawValue) : [];
@@ -189,6 +197,58 @@ function appendFailedItems(target, topicBuckets = {}) {
   return out;
 }
 
+function attachStrictQuality(item, evaluation, extras = {}) {
+  const strictQuality = evaluation && typeof evaluation === "object" ? evaluation : {};
+  const qualityRuleResults = Array.isArray(strictQuality.quality_rule_results)
+    ? strictQuality.quality_rule_results.map((result) => ({ ...result }))
+    : [];
+  const mergedStrictQuality = {
+    pass: strictQuality.pass === true,
+    rejected_rule: strictQuality.rejected_rule || null,
+    rejected_reason: strictQuality.rejected_reason || null,
+    quality_rule_results: qualityRuleResults,
+    exception_used: strictQuality.exception_used === true,
+    exception_reason: strictQuality.exception_reason || null,
+    follow_up_allowed: strictQuality.follow_up_allowed === true,
+    inclusion_reason: strictQuality.inclusion_reason || null,
+    ...extras,
+  };
+  return {
+    ...item,
+    ...extras,
+    strict_quality: mergedStrictQuality,
+    quality_rule_results: qualityRuleResults,
+    rejected_rule: mergedStrictQuality.rejected_rule,
+    rejected_reason: mergedStrictQuality.rejected_reason,
+    exception_used: mergedStrictQuality.exception_used,
+    exception_reason: mergedStrictQuality.exception_reason,
+    follow_up_allowed: mergedStrictQuality.follow_up_allowed,
+    inclusion_reason: mergedStrictQuality.inclusion_reason,
+  };
+}
+
+function appendRejectedItems(target, tag, items = []) {
+  const out = target && typeof target === "object" ? target : Object.create(null);
+  const normalizedTag = String(tag || "").trim().toUpperCase();
+  if (!normalizedTag) return out;
+  if (!out[normalizedTag]) out[normalizedTag] = [];
+  for (const item of (Array.isArray(items) ? items : [])) {
+    if (!item) continue;
+    out[normalizedTag].push(item);
+  }
+  return out;
+}
+
+function summarizeRejectedReason(item = {}) {
+  if (item?.selection_reason) return String(item.selection_reason);
+  const strictQuality = item?.strict_quality && typeof item.strict_quality === "object"
+    ? item.strict_quality
+    : {};
+  if (strictQuality.rejected_reason) return String(strictQuality.rejected_reason);
+  if (String(item?.writeup_status || "").trim().toLowerCase() === "failed_dropped") return "writeup_failed";
+  return "selection_not_selected";
+}
+
 function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params = {}) {
   const topicAudits = Array.isArray(selectionDiagnostics?.topic_selection_audit)
     ? selectionDiagnostics.topic_selection_audit.map((topic) => ({
@@ -214,6 +274,9 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
   const writeupSummary = params.writeupSummary && typeof params.writeupSummary === "object"
     ? params.writeupSummary
     : {};
+  const strictQualityDiagnostics = params.strictQualityDiagnostics && typeof params.strictQualityDiagnostics === "object"
+    ? params.strictQualityDiagnostics
+    : {};
 
   for (const topicAudit of topicAudits) {
     const tag = String(topicAudit?.tag || "").trim().toUpperCase();
@@ -238,10 +301,22 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
           writeup_attempt_count: Number(finalSelected.writeup_attempt_count || 0) || null,
           writeup_rejection_reasons: Array.isArray(finalSelected.writeup_rejection_reasons) ? finalSelected.writeup_rejection_reasons.slice() : [],
           writeup_version: finalSelected.writeup_version || null,
+          strict_quality: finalSelected.strict_quality ? { ...finalSelected.strict_quality } : null,
+          quality_rule_results: Array.isArray(finalSelected.quality_rule_results) ? finalSelected.quality_rule_results.map((result) => ({ ...result })) : [],
+          rejected_rule: finalSelected.rejected_rule || null,
+          rejected_reason: finalSelected.rejected_reason || null,
+          exception_used: finalSelected.exception_used === true,
+          exception_reason: finalSelected.exception_reason || null,
+          follow_up_allowed: finalSelected.follow_up_allowed === true,
+          inclusion_reason: finalSelected.inclusion_reason || null,
+          major_story_candidate: finalSelected.major_story_candidate === true,
+          major_story_block_reason: finalSelected.major_story_block_reason || null,
         };
       }
       const failedReasons = Array.isArray(failed?.writeup_rejection_reasons) ? failed.writeup_rejection_reasons.slice() : [];
-      const selectionReason = failed ? "writeup_failed" : String(candidate?.selection_reason || "selection_not_selected").trim() || "selection_not_selected";
+      const selectionReason = failed
+        ? summarizeRejectedReason(failed)
+        : String(candidate?.selection_reason || "selection_not_selected").trim() || "selection_not_selected";
       addCount(rejectionCounts, selectionReason);
       return {
         ...candidate,
@@ -253,6 +328,16 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
         writeup_attempt_count: Number(failed?.writeup_attempt_count || 0) || null,
         writeup_rejection_reasons: failedReasons,
         writeup_version: failed?.writeup_version || null,
+        strict_quality: failed?.strict_quality ? { ...failed.strict_quality } : null,
+        quality_rule_results: Array.isArray(failed?.quality_rule_results) ? failed.quality_rule_results.map((result) => ({ ...result })) : [],
+        rejected_rule: failed?.rejected_rule || null,
+        rejected_reason: failed?.rejected_reason || null,
+        exception_used: failed?.exception_used === true,
+        exception_reason: failed?.exception_reason || null,
+        follow_up_allowed: failed?.follow_up_allowed === true,
+        inclusion_reason: failed?.inclusion_reason || null,
+        major_story_candidate: failed?.major_story_candidate === true,
+        major_story_block_reason: failed?.major_story_block_reason || null,
       };
     });
 
@@ -261,17 +346,27 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
     topicAudit.rejection_reason_counts = rejectionCounts;
     const topicStats = topicWriteupStats[tag] || {};
     topicAudit.writeup = normalizeAggregateWriteupStats(topicStats, params.itemsPerTopic);
+    topicAudit.strict_quality = strictQualityDiagnostics.topic_buckets?.[tag]
+      ? JSON.parse(JSON.stringify(strictQualityDiagnostics.topic_buckets[tag]))
+      : null;
   }
 
   return {
     ...selectionDiagnostics,
     writeup: normalizeAggregateWriteupStats(writeupSummary, params.itemsPerTopic),
+    strict_quality: {
+      ...(selectionDiagnostics?.strict_quality && typeof selectionDiagnostics.strict_quality === "object"
+        ? selectionDiagnostics.strict_quality
+        : {}),
+      ...JSON.parse(JSON.stringify(strictQualityDiagnostics || {})),
+    },
     topic_selection_audit: topicAudits,
   };
 }
 
 function createDigestOrchestratorEnrichmentRuntime(deps) {
   const {
+    CONFIG,
     enrichItems,
     emitDigestIncident,
     getBackfillRejectionReason,
@@ -293,7 +388,14 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       enrichOpts,
       runMode,
       dueUsersCount,
+      nowMs: paramNowMs,
     } = params;
+    const configDigest = CONFIG?.digest && typeof CONFIG.digest === "object"
+      ? CONFIG.digest
+      : {};
+    const strictQualityConfig = resolveStrictQualityConfig(configDigest);
+    const strictQualityEnabled = strictQualityConfig.enabled === true;
+    const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
 
     const topicBuckets = selectedByTopic && typeof selectedByTopic === "object"
       ? Object.fromEntries(Object.entries(selectedByTopic).map(([tag, items]) => [String(tag || "").trim().toUpperCase(), Array.isArray(items) ? items.slice() : []]))
@@ -316,6 +418,16 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       maxDiscoveryPerTopic: Math.max(0, Number(writeupBackfillPolicy?.maxDiscoveryPerTopic ?? 1)),
       commentaryCapPerTopic: Math.max(0, Number(writeupBackfillPolicy?.commentaryCapPerTopic ?? 1)),
     };
+    const maxBackfillsPerSlot = strictQualityEnabled
+      ? Math.max(1, Number(strictQualityConfig.max_backfills_per_slot || 2))
+      : 99;
+    const topicPoolCounts = Object.create(null);
+    for (const tag of new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])) {
+      const normalizedTag = String(tag || "").trim().toUpperCase();
+      if (!normalizedTag) continue;
+      topicPoolCounts[normalizedTag] = (Array.isArray(topicBuckets[normalizedTag]) ? topicBuckets[normalizedTag].length : 0)
+        + (Array.isArray(reserves[normalizedTag]) ? reserves[normalizedTag].length : 0);
+    }
 
     const writeupStats = {
       attempted_count: 0,
@@ -331,138 +443,387 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       topicWriteupStats: Object.create(null),
     };
     const usedUrls = new Set(flattenTopicBuckets(topicBuckets).map(({ item }) => String(item?.url || "").trim()).filter(Boolean));
-    const reserveCursors = Object.fromEntries(Object.keys(reserves).map((tag) => [tag, 0]));
+    const reserveCursors = Object.fromEntries([...new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])].map((tag) => [tag, 0]));
     const failedItemsByTopic = Object.create(null);
+    const finalTopicBuckets = Object.create(null);
     let aggregateUsage = { input_tokens: 0, output_tokens: 0 };
     let degraded = false;
     let degradation = null;
+    const degradationIncidentKeys = new Set();
+    const strictTopicDiagnostics = Object.create(null);
+    const strictMajorStorySummary = {
+      detected_count: 0,
+      swap_count: 0,
+      blocked_count: 0,
+    };
+
+    async function maybeEmitDegradationIncident(enrichment, meta = {}) {
+      if (enrichment?.degraded !== true) return;
+      degraded = true;
+      degradation = enrichment?.degradation || degradation;
+      const provider = String(enrichment?.degradation?.provider || "").trim();
+      if (!provider) return;
+      const reason = String(enrichment?.degradation?.reason || "unknown").trim() || "unknown";
+      const incidentKey = `${provider}:${reason}`;
+      if (degradationIncidentKeys.has(incidentKey)) return;
+      degradationIncidentKeys.add(incidentKey);
+      await emitIncident(
+        `${provider}-partial-degradation`,
+        `${provider} degradation during enrichment (${reason})`,
+        {
+          mode: runMode,
+          due_users: Number(dueUsersCount || 0),
+          selected_items: Math.max(0, Number(meta.selected_items || 0)),
+          provider,
+          reason,
+          status_code: enrichment?.degradation?.status_code != null ? Number(enrichment.degradation.status_code) : null,
+          timeout_ms: enrichment?.degradation?.timeout_ms != null ? Number(enrichment.degradation.timeout_ms) : null,
+          phase: meta.phase || null,
+          topic_tag: meta.topic_tag || null,
+        }
+      );
+    }
+
+    async function enrichTaggedEntries(taggedEntries = [], meta = {}) {
+      const rows = Array.isArray(taggedEntries) ? taggedEntries.filter((entry) => entry?.item) : [];
+      if (!rows.length) return [];
+      const enrichment = await enrichItems(rows.map((entry) => entry.item), enrichOpts);
+      aggregateUsage.input_tokens += Number(enrichment?.usage?.input_tokens || 0);
+      aggregateUsage.output_tokens += Number(enrichment?.usage?.output_tokens || 0);
+      await maybeEmitDegradationIncident(enrichment, {
+        ...meta,
+        selected_items: rows.length,
+      });
+      const enrichedItems = Array.isArray(enrichment?.items) ? enrichment.items : [];
+      const taggedOut = rows.map((entry, index) => ({
+        tag: String(entry?.tag || "").trim().toUpperCase(),
+        item: enrichedItems[index] || entry.item,
+      }));
+      accumulateWriteupStatsFromTaggedItems(writeupStats, taggedOut);
+      return taggedOut;
+    }
+
+    function evaluateCandidateForTopic(topicTag, item, acceptedItems, remainingExceptions) {
+      if (!strictQualityEnabled) {
+        const dropped = String(item?.writeup_status || "").trim().toLowerCase() === "failed_dropped";
+        return dropped
+          ? {
+              pass: false,
+              rejected_rule: "wim_strength",
+              rejected_reason: "writeup_failed",
+              quality_rule_results: [],
+              exception_used: false,
+              exception_reason: null,
+              follow_up_allowed: false,
+              inclusion_reason: null,
+            }
+          : {
+              pass: true,
+              rejected_rule: null,
+              rejected_reason: null,
+              quality_rule_results: [],
+              exception_used: false,
+              exception_reason: null,
+              follow_up_allowed: false,
+              inclusion_reason: "writeup_pass",
+            };
+      }
+      return evaluateTopicItem(item, {
+        strictQualityConfig,
+        configDigest,
+        nowMs,
+        acceptedItems,
+        remainingExceptions,
+        topicCandidateCount: Math.max(0, Number(topicPoolCounts[topicTag] || 0)),
+        thinPool: Number(topicPoolCounts[topicTag] || 0) < Math.max(15, backfillPolicy.itemsPerTopic * 3),
+      });
+    }
+
+    function weakestAcceptedIndex(items = []) {
+      let weakestIndex = -1;
+      let weakestScore = Infinity;
+      for (let index = 0; index < items.length; index += 1) {
+        const score = Number(items[index]?._score);
+        const normalizedScore = Number.isFinite(score) ? score : -Infinity;
+        if (normalizedScore < weakestScore) {
+          weakestScore = normalizedScore;
+          weakestIndex = index;
+        }
+      }
+      return weakestIndex;
+    }
+
+    function needsEnrichment(item = {}) {
+      const status = String(item?.writeup_status || "").trim();
+      if (status) return false;
+      return !String(item?.wim || "").trim()
+        || !String(item?.wim_brief || "").trim()
+        || !String(item?.signal_shift || "").trim()
+        || !String(item?.implication_type || "").trim();
+    }
 
     const flattenedInitial = flattenTopicBuckets(topicBuckets);
     if (flattenedInitial.length > 0) {
-      const enrichment = await enrichItems(flattenedInitial.map((entry) => entry.item), enrichOpts);
-      degraded = enrichment?.degraded === true;
-      degradation = enrichment?.degradation || null;
-      aggregateUsage.input_tokens += Number(enrichment?.usage?.input_tokens || 0);
-      aggregateUsage.output_tokens += Number(enrichment?.usage?.output_tokens || 0);
-      const enrichedTopicBuckets = mapEnrichedTopicBuckets(flattenedInitial, Array.isArray(enrichment?.items) ? enrichment.items : []);
-      appendFailedItems(failedItemsByTopic, enrichedTopicBuckets);
-      accumulateWriteupStatsFromTaggedItems(
-        writeupStats,
-        flattenTopicBuckets(enrichedTopicBuckets)
-      );
+      const enrichedTagged = await enrichTaggedEntries(flattenedInitial, { phase: "initial" });
+      const enrichedTopicBuckets = mapEnrichedTopicBuckets(flattenedInitial, enrichedTagged.map((entry) => entry.item));
       for (const [tag, itemsForTopic] of Object.entries(enrichedTopicBuckets)) {
         topicBuckets[tag] = itemsForTopic;
       }
-      if (enrichment?.degraded && degradation?.provider) {
-        await emitIncident(
-          `${degradation.provider}-partial-degradation`,
-          `${degradation.provider} degradation during enrichment (${degradation.reason || "unknown"})`,
-          {
-            mode: runMode,
-            due_users: Number(dueUsersCount || 0),
-            selected_items: flattenedInitial.length,
-            provider: degradation.provider,
-            reason: degradation.reason || "unknown",
-            status_code: degradation.status_code != null ? Number(degradation.status_code) : null,
-            timeout_ms: degradation.timeout_ms != null ? Number(degradation.timeout_ms) : null,
-          }
-        );
-      }
     }
 
-    let keepBackfilling = true;
-    while (keepBackfilling) {
-      keepBackfilling = false;
-      const replacementTargets = [];
-      const replacementCandidates = [];
+    for (const tag of [...new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])]) {
+      const topicTag = String(tag || "").trim().toUpperCase();
+      if (!topicTag) continue;
+      const initialItems = Array.isArray(topicBuckets[topicTag]) ? topicBuckets[topicTag].slice() : [];
+      const acceptedItems = [];
+      const rejectedItems = [];
+      let remainingExceptions = Math.max(0, Number(strictQualityConfig.max_exceptions_per_digest || 0));
+      let backfillAttemptCount = 0;
+      let underfillCount = 0;
+      const majorStoryDiagnostics = {
+        detected_count: 0,
+        swap_count: 0,
+        blocked_count: 0,
+        detected_candidates: [],
+        blocked_candidates: [],
+      };
 
-      for (const tag of Object.keys(topicBuckets)) {
-        const topicTag = String(tag || "").trim().toUpperCase();
-        const currentItems = Array.isArray(topicBuckets[topicTag]) ? topicBuckets[topicTag] : [];
-        const successfulItems = currentItems.filter((item) => String(item?.writeup_status || "").trim().toLowerCase() !== "failed_dropped");
-        topicBuckets[topicTag] = successfulItems;
+      for (const item of initialItems) {
+        const evaluation = evaluateCandidateForTopic(topicTag, item, acceptedItems, remainingExceptions);
+        if (evaluation.pass) {
+          const accepted = attachStrictQuality(item, evaluation);
+          acceptedItems.push(accepted);
+          if (evaluation.exception_used === true) remainingExceptions = Math.max(0, remainingExceptions - 1);
+          continue;
+        }
+        const rejected = attachStrictQuality(item, evaluation);
+        rejectedItems.push(rejected);
+        appendRejectedItems(failedItemsByTopic, topicTag, [rejected]);
+      }
 
-        while (topicBuckets[topicTag].length + replacementTargets.filter((entry) => entry.tag === topicTag).length < backfillPolicy.itemsPerTopic) {
+      let reserveDepleted = false;
+      while (acceptedItems.length < backfillPolicy.itemsPerTopic && !reserveDepleted) {
+        let slotFilled = false;
+        for (let attempt = 0; attempt < maxBackfillsPerSlot; attempt += 1) {
           const nextCandidate = pickNextReserveCandidate({
             reserveQueue: reserves[topicTag],
             reserveCursor: reserveCursors[topicTag] || 0,
-            selectedItems: topicBuckets[topicTag].concat(
-              replacementTargets
-                .filter((entry) => entry.tag === topicTag)
-                .map((entry) => entry.item)
-            ),
+            selectedItems: acceptedItems,
             usedUrls,
             getBackfillRejectionReason: resolveBackfillRejection,
             policy: backfillPolicy,
           });
           reserveCursors[topicTag] = nextCandidate.nextCursor;
-          if (!nextCandidate.candidate) break;
-          const url = String(nextCandidate.candidate?.url || "").trim();
-          if (url) usedUrls.add(url);
-          replacementTargets.push({ tag: topicTag, item: nextCandidate.candidate });
-          replacementCandidates.push(nextCandidate.candidate);
-          keepBackfilling = true;
+          if (!nextCandidate.candidate) {
+            reserveDepleted = true;
+            break;
+          }
+          const candidateUrl = String(nextCandidate.candidate?.url || "").trim();
+          if (candidateUrl) usedUrls.add(candidateUrl);
+          backfillAttemptCount += 1;
+          const enrichedReplacement = await enrichTaggedEntries([{ tag: topicTag, item: nextCandidate.candidate }], {
+            phase: "backfill",
+            topic_tag: topicTag,
+          });
+          const enrichedCandidate = enrichedReplacement[0]?.item || nextCandidate.candidate;
+          const evaluation = evaluateCandidateForTopic(topicTag, enrichedCandidate, acceptedItems, remainingExceptions);
+          if (evaluation.pass) {
+            const accepted = attachStrictQuality(enrichedCandidate, evaluation);
+            acceptedItems.push(accepted);
+            if (evaluation.exception_used === true) remainingExceptions = Math.max(0, remainingExceptions - 1);
+            slotFilled = true;
+            break;
+          }
+          const rejected = attachStrictQuality(enrichedCandidate, evaluation);
+          rejectedItems.push(rejected);
+          appendRejectedItems(failedItemsByTopic, topicTag, [rejected]);
+        }
+        if (!slotFilled) underfillCount += 1;
+      }
+
+      if (strictQualityEnabled && strictQualityConfig.major_story.enabled === true) {
+        const majorStoryPool = [];
+        const seenMajorStoryUrls = new Set();
+        const remainingReserve = Array.isArray(reserves[topicTag]) ? reserves[topicTag].slice(reserveCursors[topicTag] || 0) : [];
+        for (const candidate of [...rejectedItems, ...remainingReserve]) {
+          const url = String(candidate?.url || "").trim() || `${topicTag}:${majorStoryPool.length}`;
+          if (seenMajorStoryUrls.has(url)) continue;
+          seenMajorStoryUrls.add(url);
+          if (acceptedItems.some((item) => String(item?.url || "").trim() === String(candidate?.url || "").trim())) continue;
+          if (!isMajorStoryCandidate(candidate, {
+            strictQualityConfig,
+            configDigest,
+            nowMs,
+            selectedItems: acceptedItems,
+          })) continue;
+          majorStoryPool.push(candidate);
+        }
+        majorStoryPool.sort((left, right) => Number(right?._score || 0) - Number(left?._score || 0));
+
+        for (const candidate of majorStoryPool.slice(0, 5)) {
+          const url = String(candidate?.url || "").trim();
+          majorStoryDiagnostics.detected_count += 1;
+          strictMajorStorySummary.detected_count += 1;
+          majorStoryDiagnostics.detected_candidates.push({
+            url: url || null,
+            headline: String(candidate?.headline || "").slice(0, 160) || null,
+            score: Number.isFinite(Number(candidate?._score)) ? Number(candidate._score) : null,
+          });
+          const preparedCandidate = needsEnrichment(candidate)
+            ? ((await enrichTaggedEntries([{ tag: topicTag, item: candidate }], {
+                phase: "major_story",
+                topic_tag: topicTag,
+              }))[0]?.item || candidate)
+            : candidate;
+
+          if (acceptedItems.length < backfillPolicy.itemsPerTopic) {
+            const evaluation = evaluateCandidateForTopic(topicTag, preparedCandidate, acceptedItems, remainingExceptions);
+            if (evaluation.pass) {
+              const accepted = attachStrictQuality(preparedCandidate, evaluation, {
+                major_story_candidate: true,
+                inclusion_reason: "major_story_underfill_fill",
+              });
+              acceptedItems.push(accepted);
+              if (evaluation.exception_used === true) remainingExceptions = Math.max(0, remainingExceptions - 1);
+              majorStoryDiagnostics.swap_count += 1;
+              strictMajorStorySummary.swap_count += 1;
+              continue;
+            }
+            const blocked = attachStrictQuality(preparedCandidate, evaluation, {
+              major_story_candidate: true,
+              major_story_block_reason: evaluation.rejected_reason || "major_story_rejected",
+            });
+            rejectedItems.push(blocked);
+            appendRejectedItems(failedItemsByTopic, topicTag, [blocked]);
+            majorStoryDiagnostics.blocked_count += 1;
+            strictMajorStorySummary.blocked_count += 1;
+            majorStoryDiagnostics.blocked_candidates.push({
+              url: url || null,
+              headline: String(preparedCandidate?.headline || "").slice(0, 160) || null,
+              reason: evaluation.rejected_reason || "major_story_rejected",
+            });
+            continue;
+          }
+
+          const weakestIndex = weakestAcceptedIndex(acceptedItems);
+          if (weakestIndex === -1) break;
+          const swapOut = acceptedItems[weakestIndex];
+          const acceptedWithoutWeakest = acceptedItems.filter((_item, index) => index !== weakestIndex);
+          const swapBudget = Math.max(
+            0,
+            remainingExceptions + (swapOut?.exception_used === true ? 1 : 0)
+          );
+          const evaluation = evaluateCandidateForTopic(topicTag, preparedCandidate, acceptedWithoutWeakest, swapBudget);
+          if (evaluation.pass) {
+            const accepted = attachStrictQuality(preparedCandidate, evaluation, {
+              major_story_candidate: true,
+              inclusion_reason: "major_story_swap",
+            });
+            acceptedItems.splice(weakestIndex, 1, accepted);
+            if (swapOut?.exception_used === true) remainingExceptions += 1;
+            if (evaluation.exception_used === true) remainingExceptions = Math.max(0, remainingExceptions - 1);
+            const swappedOut = {
+              ...swapOut,
+              selection_reason: "major_story_swapped_out",
+            };
+            rejectedItems.push(swappedOut);
+            appendRejectedItems(failedItemsByTopic, topicTag, [swappedOut]);
+            majorStoryDiagnostics.swap_count += 1;
+            strictMajorStorySummary.swap_count += 1;
+            continue;
+          }
+          const blocked = attachStrictQuality(preparedCandidate, evaluation, {
+            major_story_candidate: true,
+            major_story_block_reason: evaluation.rejected_reason || "major_story_rejected",
+          });
+          rejectedItems.push(blocked);
+          appendRejectedItems(failedItemsByTopic, topicTag, [blocked]);
+          majorStoryDiagnostics.blocked_count += 1;
+          strictMajorStorySummary.blocked_count += 1;
+          majorStoryDiagnostics.blocked_candidates.push({
+            url: url || null,
+            headline: String(preparedCandidate?.headline || "").slice(0, 160) || null,
+            reason: evaluation.rejected_reason || "major_story_rejected",
+          });
         }
       }
 
-      if (!replacementCandidates.length) break;
+      let shipReady = {
+        pass: true,
+        reason: strictQualityEnabled ? "bucket_not_evaluated" : "strict_quality_disabled",
+        lead_item_reason: null,
+        signal_density: 0,
+      };
+      if (strictQualityEnabled) {
+        shipReady = evaluateTopicBucketShipReady(acceptedItems, {
+          strictQualityConfig,
+          configDigest,
+          maxItemsPerSourceDomain: backfillPolicy.maxItemsPerSourceDomain,
+          nowMs,
+        });
+      }
 
-      const replacementEnrichment = await enrichItems(replacementCandidates, enrichOpts);
-      aggregateUsage.input_tokens += Number(replacementEnrichment?.usage?.input_tokens || 0);
-      aggregateUsage.output_tokens += Number(replacementEnrichment?.usage?.output_tokens || 0);
-      if (replacementEnrichment?.degraded === true) {
-        degraded = true;
-        degradation = replacementEnrichment?.degradation || degradation;
-      }
-      const enrichedReplacements = Array.isArray(replacementEnrichment?.items) ? replacementEnrichment.items : [];
-      const replacementBuckets = Object.create(null);
-      for (let index = 0; index < replacementTargets.length; index += 1) {
-        const tag = String(replacementTargets[index]?.tag || "").trim().toUpperCase();
-        if (!tag) continue;
-        if (!replacementBuckets[tag]) replacementBuckets[tag] = [];
-        replacementBuckets[tag].push(enrichedReplacements[index] || replacementTargets[index].item);
-      }
-      appendFailedItems(failedItemsByTopic, replacementBuckets);
-      accumulateWriteupStatsFromTaggedItems(
-        writeupStats,
-        replacementTargets.map((entry, index) => ({
-          tag: entry.tag,
-          item: enrichedReplacements[index] || entry.item,
-        }))
-      );
-      for (let index = 0; index < replacementTargets.length; index += 1) {
-        const tag = replacementTargets[index].tag;
-        if (!topicBuckets[tag]) topicBuckets[tag] = [];
-        topicBuckets[tag].push(enrichedReplacements[index] || replacementTargets[index].item);
-      }
-    }
+      const topicStats = ensureTopicWriteupStats(topicTag, writeupStats.topicWriteupStats);
+      topicStats.underfill_due_writeup_count = Math.max(0, backfillPolicy.itemsPerTopic - acceptedItems.length);
 
-    const failedByTopic = appendFailedItems(Object.create(null), failedItemsByTopic);
-    for (const tag of Object.keys(topicBuckets)) {
-      topicBuckets[tag] = (Array.isArray(topicBuckets[tag]) ? topicBuckets[tag] : []).filter((item) => String(item?.writeup_status || "").trim().toLowerCase() !== "failed_dropped");
-      const topicStats = ensureTopicWriteupStats(tag, writeupStats.topicWriteupStats);
-      topicStats.final_selected_count = topicBuckets[tag].length;
-      topicStats.underfill_due_writeup_count = Math.max(0, backfillPolicy.itemsPerTopic - topicBuckets[tag].length);
-      writeupStats.final_selected_count += topicBuckets[tag].length;
+      if (!strictQualityEnabled || shipReady.pass === true) {
+        finalTopicBuckets[topicTag] = acceptedItems.slice();
+        topicStats.final_selected_count = acceptedItems.length;
+        writeupStats.final_selected_count += acceptedItems.length;
+      } else {
+        topicStats.final_selected_count = 0;
+        const blockedItems = acceptedItems.map((item) => ({
+          ...item,
+          selection_reason: `bucket_${shipReady.reason}`,
+          strict_quality: {
+            ...(item?.strict_quality && typeof item.strict_quality === "object" ? item.strict_quality : {}),
+            bucket_block_reason: shipReady.reason,
+          },
+        }));
+        appendRejectedItems(failedItemsByTopic, topicTag, blockedItems);
+      }
       writeupStats.underfill_due_writeup_count += topicStats.underfill_due_writeup_count;
+
+      strictTopicDiagnostics[topicTag] = {
+        initial_selected_count: initialItems.length,
+        final_count: Array.isArray(finalTopicBuckets[topicTag]) ? finalTopicBuckets[topicTag].length : 0,
+        underfill_count: Math.max(0, backfillPolicy.itemsPerTopic - acceptedItems.length),
+        backfill_attempt_count: backfillAttemptCount,
+        exception_count: acceptedItems.filter((item) => item?.exception_used === true).length,
+        pass: strictQualityEnabled ? shipReady.pass === true : true,
+        block_reason: strictQualityEnabled && shipReady.pass !== true ? shipReady.reason || "bucket_blocked" : null,
+        lead_item_reason: shipReady.lead_item_reason || null,
+        signal_density: shipReady.signal_density ?? null,
+        major_story: majorStoryDiagnostics,
+      };
     }
 
-    const finalSelected = flattenTopicBuckets(topicBuckets).map(({ item }) => item);
+    const failedByTopic = Object.fromEntries(
+      Object.entries(failedItemsByTopic).map(([tag, items]) => [tag, Array.isArray(items) ? items.slice() : []])
+    );
+    const finalSelected = flattenTopicBuckets(finalTopicBuckets).map(({ item }) => item);
     const normalizedWriteupSummary = normalizeAggregateWriteupStats(writeupStats, backfillPolicy.itemsPerTopic);
     const normalizedTopicWriteupStats = Object.fromEntries(
       Object.entries(writeupStats.topicWriteupStats).map(([tag, stats]) => [tag, normalizeAggregateWriteupStats(stats, backfillPolicy.itemsPerTopic)])
     );
     const updatedSelectionDiagnostics = updateSelectionDiagnosticsForWriteups(selectionDiagnostics, {
-      finalSelectedByTopic: topicBuckets,
+      finalSelectedByTopic: finalTopicBuckets,
       failedByTopic,
       topicWriteupStats: normalizedTopicWriteupStats,
       writeupSummary: normalizedWriteupSummary,
       itemsPerTopic: backfillPolicy.itemsPerTopic,
+      strictQualityDiagnostics: {
+        ...(selectionDiagnostics?.strict_quality && typeof selectionDiagnostics.strict_quality === "object"
+          ? selectionDiagnostics.strict_quality
+          : {}),
+        topic_buckets: strictTopicDiagnostics,
+        major_story: strictMajorStorySummary,
+      },
     });
 
     return {
       enriched: finalSelected,
-      finalSelectedByTopic: topicBuckets,
+      finalSelectedByTopic: finalTopicBuckets,
       failedByTopic,
       claudeUsage: aggregateUsage,
       degraded,
@@ -471,7 +832,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       writeupDiagnostics: {
         ...normalizedWriteupSummary,
         topic_stats: normalizedTopicWriteupStats,
-        allow_underfill_topic_tags: Object.keys(topicBuckets).filter((tag) => {
+        allow_underfill_topic_tags: Object.keys(finalTopicBuckets).filter((tag) => {
           const stats = normalizedTopicWriteupStats[tag];
           return Number(stats?.underfill_due_writeup_count || 0) > 0 && Number(stats?.final_selected_count || 0) > 0;
         }),

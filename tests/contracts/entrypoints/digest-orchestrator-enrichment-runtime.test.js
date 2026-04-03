@@ -22,6 +22,31 @@ function makeSelectedCandidate(url, headline) {
     source_domain: new URL(url).hostname,
     retrieval_origin: "broker_publisher_feed",
     source_type: "reported_media",
+    source_policy: "preferred",
+    source_tier: 1,
+    source_authority: 0.92,
+    topic_fit: 0.9,
+    published_date: "2026-03-27T10:00:00.000Z",
+    baseScore: 8.2,
+    strategic_value: 0.82,
+    cross_source_count: 2,
+    _score: 0.82,
+  };
+}
+
+function withPassingWriteup(item, overrides = {}) {
+  return {
+    ...item,
+    summary: "Acme repriced enterprise AI contracts for new buyers.",
+    signal_shift: "Acme repriced AI contracts",
+    implication_type: "cost",
+    wim_brief: "Acme's pricing reset raises enterprise software costs this quarter.",
+    wim: "Acme repriced AI contracts, which raises enterprise software costs and resets CIO budget assumptions this quarter.",
+    writeup_status: "model_pass",
+    writeup_attempt_count: 1,
+    writeup_rejection_reasons: [],
+    writeup_version: "v2",
+    ...overrides,
   };
 }
 
@@ -108,7 +133,116 @@ async function testBackfillsDroppedWriteupWithSameTopicReserve() {
   assert.strictEqual(out.writeupDiagnostics.final_selected_count, 5);
 }
 
-testBackfillsDroppedWriteupWithSameTopicReserve().catch((error) => {
+async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
+  const initialSelected = [
+    withPassingWriteup(makeSelectedCandidate("https://example.com/11", "One"), { _score: 0.84 }),
+    withPassingWriteup(makeSelectedCandidate("https://example.com/12", "Two"), {
+      writeup_status: "failed_dropped",
+      signal_shift: null,
+      wim_brief: null,
+      wim: null,
+      writeup_rejection_reasons: ["generic_language"],
+      _score: 0.76,
+    }),
+    withPassingWriteup(makeSelectedCandidate("https://example.com/13", "Three"), { _score: 0.83 }),
+    withPassingWriteup(makeSelectedCandidate("https://example.com/14", "Four"), { _score: 0.78 }),
+    withPassingWriteup(makeSelectedCandidate("https://example.com/15", "Weakest"), { _score: 0.51, baseScore: 6.1, strategic_value: 0.48 }),
+  ];
+  const reserveRaw = [
+    makeSelectedCandidate("https://example.com/16", "Backfill reserve"),
+    {
+      ...makeSelectedCandidate("https://example.com/17", "Official major story"),
+      source_type: "primary_official",
+      source_policy: "allowed",
+      source_authority: 0.97,
+      cross_source_count: 4,
+      _score: 0.62,
+      baseScore: 7.8,
+      strategic_value: 0.77,
+    },
+  ];
+  const enrichedByUrl = new Map([
+    ...initialSelected.map((item) => [item.url, item]),
+    ["https://example.com/16", withPassingWriteup(makeSelectedCandidate("https://example.com/16", "Backfill reserve"), { _score: 0.79 })],
+    ["https://example.com/17", withPassingWriteup({
+      ...reserveRaw[1],
+      summary: "The agency issued a new nationwide AI procurement rule.",
+    }, {
+      signal_shift: "The SEC reset AI vendor disclosures",
+      implication_type: "regulation",
+      wim_brief: "The SEC's rule reset tightens AI vendor compliance costs immediately.",
+      wim: "The SEC reset AI vendor disclosures, which raises compliance costs and reshapes enterprise software selling this quarter.",
+      _score: 0.91,
+    })],
+  ]);
+
+  const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
+    CONFIG: {
+      digest: {
+        strict_quality: {
+          enabled: true,
+          max_backfills_per_slot: 2,
+          max_exceptions_per_digest: 1,
+        },
+      },
+    },
+    enrichItems: async (items) => ({
+      items: items.map((item) => enrichedByUrl.get(item.url) || item),
+      usage: { input_tokens: 10, output_tokens: 5 },
+      degraded: false,
+      degradation: null,
+    }),
+    emitDigestIncident: async () => false,
+    getBackfillRejectionReason: () => null,
+  });
+
+  const out = await enrichmentRuntime.enrichSelectedItems({
+    selected: initialSelected.map((item) => ({ ...item })),
+    selectedByTopic: {
+      TECHNOLOGY: initialSelected.map((item) => makeSelectedCandidate(item.url, item.headline)),
+    },
+    reserveByTopic: {
+      TECHNOLOGY: reserveRaw.map((item) => ({ ...item })),
+    },
+    selectionDiagnostics: {
+      topic_selection_audit: [{
+        tag: "TECHNOLOGY",
+        total_candidates: 7,
+        selected_count: 5,
+        rejected_count: 2,
+        rejection_reason_counts: { selection_pool_full: 2 },
+        candidates: [
+          ...initialSelected.map((item) => ({ url: item.url, headline: item.headline, selected: true, selection_reason: null })),
+          { url: "https://example.com/16", headline: "Backfill reserve", selected: false, selection_reason: "selection_pool_full" },
+          { url: "https://example.com/17", headline: "Official major story", selected: false, selection_reason: "selection_pool_full" },
+        ],
+      }],
+    },
+    writeupBackfillPolicy: {
+      itemsPerTopic: 5,
+      maxItemsPerSourceDomain: 5,
+      maxDiscoveryPerTopic: 1,
+      commentaryCapPerTopic: 1,
+    },
+    runMode: "scheduled",
+    dueUsersCount: 1,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+  });
+
+  assert.strictEqual(out.finalSelectedByTopic.TECHNOLOGY.length, 5);
+  assert.ok(out.finalSelectedByTopic.TECHNOLOGY.some((item) => item.url === "https://example.com/16"), "strict gate should backfill the weak writeup slot");
+  assert.ok(out.finalSelectedByTopic.TECHNOLOGY.some((item) => item.url === "https://example.com/17"), "major story candidate should swap into the topic bucket");
+  assert.ok(!out.finalSelectedByTopic.TECHNOLOGY.some((item) => item.url === "https://example.com/15"), "weakest item should be swapped out by the major story");
+  assert.ok(out.failedByTopic.TECHNOLOGY.some((item) => item.url === "https://example.com/12"), "weak writeup item should remain inspectable");
+  assert.ok(out.failedByTopic.TECHNOLOGY.some((item) => item.selection_reason === "major_story_swapped_out"), "swapped-out item should be logged");
+  assert.strictEqual(out.selectionDiagnostics.strict_quality.major_story.swap_count, 1);
+  assert.strictEqual(out.selectionDiagnostics.strict_quality.topic_buckets.TECHNOLOGY.pass, true);
+}
+
+(async () => {
+  await testBackfillsDroppedWriteupWithSameTopicReserve();
+  await testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory();
+})().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);
 });

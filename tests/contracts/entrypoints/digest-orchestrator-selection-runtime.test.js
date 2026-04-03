@@ -202,6 +202,61 @@ assertModuleExports(() => runtime, TARGET_REL);
     "extra commentary items should be rejected explicitly once the fallback slot is used"
   );
 
+  const strictPrefilterRuntime = createDigestOrchestratorSelectionRuntime({
+    CONFIG: {
+      digest: {
+        itemCount: 5,
+        crossDayDedupDays: 3,
+        minBackfillItemsAfterDedup: 3,
+        maxItemsPerSourceDomain: 2,
+        strict_quality: {
+          enabled: true,
+          freshness_hours_cap: 48,
+          topic_fit_min: 0.7,
+        },
+      },
+    },
+    log: () => {},
+    createDigestPolicies: () => ({
+      rankingPolicy: { repeatPenalty: 0, minBaseScoreForFinal: 6.5 },
+      depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+    }),
+    dedupAgainstRecentArchives: (items) => ({ items: items.slice(), removed: 0, archive_days_used: 3, backfilled: 0 }),
+    buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items: items.slice(), suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
+    emitDigestIncident: async () => {},
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
+    annotateEditorialSignals: (items) => items.slice(),
+    buildStorylineCandidates: (items) => items.slice(),
+  });
+
+  const strictPrefilterOut = await strictPrefilterRuntime.selectForEnrichment({
+    allItems: [
+      { url: "https://example.com/valid", headline: "Valid item", tag: "TECHNOLOGY", published_date: "2026-03-27T10:00:00.000Z", source_domain: "valid.example.com", source_type: "reported_media", topic_fit: 0.9 },
+      { url: "https://example.com/stale", headline: "Stale item", tag: "TECHNOLOGY", published_date: "2026-03-24T01:00:00.000Z", source_domain: "stale.example.com", source_type: "reported_media", topic_fit: 0.9 },
+      { url: "https://example.com/offtopic", headline: "Off-topic item", tag: "TECHNOLOGY", published_date: "2026-03-27T09:00:00.000Z", source_domain: "offtopic.example.com", source_type: "reported_media", topic_fit: 0.3 },
+    ],
+    selectionTarget: 5,
+    tagPriority: { technology: 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 7,
+    nowMs,
+  });
+
+  assert.strictEqual(strictPrefilterOut.selectionDiagnostics.strict_quality.prefilter.removed_count, 2);
+  assert.strictEqual(strictPrefilterOut.selectionDiagnostics.candidate_pool_after_pre_ranking_quality, 1);
+
   const failIncidents = [];
   const failRuntime = createDigestOrchestratorSelectionRuntime({
     CONFIG: { digest: { itemCount: 5, crossDayDedupDays: 3 } },

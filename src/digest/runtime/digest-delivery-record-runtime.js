@@ -127,6 +127,19 @@ function createDigestDeliveryRecordRuntime(deps) {
       refill_count: Math.max(0, Number(input.refill_count || 0)),
       thin_pool: input.thin_pool === true,
       dominant_failure_mode: String(input.dominant_failure_mode || "").trim() || null,
+      surviving_topic_bucket_count: Number.isFinite(Number(input.surviving_topic_bucket_count))
+        ? Number(input.surviving_topic_bucket_count)
+        : null,
+      strict_quality_exception_count: Number.isFinite(Number(input.strict_quality_exception_count))
+        ? Number(input.strict_quality_exception_count)
+        : null,
+      extreme_underfill: input.extreme_underfill === true,
+      blocked_topic_list: Array.isArray(input.blocked_topic_list)
+        ? input.blocked_topic_list.map((row) => ({
+            tag: String(row?.tag || "").trim() || null,
+            reason: String(row?.reason || "").trim() || null,
+          }))
+        : [],
       items: Array.isArray(input.items) ? input.items.slice() : [],
     };
   }

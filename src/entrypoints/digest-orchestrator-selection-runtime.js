@@ -12,6 +12,10 @@ const {
 const { classifyCandidates } = require("../domains/classification/strategic-relevance-classifier");
 const { filterLowRelevance, boostHighRelevance } = require("../domains/classification/strategic-relevance-scoring");
 const { loadCache } = require("../domains/classification/strategic-relevance-cache");
+const {
+  resolveStrictQualityConfig,
+  runPreRankingFilter,
+} = require("../digest/domain/strict-quality-domain-runtime");
 const path = require("path");
 
 // Domain-to-topic scope constraints for best-fit reassignment.
@@ -588,14 +592,30 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     let classificationDiagnostics = null;
     let filterDiagnostics = null;
     let boostDiagnostics = null;
+    let strictQualityPrefilterDiagnostics = null;
+    const strictQualityConfig = resolveStrictQualityConfig(CONFIG.digest || {});
+    const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
+    let preRankingItems = annotatedItems;
+    if (strictQualityConfig.enabled) {
+      const preRankingResult = runPreRankingFilter(annotatedItems, {
+        strictQualityConfig,
+        configDigest: CONFIG.digest || {},
+        nowMs,
+      });
+      strictQualityPrefilterDiagnostics = preRankingResult.diagnostics;
+      preRankingItems = preRankingResult.kept;
+      if (Number(strictQualityPrefilterDiagnostics?.removed_count || 0) > 0) {
+        log(`Strict quality prefilter removed ${strictQualityPrefilterDiagnostics.removed_count} candidate(s) before scoring`);
+      }
+    }
     const classificationEnabled = CONFIG.digest?.classification?.enabled === true;
-    let scoringInput = annotatedItems;
+    let scoringInput = preRankingItems;
 
     if (classificationEnabled) {
       const cachePath = path.resolve(process.cwd(), "data", "strategic-classification-cache.json");
       const cache = loadCache(cachePath);
       const { candidates: classified, diagnostics: classRunDiag } = await classifyCandidates(
-        annotatedItems,
+        preRankingItems,
         {
           cache,
           config: CONFIG,
@@ -620,7 +640,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const scoringConfig = paramScoringConfig && typeof paramScoringConfig === "object"
       ? paramScoringConfig
       : (CONFIG.digest?.scoring || {});
-    const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
     const scoredItems = scoreCandidates(scoringInput, { scoringConfig, nowMs });
 
     // --- Post-score strategic boost ---
@@ -783,6 +802,10 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         classification_run: classificationDiagnostics,
         classification_summary: filterDiagnostics,
         classification_boost: boostDiagnostics,
+        strict_quality: {
+          prefilter: strictQualityPrefilterDiagnostics,
+        },
+        candidate_pool_after_pre_ranking_quality: strictQualityConfig.enabled ? preRankingItems.length : annotatedItems.length,
         candidate_pool_after_classification: classificationEnabled ? scoringInput.length : null,
         effective_max_items_per_source_domain: effectiveMaxItemsPerSourceDomain,
         storyline_cluster_removed_count: storylineClusterRemovedCount,

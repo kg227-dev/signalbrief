@@ -14,6 +14,44 @@ const runtime = require(TARGET_PATH);
 const { createDigestOrchestratorDeliveryRuntime } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
+function makeStrictItem(tag, headline, url, overrides = {}) {
+  return {
+    tag,
+    headline,
+    summary: "Enterprise buyers are repricing contracts around a new policy change.",
+    url,
+    source: "Example",
+    source_domain: "example.com",
+    published_date: "2026-03-14T05:00:00.000Z",
+    topicMatch: 9,
+    source_policy: "preferred",
+    source_type: "reported_media",
+    source_authority: 0.92,
+    source_tier: 1,
+    topic_fit: 0.9,
+    baseScore: 8.4,
+    strategic_value: 0.81,
+    cross_source_count: 2,
+    _score: 0.84,
+    signal_shift: "Acme repriced AI contracts",
+    implication_type: "cost",
+    wim_brief: "Acme's pricing reset raises enterprise software costs this quarter.",
+    wim: "Acme repriced AI contracts, which raises enterprise software costs and resets CIO budget assumptions this quarter.",
+    writeup_status: "model_pass",
+    writeup_attempt_count: 1,
+    writeup_rejection_reasons: [],
+    writeup_version: "v2",
+    strict_quality: {
+      pass: true,
+      quality_rule_results: [],
+      exception_used: false,
+      follow_up_allowed: false,
+      inclusion_reason: "quality_pass",
+    },
+    ...overrides,
+  };
+}
+
 (async () => {
   const sentEmailOrders = [];
   const sentQuickScanRows = [];
@@ -295,6 +333,121 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.ok(!Object.prototype.hasOwnProperty.call(sentRecord, "lower_confidence_used"));
   assert.ok(sentRecord.items.every((item) => !Object.prototype.hasOwnProperty.call(item, "delivery_confidence")));
   assert.ok(sentRecord.items.every((item) => !Object.prototype.hasOwnProperty.call(item, "delivery_topic_classes")));
+})().catch((error) => {
+  process.stderr.write(`${error.stack || error.message}\n`);
+  process.exit(1);
+});
+
+(async () => {
+  const sentEmailOrders = [];
+  const recordPayloads = [];
+  const deliveryRuntime = createDigestOrchestratorDeliveryRuntime({
+    CONFIG: {
+      digest: {
+        strict_quality: {
+          enabled: true,
+          max_exceptions_per_digest: 1,
+          ship_ready: {
+            extreme_underfill_item_count: 1,
+          },
+        },
+        maxItemsPerSourceDomain: 2,
+        perUserFreshnessDigests: 3,
+        perUserFreshnessMinItems: 3,
+      },
+    },
+    log: () => {},
+    writeUser: () => {},
+    parseSourceDomain: () => "example.com",
+    applyDigestDepth: (items) => items.slice(),
+    computeDigestQualityScore: () => ({ score: 91, band: "strong", components: {} }),
+    buildDigestId: (dateKey, userId) => `${dateKey}:${userId}`,
+    appendEngagementEventChecked: () => ({ ok: true }),
+    beginDigestDeliveryRecord: () => ({ ok: true, skipped: false, version: 1, record: { version: 1 } }),
+    updateDigestDeliveryRecord: (payload) => {
+      recordPayloads.push(payload);
+      return { ok: true };
+    },
+    loadRecentSentDigests: () => [],
+    loadAllCurrentRecords: () => [],
+    digestRetryStateRuntime: {
+      upsertRetryState: () => null,
+      clearRetryState: () => true,
+    },
+    generateLeadSubjectLine: async () => ({ subject: "Subject", usage: {} }),
+    generateEditorialNote: async () => ({ note: "", usage: {} }),
+    buildEmail: (items) => {
+      sentEmailOrders.push(items.map((item) => item.headline));
+      return "<html></html>";
+    },
+    buildOpenTrackingPixel: () => "",
+    getBaseUrl: () => "https://getsignalbrief.com",
+    sendEmail: async () => {},
+    normalizeUrlForDedup: (value) => value,
+    formatEtDateKey: () => "2026-03-14",
+    stripInlineHtml: (value) => String(value || ""),
+    topicVisual: () => ({ icon: "", chipText: "#000", chipBg: "#fff" }),
+    escapeHtml: (value) => String(value || ""),
+  });
+
+  const result = await deliveryRuntime.deliverDueUsers({
+    dueUsers: [{
+      chatId: "strict-user",
+      email: "strict@example.com",
+      token: "tok-strict",
+      topics: ["TECHNOLOGY", "ENERGY"],
+      preferences: {
+        depth: "full",
+        email_enabled: true,
+        telegram_enabled: false,
+      },
+      welcome_email_sent: true,
+      last_digest_items: [],
+    }],
+    enriched: [],
+    finalSelectedByTopic: {
+      TECHNOLOGY: [
+        makeStrictItem("TECHNOLOGY", "Technology lead", "https://example.com/tech", {
+          storyline_key: "shared-story",
+          freshness_key: "shared-story:2026-03-14",
+        }),
+      ],
+      ENERGY: [
+        makeStrictItem("ENERGY", "Energy overlap", "https://example.com/energy", {
+          storyline_key: "shared-story",
+          freshness_key: "shared-story:2026-03-14",
+          _score: 0.79,
+          baseScore: 8.1,
+          strategic_value: 0.78,
+        }),
+      ],
+    },
+    now: new Date("2026-03-14T10:00:00.000Z"),
+    shortDate: "Mar 14",
+    dateStr: "Saturday, March 14, 2026",
+    digestDateKey: "2026-03-14",
+    runId: "scheduled:2026-03-14T10-00-00-000Z",
+    repeatIndex: { days: 3, urlKeys: new Set(), headlineKeys: new Set() },
+    repeatPenalty: 0.5,
+    depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+    rankingPolicy: { minSignalScoreForFinal: 6.2 },
+    publicDigestUrl: "https://getsignalbrief.com/digest/2026-03-14",
+    suppressWelcome: false,
+    claudeUsage: { input_tokens: 0, output_tokens: 0 },
+    engagementEvents: [],
+    writeupDiagnostics: {},
+  });
+
+  assert.strictEqual(result.deliveredUsers.length, 1);
+  assert.deepStrictEqual(sentEmailOrders[0], ["Technology lead"]);
+  const sentRecord = recordPayloads.find((payload) => payload?.status === "sent");
+  assert.ok(sentRecord, "strict path should persist a sent record");
+  assert.strictEqual(sentRecord.extreme_underfill, true);
+  assert.strictEqual(sentRecord.surviving_topic_bucket_count, 1);
+  assert.strictEqual(sentRecord.strict_quality_exception_count, 0);
+  assert.ok(Array.isArray(sentRecord.blocked_topic_list));
+  assert.strictEqual(sentRecord.blocked_topic_list.length, 1);
+  assert.strictEqual(sentRecord.blocked_topic_list[0].tag, "ENERGY");
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

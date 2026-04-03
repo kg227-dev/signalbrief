@@ -603,6 +603,9 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
   const selectionReason = selected
     ? null
     : String(candidate?.selection_reason || "selection_not_selected").trim() || "selection_not_selected";
+  const strictQuality = candidate?.strict_quality && typeof candidate.strict_quality === "object"
+    ? cloneJsonValue(candidate.strict_quality)
+    : null;
   return {
     headline: String(candidate?.headline || "").slice(0, 160),
     url: String(candidate?.url || ""),
@@ -622,6 +625,20 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
     content_flags: Array.isArray(candidate?.content_flags) ? candidate.content_flags.slice() : [],
     selected,
     selection_reason: selectionReason,
+    writeup_status: candidate?.writeup_status || null,
+    writeup_attempt_count: Number.isFinite(Number(candidate?.writeup_attempt_count)) ? Number(candidate.writeup_attempt_count) : null,
+    writeup_rejection_reasons: Array.isArray(candidate?.writeup_rejection_reasons) ? candidate.writeup_rejection_reasons.slice() : [],
+    writeup_version: candidate?.writeup_version || null,
+    strict_quality: strictQuality,
+    quality_rule_results: Array.isArray(candidate?.quality_rule_results) ? cloneJsonValue(candidate.quality_rule_results) : [],
+    rejected_rule: candidate?.rejected_rule || strictQuality?.rejected_rule || null,
+    rejected_reason: candidate?.rejected_reason || strictQuality?.rejected_reason || null,
+    exception_used: candidate?.exception_used === true || strictQuality?.exception_used === true,
+    exception_reason: candidate?.exception_reason || strictQuality?.exception_reason || null,
+    follow_up_allowed: candidate?.follow_up_allowed === true || strictQuality?.follow_up_allowed === true,
+    inclusion_reason: candidate?.inclusion_reason || strictQuality?.inclusion_reason || null,
+    major_story_candidate: candidate?.major_story_candidate === true || strictQuality?.major_story_candidate === true,
+    major_story_block_reason: candidate?.major_story_block_reason || strictQuality?.major_story_block_reason || null,
   };
 }
 
@@ -716,6 +733,9 @@ function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selec
         missed_story_flags: buildTopicMissedStoryFlags(candidates),
         writeup: topic?.writeup && typeof topic.writeup === "object"
           ? cloneJsonValue(topic.writeup)
+          : null,
+        strict_quality: topic?.strict_quality && typeof topic.strict_quality === "object"
+          ? cloneJsonValue(topic.strict_quality)
           : null,
         candidates,
       };
@@ -885,6 +905,9 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       global_lane_breakdown: globalLaneCounts,
       missed_story_flag_count: missedStoryFlagCount,
       writeup: writeupSummary,
+      strict_quality: selectionDiagnostics?.strict_quality && typeof selectionDiagnostics.strict_quality === "object"
+        ? cloneJsonValue(selectionDiagnostics.strict_quality)
+        : null,
       broker_saturated_topics: Array.isArray(fetchDiagnostics?.topic_diagnostics)
         ? fetchDiagnostics.topic_diagnostics.filter((topic) => Number(topic?.broker_item_count || 0) >= 10).length
         : 0,
@@ -929,11 +952,13 @@ function recomputeDigestAuditRollups(auditDoc) {
   let totalCandidates = 0;
   let totalSelected = 0;
   let missedStoryFlagCount = 0;
+  let blockedTopicBucketCount = 0;
 
   for (const topic of topicList) {
     totalCandidates += Number(topic?.total_candidates || 0);
     totalSelected += Number(topic?.selected_count || 0);
     missedStoryFlagCount += Math.max(0, Number(Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags.length : 0));
+    if (topic?.strict_quality?.pass === false) blockedTopicBucketCount += 1;
     for (const [lane, count] of Object.entries(topic?.lane_breakdown || {})) {
       globalLaneBreakdown[lane] = (globalLaneBreakdown[lane] || 0) + Number(count || 0);
     }
@@ -950,6 +975,7 @@ function recomputeDigestAuditRollups(auditDoc) {
     selection_rejection_counts: selectionRejectionCounts,
     discovery_capped: Number(selectionRejectionCounts.selection_discovery_cap || 0),
     missed_story_flag_count: missedStoryFlagCount,
+    blocked_topic_bucket_count: blockedTopicBucketCount,
   };
 
   const fetch = doc.fetch && typeof doc.fetch === "object" ? doc.fetch : {};
@@ -1567,12 +1593,14 @@ async function main() {
   }
 
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
+    CONFIG,
     enrichItems,
     emitDigestIncident,
     getBackfillRejectionReason,
   });
   const {
     enriched,
+    finalSelectedByTopic,
     selectionDiagnostics: finalSelectionDiagnostics,
     claudeUsage,
     writeupDiagnostics,
@@ -1584,6 +1612,7 @@ async function main() {
     writeupBackfillPolicy,
     runMode,
     dueUsersCount: dueUsers.length,
+    nowMs: now.getTime(),
   });
 
   writeDigestAuditLog({
@@ -1652,6 +1681,7 @@ async function main() {
     const deliveryResult = await deliveryRuntime.deliverDueUsers({
       dueUsers,
       enriched: storylinePool,
+      finalSelectedByTopic,
       now,
       shortDate,
       dateStr,

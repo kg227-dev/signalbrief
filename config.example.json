@@ -51,6 +51,26 @@
       "cache_ttl_days": 14,
       "boost_in_thin_pool": true,
       "model": "claude-3-haiku-20240307"
+    },
+    "strict_quality": {
+      "enabled": false,
+      "freshness_hours_cap": 48,
+      "topic_fit_min": 0.7,
+      "max_backfills_per_slot": 2,
+      "max_exceptions_per_digest": 1,
+      "allow_tier3_in_thin_pool": true,
+      "major_story": {
+        "enabled": true,
+        "min_cross_source_count": 2,
+        "escape_hatch_primary_trusted": true,
+        "escape_hatch_high_corroboration": true
+      },
+      "ship_ready": {
+        "allow_underfill": true,
+        "extreme_underfill_item_count": 1,
+        "anchor_base_score": 8.5,
+        "anchor_strategic_value": 0.8
+      }
     }
   },
   "topics": [

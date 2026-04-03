@@ -52,6 +52,12 @@ function expectNumberRange(errors, fieldPath, value, { min = 0, max = Number.MAX
   return true;
 }
 
+function expectBoolean(errors, fieldPath, value) {
+  if (typeof value === "boolean") return true;
+  pushError(errors, fieldPath, "must be a boolean");
+  return false;
+}
+
 function validateTopicEntry(errors, topic, idx, seenTags) {
   const topicPath = `topics[${idx}]`;
   if (!expectObject(errors, topicPath, topic)) return;
@@ -116,6 +122,55 @@ function validateConfigSchema(config) {
         }
         if (searchBudget.scheduled.hard_calls != null) {
           expectPositiveInteger(errors, "digest.search_budget.scheduled.hard_calls", searchBudget.scheduled.hard_calls, { min: 1, max: 200 });
+        }
+      }
+    }
+    if (digest.strict_quality != null && expectObject(errors, "digest.strict_quality", digest.strict_quality)) {
+      const strictQuality = digest.strict_quality;
+      if (strictQuality.enabled != null) {
+        expectBoolean(errors, "digest.strict_quality.enabled", strictQuality.enabled);
+      }
+      if (strictQuality.freshness_hours_cap != null) {
+        expectPositiveInteger(errors, "digest.strict_quality.freshness_hours_cap", strictQuality.freshness_hours_cap, { min: 1, max: 168 });
+      }
+      if (strictQuality.topic_fit_min != null) {
+        expectNumberRange(errors, "digest.strict_quality.topic_fit_min", strictQuality.topic_fit_min, { min: 0, max: 1 });
+      }
+      if (strictQuality.max_backfills_per_slot != null) {
+        expectPositiveInteger(errors, "digest.strict_quality.max_backfills_per_slot", strictQuality.max_backfills_per_slot, { min: 1, max: 5 });
+      }
+      if (strictQuality.max_exceptions_per_digest != null) {
+        expectPositiveInteger(errors, "digest.strict_quality.max_exceptions_per_digest", strictQuality.max_exceptions_per_digest, { min: 0, max: 5 });
+      }
+      if (strictQuality.allow_tier3_in_thin_pool != null) {
+        expectBoolean(errors, "digest.strict_quality.allow_tier3_in_thin_pool", strictQuality.allow_tier3_in_thin_pool);
+      }
+      if (strictQuality.major_story != null && expectObject(errors, "digest.strict_quality.major_story", strictQuality.major_story)) {
+        if (strictQuality.major_story.enabled != null) {
+          expectBoolean(errors, "digest.strict_quality.major_story.enabled", strictQuality.major_story.enabled);
+        }
+        if (strictQuality.major_story.min_cross_source_count != null) {
+          expectPositiveInteger(errors, "digest.strict_quality.major_story.min_cross_source_count", strictQuality.major_story.min_cross_source_count, { min: 1, max: 10 });
+        }
+        if (strictQuality.major_story.escape_hatch_primary_trusted != null) {
+          expectBoolean(errors, "digest.strict_quality.major_story.escape_hatch_primary_trusted", strictQuality.major_story.escape_hatch_primary_trusted);
+        }
+        if (strictQuality.major_story.escape_hatch_high_corroboration != null) {
+          expectBoolean(errors, "digest.strict_quality.major_story.escape_hatch_high_corroboration", strictQuality.major_story.escape_hatch_high_corroboration);
+        }
+      }
+      if (strictQuality.ship_ready != null && expectObject(errors, "digest.strict_quality.ship_ready", strictQuality.ship_ready)) {
+        if (strictQuality.ship_ready.allow_underfill != null) {
+          expectBoolean(errors, "digest.strict_quality.ship_ready.allow_underfill", strictQuality.ship_ready.allow_underfill);
+        }
+        if (strictQuality.ship_ready.extreme_underfill_item_count != null) {
+          expectPositiveInteger(errors, "digest.strict_quality.ship_ready.extreme_underfill_item_count", strictQuality.ship_ready.extreme_underfill_item_count, { min: 1, max: 5 });
+        }
+        if (strictQuality.ship_ready.anchor_base_score != null) {
+          expectNumberRange(errors, "digest.strict_quality.ship_ready.anchor_base_score", strictQuality.ship_ready.anchor_base_score, { min: 0, max: 10 });
+        }
+        if (strictQuality.ship_ready.anchor_strategic_value != null) {
+          expectNumberRange(errors, "digest.strict_quality.ship_ready.anchor_strategic_value", strictQuality.ship_ready.anchor_strategic_value, { min: 0, max: 1 });
         }
       }
     }

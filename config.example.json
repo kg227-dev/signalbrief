@@ -68,6 +68,7 @@
       "ship_ready": {
         "allow_underfill": true,
         "extreme_underfill_item_count": 1,
+        "extreme_underfill_warn_rate_pct": 2,
         "anchor_base_score": 8.5,
         "anchor_strategic_value": 0.8
       }

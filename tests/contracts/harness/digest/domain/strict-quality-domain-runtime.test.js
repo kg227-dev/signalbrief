@@ -16,7 +16,9 @@ assertModuleExports(() => runtime, TARGET_REL);
 const {
   evaluateDuplicateStoryline,
   evaluateFinalDigestAssembly,
+  evaluateTopicBucketShipReady,
   evaluateTopicItem,
+  isLeadItem,
   runPreRankingFilter,
 } = runtime;
 
@@ -144,6 +146,74 @@ function makeItem(url, headline, overrides = {}) {
 }
 
 {
+  const topicCandidates = [
+    makeItem("https://example.com/top", "Top", { _score: 0.94 }),
+    makeItem("https://example.com/lead", "Lead", { _score: 0.91, cross_source_count: 3 }),
+    makeItem("https://example.com/mid", "Mid", { _score: 0.72 }),
+    makeItem("https://example.com/low", "Low", { _score: 0.55 }),
+    makeItem("https://example.com/lower", "Lower", { _score: 0.51 }),
+    makeItem("https://example.com/lowest", "Lowest", { _score: 0.49 }),
+    makeItem("https://example.com/bottom", "Bottom", { _score: 0.45 }),
+    makeItem("https://example.com/bottom2", "Bottom 2", { _score: 0.41 }),
+    makeItem("https://example.com/bottom3", "Bottom 3", { _score: 0.38 }),
+    makeItem("https://example.com/bottom4", "Bottom 4", { _score: 0.35 }),
+  ];
+  const topDecileLead = isLeadItem(topicCandidates[0], {
+    configDigest: {
+      strict_quality: {
+        ship_ready: {
+          anchor_base_score: 8.5,
+          anchor_strategic_value: 0.8,
+        },
+      },
+    },
+    topicCandidates,
+  });
+  assert.strictEqual(topDecileLead.pass, true);
+
+  const outsideTopDecileLead = isLeadItem(topicCandidates[1], {
+    configDigest: {
+      strict_quality: {
+        ship_ready: {
+          anchor_base_score: 8.5,
+          anchor_strategic_value: 0.8,
+        },
+      },
+    },
+    topicCandidates,
+  });
+  assert.strictEqual(outsideTopDecileLead.pass, false);
+  assert.strictEqual(outsideTopDecileLead.reason, "anchor_not_top_decile");
+}
+
+{
+  const signalDensity = evaluateTopicBucketShipReady([
+    makeItem("https://example.com/strong", "Strong", { _score: 0.92, cross_source_count: 3 }),
+    makeItem("https://example.com/borderline-1", "Borderline 1", { _score: 0.61, baseScore: 6.1, strategic_value: 0.42, cross_source_count: 1 }),
+    makeItem("https://example.com/borderline-2", "Borderline 2", { _score: 0.59, baseScore: 6.0, strategic_value: 0.4, cross_source_count: 1 }),
+  ], {
+    configDigest: {
+      strict_quality: {
+        ship_ready: {
+          anchor_base_score: 8.5,
+          anchor_strategic_value: 0.8,
+        },
+      },
+    },
+    topicCandidates: [
+      makeItem("https://example.com/strong", "Strong", { _score: 0.92, cross_source_count: 3 }),
+      makeItem("https://example.com/borderline-1", "Borderline 1", { _score: 0.61, baseScore: 6.1, strategic_value: 0.42, cross_source_count: 1 }),
+      makeItem("https://example.com/borderline-2", "Borderline 2", { _score: 0.59, baseScore: 6.0, strategic_value: 0.4, cross_source_count: 1 }),
+    ],
+    maxItemsPerSourceDomain: 5,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+  });
+  assert.strictEqual(signalDensity.pass, false);
+  assert.strictEqual(signalDensity.reason, "signal_density_low");
+  assert.strictEqual(signalDensity.borderline_item_count, 2);
+}
+
+{
   const assembly = evaluateFinalDigestAssembly({
     TECHNOLOGY: [makeItem("https://example.com/tech", "Technology lead", {
       storyline_key: "shared-story",
@@ -170,12 +240,17 @@ function makeItem(url, headline, overrides = {}) {
     subscribedTopics: ["TECHNOLOGY", "ENERGY"],
     maxItemsPerSourceDomain: 2,
     nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+    topicCandidatesByTag: {
+      TECHNOLOGY: [makeItem("https://example.com/tech", "Technology lead", { _score: 0.92, storyline_key: "shared-story", freshness_key: "shared-story:1" })],
+      ENERGY: [makeItem("https://example.com/energy", "Energy overlap", { tag: "ENERGY", _score: 0.79, storyline_key: "shared-story", freshness_key: "shared-story:1" })],
+    },
   });
 
   assert.strictEqual(assembly.delivery_eligible, true);
   assert.strictEqual(assembly.items.length, 1);
   assert.strictEqual(assembly.surviving_topic_bucket_count, 1);
   assert.strictEqual(assembly.extreme_underfill, true);
+  assert.strictEqual(assembly.extreme_underfill_target_rate_pct, 2);
   assert.strictEqual(assembly.blocked_topics.length, 1);
-  assert.strictEqual(assembly.blocked_topics[0].tag, "ENERGY");
+  assert.strictEqual(assembly.blocked_topics[0].reason, "repeated_framing_across_topics");
 }

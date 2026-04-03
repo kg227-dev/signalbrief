@@ -134,6 +134,9 @@ function createDigestDeliveryRecordRuntime(deps) {
         ? Number(input.strict_quality_exception_count)
         : null,
       extreme_underfill: input.extreme_underfill === true,
+      extreme_underfill_target_rate_pct: Number.isFinite(Number(input.extreme_underfill_target_rate_pct))
+        ? Number(input.extreme_underfill_target_rate_pct)
+        : null,
       blocked_topic_list: Array.isArray(input.blocked_topic_list)
         ? input.blocked_topic_list.map((row) => ({
             tag: String(row?.tag || "").trim() || null,

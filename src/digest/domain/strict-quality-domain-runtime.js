@@ -21,6 +21,7 @@ const DEFAULT_STRICT_QUALITY = Object.freeze({
   ship_ready: Object.freeze({
     allow_underfill: true,
     extreme_underfill_item_count: 1,
+    extreme_underfill_warn_rate_pct: 2,
     anchor_base_score: 8.5,
     anchor_strategic_value: 0.8,
   }),
@@ -121,6 +122,11 @@ function resolveStrictQualityConfig(configDigest = {}) {
     ship_ready: {
       allow_underfill: shipReady.allow_underfill !== false,
       extreme_underfill_item_count: Math.max(1, Number(shipReady.extreme_underfill_item_count || DEFAULT_STRICT_QUALITY.ship_ready.extreme_underfill_item_count)),
+      extreme_underfill_warn_rate_pct: clamp(
+        shipReady.extreme_underfill_warn_rate_pct ?? DEFAULT_STRICT_QUALITY.ship_ready.extreme_underfill_warn_rate_pct,
+        0,
+        100
+      ),
       anchor_base_score: clamp(shipReady.anchor_base_score ?? DEFAULT_STRICT_QUALITY.ship_ready.anchor_base_score, 0, 10),
       anchor_strategic_value: clamp(shipReady.anchor_strategic_value ?? DEFAULT_STRICT_QUALITY.ship_ready.anchor_strategic_value, 0, 1),
     },
@@ -457,21 +463,71 @@ function isMajorStoryCandidate(item, ctx = {}) {
 
 function isLeadItem(item = {}, ctx = {}) {
   const strictQualityConfig = ctx.strictQualityConfig || resolveStrictQualityConfig(ctx.configDigest || {});
-  const baseScore = Number(item?.baseScore || 0);
-  const strategicValue = Number(item?.strategic_value || 0);
-  if (baseScore >= strictQualityConfig.ship_ready.anchor_base_score || strategicValue >= strictQualityConfig.ship_ready.anchor_strategic_value) {
-    return { pass: true, reason: "numeric_anchor" };
-  }
   const sourceBand = classifySourceQualityBand(item);
   if (sourceBand !== "trusted") return { pass: false, reason: "anchor_not_trusted" };
   if (evaluateWriteupStrength(item).pass !== true) return { pass: false, reason: "anchor_weak_wim" };
+
+  const topicCandidates = Array.isArray(ctx.topicCandidates)
+    ? ctx.topicCandidates
+    : [];
+  const rankedScores = topicCandidates
+    .map((candidate) => Number(candidate?._score))
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => right - left);
+  const itemScore = Number(item?._score || 0);
+  const topDecileCount = Math.max(1, Math.ceil(Math.max(1, rankedScores.length || 1) * 0.1));
+  const topDecileCutoff = rankedScores.length > 0
+    ? rankedScores[Math.min(rankedScores.length - 1, topDecileCount - 1)]
+    : null;
+  if (topDecileCutoff != null && (!Number.isFinite(itemScore) || itemScore < topDecileCutoff)) {
+    return {
+      pass: false,
+      reason: "anchor_not_top_decile",
+      cutoff_score: topDecileCutoff,
+      candidate_count: rankedScores.length,
+    };
+  }
+
+  const baseScore = Number(item?.baseScore || 0);
+  const strategicValue = Number(item?.strategic_value || 0);
   const corroborated = Number(item?.cross_source_count || 0) >= 2;
-  const strongSignal = Number(item?._score || 0) >= 0.72 || Number(item?.topic_fit || 0) >= 0.85;
-  const primaryOfficial = String(item?.source_type || "").trim().toLowerCase() === "primary_official";
-  if (corroborated || strongSignal || primaryOfficial) {
-    return { pass: true, reason: "fallback_anchor" };
+  const strategicallyStrong = baseScore >= strictQualityConfig.ship_ready.anchor_base_score
+    || strategicValue >= strictQualityConfig.ship_ready.anchor_strategic_value;
+  if (corroborated || strategicallyStrong) {
+    return {
+      pass: true,
+      reason: strategicallyStrong ? "top_decile_trusted_strong_lead" : "top_decile_trusted_corroborated_lead",
+      cutoff_score: topDecileCutoff,
+      candidate_count: rankedScores.length,
+    };
   }
   return { pass: false, reason: "anchor_not_strong_enough" };
+}
+
+function isBorderlineItem(item = {}, ctx = {}) {
+  const strictQualityConfig = ctx.strictQualityConfig || resolveStrictQualityConfig(ctx.configDigest || {});
+  const baseScore = Number(item?.baseScore || 0);
+  const strategicValue = Number(item?.strategic_value || 0);
+  const corroborated = Number(item?.cross_source_count || 0) >= 2;
+  const exceptionUsed = item?.exception_used === true || item?.strict_quality?.exception_used === true;
+  if (exceptionUsed) return true;
+  const borderlineBaseThreshold = Math.max(6.8, strictQualityConfig.ship_ready.anchor_base_score - 1.2);
+  const borderlineStrategicThreshold = Math.max(0.62, strictQualityConfig.ship_ready.anchor_strategic_value - 0.18);
+  return baseScore < borderlineBaseThreshold
+    && strategicValue < borderlineStrategicThreshold
+    && !corroborated;
+}
+
+function isClearlyStrongItem(item = {}, ctx = {}) {
+  const sourceBand = classifySourceQualityBand(item);
+  if (sourceBand !== "trusted") return false;
+  if (evaluateWriteupStrength(item).pass !== true) return false;
+  const leadCheck = isLeadItem(item, ctx);
+  if (leadCheck.pass === true) return true;
+  const corroborated = Number(item?.cross_source_count || 0) >= 2;
+  const strategicValue = Number(item?.strategic_value || 0);
+  const baseScore = Number(item?.baseScore || 0);
+  return corroborated && (strategicValue >= 0.7 || baseScore >= 7.8);
 }
 
 function evaluateTopicBucketShipReady(items, ctx = {}) {
@@ -538,15 +594,17 @@ function evaluateTopicBucketShipReady(items, ctx = {}) {
     };
   }
 
-  const avgStrategicValue = rows.reduce((sum, item) => sum + Number(item?.strategic_value || 0), 0) / rows.length;
-  const avgBaseScore = rows.reduce((sum, item) => sum + Number(item?.baseScore || 0), 0) / rows.length;
-  const signalDensity = Number((((avgStrategicValue * 10) + avgBaseScore) / 2).toFixed(3));
-  if (avgStrategicValue < 0.45 && avgBaseScore < 6.2) {
+  const borderlineItemCount = rows.filter((item) => isBorderlineItem(item, ctx)).length;
+  const strongItemCount = rows.filter((item) => isClearlyStrongItem(item, ctx)).length;
+  const signalDensity = Number((strongItemCount - (borderlineItemCount * 0.5)).toFixed(3));
+  if (borderlineItemCount > 1 || strongItemCount < 1) {
     return {
       pass: false,
       reason: "signal_density_low",
       lead_item_reason: leadResult.result.reason,
       signal_density: signalDensity,
+      borderline_item_count: borderlineItemCount,
+      strong_item_count: strongItemCount,
     };
   }
 
@@ -556,16 +614,25 @@ function evaluateTopicBucketShipReady(items, ctx = {}) {
     lead_item_reason: leadResult.result.reason,
     lead_item_url: String(leadResult.item?.url || "").trim() || null,
     signal_density: signalDensity,
+    borderline_item_count: borderlineItemCount,
+    strong_item_count: strongItemCount,
   };
 }
 
-function bucketStrength(items = [], ctx = {}) {
+function bucketStrength(tag, items = [], ctx = {}) {
   const rows = Array.isArray(items) ? items : [];
   if (!rows.length) return 0;
+  const topicCandidatesByTag = ctx.topicCandidatesByTag && typeof ctx.topicCandidatesByTag === "object"
+    ? ctx.topicCandidatesByTag
+    : {};
+  const topicCandidates = Array.isArray(topicCandidatesByTag[tag]) ? topicCandidatesByTag[tag] : rows;
   const lead = rows
     .map((item) => ({
       item,
-      anchor: isLeadItem(item, ctx),
+      anchor: isLeadItem(item, {
+        ...ctx,
+        topicCandidates,
+      }),
     }))
     .sort((left, right) => Number(right.item?._score || 0) - Number(left.item?._score || 0))[0];
   return Number(lead?.item?._score || 0) + (lead?.anchor?.pass ? 1 : 0);
@@ -607,7 +674,7 @@ function evaluateFinalDigestAssembly(topicBuckets, ctx = {}) {
 
   const sortedByStrength = allEntries
     .slice()
-    .sort((left, right) => bucketStrength(right.items, ctx) - bucketStrength(left.items, ctx));
+    .sort((left, right) => bucketStrength(right.tag, right.items, ctx) - bucketStrength(left.tag, left.items, ctx));
   const kept = [];
   const blockedTopics = [];
 
@@ -628,7 +695,7 @@ function evaluateFinalDigestAssembly(topicBuckets, ctx = {}) {
     const removable = kept
       .slice()
       .filter((entry) => Number(entry.exception_count || 0) > 0)
-      .sort((left, right) => bucketStrength(left.items, ctx) - bucketStrength(right.items, ctx));
+      .sort((left, right) => bucketStrength(left.tag, left.items, ctx) - bucketStrength(right.tag, right.items, ctx));
     while (totalExceptions > strictQualityConfig.max_exceptions_per_digest && removable.length > 0) {
       const next = removable.shift();
       const index = kept.findIndex((entry) => entry.tag === next.tag);
@@ -648,7 +715,13 @@ function evaluateFinalDigestAssembly(topicBuckets, ctx = {}) {
     if (found) keptMap[tag] = found.items.slice();
   }
   const flatItems = orderedTopics.flatMap((tag) => Array.isArray(keptMap[tag]) ? keptMap[tag] : []);
-  const hasLeadBucket = kept.some((entry) => evaluateTopicBucketShipReady(entry.items, ctx).pass === true);
+  const topicCandidatesByTag = ctx.topicCandidatesByTag && typeof ctx.topicCandidatesByTag === "object"
+    ? ctx.topicCandidatesByTag
+    : {};
+  const hasLeadBucket = kept.some((entry) => evaluateTopicBucketShipReady(entry.items, {
+    ...ctx,
+    topicCandidates: Array.isArray(topicCandidatesByTag[entry.tag]) ? topicCandidatesByTag[entry.tag] : entry.items,
+  }).pass === true);
   const extremeUnderfill = flatItems.length === strictQualityConfig.ship_ready.extreme_underfill_item_count;
 
   return {
@@ -659,6 +732,7 @@ function evaluateFinalDigestAssembly(topicBuckets, ctx = {}) {
     total_exceptions_used: kept.reduce((sum, entry) => sum + Number(entry.exception_count || 0), 0),
     surviving_topic_bucket_count: kept.length,
     extreme_underfill: extremeUnderfill,
+    extreme_underfill_target_rate_pct: Number(strictQualityConfig.ship_ready.extreme_underfill_warn_rate_pct || 0),
   };
 }
 

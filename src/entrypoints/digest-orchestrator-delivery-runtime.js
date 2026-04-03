@@ -177,6 +177,9 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         ? Number(deliveryDiagnostics.strict_quality_exception_count)
         : null,
       extreme_underfill: deliveryDiagnostics.extreme_underfill === true,
+      extreme_underfill_target_rate_pct: Number.isFinite(Number(deliveryDiagnostics.extreme_underfill_target_rate_pct))
+        ? Number(deliveryDiagnostics.extreme_underfill_target_rate_pct)
+        : null,
       blocked_topic_list: Array.isArray(deliveryDiagnostics.blocked_topic_list)
         ? deliveryDiagnostics.blocked_topic_list.map((row) => ({
             tag: row?.tag || null,
@@ -348,6 +351,9 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       surviving_topic_bucket_count: Math.max(0, Number(assembly?.surviving_topic_bucket_count || 0)),
       extreme_underfill: assembly?.extreme_underfill === true,
       strict_quality_exception_count: Math.max(0, Number(assembly?.total_exceptions_used || 0)),
+      extreme_underfill_target_rate_pct: Number.isFinite(Number(assembly?.extreme_underfill_target_rate_pct))
+        ? Number(assembly.extreme_underfill_target_rate_pct)
+        : null,
     };
   }
 
@@ -480,6 +486,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             subscribedTopics: subscribedStandardTopics,
             maxItemsPerSourceDomain: CONFIG.digest?.maxItemsPerSourceDomain || 2,
             nowMs: now.getTime(),
+            topicCandidatesByTag: strictUserTopicBuckets,
           });
           deliverySelection = buildStrictDeliverySelection(strictAssembly);
           deliveryDiagnostics = {
@@ -494,6 +501,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             surviving_topic_bucket_count: deliverySelection.surviving_topic_bucket_count,
             strict_quality_exception_count: deliverySelection.strict_quality_exception_count,
             extreme_underfill: deliverySelection.extreme_underfill,
+            extreme_underfill_target_rate_pct: deliverySelection.extreme_underfill_target_rate_pct,
             blocked_topic_list: Array.isArray(deliverySelection.blocked_topics)
               ? deliverySelection.blocked_topics.slice()
               : [],

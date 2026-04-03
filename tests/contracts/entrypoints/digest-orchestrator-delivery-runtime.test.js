@@ -443,6 +443,7 @@ function makeStrictItem(tag, headline, url, overrides = {}) {
   const sentRecord = recordPayloads.find((payload) => payload?.status === "sent");
   assert.ok(sentRecord, "strict path should persist a sent record");
   assert.strictEqual(sentRecord.extreme_underfill, true);
+  assert.strictEqual(sentRecord.extreme_underfill_target_rate_pct, 2);
   assert.strictEqual(sentRecord.surviving_topic_bucket_count, 1);
   assert.strictEqual(sentRecord.strict_quality_exception_count, 0);
   assert.ok(Array.isArray(sentRecord.blocked_topic_list));

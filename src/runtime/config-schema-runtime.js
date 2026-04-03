@@ -166,6 +166,9 @@ function validateConfigSchema(config) {
         if (strictQuality.ship_ready.extreme_underfill_item_count != null) {
           expectPositiveInteger(errors, "digest.strict_quality.ship_ready.extreme_underfill_item_count", strictQuality.ship_ready.extreme_underfill_item_count, { min: 1, max: 5 });
         }
+        if (strictQuality.ship_ready.extreme_underfill_warn_rate_pct != null) {
+          expectNumberRange(errors, "digest.strict_quality.ship_ready.extreme_underfill_warn_rate_pct", strictQuality.ship_ready.extreme_underfill_warn_rate_pct, { min: 0, max: 100 });
+        }
         if (strictQuality.ship_ready.anchor_base_score != null) {
           expectNumberRange(errors, "digest.strict_quality.ship_ready.anchor_base_score", strictQuality.ship_ready.anchor_base_score, { min: 0, max: 10 });
         }

@@ -2575,6 +2575,8 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
       ${renderDigestAuditSummaryPill("Underfill", String(Number(strictQuality.underfill_count || 0)), Number(strictQuality.underfill_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
       ${renderDigestAuditSummaryPill("Lead", String(strictQuality.lead_item_reason || "none"))}
       ${renderDigestAuditSummaryPill("Signal density", Number.isFinite(Number(strictQuality.signal_density)) ? Number(strictQuality.signal_density).toFixed(2) : "—")}
+      ${renderDigestAuditSummaryPill("Borderline", String(Number(strictQuality.borderline_item_count || 0)), Number(strictQuality.borderline_item_count || 0) > 1 ? "var(--red)" : "var(--green)")}
+      ${renderDigestAuditSummaryPill("Clearly strong", String(Number(strictQuality.strong_item_count || 0)), Number(strictQuality.strong_item_count || 0) < 1 ? "var(--red)" : "var(--green)")}
       ${renderDigestAuditSummaryPill("Exceptions", String(Number(strictQuality.exception_count || 0)), Number(strictQuality.exception_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
     </div>` : ""}
     ${majorStory ? `<div class="digest-audit-row" style="margin-bottom:10px;">

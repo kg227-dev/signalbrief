@@ -760,6 +760,10 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
           configDigest,
           maxItemsPerSourceDomain: backfillPolicy.maxItemsPerSourceDomain,
           nowMs,
+          topicCandidates: [
+            ...initialItems,
+            ...(Array.isArray(reserves[topicTag]) ? reserves[topicTag] : []),
+          ],
         });
       }
 
@@ -794,6 +798,8 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
         block_reason: strictQualityEnabled && shipReady.pass !== true ? shipReady.reason || "bucket_blocked" : null,
         lead_item_reason: shipReady.lead_item_reason || null,
         signal_density: shipReady.signal_density ?? null,
+        borderline_item_count: Number(shipReady.borderline_item_count || 0),
+        strong_item_count: Number(shipReady.strong_item_count || 0),
         major_story: majorStoryDiagnostics,
       };
     }

@@ -266,8 +266,12 @@
         "^companies that have not submitted",
         "^fda warns consumers not to",
         "^fda alerts customers to",
+        "^drug safety communication",
+        "^fda drug safety communication",
         "drug amount reports",
         "hidden drug ingredients",
+        "voluntary recall",
+        "sterility issues",
         "shortage mitigation efforts"
       ]
     },
@@ -326,6 +330,13 @@
         "adverse",
         "device",
         "drug"
+      ],
+      "title_exclude_patterns": [
+        "voluntary recall",
+        "sterility issues",
+        "^fda alerts customers to",
+        "^fda warns consumers not to",
+        "^drug safety communication"
       ]
     },
     {
@@ -496,8 +507,12 @@
         "^companies that have not submitted",
         "^fda warns consumers not to",
         "^fda alerts customers to",
+        "^drug safety communication",
+        "^fda drug safety communication",
         "drug amount reports",
         "hidden drug ingredients",
+        "voluntary recall",
+        "sterility issues",
         "shortage mitigation efforts"
       ]
     },
@@ -539,8 +554,12 @@
         "^companies that have not submitted",
         "^fda warns consumers not to",
         "^fda alerts customers to",
+        "^drug safety communication",
+        "^fda drug safety communication",
         "drug amount reports",
         "hidden drug ingredients",
+        "voluntary recall",
+        "sterility issues",
         "shortage mitigation efforts"
       ]
     },

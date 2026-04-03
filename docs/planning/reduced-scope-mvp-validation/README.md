@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Validate the current reduced-scope MVP against real scheduled production behavior over a 7-day canary-only window.
+Validate the current reduced-scope MVP against real scheduled production behavior over an initial 7-day canary-only window plus a second 7-day continuation window (Days 8-14) after the first week failed on product-quality grounds.
 
 This is a fresh standalone validation artifact. It is intentionally separate from the older reliability recovery and superpower planning docs.
 
@@ -18,7 +18,7 @@ This is a fresh standalone validation artifact. It is intentionally separate fro
 
 - Scheduled email path only
 - Canary-only exposure
-- 7 consecutive production days
+- 14 consecutive production days total
 - Admin auditability is the primary evidence source
 - Inbox receipt is a secondary transport spot-check
 - Manual resend, regenerate, and topic audit rerun are diagnosis/recovery tools only
@@ -74,7 +74,7 @@ Use only the currently available repo and product surfaces below:
 
 ## Hard Exit Gates
 
-The 7-day window passes only if all of the following are true:
+The continuation window passes only if all of the following are true across Days 8-14:
 
 - 100% canary topic-days are delivered at exactly 5 items
 - 0 selected items are older than 48 hours
@@ -101,7 +101,7 @@ The 7-day window passes only if all of the following are true:
 |---|---|
 | Current deploy SHA | `02bc16211dcad3e2d2c39ac66a98e893acc901a7` |
 | Validation start date | 2026-03-28 (Day 1 = first 07:00 ET send) |
-| Validation end date | 2026-04-03 (Day 7) |
+| Validation end date | 2026-04-10 (Day 14) |
 | Primary operator | Kush Gulati |
 | Secondary operator | TBD |
 | Current digest tuning snapshot | No `data/digest-tuning.json` present — system uses hardcoded defaults |
@@ -166,6 +166,13 @@ The 7-day window passes only if all of the following are true:
 | Day 5 | 2026-04-01 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 77.1% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Second consecutive full day. 613 candidates, 35 selected, all 10 canaries sent. Trusted share still missed target and the selected set still included FDA compliance pages, an American Banker self-promo, and an off-topic FreightWaves border story. |
 | Day 6 | 2026-04-02 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 80.0% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Operationally the strongest day yet: 642 candidates, 35 selected, all 10 canaries delivered, and every hard fill/freshness/backbone gate passed. Still not green: selected-set quality remains mixed and all 80 stored scheduled items had null `wim` / `wim_brief`, indicating a likely deep-mode writeup regression. |
 | Day 7 | 2026-04-03 | Yes | 10 | 10 | 7 | 7 | 0 | 0 | 0 | 80.0% | 100% | 0% | 100% (58/58) | 1 | No | 0 | Yellow | Fourth straight full day. All 10 canaries delivered and every item had visible body text via summary fallback, but all 80 stored scheduled items still had `wim=null` / `wim_brief=null` and official-content leakage remained visible in Life Sciences, Consumer & Retail, Financial Services, and Healthcare. |
+| Day 8 | 2026-04-04 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Week 2 continuation begins. Primary checks: persisted `wim` recovery, lower official-filler share, and effective source-cap enforcement. |
+| Day 9 | 2026-04-05 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Continue weekend behavior validation under the stricter writeup and ranking rules. |
+| Day 10 | 2026-04-06 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Confirm weekday recovery holds after the week-2 fixes. |
+| Day 11 | 2026-04-07 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Validate live source-cap behavior and trusted-share improvement. |
+| Day 12 | 2026-04-08 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Validate sustained topic purity and lower official filler. |
+| Day 13 | 2026-04-09 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Validate that deep-mode strategic copy persists in stored scheduled records. |
+| Day 14 | 2026-04-10 | TBD | 10 | TBD | 7 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Final continuation closeout for the second-week window. |
 
 ## Daily Runbook
 
@@ -545,6 +552,7 @@ Scheduled run `scheduled:2026-04-03T11-04-03-978Z` executed on time. All 10 cana
 - Day 7 confirms the system is mechanically stable on weekdays after the Day 1-3 recovery work. The operational reliability problem has largely been solved.
 - The remaining blockers are editorial and output-path quality: writeup persistence, official-content penalties, and stronger topic-fit / content-shape filtering.
 - By the current validation rules, the 7-day window cannot pass. Days 1-3 were red, and Days 4-7 remained yellow even after the system became operationally stable.
+- Days 8-14 are now an explicit continuation window focused on verifying the quality fixes against the stable delivery path, not on re-proving basic scheduler reliability.
 
 ## Issue Log
 
@@ -640,6 +648,18 @@ The scheduled product path is much more reliable than it was at the start of the
 - **Product quality did not recover enough**: the strategic-writeup path still persisted `wim=null` / `wim_brief=null` on Day 7, and official/noisy content still won too many selected slots.
 
 The next work should be constrained to three areas: trace scheduled enrichment/persistence for `wim`, hard-penalize or exclude official recall/list/rule filler when trade coverage exists, and tighten topic-fit/content-shape filtering in Technology, Healthcare, and Life Sciences.
+
+### Days 8-14 Continuation Readiness
+
+Status on 2026-04-03 before the next remediation batch:
+
+- Scheduler health is green: `GET /api/health/scheduler` returns `ok=true`, `blocked=false`.
+- The full 10-user canary cohort remains active and aligned at `07:00 ET`.
+- The validation blocker is no longer operational readiness. It is output quality and selection quality.
+- The second-week focus areas are:
+  - restore persisted strategic writeups in scheduled records
+  - reduce official-filler selection in Healthcare, Life Sciences, Consumer & Retail, and Financial Services
+  - enforce the intended effective per-source cap in the scheduled path
 
 ## What This Validation Does Not Prove
 

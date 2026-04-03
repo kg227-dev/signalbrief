@@ -1,22 +1,22 @@
 # MVP Validation — Daily Analysis
 
-7-day rolling analysis of digest quality, source health, and product readiness.
+Rolling analysis of digest quality, source health, and product readiness across the initial 7-day validation window plus the Days 8-14 continuation window.
 Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-day-N-YYYY-MM-DD.md`.
 
 ## Rolling tracker
 
-| Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | Target |
-|--------|----|----|----|----|----|----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | 7/7 |
-| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | >=80% |
-| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | >=70% |
-| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | >=90% |
-| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | 0 |
-| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | 0 |
-| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | 7 |
-| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | Green |
+| Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 | D10 | D11 | D12 | D13 | D14 | Target |
+|--------|----|----|----|----|----|----|-----|----|----|-----|-----|-----|-----|-----|--------|
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
+| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | TBD | TBD | TBD | TBD | TBD | TBD | TBD | >=80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | TBD | >=70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | TBD | >=90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
+| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 7 |
+| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Green |
 
 ## Completed days
 
@@ -27,6 +27,14 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 - [Day 5 — 2026-04-01 (Wednesday)](../../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
 - [Day 6 — 2026-04-02 (Thursday)](../../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
 - [Day 7 — 2026-04-03 (Friday)](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md)
+
+## Days 8-14 continuation focus
+
+The first 7-day window failed on product-quality grounds, not delivery mechanics. Days 8-14 are a continuation window focused on three live questions:
+
+- Are scheduled records persisting real strategic writeups again instead of dropping `wim` / `wim_brief`?
+- Are official filler pages and off-topic commentary losing to stronger trade reporting in the selected set?
+- Is the scheduled path actually honoring the intended effective per-source cap?
 
 ## Day 4 — 2026-03-31
 

@@ -87,12 +87,15 @@ function degradedResult(items, usage, degradation) {
 }
 
 function collectWeakWriteupIndexes(items = []) {
-  const { validateStrategicWriteup: validateWriteup } = require("./digest-data-enrich-result-runtime");
   const weak = [];
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
-    const check = validateWriteup(item, item);
-    if (!check.ok) weak.push({ index, reasons: check.reasons.slice() });
+    const reasons = Array.isArray(item?.writeup_validation_reasons)
+      ? item.writeup_validation_reasons.slice()
+      : [];
+    if (String(item?.writeup_origin || "").trim().toLowerCase() === "fallback" || reasons.length > 0) {
+      weak.push({ index, reasons });
+    }
   }
   return weak;
 }

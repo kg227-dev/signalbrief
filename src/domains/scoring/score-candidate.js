@@ -49,6 +49,9 @@ const DEFAULT_LANE_BONUSES = Object.freeze({
 // Items at 0h score 1.0; items at maxAgeHours score 0.05 (not 0 — they're still eligible).
 const DEFAULT_MAX_AGE_HOURS = 48;
 const FRESHNESS_FLOOR = 0.05;
+const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety communication|recall|warns consumers|alerts customers|consumer update|fact sheet|guidance for industry|companies that have not submitted|drug amount reports|shortage mitigation efforts|proactively posted|final rule|proposed rule)\b/i;
+const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(commentary|analysis|feature)\b|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|excerpt from|reporter goes up against)\b/i;
+const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b)\b/i;
 
 function clamp(value, lo, hi) {
   const n = Number(value);
@@ -175,6 +178,55 @@ function computeNoveltyScore(item) {
   return 0.8;
 }
 
+function normalizeTopicFitScore(item) {
+  const raw = Number(item?.topic_fit);
+  if (!Number.isFinite(raw)) return 0.5;
+  if (raw >= 0 && raw <= 1) return raw;
+  if (raw > 1 && raw <= 100) return clamp(raw / 100, 0, 1);
+  return clamp(raw, 0, 1);
+}
+
+function computeQualityAdjustment(item) {
+  let adjustment = 0;
+  const headline = String(item?.headline || "");
+  const summary = String(item?.summary || "");
+  const combined = `${headline} ${summary}`;
+  const topicTag = String(item?.tag || "").trim().toUpperCase();
+  const topicFit = normalizeTopicFitScore(item);
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const sourceFamily = String(item?.source_family || item?.retrieval_source_family || "").trim().toLowerCase();
+  const contentKind = String(item?.content_kind || "").trim().toLowerCase();
+  const originalityProfile = String(item?.originality_profile || "").trim().toLowerCase();
+  const contentFlags = Array.isArray(item?.content_flags)
+    ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase())
+    : [];
+
+  if (topicFit < 0.2) adjustment -= 0.2;
+  else if (topicFit < 0.4) adjustment -= 0.12;
+  else if (topicFit >= 0.85) adjustment += 0.05;
+
+  if (sourceType === "primary_official" || sourceFamily === "official" || contentKind === "official_document") {
+    adjustment -= 0.05;
+    if (OFFICIAL_FILLER_PATTERN.test(combined)) adjustment -= 0.22;
+  }
+
+  const commentaryLike = sourceType === "analysis_blog"
+    || originalityProfile === "derived_synthesis"
+    || contentFlags.includes("generic_commentary")
+    || COMMENTARY_PATTERN.test(combined);
+  if (commentaryLike) adjustment -= 0.18;
+
+  if (topicTag === "TECHNOLOGY" && TECH_NOISE_PATTERN.test(combined)) adjustment -= 0.2;
+
+  if ((sourceType === "reported_media" || sourceType === "trade_specialist")
+    && topicFit >= 0.75
+    && !commentaryLike) {
+    adjustment += 0.04;
+  }
+
+  return clamp(adjustment, -0.4, 0.12);
+}
+
 /**
  * Score a single candidate item.
  *
@@ -196,14 +248,17 @@ function scoreCandidate(item, opts = {}) {
   const sourceTier = computeSourceTierScore(item, cfg.tierScores);
   const laneBonus = computeLaneBonusScore(item, cfg.laneBonuses);
   const novelty = computeNoveltyScore(item);
+  const topicFit = normalizeTopicFitScore(item);
+  const qualityAdjustment = computeQualityAdjustment(item);
 
-  const score = clamp(
+  const baseScore = clamp(
     freshness * w.freshness
     + sourceTier * w.source_tier
     + laneBonus * w.lane_bonus
     + novelty * w.novelty,
     0, 1
   );
+  const score = clamp(baseScore + qualityAdjustment, 0, 1);
 
   // Build human-readable explanation for the admin audit log
   const reasons = [
@@ -211,6 +266,8 @@ function scoreCandidate(item, opts = {}) {
     `source_tier=${sourceTier.toFixed(3)} (weight ${w.source_tier}, tier=${item?.source_tier ?? "unknown"})`,
     `lane_bonus=${laneBonus.toFixed(3)} (weight ${w.lane_bonus}, lane=${item?.retrieval_origin || item?.retrieval_lane || "unknown"})`,
     `novelty=${novelty.toFixed(3)} (weight ${w.novelty})`,
+    `topic_fit=${topicFit.toFixed(3)}`,
+    `quality_adjustment=${qualityAdjustment.toFixed(3)}`,
   ];
 
   return {
@@ -221,6 +278,9 @@ function scoreCandidate(item, opts = {}) {
       source_tier: Number(sourceTier.toFixed(4)),
       lane_bonus: Number(laneBonus.toFixed(4)),
       novelty: Number(novelty.toFixed(4)),
+      topic_fit: Number(topicFit.toFixed(4)),
+      quality_adjustment: Number(qualityAdjustment.toFixed(4)),
+      base_score: Number(baseScore.toFixed(4)),
     },
     _score_reasons: reasons,
   };

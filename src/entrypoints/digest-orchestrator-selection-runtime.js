@@ -172,6 +172,18 @@ function incrementCount(target, key) {
   target[normalizedKey] = (target[normalizedKey] || 0) + 1;
 }
 
+function resolveEffectiveSourceCap(paramScoringConfig, configDigest) {
+  const configured = Number(
+    (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
+      ? paramScoringConfig.maxItemsPerSourceDomain
+      : (configDigest && configDigest.maxItemsPerSourceDomain != null)
+        ? configDigest.maxItemsPerSourceDomain
+        : 5
+  );
+  if (!Number.isFinite(configured)) return 5;
+  return Math.max(1, Math.trunc(configured));
+}
+
 function toSelectionAuditCandidate(item, extras = {}) {
   return {
     tag: String(item?.tag || "").trim().toUpperCase() || null,
@@ -585,6 +597,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     // 3. at most one strong analysis/commentary item if still needed
     const itemsPerTopic = 5;
     const maxDiscoveryPerTopic = Math.max(0, Number(CONFIG.digest.maxDiscoveryItemsPerTopic ?? 1));
+    const effectiveMaxItemsPerSourceDomain = resolveEffectiveSourceCap(paramScoringConfig, CONFIG.digest);
 
     // Group scored+sorted candidates by topic tag.
     const byTag = new Map();
@@ -600,13 +613,10 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const topicSelectionAudit = [];
     const selectionRejectionCounts = Object.create(null);
     for (const [topicTag, topicItems] of byTag.entries()) {
-      const maxItemsPerSourceDomain = (paramScoringConfig && paramScoringConfig.maxItemsPerSourceDomain != null)
-        ? paramScoringConfig.maxItemsPerSourceDomain
-        : CONFIG.digest.maxItemsPerSourceDomain;
       const topicSelection = selectTopicItemsWithFallback({
         topicItems,
         itemsPerTopic,
-        maxItemsPerSourceDomain,
+        maxItemsPerSourceDomain: effectiveMaxItemsPerSourceDomain,
         maxDiscoveryPerTopic,
         nowMs,
       });
@@ -659,6 +669,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           commentary_candidates: commentaryPool.length,
           commentary_selected: commentarySelectedCount,
         },
+        per_source_cap: effectiveMaxItemsPerSourceDomain,
         lane_breakdown: topicLaneCounts,
         rejection_reason_counts: topicReasonCounts,
         candidates: topicCandidates,
@@ -683,7 +694,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       throw new Error("No live items available after freshness and selection filters; digest aborted");
     }
 
-    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${Number(CONFIG.digest.maxItemsPerSourceDomain || 3)})`);
+    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${effectiveMaxItemsPerSourceDomain})`);
 
     return {
       selected,
@@ -706,6 +717,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         classification_summary: filterDiagnostics,
         classification_boost: boostDiagnostics,
         candidate_pool_after_classification: classificationEnabled ? scoringInput.length : null,
+        effective_max_items_per_source_domain: effectiveMaxItemsPerSourceDomain,
         storyline_cluster_removed_count: storylineClusterRemovedCount,
         best_fit_topic_reassigned_count: bestFitTopicReassignedCount,
         candidate_pool_scored: postScoreItems.length,

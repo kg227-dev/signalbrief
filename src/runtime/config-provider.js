@@ -123,6 +123,10 @@ function normalizeMvpConfig(config) {
       resolved.digest = {};
     }
     resolved.digest.itemCount = 5;
+    const configuredSourceCap = Number(resolved.digest.maxItemsPerSourceDomain);
+    resolved.digest.maxItemsPerSourceDomain = Number.isFinite(configuredSourceCap)
+      ? Math.max(5, Math.trunc(configuredSourceCap))
+      : 5;
     resolved.topics = normalizeMvpTopics(resolved.topics);
   }
   return resolved;

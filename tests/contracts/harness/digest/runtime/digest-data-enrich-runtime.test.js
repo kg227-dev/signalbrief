@@ -141,12 +141,42 @@ async function testWeakWriteupTriggersRepairPass() {
   assert.ok(out.usage.input_tokens >= 42, "repair pass usage should be accumulated");
 }
 
+async function testInvalidWriteupFallsBackToDeterministicStrategicCopy() {
+  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => ({
+    status: 200,
+    body: {
+      usage: { input_tokens: 20, output_tokens: 6 },
+      content: [{ text: JSON.stringify([{
+        wim_brief: null,
+        wim: "This highlights the trend. Companies should watch developments.",
+        implications: null,
+        watch_next: null,
+      }]) }],
+    },
+  })));
+
+  const out = await enrichRuntime.enrichItems([{
+    headline: "Frequently requested or proactively posted drug-specific and other records",
+    summary: "Frequently requested or proactively posted drug-specific and other records",
+    tag: "LIFE SCIENCES",
+    source: "fda.gov",
+    source_type: "primary_official",
+    published_date: "2026-04-01T10:00:00.000Z",
+  }]);
+
+  assert.strictEqual(out.degraded, false);
+  assert.ok(out.items[0].wim_brief, "fallback should populate wim_brief when the model output is unusable");
+  assert.ok(/records or compliance index/i.test(out.items[0].wim || ""), "fallback should produce honest strategic text for listing-style official items");
+  assert.strictEqual(out.items[0].writeup_origin, "fallback");
+}
+
 (async () => {
   await testRequestFailureDegradesCleanly();
   await testStatusFailureRespectsProviderPolicy();
   await testParseFailureFallsBack();
   await testEmptySelectionSkipsProviderCall();
   await testWeakWriteupTriggersRepairPass();
+  await testInvalidWriteupFallsBackToDeterministicStrategicCopy();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

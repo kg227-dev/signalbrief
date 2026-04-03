@@ -93,7 +93,7 @@ function createRenderPublicPages(deps) {
 
   function renderScorePill(score, className = "score-pill") {
     const numericScore = Number(score);
-    if (!Number.isFinite(numericScore)) return "";
+    if (!Number.isFinite(numericScore) || numericScore <= 0) return "";
     const tone = scoreTone(numericScore);
     return `<span class="${className}" style="--score-dot:${tone.dot};--score-text:${tone.text};--score-bg:${tone.bg};--score-glow:${tone.glow};">
       <span class="score-dot" aria-hidden="true"></span>

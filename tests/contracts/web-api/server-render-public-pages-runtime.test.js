@@ -37,6 +37,22 @@ const html = renderPublicDigestPage({
   ],
 });
 
+const zeroScoreHtml = renderPublicDigestPage({
+  dateKey: "2026-04-03",
+  dateLabel: "Friday, April 3, 2026",
+  quickScan: "Zero",
+  items: [
+    {
+      headline: "Zero",
+      tag: "HEALTHCARE",
+      summary: "Zero-score item",
+      source: "example.net",
+      url: "https://example.net/zero",
+      relevanceScore: 0,
+    },
+  ],
+});
+
 const publicHtml = renderPublicDigestPage({
   dateKey: "2026-03-13",
   dateLabel: "Friday, March 13, 2026",
@@ -67,3 +83,4 @@ assert.ok(html.includes("Top item"), "expected item summary to render");
 assert.ok(html.includes("Why it matters"), "expected why-it-matters label to render");
 assert.ok(html.includes("Why this matters. Keep watching this shift."), "expected sanitized why-it-matters text to render");
 assert.ok(publicHtml.includes('<link rel="canonical" href="https://getsignalbrief.com/digest/2026-03-13">'), "expected public page to canonicalize to the public digest URL");
+assert.ok(!zeroScoreHtml.includes(">0.0<"), "expected zero scores to be suppressed on public digests");

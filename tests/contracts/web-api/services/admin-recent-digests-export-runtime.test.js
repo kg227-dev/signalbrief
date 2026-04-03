@@ -124,6 +124,7 @@ const {
   assert.strictEqual(row.recipient, "user@example.com");
   assert.strictEqual(row.user_id, "chat-1");
   assert.strictEqual(row.mode, "scheduled");
+  assert.strictEqual(row.digest_url, "/digest/2026-03-20");
   assert.strictEqual(row.quality_score, 81.5);
   assert.strictEqual(row.sent_item_count, 1);
   assert.strictEqual(row.requested_count, 5);

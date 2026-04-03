@@ -17,6 +17,12 @@ function shiftDateKey(dateKey, offsetDays) {
   return date.toISOString().slice(0, 10);
 }
 
+function buildPublicDigestUrl(dateKey) {
+  const key = String(dateKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return "";
+  return `/digest/${key}`;
+}
+
 function resolveWindow(days, now = new Date()) {
   const normalizedDays = Math.min(60, Math.max(1, Number(days || 7)));
   const endDateEt = toEtDateKey(now);
@@ -246,6 +252,14 @@ function createRecentDigestsExporter(deps) {
           ? loadLatestDigestSnapshot(userId, dateEt)
           : null;
         const resolvedSnapshot = snapshot || fallbackSnapshot || null;
+        const digestUrl = String(
+          perUserRow?.digest_url
+          || run?.digest_url
+          || resolvedSnapshot?.digest_url
+          || resolvedSnapshot?.publicDigestUrl
+          || resolvedSnapshot?.public_digest_url
+          || buildPublicDigestUrl(dateEt)
+        ).trim();
         const sentItems = normalizeItems(
           Array.isArray(resolvedSnapshot?.items) && resolvedSnapshot.items.length > 0
             ? resolvedSnapshot.items
@@ -267,6 +281,7 @@ function createRecentDigestsExporter(deps) {
           run_at_utc: String(run?.run_at || "").trim() || null,
           run_at_et: String(run?.run_at_et || "").trim() || null,
           digest_id: digestId,
+          digest_url: digestUrl,
           delivery_version: Number.isFinite(Number(perUserRow?.delivery_version))
             ? Number(perUserRow.delivery_version)
             : (Number.isFinite(Number(resolvedSnapshot?.version)) ? Number(resolvedSnapshot.version) : null),

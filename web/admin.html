@@ -1370,7 +1370,7 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           <th title="Recipients who were served in the run.">Sent to</th>
           <th title="Claude token usage for the run: input tokens / output tokens.">Tokens (in / out)</th>
           <th title="Digest quality is a 0-100 score for the full brief, not a match percentage.">Digest quality</th>
-          <th title="Open the digest and inspect item-level scoring/debug details.">Digest</th>
+          <th title="Inspect item-level scoring/debug details when available.">Digest</th>
           <th title="Total API cost for the run: Perplexity plus Claude.">Total</th>
         </tr>
       </thead>
@@ -1607,9 +1607,7 @@ function resolveRunDigestHref(run) {
   return "";
 }
 function renderRunDigestLink(run) {
-  const href = resolveRunDigestHref(run);
-  if (!href) return `<span style="color:var(--text-secondary);">—</span>`;
-  return `<a href="${esc(href)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600;">view digest →</a>`;
+  return "";
 }
 function failureModeLabel(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
@@ -4673,6 +4671,7 @@ async function load(silent = false) {
         const digestQuality = renderRunDigestQuality(r);
         const digestLink = renderRunDigestLink(r);
         const debugPanel = renderRunDebugPanel(r);
+        const digestCell = `${digestLink}${debugPanel}` || `<span style="color:var(--text-secondary);">—</span>`;
         return `<tr>
           <td class="mono">${dateEt}</td>
           <td class="mono" style="color:#6B7280;">${timeEt}</td>
@@ -4681,7 +4680,7 @@ async function load(silent = false) {
           <td style="font-size:12px;line-height:1.4;">${recipients}</td>
           <td class="mono" style="color:#6B7280;">${fmtTokens(tokensIn)} / ${fmtTokens(tokensOut)}</td>
           <td>${digestQuality}</td>
-          <td>${digestLink}${debugPanel}</td>
+          <td>${digestCell}</td>
           <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(r.total_cost_usd)}</td>
         </tr>`;
       }).join("");

@@ -27,3 +27,7 @@ for (const snippet of requiredSnippets) {
     throw new Error(`admin runs table is missing required snippet: ${snippet}`);
   }
 }
+
+if (source.includes("view digest →")) {
+  throw new Error("admin runs table should not render dead view digest links");
+}

@@ -211,34 +211,54 @@ function overlapRatio(a, b) {
 
 function computeAnalysisQuality(items) {
   if (!Array.isArray(items) || !items.length) return 0;
-  const completeness = mean(items.map((i) => (String(i?.wim || "").trim() ? 100 : 0)));
-  const specificity = mean(items.map((i) => {
-    const text = String(i?.wim || "");
+  const passRate = mean(items.map((item) => {
+    const status = String(item?.writeup_status || "").trim().toLowerCase();
+    const version = String(item?.writeup_version || "").trim().toLowerCase();
+    return (version === "v2" && (status === "model_pass" || status === "repair_pass") && String(item?.wim || "").trim())
+      ? 100
+      : 0;
+  }));
+  const specificity = mean(items.map((item) => {
+    const text = String(item?.wim || "");
     if (!text.trim()) return 0;
+    const hasSignalShift = String(item?.signal_shift || "").trim().length > 0;
+    const hasImplicationType = String(item?.implication_type || "").trim().length > 0;
     const hasNumber = /[$%]|\b\d[\d,.]*\b/.test(text);
     const hasEntity = /\b[A-Z][a-z]{2,}\b/.test(text);
-    return hasNumber && hasEntity ? 100 : (hasNumber || hasEntity ? 70 : 40);
+    let score = 45;
+    if (hasSignalShift) score += 20;
+    if (hasImplicationType) score += 10;
+    if (hasNumber) score += 10;
+    if (hasEntity) score += 15;
+    return clamp(score, 0, 100);
   }));
-  const actionability = mean(items.map((i) => {
-    const text = normalizeToken(i?.wim || "");
+  const interpretation = mean(items.map((item) => {
+    const text = normalizeToken(item?.wim || "");
     if (!text) return 0;
-    const cues = ["implies", "watch", "next", "risk", "impact", "move", "should", "likely", "means"];
-    const hit = cues.some((c) => text.includes(c));
-    return hit ? 100 : 55;
+    const cues = ["signals", "signal", "shifts", "shift", "tightens", "resets", "forces", "pressures", "raises", "lowers", "changes", "means", "reprices", "consolidates"];
+    const hasCue = cues.some((cue) => text.includes(cue));
+    const hasLever = /\b(pricing|margin|demand|cost|capex|valuation|inventory|credit|capacity|workflow|utilization|reimbursement|funding|traffic|mix)\b/.test(text);
+    if (hasCue && hasLever) return 100;
+    if (hasCue || hasLever) return 70;
+    return 35;
   }));
-  const differentiation = mean(items.map((i) => {
-    const overlap = overlapRatio(i?.headline || "", i?.wim || "");
-    return clamp((1 - overlap) * 100, 0, 100);
+  const differentiation = mean(items.map((item) => {
+    const overlap = overlapRatio(item?.headline || "", item?.wim || "");
+    const repeated = Array.isArray(item?.writeup_rejection_reasons)
+      ? item.writeup_rejection_reasons.includes("repeated_lead_phrase")
+      : false;
+    const score = clamp((1 - overlap) * 100, 0, 100);
+    return repeated ? Math.max(0, score - 30) : score;
   }));
-  const density = mean(items.map((i) => {
-    const chars = String(i?.wim || "").trim().length;
-    if (!chars) return 0;
-    if (chars >= 140 && chars <= 340) return 100;
-    if (chars >= 90 && chars < 140) return 80;
-    if (chars > 340 && chars <= 520) return 75;
-    return 55;
+  const shape = mean(items.map((item) => {
+    const text = String(item?.wim || "").trim();
+    if (!text) return 0;
+    const sentenceCount = String(text).split(/(?<=[.!?])\s+/).filter(Boolean).length;
+    if (sentenceCount >= 1 && sentenceCount <= 2) return 100;
+    if (sentenceCount <= 4) return 80;
+    return 40;
   }));
-  const score = 0.35 * completeness + 0.2 * specificity + 0.2 * actionability + 0.15 * differentiation + 0.1 * density;
+  const score = 0.4 * passRate + 0.2 * specificity + 0.2 * interpretation + 0.1 * differentiation + 0.1 * shape;
   return Number(clamp(score, 0, 100).toFixed(2));
 }
 

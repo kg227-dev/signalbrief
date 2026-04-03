@@ -46,6 +46,7 @@ async function testRequestFailureDegradesCleanly() {
   assert.strictEqual(out.degradation.provider, "anthropic");
   assert.strictEqual(out.degradation.reason, "request_failed");
   assert.strictEqual(out.items[0].wim, null);
+  assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
 }
 
 async function testStatusFailureRespectsProviderPolicy() {
@@ -62,12 +63,12 @@ async function testStatusFailureRespectsProviderPolicy() {
   assert.strictEqual(out.degradation.reason, "status_failure");
   assert.strictEqual(out.degradation.status_code, 503);
   assert.strictEqual(out.usage.input_tokens, 12);
-  assert.strictEqual(out.items[0].watch_next, null);
   assert.deepStrictEqual(optsSeen[0].retryStatusCodes, [429, 503]);
   assert.strictEqual(optsSeen[0].timeoutMs, 5678);
+  assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
 }
 
-async function testParseFailureFallsBack() {
+async function testParseFailureDropsItems() {
   const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => ({
     status: 200,
     body: {
@@ -79,7 +80,7 @@ async function testParseFailureFallsBack() {
   assert.strictEqual(out.degraded, true);
   assert.strictEqual(out.degradation.reason, "parse_failure");
   assert.strictEqual(out.usage.input_tokens, 22);
-  assert.strictEqual(out.items[0].implications, null);
+  assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
 }
 
 async function testEmptySelectionSkipsProviderCall() {
@@ -104,10 +105,10 @@ async function testWeakWriteupTriggersRepairPass() {
         body: {
           usage: { input_tokens: 30, output_tokens: 10 },
           content: [{ text: JSON.stringify([{
-            wim_brief: "Utility cost pressure is rising.",
-            wim: "This highlights pressure across the utility sector. Companies should watch developments.",
-            implications: null,
-            watch_next: null,
+            signal_shift: "Retail AI spending is evolving",
+            implication_type: "other",
+            wim_brief: "Retailers are still discussing AI strategy.",
+            wim: "For consumer operators, this matters for demand, pricing power, inventory, and channel strategy.",
           }]) }],
         },
       };
@@ -117,40 +118,41 @@ async function testWeakWriteupTriggersRepairPass() {
       body: {
         usage: { input_tokens: 12, output_tokens: 8 },
         content: [{ text: JSON.stringify([{
-          wim_brief: "Fuel cost volatility is moving utility pricing decisions closer to the rate case window.",
-          wim: "<strong>Duke Energy fuel-cost volatility raises rate-recovery pressure, which matters for margin protection and customer pricing over the next 2 quarters.</strong> For utility finance teams, fuel hedging and rate-case timing need to tighten because Duke and peer regulated utilities can absorb less commodity shock without affecting cost recovery.",
-          implications: "For CFOs, revisit hedging assumptions and customer recovery timing before the next rate filing cycle.",
-          watch_next: "Watch: Duke Energy's next rate-case filing and fuel-cost recovery disclosures.",
+          signal_shift: "Shoptalk vendors are being pushed from pilots to ROI proof",
+          implication_type: "workflow",
+          wim_brief: "Retail AI budgets are shifting from pilots to measurable productivity gains.",
+          wim: "Shoptalk's AI messaging has shifted from experimentation to proof of ROI, which raises the bar for retail tech vendors selling into tighter budgets. Retailers now have more leverage to cut pilots that do not show labor or conversion gains before the next planning cycle.",
         }]) }],
       },
     };
   }));
 
   const out = await enrichRuntime.enrichItems([{
-    headline: "What if Duke Energy shared the burden of fuel costs with its customers?",
-    summary: "Fuel-cost volatility is testing how utilities recover costs from ratepayers.",
-    tag: "ENERGY",
-    source: "canarymedia.com",
+    headline: "In 2026, AI talk at retail events shifts to proving real results, defining a true strategy",
+    summary: "At this year's Shoptalk Spring, it wasn't enough for brands and retailers to talk about the ways that they think they will use AI.",
+    tag: "CONSUMER & RETAIL",
+    source: "modernretail.co",
     source_type: "trade_specialist",
     published_date: "2026-04-01T10:00:00.000Z",
   }]);
 
   assert.strictEqual(calls, 2, "weak writeups should trigger one repair pass");
   assert.strictEqual(out.degraded, false);
-  assert.ok(/Duke Energy fuel-cost volatility/i.test(out.items[0].wim || ""), "repair pass should replace weak why-it-matters copy");
+  assert.strictEqual(out.items[0].writeup_status, "repair_pass");
+  assert.ok(/proof of ROI/i.test(out.items[0].wim || ""), "repair pass should replace weak why-it-matters copy");
   assert.ok(out.usage.input_tokens >= 42, "repair pass usage should be accumulated");
 }
 
-async function testInvalidWriteupFallsBackToDeterministicStrategicCopy() {
+async function testInvalidWriteupIsDroppedWithoutFallback() {
   const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => ({
     status: 200,
     body: {
       usage: { input_tokens: 20, output_tokens: 6 },
       content: [{ text: JSON.stringify([{
-        wim_brief: null,
-        wim: "This highlights the trend. Companies should watch developments.",
-        implications: null,
-        watch_next: null,
+        signal_shift: "The FDA updated information",
+        implication_type: "other",
+        wim_brief: "This matters for life sciences companies broadly.",
+        wim: "For life sciences teams, this matters for regulatory timing, development risk, and commercial potential.",
       }]) }],
     },
   })));
@@ -165,18 +167,22 @@ async function testInvalidWriteupFallsBackToDeterministicStrategicCopy() {
   }]);
 
   assert.strictEqual(out.degraded, false);
-  assert.ok(out.items[0].wim_brief, "fallback should populate wim_brief when the model output is unusable");
-  assert.ok(/records or compliance index/i.test(out.items[0].wim || ""), "fallback should produce honest strategic text for listing-style official items");
-  assert.strictEqual(out.items[0].writeup_origin, "fallback");
+  assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
+  assert.strictEqual(out.items[0].wim_brief, null);
+  assert.ok(
+    Array.isArray(out.items[0].writeup_rejection_reasons)
+      && out.items[0].writeup_rejection_reasons.length > 0,
+    "failed writeups should preserve rejection reasons instead of falling back to deterministic copy"
+  );
 }
 
 (async () => {
   await testRequestFailureDegradesCleanly();
   await testStatusFailureRespectsProviderPolicy();
-  await testParseFailureFallsBack();
+  await testParseFailureDropsItems();
   await testEmptySelectionSkipsProviderCall();
   await testWeakWriteupTriggersRepairPass();
-  await testInvalidWriteupFallsBackToDeterministicStrategicCopy();
+  await testInvalidWriteupIsDroppedWithoutFallback();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);
   process.exit(1);

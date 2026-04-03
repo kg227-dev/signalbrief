@@ -41,7 +41,7 @@ assert.ok(!html.includes("Summary text."), "email item should not render raw sum
 assert.ok(!html.includes("Why included:"), "email item should not render why_shown text");
 assert.ok(!html.includes("Lower confidence"), "email item should not render lower-confidence badges in the active MVP email path");
 
-// deep mode should not masquerade source summary as why-it-matters copy
+// deep mode should only render the validated why-it-matters block
 const noWimHtml = emailItemsRuntime.renderDigestItemHtml({
   tag: "AI",
   headline: "Some headline",
@@ -51,7 +51,7 @@ const noWimHtml = emailItemsRuntime.renderDigestItemHtml({
   source: "example.com",
   url: "https://example.com/article",
 }, 0, { depth: "headline_plus_why" });
-assert.ok(noWimHtml.includes("strategic fallback punchline"), "email item should fall back to wim_brief in deep mode");
+assert.ok(!noWimHtml.includes("strategic fallback punchline"), "email item should not fall back to wim_brief in deep mode");
 assert.ok(!noWimHtml.includes("A short summary"), "email item should not show source summary in deep mode when wim is absent");
 assert.ok(!noWimHtml.includes("Why it matters."), "email item should not show wim when it is null");
 
@@ -64,8 +64,8 @@ const noWriteupHtml = emailItemsRuntime.renderDigestItemHtml({
   source: "modernhealthcare.com",
   url: "https://example.com/healthcare",
 }, 0, { depth: "headline_plus_why" });
-assert.ok(noWriteupHtml.includes("A source summary should render"), "email item should fall back to summary in deep mode when no writeup fields are available");
-assert.ok(noWriteupHtml.includes("For healthcare operators"), "email item should add a strategic lens in deep mode when no writeup fields are available");
+assert.ok(!noWriteupHtml.includes("A source summary should render"), "email item should not fall back to summary in deep mode when no writeup fields are available");
+assert.ok(!noWriteupHtml.includes("For healthcare operators"), "email item should not add generic strategic lens fallback copy");
 
 const duplicateFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
   tag: "LIFE SCIENCES",
@@ -76,7 +76,7 @@ const duplicateFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
   source: "fda.gov",
   url: "https://example.com/fda",
 }, 0, { depth: "headline_plus_why" });
-assert.ok(duplicateFallbackHtml.includes("records or listing page"), "email item should flag listing-style FDA content instead of using the normal sector lens");
+assert.ok(!duplicateFallbackHtml.includes("records or listing page"), "email item should not render special-case fallback copy for dropped writeups");
 
 const safetyFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
   tag: "LIFE SCIENCES",
@@ -87,4 +87,4 @@ const safetyFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
   source: "fda.gov",
   url: "https://example.com/fda-warning",
 }, 0, { depth: "headline_plus_why" });
-assert.ok(safetyFallbackHtml.includes("targeted safety or enforcement notice"), "email item should use safety-notice copy for recall and warning items");
+assert.ok(!safetyFallbackHtml.includes("targeted safety or enforcement notice"), "email item should not render safety-notice fallback copy");

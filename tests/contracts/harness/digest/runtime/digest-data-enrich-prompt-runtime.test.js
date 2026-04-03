@@ -21,14 +21,15 @@ const prompt = runtime.buildDigestDataEnrichPrompt([
   },
 ]);
 
-assert.ok(prompt.includes("five fresh signals for one sector topic at a time"));
-assert.ok(prompt.includes("operators, founders, investors, and functional leaders"));
-assert.ok(prompt.includes("not consulting-speak, generic macro filler"));
-assert.ok(prompt.includes("decision relevance for a serious sector reader"));
-assert.ok(prompt.includes("\"ops lead\", \"founder\", \"deal team\", \"supply chain lead\""));
-assert.ok(!prompt.includes("senior strategy consultants"));
-assert.ok(!prompt.includes("MBB, Big 4"));
-assert.ok(!prompt.includes("PE/investment shops"));
-assert.ok(!prompt.includes("client meetings"));
+assert.ok(prompt.includes('writing the "Why It Matters" layer for SignalBrief'));
+assert.ok(prompt.includes("interpretation, not summary"));
+assert.ok(prompt.includes('"signal_shift"'));
+assert.ok(prompt.includes('"implication_type"'));
+assert.ok(prompt.includes('"wim_brief"'));
+assert.ok(prompt.includes('"wim"'));
+assert.ok(prompt.includes('Do NOT start a sentence with "For X teams, this matters for..."'));
+assert.ok(prompt.includes("Return ONLY a JSON array"));
+assert.ok(prompt.includes('"topic_fit": null'));
+assert.ok(!prompt.includes("five fresh signals for one sector topic at a time"));
 
 process.stdout.write("[digest-data-enrich-prompt-runtime] all assertions passed\n");

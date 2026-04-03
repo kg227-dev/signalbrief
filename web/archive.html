@@ -770,10 +770,7 @@ function applyFilters() {
     if (query) {
       const haystack = [
         item.headline,
-        item.summary,
         stripHtml(item.wim),
-        item.implications,
-        item.watch_next,
       ].join(" ").toLowerCase();
       if (!haystack.includes(query)) return false;
     }
@@ -859,8 +856,6 @@ function renderResults() {
 
     const safeWim = sanitizeWimHtml(item.wim || "");
     const wimHtml = safeWim ? highlightHtml(safeWim, query) : "";
-    const implication = item.implications ? `<div class="analysis-extra">→ ${highlightText(item.implications, query)}</div>` : "";
-    const watchNext = item.watch_next ? `<div class="analysis-extra">👀 ${highlightText(item.watch_next, query)}</div>` : "";
     const tagClasses = ["tag-pill"];
 
     return `
@@ -872,14 +867,11 @@ function renderResults() {
           </div>
         </div>
         <h3 class="signal-headline">${highlightText(item.headline, query)}</h3>
-        <p class="signal-summary">${highlightText(item.summary, query)}</p>
         ${wimHtml ? `<button type="button" class="analysis-toggle" data-action="analysis" data-key="${esc(key)}">${expanded ? "Hide analysis ↑" : "Show analysis ↓"}</button>` : ""}
         ${expanded && wimHtml ? `
           <div class="analysis-body">
             <div class="analysis-label">Why It Matters</div>
             <div class="analysis-copy">${wimHtml}</div>
-            ${implication}
-            ${watchNext}
           </div>` : ""}
         <div style="margin-top:${expanded && wimHtml ? "8px" : "6px"};">
           ${item.url ? `<a class="source-link" href="${esc(item.url)}" target="_blank" rel="noopener">Read more → ${esc(item.source || "source")}</a>` : `<span style="font-size:13px;color:#6B7280;">Source: ${esc(item.source || "n/a")}</span>`}

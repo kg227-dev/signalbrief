@@ -167,6 +167,57 @@ function selectTopicItemsWithFallback(params = {}) {
   };
 }
 
+function buildTopicSelectionState(selectedItems = []) {
+  const domainCounts = Object.create(null);
+  let discoveryCount = 0;
+  let commentaryCount = 0;
+  for (const item of (Array.isArray(selectedItems) ? selectedItems : [])) {
+    const domain = String(item?.source_domain || item?.source || "unknown").trim().toLowerCase();
+    domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+    if (isDiscoveryLaneItem(item)) discoveryCount += 1;
+    if (isAnalysisOrCommentaryItem(item)) commentaryCount += 1;
+  }
+  return {
+    domainCounts,
+    discoveryCount,
+    commentaryCount,
+  };
+}
+
+function getBackfillRejectionReason(candidate, currentSelected = [], opts = {}) {
+  const perSourceCap = Math.max(1, Number(opts.maxItemsPerSourceDomain || 3));
+  const discoveryCap = Math.max(0, Number(opts.maxDiscoveryPerTopic ?? 1));
+  const commentaryCap = Math.max(0, Number(opts.commentaryCap ?? 1));
+  const state = buildTopicSelectionState(currentSelected);
+  const isCommentary = isAnalysisOrCommentaryItem(candidate);
+  if (commentaryCap >= 0 && isCommentary && state.commentaryCount >= commentaryCap) {
+    return "selection_commentary_cap";
+  }
+
+  const domain = String(candidate?.source_domain || candidate?.source || "unknown").trim().toLowerCase();
+  const domainCount = state.domainCounts[domain] || 0;
+  if (domainCount >= perSourceCap) {
+    return `selection_source_cap (${domain}: ${domainCount}/${perSourceCap})`;
+  }
+
+  if (isDiscoveryLaneItem(candidate) && state.discoveryCount >= discoveryCap) {
+    return "selection_discovery_cap";
+  }
+
+  return null;
+}
+
+function buildTopicReserveQueue(params = {}) {
+  const pools = params.pools && typeof params.pools === "object" ? params.pools : {};
+  const selectedItems = Array.isArray(params.selectedItems) ? params.selectedItems : [];
+  const selectedUrls = new Set(selectedItems.map((item) => String(item?.url || "").trim()).filter(Boolean));
+  return [
+    ...(Array.isArray(pools.eventTier1) ? pools.eventTier1 : []),
+    ...(Array.isArray(pools.eventTier2) ? pools.eventTier2 : []),
+    ...(Array.isArray(pools.commentaryPool) ? pools.commentaryPool : []),
+  ].filter((item) => !selectedUrls.has(String(item?.url || "").trim()));
+}
+
 function incrementCount(target, key) {
   const normalizedKey = String(key || "").trim() || "unknown";
   target[normalizedKey] = (target[normalizedKey] || 0) + 1;
@@ -609,6 +660,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
     // Select per topic with a controlled fallback hierarchy that never exceeds 48h.
     const perTopicSelected = [];
+    const selectedByTopic = Object.create(null);
+    const reserveByTopic = Object.create(null);
     let totalDiscoveryCapped = 0;
     const topicSelectionAudit = [];
     const selectionRejectionCounts = Object.create(null);
@@ -635,6 +688,11 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
       totalDiscoveryCapped += Array.from(rejectionReasonByItem.values()).filter((reason) => reason === "selection_discovery_cap").length;
       perTopicSelected.push(...topicAcceptedItems);
+      selectedByTopic[topicTag] = topicAcceptedItems.slice();
+      reserveByTopic[topicTag] = buildTopicReserveQueue({
+        pools,
+        selectedItems: topicAcceptedItems,
+      });
 
       const topicReasonCounts = Object.create(null);
       const selectedSet = new Set(topicAcceptedItems);
@@ -669,6 +727,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           commentary_candidates: commentaryPool.length,
           commentary_selected: commentarySelectedCount,
         },
+        reserve_candidate_count: reserveByTopic[topicTag].length,
         per_source_cap: effectiveMaxItemsPerSourceDomain,
         lane_breakdown: topicLaneCounts,
         rejection_reason_counts: topicReasonCounts,
@@ -698,11 +757,19 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
     return {
       selected,
+      selectedByTopic,
+      reserveByTopic,
       repeatIndex,
       repeatPenalty,
       rankingPolicy,
       depthPolicy,
       repetitionNote,
+      writeupBackfillPolicy: {
+        itemsPerTopic,
+        maxItemsPerSourceDomain: effectiveMaxItemsPerSourceDomain,
+        maxDiscoveryPerTopic,
+        commentaryCapPerTopic: 1,
+      },
       selectionDiagnostics: {
         candidate_pool_before_dedup: rawCandidateCount,
         candidate_pool_after_editorial: candidatePoolAfterEditorial,
@@ -748,6 +815,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
 
 module.exports = {
   createDigestOrchestratorSelectionRuntime,
+  buildTopicReserveQueue,
+  buildTopicSelectionState,
+  getBackfillRejectionReason,
   canonicalizeCandidateTopicTags,
   computeItemAgeHours,
   prepareSelectionCandidates,

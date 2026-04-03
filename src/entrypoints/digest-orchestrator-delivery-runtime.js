@@ -52,10 +52,16 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       tag: item?.tag || null,
       headline: item?.headline || null,
       summary: item?.summary || null,
+      signal_shift: item?.signal_shift || null,
+      implication_type: item?.implication_type || null,
       wim_brief: item?.wim_brief || null,
       wim: item?.wim || null,
       implications: item?.implications || null,
       watch_next: item?.watch_next || null,
+      writeup_status: item?.writeup_status || null,
+      writeup_attempt_count: Number.isFinite(Number(item?.writeup_attempt_count)) ? Number(item.writeup_attempt_count) : null,
+      writeup_rejection_reasons: Array.isArray(item?.writeup_rejection_reasons) ? item.writeup_rejection_reasons.slice() : [],
+      writeup_version: item?.writeup_version || null,
       url: item?.url || null,
       source: item?.source || null,
       source_domain: item?.source_domain || parseSourceDomain(item),
@@ -139,6 +145,20 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       refill_count: deliveryDiagnostics.refill_count,
       thin_pool: deliveryDiagnostics.thin_pool,
       dominant_failure_mode: deliveryDiagnostics.dominant_failure_mode,
+      writeup_first_pass_success_count: deliveryDiagnostics.writeup_first_pass_success_count,
+      writeup_first_pass_success_rate_pct: deliveryDiagnostics.writeup_first_pass_success_rate_pct,
+      writeup_repair_attempted_count: deliveryDiagnostics.writeup_repair_attempted_count,
+      writeup_repair_success_count: deliveryDiagnostics.writeup_repair_success_count,
+      writeup_repair_pass_success_rate_pct: deliveryDiagnostics.writeup_repair_pass_success_rate_pct,
+      writeup_drop_count: deliveryDiagnostics.writeup_drop_count,
+      writeup_underfill_due_writeup_count: deliveryDiagnostics.writeup_underfill_due_writeup_count,
+      writeup_repeated_phrase_rejection_count: deliveryDiagnostics.writeup_repeated_phrase_rejection_count,
+      writeup_model_generated_count: deliveryDiagnostics.writeup_model_generated_count,
+      writeup_model_generated_share_pct: deliveryDiagnostics.writeup_model_generated_share_pct,
+      writeup_dropped_share_pct: deliveryDiagnostics.writeup_dropped_share_pct,
+      writeup_allow_underfill_topic_tags: Array.isArray(deliveryDiagnostics.writeup_allow_underfill_topic_tags)
+        ? deliveryDiagnostics.writeup_allow_underfill_topic_tags.slice()
+        : [],
     };
   }
 
@@ -263,10 +283,16 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     };
   }
 
-  function listIncompleteTopics(topicBuckets, subscribedStandardTopics) {
+  function listIncompleteTopics(topicBuckets, subscribedStandardTopics, opts = {}) {
     const minPerTopic = Math.max(1, Number(CONFIG.digest.minDeliveryItemsPerTopic || DELIVERY_POLICY.target_item_count));
+    const allowUnderfillTopics = new Set(
+      (Array.isArray(opts.allowUnderfillTopicTags) ? opts.allowUnderfillTopicTags : [])
+        .map((topic) => String(topic || "").trim())
+        .filter(Boolean)
+    );
     return (Array.isArray(subscribedStandardTopics) ? subscribedStandardTopics : []).filter((topic) => {
       const count = Array.isArray(topicBuckets?.[topic]) ? topicBuckets[topic].length : 0;
+      if (allowUnderfillTopics.has(topic) && count > 0) return false;
       return count < minPerTopic;
     });
   }
@@ -308,6 +334,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       engagementEvents,
       runDiagnostics,
       repetitionNote,
+      writeupDiagnostics,
     } = params;
 
     const deliveredUsers = [];
@@ -367,8 +394,13 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         const userItems = filterItemsForSubscribedTopics(enriched, subscribedStandardTopics);
         const topicBuckets = selectTopicBuckets(userItems, subscribedStandardTopics, DELIVERY_POLICY.target_item_count);
         const bucketItems = flattenTopicBuckets(topicBuckets, subscribedStandardTopics);
-        const incompleteTopics = listIncompleteTopics(topicBuckets, subscribedStandardTopics);
+        const incompleteTopics = listIncompleteTopics(topicBuckets, subscribedStandardTopics, {
+          allowUnderfillTopicTags: Array.isArray(writeupDiagnostics?.allow_underfill_topic_tags)
+            ? writeupDiagnostics.allow_underfill_topic_tags
+            : [],
+        });
         deliveryDiagnostics = {
+          ...(runDiagnostics && typeof runDiagnostics === "object" ? runDiagnostics : {}),
           requested_count: requestedItemCount,
           candidate_pool_before_dedup: Array.isArray(enriched) ? enriched.length : 0,
           candidate_pool_after_dedup: userItems.length,

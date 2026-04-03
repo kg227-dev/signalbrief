@@ -200,7 +200,6 @@ function createRenderPublicPages(deps) {
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");
       const headline = escapeHtml(item?.headline || "Untitled item");
-      const summary = escapeHtml(item?.summary || "");
       const wim = escapeHtml(stripHtml(item?.wim || ""));
       const source = escapeHtml(item?.source || "source");
       const href = sanitizePublicUrl(item?.url);
@@ -237,7 +236,6 @@ function createRenderPublicPages(deps) {
           ${scoreHtml}
         </div>
         <h2>${headline}</h2>
-        ${summary ? `<p class="item-summary">${summary}</p>` : ""}
         ${wim ? `<p class="item-wim">${wim}</p>` : ""}
         <div class="item-link">
           ${freshnessHtml}${sourceLink}${sourceBadge ? ` ${sourceBadge}` : ""}${corrNote ? ` ${corrNote}` : ""}

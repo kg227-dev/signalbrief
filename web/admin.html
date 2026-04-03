@@ -2248,6 +2248,8 @@ function renderDigestAuditCandidate(candidate) {
   const selected = candidate?.selected === true;
   const scoreLabel = Number.isFinite(score) ? score.toFixed(3) : "—";
   const tone = selected ? "var(--green)" : "var(--text-secondary)";
+  const writeupStatus = String(candidate?.writeup_status || "").trim() || (selected ? "selected" : "");
+  const writeupReasons = Array.isArray(candidate?.writeup_rejection_reasons) ? candidate.writeup_rejection_reasons : [];
   return `<div class="digest-audit-item">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
       <div style="min-width:0;">
@@ -2260,7 +2262,9 @@ function renderDigestAuditCandidate(candidate) {
       ${renderDigestAuditSummaryPill(selected ? "Selected" : "Rejected", selected ? "yes" : "no", tone)}
       ${renderDigestAuditSummaryPill("Reason", reason)}
       ${candidate?.source_tier != null ? renderDigestAuditSummaryPill("Tier", String(candidate.source_tier)) : ""}
+      ${writeupStatus ? renderDigestAuditSummaryPill("Writeup", writeupStatus, writeupStatus === "failed_dropped" ? "var(--red)" : "var(--green)") : ""}
     </div>
+    ${writeupReasons.length ? `<div class="subscriber-sub" style="margin-top:6px;">${esc(writeupReasons.join(" · "))}</div>` : ""}
   </div>`;
 }
 
@@ -2441,6 +2445,52 @@ function renderTopicReadinessCard(topicReadiness) {
   </div>`;
 }
 
+function renderWriteupQualityCard(writeup) {
+  const data = writeup && typeof writeup === "object" ? writeup : null;
+  if (!data) return "";
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Why it matters quality</div>
+        <div class="subscriber-sub">Model pass, repair pass, and drop behavior for the v2 writeup system on this run.</div>
+      </div>
+      <div class="mono" style="color:${Number(data.drop_count || 0) > 0 ? "var(--yellow)" : "var(--green)"};font-weight:700;">v2</div>
+    </div>
+    <div class="digest-audit-kpis">
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">First-pass success</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.first_pass_success_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Repair-pass success</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.repair_pass_success_rate_pct || 0)}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Writeup drops</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.drop_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Underfill from writeup</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.underfill_due_writeup_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Repeated-phrase rejects</div>
+        <div class="digest-audit-kpi-value">${Math.max(0, Number(data.repeated_phrase_rejection_count || 0))}</div>
+      </div>
+      <div class="digest-audit-kpi">
+        <div class="digest-audit-kpi-label">Model-generated share</div>
+        <div class="digest-audit-kpi-value">${formatPct(data.model_generated_share_pct || 0)}</div>
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${renderDigestAuditSummaryPill("Attempted", String(Math.max(0, Number(data.attempted_count || 0))))}
+      ${renderDigestAuditSummaryPill("Model-generated", String(Math.max(0, Number(data.model_generated_count || 0))), "var(--green)")}
+      ${renderDigestAuditSummaryPill("Dropped share", formatPct(data.dropped_share_pct || 0), Number(data.dropped_share_pct || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+      ${renderDigestAuditSummaryPill("Final selected", String(Math.max(0, Number(data.final_selected_count || 0))))}
+    </div>
+  </div>`;
+}
+
 function renderMissedStoryFlag(flag) {
   const headline = esc(flag?.headline || "Untitled");
   const href = String(flag?.url || "").trim();
@@ -2547,6 +2597,9 @@ function renderDigestAuditPanel() {
   const sourceHealth = data.source_health && typeof data.source_health === "object"
     ? data.source_health
     : null;
+  const writeup = summary.writeup && typeof summary.writeup === "object"
+    ? summary.writeup
+    : null;
   const topicReadiness = data.topic_readiness && typeof data.topic_readiness === "object"
     ? data.topic_readiness
     : null;
@@ -2564,6 +2617,7 @@ function renderDigestAuditPanel() {
   panel.innerHTML = `
     ${renderRollingReadinessCard(readiness)}
     ${renderBackboneHealthCard(sourceHealth)}
+    ${renderWriteupQualityCard(writeup)}
     ${renderTopicReadinessCard(topicReadiness)}
     <div class="digest-audit-card">
       <div class="digest-audit-kpis">

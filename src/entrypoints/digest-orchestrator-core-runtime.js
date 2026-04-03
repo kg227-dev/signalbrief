@@ -66,6 +66,7 @@ const { resolveDueUsers } = require("./digest-orchestrator-schedule-runtime");
 const { createDigestOrchestratorDeliveryRuntime } = require("./digest-orchestrator-delivery-runtime");
 const { createDigestOrchestratorFetchRuntime } = require("./digest-orchestrator-fetch-runtime");
 const { createDigestOrchestratorSelectionRuntime } = require("./digest-orchestrator-selection-runtime");
+const { getBackfillRejectionReason } = require("./digest-orchestrator-selection-runtime");
 const { createDigestOrchestratorEnrichmentRuntime } = require("./digest-orchestrator-enrichment-runtime");
 const {
   createDigestOrchestratorArchiveRuntime,
@@ -713,6 +714,9 @@ function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selec
           ? sanitizeCountMap(topic?.rejection_reason_counts)
           : fallbackReasonCounts,
         missed_story_flags: buildTopicMissedStoryFlags(candidates),
+        writeup: topic?.writeup && typeof topic.writeup === "object"
+          ? cloneJsonValue(topic.writeup)
+          : null,
         candidates,
       };
     }
@@ -847,6 +851,9 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
   const missedStoryFlagCount = Object.values(topicSummaries).reduce((sum, topic) => {
     return sum + Math.max(0, Number(Array.isArray(topic?.missed_story_flags) ? topic.missed_story_flags.length : 0));
   }, 0);
+  const writeupSummary = selectionDiagnostics?.writeup && typeof selectionDiagnostics.writeup === "object"
+    ? cloneJsonValue(selectionDiagnostics.writeup)
+    : null;
 
   return {
     run_id: runId || null,
@@ -877,6 +884,7 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       score_bottom: selectionDiagnostics?.score_bottom ?? null,
       global_lane_breakdown: globalLaneCounts,
       missed_story_flag_count: missedStoryFlagCount,
+      writeup: writeupSummary,
       broker_saturated_topics: Array.isArray(fetchDiagnostics?.topic_diagnostics)
         ? fetchDiagnostics.topic_diagnostics.filter((topic) => Number(topic?.broker_item_count || 0) >= 10).length
         : 0,
@@ -1503,12 +1511,15 @@ async function main() {
   });
   const {
     selected,
+    selectedByTopic,
+    reserveByTopic,
     repeatIndex,
     repeatPenalty,
     rankingPolicy,
     depthPolicy,
     selectionDiagnostics,
     repetitionNote,
+    writeupBackfillPolicy,
   } = await selectionRuntime.selectForEnrichment({
     allItems,
     selectionTarget,
@@ -1520,17 +1531,16 @@ async function main() {
     scoringConfig: mergedScoringConfig,
   });
 
-  writeDigestAuditLog({
-    digestDateKey,
-    runId,
-    runMode,
-    selected,
-    selectionDiagnostics,
-    fetchDiagnostics,
-    mergeTopicTag: auditTopicRerun ? auditTopicTag : "",
-  });
-
   if (auditOnly) {
+    writeDigestAuditLog({
+      digestDateKey,
+      runId,
+      runMode,
+      selected,
+      selectionDiagnostics,
+      fetchDiagnostics,
+      mergeTopicTag: auditTopicRerun ? auditTopicTag : "",
+    });
     recordRunCost({
       now,
       runId,
@@ -1559,14 +1569,31 @@ async function main() {
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
     enrichItems,
     emitDigestIncident,
+    getBackfillRejectionReason,
   });
   const {
     enriched,
+    selectionDiagnostics: finalSelectionDiagnostics,
     claudeUsage,
+    writeupDiagnostics,
   } = await enrichmentRuntime.enrichSelectedItems({
     selected,
+    selectedByTopic,
+    reserveByTopic,
+    selectionDiagnostics,
+    writeupBackfillPolicy,
     runMode,
     dueUsersCount: dueUsers.length,
+  });
+
+  writeDigestAuditLog({
+    digestDateKey,
+    runId,
+    runMode,
+    selected: enriched,
+    selectionDiagnostics: finalSelectionDiagnostics,
+    fetchDiagnostics,
+    mergeTopicTag: auditTopicRerun ? auditTopicTag : "",
   });
 
   const storylinePool = Array.isArray(enriched) ? enriched.slice() : [];
@@ -1639,6 +1666,7 @@ async function main() {
       deliveryMode,
       deliveryEventSource,
       claudeUsage,
+      writeupDiagnostics,
       engagementEvents,
       repetitionNote,
       runDiagnostics: {
@@ -1674,6 +1702,20 @@ async function main() {
         provider_429_rate: Number(fetchDiagnostics?.provider_429_rate || 0),
         provider_transport_errors: Number(fetchDiagnostics?.transport_errors || 0),
         provider_degraded: Number(fetchDiagnostics?.degraded_topic_rate || 0) > 0,
+        writeup_first_pass_success_count: Number(writeupDiagnostics?.first_pass_success_count || 0),
+        writeup_first_pass_success_rate_pct: Number(writeupDiagnostics?.first_pass_success_rate_pct || 0),
+        writeup_repair_attempted_count: Number(writeupDiagnostics?.repair_attempted_count || 0),
+        writeup_repair_success_count: Number(writeupDiagnostics?.repair_success_count || 0),
+        writeup_repair_pass_success_rate_pct: Number(writeupDiagnostics?.repair_pass_success_rate_pct || 0),
+        writeup_drop_count: Number(writeupDiagnostics?.drop_count || 0),
+        writeup_underfill_due_writeup_count: Number(writeupDiagnostics?.underfill_due_writeup_count || 0),
+        writeup_repeated_phrase_rejection_count: Number(writeupDiagnostics?.repeated_phrase_rejection_count || 0),
+        writeup_model_generated_count: Number(writeupDiagnostics?.model_generated_count || 0),
+        writeup_model_generated_share_pct: Number(writeupDiagnostics?.model_generated_share_pct || 0),
+        writeup_dropped_share_pct: Number(writeupDiagnostics?.dropped_share_pct || 0),
+        writeup_allow_underfill_topic_tags: Array.isArray(writeupDiagnostics?.allow_underfill_topic_tags)
+          ? writeupDiagnostics.allow_underfill_topic_tags.slice()
+          : [],
       },
     });
     deliveredUsers = deliveryResult.deliveredUsers;

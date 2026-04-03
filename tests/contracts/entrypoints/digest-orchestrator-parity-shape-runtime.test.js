@@ -133,30 +133,81 @@ function sortedKeys(obj) {
       "repeatIndex",
       "repeatPenalty",
       "repetitionNote",
+      "reserveByTopic",
       "selected",
+      "selectedByTopic",
       "selectionDiagnostics",
+      "writeupBackfillPolicy",
     ],
     "selection stage output shape must remain parity-stable"
   );
 
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
     enrichItems: async (selected) => ({
-      items: selected.map((item) => ({ ...item, wim: "ok" })),
+      items: selected.map((item) => ({
+        ...item,
+        signal_shift: "Example Corp repriced a contract",
+        implication_type: "cost",
+        wim_brief: "The repricing tightens customer budgets immediately.",
+        wim: "Example Corp repriced a contract, which changes near-term spend assumptions for buyers.",
+        writeup_status: "model_pass",
+        writeup_attempt_count: 1,
+        writeup_rejection_reasons: [],
+        writeup_version: "v2",
+      })),
       usage: { input_tokens: 10, output_tokens: 20 },
     }),
+    emitDigestIncident: async () => false,
+    getBackfillRejectionReason: () => null,
   });
   const enrichmentOut = await enrichmentRuntime.enrichSelectedItems({
     selected: selectionOut.selected,
+    selectedByTopic: selectionOut.selectedByTopic,
+    reserveByTopic: selectionOut.reserveByTopic,
+    selectionDiagnostics: selectionOut.selectionDiagnostics,
+    writeupBackfillPolicy: selectionOut.writeupBackfillPolicy,
   });
   assert.deepStrictEqual(
     sortedKeys(enrichmentOut),
-    ["claudeUsage", "enriched"],
+    [
+      "claudeUsage",
+      "degradation",
+      "degraded",
+      "enriched",
+      "failedByTopic",
+      "finalSelectedByTopic",
+      "selectionDiagnostics",
+      "writeupDiagnostics",
+    ],
     "enrichment stage output shape must remain parity-stable"
   );
   assert.deepStrictEqual(
     sortedKeys(enrichmentOut.claudeUsage),
     ["input_tokens", "output_tokens"],
     "enrichment usage shape must remain parity-stable"
+  );
+  assert.deepStrictEqual(
+    sortedKeys(enrichmentOut.writeupDiagnostics),
+    [
+      "allow_underfill_topic_tags",
+      "attempted_count",
+      "drop_count",
+      "dropped_share_pct",
+      "final_selected_count",
+      "first_pass_failure_count",
+      "first_pass_success_count",
+      "first_pass_success_rate_pct",
+      "items_per_topic_target",
+      "model_generated_count",
+      "model_generated_share_pct",
+      "repair_attempted_count",
+      "repair_pass_success_rate_pct",
+      "repair_success_count",
+      "repeated_phrase_rejection_count",
+      "topic_stats",
+      "underfill_due_writeup_count",
+    ],
+    "enrichment writeup diagnostics shape must remain parity-stable"
   );
 
   const deliveryRankingRuntime = createDigestOrchestratorDeliveryRankingRuntime({

@@ -12,10 +12,7 @@ function mapArchiveItem(item, userTopics, archiveRelevanceScore) {
   return {
     tag: item?.tag || "",
     headline: item?.headline || "",
-    summary: item?.summary || "",
     wim: item?.wim || null,
-    implications: item?.implications || null,
-    watch_next: item?.watch_next || null,
     url: item?.url || "",
     source: item?.source || "",
     baseScore: typeof item?.baseScore === "number" ? item.baseScore : null,

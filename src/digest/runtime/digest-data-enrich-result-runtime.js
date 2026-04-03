@@ -1,5 +1,16 @@
 "use strict";
 
+const IMPLICATION_TYPES = new Set([
+  "cost",
+  "competition",
+  "regulation",
+  "workflow",
+  "structure",
+  "demand",
+  "capital",
+  "other",
+]);
+
 const GENERIC_WIM_PATTERNS = [
   /\bcould have (?:significant )?implications\b/i,
   /\bmay affect\b/i,
@@ -10,51 +21,39 @@ const GENERIC_WIM_PATTERNS = [
   /\bstakeholders\b/i,
   /\bindustry broadly\b/i,
   /\bkeep an eye on\b/i,
+  /\bthis is important because\b/i,
 ];
-const BUSINESS_LEVER_PATTERN = /\b(pricing|price|margin|demand|cost|capex|valuation|market share|inventory|utilization|reimbursement|credit|funding|deposits?|loans?|load growth|capacity|lead times?|backlog|premium|throughput|traffic|fee income|spread|yield)\b/i;
-const ROLE_SENTENCE_PATTERN = /(^|[.!?]\s+)For [A-Za-z][A-Za-z/& -]{1,40},/;
-const PROPER_NOUN_PATTERN = /\b(?:[A-Z]{2,}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/;
-const QUANT_ANCHOR_PATTERN = /[$%]|\b\d[\d,.]*\b|\bnext\s+\d+\s+(?:day|days|week|weeks|month|months|quarter|quarters)\b|\bQ[1-4]\b|\bby\s+20\d{2}\b/i;
-const FALLBACK_TOPIC_GUIDANCE = Object.freeze({
-  "HEALTHCARE": {
-    role: "care-delivery leaders",
-    levers: "reimbursement, labor cost, and care capacity",
-    action: "capacity, reimbursement, and operating plans",
-  },
-  "LIFE SCIENCES": {
-    role: "portfolio and commercial leads",
-    levers: "regulatory timing, development risk, and commercial uptake",
-    action: "launch timing, regulatory strategy, and portfolio assumptions",
-  },
-  "TECHNOLOGY": {
-    role: "product and infrastructure leaders",
-    levers: "product roadmaps, infrastructure demand, and competitive positioning",
-    action: "roadmap, capacity, and pricing assumptions",
-  },
-  "ENERGY": {
-    role: "commercial and operations teams",
-    levers: "power pricing, project economics, and regulatory exposure",
-    action: "project pacing, hedging, and regulatory assumptions",
-  },
-  "FINANCIAL SERVICES": {
-    role: "finance and strategy teams",
-    levers: "funding costs, compliance exposure, and revenue mix",
-    action: "pricing, balance-sheet, and compliance plans",
-  },
-  "CONSUMER & RETAIL": {
-    role: "merchandising and operating teams",
-    levers: "demand, pricing power, inventory, and channel mix",
-    action: "inventory, pricing, and channel plans",
-  },
-  "INDUSTRIALS": {
-    role: "operations and supply-chain leaders",
-    levers: "capacity, lead times, input costs, and throughput",
-    action: "capacity, sourcing, and customer commitments",
-  },
-});
-const INDEX_PAGE_PATTERN = /\b(frequently requested|what'?s new|queryresult|drug-specific and other records|companies that have not submitted)\b/i;
-const SAFETY_NOTICE_PATTERN = /\b(alerts customers|warns consumers|recall|hidden drug ingredients|sterility issues|drug safety communication)\b/i;
-const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|reporter goes up against|excerpt from)\b/i;
+const REUSABLE_CATEGORY_PATTERN = /\bfor [a-z/& -]{2,50}(?:teams?|operators?|leaders?|companies|businesses), this matters for\b/i;
+const BUSINESS_LEVER_PATTERN = /\b(pricing|price|margins?|demand|costs?|capex|valuation|market share|inventory|utilization|reimbursement|credit|funding|deposits?|loans?|load growth|capacity|lead times?|backlog|premium|throughput|traffic|fees?|fee income|spread|yield|workflow|turnover|churn|volume|gmv|burn|cash|opex|labor|mix|assortment|services?|ecosystem|distribution|footprint|conversion|productivity|contribution|share gains?)\b/i;
+const COMPETITION_SIGNAL_PATTERN = /\b(competitive set|competition|competitor|rivals?|platform|assortment|bundled|consolidat(?:e|es|ed|ion)|footprint|ecosystem|share gains?)\b/i;
+const INTERPRETATION_CUE_PATTERN = /\b(signals?|shifts?|tightens?|loosens?|resets?|raises?|lowers?|compress(?:es|ing)?|forces?|pushes?|puts?|reprices?|consolidates?|widens?|narrows?|accelerates?|delays?|reshapes?|hardens?|softens?|pulls?|locks?|redirects?|changes?|moves?|resets?)\b/i;
+const HEDGE_PATTERN = /\b(could|may|might|potentially|possibly|appears to|seems to|suggests that)\b/i;
+const JOURNALISM_PATTERN = /\baccording to\b|\bsaid\b|\breported\b/i;
+const CAPITALIZED_TOKEN_PATTERN = /\b(?:[A-Z]{2,}(?:\s+[A-Z]{2,})*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/g;
+const QUANT_ANCHOR_PATTERN = /[$%]|\b\d[\d,.]*\b|\bQ[1-4]\b|\b(?:day|days|week|weeks|month|months|quarter|quarters|year|years)\b|\bby\s+20\d{2}\b/i;
+const TITLE_STOPWORDS = new Set([
+  "A",
+  "An",
+  "And",
+  "As",
+  "At",
+  "But",
+  "For",
+  "From",
+  "If",
+  "In",
+  "It",
+  "Its",
+  "Of",
+  "On",
+  "The",
+  "This",
+  "That",
+  "These",
+  "Those",
+  "To",
+  "Watch",
+]);
 
 function parseJsonArrayLenient(raw) {
   const cleaned = String(raw || "")
@@ -169,124 +168,89 @@ function normalizeComparableText(value) {
     .trim();
 }
 
-function truncateWords(value, maxWords) {
-  const words = String(value || "")
+function wordCount(value) {
+  return String(value || "")
     .trim()
     .split(/\s+/)
-    .filter(Boolean);
-  if (!words.length) return "";
-  if (words.length <= maxWords) return words.join(" ");
-  return `${words.slice(0, maxWords).join(" ")}…`;
+    .filter(Boolean)
+    .length;
 }
 
-function extractAnchorEntity(item) {
-  const headline = stripHtml(item?.headline || "");
-  const source = String(item?.source || item?.source_domain || "").trim();
-  const acronymMatch = headline.match(/\b(?:[A-Z]{2,}(?:\s+[A-Z]{2,})*)\b/);
-  if (acronymMatch?.[0]) return acronymMatch[0];
-  const properMatch = headline.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/);
-  if (properMatch?.[0]) return properMatch[0];
-  const domainMatch = source.match(/([a-z0-9-]+)\.[a-z]+$/i);
-  if (domainMatch?.[1]) {
-    return domainMatch[1]
-      .split("-")
-      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-      .join(" ");
-  }
-  return String(item?.tag || "SignalBrief");
+function normalizeImplicationType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return IMPLICATION_TYPES.has(normalized) ? normalized : null;
 }
 
-function classifyFallbackShape(item) {
-  const combined = `${stripHtml(item?.headline || "")} ${stripHtml(item?.summary || "")}`;
-  if (INDEX_PAGE_PATTERN.test(combined)) return "index_page";
-  if (SAFETY_NOTICE_PATTERN.test(combined)) return "safety_notice";
-  if (COMMENTARY_PATTERN.test(combined)) return "commentary";
-  return "standard";
+function hasNamedAnchor(text) {
+  const matches = stripHtml(text).match(CAPITALIZED_TOKEN_PATTERN) || [];
+  return matches.some((match) => !TITLE_STOPWORDS.has(String(match || "").trim()));
 }
 
-function pickTopicGuidance(item) {
-  return FALLBACK_TOPIC_GUIDANCE[String(item?.tag || "").trim().toUpperCase()]
-    || {
-      role: "operating teams",
-      levers: "execution, economics, and competitive positioning",
-      action: "near-term operating plans",
-    };
+function leadingPhraseKey(value, words = 6) {
+  const normalized = normalizeComparableText(value);
+  if (!normalized) return "";
+  return normalized.split(" ").slice(0, words).join(" ");
 }
 
-function buildFallbackStrategicWriteup(item) {
-  const guidance = pickTopicGuidance(item);
-  const entity = extractAnchorEntity(item);
-  const summary = stripHtml(item?.summary || "");
-  const headline = stripHtml(item?.headline || "");
-  const summaryComparable = normalizeComparableText(summary);
-  const headlineComparable = normalizeComparableText(headline);
-  const uniqueSummaryLead = summary && summaryComparable !== headlineComparable
-    ? splitSentences(summary)[0] || summary
-    : "";
-  const shape = classifyFallbackShape(item);
-
-  if (shape === "index_page") {
-    return {
-      wim_brief: truncateWords(`${entity} records page is reference material, not a market-moving signal.`, 18),
-      wim: `<strong>${entity} is surfacing a records or compliance index rather than a market-moving story, which keeps the decision value low for ${guidance.levers} over the next 2 quarters.</strong> For ${guidance.role}, treat this as reference material unless it changes regulatory timing or compliance exposure in the next 2 quarters.`,
-      implications: `For ${guidance.role}, only escalate this if it changes regulatory timing or compliance exposure for active programs.`,
-      watch_next: null,
-      writeup_fallback_reason: "index_page",
-    };
-  }
-
-  if (shape === "safety_notice") {
-    return {
-      wim_brief: truncateWords(`${entity} safety action matters mainly for compliance, inventory, and near-term commercial risk.`, 18),
-      wim: `<strong>${entity} is flagging a targeted safety or enforcement issue, which matters mainly for remediation cost, compliance exposure, and commercial risk in the next 2 quarters.</strong> For ${guidance.role}, isolate supplier, inventory, and customer exposure now because recalls and warning notices can quickly shift demand, cost, and execution plans.`,
-      implications: `For ${guidance.role}, identify affected products, inventory, and compliance exposure before the next operating review.`,
-      watch_next: null,
-      writeup_fallback_reason: "safety_notice",
-    };
-  }
-
-  if (shape === "commentary") {
-    return {
-      wim_brief: truncateWords(`${entity} is directional context, not a direct operating catalyst for decision-makers.`, 18),
-      wim: `<strong>${entity} is offering commentary rather than announcing a hard-news catalyst, which lowers the immediate signal for ${guidance.levers} over the next 2 quarters.</strong> For ${guidance.role}, use it as directional context for ${guidance.action} only if it reinforces moves already showing up in customer, pricing, or regulatory data.`,
-      implications: `For ${guidance.role}, treat this as context for current planning rather than a standalone trigger for action.`,
-      watch_next: null,
-      writeup_fallback_reason: "commentary",
-    };
-  }
-
-  const lead = uniqueSummaryLead
-    ? truncateWords(uniqueSummaryLead, 22)
-    : `${entity} is changing the sector backdrop`;
-  const leadSentence = /[.!?]$/.test(lead) ? lead : `${lead}.`;
-
-  return {
-    wim_brief: truncateWords(`${entity} raises near-term questions for ${guidance.levers}.`, 18),
-    wim: `<strong>${leadSentence} This matters for ${guidance.levers} over the next 2 quarters.</strong> For ${guidance.role}, revisit ${guidance.action} now because this development can change capital, pricing, demand, or compliance assumptions faster than a routine sector update.`,
-    implications: `For ${guidance.role}, test current ${guidance.action} against this development before the next planning cycle.`,
-    watch_next: null,
-    writeup_fallback_reason: "strategic_fallback",
-  };
+function mergeRejectionReasons(existing, nextReasons) {
+  return Array.from(new Set([
+    ...(Array.isArray(existing) ? existing : []),
+    ...(Array.isArray(nextReasons) ? nextReasons : []),
+  ]));
 }
 
 function validateStrategicWriteup(item, candidate = {}) {
   const reasons = [];
+  const signalShift = stringOrNull(candidate?.signal_shift);
+  const implicationType = normalizeImplicationType(candidate?.implication_type);
+  const wimBrief = stringOrNull(candidate?.wim_brief);
   const wim = stringOrNull(candidate?.wim);
-  if (!wim) {
-    reasons.push("missing_wim");
-    return { ok: false, reasons };
+  const headline = String(item?.headline || "");
+  const summary = String(item?.summary || "");
+  const contextText = `${headline} ${summary}`.trim();
+
+  if (!signalShift) reasons.push("missing_signal_shift");
+  else {
+    if (wordCount(signalShift) > 16) reasons.push("signal_shift_too_long");
+    if (!hasNamedAnchor(signalShift) && !QUANT_ANCHOR_PATTERN.test(signalShift)) reasons.push("signal_shift_unanchored");
+    if (overlapRatio(signalShift, contextText) >= 0.95) reasons.push("signal_shift_too_literal");
   }
 
-  const plain = stripHtml(wim);
-  const sentences = splitSentences(plain);
-  const contextText = `${item?.headline || ""} ${item?.summary || ""}`.trim();
+  if (!implicationType) reasons.push("invalid_implication_type");
 
-  if (sentences.length < 2) reasons.push("too_short");
-  if (!BUSINESS_LEVER_PATTERN.test(plain)) reasons.push("missing_business_lever");
-  if (!ROLE_SENTENCE_PATTERN.test(plain)) reasons.push("missing_role_sentence");
-  if (!(PROPER_NOUN_PATTERN.test(plain) || QUANT_ANCHOR_PATTERN.test(plain))) reasons.push("missing_anchor");
-  if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain))) reasons.push("generic_language");
-  if (overlapRatio(plain, contextText) >= 0.72) reasons.push("summary_like");
+  if (!wimBrief) reasons.push("missing_wim_brief");
+  else {
+    if (splitSentences(wimBrief).length !== 1) reasons.push("brief_multi_sentence");
+    if (wordCount(wimBrief) > 18) reasons.push("brief_too_long");
+    if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(wimBrief)) || REUSABLE_CATEGORY_PATTERN.test(wimBrief)) {
+      reasons.push("brief_generic");
+    }
+    if (!hasNamedAnchor(wimBrief) && !QUANT_ANCHOR_PATTERN.test(wimBrief) && overlapRatio(wimBrief, contextText) >= 0.72) {
+      reasons.push("brief_summary_like");
+    }
+  }
+
+  if (!wim) {
+    reasons.push("missing_wim");
+  } else {
+    const plain = stripHtml(wim);
+    const sentences = splitSentences(plain);
+    if (sentences.length < 1) reasons.push("too_short");
+    if (sentences.length > 4) reasons.push("too_long");
+    if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain)) || REUSABLE_CATEGORY_PATTERN.test(plain)) {
+      reasons.push("generic_language");
+    }
+    if (!INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("missing_interpretation");
+    const hasLeverSignal = BUSINESS_LEVER_PATTERN.test(plain)
+      || (implicationType === "competition" && COMPETITION_SIGNAL_PATTERN.test(plain));
+    if (!hasLeverSignal && implicationType !== "regulation" && implicationType !== "workflow" && implicationType !== "other") {
+      reasons.push("missing_business_lever");
+    }
+    if (!(hasNamedAnchor(plain) || QUANT_ANCHOR_PATTERN.test(plain))) reasons.push("missing_story_anchor");
+    if (overlapRatio(plain, contextText) >= 0.74) reasons.push("summary_like");
+    if (HEDGE_PATTERN.test(plain)) reasons.push("hedged");
+    if (JOURNALISM_PATTERN.test(plain) && !INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("journalistic_tone");
+  }
 
   return {
     ok: reasons.length === 0,
@@ -295,41 +259,83 @@ function validateStrategicWriteup(item, candidate = {}) {
 }
 
 function normalizeEnrichedItems(items, enriched, opts = {}) {
+  const attemptCount = Math.max(1, Number(opts.writeupAttemptCount || 1));
+  const passStatus = String(opts.writeupStatusOnPass || "model_pass").trim() || "model_pass";
   const diagnostics = [];
-  return items.map((item, index) => {
+  const normalizedItems = (Array.isArray(items) ? items : []).map((item, index) => {
     const candidate = enriched[index] || {};
     const baseScore = normalizeBaseScore(candidate.baseScore);
-    const writeupCheck = opts.validateWriteups === true
-      ? validateStrategicWriteup(item, candidate)
-      : { ok: true, reasons: [] };
-    const fallbackWriteup = buildFallbackStrategicWriteup(item);
+    const writeupCheck = opts.validateWriteups === false
+      ? { ok: true, reasons: [] }
+      : validateStrategicWriteup(item, candidate);
+    const rejected = writeupCheck.ok !== true;
     const normalized = {
       ...item,
-      wim_brief: stringOrNull(candidate.wim_brief) || fallbackWriteup.wim_brief,
-      wim: writeupCheck.ok ? stringOrNull(candidate.wim) : fallbackWriteup.wim,
+      signal_shift: stringOrNull(candidate.signal_shift),
+      implication_type: normalizeImplicationType(candidate.implication_type),
+      wim_brief: rejected ? null : stringOrNull(candidate.wim_brief),
+      wim: rejected ? null : stringOrNull(candidate.wim),
       baseScore,
       strategic_value: normalizeStrategicValue(candidate.strategic_value, baseScore),
       content_flags: normalizeStringArray(candidate.content_flags),
       storyline_hints: normalizeStringArray(candidate.storyline_hints, 4),
-      implications: stringOrNull(candidate.implications) || fallbackWriteup.implications,
-      watch_next: stringOrNull(candidate.watch_next) || fallbackWriteup.watch_next,
-      writeup_origin: writeupCheck.ok ? "model" : "fallback",
-      writeup_validation_reasons: writeupCheck.reasons.slice(),
-      writeup_fallback_reason: writeupCheck.ok ? null : fallbackWriteup.writeup_fallback_reason,
+      implications: null,
+      watch_next: null,
+      writeup_status: writeupCheck.ok ? passStatus : "failed_dropped",
+      writeup_attempt_count: attemptCount,
+      writeup_rejection_reasons: writeupCheck.reasons.slice(),
+      writeup_version: "v2",
     };
     diagnostics.push({
       index,
       ok: writeupCheck.ok,
       reasons: writeupCheck.reasons.slice(),
-      had_wim_brief: normalized.wim_brief != null,
     });
     return normalized;
   });
+
+  return {
+    items: normalizedItems,
+    diagnostics,
+  };
+}
+
+function applyBatchWriteupValidation(items = []) {
+  const out = Array.isArray(items) ? items.map((item) => ({ ...item })) : [];
+  const seenLeadByTopic = new Map();
+  let repeatedPhraseRejectCount = 0;
+
+  for (let index = 0; index < out.length; index += 1) {
+    const item = out[index];
+    if (!item) continue;
+    const tag = String(item?.tag || "").trim().toUpperCase() || "__UNTAGGED__";
+    const leadKey = leadingPhraseKey(item?.wim || item?.wim_brief || "");
+    if (!leadKey) continue;
+    if (!seenLeadByTopic.has(tag)) seenLeadByTopic.set(tag, new Map());
+    const seenForTopic = seenLeadByTopic.get(tag);
+    const priorIndex = seenForTopic.get(leadKey);
+    if (typeof priorIndex === "number") {
+      const nextReasons = mergeRejectionReasons(item?.writeup_rejection_reasons, ["repeated_lead_phrase"]);
+      out[index] = {
+        ...item,
+        writeup_status: "failed_dropped",
+        writeup_rejection_reasons: nextReasons,
+      };
+      repeatedPhraseRejectCount += 1;
+      continue;
+    }
+    seenForTopic.set(leadKey, index);
+  }
+
+  return {
+    items: out,
+    repeatedPhraseRejectCount,
+  };
 }
 
 module.exports = {
   parseJsonArrayLenient,
   normalizeEnrichedItems,
   validateStrategicWriteup,
-  buildFallbackStrategicWriteup,
+  applyBatchWriteupValidation,
 };

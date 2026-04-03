@@ -14,56 +14,101 @@ const runtime = require(TARGET_PATH);
 const { createDigestOrchestratorEnrichmentRuntime } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
-(async () => {
+function makeSelectedCandidate(url, headline) {
+  return {
+    url,
+    headline,
+    tag: "TECHNOLOGY",
+    source_domain: new URL(url).hostname,
+    retrieval_origin: "broker_publisher_feed",
+    source_type: "reported_media",
+  };
+}
+
+async function testBackfillsDroppedWriteupWithSameTopicReserve() {
+  const firstBatch = [
+    { ...makeSelectedCandidate("https://example.com/1", "One"), wim: "One", wim_brief: "One", signal_shift: "One changed", implication_type: "competition", writeup_status: "model_pass", writeup_attempt_count: 1, writeup_rejection_reasons: [], writeup_version: "v2" },
+    { ...makeSelectedCandidate("https://example.com/2", "Two"), wim: null, wim_brief: null, signal_shift: null, implication_type: null, writeup_status: "failed_dropped", writeup_attempt_count: 1, writeup_rejection_reasons: ["generic_language"], writeup_version: "v2" },
+    { ...makeSelectedCandidate("https://example.com/3", "Three"), wim: "Three", wim_brief: "Three", signal_shift: "Three changed", implication_type: "capital", writeup_status: "model_pass", writeup_attempt_count: 1, writeup_rejection_reasons: [], writeup_version: "v2" },
+    { ...makeSelectedCandidate("https://example.com/4", "Four"), wim: "Four", wim_brief: "Four", signal_shift: "Four changed", implication_type: "workflow", writeup_status: "model_pass", writeup_attempt_count: 1, writeup_rejection_reasons: [], writeup_version: "v2" },
+    { ...makeSelectedCandidate("https://example.com/5", "Five"), wim: "Five", wim_brief: "Five", signal_shift: "Five changed", implication_type: "cost", writeup_status: "model_pass", writeup_attempt_count: 1, writeup_rejection_reasons: [], writeup_version: "v2" },
+  ];
+  const reserveBatch = [
+    { ...makeSelectedCandidate("https://example.com/6", "Reserve"), wim: "Reserve item", wim_brief: "Reserve brief", signal_shift: "Reserve changed", implication_type: "competition", writeup_status: "model_pass", writeup_attempt_count: 1, writeup_rejection_reasons: [], writeup_version: "v2" },
+  ];
+
+  let callCount = 0;
   const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
-    enrichItems: async (selected) => ({
-      items: selected.map((item) => ({ ...item, wim: "ok" })),
-      usage: { input_tokens: "123", output_tokens: 45 },
-    }),
+    enrichItems: async (items) => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          items: firstBatch,
+          usage: { input_tokens: 10, output_tokens: 5 },
+          degraded: false,
+          degradation: null,
+        };
+      }
+      return {
+        items: reserveBatch,
+        usage: { input_tokens: 3, output_tokens: 2 },
+        degraded: false,
+        degradation: null,
+      };
+    },
+    emitDigestIncident: async () => false,
+    getBackfillRejectionReason: () => null,
   });
+
+  const selectionDiagnostics = {
+    topic_selection_audit: [{
+      tag: "TECHNOLOGY",
+      total_candidates: 6,
+      selected_count: 5,
+      rejected_count: 1,
+      rejection_reason_counts: { selection_pool_full: 1 },
+      candidates: [
+        { url: "https://example.com/1", headline: "One", selected: true, selection_reason: null },
+        { url: "https://example.com/2", headline: "Two", selected: true, selection_reason: null },
+        { url: "https://example.com/3", headline: "Three", selected: true, selection_reason: null },
+        { url: "https://example.com/4", headline: "Four", selected: true, selection_reason: null },
+        { url: "https://example.com/5", headline: "Five", selected: true, selection_reason: null },
+        { url: "https://example.com/6", headline: "Reserve", selected: false, selection_reason: "selection_pool_full" },
+      ],
+    }],
+  };
 
   const out = await enrichmentRuntime.enrichSelectedItems({
-    selected: [{ headline: "A" }],
-  });
-  assert.deepStrictEqual(out.enriched, [{ headline: "A", wim: "ok" }]);
-  assert.strictEqual(out.claudeUsage.input_tokens, 123);
-  assert.strictEqual(out.claudeUsage.output_tokens, 45);
-
-  const fallbackRuntime = createDigestOrchestratorEnrichmentRuntime({
-    enrichItems: async () => ({
-      items: null,
-      usage: {},
-    }),
-  });
-  const fallback = await fallbackRuntime.enrichSelectedItems({ selected: [] });
-  assert.deepStrictEqual(fallback.enriched, []);
-  assert.deepStrictEqual(fallback.claudeUsage, { input_tokens: 0, output_tokens: 0 });
-
-  const incidents = [];
-  const degradedRuntime = createDigestOrchestratorEnrichmentRuntime({
-    enrichItems: async () => ({
-      items: [{ headline: "A", wim: null }],
-      usage: { input_tokens: 0, output_tokens: 0 },
-      degraded: true,
-      degradation: {
-        provider: "anthropic",
-        reason: "status_failure",
-        status_code: 503,
-        timeout_ms: 30000,
-      },
-    }),
-    emitDigestIncident: async (...args) => {
-      incidents.push(args);
+    selected: firstBatch.map((item) => ({ ...item })),
+    selectedByTopic: {
+      TECHNOLOGY: firstBatch.map((item) => makeSelectedCandidate(item.url, item.headline)),
     },
-  });
-  const degraded = await degradedRuntime.enrichSelectedItems({
-    selected: [{ headline: "A" }],
+    reserveByTopic: {
+      TECHNOLOGY: [makeSelectedCandidate("https://example.com/6", "Reserve")],
+    },
+    selectionDiagnostics,
+    writeupBackfillPolicy: {
+      itemsPerTopic: 5,
+      maxItemsPerSourceDomain: 5,
+      maxDiscoveryPerTopic: 1,
+      commentaryCapPerTopic: 1,
+    },
     runMode: "scheduled",
-    dueUsersCount: 2,
+    dueUsersCount: 1,
   });
-  assert.strictEqual(Array.isArray(degraded.enriched), true);
-  assert.strictEqual(degraded.enriched[0].headline, "A");
-  assert.strictEqual(incidents.length, 1);
-  assert.strictEqual(incidents[0][0], "anthropic-partial-degradation");
-  assert.strictEqual(incidents[0][2].status_code, 503);
-})();
+
+  assert.strictEqual(callCount, 2, "failed writeups should trigger same-topic reserve enrichment");
+  assert.strictEqual(out.enriched.length, 5);
+  assert.ok(out.enriched.some((item) => item.url === "https://example.com/6"), "reserve candidate should backfill dropped writeup");
+  assert.ok(out.failedByTopic.TECHNOLOGY.some((item) => item.url === "https://example.com/2"), "failed item should remain inspectable");
+  assert.strictEqual(out.selectionDiagnostics.topic_selection_audit[0].selected_count, 5);
+  const droppedCandidate = out.selectionDiagnostics.topic_selection_audit[0].candidates.find((candidate) => candidate.url === "https://example.com/2");
+  assert.strictEqual(droppedCandidate.selection_reason, "writeup_failed");
+  assert.strictEqual(out.writeupDiagnostics.drop_count, 1);
+  assert.strictEqual(out.writeupDiagnostics.final_selected_count, 5);
+}
+
+testBackfillsDroppedWriteupWithSameTopicReserve().catch((error) => {
+  process.stderr.write(`${error.stack || error.message}\n`);
+  process.exit(1);
+});

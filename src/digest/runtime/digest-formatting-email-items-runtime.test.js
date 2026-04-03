@@ -27,7 +27,7 @@ const runtime = createDigestEmailItemsRuntime({
 const html = runtime.renderDigestItemHtml({
   tag: "CONSUMER & RETAIL",
   headline: "Gaps feels confident about inventory levels, tariff mitigation",
-  summary: "The retailer remains focused on what it calls &ldquo;stringent&rdquo; inventory practices.",
+  wim: "The retailer remains focused on what it calls &ldquo;stringent&rdquo; inventory practices.",
   source: "supplychaindive.com",
   source_tier: "strong",
   published_date: "2026-04-01T10:00:00.000Z",
@@ -39,85 +39,44 @@ assert.ok(!html.includes("&ldquo;"), "email item body should not leak raw named 
 
 const deepHtml = runtime.renderDigestItemHtml({
   tag: "TECHNOLOGY",
-  headline: "Long summary should keep its ending",
-  summary: "This summary is intentionally long enough to exercise the fallback rendering path without hitting the old 200 character cutoff. It should keep the tail end of the sentence intact instead of chopping it off midway through a word. Deep mode should keep this last clause visible, even though it pushes well past the old short cutoff and into the longer fallback range.",
-  wim_brief: "Deep readers should still get a strategic fallback punchline when the full writeup is unavailable.",
-  source: "techcrunch.com",
+  headline: "AI budgets tighten around proof of ROI",
+  wim: "Retail AI budgets are shifting from pilots to measurable productivity gains, which changes vendor qualification standards. Buyers now have more leverage to cut pilots that do not show labor or conversion gains before the next planning cycle.",
+  source: "modernretail.co",
   source_tier: "strong",
   published_date: "2026-04-01T10:00:00.000Z",
   relevanceScore: 8.2,
 }, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
 
-assert.ok(deepHtml.includes("strategic fallback punchline"), "deep emails should prefer wim_brief over raw summary fallback");
-assert.ok(!deepHtml.includes("old short cutoff"), "deep emails should not fall back to raw summary text");
+assert.ok(deepHtml.includes("measurable productivity gains"), "deep emails should render the why-it-matters block");
+assert.ok(!deepHtml.includes("analysis-copy"), "email renderer should not output archive-only markup");
 
-const deepSummaryFallbackHtml = runtime.renderDigestItemHtml({
+const noFallbackHtml = runtime.renderDigestItemHtml({
   tag: "HEALTHCARE",
-  headline: "Fallback summaries should still render in deep mode",
-  summary: "This summary should appear when both why-it-matters fields are missing so deep digests never ship blank cards.",
+  headline: "Fallback summaries should not render in v2",
+  summary: "This summary should not appear as a fallback body in v2.",
   wim: null,
-  wim_brief: null,
   source: "modernhealthcare.com",
   source_tier: "strong",
   published_date: "2026-04-01T10:00:00.000Z",
   relevanceScore: 8.0,
 }, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
 
-assert.ok(deepSummaryFallbackHtml.includes("This summary should appear"), "deep emails should fall back to source summary when no why-it-matters fields are available");
-assert.ok(deepSummaryFallbackHtml.includes("For healthcare operators"), "deep emails should add a strategic lens when no why-it-matters fields are available");
+assert.ok(!noFallbackHtml.includes("This summary should not appear"), "deep emails should not fall back to source summary text in v2");
+assert.ok(!noFallbackHtml.includes("For healthcare operators"), "deep emails should not add a generic sector lens fallback in v2");
 
-const duplicatedSummaryHtml = runtime.renderDigestItemHtml({
+const noLegacySectionsHtml = runtime.renderDigestItemHtml({
   tag: "LIFE SCIENCES",
-  headline: "Frequently requested or proactively posted drug-specific and other records",
-  summary: "Frequently requested or proactively posted drug-specific and other records",
-  wim: null,
-  wim_brief: null,
-  source: "fda.gov",
-  source_tier: "premium",
-  published_date: "2026-04-01T10:00:00.000Z",
-  relevanceScore: 6.2,
-}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
-
-assert.ok(duplicatedSummaryHtml.includes("records or listing page"), "deep fallback should flag listing-style FDA content instead of inventing a strategic lens");
-assert.ok(!duplicatedSummaryHtml.includes("For life sciences teams"), "deep fallback should not apply the normal sector lens to listing pages");
-
-const safetyNoticeHtml = runtime.renderDigestItemHtml({
-  tag: "LIFE SCIENCES",
-  headline: "FDA alerts customers to voluntary recall of compounded drugs due to sterility issues",
-  summary: "FDA is alerting patients and health care professionals about a voluntary recall due to a lack of sterility assurance.",
-  wim: null,
-  wim_brief: null,
-  source: "fda.gov",
-  source_tier: "premium",
-  published_date: "2026-04-01T10:00:00.000Z",
-  relevanceScore: 6.2,
-}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
-assert.ok(safetyNoticeHtml.includes("targeted safety or enforcement notice"), "deep fallback should use a safety-notice disclaimer for recall-style official items");
-
-const commentaryHtml = runtime.renderDigestItemHtml({
-  tag: "TECHNOLOGY",
-  headline: "Best Noise-Canceling Earbuds: Bose, Sony, Apple, and More",
-  summary: "Everyone needs a good pair of ANC earbuds.",
-  wim: null,
-  wim_brief: null,
-  source: "wired.com",
+  headline: "Why It Matters v2 removes legacy sections",
+  wim: "A strong story-specific interpretation should render as one block only.",
+  implications: "This should not render.",
+  watch_next: "This should not render either.",
+  source: "fiercebiotech.com",
   source_tier: "strong",
   published_date: "2026-04-01T10:00:00.000Z",
-  relevanceScore: 6.2,
+  relevanceScore: 7.9,
 }, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
-assert.ok(commentaryHtml.includes("commentary or feature content"), "deep fallback should flag feature-style content instead of inventing a strategic lens");
 
-const opinionHtml = runtime.renderDigestItemHtml({
-  tag: "HEALTHCARE",
-  headline: "Opinion: America needs more clinics of last resort for patients who can’t get answers",
-  summary: "An excerpt from a new book argues for more clinics of last resort.",
-  wim: null,
-  wim_brief: null,
-  source: "statnews.com",
-  source_tier: "strong",
-  published_date: "2026-04-01T10:00:00.000Z",
-  relevanceScore: 6.2,
-}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
-assert.ok(opinionHtml.includes("commentary or feature content"), "deep fallback should flag opinion content instead of adding a normal sector lens");
+assert.ok(noLegacySectionsHtml.includes("one block only"), "deep emails should keep the validated WIM body");
+assert.ok(!noLegacySectionsHtml.includes("This should not render"), "deep emails should not render legacy implications/watch_next rows");
 
-console.log("email item rendering decodes HTML entities ✓");
+console.log("email item rendering follows Why It Matters v2 ✓");

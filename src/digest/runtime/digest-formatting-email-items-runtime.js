@@ -70,12 +70,36 @@ function createDigestEmailItemsRuntime(deps) {
     "INDUSTRIALS": "For industrial teams, this matters for capacity, shipping flows, input costs, and operational execution.",
   };
 
+  function classifyDeepFallbackShape(item) {
+    const text = `${decodeHtmlEntities(item?.headline || "")} ${decodeHtmlEntities(item?.summary || "")}`;
+    if (/\b(frequently requested|what'?s new|queryresult|drug-specific and other records|companies that have not submitted)\b/i.test(text)) {
+      return "index_page";
+    }
+    if (/\b(alerts customers|warns consumers|recall|hidden drug ingredients|sterility issues)\b/i.test(text)) {
+      return "safety_notice";
+    }
+    if (/(^|[\s"“])opinion:|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|reporter goes up against|excerpt from)\b/i.test(text)) {
+      return "commentary";
+    }
+    return "standard";
+  }
+
   function buildDeepFallbackCopy(item) {
     const decodedHeadline = decodeHtmlEntities(item?.headline || "");
     const decodedSummary = decodeHtmlEntities(item?.summary || "");
     const headlineKey = normalizeComparableText(decodedHeadline);
     const summaryKey = normalizeComparableText(decodedSummary);
     const lens = DEEP_FALLBACK_LENSES[String(item?.tag || "").trim()] || "For operators, this matters for near-term execution, economics, and competitive positioning.";
+    const shape = classifyDeepFallbackShape(item);
+    if (shape === "index_page") {
+      return "This appears to be a records or listing page rather than a single market-moving story. It is only useful if it changes regulatory, labeling, or compliance assumptions for affected companies.";
+    }
+    if (shape === "safety_notice") {
+      return "This is a targeted safety or enforcement notice, not broad sector news. It matters mainly for affected manufacturers, distributors, and compliance teams.";
+    }
+    if (shape === "commentary") {
+      return "This reads more like commentary or feature content than a direct operating catalyst. Treat it as directional context, not a core sector signal.";
+    }
     const leadSentences = splitSentences(decodedSummary);
     const lead = leadSentences[0] || decodedSummary.trim();
     const leadTrimmed = truncateAtWordBoundary(lead, 220);

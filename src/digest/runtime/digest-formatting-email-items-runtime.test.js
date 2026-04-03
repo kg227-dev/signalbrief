@@ -78,7 +78,46 @@ const duplicatedSummaryHtml = runtime.renderDigestItemHtml({
   relevanceScore: 6.2,
 }, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
 
-assert.ok(duplicatedSummaryHtml.includes("For life sciences teams"), "deep fallback should use a strategic lens when summary just repeats the headline");
-assert.ok(!duplicatedSummaryHtml.includes("Frequently requested or proactively posted drug-specific and other records</div><div"), "deep fallback should not just restate the headline as body text");
+assert.ok(duplicatedSummaryHtml.includes("records or listing page"), "deep fallback should flag listing-style FDA content instead of inventing a strategic lens");
+assert.ok(!duplicatedSummaryHtml.includes("For life sciences teams"), "deep fallback should not apply the normal sector lens to listing pages");
+
+const safetyNoticeHtml = runtime.renderDigestItemHtml({
+  tag: "LIFE SCIENCES",
+  headline: "FDA alerts customers to voluntary recall of compounded drugs due to sterility issues",
+  summary: "FDA is alerting patients and health care professionals about a voluntary recall due to a lack of sterility assurance.",
+  wim: null,
+  wim_brief: null,
+  source: "fda.gov",
+  source_tier: "premium",
+  published_date: "2026-04-01T10:00:00.000Z",
+  relevanceScore: 6.2,
+}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
+assert.ok(safetyNoticeHtml.includes("targeted safety or enforcement notice"), "deep fallback should use a safety-notice disclaimer for recall-style official items");
+
+const commentaryHtml = runtime.renderDigestItemHtml({
+  tag: "TECHNOLOGY",
+  headline: "Best Noise-Canceling Earbuds: Bose, Sony, Apple, and More",
+  summary: "Everyone needs a good pair of ANC earbuds.",
+  wim: null,
+  wim_brief: null,
+  source: "wired.com",
+  source_tier: "strong",
+  published_date: "2026-04-01T10:00:00.000Z",
+  relevanceScore: 6.2,
+}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
+assert.ok(commentaryHtml.includes("commentary or feature content"), "deep fallback should flag feature-style content instead of inventing a strategic lens");
+
+const opinionHtml = runtime.renderDigestItemHtml({
+  tag: "HEALTHCARE",
+  headline: "Opinion: America needs more clinics of last resort for patients who can’t get answers",
+  summary: "An excerpt from a new book argues for more clinics of last resort.",
+  wim: null,
+  wim_brief: null,
+  source: "statnews.com",
+  source_tier: "strong",
+  published_date: "2026-04-01T10:00:00.000Z",
+  relevanceScore: 6.2,
+}, 0, { digestDateKey: "2026-04-01", depth: "headline_plus_why" });
+assert.ok(opinionHtml.includes("commentary or feature content"), "deep fallback should flag opinion content instead of adding a normal sector lens");
 
 console.log("email item rendering decodes HTML entities ✓");

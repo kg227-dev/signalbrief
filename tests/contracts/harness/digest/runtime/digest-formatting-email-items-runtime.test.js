@@ -76,4 +76,15 @@ const duplicateFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
   source: "fda.gov",
   url: "https://example.com/fda",
 }, 0, { depth: "headline_plus_why" });
-assert.ok(duplicateFallbackHtml.includes("For life sciences teams"), "email item should use a strategic lens when summary duplicates the headline");
+assert.ok(duplicateFallbackHtml.includes("records or listing page"), "email item should flag listing-style FDA content instead of using the normal sector lens");
+
+const safetyFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
+  tag: "LIFE SCIENCES",
+  headline: "FDA warns consumers not to purchase or use Artri products",
+  summary: "FDA is warning consumers not to purchase or use products that may contain hidden drug ingredients.",
+  wim: null,
+  wim_brief: null,
+  source: "fda.gov",
+  url: "https://example.com/fda-warning",
+}, 0, { depth: "headline_plus_why" });
+assert.ok(safetyFallbackHtml.includes("targeted safety or enforcement notice"), "email item should use safety-notice copy for recall and warning items");

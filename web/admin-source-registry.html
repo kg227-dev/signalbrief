@@ -347,6 +347,7 @@ body.dark .modal-close { background:var(--card); }
     </div>
     <div class="table-toolbar-controls">
       <select id="historyModeInput" class="table-filter" onchange="changeSourceRegistryHistoryMode()">
+        <option value="rolling_7d">Rolling last 7 days sent sources</option>
         <option value="validation_week_1">Validation Week 1 sent sources</option>
         <option value="all_tracked_history">All tracked history</option>
       </select>
@@ -886,9 +887,10 @@ function renderBrokerHighlightGroups(brokerConfig) {
   `).join("");
 }
 function normalizeSourceRegistryHistoryMode(mode) {
-  return String(mode || "").trim().toLowerCase() === "all_tracked_history"
-    ? "all_tracked_history"
-    : "validation_week_1";
+  const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === "all_tracked_history") return "all_tracked_history";
+  if (normalized === "validation_week_1") return "validation_week_1";
+  return "rolling_7d";
 }
 function describeHistoryWindow(overview) {
   const historyWindow = overview?.history_window || {};
@@ -1082,7 +1084,7 @@ function setSourceRegistryHistoryMode(mode) {
   const modeInput = document.getElementById("historyModeInput");
   if (modeInput && modeInput.value !== sourceRegistryHistoryMode) modeInput.value = sourceRegistryHistoryMode;
   const url = new URL(window.location.href);
-  if (sourceRegistryHistoryMode === "validation_week_1") url.searchParams.delete("history_mode");
+  if (sourceRegistryHistoryMode === "rolling_7d") url.searchParams.delete("history_mode");
   else url.searchParams.set("history_mode", sourceRegistryHistoryMode);
   history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
@@ -1515,7 +1517,12 @@ function exportSuggestionsCSV() {
       r.admin_override?.updated_by || r.updated_by || "",
     ];
   })].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  downloadCSV(csv, historyWindow.mode === "validation_week_1" ? "source-governance-validation-week-1.csv" : "source-governance-all-history.csv");
+  downloadCSV(
+    csv,
+    historyWindow.mode === "validation_week_1"
+      ? "source-governance-validation-week-1.csv"
+      : (historyWindow.mode === "rolling_7d" ? "source-governance-rolling-7d.csv" : "source-governance-all-history.csv")
+  );
 }
 function renderSourceRegistryInspector(detail, overview) {
   const container = document.getElementById("sourceRegistryInspector");
@@ -1714,7 +1721,7 @@ let latestSourceRegistryOverview = null;
 let selectedSourceRegistryDomain = "";
 let selectedSourceRegistryIdentityKey = "";
 let sourceRegistryOverviewQuery = "";
-let sourceRegistryHistoryMode = "validation_week_1";
+let sourceRegistryHistoryMode = "rolling_7d";
 let loadInFlight = false;
 let _allSuggestions = [];
 let suggestionsSortKey = "tracked_sends";
@@ -1984,7 +1991,7 @@ window.addEventListener("focus", () => load(true));
   const initialDomain = params.get("domain") || "";
   const initialIdentityKey = params.get("identity_key") || "";
   const initialQuery = params.get("query") || "";
-  const initialHistoryMode = params.get("history_mode") || "validation_week_1";
+  const initialHistoryMode = params.get("history_mode") || "rolling_7d";
   setSelectedDomain(initialDomain, initialIdentityKey);
   setSourceRegistryHistoryMode(initialHistoryMode);
   setSourceRegistryOverviewQuery(initialQuery);

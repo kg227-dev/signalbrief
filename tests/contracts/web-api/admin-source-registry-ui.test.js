@@ -10,6 +10,7 @@ const pageSource = fs.readFileSync(PAGE_PATH, "utf8");
 const requiredPageSnippets = [
   "Source Governance",
   "Broker cleanup / review sources",
+  "Rolling last 7 days sent sources",
   "Validation Week 1 sent sources",
   "Loading sent-source window",
   "Broker source inventory",

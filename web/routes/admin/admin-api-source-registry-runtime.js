@@ -24,9 +24,10 @@ function parseLimitParam(url) {
 }
 
 function parseHistoryModeParam(url) {
-  return String(url.searchParams.get("history_mode") || "").trim().toLowerCase() === "all_tracked_history"
-    ? "all_tracked_history"
-    : "validation_week_1";
+  const mode = String(url.searchParams.get("history_mode") || "").trim().toLowerCase();
+  if (mode === "all_tracked_history") return "all_tracked_history";
+  if (mode === "validation_week_1") return "validation_week_1";
+  return "rolling_7d";
 }
 
 function sanitizeBody(body = {}) {

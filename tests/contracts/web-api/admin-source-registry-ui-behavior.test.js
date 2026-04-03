@@ -294,12 +294,12 @@ async function flushMicrotasks() {
       }
       if (href.startsWith("/api/admin/source-registry?")) {
         return jsonResponse({
-          history_mode: "validation_week_1",
-          history_scope: "validation_week_1",
-          history_scope_label: "Validation Week 1",
+          history_mode: "rolling_7d",
+          history_scope: "rolling_7d",
+          history_scope_label: "Rolling last 7 days",
           history_window: {
-            mode: "validation_week_1",
-            label: "Validation Week 1",
+            mode: "rolling_7d",
+            label: "Rolling last 7 days",
             description: "Sent items only from March 28, 2026 through April 3, 2026 ET.",
             sent_only: true,
             start_date_et: "2026-03-28",
@@ -490,7 +490,7 @@ async function flushMicrotasks() {
   await flushMicrotasks();
 
   assert.ok(
-    fetchCalls.includes("/api/admin/source-registry/domain?domain=benzinga.com&history_mode=validation_week_1"),
+    fetchCalls.includes("/api/admin/source-registry/domain?domain=benzinga.com&history_mode=rolling_7d"),
     "inspecting a row should still load the selected domain detail"
   );
   assert.strictEqual(
@@ -504,7 +504,7 @@ async function flushMicrotasks() {
   await flushMicrotasks();
 
   assert.ok(
-    fetchCalls.includes("/api/admin/source-registry/domain?domain=youtube.com&history_mode=validation_week_1&identity_key=youtube%3A%40insideboardroom"),
+    fetchCalls.includes("/api/admin/source-registry/domain?domain=youtube.com&history_mode=rolling_7d&identity_key=youtube%3A%40insideboardroom"),
     "identity-scope inspection should request detail with identity_key"
   );
   assert.strictEqual(
@@ -524,8 +524,8 @@ async function flushMicrotasks() {
   const overviewCall = fetchCalls.find((href) => href.startsWith("/api/admin/source-registry?"));
   assert.ok(overviewCall, "overview reload should request the source registry list");
   assert.ok(
-    overviewCall.includes("history_mode=validation_week_1"),
-    "overview reload should default to validation week 1"
+    overviewCall.includes("history_mode=rolling_7d"),
+    "overview reload should default to the rolling 7-day window"
   );
   assert.ok(
     overviewCall.includes("limit=100"),
@@ -568,8 +568,8 @@ async function flushMicrotasks() {
     "validation review panel should render broker cleanup / review items separately from sent sources"
   );
   assert.ok(
-    elements.get("sentSourcesTitle").textContent.includes("Validation Week 1"),
-    "sent-sources header should reflect the active validation-week scope"
+    elements.get("sentSourcesTitle").textContent.includes("Rolling last 7 days"),
+    "sent-sources header should reflect the active rolling scope"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("MVP topic controls"),

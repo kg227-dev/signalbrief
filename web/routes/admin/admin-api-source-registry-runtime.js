@@ -23,6 +23,12 @@ function parseLimitParam(url) {
   return Math.min(100, Math.max(1, requested));
 }
 
+function parseHistoryModeParam(url) {
+  return String(url.searchParams.get("history_mode") || "").trim().toLowerCase() === "all_tracked_history"
+    ? "all_tracked_history"
+    : "validation_week_1";
+}
+
 function sanitizeBody(body = {}) {
   const domain = normalizeSourcePolicyDomain(body?.domain);
   const identityKey = normalizeSourceIdentityKey(body?.identity_key);
@@ -120,6 +126,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
       setAdminSourceRegistry,
       buildRecentDigestsExport,
       sourceRegistryPath,
+      historyMode: parseHistoryModeParam(url),
       query: url.searchParams.get("query") || "",
       limit: parseLimitParam(url),
     });
@@ -141,6 +148,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
       buildRecentDigestsExport,
       readJsonLineLog,
       adminActionLog: ADMIN_ACTION_LOG,
+      historyMode: parseHistoryModeParam(url),
     });
     return json(res, payload || { error: "domain not found" }, payload ? 200 : 404);
   }

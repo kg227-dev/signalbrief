@@ -329,13 +329,27 @@ body.dark .modal-close { background:var(--card); }
     <div id="sourceOfTruthPanelBody" class="empty">Loading source-of-truth status…</div>
   </div>
 
+  <div class="card" style="margin-bottom:28px;">
+    <div class="section-head">
+      <div>
+        <div class="section-title" style="margin-bottom:0;">Broker cleanup / review sources</div>
+        <div class="section-subcopy">Separate from sent winners. This panel shows the broker roster cleanup and validation-review sources so they do not get confused with what actually shipped.</div>
+      </div>
+    </div>
+    <div id="validationReviewPanelBody" class="empty">Loading broker cleanup / review sources…</div>
+  </div>
+
   <div class="table-toolbar" style="margin-bottom:10px;">
     <div>
-      <div class="section-title" style="margin-bottom:0;">Source governance (all tracked history)</div>
-      <div class="table-meta" style="margin-top:3px;">This table now merges broker roster state, tracked digest metrics, and explicit governance overrides.</div>
+      <div id="sentSourcesTitle" class="section-title" style="margin-bottom:0;">Sent sources</div>
+      <div id="sentSourcesMeta" class="table-meta" style="margin-top:3px;">Loading sent-source window…</div>
       <div id="suggestionsCount" class="table-meta" style="margin-top:3px;"></div>
     </div>
     <div class="table-toolbar-controls">
+      <select id="historyModeInput" class="table-filter" onchange="changeSourceRegistryHistoryMode()">
+        <option value="validation_week_1">Validation Week 1 sent sources</option>
+        <option value="all_tracked_history">All tracked history</option>
+      </select>
       <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, broker source id, reason, or note…" oninput="filterSuggestions()">
       <button class="table-action-link" type="button" onclick="exportSuggestionsCSV()">Export CSV</button>
     </div>
@@ -679,11 +693,13 @@ function renderCurationQueues(overview) {
   const container = document.getElementById("curationQueuesPanelBody");
   if (!container) return;
   const queues = overview?.curation_queues;
+  const historyWindow = describeHistoryWindow(overview);
   if (!queues || typeof queues !== "object") {
     container.innerHTML = `<div class="empty">Curation queues unavailable.</div>`;
     return;
   }
   container.innerHTML = `
+    <div class="table-meta" style="margin-bottom:10px;">Current queue window: ${esc(historyWindow.description)}</div>
     <div class="curation-queue-grid">
       <div class="curation-queue-card">
         <div class="curation-queue-title">Specialist candidates</div>
@@ -869,11 +885,97 @@ function renderBrokerHighlightGroups(brokerConfig) {
     </div>
   `).join("");
 }
+function normalizeSourceRegistryHistoryMode(mode) {
+  return String(mode || "").trim().toLowerCase() === "all_tracked_history"
+    ? "all_tracked_history"
+    : "validation_week_1";
+}
+function describeHistoryWindow(overview) {
+  const historyWindow = overview?.history_window || {};
+  const label = String(historyWindow.label || "").trim() || "Sent sources";
+  const description = String(historyWindow.description || "").trim() || "Sent items only.";
+  return {
+    mode: normalizeSourceRegistryHistoryMode(historyWindow.mode),
+    label,
+    description,
+    sentOnly: historyWindow.sent_only === true,
+    startDate: String(historyWindow.start_date_et || "").trim() || null,
+    endDate: String(historyWindow.end_date_et || "").trim() || null,
+  };
+}
+function renderSentSourcesHeader(overview) {
+  const titleEl = document.getElementById("sentSourcesTitle");
+  const metaEl = document.getElementById("sentSourcesMeta");
+  const modeInput = document.getElementById("historyModeInput");
+  const historyWindow = describeHistoryWindow(overview);
+  if (titleEl) titleEl.textContent = `${historyWindow.label} sent sources`;
+  if (metaEl) metaEl.textContent = `${historyWindow.description} Broker cleanup and review sources are separated above.`;
+  if (modeInput) modeInput.value = historyWindow.mode;
+}
+function renderValidationReviewItems(rows) {
+  const entries = Array.isArray(rows) ? rows : [];
+  if (!entries.length) return `<div class="empty">No broker cleanup or review sources were parsed from the validation manual review doc.</div>`;
+  return `<div class="source-highlight-list">${entries.map((item) => {
+    const brokerSource = item?.broker_source || null;
+    const liveState = brokerSource
+      ? `${brokerSource.enabled !== false ? "live enabled" : "live disabled"} · tier ${Math.max(1, Number(brokerSource.tier || 2))}${brokerSource.lane ? ` · ${brokerLaneLabel(brokerSource.lane)}` : ""}`
+      : "No live broker snapshot matched this review item";
+    const title = item?.domain
+      ? `<button type="button" class="table-action-link mono" style="padding:0;border:none;background:none;min-height:auto;" onclick="inspectSourceRegistryDomain('${esc(item.domain)}')">${esc(item.source_id || item.domain || "unknown")}</button>`
+      : `<span class="mono">${esc(item.source_id || "unknown")}</span>`;
+    const statusTone = item?.disposition_key === "replace"
+      ? { tone: "var(--red)", bg: "#FEE2E2" }
+      : (item?.disposition_key === "keep_disabled"
+        ? { tone: "var(--text-secondary)", bg: "rgba(0,0,0,0.05)" }
+        : { tone: "var(--yellow)", bg: "#FEF3C7" });
+    return `
+      <div class="source-highlight-item">
+        <div class="source-highlight-item-title">${title}</div>
+        <div class="source-highlight-item-copy">
+          <span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${statusTone.bg};color:${statusTone.tone};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(item?.disposition || "review")}</span>
+          <span style="margin-left:6px;">${esc(item?.topic || "Unscoped")}${item?.domain ? ` · ${esc(item.domain)}` : ""}</span>
+        </div>
+        <div class="source-highlight-item-copy">${esc(item?.note || "Needs validation review.")}</div>
+        <div class="source-highlight-item-copy">${esc(liveState)}</div>
+      </div>`;
+  }).join("")}</div>`;
+}
+function renderValidationReviewSummary(overview) {
+  const container = document.getElementById("validationReviewPanelBody");
+  if (!container) return;
+  const review = overview?.validation_review || null;
+  if (!review || typeof review !== "object") {
+    container.innerHTML = `<div class="empty">Validation cleanup / review sources unavailable.</div>`;
+    return;
+  }
+  const counts = review?.counts || {};
+  container.innerHTML = `
+    <div class="table-meta">Manual broker cleanup context from <span class="mono">${esc(review.source_path || "validation review doc")}</span>. This is roster-review evidence, not a sent-source list.</div>
+    <div class="source-truth-grid" style="margin-top:12px;">
+      <div class="source-truth-card">
+        <div class="source-truth-kicker">Investigate</div>
+        <div class="source-truth-headline">${Math.max(0, Number(counts.investigate || 0))}</div>
+        <div class="source-truth-copy">Sources flagged for feed quality, yield, or topical-fit verification.</div>
+      </div>
+      <div class="source-truth-card">
+        <div class="source-truth-kicker">Replace</div>
+        <div class="source-truth-headline">${Math.max(0, Number(counts.replace || 0))}</div>
+        <div class="source-truth-copy">Sources with broken or structurally poor endpoints that need replacement.</div>
+      </div>
+      <div class="source-truth-card">
+        <div class="source-truth-kicker">Keep disabled</div>
+        <div class="source-truth-headline">${Math.max(0, Number(counts.keep_disabled || 0))}</div>
+        <div class="source-truth-copy">Sources intentionally left out of the live roster unless a stronger reason appears.</div>
+      </div>
+    </div>
+    ${renderValidationReviewItems(review.items)}`;
+}
 function renderSourceOfTruthSummary(overview) {
   const container = document.getElementById("sourceOfTruthPanelBody");
   if (!container) return;
   const brokerConfig = overview?.broker_config || null;
   const governance = overview?.governance_registry || null;
+  const historyWindow = describeHistoryWindow(overview);
   if (!brokerConfig || typeof brokerConfig !== "object") {
     container.innerHTML = `<div class="empty">Broker source-of-truth details unavailable.</div>`;
     return;
@@ -902,8 +1004,8 @@ function renderSourceOfTruthSummary(overview) {
       </div>
       <div class="source-truth-card">
         <div class="source-truth-kicker">Main table coverage</div>
-        <div class="source-truth-headline">${Math.max(0, Number(overview?.suggestion_count || 0))} tracked suggestions</div>
-        <div class="source-truth-copy">${Math.max(0, Number(overview?.override_count || 0))} direct governance override${Number(overview?.override_count || 0) === 1 ? "" : "s"} plus broker-only domains from the live roster now surface below.</div>
+        <div class="source-truth-headline">${Math.max(0, Number(overview?.suggestion_count || 0))} sent domains in view</div>
+        <div class="source-truth-copy">${historyWindow.description} ${Math.max(0, Number(overview?.override_count || 0))} direct governance override${Number(overview?.override_count || 0) === 1 ? "" : "s"} still apply, but broker cleanup sources are split into their own panel.</div>
         <div class="source-truth-line">Search by domain, broker source id, tracked reason, or governance note.</div>
       </div>
     </div>
@@ -974,6 +1076,31 @@ function getSourceRegistryOverviewSearchInput() {
   return document.getElementById("sourceRegistryOverviewSearch")
     || document.getElementById("sourceRegistryTableSearch")
     || document.getElementById("sourceRegistrySuggestionsSearch");
+}
+function setSourceRegistryHistoryMode(mode) {
+  sourceRegistryHistoryMode = normalizeSourceRegistryHistoryMode(mode);
+  const modeInput = document.getElementById("historyModeInput");
+  if (modeInput && modeInput.value !== sourceRegistryHistoryMode) modeInput.value = sourceRegistryHistoryMode;
+  const url = new URL(window.location.href);
+  if (sourceRegistryHistoryMode === "validation_week_1") url.searchParams.delete("history_mode");
+  else url.searchParams.set("history_mode", sourceRegistryHistoryMode);
+  history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+function getSourceRegistryHistoryMode() {
+  const modeInput = document.getElementById("historyModeInput");
+  const nextMode = modeInput ? normalizeSourceRegistryHistoryMode(modeInput.value) : sourceRegistryHistoryMode;
+  if (nextMode !== sourceRegistryHistoryMode) setSourceRegistryHistoryMode(nextMode);
+  return sourceRegistryHistoryMode;
+}
+async function changeSourceRegistryHistoryMode() {
+  setSourceRegistryHistoryMode(getSourceRegistryHistoryMode());
+  const overview = await loadSourceRegistryOverview(true);
+  if (!overview) return;
+  if (selectedSourceRegistryDomain && !isEditingSourceRegistry()) {
+    await inspectSourceRegistryDomain(selectedSourceRegistryDomain, true, selectedSourceRegistryIdentityKey);
+  } else {
+    renderSourceRegistryInspector(null, overview);
+  }
 }
 function setSourceRegistryOverviewQuery(query) {
   sourceRegistryOverviewQuery = String(query || "").trim();
@@ -1085,6 +1212,7 @@ function renderBrokerRosterCell(row) {
 function buildGovernanceRows(overview) {
   const suggestions = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
   const overrides = Array.isArray(overview?.overrides) ? overview.overrides : [];
+  const sentOnly = overview?.history_window?.sent_only === true;
   const brokerDomainMap = buildBrokerDomainMap(overview?.broker_config || null);
   const rowsByDomain = new Map();
 
@@ -1106,11 +1234,13 @@ function buildGovernanceRows(overview) {
     if (!domain) return;
     const existing = rowsByDomain.get(domain) || {};
     const recent = override?.recent_metrics || {};
+    const sendCount = existing.send_count != null ? existing.send_count : Math.max(0, Number(recent.send_count || 0));
+    if (sentOnly && sendCount <= 0) return;
     const brokerSummary = existing.broker_summary || brokerDomainMap.get(domain) || null;
     rowsByDomain.set(domain, {
       ...existing,
       domain,
-      send_count: existing.send_count != null ? existing.send_count : Math.max(0, Number(recent.send_count || 0)),
+      send_count: sendCount,
       weak_source_item_count: existing.weak_source_item_count != null
         ? existing.weak_source_item_count
         : Math.max(0, Number(recent.weak_source_item_count || 0)),
@@ -1129,23 +1259,36 @@ function buildGovernanceRows(overview) {
     });
   });
 
-  brokerDomainMap.forEach((summary, domain) => {
-    const existing = rowsByDomain.get(domain) || {};
-    rowsByDomain.set(domain, {
-      ...existing,
-      domain,
-      send_count: existing.send_count != null ? existing.send_count : 0,
-      weak_source_item_count: existing.weak_source_item_count != null ? existing.weak_source_item_count : 0,
-      poor_digest_item_count: existing.poor_digest_item_count != null ? existing.poor_digest_item_count : 0,
-      top_tags: Array.isArray(existing.top_tags) ? existing.top_tags : [],
-      effective_policy: existing.effective_policy && Object.keys(existing.effective_policy).length
-        ? existing.effective_policy
-        : (summary.effective_policy || {}),
-      admin_override: existing.admin_override || null,
-      suggested_reason: existing.suggested_reason || "",
-      broker_summary: summary,
+  if (sentOnly) {
+    rowsByDomain.forEach((row, domain) => {
+      const summary = brokerDomainMap.get(domain) || null;
+      rowsByDomain.set(domain, {
+        ...row,
+        broker_summary: summary,
+        effective_policy: row?.effective_policy && Object.keys(row.effective_policy).length
+          ? row.effective_policy
+          : (summary?.effective_policy || {}),
+      });
     });
-  });
+  } else {
+    brokerDomainMap.forEach((summary, domain) => {
+      const existing = rowsByDomain.get(domain) || {};
+      rowsByDomain.set(domain, {
+        ...existing,
+        domain,
+        send_count: existing.send_count != null ? existing.send_count : 0,
+        weak_source_item_count: existing.weak_source_item_count != null ? existing.weak_source_item_count : 0,
+        poor_digest_item_count: existing.poor_digest_item_count != null ? existing.poor_digest_item_count : 0,
+        top_tags: Array.isArray(existing.top_tags) ? existing.top_tags : [],
+        effective_policy: existing.effective_policy && Object.keys(existing.effective_policy).length
+          ? existing.effective_policy
+          : (summary.effective_policy || {}),
+        admin_override: existing.admin_override || null,
+        suggested_reason: existing.suggested_reason || "",
+        broker_summary: summary,
+      });
+    });
+  }
 
   return Array.from(rowsByDomain.values());
 }
@@ -1287,6 +1430,7 @@ function renderSuggestionRow(row) {
   </tr>`;
 }
 function renderSourceRegistrySuggestions(overview) {
+  renderSentSourcesHeader(overview);
   _allSuggestions = buildGovernanceRows(overview);
   filterSuggestions();
 }
@@ -1308,7 +1452,7 @@ function filterSuggestions() {
   if (!body) return;
   body.innerHTML = sortedRows.length
     ? sortedRows.map(renderSuggestionRow).join("")
-    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No broker, tracked, or overridden sources yet."}</td></tr>`;
+    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No sent sources matched this window."}</td></tr>`;
   if (countEl) countEl.textContent = q
     ? `${sortedRows.length} of ${_allSuggestions.length} sources`
     : `${_allSuggestions.length} source${_allSuggestions.length !== 1 ? "s" : ""}`;
@@ -1340,6 +1484,7 @@ function parseTopicFitText(rawValue) {
   return topicFit;
 }
 function exportSuggestionsCSV() {
+  const historyWindow = describeHistoryWindow(latestSourceRegistryOverview);
   const q = (document.getElementById("suggestionsSearch")?.value || "").toLowerCase().trim();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
@@ -1370,17 +1515,18 @@ function exportSuggestionsCSV() {
       r.admin_override?.updated_by || r.updated_by || "",
     ];
   })].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  downloadCSV(csv, "source-governance.csv");
+  downloadCSV(csv, historyWindow.mode === "validation_week_1" ? "source-governance-validation-week-1.csv" : "source-governance-all-history.csv");
 }
 function renderSourceRegistryInspector(detail, overview) {
   const container = document.getElementById("sourceRegistryInspector");
   if (!container) return;
+  const historyWindow = describeHistoryWindow(overview);
   const governancePath = overview?.governance_registry?.active_path || overview?.source_registry_path || "";
   const governanceHint = governancePath
     ? `Governance overrides live in broker config: ${governancePath}`
     : "Governance overrides live inside the active broker config.";
   if (!detail) {
-    container.innerHTML = `<div class="table-meta">${esc(governanceHint)} Search for a domain to inspect its effective policy and recent impact.</div>`;
+    container.innerHTML = `<div class="table-meta">${esc(governanceHint)} Current inspector window: ${esc(historyWindow.label)}. Search for a domain to inspect its effective policy and sent impact.</div>`;
     return;
   }
   const policy = detail.effective_policy || {};
@@ -1404,9 +1550,9 @@ function renderSourceRegistryInspector(detail, overview) {
     <div class="table-toolbar" style="margin-bottom:16px;">
       <div>
         <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
-        <div class="subscriber-sub">${esc(governanceHint)} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
+        <div class="subscriber-sub">${esc(governanceHint)} · ${esc(historyWindow.label)} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
       </div>
-      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · tracked sends ${Math.max(0, Number(recent.send_count || 0))}</div>
+      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · window sends ${Math.max(0, Number(recent.send_count || 0))}</div>
     </div>
     <div style="display:grid;grid-template-columns:1.2fr .9fr;gap:18px;align-items:start;">
       <div style="display:flex;flex-direction:column;gap:14px;">
@@ -1568,6 +1714,7 @@ let latestSourceRegistryOverview = null;
 let selectedSourceRegistryDomain = "";
 let selectedSourceRegistryIdentityKey = "";
 let sourceRegistryOverviewQuery = "";
+let sourceRegistryHistoryMode = "validation_week_1";
 let loadInFlight = false;
 let _allSuggestions = [];
 let suggestionsSortKey = "tracked_sends";
@@ -1688,7 +1835,8 @@ async function saveBrokerSourceTier(sourceId) {
 }
 async function loadSourceRegistryOverview(silent = true) {
   const query = getSourceRegistryOverviewQuery();
-  const resp = await apiFetchJson(`/api/admin/source-registry?limit=20${query ? `&query=${encodeURIComponent(query)}` : ""}`, {}, 1);
+  const historyMode = getSourceRegistryHistoryMode();
+  const resp = await apiFetchJson(`/api/admin/source-registry?limit=100&history_mode=${encodeURIComponent(historyMode)}${query ? `&query=${encodeURIComponent(query)}` : ""}`, {}, 1);
   const data = resp.data || {};
   if (!resp.ok || data.error) {
     if (!silent) showToast("err", data.error || "Failed to load source registry");
@@ -1698,6 +1846,7 @@ async function loadSourceRegistryOverview(silent = true) {
   renderPreferredSourcesConfig(data);
   renderCurationQueues(data);
   renderSourceOfTruthSummary(data);
+  renderValidationReviewSummary(data);
   renderSourceRegistrySuggestions(data);
   return data;
 }
@@ -1710,7 +1859,7 @@ async function inspectSourceRegistryDomain(domainValue, silent = false, identity
     return;
   }
   if (searchEl) searchEl.value = rawDomain;
-  const detailUrl = `/api/admin/source-registry/domain?domain=${encodeURIComponent(rawDomain)}${identityKey ? `&identity_key=${encodeURIComponent(identityKey)}` : ""}`;
+  const detailUrl = `/api/admin/source-registry/domain?domain=${encodeURIComponent(rawDomain)}&history_mode=${encodeURIComponent(getSourceRegistryHistoryMode())}${identityKey ? `&identity_key=${encodeURIComponent(identityKey)}` : ""}`;
   const resp = await apiFetchJson(detailUrl, {}, 1);
   const data = resp.data || {};
   if (!resp.ok || data.error) {
@@ -1835,7 +1984,9 @@ window.addEventListener("focus", () => load(true));
   const initialDomain = params.get("domain") || "";
   const initialIdentityKey = params.get("identity_key") || "";
   const initialQuery = params.get("query") || "";
+  const initialHistoryMode = params.get("history_mode") || "validation_week_1";
   setSelectedDomain(initialDomain, initialIdentityKey);
+  setSourceRegistryHistoryMode(initialHistoryMode);
   setSourceRegistryOverviewQuery(initialQuery);
   renderSuggestionsHeaderRow();
   const searchEl = document.getElementById("sourceRegistrySearch");

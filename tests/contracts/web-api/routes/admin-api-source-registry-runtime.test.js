@@ -196,6 +196,10 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.ok(handled);
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.source_registry_path, "/tmp/source-registry.json");
+    assert.strictEqual(payload.history_mode, "validation_week_1");
+    assert.strictEqual(payload.history_scope, "validation_week_1");
+    assert.strictEqual(payload.history_window.start_date_et, "2026-03-28");
+    assert.strictEqual(payload.history_window.end_date_et, "2026-04-03");
     assert.strictEqual(payload.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
     assert.strictEqual(payload.preferred_sources.standard_topic_source.source_of_truth, "standard_topic_broker");
     assert.strictEqual(payload.broker_config.topic_count, 1);
@@ -203,6 +207,7 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.strictEqual(payload.governance_registry.source_of_truth, "standard_topic_broker.governance");
     assert.strictEqual(payload.governance_registry.active_path, "/tmp/source-registry.json");
     assert.strictEqual(payload.broker_config.sources[0].id, "stat_rss");
+    assert.strictEqual(payload.validation_review.source_path, "docs/planning/reduced-scope-mvp-validation/source-registry-manual-review.md");
   }
 
   {

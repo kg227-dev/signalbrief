@@ -35,8 +35,9 @@ const {
     {
       user_email: "alpha@example.com",
       recipient: "alpha@example.com",
-      digest_id: "2026-03-20:alpha",
-      run_at_utc: "2026-03-20T11:00:00.000Z",
+      digest_id: "2026-03-31:alpha",
+      run_at_utc: "2026-03-31T11:00:00.000Z",
+      date_et: "2026-03-31",
       quality_score: 61,
       dominant_failure_mode: "weak_source",
       sent_items: [
@@ -57,8 +58,9 @@ const {
     {
       user_email: "beta@example.com",
       recipient: "beta@example.com",
-      digest_id: "2026-03-19:beta",
-      run_at_utc: "2026-03-19T11:00:00.000Z",
+      digest_id: "2026-04-01:beta",
+      run_at_utc: "2026-04-01T11:00:00.000Z",
+      date_et: "2026-04-01",
       quality_score: 72,
       dominant_failure_mode: "unknown",
       sent_items: [
@@ -85,8 +87,9 @@ const {
     {
       user_email: "gamma@example.com",
       recipient: "gamma@example.com",
-      digest_id: "2026-03-21:gamma",
-      run_at_utc: "2026-03-21T11:00:00.000Z",
+      digest_id: "2026-04-02:gamma",
+      run_at_utc: "2026-04-02T11:00:00.000Z",
+      date_et: "2026-04-02",
       quality_score: 84,
       dominant_failure_mode: "unknown",
       sent_items: [
@@ -107,8 +110,9 @@ const {
     {
       user_email: "delta@example.com",
       recipient: "delta@example.com",
-      digest_id: "2026-03-21:delta",
-      run_at_utc: "2026-03-21T12:00:00.000Z",
+      digest_id: "2026-04-02:delta",
+      run_at_utc: "2026-04-02T12:00:00.000Z",
+      date_et: "2026-04-02",
       quality_score: 76,
       dominant_failure_mode: "unknown",
       sent_items: [
@@ -127,8 +131,9 @@ const {
     {
       user_email: "epsilon@example.com",
       recipient: "epsilon@example.com",
-      digest_id: "2026-03-21:epsilon",
-      run_at_utc: "2026-03-21T13:00:00.000Z",
+      digest_id: "2026-04-03:epsilon",
+      run_at_utc: "2026-04-03T13:00:00.000Z",
+      date_et: "2026-04-03",
       quality_score: 81,
       dominant_failure_mode: "unknown",
       sent_items: [
@@ -263,7 +268,11 @@ const {
     limit: 10,
   });
   assert.strictEqual(overview.override_count, 1);
-  assert.strictEqual(overview.history_scope, "all_time");
+  assert.strictEqual(overview.history_mode, "validation_week_1");
+  assert.strictEqual(overview.history_scope, "validation_week_1");
+  assert.strictEqual(overview.history_scope_label, "Validation Week 1");
+  assert.strictEqual(overview.history_window.start_date_et, "2026-03-28");
+  assert.strictEqual(overview.history_window.end_date_et, "2026-04-03");
   assert.strictEqual(overview.suggestions.length, 1);
   assert.strictEqual(overview.suggestions[0].domain, "benzinga.com");
   assert.strictEqual(overview.suggestions[0].effective_policy.hard_block, true);
@@ -282,6 +291,8 @@ const {
   assert.strictEqual(overview.governance_registry.domain_count, 1);
   assert.strictEqual(overview.governance_registry.identity_count, 1);
   assert.strictEqual(overview.governance_registry.is_effectively_empty, false);
+  assert.strictEqual(overview.validation_review.source_path, "docs/planning/reduced-scope-mvp-validation/source-registry-manual-review.md");
+  assert.ok(Array.isArray(overview.validation_review.items));
   assert.strictEqual(overview.curation_queues.specialist_candidates[0].domain, "pharmavoice.com");
   assert.strictEqual(overview.curation_queues.derivative_winners[0].domain, "benzinga.com");
   assert.strictEqual(overview.curation_queues.platform_ambiguity[0].domain, "youtube.com");
@@ -318,7 +329,8 @@ const {
   });
   assert.ok(detail);
   assert.strictEqual(detail.domain, "benzinga.com");
-  assert.strictEqual(detail.history_scope, "all_time");
+  assert.strictEqual(detail.history_mode, "validation_week_1");
+  assert.strictEqual(detail.history_scope, "validation_week_1");
   assert.strictEqual(detail.effective_policy.hard_block, true);
   assert.strictEqual(detail.recent_metrics.send_count, 2);
   assert.strictEqual(detail.audit_entries.length, 1);

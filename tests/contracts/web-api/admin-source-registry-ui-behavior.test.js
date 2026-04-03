@@ -69,6 +69,7 @@ async function flushMicrotasks() {
     "preferredSourcesPanelBody",
     "curationQueuesPanelBody",
     "sourceOfTruthPanelBody",
+    "validationReviewPanelBody",
     "sourceRegistrySuggestionsHeaderRow",
     "sourceRegistrySuggestionsBody",
     "suggestionsCount",
@@ -79,6 +80,9 @@ async function flushMicrotasks() {
     "confirmModalTitle",
     "confirmModalBody",
     "confirmModalAcceptBtn",
+    "historyModeInput",
+    "sentSourcesTitle",
+    "sentSourcesMeta",
     "sourceRegistryScopeInput",
     "sourceRegistryDomainInput",
     "sourceRegistryFormFeedback",
@@ -290,6 +294,17 @@ async function flushMicrotasks() {
       }
       if (href.startsWith("/api/admin/source-registry?")) {
         return jsonResponse({
+          history_mode: "validation_week_1",
+          history_scope: "validation_week_1",
+          history_scope_label: "Validation Week 1",
+          history_window: {
+            mode: "validation_week_1",
+            label: "Validation Week 1",
+            description: "Sent items only from March 28, 2026 through April 3, 2026 ET.",
+            sent_only: true,
+            start_date_et: "2026-03-28",
+            end_date_et: "2026-04-03",
+          },
           preferred_sources: {
             path: "/app/data/standard-topic-broker-sources.json",
             runtime_path: "/app/data/standard-topic-broker-sources.json",
@@ -350,6 +365,30 @@ async function flushMicrotasks() {
             identity_count: 0,
             updated_at: null,
             is_effectively_empty: true,
+          },
+          validation_review: {
+            source_path: "docs/planning/reduced-scope-mvp-validation/source-registry-manual-review.md",
+            counts: {
+              investigate: 2,
+              replace: 1,
+              keep_disabled: 1,
+            },
+            items: [
+              {
+                topic: "Life Sciences",
+                source_id: "life_fda_drugs",
+                domain: "fda.gov",
+                disposition: "Investigate",
+                disposition_key: "investigate",
+                note: "Verify that feed items are discrete stories, not rolling update pages.",
+                broker_source: {
+                  id: "life_fda_drugs",
+                  enabled: true,
+                  tier: 3,
+                  lane: "official",
+                },
+              },
+            ],
           },
           curation_queues: {
             specialist_candidates: [
@@ -451,7 +490,7 @@ async function flushMicrotasks() {
   await flushMicrotasks();
 
   assert.ok(
-    fetchCalls.includes("/api/admin/source-registry/domain?domain=benzinga.com"),
+    fetchCalls.includes("/api/admin/source-registry/domain?domain=benzinga.com&history_mode=validation_week_1"),
     "inspecting a row should still load the selected domain detail"
   );
   assert.strictEqual(
@@ -465,7 +504,7 @@ async function flushMicrotasks() {
   await flushMicrotasks();
 
   assert.ok(
-    fetchCalls.includes("/api/admin/source-registry/domain?domain=youtube.com&identity_key=youtube%3A%40insideboardroom"),
+    fetchCalls.includes("/api/admin/source-registry/domain?domain=youtube.com&history_mode=validation_week_1&identity_key=youtube%3A%40insideboardroom"),
     "identity-scope inspection should request detail with identity_key"
   );
   assert.strictEqual(
@@ -484,6 +523,14 @@ async function flushMicrotasks() {
 
   const overviewCall = fetchCalls.find((href) => href.startsWith("/api/admin/source-registry?"));
   assert.ok(overviewCall, "overview reload should request the source registry list");
+  assert.ok(
+    overviewCall.includes("history_mode=validation_week_1"),
+    "overview reload should default to validation week 1"
+  );
+  assert.ok(
+    overviewCall.includes("limit=100"),
+    "overview reload should request the full sent-source window instead of truncating to 20 rows"
+  );
   assert.ok(
     !overviewCall.includes("query=benzinga.com"),
     "overview reload should not reuse the inspect-domain value as a table filter"
@@ -515,6 +562,14 @@ async function flushMicrotasks() {
   assert.ok(
     elements.get("sourceOfTruthPanelBody").innerHTML.includes("/app/data/standard-topic-broker-sources.json"),
     "source-of-truth panel should expose the active broker config path"
+  );
+  assert.ok(
+    elements.get("validationReviewPanelBody").innerHTML.includes("life_fda_drugs"),
+    "validation review panel should render broker cleanup / review items separately from sent sources"
+  );
+  assert.ok(
+    elements.get("sentSourcesTitle").textContent.includes("Validation Week 1"),
+    "sent-sources header should reflect the active validation-week scope"
   );
   assert.ok(
     elements.get("preferredSourcesPanelBody").innerHTML.includes("MVP topic controls"),

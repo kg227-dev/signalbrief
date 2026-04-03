@@ -45,6 +45,7 @@ function createDigestEmailFormattingRuntime(deps) {
       : "today's top signals across all areas";
     const learningSummary = String(opts.learningSummary || "").trim();
     const editorialNoteText = String(opts.editorialNote || "").trim();
+    const publicDigestUrl = String(opts.publicDigestUrl || "").trim();
     const headerMeta = styleRuntime.buildEmailHeaderMeta(items.length, opts.digestQuality);
     const itemsHtml = items
       .map((item, index) => itemsRuntime.renderDigestItemHtml(item, index, { userToken, digestId, depth }))
@@ -57,6 +58,7 @@ function createDigestEmailFormattingRuntime(deps) {
       welcomeBanner: sectionsRuntime.buildWelcomeBanner(isFirstDigest, filterNote, userToken),
       personalizationNote: sectionsRuntime.buildPersonalizationNote(learningSummary),
       editorialNote: sectionsRuntime.buildEditorialNote(editorialNoteText),
+      viewOnlineLink: sectionsRuntime.buildViewOnlineLink(publicDigestUrl),
       settingsFooter: sectionsRuntime.renderSettingsFooter(user, userToken),
       baseUrl: BASE_URL,
       userToken,

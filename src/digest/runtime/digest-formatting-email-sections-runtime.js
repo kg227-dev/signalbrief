@@ -50,6 +50,15 @@ function createDigestEmailSectionsRuntime(deps) {
   </div>`;
   }
 
+  function buildViewOnlineLink(publicDigestUrl) {
+    const url = String(publicDigestUrl || "").trim();
+    if (!url) return "";
+    return `
+      <div style="margin-top:10px;">
+        <a href="${escapeHtml(url)}" style="font-size:12px;color:#2563EB;text-decoration:none;font-weight:600;">View online →</a>
+      </div>`;
+  }
+
   function renderSettingsFooter(user, userToken) {
     if (!user) return "";
     const prefs = user.preferences || {};
@@ -85,6 +94,7 @@ function createDigestEmailSectionsRuntime(deps) {
     buildWelcomeBanner,
     buildPersonalizationNote,
     buildEditorialNote,
+    buildViewOnlineLink,
     renderSettingsFooter,
   };
 }

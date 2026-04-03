@@ -4,6 +4,7 @@ const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html",
 const SHORT_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/signup", "/signup.html"]);
 const NO_CACHE_STATIC_ROUTES = new Set(["/index.js"]);
 const INDEX_ASSET_VERSION_TOKEN = "__ASSET_VERSION__";
+const PUBLIC_DIGEST_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=86400";
 
 const STATIC_ROUTE_FILES = new Map([
   ["/", "index.html"],
@@ -68,7 +69,7 @@ function normalizePublicBaseUrl(rawBaseUrl) {
   }
 }
 
-function buildSitemapXml({ baseUrl }) {
+function buildSitemapXml({ baseUrl, digestEntries = [] }) {
   const normalizedBaseUrl = normalizePublicBaseUrl(baseUrl);
   const entries = [
     {
@@ -82,6 +83,7 @@ function buildSitemapXml({ baseUrl }) {
       priority: "0.8",
     },
   ];
+  entries.push(...(Array.isArray(digestEntries) ? digestEntries : []));
 
   const urlRows = entries.map((entry) => {
     const parts = [
@@ -99,12 +101,11 @@ function buildSitemapXml({ baseUrl }) {
     `</urlset>\n`;
 }
 
-function resolveDigestDateKey(pathname, archiveFiles) {
+function resolveDigestDateKey(pathname) {
   const match = pathname.match(DIGEST_ROUTE_RE);
   if (!match) return null;
   const explicit = match[1];
   if (explicit) return explicit;
-  if (archiveFiles.length > 0) return String(archiveFiles[0] || "").replace(".json", "");
   return null;
 }
 
@@ -119,18 +120,66 @@ function buildAdminDigestAuditRedirectUrl(dateKey) {
   return `/admin?digest_audit_date=${encodeURIComponent(String(dateKey || "").trim())}#digestAuditSection`;
 }
 
+function readPublicDigestPayload({ fs, archivePath, dateKey, formatPublicDigestDateLabel }) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
+    return {
+      dateKey,
+      dateLabel: String(
+        parsed?.dateStr
+        || parsed?.date_str
+        || parsed?.dateLabel
+        || formatPublicDigestDateLabel(dateKey)
+        || dateKey
+      ),
+      quickScan: String(parsed?.quickScan || parsed?.quick_scan || ""),
+      items: Array.isArray(parsed?.items) ? parsed.items : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildPublicDigestSitemapEntries({ fs, path, APP_ROOT, archiveDir, readArchiveFiles, baseUrl }) {
+  const normalizedBaseUrl = normalizePublicBaseUrl(baseUrl);
+  const resolvedArchiveDir = archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
+  const files = readArchiveFiles(resolvedArchiveDir);
+  if (!Array.isArray(files) || files.length === 0) return [];
+
+  return files
+    .map((fileName) => String(fileName || "").trim())
+    .filter((fileName) => /^\d{4}-\d{2}-\d{2}\.json$/.test(fileName))
+    .map((fileName) => {
+      const dateKey = fileName.replace(".json", "");
+      const archivePath = path.join(resolvedArchiveDir, fileName);
+      if (!fs.existsSync(archivePath)) return null;
+      return {
+        loc: `${normalizedBaseUrl}/digest/${dateKey}`,
+        changefreq: "weekly",
+        priority: "0.7",
+      };
+    })
+    .filter(Boolean);
+}
+
 function serveDigestPage(ctx, deps) {
   const { req, res, url, pathname } = ctx;
   const {
-    path, fs, APP_ROOT, archiveDir, readArchiveFiles, renderPublicDigestMissingPage,
+    path,
+    fs,
+    APP_ROOT,
+    archiveDir,
+    readArchiveFiles,
+    renderPublicDigestMissingPage,
+    renderPublicDigestPage,
+    formatPublicDigestDateLabel,
     isAdminAuthed,
   } = deps;
 
   if (req.method !== "GET" || !DIGEST_ROUTE_RE.test(pathname)) return false;
 
   const resolvedArchiveDir = archiveDir ? path.resolve(String(archiveDir)) : path.join(APP_ROOT, "archive");
-  const files = readArchiveFiles(resolvedArchiveDir);
-  const dateKey = resolveDigestDateKey(pathname, files);
+  const dateKey = resolveDigestDateKey(pathname);
   if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
     return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
@@ -157,22 +206,49 @@ function serveDigestPage(ctx, deps) {
     return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
   }
 
-  return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
+  const digest = readPublicDigestPayload({
+    fs,
+    archivePath,
+    dateKey,
+    formatPublicDigestDateLabel,
+  });
+  if (!digest) {
+    return writeMissingDigest(res, dateKey, renderPublicDigestMissingPage);
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": PUBLIC_DIGEST_CACHE_CONTROL,
+  });
+  return res.end(renderPublicDigestPage(digest));
 }
 
 function serveSitemap(ctx, deps) {
   const { req, res, pathname } = ctx;
   const {
+    fs,
+    path,
+    APP_ROOT,
+    archiveDir,
+    readArchiveFiles,
     getBaseUrl,
   } = deps;
   if (req.method !== "GET" || pathname !== "/sitemap.xml") return false;
 
   const xml = buildSitemapXml({
     baseUrl: typeof getBaseUrl === "function" ? getBaseUrl() : "https://getsignalbrief.com",
+    digestEntries: buildPublicDigestSitemapEntries({
+      fs,
+      path,
+      APP_ROOT,
+      archiveDir,
+      readArchiveFiles,
+      baseUrl: typeof getBaseUrl === "function" ? getBaseUrl() : "https://getsignalbrief.com",
+    }),
   });
   res.writeHead(200, {
     "Content-Type": "application/xml; charset=utf-8",
-    "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+    "Cache-Control": PUBLIC_DIGEST_CACHE_CONTROL,
   });
   return res.end(xml);
 }
@@ -194,7 +270,7 @@ function serveStaticFile(res, pathname, deps) {
   if (NO_STORE_STATIC_ROUTES.has(pathname)) {
     headers["Cache-Control"] = "no-store";
   } else if (SHORT_CACHE_STATIC_ROUTES.has(pathname)) {
-    headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=86400";
+    headers["Cache-Control"] = PUBLIC_DIGEST_CACHE_CONTROL;
   } else if (NO_CACHE_STATIC_ROUTES.has(pathname)) {
     headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate";
   }

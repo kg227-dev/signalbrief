@@ -165,7 +165,6 @@ function createRenderPublicPages(deps) {
     baseUrl = "http://localhost:3003",
     isPersonalized = false,
   }) {
-    const referralToken = normalizeReferralToken(refToken);
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
     const canonicalUrl = `${normalizedBaseUrl}/digest/${dateKey}`;
     const rawDateLabel = String(dateLabel || formatPublicDigestDateLabel(dateKey) || "");
@@ -186,7 +185,8 @@ function createRenderPublicPages(deps) {
       155
     );
     const safeDigestDescription = escapeHtml(digestDescription);
-    const robotsContent = "noindex,nofollow,noarchive";
+    const robotsContent = "index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1";
+    const signupUrl = `${normalizedBaseUrl}/signup`;
     const quickScanHtml = quickScanPoints
       .map((point) => {
         const pointScore = scoreByHeadline.get(normalizeHeadlineLookup(point));
@@ -200,6 +200,7 @@ function createRenderPublicPages(deps) {
     const cards = safeItems.map((item, idx) => {
       const tag = escapeHtml(item?.tag || "Signal");
       const headline = escapeHtml(item?.headline || "Untitled item");
+      const summary = escapeHtml(stripHtml(item?.summary || ""));
       const wim = escapeHtml(stripHtml(item?.wim || ""));
       const source = escapeHtml(item?.source || "source");
       const href = sanitizePublicUrl(item?.url);
@@ -208,7 +209,6 @@ function createRenderPublicPages(deps) {
       const corrNote = renderCorroborationNote(item?.cross_source_count, item?.supporting_sources);
       const flagsHtml = renderContentFlags(item?.content_flags);
       const freshnessHtml = isPersonalized ? renderFreshnessLabel(item?.published_date, dateKey) : "";
-      const whyShownText = isPersonalized ? escapeHtml(buildWhyShownText(item)) : "";
       const sourceLink = href
         ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">Read more → ${source}</a>`
         : `<span>${source}</span>`;
@@ -236,7 +236,8 @@ function createRenderPublicPages(deps) {
           ${scoreHtml}
         </div>
         <h2>${headline}</h2>
-        ${wim ? `<p class="item-wim">${wim}</p>` : ""}
+        ${summary ? `<p class="item-summary">${summary}</p>` : ""}
+        ${wim ? `<p class="item-wim"><span class="item-wim-label">Why it matters</span>${wim}</p>` : ""}
         <div class="item-link">
           ${freshnessHtml}${sourceLink}${sourceBadge ? ` ${sourceBadge}` : ""}${corrNote ? ` ${corrNote}` : ""}
         </div>
@@ -296,10 +297,13 @@ function createRenderPublicPages(deps) {
     .kicker { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: #334155; font-weight: 700; margin-bottom: 8px; }
     h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; }
     .hero-sub { margin: 10px 0 0; color: var(--muted); line-height: 1.5; font-size: 15px; }
+    .hero-note { margin: 12px 0 0; color: #334155; line-height: 1.55; font-size: 13px; }
     .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
-    .btn { text-decoration: none; border-radius: 999px; padding: 10px 16px; font-size: 13px; font-weight: 700; display: inline-block; }
-    .btn-primary { background: var(--accent); color: var(--accent-ink); }
-    .btn-secondary { background: var(--accent-soft); color: #166534; }
+    .btn { text-decoration: none; border-radius: 999px; padding: 10px 16px; font-size: 13px; font-weight: 700; display: inline-block; border: 1px solid transparent; }
+    .btn-primary { background: #ecfeff; color: #0f766e; border-color: #99f6e4; }
+    .btn-secondary { background: var(--accent-soft); color: #166534; border-color: #bbf7d0; }
+    button.btn { font-family: inherit; cursor: pointer; }
+    .share-status { display: inline-flex; align-items: center; min-height: 18px; font-size: 12px; color: #166534; font-weight: 600; }
     .scan { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 14px; padding: 12px 14px; margin-top: 14px; }
     .scan-heading { margin: 0 0 9px; color: #1e3a8a; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
     .scan-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -316,7 +320,8 @@ function createRenderPublicPages(deps) {
     .score-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--score-dot); box-shadow: var(--score-glow); flex-shrink: 0; }
     h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; }
     .item-summary { margin: 0 0 8px; color: #334155; line-height: 1.6; font-size: 15px; }
-    .item-wim { margin: 0 0 10px; color: #0f172a; line-height: 1.6; font-size: 14px; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
+    .item-wim { margin: 0 0 10px; color: #0f172a; line-height: 1.6; font-size: 14px; font-family: Georgia, 'Times New Roman', serif; }
+    .item-wim-label { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #2563eb; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .item-link { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .item-link a { color: #2563eb; text-decoration: none; font-weight: 600; font-size: 14px; }
     .item-link span { color: #64748b; font-size: 14px; }
@@ -350,16 +355,70 @@ function createRenderPublicPages(deps) {
 <body>
   <main class="wrap">
     <section class="hero">
-      <div class="kicker">${isPersonalized ? "SignalBrief Digest" : "SignalBrief Admin Preview"}</div>
+      <div class="kicker">SignalBrief Public Digest</div>
       <h1>${safeDateLabel}</h1>
-      <p class="hero-sub">A private SignalBrief digest view for subscriber and operator use.</p>
+      <p class="hero-sub">A shareable web version of SignalBrief's full digest, with concise analysis and source links.</p>
+      <p class="hero-note">Anyone with this link can read the full digest. SignalBrief itself remains email-first.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="${escapeHtml(signupUrl)}">Get your own brief</a>
+        <button class="btn btn-secondary js-share-digest" type="button" data-share-url="${escapeHtml(canonicalUrl)}">Forward this brief</button>
+        <span class="share-status" data-share-status aria-live="polite"></span>
+      </div>
       ${quickScanHtml ? `<div class="scan"><p class="scan-heading">Quick scan</p><ul class="scan-list">${quickScanHtml}</ul></div>` : ""}
     </section>
     <section class="item-list">
       ${cards || `<div class="item-card"><p class="item-summary">No items available for this date.</p></div>`}
     </section>
-    <p class="footer">Private SignalBrief digest view</p>
+    <p class="footer">Built with SignalBrief · <a href="${escapeHtml(normalizedBaseUrl)}" target="_blank" rel="noopener">getsignalbrief.com</a></p>
   </main>
+<script>
+(function() {
+  var button = document.querySelector(".js-share-digest");
+  var status = document.querySelector("[data-share-status]");
+  if (!button || !status) return;
+
+  function setStatus(text) {
+    status.textContent = text;
+    if (!text) return;
+    window.clearTimeout(setStatus._timer);
+    setStatus._timer = window.setTimeout(function() {
+      status.textContent = "";
+    }, 2200);
+  }
+
+  async function copyShareUrl(url) {
+    if (navigator.share) {
+      await navigator.share({ title: document.title, url: url });
+      setStatus("Ready to share");
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+      setStatus("Link copied");
+      return;
+    }
+
+    var input = document.createElement("input");
+    input.value = url;
+    input.setAttribute("readonly", "readonly");
+    input.style.position = "absolute";
+    input.style.left = "-9999px";
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+    setStatus("Link copied");
+  }
+
+  button.addEventListener("click", function() {
+    var shareUrl = button.getAttribute("data-share-url") || window.location.href;
+    copyShareUrl(shareUrl).catch(function(err) {
+      if (err && err.name === "AbortError") return;
+      setStatus("Copy failed");
+    });
+  });
+})();
+</script>
 ${isPersonalized ? `<script>
 (function() {
   function sendFeedback(digestId, token, itemIndex, type) {

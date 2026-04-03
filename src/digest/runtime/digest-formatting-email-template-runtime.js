@@ -9,6 +9,7 @@ function createDigestEmailTemplateRuntime() {
       .replace("{{WELCOME_BANNER}}", slots.welcomeBanner || "")
       .replace("{{PERSONALIZATION_NOTE}}", slots.personalizationNote || "")
       .replace("{{EDITORIAL_NOTE}}", slots.editorialNote || "")
+      .replace("{{VIEW_ONLINE_LINK}}", slots.viewOnlineLink || "")
       .replace("{{SETTINGS_FOOTER}}", slots.settingsFooter || "")
       .replace(/\{\{BASE_URL\}\}/g, slots.baseUrl || "")
       .replace(/\{\{SETTINGS_TOKEN\}\}/g, slots.userToken || "")

@@ -164,7 +164,7 @@ const deps = {
   assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
   assert.ok(res.body.includes("<loc>https://getsignalbrief.com/</loc>"));
   assert.ok(res.body.includes("<loc>https://getsignalbrief.com/signup</loc>"));
-  assert.ok(!res.body.includes("/digest/2026-03-15"));
+  assert.ok(res.body.includes("<loc>https://getsignalbrief.com/digest/2026-03-15</loc>"));
 }
 
 {
@@ -173,7 +173,6 @@ const deps = {
     quickScan: "Archive quick scan",
     items: [{ headline: "Archive item" }],
   }, null, 2));
-  let renderedPayload = null;
   const handler = createPublicStaticRouteHandler({
     ...deps,
     readArchiveFiles: () => ["2026-03-14.json"],
@@ -214,4 +213,33 @@ const deps = {
     res.headers.Location,
     "/admin?digest_audit_date=2026-03-16#digestAuditSection"
   );
+}
+
+{
+  fs.writeFileSync(path.join(archiveDir, "2026-03-17.json"), JSON.stringify({
+    dateStr: "Tuesday, March 17, 2026",
+    quickScan: "Public digest quick scan",
+    items: [{ headline: "Public digest item", summary: "A public item summary." }],
+  }, null, 2));
+  let renderedPayload = null;
+  const handler = createPublicStaticRouteHandler({
+    ...deps,
+    readArchiveFiles: () => ["2026-03-17.json"],
+    renderPublicDigestPage: (payload) => {
+      renderedPayload = payload;
+      return "<html>public digest</html>";
+    },
+  });
+  const { handled, res } = invoke(handler, {
+    method: "GET",
+    pathname: "/digest/2026-03-17",
+  });
+  assert.strictEqual(handled, "<html>public digest</html>");
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Content-Type"], "text/html; charset=utf-8");
+  assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
+  assert.strictEqual(renderedPayload.dateKey, "2026-03-17");
+  assert.strictEqual(renderedPayload.dateLabel, "Tuesday, March 17, 2026");
+  assert.strictEqual(renderedPayload.quickScan, "Public digest quick scan");
+  assert.strictEqual(renderedPayload.items.length, 1);
 }

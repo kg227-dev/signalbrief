@@ -20,6 +20,7 @@ const html = renderPublicDigestPage({
       headline: "One",
       tag: "TECHNOLOGY",
       summary: "Top item",
+      wim: "<strong>Why this matters.</strong> Keep watching this shift.",
       source: "example.com",
       url: "https://example.com/one",
       relevanceScore: 7.6,
@@ -28,6 +29,7 @@ const html = renderPublicDigestPage({
       headline: "Two",
       tag: "ENERGY",
       summary: "Second item",
+      wim: "Second why it matters.",
       source: "example.org",
       url: "https://example.org/two",
       relevance_score: 4.2,
@@ -35,14 +37,12 @@ const html = renderPublicDigestPage({
   ],
 });
 
-const personalizedHtml = renderPublicDigestPage({
+const publicHtml = renderPublicDigestPage({
   dateKey: "2026-03-13",
   dateLabel: "Friday, March 13, 2026",
   quickScan: "One · Two",
   items: [],
-  refToken: "a".repeat(64),
   baseUrl: "https://getsignalbrief.com/",
-  isPersonalized: true,
 });
 
 assert.ok(html.includes('class="scan-heading"'), "expected quick scan heading to render");
@@ -56,10 +56,14 @@ assert.ok(html.includes('class="score-pill score-pill-compact"'), "expected quic
 assert.ok(html.includes(">7.6<"), "expected current relevanceScore to render");
 assert.ok(html.includes(">4.2<"), "expected legacy relevance_score to render");
 assert.ok(html.includes('class="item-meta-left"'), "expected item metadata layout to include score badge region");
-assert.ok(html.includes('<meta name="robots" content="noindex,nofollow,noarchive">'), "expected digest preview to stay private");
+assert.ok(html.includes('<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">'), "expected public digest page to allow indexing");
 assert.ok(html.includes('<link rel="canonical" href="http://localhost:3003/digest/2026-03-13">'), "expected canonical digest URL");
 assert.ok(html.includes('"@type": "CollectionPage"'), "expected structured data block");
-assert.ok(!html.includes("Forward this brief"), "expected share CTA to be removed from digest preview");
-assert.ok(personalizedHtml.includes('<meta name="robots" content="noindex,nofollow,noarchive">'), "expected personalized digest page to be noindex");
-assert.ok(personalizedHtml.includes('<link rel="canonical" href="https://getsignalbrief.com/digest/2026-03-13">'), "expected personalized page to canonicalize to the public digest URL");
-assert.ok(!personalizedHtml.includes("Get your own personalized brief"), "expected legacy signup CTA to be removed from digest preview");
+assert.ok(html.includes("SignalBrief Public Digest"), "expected public digest kicker");
+assert.ok(html.includes("Get your own brief"), "expected signup CTA");
+assert.ok(html.includes("Forward this brief"), "expected share CTA");
+assert.ok(html.includes("Link copied"), "expected copy-link status message");
+assert.ok(html.includes("Top item"), "expected item summary to render");
+assert.ok(html.includes("Why it matters"), "expected why-it-matters label to render");
+assert.ok(html.includes("Why this matters. Keep watching this shift."), "expected sanitized why-it-matters text to render");
+assert.ok(publicHtml.includes('<link rel="canonical" href="https://getsignalbrief.com/digest/2026-03-13">'), "expected public page to canonicalize to the public digest URL");

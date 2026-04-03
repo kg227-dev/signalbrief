@@ -218,8 +218,16 @@ const deps = {
 {
   fs.writeFileSync(path.join(archiveDir, "2026-03-17.json"), JSON.stringify({
     dateStr: "Tuesday, March 17, 2026",
-    quickScan: "Public digest quick scan",
-    items: [{ headline: "Public digest item", summary: "A public item summary." }],
+    quickScan: "Archive-wide quick scan that should not leak into the public digest",
+    items: [
+      { headline: "Item 1", summary: "Summary 1", relevanceScore: 7.8 },
+      { headline: "Item 2", summary: "Summary 2", strategic_value: 0.9 },
+      { headline: "Item 3", summary: "Summary 3", baseScore: 6.2 },
+      { headline: "Item 4", summary: "Summary 4", score_breakdown: { adjusted_score: 0.72 } },
+      { headline: "Item 5", summary: "Summary 5" },
+      { headline: "Item 6", summary: "Summary 6", relevanceScore: 5.1 },
+      { headline: "Item 7", summary: "Summary 7", baseScore: 1.2 },
+    ],
   }, null, 2));
   let renderedPayload = null;
   const handler = createPublicStaticRouteHandler({
@@ -240,6 +248,13 @@ const deps = {
   assert.strictEqual(res.headers["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400");
   assert.strictEqual(renderedPayload.dateKey, "2026-03-17");
   assert.strictEqual(renderedPayload.dateLabel, "Tuesday, March 17, 2026");
-  assert.strictEqual(renderedPayload.quickScan, "Public digest quick scan");
-  assert.strictEqual(renderedPayload.items.length, 1);
+  assert.strictEqual(renderedPayload.items.length, 5);
+  assert.strictEqual(
+    renderedPayload.quickScan,
+    "Item 1 · Item 2 · Item 3 · Item 4 · Item 6"
+  );
+  assert.deepStrictEqual(
+    renderedPayload.items.map((item) => item.headline),
+    ["Item 1", "Item 2", "Item 3", "Item 4", "Item 6"]
+  );
 }

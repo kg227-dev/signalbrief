@@ -66,9 +66,14 @@ function createRenderPublicPages(deps) {
   }
 
   function readItemScore(item) {
-    const directScore = Number(item?.relevanceScore);
+    const directScore = item?.relevanceScore == null || item?.relevanceScore === ""
+      ? null
+      : Number(item.relevanceScore);
     if (Number.isFinite(directScore)) return directScore;
-    const legacyScore = Number(item?.relevance_score);
+
+    const legacyScore = item?.relevance_score == null || item?.relevance_score === ""
+      ? null
+      : Number(item.relevance_score);
     if (Number.isFinite(legacyScore)) return legacyScore;
     return null;
   }

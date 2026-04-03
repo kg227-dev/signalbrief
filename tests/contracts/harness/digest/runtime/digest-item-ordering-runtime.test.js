@@ -17,6 +17,8 @@ assertModuleExports(() => runtime, TARGET_REL);
 assert.strictEqual(readItemScore({ relevanceScore: 7.6 }), 7.6);
 assert.strictEqual(readItemScore({ relevance_score: 6.8 }), 6.8);
 assert.strictEqual(readItemScore({ relevanceScore: "x" }), null);
+assert.strictEqual(readItemScore({ relevanceScore: null }), null);
+assert.strictEqual(readItemScore({ relevance_score: "" }), null);
 
 const original = [
   { headline: "Second", relevanceScore: 6.8 },

@@ -5,6 +5,7 @@ const SHORT_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/signup", "/sign
 const NO_CACHE_STATIC_ROUTES = new Set(["/index.js"]);
 const INDEX_ASSET_VERSION_TOKEN = "__ASSET_VERSION__";
 const PUBLIC_DIGEST_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=86400";
+const PUBLIC_DIGEST_ITEM_LIMIT = 5;
 
 const STATIC_ROUTE_FILES = new Map([
   ["/", "index.html"],
@@ -120,9 +121,66 @@ function buildAdminDigestAuditRedirectUrl(dateKey) {
   return `/admin?digest_audit_date=${encodeURIComponent(String(dateKey || "").trim())}#digestAuditSection`;
 }
 
+function readOptionalNumber(value) {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function readPublicDigestScore(item) {
+  const relevanceScore = readOptionalNumber(item?.relevanceScore);
+  if (Number.isFinite(relevanceScore)) return { tier: 4, score: relevanceScore };
+
+  const legacyRelevanceScore = readOptionalNumber(item?.relevance_score);
+  if (Number.isFinite(legacyRelevanceScore)) return { tier: 4, score: legacyRelevanceScore };
+
+  const adjustedScore = readOptionalNumber(item?.score_breakdown?.adjusted_score);
+  if (Number.isFinite(adjustedScore)) return { tier: 3, score: adjustedScore * 10 };
+
+  const strategicValue = readOptionalNumber(item?.strategic_value);
+  if (Number.isFinite(strategicValue)) return { tier: 2, score: strategicValue * 10 };
+
+  const baseScore = readOptionalNumber(item?.baseScore);
+  if (Number.isFinite(baseScore)) return { tier: 1, score: baseScore };
+
+  return { tier: 0, score: 0 };
+}
+
+function selectPublicDigestItems(items) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (rows.length <= PUBLIC_DIGEST_ITEM_LIMIT) return rows.slice();
+
+  return rows
+    .map((item, index) => ({
+      item,
+      index,
+      ranking: readPublicDigestScore(item),
+    }))
+    .sort((left, right) => {
+      if (left.ranking.tier !== right.ranking.tier) return right.ranking.tier - left.ranking.tier;
+      if (left.ranking.score !== right.ranking.score) return right.ranking.score - left.ranking.score;
+      return left.index - right.index;
+    })
+    .slice(0, PUBLIC_DIGEST_ITEM_LIMIT)
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.item);
+}
+
+function buildPublicDigestQuickScan(items, fallbackQuickScan) {
+  const digestItems = Array.isArray(items) ? items : [];
+  if (digestItems.length > 0) {
+    return digestItems
+      .map((item) => String(item?.headline || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join(" · ");
+  }
+  return String(fallbackQuickScan || "");
+}
+
 function readPublicDigestPayload({ fs, archivePath, dateKey, formatPublicDigestDateLabel }) {
   try {
     const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
+    const selectedItems = selectPublicDigestItems(parsed?.items);
     return {
       dateKey,
       dateLabel: String(
@@ -132,8 +190,8 @@ function readPublicDigestPayload({ fs, archivePath, dateKey, formatPublicDigestD
         || formatPublicDigestDateLabel(dateKey)
         || dateKey
       ),
-      quickScan: String(parsed?.quickScan || parsed?.quick_scan || ""),
-      items: Array.isArray(parsed?.items) ? parsed.items : [],
+      quickScan: buildPublicDigestQuickScan(selectedItems, parsed?.quickScan || parsed?.quick_scan || ""),
+      items: selectedItems,
     };
   } catch {
     return null;

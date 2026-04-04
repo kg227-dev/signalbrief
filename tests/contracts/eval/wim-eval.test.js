@@ -175,3 +175,44 @@ assert.ok(judgePrompt.includes("This signals margin pressure."), "judge prompt m
 assert.ok(!judgePrompt.includes("Full text."), "minimal mode judge prompt must not include excerpt");
 
 process.stdout.write("[wim-eval] judge-runtime unit tests: PASS\n");
+
+checkModule("src/eval/wim/report-runtime.js");
+
+const { computeAggregates, formatPct } = require("../../../src/eval/wim/report-runtime.js");
+
+function makeRow(overrides) {
+  return Object.assign({
+    id: "2026-04-01:HEALTHCARE:0",
+    topic: "HEALTHCARE",
+    variant: "variant-a",
+    inputMode: "minimal",
+    passFail: "pass",
+    overallScore: 4.0,
+    failureTags: [],
+    isCatastrophicFailure: false,
+    inGoldSet: false,
+  }, overrides);
+}
+
+const rows = [
+  makeRow({ id: "a:T1:0", topic: "T1", variant: "baseline", passFail: "pass", overallScore: 3.5, failureTags: [] }),
+  makeRow({ id: "a:T1:0", topic: "T1", variant: "variant-a", passFail: "pass", overallScore: 4.5, failureTags: [] }),
+  makeRow({ id: "a:T2:0", topic: "T2", variant: "baseline", passFail: "fail", overallScore: 2.0, failureTags: ["GENERIC"] }),
+  makeRow({ id: "a:T2:0", topic: "T2", variant: "variant-a", passFail: "pass", overallScore: 3.8, failureTags: [] }),
+  makeRow({ id: "a:T1:1", topic: "T1", variant: "baseline", passFail: "fail", overallScore: 1.5, failureTags: ["CATEGORY_CLICHE"], isCatastrophicFailure: false }),
+  makeRow({ id: "a:T1:1", topic: "T1", variant: "variant-a", passFail: "fail", overallScore: 2.0, failureTags: ["VAGUE_IMPLICATION"], isCatastrophicFailure: false }),
+];
+
+const agg = computeAggregates(rows, "baseline", "variant-a");
+
+assert.strictEqual(agg.byVariant["baseline"].passCount, 1);
+assert.strictEqual(agg.byVariant["baseline"].total, 3);
+assert.strictEqual(agg.byVariant["variant-a"].passCount, 2);
+assert.ok(agg.byVariant["baseline"].genericClicheRate > 0.6, "baseline generic/cliche rate should be > 0.6");
+assert.ok(agg.byTopic["T1"], "T1 topic missing from breakdown");
+assert.ok(agg.byTopic["T2"], "T2 topic missing from breakdown");
+
+assert.strictEqual(formatPct(0.75, 12, 16), "75% (12/16)");
+assert.strictEqual(formatPct(1, 3, 3), "100% (3/3)");
+
+process.stdout.write("[wim-eval] report-runtime unit tests: PASS\n");

@@ -7,16 +7,18 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 | D10 | D11 | D12 | D13 | D14 | Target |
 |--------|----|----|----|----|----|----|-----|----|----|-----|-----|-----|-----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
-| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | TBD | TBD | TBD | TBD | TBD | TBD | TBD | >=80% |
-| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | TBD | >=70% |
-| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | TBD | >=90% |
-| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
-| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
-| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
-| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | 7 |
-| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | TBD | TBD | TBD | TBD | TBD | TBD | TBD | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
+| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | **31.4%** | TBD | TBD | TBD | TBD | TBD | TBD | >=80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | >=70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | >=90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | 20 | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
+| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | n/a* | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | 5 | TBD | TBD | TBD | TBD | TBD | TBD | 7 |
+| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | Yellow | TBD | TBD | TBD | TBD | TBD | TBD | Green |
+
+*Day 8 still reports 20 missed-story flags at the run-summary level, but the candidate-level audit surface is now dominated by `writeup_failed` drops and backfills. The more actionable Day 8 failure mode is 63 dropped writeup attempts rather than a stable true-miss count, so D8 true-miss is left `n/a*` instead of invented.*
 
 ## Completed days
 
@@ -27,14 +29,15 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 - [Day 5 — 2026-04-01 (Wednesday)](../../archive/planning/2026-03/mvp-day-5-2026-04-01.md)
 - [Day 6 — 2026-04-02 (Thursday)](../../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
 - [Day 7 — 2026-04-03 (Friday)](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md)
+- [Day 8 — 2026-04-04 (Saturday)](../../archive/planning/2026-03/mvp-day-8-2026-04-04.md)
 
 ## Days 8-14 continuation focus
 
-The first 7-day window failed on product-quality grounds, not delivery mechanics. Days 8-14 are a continuation window focused on three live questions:
+The first 7-day window failed on product-quality grounds, not delivery mechanics. Days 8-14 are a continuation window focused on the remaining live quality questions:
 
-- Are scheduled records persisting real strategic writeups again instead of dropping `wim` / `wim_brief`?
-- Are official filler pages and off-topic commentary losing to stronger trade reporting in the selected set?
-- Is the scheduled path actually honoring the intended effective per-source cap?
+- Day 8 answered the first question `yes`: scheduled records are persisting real v2 writeups again instead of dropping `wim` / `wim_brief`.
+- The remaining open questions are whether official filler and low-trust survivors can stop winning selected slots, and whether the validator/repair path can stop dropping strong trade stories before backfill takes over.
+- The scheduled-path cap issue is less visible in Day 8 than it was in Days 4-7, but Day 8 quality is still not good enough to call the selection policy healthy.
 
 ## Day 4 — 2026-03-31
 
@@ -53,6 +56,10 @@ Day 7 prep is now explicit: restore non-empty deep-mode body text even when sche
 ## Day 7 — 2026-04-03
 
 See [archive](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md). **Yellow.** Day 7 closed the week with a fourth consecutive mechanically healthy weekday: 618 candidates, 35 selected, 7/7 topics at 5 items, 7/7 topics above the depth gate, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 10/10 canaries delivered. It is still not green. The renderer mitigation worked, so no deep card shipped blank, but all 10 scheduled canary records still stored `0/80` populated `wim` / `wim_brief` fields. The selected set also still shows official-content leakage: Life Sciences selected 3 FDA items, Consumer & Retail selected an FDA recall, Financial Services selected a CMS rule item, and Healthcare still leaned on STAT opinion plus CMS rulemaking despite a deep trade pool. FierceBiotech and FiercePharma improved the Life Sciences candidate pool, but they still did not win any of the 5 selected slots.
+
+## Day 8 — 2026-04-04
+
+See [archive](../../archive/planning/2026-03/mvp-day-8-2026-04-04.md). **Yellow.** Day 8 is the first continuation-window proof that the scheduled writeup path recovered materially: the Day 8 audit persists `35/35` selected items with `writeup_status=model_pass` and `writeup_version=v2`, and the canary records show model-generated analysis text on every non-scan card. Operationally it stayed strong again: 490 candidates, 35 selected, 7/7 topics at 5 items, 7/7 topics above the depth gate, 10/10 canaries delivered, 100% broker backbone, 100% source success, and 0 duplicate URLs vs Day 7. It is still not green. Raw trusted share collapsed to `31.4%`, Life Sciences regressed to `5/5` FDA official selections, and the v2 gate dropped `63/98` writeup attempts with `0/26` repair recoveries, forcing lower-trust backfills to preserve the count contract.
 
 ---
 

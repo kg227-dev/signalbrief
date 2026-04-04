@@ -281,19 +281,27 @@ body.dark .modal-close { background:var(--card); }
 
     <div class="card">
       <div class="section-title">How to use this</div>
-      <div class="section-subcopy" style="margin-bottom:14px;">Keep it simple:</div>
+      <div class="section-subcopy" style="margin-bottom:14px;">Use this page to decide whether a sent source looks healthy, needs review, or should be tightened.</div>
       <div style="display:grid;grid-template-columns:1fr;gap:10px;">
         <div class="explain-block">
-          <div class="explain-label">Main Table</div>
-          <div class="explain-copy">This is the part that matters most. It shows sources that have actually been sent.</div>
+          <div class="explain-label">What The Table Is</div>
+          <div class="explain-copy">Each row is a domain that has actually been sent in digests during the selected window. This is not a master list of every possible source. It is the live sent-source picture.</div>
         </div>
         <div class="explain-block">
-          <div class="explain-label">Search A Source</div>
-          <div class="explain-copy">Use search only when a source looks wrong and you want to inspect or change it.</div>
+          <div class="explain-label">Good Vs Risky</div>
+          <div class="explain-copy">Usually good: <span class="mono">Preferred</span> or <span class="mono">Allowed</span>, <span class="mono">Reviewed</span>, and weak exposure <span class="mono">0</span>. More risky: <span class="mono">Review</span>, <span class="mono">Limited</span>, <span class="mono">Unreviewed</span>, repeated weak exposure, or anything <span class="mono">Blocked</span>.</div>
         </div>
         <div class="explain-block">
-          <div class="explain-label">Advanced</div>
-          <div class="explain-copy">Broker roster details and cleanup notes are still here, but tucked below because you usually do not need them.</div>
+          <div class="explain-label">How To Read Columns</div>
+          <div class="explain-copy"><span class="mono">Domain</span>: the publisher. <span class="mono">Broker roster</span>: whether it is explicitly in the live broker config; "not in live broker roster" does not automatically mean bad. <span class="mono">Governance policy</span>: how we treat it. <span class="mono">Tracked sends</span>: how often it was sent. <span class="mono">Review state</span>: whether we have already checked it. <span class="mono">Topic fit</span>: which sectors it is good for. <span class="mono">Why surfaced</span>: why the page is drawing attention to it, not a final verdict.</div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">What You Usually Do</div>
+          <div class="explain-copy">Leave a source alone if it is preferred or allowed, reviewed, and not showing weak exposure. Inspect it if the policy looks too loose or too strict, if review state is missing, or if the reason column looks concerning. Only block or heavily downgrade a source when it is clearly low quality, misleading, or a bad fit.</div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">Use Search When</div>
+          <div class="explain-copy">Open a source when you want sample items, recent usage, or to change its source type, policy, review status, or note. Advanced broker details and older cleanup notes are still available below, but most day-to-day admin work should stay in the main table and inspector.</div>
         </div>
       </div>
     </div>

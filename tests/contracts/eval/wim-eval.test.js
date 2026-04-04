@@ -84,3 +84,36 @@ const uniqueIds = new Set(goldIds);
 assert.strictEqual(uniqueIds.size, goldIds.length, "Gold set has duplicate ids");
 
 process.stdout.write("[wim-eval] proposeGoldSet unit tests: PASS\n");
+
+checkModule("src/eval/wim/generator-runtime.js");
+
+const { assemblePrompt, parseWimResponse } = require("../../../src/eval/wim/generator-runtime.js");
+
+// assemblePrompt: minimal mode — no excerpt
+const promptFile = { prompt: "INSTRUCTIONS\n\n" };
+const item = { headline: "Big Deal Announced", summary: "Company A acquires Company B.", excerpt: "Long article text..." };
+const minimalPrompt = assemblePrompt(promptFile, item, "minimal");
+assert.ok(minimalPrompt.includes("Big Deal Announced"), "minimal prompt must include headline");
+assert.ok(minimalPrompt.includes("Company A acquires Company B."), "minimal prompt must include summary");
+assert.ok(!minimalPrompt.includes("Long article text"), "minimal prompt must NOT include excerpt");
+
+// assemblePrompt: enhanced mode — excerpt included
+const enhancedPrompt = assemblePrompt(promptFile, item, "enhanced");
+assert.ok(enhancedPrompt.includes("Long article text"), "enhanced prompt must include excerpt");
+
+// parseWimResponse: clean JSON
+const cleanResponse = '{"wim_brief":"Short punchline.","wim":"This signals a shift."}';
+const parsed = parseWimResponse(cleanResponse);
+assert.strictEqual(parsed.wim, "This signals a shift.");
+assert.strictEqual(parsed.wim_brief, "Short punchline.");
+
+// parseWimResponse: JSON wrapped in markdown fences
+const fencedResponse = '```json\n{"wim_brief":"Short.","wim":"Signals shift."}\n```';
+const parsedFenced = parseWimResponse(fencedResponse);
+assert.strictEqual(parsedFenced.wim, "Signals shift.");
+
+// parseWimResponse: malformed returns nulls
+const malformed = parseWimResponse("not json at all");
+assert.strictEqual(malformed.wim, null);
+
+process.stdout.write("[wim-eval] generator-runtime unit tests: PASS\n");

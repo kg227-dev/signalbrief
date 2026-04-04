@@ -223,6 +223,29 @@ function buildCtx(pathname) {
 
 {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-digest-audit-route-"));
+  const priorAuditDoc = {
+    date_et: "2026-03-26",
+    summary: {
+      total_candidates: 18,
+      total_selected: 5,
+      missed_story_flag_count: 0,
+    },
+    topics: {
+      TECHNOLOGY: {
+        total_candidates: 18,
+        selected_count: 5,
+        missed_story_flags: [],
+        candidates: [
+          { headline: "Prior selected item", url: "https://example.com/prior", source: "Example", lane: "publisher_feed", _score: 0.88, selected: true },
+        ],
+      },
+    },
+    fetch: {
+      broker_candidate_count: 18,
+      discovery_candidate_count: 0,
+      topic_diagnostics: [],
+    },
+  };
   const auditDoc = {
     date_et: "2026-03-27",
     summary: {
@@ -246,9 +269,10 @@ function buildCtx(pathname) {
       topic_diagnostics: [],
     },
   };
+  fs.writeFileSync(path.join(tmpDir, "2026-03-26.json"), JSON.stringify(priorAuditDoc, null, 2), "utf8");
   fs.writeFileSync(path.join(tmpDir, "2026-03-27.json"), JSON.stringify(auditDoc, null, 2), "utf8");
 
-  const ctx = buildCtx("/api/admin/digest-audit?date=2026-03-27");
+  const ctx = buildCtx("/api/admin/digest-audit?date=2026-03-27&days=30");
   const deps = {
     json(res, data, status = 200) {
       res.writeHead(status, { "Content-Type": "application/json" });
@@ -269,6 +293,8 @@ function buildCtx(pathname) {
     assert.ok(body.topic_readiness && typeof body.topic_readiness === "object", "topic readiness included");
     assert.ok(body.source_health && typeof body.source_health === "object", "source health summary included");
     assert.strictEqual(body.summary.missed_story_flag_count, 1, "current audit summary preserved");
+    assert.strictEqual(body.rolling_readiness.days_covered, 2, "rolling readiness honors requested days window");
+    assert.strictEqual(body.topic_readiness.TECHNOLOGY.days_observed, 2, "topic readiness observed days grows past 1 when older audits are available");
     console.log("handleAdminDigestAuditRoutes ✓");
   })().catch((error) => {
     console.error(error);

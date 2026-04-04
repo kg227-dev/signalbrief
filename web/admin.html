@@ -2712,6 +2712,8 @@ function renderDigestAuditPanel() {
   `;
 }
 
+const DIGEST_AUDIT_READINESS_DAYS = 30;
+
 async function loadDigestAudit(silent = true) {
   const dateKey = ensureDigestAuditDateInput();
   digestAuditState = {
@@ -2723,7 +2725,7 @@ async function loadDigestAudit(silent = true) {
   };
   renderDigestAuditPanel();
   try {
-    const resp = await apiFetchJson(`/api/admin/digest-audit?date=${encodeURIComponent(dateKey)}`, {}, 1);
+    const resp = await apiFetchJson(`/api/admin/digest-audit?date=${encodeURIComponent(dateKey)}&days=${DIGEST_AUDIT_READINESS_DAYS}`, {}, 1);
     const data = resp.data || {};
     if (!resp.ok || data.error) {
       digestAuditState = {

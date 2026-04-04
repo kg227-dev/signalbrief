@@ -451,7 +451,9 @@ async function handleAdminDigestAuditRoutes(ctx, deps) {
     return true;
   }
 
-  const recentAuditDocs = loadRecentAuditDocs(auditDir, 7);
+  const rawDays = Number(url.searchParams.get("days") || "30");
+  const readinessDays = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 30) : 30;
+  const recentAuditDocs = loadRecentAuditDocs(auditDir, readinessDays);
   const sourceHealth = aggregateSourceHealth(recentAuditDocs);
   json(res, {
     ok: true,

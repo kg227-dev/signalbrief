@@ -67,5 +67,6 @@ const { buildAdminRoster } = require(TARGET_PATH);
   assert.strictEqual(roster[0].last_scheduled_digest, "2026-03-21");
   assert.strictEqual(roster[0].last_scheduled_digest_item_count, 2);
   assert.strictEqual(roster[0].last_scheduled_digest_url, "https://getsignalbrief.com/digest/2026-03-21");
+  assert.strictEqual(roster[0].last_scheduled_archive_url, "/archive?email=kgman29%40gmail.com&admin=1&admin_return=%2Fadmin%2Fuser%3Femail%3Dkgman29%2540gmail.com");
   assert.strictEqual(roster[0].last_digest_item_count, 2);
 })();

@@ -188,6 +188,7 @@ function buildAdminRosterEntry({
     last_digest_item_count: effectiveLastDigestItems.length,
     last_scheduled_digest_item_count: Array.isArray(recentScheduledRow?.sent_items) ? recentScheduledRow.sent_items.length : 0,
     last_scheduled_digest_url: recentScheduledDigestUrl,
+    last_scheduled_archive_url: archivePath || "",
     days_missed: user.status === "active" ? calcDaysMissed(effectiveLastDigestAt, allowedDays) : 0,
     delivery_time: formatDeliveryTimeLabel(prefs.delivery_time || "07:00"),
     delivery_time_raw: prefs.delivery_time || "07:00",

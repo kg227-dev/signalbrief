@@ -10,11 +10,15 @@ const source = fs.readFileSync(TARGET_PATH, "utf8");
 for (const snippet of [
   "const deliveredToday = isToday && String(u.last_scheduled_digest || u.last_digest || \"\") === dateKey;",
   "delivered_count: Number(u.last_scheduled_digest_item_count || u.last_digest_item_count || 0),",
-  "digest_url: String(u.last_scheduled_digest_url || \"\").trim(),",
-  "ev.status === \"sent\" && ev.digest_url",
-  ">View digest</a>",
+  "archive_url: String(u.last_scheduled_archive_url || u.archive_url || \"\").trim(),",
+  "ev.status === \"sent\" && ev.archive_url",
+  ">View archive</a>",
 ]) {
   if (!source.includes(snippet)) {
     throw new Error(`admin schedule status logic is missing required snippet: ${snippet}`);
   }
+}
+
+if (source.includes(">View digest</a>")) {
+  throw new Error("admin schedule status should not render stale view digest links");
 }

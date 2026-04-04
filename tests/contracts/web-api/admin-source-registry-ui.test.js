@@ -50,6 +50,7 @@ const requiredPageSnippets = [
   "function renderSourceRegistryInspector(detail, overview)",
   "Edit this source",
   "What This Source Is",
+  "Stop nagging me",
   "Optional topic rules",
   "Legacy compatibility overrides",
   "More details",

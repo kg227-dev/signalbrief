@@ -148,6 +148,12 @@ function sanitizeEnumValue(rawValue, allowedValues) {
   return allowedValues.has(normalized) ? normalized : null;
 }
 
+function sanitizeStopNagging(rawValue) {
+  if (rawValue === true || rawValue === 1) return true;
+  const normalized = String(rawValue || "").trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
+}
+
 function sanitizeSourceType(rawValue) {
   return sanitizeEnumValue(rawValue, ALLOWED_SOURCE_TYPES);
 }
@@ -188,6 +194,7 @@ function sanitizeRegistryEntry(domain, rawEntry, meta = {}) {
   const originalityProfile = sanitizeOriginalityProfile(entry.originality_profile);
   const topicFit = sanitizeTopicFitMap(entry.topic_fit);
   const hardBlock = entry.hard_block === true || policy === "blocked";
+  const stopNagging = sanitizeStopNagging(entry.stop_nagging) && !hardBlock;
   const note = String(entry.note || "").trim().slice(0, MAX_NOTE_LENGTH);
   const updatedAt = String(meta.updated_at || entry.updated_at || "").trim() || null;
   const updatedBy = String(meta.updated_by || entry.updated_by || "").trim() || null;
@@ -201,6 +208,7 @@ function sanitizeRegistryEntry(domain, rawEntry, meta = {}) {
     tier_override: tierOverride,
     authority_override: authorityOverride,
     hard_block: hardBlock,
+    stop_nagging: stopNagging,
     note,
     updated_at: updatedAt,
     updated_by: updatedBy,
@@ -219,6 +227,7 @@ function sanitizeIdentityRegistryEntry(identityKey, rawEntry, meta = {}) {
   const originalityProfile = sanitizeOriginalityProfile(entry.originality_profile);
   const topicFit = sanitizeTopicFitMap(entry.topic_fit);
   const hardBlock = entry.hard_block === true || policy === "blocked";
+  const stopNagging = sanitizeStopNagging(entry.stop_nagging) && !hardBlock;
   const note = String(entry.note || "").trim().slice(0, MAX_NOTE_LENGTH);
   const updatedAt = String(meta.updated_at || entry.updated_at || "").trim() || null;
   const updatedBy = String(meta.updated_by || entry.updated_by || "").trim() || null;
@@ -232,6 +241,7 @@ function sanitizeIdentityRegistryEntry(identityKey, rawEntry, meta = {}) {
     tier_override: tierOverride,
     authority_override: authorityOverride,
     hard_block: hardBlock,
+    stop_nagging: stopNagging,
     note,
     updated_at: updatedAt,
     updated_by: updatedBy,
@@ -496,6 +506,7 @@ module.exports = {
   sanitizeReviewStatus,
   sanitizeSourcePolicy,
   sanitizeSourceType,
+  sanitizeStopNagging,
   sanitizeTierOverride,
   sanitizeTopicFitMap,
 };

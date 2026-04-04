@@ -89,6 +89,7 @@ async function flushMicrotasks() {
     "sourceRegistrySourceTypeInput",
     "sourceRegistryPolicyInput",
     "sourceRegistryReviewStatusInput",
+    "sourceRegistryStopNaggingInput",
     "sourceRegistryTopicFitInput",
     "sourceRegistryTierInput",
     "sourceRegistryAuthorityInput",
@@ -97,6 +98,7 @@ async function flushMicrotasks() {
   const elements = new Map(elementIds.map((id) => [id, createElement(id)]));
   const location = new URL("https://example.com/admin/source-registry");
   const fetchCalls = [];
+  const savedDomainPosts = [];
   const brokerOverview = {
     source_mode: "runtime",
     active_path: "/app/data/standard-topic-broker-sources.json",
@@ -200,11 +202,47 @@ async function flushMicrotasks() {
       },
       setItem() {},
     },
-    fetch: async (url) => {
+    fetch: async (url, options = {}) => {
       const href = typeof url === "string" ? url : String(url?.url || "");
       fetchCalls.push(href);
       if (href === "/api/admin/check") {
         return jsonResponse({ authenticated: true });
+      }
+      if (href === "/api/admin/source-registry/domain" && String(options?.method || "").toUpperCase() === "POST") {
+        const body = JSON.parse(String(options?.body || "{}"));
+        savedDomainPosts.push(body);
+        return jsonResponse({
+          success: true,
+          detail: {
+            domain: body.domain || "benzinga.com",
+            selected_scope: body.identity_key ? "identity" : "domain",
+            selected_identity_key: body.identity_key || null,
+            identity_candidates: [],
+            effective_policy: {
+              source_type: body.source_type || "trade_specialist",
+              source_policy: body.policy || "preferred",
+              review_status: body.review_status || "reviewed",
+            },
+            admin_override: {
+              domain: body.domain || "benzinga.com",
+              identity_key: body.identity_key || null,
+              stop_nagging: body.stop_nagging === true,
+              note: body.note || "",
+            },
+            direct_override: {
+              domain: body.domain || "benzinga.com",
+              identity_key: body.identity_key || null,
+              stop_nagging: body.stop_nagging === true,
+              note: body.note || "",
+            },
+            recent_metrics: {
+              sample_items: [],
+              recent_users: [],
+              top_tags: [],
+            },
+            audit_entries: [],
+          },
+        });
       }
       if (href === "/api/admin/source-registry/broker/topic") {
         brokerOverview.topics[0].enabled = false;
@@ -510,6 +548,25 @@ async function flushMicrotasks() {
     !elements.get("sourceRegistryInspector").innerHTML.includes("Policy source:"),
     "inspector should hide low-signal policy-source internals from the default layout"
   );
+  assert.ok(
+    elements.get("sourceRegistryInspector").innerHTML.includes("Stop nagging me"),
+    "inspector should expose the manual approval checkbox"
+  );
+
+  elements.get("sourceRegistryDomainInput").value = "americanbanker.com";
+  elements.get("sourceRegistryReviewStatusInput").value = "reviewed";
+  elements.get("sourceRegistryStopNaggingInput").checked = true;
+  elements.get("sourceRegistryNoteInput").value = "Reviewed Apr 3: good trade source for Financial Services";
+  fetchCalls.length = 0;
+  await context.saveSourceRegistryDomain();
+  await flushMicrotasks();
+
+  assert.ok(
+    fetchCalls.includes("/api/admin/source-registry/domain"),
+    "saving the inspector should POST the source decision"
+  );
+  assert.strictEqual(savedDomainPosts[0].stop_nagging, true);
+  assert.strictEqual(savedDomainPosts[0].review_status, "reviewed");
 
   fetchCalls.length = 0;
   await context.inspectSourceRegistryDomain("youtube.com", true, "youtube:@insideboardroom");
@@ -627,6 +684,33 @@ async function flushMicrotasks() {
   context.renderSourceRegistrySuggestions({
     suggestions: [
       {
+        domain: "americanbanker.com",
+        send_count: 9,
+        weak_source_item_count: 0,
+        poor_digest_item_count: 9,
+        suggested_reason: "Common in weak digests",
+        admin_override: {
+          domain: "americanbanker.com",
+          stop_nagging: true,
+          note: "Reviewed Apr 3: good trade source for Financial Services",
+        },
+        effective_policy: {
+          source_type: "trade_specialist",
+          source_tier: "strong",
+          source_policy: "preferred",
+          review_status: "reviewed",
+          topic_fit_map: {
+            "financial services": "high",
+          },
+          policy_effects: {
+            lead_eligible: true,
+            exposure_cap: null,
+            requires_corroboration: false,
+            score_multiplier: 1.04,
+          },
+        },
+      },
+      {
         domain: "youtube.com",
         send_count: 3,
         weak_source_item_count: 3,
@@ -721,30 +805,34 @@ async function flushMicrotasks() {
 
   assert.deepStrictEqual(
     extractRenderedDomains(elements.get("sourceRegistrySuggestionsBody").innerHTML),
-    ["pharmavoice.com", "youtube.com", "news.broadcom.com", "businessinsider.com"],
+    ["americanbanker.com", "pharmavoice.com", "youtube.com", "news.broadcom.com", "businessinsider.com"],
     "governance rows should default to tracked sends descending"
   );
   assert.strictEqual(
     elements.get("suggestionsCount").textContent,
-    "4 sources",
+    "5 sources",
     "suggestions count should reflect the rendered row count"
   );
   assert.ok(
     elements.get("sourceRegistrySuggestionsBody").innerHTML.includes("Audit history"),
     "rows with overrides should render an inline audit control"
   );
+  assert.ok(
+    elements.get("sourceRegistrySuggestionsBody").innerHTML.includes("Approved"),
+    "manual stop-nagging approvals should render as approved instead of check-fit nags"
+  );
 
   context.toggleSuggestionsSort("domain");
   assert.deepStrictEqual(
     extractRenderedDomains(elements.get("sourceRegistrySuggestionsBody").innerHTML),
-    ["businessinsider.com", "news.broadcom.com", "pharmavoice.com", "youtube.com"],
+    ["americanbanker.com", "businessinsider.com", "news.broadcom.com", "pharmavoice.com", "youtube.com"],
     "toggling a new column should use that column's default sort direction"
   );
 
   context.toggleSuggestionsSort("domain");
   assert.deepStrictEqual(
     extractRenderedDomains(elements.get("sourceRegistrySuggestionsBody").innerHTML),
-    ["youtube.com", "pharmavoice.com", "news.broadcom.com", "businessinsider.com"],
+    ["youtube.com", "pharmavoice.com", "news.broadcom.com", "businessinsider.com", "americanbanker.com"],
     "toggling the same column again should reverse the sort direction"
   );
 

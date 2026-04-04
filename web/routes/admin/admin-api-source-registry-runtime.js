@@ -13,6 +13,7 @@ const {
   sanitizeReviewStatus,
   sanitizeSourcePolicy,
   sanitizeSourceType,
+  sanitizeStopNagging,
   sanitizeTierOverride,
   sanitizeTopicFitMap,
 } = require("../../../src/runtime/source-policy-registry-runtime");
@@ -45,6 +46,7 @@ function sanitizeBody(body = {}) {
     ? null
     : clampAuthority(body.authority_override);
   const hardBlock = body?.hard_block === true || policy === "blocked";
+  const stopNagging = sanitizeStopNagging(body?.stop_nagging) && !hardBlock;
   const note = String(body?.note || "").trim();
   return {
     domain,
@@ -57,6 +59,7 @@ function sanitizeBody(body = {}) {
     tier_override: tierOverride,
     authority_override: authorityOverride,
     hard_block: hardBlock,
+    stop_nagging: stopNagging,
     note,
   };
 }

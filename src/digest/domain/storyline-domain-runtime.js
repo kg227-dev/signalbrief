@@ -980,6 +980,7 @@ function explainSourcePolicy(sourceDomainRaw, tag, options = {}) {
       tier_override: tierOverride,
       authority_override: authorityOverride,
       hard_block: hardBlock,
+      stop_nagging: adminEntry?.stop_nagging === true,
       note: String(adminEntry?.note || "").trim() || "",
       updated_at: String(adminEntry?.updated_at || "").trim() || null,
       updated_by: String(adminEntry?.updated_by || "").trim() || null,

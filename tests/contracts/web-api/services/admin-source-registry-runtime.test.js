@@ -184,6 +184,7 @@ const {
         source_type: "reported_media",
         policy: "allowed",
         review_status: "reviewed",
+        stop_nagging: true,
         note: "Reviewed channel override",
         updated_at: "2026-03-21T12:00:00.000Z",
         updated_by: "admin@example.com",
@@ -391,6 +392,7 @@ const {
   assert.strictEqual(identityDetail.selected_identity_key, "youtube:@insideboardroom");
   assert.strictEqual(identityDetail.recent_metrics.send_count, 1);
   assert.strictEqual(identityDetail.direct_override.identity_key, "youtube:@insideboardroom");
+  assert.strictEqual(identityDetail.admin_override.stop_nagging, true);
   assert.ok(identityDetail.identity_candidates.some((candidate) => candidate.identity_key === "youtube:@insideboardroom"));
   assert.strictEqual(identityDetail.audit_entries[0].scope, "identity");
 

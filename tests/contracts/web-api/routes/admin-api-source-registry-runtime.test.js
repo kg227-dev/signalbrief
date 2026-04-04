@@ -238,21 +238,53 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
   }
 
   {
-    const { handled, res } = await invoke({}, {
+    let savedInput = null;
+    const { handled, res } = await invoke({
+      upsertSourceRegistryEntry: (input) => {
+        savedInput = input;
+        return {
+          registry: {
+            version: 1,
+            updated_at: "2026-03-20T12:00:00.000Z",
+            domains: {
+              "benzinga.com": {
+                domain: "benzinga.com",
+                tier_override: "weak",
+                authority_override: 0.22,
+                hard_block: false,
+                stop_nagging: true,
+                note: "Reviewed and acceptable",
+              },
+            },
+            identities: {},
+          },
+          before: null,
+          after: {
+            domain: "benzinga.com",
+            tier_override: "weak",
+            authority_override: 0.22,
+            hard_block: false,
+            stop_nagging: true,
+            note: "Reviewed and acceptable",
+          },
+        };
+      },
+    }, {
       method: "POST",
       pathname: "/api/admin/source-registry/domain",
       body: {
         domain: "benzinga.com",
         tier_override: "weak",
         authority_override: 0.22,
-        hard_block: true,
-        note: "Too noisy",
+        stop_nagging: true,
+        note: "Reviewed and acceptable",
       },
     });
     assert.ok(handled);
     const payload = JSON.parse(res.body);
     assert.strictEqual(payload.success, true);
     assert.strictEqual(payload.detail.domain, "benzinga.com");
+    assert.strictEqual(savedInput.stop_nagging, true);
   }
 
   {

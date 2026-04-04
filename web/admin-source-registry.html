@@ -1267,6 +1267,25 @@ function renderSimpleStatusPill(label, tone = "green") {
       : { fg: "var(--green)", bg: "#DCFCE7" });
   return `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${palette.bg};color:${palette.fg};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(label)}</span>`;
 }
+function getSourceAdminOverride(row) {
+  if (!row || typeof row !== "object") return null;
+  return row.admin_override || row.direct_override || null;
+}
+function shouldSuppressAutoSourceWarnings(row) {
+  const override = getSourceAdminOverride(row);
+  if (!override || override.stop_nagging !== true) return false;
+  const validationDisposition = String(row?.validation_review?.disposition_key || "").trim().toLowerCase();
+  if (validationDisposition === "replace" || validationDisposition === "investigate" || validationDisposition === "keep_disabled") return false;
+  const effective = row?.effective_policy || {};
+  const policy = String(effective?.source_policy || "").trim().toLowerCase();
+  if (effective?.hard_block === true || policy === "blocked") return false;
+  return true;
+}
+function buildSuppressedWarningCopy(row) {
+  const override = getSourceAdminOverride(row);
+  const note = String(override?.note || "").trim();
+  return note || "Reviewed by admin. Automatic fit nags are hidden until you change or reset this source.";
+}
 function buildSourceStanding(row) {
   const effective = row?.effective_policy || {};
   const policy = String(effective?.source_policy || "").trim().toLowerCase();
@@ -1279,6 +1298,14 @@ function buildSourceStanding(row) {
       label: "Blocked",
       tone: "red",
       copy: "Should not be sent",
+    };
+  }
+  if (shouldSuppressAutoSourceWarnings(row)) {
+    return {
+      key: "good",
+      label: "Approved",
+      tone: "green",
+      copy: buildSuppressedWarningCopy(row),
     };
   }
   const issues = [];
@@ -1318,7 +1345,8 @@ function buildSourceAction(row) {
   const weakExposure = Math.max(0, Number(row?.weak_source_item_count || 0));
   const poorDigestCount = Math.max(0, Number(row?.poor_digest_item_count || 0));
   const validationReview = row?.validation_review || null;
-  const overrideNote = String(row?.admin_override?.note || "").trim();
+  const override = getSourceAdminOverride(row);
+  const overrideNote = String(override?.note || "").trim();
   if (validationReview?.disposition_key === "replace") {
     return {
       label: "Replace feed",
@@ -1344,18 +1372,25 @@ function buildSourceAction(row) {
       copy: validationReview.note || "Leave disabled unless a stronger reason appears.",
     };
   }
-  if (overrideNote) {
-    return {
-      label: "Override active",
-      tone: "yellow",
-      copy: overrideNote,
-    };
-  }
   if (effective?.hard_block === true || policy === "blocked") {
     return {
       label: "Keep blocked",
       tone: "red",
       copy: "This source is intentionally blocked.",
+    };
+  }
+  if (shouldSuppressAutoSourceWarnings(row)) {
+    return {
+      label: "Approved",
+      tone: "green",
+      copy: overrideNote || "Reviewed by admin. Automatic Check fit and Check quality nags are suppressed until you change or reset this source.",
+    };
+  }
+  if (overrideNote) {
+    return {
+      label: "Override active",
+      tone: "yellow",
+      copy: overrideNote,
     };
   }
   if (sourceType === "corporate_pr") {
@@ -1895,6 +1930,15 @@ function renderSourceRegistryInspector(detail, overview) {
           </select>
           <div class="table-meta">Use this to track whether the source has already had a real manual review.</div>
         </div>
+        <div class="modal-field">
+          <label style="display:flex;align-items:flex-start;gap:10px;">
+            <input id="sourceRegistryStopNaggingInput" type="checkbox" style="margin-top:3px;" ${directOverride.stop_nagging === true ? "checked" : ""}>
+            <span>
+              <span style="display:block;font-weight:600;color:var(--text);">Stop nagging me</span>
+              <span class="table-meta" style="display:block;margin-top:4px;">Use this after you reviewed the sample items and are comfortable with this source. It hides automatic &quot;Check fit&quot; and &quot;Check quality&quot; nags until you change or reset the source.</span>
+            </span>
+          </label>
+        </div>
         <details style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff;">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Optional topic rules</summary>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px;">
@@ -2119,6 +2163,7 @@ async function saveSourceRegistryDomain() {
   const sourceType = String(document.getElementById("sourceRegistrySourceTypeInput")?.value || "").trim();
   const policy = String(document.getElementById("sourceRegistryPolicyInput")?.value || "").trim();
   const reviewStatus = String(document.getElementById("sourceRegistryReviewStatusInput")?.value || "").trim();
+  const stopNagging = document.getElementById("sourceRegistryStopNaggingInput")?.checked === true;
   const topicFit = parseTopicFitText(document.getElementById("sourceRegistryTopicFitInput")?.value || "");
   const tierOverride = String(document.getElementById("sourceRegistryTierInput")?.value || "").trim();
   const authorityOverride = String(document.getElementById("sourceRegistryAuthorityInput")?.value || "").trim();
@@ -2137,6 +2182,7 @@ async function saveSourceRegistryDomain() {
       source_type: sourceType || null,
       policy: policy || null,
       review_status: reviewStatus || null,
+      stop_nagging: stopNagging,
       topic_fit: topicFit,
       tier_override: tierOverride || null,
       authority_override: authorityOverride === "" ? null : Number(authorityOverride),

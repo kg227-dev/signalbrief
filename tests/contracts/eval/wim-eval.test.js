@@ -117,3 +117,61 @@ const malformed = parseWimResponse("not json at all");
 assert.strictEqual(malformed.wim, null);
 
 process.stdout.write("[wim-eval] generator-runtime unit tests: PASS\n");
+
+checkModule("src/eval/wim/judge-runtime.js");
+
+const { computeOverallScore, parseJudgeResponse, buildJudgePrompt } = require("../../../src/eval/wim/judge-runtime.js");
+
+// computeOverallScore: mean of 5 dimensions, 1 decimal
+const scores = { specificity: 4, insightDepth: 3, strategicRelevance: 5, nonRedundancy: 4, clarityTightness: 3 };
+assert.strictEqual(computeOverallScore(scores), 3.8);
+
+const perfectScores = { specificity: 5, insightDepth: 5, strategicRelevance: 5, nonRedundancy: 5, clarityTightness: 5 };
+assert.strictEqual(computeOverallScore(perfectScores), 5.0);
+
+// parseJudgeResponse: valid JSON
+const validJudge = JSON.stringify({
+  passFail: "fail",
+  scores: { specificity: 2, insightDepth: 2, strategicRelevance: 2, nonRedundancy: 3, clarityTightness: 2 },
+  failureTags: ["GENERIC", "RESTATES_HEADLINE"],
+  isCatastrophicFailure: false,
+  primaryFailureReason: "Restates headline with no added insight.",
+  judgeRationale: "WIM does not go beyond the headline.",
+});
+const judgeResult = parseJudgeResponse(validJudge);
+assert.strictEqual(judgeResult.passFail, "fail");
+assert.deepStrictEqual(judgeResult.failureTags, ["GENERIC", "RESTATES_HEADLINE"]);
+assert.strictEqual(judgeResult.isCatastrophicFailure, false);
+assert.strictEqual(judgeResult.primaryFailureReason, "Restates headline with no added insight.");
+
+// parseJudgeResponse: catastrophic tag must override isCatastrophicFailure=false
+const catastrophicJudge = JSON.stringify({
+  passFail: "fail",
+  scores: { specificity: 1, insightDepth: 1, strategicRelevance: 1, nonRedundancy: 1, clarityTightness: 1 },
+  failureTags: ["WRONG_IMPLICATION"],
+  isCatastrophicFailure: false,
+  primaryFailureReason: "Wrong implication stated.",
+  judgeRationale: "Factually incorrect.",
+});
+const catastrophicResult = parseJudgeResponse(catastrophicJudge);
+assert.strictEqual(catastrophicResult.isCatastrophicFailure, true, "WRONG_IMPLICATION must set isCatastrophicFailure=true");
+
+// buildJudgePrompt: contains headline and wim, not excerpt in minimal mode
+const rubric = {
+  passFail: { criteria: ["States implication", "Is specific", "Adds info", "Grounded", "Concise"] },
+  scoreDimensions: [
+    { key: "specificity", label: "Specificity" },
+    { key: "insightDepth", label: "Insight Depth" },
+    { key: "strategicRelevance", label: "Strategic Relevance" },
+    { key: "nonRedundancy", label: "Non-Redundancy" },
+    { key: "clarityTightness", label: "Clarity / Tightness" },
+  ],
+  failureTags: ["GENERIC", "RESTATES_HEADLINE"],
+  catastrophicCriteria: { tags: ["WRONG_IMPLICATION", "OVERCONFIDENT", "NOT_GROUNDED_IN_ARTICLE"] },
+};
+const judgePrompt = buildJudgePrompt(rubric, { headline: "Big Deal", summary: "Co A buys Co B.", excerpt: "Full text." }, "This signals margin pressure.", "minimal");
+assert.ok(judgePrompt.includes("Big Deal"), "judge prompt must include headline");
+assert.ok(judgePrompt.includes("This signals margin pressure."), "judge prompt must include WIM");
+assert.ok(!judgePrompt.includes("Full text."), "minimal mode judge prompt must not include excerpt");
+
+process.stdout.write("[wim-eval] judge-runtime unit tests: PASS\n");

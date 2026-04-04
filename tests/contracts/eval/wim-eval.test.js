@@ -216,3 +216,5 @@ assert.strictEqual(formatPct(0.75, 12, 16), "75% (12/16)");
 assert.strictEqual(formatPct(1, 3, 3), "100% (3/3)");
 
 process.stdout.write("[wim-eval] report-runtime unit tests: PASS\n");
+
+checkModule("src/entrypoints/wim-eval.js");

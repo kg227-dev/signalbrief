@@ -177,6 +177,56 @@ function buildPublicDigestQuickScan(items, fallbackQuickScan) {
   return String(fallbackQuickScan || "");
 }
 
+function buildSnapshotDigestPayload({ snapshot, dateKey, formatPublicDigestDateLabel }) {
+  const items = Array.isArray(snapshot?.items) ? snapshot.items.filter(Boolean) : [];
+  if (!items.length) return null;
+  return {
+    dateKey,
+    dateLabel: String(
+      snapshot?.date_str
+      || snapshot?.dateStr
+      || snapshot?.dateLabel
+      || formatPublicDigestDateLabel(dateKey)
+      || dateKey
+    ),
+    quickScan: buildPublicDigestQuickScan(items, snapshot?.quick_scan || snapshot?.quickScan || ""),
+    items,
+  };
+}
+
+function readPersonalizedDigestPayload({
+  dateKey,
+  refToken,
+  runId,
+  findUserByToken,
+  loadLatestDigestSnapshot,
+  loadDigestSnapshotByRunId,
+  formatPublicDigestDateLabel,
+}) {
+  if (typeof findUserByToken !== "function") return null;
+  const token = String(refToken || "").trim();
+  if (!token) return null;
+
+  const user = findUserByToken(token);
+  const userId = String(user?.chatId || "").trim();
+  if (!user || !userId) return null;
+
+  const normalizedRunId = String(runId || "").trim();
+  let snapshot = null;
+  if (normalizedRunId && typeof loadDigestSnapshotByRunId === "function") {
+    snapshot = loadDigestSnapshotByRunId(userId, dateKey, normalizedRunId);
+  }
+  if (!snapshot && typeof loadLatestDigestSnapshot === "function") {
+    snapshot = loadLatestDigestSnapshot(userId, dateKey);
+  }
+
+  return buildSnapshotDigestPayload({
+    snapshot,
+    dateKey,
+    formatPublicDigestDateLabel,
+  });
+}
+
 function readPublicDigestPayload({ fs, archivePath, dateKey, formatPublicDigestDateLabel }) {
   try {
     const parsed = JSON.parse(fs.readFileSync(archivePath, "utf8"));
@@ -231,6 +281,9 @@ function serveDigestPage(ctx, deps) {
     renderPublicDigestMissingPage,
     renderPublicDigestPage,
     formatPublicDigestDateLabel,
+    findUserByToken,
+    loadLatestDigestSnapshot,
+    loadDigestSnapshotByRunId,
     isAdminAuthed,
   } = deps;
 
@@ -244,7 +297,28 @@ function serveDigestPage(ctx, deps) {
 
   const archivePath = path.join(resolvedArchiveDir, `${dateKey}.json`);
   const refToken = url.searchParams.get("ref") || "";
+  const runId = url.searchParams.get("run") || "";
   if (refToken) {
+    const personalizedDigest = readPersonalizedDigestPayload({
+      dateKey,
+      refToken,
+      runId,
+      findUserByToken,
+      loadLatestDigestSnapshot,
+      loadDigestSnapshotByRunId,
+      formatPublicDigestDateLabel,
+    });
+    if (personalizedDigest) {
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "private, no-store",
+      });
+      return res.end(renderPublicDigestPage({
+        ...personalizedDigest,
+        refToken,
+        isPersonalized: true,
+      }));
+    }
     res.writeHead(302, {
       Location: buildArchiveRedirectUrl(dateKey, refToken),
       "Cache-Control": "private, no-store",

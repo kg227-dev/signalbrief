@@ -176,19 +176,59 @@ const deps = {
   const handler = createPublicStaticRouteHandler({
     ...deps,
     readArchiveFiles: () => ["2026-03-14.json"],
+    findUserByToken: (token) => (token === "tok-1" ? { chatId: "user-1", token } : null),
+    loadLatestDigestSnapshot: () => null,
+    loadDigestSnapshotByRunId: (userId, dateKey, runId) => {
+      if (userId !== "user-1" || dateKey !== "2026-03-14" || runId !== "scheduled:run-1") return null;
+      return {
+        user_id: userId,
+        date_et: dateKey,
+        date_str: "Saturday, March 14, 2026",
+        quick_scan: "Snapshot digest",
+        items: [
+          { headline: "Snapshot item 1", tag: "TECHNOLOGY", summary: "Snapshot summary", url: "https://example.com/1", source: "example.com" },
+          { headline: "Snapshot item 2", tag: "ENERGY", summary: "Snapshot summary", url: "https://example.com/2", source: "example.com" },
+        ],
+      };
+    },
+    renderPublicDigestPage: (payload) => JSON.stringify(payload),
   });
   const { handled, res } = invoke(handler, {
     method: "GET",
     pathname: "/digest/2026-03-14",
     search: "?ref=tok-1&run=scheduled%3Arun-1",
   });
+  const personalizedPayload = JSON.parse(handled);
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.headers["Content-Type"], "text/html; charset=utf-8");
+  assert.strictEqual(res.headers["Cache-Control"], "private, no-store");
+  assert.strictEqual(personalizedPayload.dateKey, "2026-03-14");
+  assert.strictEqual(personalizedPayload.refToken, "tok-1");
+  assert.strictEqual(personalizedPayload.isPersonalized, true);
+  assert.strictEqual(personalizedPayload.items.length, 2);
+  assert.strictEqual(personalizedPayload.items[0].headline, "Snapshot item 1");
+}
+
+{
+  fs.writeFileSync(path.join(archiveDir, "2026-03-18.json"), JSON.stringify({
+    dateStr: "Wednesday, March 18, 2026",
+    quickScan: "Archive quick scan",
+    items: [{ headline: "Archive item" }],
+  }, null, 2));
+  const handler = createPublicStaticRouteHandler({
+    ...deps,
+    readArchiveFiles: () => ["2026-03-18.json"],
+    findUserByToken: () => null,
+  });
+  const { handled, res } = invoke(handler, {
+    method: "GET",
+    pathname: "/digest/2026-03-18",
+    search: "?ref=tok-missing",
+  });
   assert.strictEqual(handled, "");
   assert.strictEqual(res.statusCode, 302);
   assert.strictEqual(res.headers["Cache-Control"], "private, no-store");
-  assert.strictEqual(
-    res.headers.Location,
-    "/archive?token=tok-1&date=2026-03-14"
-  );
+  assert.strictEqual(res.headers.Location, "/archive?token=tok-missing&date=2026-03-18");
 }
 
 {

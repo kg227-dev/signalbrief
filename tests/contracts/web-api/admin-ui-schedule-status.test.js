@@ -10,8 +10,8 @@ const source = fs.readFileSync(TARGET_PATH, "utf8");
 for (const snippet of [
   "const deliveredToday = isToday && String(u.last_scheduled_digest || u.last_digest || \"\") === dateKey;",
   "delivered_count: Number(u.last_scheduled_digest_item_count || u.last_digest_item_count || 0),",
-  "archive_url: String(u.last_scheduled_archive_url || u.archive_url || \"\").trim(),",
-  "ev.status === \"sent\" && ev.archive_url",
+  "digest_url: String(u.last_scheduled_digest_view_url || u.last_scheduled_archive_url || u.archive_url || \"\").trim(),",
+  "ev.status === \"sent\" && ev.digest_url",
   ">View digest</a>",
 ]) {
   if (!source.includes(snippet)) {

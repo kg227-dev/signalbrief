@@ -28,6 +28,7 @@ const { buildAdminRoster } = require(TARGET_PATH);
       last_digest_at: "2026-03-20T11:01:35.519Z",
       last_digest_items: [],
       digests_received: 28,
+      token: "token-kush",
       topics: ["technology", "ai_tech", "strategy"],
       topic_weights: {},
       bookmarks: [],
@@ -48,6 +49,7 @@ const { buildAdminRoster } = require(TARGET_PATH);
       user_email: "kgman29@gmail.com",
       recipient: "kgman29@gmail.com",
       mode: "scheduled",
+      run_id: "scheduled:2026-03-21T11-03-08-850Z",
       date_et: "2026-03-21",
       run_at_utc: "2026-03-21T11:03:08.850Z",
       digest_url: "https://getsignalbrief.com/digest/2026-03-21",
@@ -67,6 +69,7 @@ const { buildAdminRoster } = require(TARGET_PATH);
   assert.strictEqual(roster[0].last_scheduled_digest, "2026-03-21");
   assert.strictEqual(roster[0].last_scheduled_digest_item_count, 2);
   assert.strictEqual(roster[0].last_scheduled_digest_url, "https://getsignalbrief.com/digest/2026-03-21");
-  assert.strictEqual(roster[0].last_scheduled_archive_url, "/archive?email=kgman29%40gmail.com&admin=1&admin_return=%2Fadmin%2Fuser%3Femail%3Dkgman29%2540gmail.com&date=2026-03-21");
+  assert.strictEqual(roster[0].last_scheduled_archive_url, "/archive?token=token-kush&admin=1&admin_return=%2Fadmin%2Fuser%3Femail%3Dkgman29%2540gmail.com&date=2026-03-21");
+  assert.strictEqual(roster[0].last_scheduled_digest_view_url, "/digest/2026-03-21?ref=token-kush&run=scheduled%3A2026-03-21T11-03-08-850Z");
   assert.strictEqual(roster[0].last_digest_item_count, 2);
 })();

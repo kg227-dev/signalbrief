@@ -3812,7 +3812,7 @@ function renderSchedule(roster) {
         depth: u.depth,
         status: deliveredToday ? "sent" : (missedToday ? "missed" : "scheduled"),
         delivered_count: Number(u.last_scheduled_digest_item_count || u.last_digest_item_count || 0),
-        archive_url: String(u.last_scheduled_archive_url || u.archive_url || "").trim(),
+        digest_url: String(u.last_scheduled_digest_view_url || u.last_scheduled_archive_url || u.archive_url || "").trim(),
         email: u.email,
         delivery_time_raw: u.delivery_time_raw || "07:00",
       });
@@ -3863,8 +3863,8 @@ function renderSchedule(roster) {
           <div class="schedule-name">${esc(ev.name)}</div>
           <div class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</div>
           <div class="schedule-actions">
-            ${ev.status === "sent" && ev.archive_url
-              ? `<a class="schedule-set-btn" href="${esc(normalizeAdminActionHref(ev.archive_url))}" target="_blank" rel="noopener">View digest</a>`
+            ${ev.status === "sent" && ev.digest_url
+              ? `<a class="schedule-set-btn" href="${esc(normalizeAdminActionHref(ev.digest_url))}" target="_blank" rel="noopener">View digest</a>`
               : ev.email && ev.status !== "sent"
               ? `<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(ev.email || "")}, ${JSON.stringify(ev.delivery_time_raw || "07:00")}, this)'>set time</button>`
               : `<span style="color:var(--text-secondary);font-size:11px;">—</span>`}

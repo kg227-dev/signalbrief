@@ -1,0 +1,45 @@
+{
+  "rubricVersion": "v1",
+  "passFail": {
+    "criteria": [
+      "Clearly states implication (not just a summary of the article)",
+      "Specific to this article (not reusable across articles in the same topic)",
+      "Adds information not already in the headline",
+      "Factually grounded — not hallucinated or unsupported by the article context",
+      "Concise: target 1-2 sentences; up to 3 acceptable; hard fail if more than 3 or obviously bloated"
+    ],
+    "rule": "ALL must pass for overall pass"
+  },
+  "scoreDimensions": [
+    { "key": "specificity",        "label": "Specificity",         "min": 1, "max": 5 },
+    { "key": "insightDepth",       "label": "Insight Depth",       "min": 1, "max": 5 },
+    { "key": "strategicRelevance", "label": "Strategic Relevance", "min": 1, "max": 5 },
+    { "key": "nonRedundancy",      "label": "Non-Redundancy",      "min": 1, "max": 5 },
+    { "key": "clarityTightness",   "label": "Clarity / Tightness", "min": 1, "max": 5 }
+  ],
+  "failureTags": [
+    "GENERIC",
+    "RESTATES_HEADLINE",
+    "VAGUE_IMPLICATION",
+    "WRONG_IMPLICATION",
+    "OVERCONFIDENT",
+    "NOT_GROUNDED_IN_ARTICLE",
+    "TOO_BROAD",
+    "CATEGORY_CLICHE",
+    "TOO_LONG",
+    "WEAK_LEAD"
+  ],
+  "catastrophicCriteria": {
+    "tags": ["WRONG_IMPLICATION", "OVERCONFIDENT", "NOT_GROUNDED_IN_ARTICLE"],
+    "note": "Any catastrophic tag fires isCatastrophicFailure. Low score alone is not sufficient."
+  },
+  "shipGate": {
+    "minPassRate": 0.75,
+    "humanPreferenceMinRate": 0.60,
+    "catastrophicFailMaxCount": 0,
+    "genericClicheMaxRate": 0.10,
+    "noMaterialTopicRegression": {
+      "definition": "Material regression = pass rate drop beyond 10 points, any new catastrophic failure, or human preference loss on gold-set items for a topic"
+    }
+  }
+}

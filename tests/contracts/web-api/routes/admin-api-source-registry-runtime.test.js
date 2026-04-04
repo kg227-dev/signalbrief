@@ -195,9 +195,9 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     });
     assert.ok(handled);
     const payload = JSON.parse(res.body);
-    assert.strictEqual(payload.source_registry_path, "/tmp/source-registry.json");
-    assert.strictEqual(payload.history_mode, "rolling_7d");
-    assert.strictEqual(payload.history_scope, "rolling_7d");
+    assert.strictEqual(payload.source_registry_path, "/tmp/standard-topic-broker-sources.json");
+    assert.strictEqual(payload.history_mode, "all_tracked_history");
+    assert.strictEqual(payload.history_scope, "all_time");
     assert.strictEqual(payload.history_window.start_date_et, null);
     assert.strictEqual(payload.history_window.end_date_et, null);
     assert.strictEqual(payload.preferred_sources.path, "/tmp/standard-topic-broker-sources.json");
@@ -205,7 +205,7 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
     assert.strictEqual(payload.broker_config.topic_count, 1);
     assert.ok(Array.isArray(payload.broker_config.domains));
     assert.strictEqual(payload.governance_registry.source_of_truth, "standard_topic_broker.governance");
-    assert.strictEqual(payload.governance_registry.active_path, "/tmp/source-registry.json");
+    assert.strictEqual(payload.governance_registry.active_path, "/tmp/standard-topic-broker-sources.json");
     assert.strictEqual(payload.broker_config.sources[0].id, "stat_rss");
     assert.strictEqual(payload.validation_review.source_path, "docs/planning/reduced-scope-mvp-validation/source-registry-manual-review.md");
   }

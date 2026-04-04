@@ -263,9 +263,9 @@ const {
       return {
         rows,
         window: {
-          all_time: false,
-          days: 7,
-          start_date_et: "2026-03-28",
+          all_time: true,
+          days: null,
+          start_date_et: "2026-03-31",
           end_date_et: "2026-04-03",
         },
       };
@@ -276,10 +276,10 @@ const {
     limit: 10,
   });
   assert.strictEqual(overview.override_count, 1);
-  assert.strictEqual(overview.history_mode, "rolling_7d");
-  assert.strictEqual(overview.history_scope, "rolling_7d");
-  assert.strictEqual(overview.history_scope_label, "Rolling last 7 days");
-  assert.strictEqual(overview.history_window.start_date_et, "2026-03-28");
+  assert.strictEqual(overview.history_mode, "all_tracked_history");
+  assert.strictEqual(overview.history_scope, "all_time");
+  assert.strictEqual(overview.history_scope_label, "All tracked history");
+  assert.strictEqual(overview.history_window.start_date_et, "2026-03-31");
   assert.strictEqual(overview.history_window.end_date_et, "2026-04-03");
   assert.strictEqual(overview.suggestions.length, 1);
   assert.strictEqual(overview.suggestions[0].domain, "benzinga.com");
@@ -312,7 +312,7 @@ const {
     overview.curation_queues.topic_coverage_gaps.some((entry) => entry.topic === "TECHNOLOGY" && entry.preferred_missing_count === 1),
     "topic coverage queues should capture preferred-missing cases"
   );
-  assert.deepStrictEqual(recentDigestsCalls[0], { days: 7 });
+  assert.deepStrictEqual(recentDigestsCalls[0], { all_time: true });
 
   const detail = buildSourceRegistryDomainDetail({
     domain: "benzinga.com",
@@ -327,9 +327,9 @@ const {
       return {
         rows,
         window: {
-          all_time: false,
-          days: 7,
-          start_date_et: "2026-03-28",
+          all_time: true,
+          days: null,
+          start_date_et: "2026-03-31",
           end_date_et: "2026-04-03",
         },
       };
@@ -345,12 +345,12 @@ const {
   });
   assert.ok(detail);
   assert.strictEqual(detail.domain, "benzinga.com");
-  assert.strictEqual(detail.history_mode, "rolling_7d");
-  assert.strictEqual(detail.history_scope, "rolling_7d");
+  assert.strictEqual(detail.history_mode, "all_tracked_history");
+  assert.strictEqual(detail.history_scope, "all_time");
   assert.strictEqual(detail.effective_policy.hard_block, true);
   assert.strictEqual(detail.recent_metrics.send_count, 2);
   assert.strictEqual(detail.audit_entries.length, 1);
-  assert.deepStrictEqual(recentDigestsCalls[1], { days: 7 });
+  assert.deepStrictEqual(recentDigestsCalls[1], { all_time: true });
 
   const identityDetail = buildSourceRegistryDomainDetail({
     domain: "youtube.com",
@@ -364,9 +364,9 @@ const {
     buildRecentDigestsExport: () => ({
       rows,
       window: {
-        all_time: false,
-        days: 7,
-        start_date_et: "2026-03-28",
+        all_time: true,
+        days: null,
+        start_date_et: "2026-03-31",
         end_date_et: "2026-04-03",
       },
     }),

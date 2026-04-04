@@ -52,9 +52,10 @@ const VALIDATION_REVIEW_DOC_PATH = path.resolve(__dirname, "../../", VALIDATION_
 
 function normalizeHistoryMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === ROLLING_7D_RANGE.mode) return ROLLING_7D_RANGE.mode;
   if (normalized === ALL_TRACKED_HISTORY_RANGE.mode) return ALL_TRACKED_HISTORY_RANGE.mode;
   if (normalized === VALIDATION_WEEK_1_RANGE.mode) return VALIDATION_WEEK_1_RANGE.mode;
-  return ROLLING_7D_RANGE.mode;
+  return ALL_TRACKED_HISTORY_RANGE.mode;
 }
 
 function buildHistoryWindow(mode, recentWindow, rows) {
@@ -235,7 +236,7 @@ function buildSourceRegistryOverview({
   const curationQueues = buildCurationQueues(metricsMap, recent.rows, Math.max(4, Math.min(12, Number(limit || 20))));
   const governanceDomainCount = Object.keys(registry.domains || {}).length;
   const governanceIdentityCount = Object.keys(registry.identities || {}).length;
-  const governanceActivePath = String(sourceRegistryPath || brokerConfig?.active_path || "").trim() || null;
+  const governanceActivePath = String(brokerConfig?.active_path || sourceRegistryPath || "").trim() || null;
   return {
     generated_at: new Date().toISOString(),
     history_mode: historyWindow.mode,

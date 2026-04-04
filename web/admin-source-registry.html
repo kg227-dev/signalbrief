@@ -253,15 +253,15 @@ body.dark .modal-close { background:var(--card); }
       <button onclick="logout()" class="signout-btn">Sign out</button>
       <button id="darkToggle" type="button" title="Toggle dark mode" style="margin-left:auto;">&#x1F319;</button>
     </div>
-    <p><strong>Source Governance</strong> for digest ranking. Classification stays descriptive; policy controls exposure and ranking behavior across tracked digest history. <span id="lastRefreshed">not refreshed yet</span></p>
+    <p><strong>Source Governance</strong>. The main table shows sources that have actually been sent. Search a source only if you need to inspect or change it. <span id="lastRefreshed">not refreshed yet</span></p>
   </div>
 
   <div class="layout-grid">
     <div class="card">
       <div class="section-head">
         <div>
-          <div class="section-title" style="margin-bottom:0;">Inspect source governance</div>
-          <div class="section-subcopy">Search a domain to see identity, classification, policy, topic fit, ranking effects, tracked impact, and audit history.</div>
+          <div class="section-title" style="margin-bottom:0;">Inspect or edit a source</div>
+          <div class="section-subcopy">Search a domain if you want to see how it is treated or change it.</div>
         </div>
         <div class="table-toolbar-controls">
           <input
@@ -281,62 +281,44 @@ body.dark .modal-close { background:var(--card); }
 
     <div class="card">
       <div class="section-title">How to use this</div>
-      <div class="section-subcopy" style="margin-bottom:14px;">This page governs how a source is interpreted in ranking. Changes apply to future digests only.</div>
+      <div class="section-subcopy" style="margin-bottom:14px;">Keep it simple:</div>
       <div style="display:grid;grid-template-columns:1fr;gap:10px;">
         <div class="explain-block">
-          <div class="explain-label">Identity</div>
-          <div class="explain-copy">Confirm what kind of source this is, whether it inherits from a family domain, and whether review state comes from a direct override or an inherited policy.</div>
+          <div class="explain-label">Main Table</div>
+          <div class="explain-copy">This is the part that matters most. It shows sources that have actually been sent.</div>
         </div>
         <div class="explain-block">
-          <div class="explain-label">Classification</div>
-          <div class="explain-copy">Set source type, policy, review state, and topic-fit overrides. Use the advanced authority field only for unusual edge cases.</div>
+          <div class="explain-label">Search A Source</div>
+          <div class="explain-copy">Use search only when a source looks wrong and you want to inspect or change it.</div>
         </div>
         <div class="explain-block">
-          <div class="explain-label">Ranking effects</div>
-          <div class="explain-copy">Policy translates into lead eligibility, exposure caps, corroboration requirements, and ranking multipliers. Blocked sources are excluded entirely.</div>
+          <div class="explain-label">Advanced</div>
+          <div class="explain-copy">Broker roster details and cleanup notes are still here, but tucked below because you usually do not need them.</div>
         </div>
       </div>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:28px;">
-    <div class="section-head">
-      <div>
-        <div class="section-title" style="margin-bottom:0;">Broker source inventory</div>
-        <div class="section-subcopy">Founder controls for the live MVP broker-backed source inventory. Shared preferred-source diagnostics are now derived from broker config, so the active path no longer carries a separate preferred-source control plane.</div>
-      </div>
-    </div>
-    <div id="preferredSourcesPanelBody" class="empty">Loading broker source inventory…</div>
-  </div>
+    <details>
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text-secondary);">Advanced diagnostics</summary>
+      <div class="table-meta" style="margin-top:10px;">You can usually ignore this. Open it if you want the broker roster, source-of-truth details, or older cleanup notes.</div>
+      <div class="section-title" style="margin-top:18px;margin-bottom:0;">Broker roster</div>
+      <div class="section-subcopy" style="margin-top:4px;">The live broker-backed source inventory and topic controls.</div>
+      <div id="preferredSourcesPanelBody" class="empty" style="margin-top:12px;">Loading broker roster…</div>
 
-  <div class="card" style="margin-bottom:28px;">
-    <div class="section-head">
-      <div>
-        <div class="section-title" style="margin-bottom:0;">Curation queues</div>
-        <div class="section-subcopy">Action queues derived from specialist wins, derivative-style winners, platform ambiguity, and topic coverage gaps across tracked digest history.</div>
-      </div>
-    </div>
-    <div id="curationQueuesPanelBody" class="empty">Loading curation queues…</div>
-  </div>
+      <div class="section-title" style="margin-top:20px;margin-bottom:0;">Recent source flags</div>
+      <div class="section-subcopy" style="margin-top:4px;">Useful only when debugging why certain sources keep surfacing.</div>
+      <div id="curationQueuesPanelBody" class="empty" style="margin-top:12px;">Loading recent source flags…</div>
 
-  <div class="card" style="margin-bottom:28px;">
-    <div class="section-head">
-      <div>
-        <div class="section-title" style="margin-bottom:0;">Source-of-truth status</div>
-        <div class="section-subcopy">Broker roster state is live. Governance overrides are embedded in that same broker file, so empty governance counts do not mean the broker roster is stale.</div>
-      </div>
-    </div>
-    <div id="sourceOfTruthPanelBody" class="empty">Loading source-of-truth status…</div>
-  </div>
+      <div class="section-title" style="margin-top:20px;margin-bottom:0;">Live config status</div>
+      <div class="section-subcopy" style="margin-top:4px;">Where the live broker and governance settings are being read from.</div>
+      <div id="sourceOfTruthPanelBody" class="empty" style="margin-top:12px;">Loading live config status…</div>
 
-  <div class="card" style="margin-bottom:28px;">
-    <div class="section-head">
-      <div>
-        <div class="section-title" style="margin-bottom:0;">Broker cleanup / review sources</div>
-        <div class="section-subcopy">Separate from sent winners. This panel shows the broker roster cleanup and validation-review sources so they do not get confused with what actually shipped.</div>
-      </div>
-    </div>
-    <div id="validationReviewPanelBody" class="empty">Loading broker cleanup / review sources…</div>
+      <div class="section-title" style="margin-top:20px;margin-bottom:0;">Older cleanup notes</div>
+      <div class="section-subcopy" style="margin-top:4px;">Historical broker cleanup / review notes from the validation docs. Not a sent-source list.</div>
+      <div id="validationReviewPanelBody" class="empty" style="margin-top:12px;">Loading older cleanup notes…</div>
+    </details>
   </div>
 
   <div class="table-toolbar" style="margin-bottom:10px;">
@@ -347,9 +329,9 @@ body.dark .modal-close { background:var(--card); }
     </div>
     <div class="table-toolbar-controls">
       <select id="historyModeInput" class="table-filter" onchange="changeSourceRegistryHistoryMode()">
+        <option value="all_tracked_history">All tracked history</option>
         <option value="rolling_7d">Rolling last 7 days sent sources</option>
         <option value="validation_week_1">Validation Week 1 sent sources</option>
-        <option value="all_tracked_history">All tracked history</option>
       </select>
       <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, broker source id, reason, or note…" oninput="filterSuggestions()">
       <button class="table-action-link" type="button" onclick="exportSuggestionsCSV()">Export CSV</button>
@@ -888,9 +870,9 @@ function renderBrokerHighlightGroups(brokerConfig) {
 }
 function normalizeSourceRegistryHistoryMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
-  if (normalized === "all_tracked_history") return "all_tracked_history";
+  if (normalized === "rolling_7d") return "rolling_7d";
   if (normalized === "validation_week_1") return "validation_week_1";
-  return "rolling_7d";
+  return "all_tracked_history";
 }
 function describeHistoryWindow(overview) {
   const historyWindow = overview?.history_window || {};
@@ -1084,7 +1066,7 @@ function setSourceRegistryHistoryMode(mode) {
   const modeInput = document.getElementById("historyModeInput");
   if (modeInput && modeInput.value !== sourceRegistryHistoryMode) modeInput.value = sourceRegistryHistoryMode;
   const url = new URL(window.location.href);
-  if (sourceRegistryHistoryMode === "rolling_7d") url.searchParams.delete("history_mode");
+  if (sourceRegistryHistoryMode === "all_tracked_history") url.searchParams.delete("history_mode");
   else url.searchParams.set("history_mode", sourceRegistryHistoryMode);
   history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
@@ -1721,7 +1703,7 @@ let latestSourceRegistryOverview = null;
 let selectedSourceRegistryDomain = "";
 let selectedSourceRegistryIdentityKey = "";
 let sourceRegistryOverviewQuery = "";
-let sourceRegistryHistoryMode = "rolling_7d";
+let sourceRegistryHistoryMode = "all_tracked_history";
 let loadInFlight = false;
 let _allSuggestions = [];
 let suggestionsSortKey = "tracked_sends";
@@ -1991,7 +1973,7 @@ window.addEventListener("focus", () => load(true));
   const initialDomain = params.get("domain") || "";
   const initialIdentityKey = params.get("identity_key") || "";
   const initialQuery = params.get("query") || "";
-  const initialHistoryMode = params.get("history_mode") || "rolling_7d";
+  const initialHistoryMode = params.get("history_mode") || "all_tracked_history";
   setSelectedDomain(initialDomain, initialIdentityKey);
   setSourceRegistryHistoryMode(initialHistoryMode);
   setSourceRegistryOverviewQuery(initialQuery);

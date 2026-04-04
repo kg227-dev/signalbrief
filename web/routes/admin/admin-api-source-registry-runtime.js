@@ -26,8 +26,9 @@ function parseLimitParam(url) {
 function parseHistoryModeParam(url) {
   const mode = String(url.searchParams.get("history_mode") || "").trim().toLowerCase();
   if (mode === "all_tracked_history") return "all_tracked_history";
+  if (mode === "rolling_7d") return "rolling_7d";
   if (mode === "validation_week_1") return "validation_week_1";
-  return "rolling_7d";
+  return "all_tracked_history";
 }
 
 function sanitizeBody(body = {}) {
@@ -131,7 +132,7 @@ async function handleAdminSourceRegistryRoutes(ctx, deps) {
       query: url.searchParams.get("query") || "",
       limit: parseLimitParam(url),
     });
-    payload.source_registry_path = sourceRegistryPath || null;
+    payload.source_registry_path = payload?.governance_registry?.active_path || sourceRegistryPath || null;
     return json(res, payload);
   }
 

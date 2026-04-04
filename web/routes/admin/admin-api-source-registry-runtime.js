@@ -26,6 +26,7 @@ function parseLimitParam(url) {
 function parseHistoryModeParam(url) {
   const mode = String(url.searchParams.get("history_mode") || "").trim().toLowerCase();
   if (mode === "all_tracked_history") return "all_tracked_history";
+  if (mode === "last_24h") return "last_24h";
   if (mode === "rolling_7d") return "rolling_7d";
   if (mode === "validation_week_1") return "validation_week_1";
   return "all_tracked_history";

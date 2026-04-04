@@ -211,6 +211,33 @@ async function invoke(deps, { method, pathname, search = "", body = null }) {
   }
 
   {
+    const recentDigestsCalls = [];
+    const { handled, res } = await invoke({
+      buildRecentDigestsExport: (options) => {
+        recentDigestsCalls.push(options);
+        return {
+          rows: [],
+          window: {
+            all_time: false,
+            days: 2,
+            start_date_et: "2026-04-02",
+            end_date_et: "2026-04-03",
+          },
+        };
+      },
+    }, {
+      method: "GET",
+      pathname: "/api/admin/source-registry",
+      search: "?history_mode=last_24h",
+    });
+    assert.ok(handled);
+    const payload = JSON.parse(res.body);
+    assert.strictEqual(payload.history_mode, "last_24h");
+    assert.strictEqual(payload.history_scope, "last_24h");
+    assert.strictEqual(recentDigestsCalls[0].days, 2);
+  }
+
+  {
     const { handled, res } = await invoke({}, {
       method: "POST",
       pathname: "/api/admin/source-registry/domain",

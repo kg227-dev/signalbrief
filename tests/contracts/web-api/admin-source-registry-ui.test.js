@@ -16,6 +16,7 @@ const requiredPageSnippets = [
   "Good Vs Risky",
   "What Deserves Action",
   "Admin action",
+  "Last 24 hours sent sources",
   "Rolling last 7 days sent sources",
   "All tracked history",
   "Validation Week 1 sent sources",

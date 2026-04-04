@@ -342,6 +342,7 @@ body.dark .modal-close { background:var(--card); }
     <div class="table-toolbar-controls">
       <select id="historyModeInput" class="table-filter" onchange="changeSourceRegistryHistoryMode()">
         <option value="all_tracked_history">All tracked history</option>
+        <option value="last_24h">Last 24 hours sent sources</option>
         <option value="rolling_7d">Rolling last 7 days sent sources</option>
         <option value="validation_week_1">Validation Week 1 sent sources</option>
       </select>
@@ -882,6 +883,7 @@ function renderBrokerHighlightGroups(brokerConfig) {
 }
 function normalizeSourceRegistryHistoryMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === "last_24h") return "last_24h";
   if (normalized === "rolling_7d") return "rolling_7d";
   if (normalized === "validation_week_1") return "validation_week_1";
   return "all_tracked_history";
@@ -1730,7 +1732,9 @@ function exportSuggestionsCSV() {
     csv,
     historyWindow.mode === "validation_week_1"
       ? "source-governance-validation-week-1.csv"
-      : (historyWindow.mode === "rolling_7d" ? "source-governance-rolling-7d.csv" : "source-governance-all-history.csv")
+      : (historyWindow.mode === "rolling_7d"
+        ? "source-governance-rolling-7d.csv"
+        : (historyWindow.mode === "last_24h" ? "source-governance-last-24h.csv" : "source-governance-all-history.csv"))
   );
 }
 function renderSourceRegistryInspector(detail, overview) {

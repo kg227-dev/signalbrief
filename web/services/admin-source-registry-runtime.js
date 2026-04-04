@@ -29,6 +29,15 @@ const ROLLING_7D_RANGE = Object.freeze({
   start_date_et: null,
   end_date_et: null,
 });
+const LAST_24H_RANGE = Object.freeze({
+  mode: "last_24h",
+  scope: "last_24h",
+  label: "Last 24 hours",
+  description: "Sent items only from the trailing 24-hour window ending now.",
+  sent_only: true,
+  start_date_et: null,
+  end_date_et: null,
+});
 const VALIDATION_WEEK_1_RANGE = Object.freeze({
   mode: "validation_week_1",
   scope: "validation_week_1",
@@ -52,13 +61,34 @@ const VALIDATION_REVIEW_DOC_PATH = path.resolve(__dirname, "../../", VALIDATION_
 
 function normalizeHistoryMode(mode) {
   const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === LAST_24H_RANGE.mode) return LAST_24H_RANGE.mode;
   if (normalized === ROLLING_7D_RANGE.mode) return ROLLING_7D_RANGE.mode;
   if (normalized === ALL_TRACKED_HISTORY_RANGE.mode) return ALL_TRACKED_HISTORY_RANGE.mode;
   if (normalized === VALIDATION_WEEK_1_RANGE.mode) return VALIDATION_WEEK_1_RANGE.mode;
   return ALL_TRACKED_HISTORY_RANGE.mode;
 }
 
-function buildHistoryWindow(mode, recentWindow, rows) {
+function toEtDateKey(value = new Date()) {
+  return new Date(value).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function parseHistoryRowTimestampMs(row) {
+  const candidates = [
+    row?.sent_at_utc,
+    row?.run_at_utc,
+    row?.sent_at,
+  ];
+  for (const candidate of candidates) {
+    const parsed = Date.parse(String(candidate || "").trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const dateEt = String(row?.date_et || "").trim();
+  if (!dateEt) return null;
+  const fallback = Date.parse(`${dateEt}T23:59:59.999Z`);
+  return Number.isFinite(fallback) ? fallback : null;
+}
+
+function buildHistoryWindow(mode, recentWindow, rows, now = new Date()) {
   const normalizedMode = normalizeHistoryMode(mode);
   const rowCount = Array.isArray(rows) ? rows.length : 0;
   if (normalizedMode === ALL_TRACKED_HISTORY_RANGE.mode) {
@@ -75,6 +105,15 @@ function buildHistoryWindow(mode, recentWindow, rows) {
       row_count: rowCount,
     };
   }
+  if (normalizedMode === LAST_24H_RANGE.mode) {
+    const cutoff = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+    return {
+      ...LAST_24H_RANGE,
+      start_date_et: toEtDateKey(cutoff),
+      end_date_et: toEtDateKey(now),
+      row_count: rowCount,
+    };
+  }
   return {
     ...ROLLING_7D_RANGE,
     start_date_et: String(recentWindow?.start_date_et || "").trim() || null,
@@ -83,10 +122,18 @@ function buildHistoryWindow(mode, recentWindow, rows) {
   };
 }
 
-function filterRecentRowsForHistoryMode(rows, mode) {
+function filterRecentRowsForHistoryMode(rows, mode, now = new Date()) {
   const historyMode = normalizeHistoryMode(mode);
   const list = Array.isArray(rows) ? rows : [];
   if (historyMode === ALL_TRACKED_HISTORY_RANGE.mode || historyMode === ROLLING_7D_RANGE.mode) return list.slice();
+  if (historyMode === LAST_24H_RANGE.mode) {
+    const cutoffMs = now.getTime() - (24 * 60 * 60 * 1000);
+    const endMs = now.getTime();
+    return list.filter((row) => {
+      const rowMs = parseHistoryRowTimestampMs(row);
+      return Number.isFinite(rowMs) && rowMs >= cutoffMs && rowMs <= endMs;
+    });
+  }
   return list.filter((row) => {
     const dateEt = String(row?.date_et || "").trim();
     return !!dateEt && dateEt >= VALIDATION_WEEK_1_RANGE.start_date_et && dateEt <= VALIDATION_WEEK_1_RANGE.end_date_et;
@@ -206,6 +253,7 @@ function buildSourceRegistryOverview({
   buildRecentDigestsExport,
   sourceRegistryPath,
   historyMode,
+  now = new Date(),
   query,
   limit = 20,
 }) {
@@ -216,17 +264,20 @@ function buildSourceRegistryOverview({
   const recentExport = typeof buildRecentDigestsExport === "function"
     ? buildRecentDigestsExport(
       normalizedHistoryMode === ALL_TRACKED_HISTORY_RANGE.mode
-        ? { all_time: true }
-        : (normalizedHistoryMode === ROLLING_7D_RANGE.mode ? { days: 7 } : { all_time: true })
+        ? { all_time: true, now }
+        : (normalizedHistoryMode === ROLLING_7D_RANGE.mode
+          ? { days: 7, now }
+          : (normalizedHistoryMode === LAST_24H_RANGE.mode ? { days: 2, now } : { all_time: true, now }))
     )
     : { rows: [] };
-  const historyWindow = buildHistoryWindow(normalizedHistoryMode, recentExport?.window || null, filterRecentRowsForHistoryMode(recentExport?.rows, normalizedHistoryMode));
+  const filteredRows = filterRecentRowsForHistoryMode(recentExport?.rows, normalizedHistoryMode, now);
+  const historyWindow = buildHistoryWindow(normalizedHistoryMode, recentExport?.window || null, filteredRows, now);
   const recent = {
     ...(recentExport || {}),
-    rows: filterRecentRowsForHistoryMode(recentExport?.rows, normalizedHistoryMode),
+    rows: filteredRows,
     window: {
       all_time: historyWindow.mode === ALL_TRACKED_HISTORY_RANGE.mode,
-      days: historyWindow.mode === ALL_TRACKED_HISTORY_RANGE.mode ? null : 7,
+      days: historyWindow.mode === ALL_TRACKED_HISTORY_RANGE.mode ? null : (historyWindow.mode === LAST_24H_RANGE.mode ? 1 : 7),
       start_date_et: historyWindow.start_date_et,
       end_date_et: historyWindow.end_date_et,
     },
@@ -276,6 +327,7 @@ function buildSourceRegistryDomainDetail({
   readJsonLineLog,
   adminActionLog,
   historyMode,
+  now = new Date(),
 }) {
   const normalizedDomain = normalizeSourceDomain(domain);
   const normalizedIdentityKey = normalizeSourceIdentityKey(identityKey);
@@ -285,17 +337,20 @@ function buildSourceRegistryDomainDetail({
   const recentExport = typeof buildRecentDigestsExport === "function"
     ? buildRecentDigestsExport(
       normalizedHistoryMode === ALL_TRACKED_HISTORY_RANGE.mode
-        ? { all_time: true }
-        : (normalizedHistoryMode === ROLLING_7D_RANGE.mode ? { days: 7 } : { all_time: true })
+        ? { all_time: true, now }
+        : (normalizedHistoryMode === ROLLING_7D_RANGE.mode
+          ? { days: 7, now }
+          : (normalizedHistoryMode === LAST_24H_RANGE.mode ? { days: 2, now } : { all_time: true, now }))
     )
     : { rows: [] };
-  const historyWindow = buildHistoryWindow(normalizedHistoryMode, recentExport?.window || null, filterRecentRowsForHistoryMode(recentExport?.rows, normalizedHistoryMode));
+  const filteredRows = filterRecentRowsForHistoryMode(recentExport?.rows, normalizedHistoryMode, now);
+  const historyWindow = buildHistoryWindow(normalizedHistoryMode, recentExport?.window || null, filteredRows, now);
   const recent = {
     ...(recentExport || {}),
-    rows: filterRecentRowsForHistoryMode(recentExport?.rows, normalizedHistoryMode),
+    rows: filteredRows,
     window: {
       all_time: historyWindow.mode === ALL_TRACKED_HISTORY_RANGE.mode,
-      days: historyWindow.mode === ALL_TRACKED_HISTORY_RANGE.mode ? null : 7,
+      days: historyWindow.mode === ALL_TRACKED_HISTORY_RANGE.mode ? null : (historyWindow.mode === LAST_24H_RANGE.mode ? 1 : 7),
       start_date_et: historyWindow.start_date_et,
       end_date_et: historyWindow.end_date_et,
     },

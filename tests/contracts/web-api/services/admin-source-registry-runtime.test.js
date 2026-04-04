@@ -312,7 +312,8 @@ const {
     overview.curation_queues.topic_coverage_gaps.some((entry) => entry.topic === "TECHNOLOGY" && entry.preferred_missing_count === 1),
     "topic coverage queues should capture preferred-missing cases"
   );
-  assert.deepStrictEqual(recentDigestsCalls[0], { all_time: true });
+  assert.strictEqual(recentDigestsCalls[0].all_time, true);
+  assert.ok(recentDigestsCalls[0].now instanceof Date);
 
   const detail = buildSourceRegistryDomainDetail({
     domain: "benzinga.com",
@@ -350,7 +351,8 @@ const {
   assert.strictEqual(detail.effective_policy.hard_block, true);
   assert.strictEqual(detail.recent_metrics.send_count, 2);
   assert.strictEqual(detail.audit_entries.length, 1);
-  assert.deepStrictEqual(recentDigestsCalls[1], { all_time: true });
+  assert.strictEqual(recentDigestsCalls[1].all_time, true);
+  assert.ok(recentDigestsCalls[1].now instanceof Date);
 
   const identityDetail = buildSourceRegistryDomainDetail({
     domain: "youtube.com",
@@ -391,6 +393,48 @@ const {
   assert.strictEqual(identityDetail.direct_override.identity_key, "youtube:@insideboardroom");
   assert.ok(identityDetail.identity_candidates.some((candidate) => candidate.identity_key === "youtube:@insideboardroom"));
   assert.strictEqual(identityDetail.audit_entries[0].scope, "identity");
+
+  const last24hNow = new Date("2026-04-03T18:00:00.000Z");
+  const last24hOverview = buildSourceRegistryOverview({
+    loadSourceRegistry: () => registry,
+    inspectStandardTopicBrokerConfig: () => ({
+      source_mode: "runtime",
+      active_path: "/tmp/standard-topic-broker-sources.json",
+      runtime_path: "/tmp/standard-topic-broker-sources.json",
+      bundled_path: "/tmp/bundled-standard-topic-broker-sources.json",
+      config: { topics: {}, sources: [] },
+    }),
+    buildSourceRegistryMap: (value) => ({
+      domains: new Map(Object.entries(value.domains || {})),
+      identities: new Map(Object.entries(value.identities || {})),
+    }),
+    setAdminSourceRegistry,
+    buildRecentDigestsExport: (options) => {
+      recentDigestsCalls.push(options);
+      return {
+        rows,
+        window: {
+          all_time: false,
+          days: 2,
+          start_date_et: "2026-04-02",
+          end_date_et: "2026-04-03",
+        },
+      };
+    },
+    sourceRegistryPath: "/tmp/standard-topic-broker-sources.json",
+    historyMode: "last_24h",
+    now: last24hNow,
+    query: "",
+    limit: 10,
+  });
+  assert.strictEqual(last24hOverview.history_mode, "last_24h");
+  assert.strictEqual(last24hOverview.history_scope, "last_24h");
+  assert.strictEqual(last24hOverview.history_scope_label, "Last 24 hours");
+  assert.strictEqual(last24hOverview.history_window.start_date_et, "2026-04-02");
+  assert.strictEqual(last24hOverview.history_window.end_date_et, "2026-04-03");
+  assert.deepStrictEqual(recentDigestsCalls[2], { days: 2, now: last24hNow });
+  assert.ok(last24hOverview.suggestions.some((entry) => entry.domain === "youtube.com"));
+  assert.ok(!last24hOverview.suggestions.some((entry) => entry.domain === "benzinga.com"));
   setAdminSourceRegistry(null);
 })();
 

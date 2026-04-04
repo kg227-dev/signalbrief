@@ -289,15 +289,19 @@ body.dark .modal-close { background:var(--card); }
         </div>
         <div class="explain-block">
           <div class="explain-label">Good Vs Risky</div>
-          <div class="explain-copy">Usually good: <span class="mono">Preferred</span> or <span class="mono">Allowed</span>, <span class="mono">Reviewed</span>, and weak exposure <span class="mono">0</span>. More risky: <span class="mono">Review</span>, <span class="mono">Limited</span>, <span class="mono">Unreviewed</span>, repeated weak exposure, or anything <span class="mono">Blocked</span>.</div>
+          <div class="explain-copy">Usually good: trusted trade or news sources that keep producing clean, on-topic winners. More risky: official feeds that can flood with filler, company/newsroom domains, platforms or aggregators, off-topic winners, and anything repeatedly showing up in weak or noisy digests.</div>
         </div>
         <div class="explain-block">
           <div class="explain-label">How To Read Columns</div>
-          <div class="explain-copy"><span class="mono">Domain</span>: the publisher. <span class="mono">Broker roster</span>: whether it is explicitly in the live broker config; "not in live broker roster" does not automatically mean bad. <span class="mono">Governance policy</span>: how we treat it. <span class="mono">Tracked sends</span>: how often it was sent. <span class="mono">Review state</span>: whether we have already checked it. <span class="mono">Topic fit</span>: which sectors it is good for. <span class="mono">Why surfaced</span>: why the page is drawing attention to it, not a final verdict.</div>
+          <div class="explain-copy"><span class="mono">Domain</span>: the publisher. <span class="mono">Type</span>: trade, official, general news, platform, or company source. <span class="mono">Standing</span>: your quick health check for this source. <span class="mono">Recent sectors</span>: where it has actually been showing up. <span class="mono">Sent count</span>: how often it was used. <span class="mono">Admin action</span>: the next thing you should do, if anything.</div>
+        </div>
+        <div class="explain-block">
+          <div class="explain-label">What Deserves Action</div>
+          <div class="explain-copy">The main things to watch are the same ones that mattered in Days 1-7: official filler crowding out better reporting, off-topic wins, self-promotional company/newsroom items, platform or aggregator ambiguity, and feeds that look structurally weak or low-yield.</div>
         </div>
         <div class="explain-block">
           <div class="explain-label">What You Usually Do</div>
-          <div class="explain-copy">Leave a source alone if it is preferred or allowed, reviewed, and not showing weak exposure. Inspect it if the policy looks too loose or too strict, if review state is missing, or if the reason column looks concerning. Only block or heavily downgrade a source when it is clearly low quality, misleading, or a bad fit.</div>
+          <div class="explain-copy">Leave a source alone if it keeps sending clean, relevant stories. Inspect it if it looks noisy, off-topic, or under-reviewed. Tighten it when it should be used more cautiously. Block or replace it only when it is clearly bad, misleading, structurally broken, or repeatedly the wrong fit.</div>
         </div>
         <div class="explain-block">
           <div class="explain-label">Use Search When</div>
@@ -341,7 +345,7 @@ body.dark .modal-close { background:var(--card); }
         <option value="rolling_7d">Rolling last 7 days sent sources</option>
         <option value="validation_week_1">Validation Week 1 sent sources</option>
       </select>
-      <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, broker source id, reason, or note…" oninput="filterSuggestions()">
+      <input id="suggestionsSearch" class="table-search" type="text" placeholder="Search domain, source type, sector, action, or note…" oninput="filterSuggestions()">
       <button class="table-action-link" type="button" onclick="exportSuggestionsCSV()">Export CSV</button>
     </div>
   </div>
@@ -351,7 +355,7 @@ body.dark .modal-close { background:var(--card); }
         <tr id="sourceRegistrySuggestionsHeaderRow"></tr>
       </thead>
       <tbody id="sourceRegistrySuggestionsBody">
-        <tr><td colspan="7" class="empty">Loading…</td></tr>
+        <tr><td colspan="6" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -901,7 +905,7 @@ function renderSentSourcesHeader(overview) {
   const modeInput = document.getElementById("historyModeInput");
   const historyWindow = describeHistoryWindow(overview);
   if (titleEl) titleEl.textContent = `${historyWindow.label} sent sources`;
-  if (metaEl) metaEl.textContent = `${historyWindow.description} Broker cleanup and review sources are separated above.`;
+  if (metaEl) metaEl.textContent = `${historyWindow.description} This table is for sent-source decisions; older broker cleanup notes are separated above.`;
   if (modeInput) modeInput.value = historyWindow.mode;
 }
 function renderValidationReviewItems(rows) {
@@ -998,7 +1002,7 @@ function renderSourceOfTruthSummary(overview) {
         <div class="source-truth-kicker">Main table coverage</div>
         <div class="source-truth-headline">${Math.max(0, Number(overview?.suggestion_count || 0))} sent domains in view</div>
         <div class="source-truth-copy">${historyWindow.description} ${Math.max(0, Number(overview?.override_count || 0))} direct governance override${Number(overview?.override_count || 0) === 1 ? "" : "s"} still apply, but broker cleanup sources are split into their own panel.</div>
-        <div class="source-truth-line">Search by domain, broker source id, tracked reason, or governance note.</div>
+        <div class="source-truth-line">Search by domain, source type, sector, action, or admin note.</div>
       </div>
     </div>
     <div class="source-truth-grid">
@@ -1016,6 +1020,11 @@ const SUGGESTION_REVIEW_SORT_ORDER = Object.freeze({
   reviewed: 0,
   monitor: 1,
   unreviewed: 2,
+});
+const SUGGESTION_STANDING_SORT_ORDER = Object.freeze({
+  good: 0,
+  watch: 1,
+  blocked: 2,
 });
 const SUGGESTION_SORT_DEFAULTS = Object.freeze({
   domain: "asc",
@@ -1201,11 +1210,220 @@ function renderBrokerRosterCell(row) {
     <div class="broker-pill-row">${summary.sources.slice(0, 3).map(renderBrokerSourceBadge).join("")}</div>
   </td>`;
 }
+function buildValidationReviewDomainMap(review) {
+  const items = Array.isArray(review?.items) ? review.items : [];
+  const priorityOrder = {
+    replace: 0,
+    investigate: 1,
+    keep_disabled: 2,
+  };
+  const out = new Map();
+  items.forEach((item) => {
+    const domain = String(item?.domain || "").trim().toLowerCase();
+    if (!domain) return;
+    const nextPriority = Number(priorityOrder[item?.disposition_key] ?? 99);
+    const existing = out.get(domain);
+    if (existing) {
+      existing.count += 1;
+      if (nextPriority < existing.priority) {
+        existing.priority = nextPriority;
+        existing.disposition_key = String(item?.disposition_key || "").trim();
+        existing.disposition = String(item?.disposition || "").trim();
+        existing.note = String(item?.note || "").trim();
+        existing.topic = String(item?.topic || "").trim();
+      }
+      return;
+    }
+    out.set(domain, {
+      priority: nextPriority,
+      count: 1,
+      disposition_key: String(item?.disposition_key || "").trim(),
+      disposition: String(item?.disposition || "").trim(),
+      note: String(item?.note || "").trim(),
+      topic: String(item?.topic || "").trim(),
+    });
+  });
+  return out;
+}
+function simplifySourceTypeLabel(sourceType) {
+  const normalized = String(sourceType || "").trim().toLowerCase();
+  if (normalized === "primary_official") return "Official";
+  if (normalized === "trade_specialist") return "Trade";
+  if (normalized === "reported_media") return "News";
+  if (normalized === "corporate_pr") return "Company";
+  if (normalized === "analysis_blog") return "Analysis";
+  if (normalized === "aggregator_republisher") return "Aggregator";
+  if (normalized === "platform_user_generated") return "Platform";
+  return "Unknown";
+}
+function renderSimpleStatusPill(label, tone = "green") {
+  const normalizedTone = String(tone || "green").trim().toLowerCase();
+  const palette = normalizedTone === "red"
+    ? { fg: "var(--red)", bg: "#FEE2E2" }
+    : (normalizedTone === "yellow"
+      ? { fg: "var(--yellow)", bg: "#FEF3C7" }
+      : { fg: "var(--green)", bg: "#DCFCE7" });
+  return `<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${palette.bg};color:${palette.fg};font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${esc(label)}</span>`;
+}
+function buildSourceStanding(row) {
+  const effective = row?.effective_policy || {};
+  const policy = String(effective?.source_policy || "").trim().toLowerCase();
+  const reviewStatus = String(effective?.review_status || "").trim().toLowerCase();
+  const weakExposure = Math.max(0, Number(row?.weak_source_item_count || 0));
+  const poorDigestCount = Math.max(0, Number(row?.poor_digest_item_count || 0));
+  if (effective?.hard_block === true || policy === "blocked") {
+    return {
+      key: "blocked",
+      label: "Blocked",
+      tone: "red",
+      copy: "Should not be sent",
+    };
+  }
+  const issues = [];
+  if (reviewStatus === "unreviewed") issues.push("Needs review");
+  else if (reviewStatus === "monitor") issues.push("Monitoring");
+  if (policy === "review") issues.push("Review policy");
+  else if (policy === "limited") issues.push("Limited use");
+  if (weakExposure > 0) issues.push(`Weak exposure ${weakExposure}`);
+  if (poorDigestCount > 0) issues.push(`Weak-digest days ${poorDigestCount}`);
+  if (issues.length) {
+    return {
+      key: "watch",
+      label: "Watch",
+      tone: "yellow",
+      copy: issues.slice(0, 2).join(" · "),
+    };
+  }
+  return {
+    key: "good",
+    label: "Good",
+    tone: "green",
+    copy: policy === "preferred" ? "Trusted and healthy" : "Healthy in current history",
+  };
+}
+function formatRecentSectorSummary(row) {
+  const tags = formatSourceMetricTags(row?.top_tags || []);
+  if (tags && tags !== "—") return tags;
+  const fitSummary = formatTopicFitSummary(row?.effective_policy?.topic_fit_map || {});
+  if (fitSummary && fitSummary !== "Baseline only") return fitSummary;
+  return "No clear sector pattern yet";
+}
+function buildSourceAction(row) {
+  const effective = row?.effective_policy || {};
+  const policy = String(effective?.source_policy || "").trim().toLowerCase();
+  const reviewStatus = String(effective?.review_status || "").trim().toLowerCase();
+  const sourceType = String(effective?.source_type || "").trim().toLowerCase();
+  const weakExposure = Math.max(0, Number(row?.weak_source_item_count || 0));
+  const poorDigestCount = Math.max(0, Number(row?.poor_digest_item_count || 0));
+  const validationReview = row?.validation_review || null;
+  const overrideNote = String(row?.admin_override?.note || "").trim();
+  if (validationReview?.disposition_key === "replace") {
+    return {
+      label: "Replace feed",
+      tone: "red",
+      copy: validationReview.count > 1
+        ? `Validation review flagged ${validationReview.count} broker sources on this domain.`
+        : (validationReview.note || "Validation review marked this feed for replacement."),
+    };
+  }
+  if (validationReview?.disposition_key === "investigate") {
+    return {
+      label: "Review quality",
+      tone: "yellow",
+      copy: validationReview.count > 1
+        ? `Validation review flagged ${validationReview.count} broker sources on this domain.`
+        : (validationReview.note || "Check feed quality, yield, or topical fit."),
+    };
+  }
+  if (validationReview?.disposition_key === "keep_disabled") {
+    return {
+      label: "Keep disabled",
+      tone: "yellow",
+      copy: validationReview.note || "Leave disabled unless a stronger reason appears.",
+    };
+  }
+  if (overrideNote) {
+    return {
+      label: "Override active",
+      tone: "yellow",
+      copy: overrideNote,
+    };
+  }
+  if (effective?.hard_block === true || policy === "blocked") {
+    return {
+      label: "Keep blocked",
+      tone: "red",
+      copy: "This source is intentionally blocked.",
+    };
+  }
+  if (sourceType === "corporate_pr") {
+    return {
+      label: "Watch for self-promo",
+      tone: "yellow",
+      copy: "Company sources can be useful, but tighten them if they start winning on marketing or house-news items.",
+    };
+  }
+  if (sourceType === "aggregator_republisher") {
+    return {
+      label: "Verify original sourcing",
+      tone: "yellow",
+      copy: "Aggregator-style winners should not crowd out a stronger original source.",
+    };
+  }
+  if (sourceType === "platform_user_generated") {
+    return {
+      label: "Check identity",
+      tone: "yellow",
+      copy: "Platform domains need extra care so the right publisher identity gets credit.",
+    };
+  }
+  if (sourceType === "primary_official") {
+    return {
+      label: "Watch for official filler",
+      tone: "yellow",
+      copy: "Useful for rules, recalls, and approvals, but inspect if it crowds out stronger trade reporting.",
+    };
+  }
+  if (reviewStatus !== "reviewed") {
+    return {
+      label: "Review manually",
+      tone: "yellow",
+      copy: "This source is sending before a full manual review.",
+    };
+  }
+  if (weakExposure >= 2) {
+    return {
+      label: "Check quality",
+      tone: "yellow",
+      copy: `Weak exposure showed up ${weakExposure} times in sent history.`,
+    };
+  }
+  if (poorDigestCount >= 2) {
+    return {
+      label: "Check fit",
+      tone: "yellow",
+      copy: `It appeared ${poorDigestCount} times on weaker digest days.`,
+    };
+  }
+  if (policy === "review" || policy === "limited") {
+    return {
+      label: "Keep watching",
+      tone: "yellow",
+      copy: "Its policy is already cautious; inspect sample items if it keeps surfacing.",
+    };
+  }
+  return {
+    label: "Leave alone",
+    tone: "green",
+    copy: "Looks healthy in the current sent-history view.",
+  };
+}
 function buildGovernanceRows(overview) {
   const suggestions = Array.isArray(overview?.suggestions) ? overview.suggestions : [];
   const overrides = Array.isArray(overview?.overrides) ? overview.overrides : [];
   const sentOnly = overview?.history_window?.sent_only === true;
   const brokerDomainMap = buildBrokerDomainMap(overview?.broker_config || null);
+  const validationReviewMap = buildValidationReviewDomainMap(overview?.validation_review || null);
   const rowsByDomain = new Map();
 
   suggestions.forEach((row) => {
@@ -1217,6 +1435,7 @@ function buildGovernanceRows(overview) {
       domain,
       admin_override: row?.admin_override || null,
       broker_summary: brokerSummary,
+      validation_review: validationReviewMap.get(domain) || null,
       effective_policy: row?.effective_policy || brokerSummary?.effective_policy || {},
     });
   });
@@ -1248,6 +1467,7 @@ function buildGovernanceRows(overview) {
       updated_at: String(override?.updated_at || existing.updated_at || "").trim() || null,
       updated_by: String(override?.updated_by || existing.updated_by || "").trim() || "",
       broker_summary: brokerSummary,
+      validation_review: existing.validation_review || validationReviewMap.get(domain) || null,
     });
   });
 
@@ -1278,6 +1498,7 @@ function buildGovernanceRows(overview) {
         admin_override: existing.admin_override || null,
         suggested_reason: existing.suggested_reason || "",
         broker_summary: summary,
+        validation_review: existing.validation_review || validationReviewMap.get(domain) || null,
       });
     });
   }
@@ -1290,17 +1511,17 @@ function getSuggestionSortValue(row, key) {
     case "domain":
       return String(row?.domain || "").toLowerCase();
     case "classification":
-      return String(formatBrokerSourceSummary(row?.broker_summary || null) || formatSourceClassificationSummary(effective) || "").toLowerCase();
+      return simplifySourceTypeLabel(effective?.source_type).toLowerCase();
     case "policy":
-      return Number(SUGGESTION_POLICY_SORT_ORDER[String(effective?.source_policy || "").trim().toLowerCase()] ?? 99);
+      return Number(SUGGESTION_STANDING_SORT_ORDER[buildSourceStanding(row).key] ?? 99);
     case "tracked_sends":
       return Math.max(0, Number(row?.send_count || 0)) * 100 + Math.max(0, Number(row?.broker_summary?.active_source_count || 0));
     case "review_state":
       return Number(SUGGESTION_REVIEW_SORT_ORDER[String(effective?.review_status || "").trim().toLowerCase()] ?? 99);
     case "topic_fit":
-      return getTopicFitSortScore(effective?.topic_fit_map);
+      return formatRecentSectorSummary(row).toLowerCase();
     case "reason":
-      return getGovernanceReasonText(row).toLowerCase();
+      return `${buildSourceAction(row).label} ${buildSourceAction(row).copy}`.toLowerCase();
     default:
       return String(row?.domain || "").toLowerCase();
   }
@@ -1329,12 +1550,11 @@ function renderSuggestionsHeaderRow() {
   if (!row) return;
   row.innerHTML = [
     renderSuggestionsSortHeader("Domain", "domain"),
-    renderSuggestionsSortHeader("Broker roster", "classification"),
-    renderSuggestionsSortHeader("Governance policy", "policy"),
+    renderSuggestionsSortHeader("Type", "classification"),
+    renderSuggestionsSortHeader("Standing", "policy"),
+    renderSuggestionsSortHeader("Recent sectors", "topic_fit"),
     renderSuggestionsSortHeader("Tracked sends", "tracked_sends"),
-    renderSuggestionsSortHeader("Review state", "review_state"),
-    renderSuggestionsSortHeader("Topic fit", "topic_fit"),
-    renderSuggestionsSortHeader("Why surfaced", "reason"),
+    renderSuggestionsSortHeader("Admin action", "reason"),
   ].join("");
 }
 function toggleSuggestionsSort(key) {
@@ -1391,15 +1611,9 @@ async function toggleSourceAudit(domain) {
 }
 function renderSuggestionReasonCell(row) {
   const override = row?.admin_override || null;
-  const reason = getGovernanceReasonText(row);
+  const action = buildSourceAction(row);
   const overrideMeta = override
     ? `Override active${override.updated_at ? ` · ${formatEtTimestamp(override.updated_at)}` : ""}${override.updated_by ? ` · ${override.updated_by}` : ""}`
-    : "";
-  const brokerMeta = row?.broker_summary
-    ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">Broker ${Math.max(0, Number(row.broker_summary.active_source_count || 0))} active · ${formatBrokerTierCounts(row.broker_summary)}</div>`
-    : "";
-  const surfacedReason = override && row?.suggested_reason
-    ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">Surfaced because: ${esc(row.suggested_reason)}</div>`
     : "";
   const auditControl = override
     ? `<div style="margin-top:8px;">
@@ -1407,17 +1621,19 @@ function renderSuggestionReasonCell(row) {
         <div id="${getSourceAuditElementId(row.domain)}" style="display:none;margin-top:8px;font-size:11px;color:var(--text-secondary);"></div>
       </div>`
     : "";
-  return `<td style="font-size:12px;color:var(--text-2);">${esc(reason)}${overrideMeta ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(overrideMeta)}</div>` : ""}${brokerMeta}${surfacedReason}${auditControl}</td>`;
+  return `<td style="font-size:12px;color:var(--text-2);">${renderSimpleStatusPill(action.label, action.tone)}<div style="margin-top:6px;font-size:11px;color:var(--text-secondary);line-height:1.45;">${esc(action.copy)}</div>${overrideMeta ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(overrideMeta)}</div>` : ""}${auditControl}</td>`;
 }
 function renderSuggestionRow(row) {
   const effective = row.effective_policy || {};
+  const standing = buildSourceStanding(row);
+  const sourceType = simplifySourceTypeLabel(effective?.source_type);
+  const recentSectorSummary = formatRecentSectorSummary(row);
   return `<tr>
     <td><button type="button" class="table-action-link" style="padding:0;border:none;background:none;" onclick="inspectSourceRegistryDomain('${esc(row.domain)}')">${esc(row.domain)}</button></td>
-    ${renderBrokerRosterCell(row)}
-    <td>${renderPolicyPill(effective.source_policy)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatSourceClassificationSummary(effective))}</div><div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(formatRankingEffectSummary(effective.policy_effects))}</div></td>
+    <td style="font-size:12px;color:var(--text-2);">${esc(sourceType)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(titleizeSourceValue(effective?.source_type || "unclassified"))}</div></td>
+    <td>${renderSimpleStatusPill(standing.label, standing.tone)}<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">${esc(standing.copy)}</div></td>
+    <td style="font-size:12px;color:var(--text-secondary);">${esc(recentSectorSummary)}</td>
     <td class="mono">${Math.max(0, Number(row.send_count || 0))}</td>
-    <td>${renderReviewPill(effective.review_status)}<div style="margin-top:4px;font-size:11px;color:${Number(row.weak_source_item_count || 0) > 0 ? "var(--red)" : "var(--text-secondary)"};">weak exposure ${Math.max(0, Number(row.weak_source_item_count || 0))}</div></td>
-    <td style="font-size:12px;color:var(--text-secondary);">${esc(formatTopicFitSummary(effective.topic_fit_map))}</td>
     ${renderSuggestionReasonCell(row)}
   </tr>`;
 }
@@ -1433,6 +1649,10 @@ function filterSuggestions() {
   renderSuggestionsHeaderRow();
   const rows = q ? _allSuggestions.filter(r =>
     (r.domain || "").toLowerCase().includes(q) ||
+    simplifySourceTypeLabel(r?.effective_policy?.source_type).toLowerCase().includes(q) ||
+    buildSourceStanding(r).label.toLowerCase().includes(q) ||
+    buildSourceAction(r).label.toLowerCase().includes(q) ||
+    buildSourceAction(r).copy.toLowerCase().includes(q) ||
     getBrokerSummaryValues(r?.broker_summary, "source_ids").join(" ").toLowerCase().includes(q) ||
     getBrokerSummaryValues(r?.broker_summary, "topics").join(" ").toLowerCase().includes(q) ||
     getGovernanceReasonText(r).toLowerCase().includes(q) ||
@@ -1444,7 +1664,7 @@ function filterSuggestions() {
   if (!body) return;
   body.innerHTML = sortedRows.length
     ? sortedRows.map(renderSuggestionRow).join("")
-    : `<tr><td colspan="7" class="empty">${q ? `No matches for "${esc(q)}".` : "No sent sources matched this window."}</td></tr>`;
+    : `<tr><td colspan="6" class="empty">${q ? `No matches for "${esc(q)}".` : "No sent sources matched this window."}</td></tr>`;
   if (countEl) countEl.textContent = q
     ? `${sortedRows.length} of ${_allSuggestions.length} sources`
     : `${_allSuggestions.length} source${_allSuggestions.length !== 1 ? "s" : ""}`;
@@ -1485,24 +1705,23 @@ function exportSuggestionsCSV() {
     getGovernanceReasonText(r).toLowerCase().includes(q) ||
     (r.suggested_reason || "").toLowerCase().includes(q)
   ) : _allSuggestions;
-  const header = ["Domain","Broker Sources","Broker Topics","Broker Tier Counts","Source Type","Policy","Review Status","Legacy Tier","Authority","Tracked Sends","Weak Exposure","Topic Fit","Reason","Suggested Reason","Override Updated","Override By"];
+  const header = ["Domain","Type","Standing","Recent Sectors","Tracked Sends","Admin Action","Action Detail","Policy","Review Status","Weak Exposure","Reason","Override Updated","Override By"];
   const csv = [header, ...rows.map(r => {
     const e = r.effective_policy || {};
-    const broker = r.broker_summary || null;
+    const standing = buildSourceStanding(r);
+    const action = buildSourceAction(r);
     return [
       r.domain || "",
-      getBrokerSummaryValues(broker, "source_ids").join(" | "),
-      getBrokerSummaryValues(broker, "topics").join(" | "),
-      broker ? formatBrokerTierCounts(broker) : "",
-      e.source_type || "",
+      simplifySourceTypeLabel(e.source_type),
+      standing.label,
+      formatRecentSectorSummary(r),
+      Math.max(0,Number(r.send_count||0)),
+      action.label,
+      action.copy,
       e.source_policy || "",
       e.review_status || "",
-      e.source_tier || "",
-      e.source_authority!=null?Number(e.source_authority).toFixed(2):"",
-      Math.max(0,Number(r.send_count||0)), Math.max(0,Number(r.weak_source_item_count||0)),
-      formatTopicFitSummary(e.topic_fit_map),
+      Math.max(0,Number(r.weak_source_item_count||0)),
       getGovernanceReasonText(r),
-      r.suggested_reason||getBrokerRosterReason(r)||"Tracked source activity",
       formatEtTimestamp(r.admin_override?.updated_at || r.updated_at),
       r.admin_override?.updated_by || r.updated_by || "",
     ];
@@ -1546,13 +1765,22 @@ function renderSourceRegistryInspector(detail, overview) {
   const sendsCount = Math.max(0, Number(recent.send_count || 0));
   const usersCount = Math.max(0, Number(recent.user_count || 0));
   const digestsCount = Math.max(0, Number(recent.digest_count || 0));
+  const standing = buildSourceStanding({
+    effective_policy: policy,
+    weak_source_item_count: weakExposureCount,
+    poor_digest_item_count: Math.max(0, Number(recent.poor_digest_item_count || 0)),
+  });
+  const action = buildSourceAction({
+    effective_policy: policy,
+    weak_source_item_count: weakExposureCount,
+    poor_digest_item_count: Math.max(0, Number(recent.poor_digest_item_count || 0)),
+    admin_override: directOverride,
+  });
   const directEntrySummary = directOverride
     ? `Editing a saved ${directOverrideScope}.`
     : "No direct override saved yet. This source is using its current baseline rules.";
   const advancedSummaryBits = [
     `Ranking behavior: ${formatRankingEffectSummary(policyEffects)}.`,
-    policy.source_authority != null ? `Authority ${Number(policy.source_authority).toFixed(2)}.` : "",
-    policy.baseline_source_authority != null ? `Baseline ${policy.baseline_source_tier || "unknown"} ${Number(policy.baseline_source_authority).toFixed(2)}.` : "",
     inheritedFrom ? `Inherited from ${inheritedFrom}.` : "",
     governancePath ? `Live config: ${governancePath}.` : "",
   ].filter(Boolean);
@@ -1567,11 +1795,10 @@ function renderSourceRegistryInspector(detail, overview) {
     <div style="display:grid;grid-template-columns:1.2fr .9fr;gap:18px;align-items:start;">
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-          ${renderPolicyPill(policy.source_policy)}
-          ${renderReviewPill(policy.review_status)}
-          ${renderSourceTierPill(policy.source_tier, policy.hard_block)}
+          ${renderSimpleStatusPill(standing.label, standing.tone)}
+          ${renderSimpleStatusPill(action.label, action.tone)}
         </div>
-        <div class="table-meta">Source type: ${esc(sourceTypeLabel)}. ${topicFitSummary === "Baseline only" ? "No topic-specific override is set." : `Topic fit: ${esc(topicFitSummary)}.`} ${weakExposureCount > 0 ? `${weakExposureCount} constrained-source item${weakExposureCount === 1 ? "" : "s"} showed up in tracked history.` : "No constrained-source items showed up in tracked history."}</div>
+        <div class="table-meta">Source type: ${esc(sourceTypeLabel)}. ${esc(standing.copy)}. ${esc(action.copy)} ${topicFitSummary === "Baseline only" ? "No topic-specific override is set." : `Topic fit: ${esc(topicFitSummary)}.`}</div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
           <div class="explain-block">
             <div class="explain-label">What This Source Is</div>
@@ -1579,7 +1806,7 @@ function renderSourceRegistryInspector(detail, overview) {
           </div>
           <div class="explain-block">
             <div class="explain-label">Current Status</div>
-            <div class="explain-copy">${esc(policy.source_policy || "review")} with ${esc(policy.review_status || "unreviewed")} review status. ${directEntrySummary}</div>
+            <div class="explain-copy">${esc(standing.label)}. ${esc(action.label)}. ${esc(directEntrySummary)}</div>
           </div>
           <div class="explain-block">
             <div class="explain-label">Tracked Usage</div>
@@ -1654,7 +1881,7 @@ function renderSourceRegistryInspector(detail, overview) {
             <option value="">Use baseline (${esc(policy.source_policy || "review")})</option>
             ${["preferred","allowed","limited","review","blocked"].map((policyValue) => `<option value="${policyValue}" ${directOverride.policy === policyValue ? "selected" : ""}>${esc(policyValue)}</option>`).join("")}
           </select>
-          <div class="table-meta">Use this to tighten or loosen how heavily the source can influence ranking.</div>
+          <div class="table-meta">This controls how aggressively the source can win. Use tighter settings for noisy, off-topic, or lower-confidence sources.</div>
         </div>
         <div class="modal-field">
           <label for="sourceRegistryReviewStatusInput">Review status</label>
@@ -1662,6 +1889,7 @@ function renderSourceRegistryInspector(detail, overview) {
             <option value="">Use baseline (${esc(policy.review_status || "unreviewed")})</option>
             ${["reviewed","monitor","unreviewed"].map((status) => `<option value="${status}" ${directOverride.review_status === status ? "selected" : ""}>${esc(status)}</option>`).join("")}
           </select>
+          <div class="table-meta">Use this to track whether the source has already had a real manual review.</div>
         </div>
         <details style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff;">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Optional topic rules</summary>
@@ -1674,19 +1902,19 @@ function renderSourceRegistryInspector(detail, overview) {
           </div>
         </details>
         <details style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff;margin-top:12px;">
-          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Advanced controls</summary>
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Legacy compatibility overrides</summary>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px;">
             <div class="modal-field" style="margin-bottom:0;">
-              <label for="sourceRegistryTierInput">Legacy tier override</label>
+              <label for="sourceRegistryTierInput">Legacy source tier override</label>
               <select id="sourceRegistryTierInput" class="table-filter" style="width:100%;">
                 <option value="">Default</option>
                 ${["premium","strong","standard","blog","corporate","weak","suspect","unknown"].map((tier) => `<option value="${tier}" ${directOverride.tier_override === tier ? "selected" : ""}>${tier}</option>`).join("")}
               </select>
             </div>
             <div class="modal-field" style="margin-bottom:0;">
-              <label for="sourceRegistryAuthorityInput">Advanced authority override (0-1)</label>
+              <label for="sourceRegistryAuthorityInput">Legacy authority override (rare)</label>
               <input id="sourceRegistryAuthorityInput" class="modal-input mono" type="number" min="0" max="1" step="0.01" value="${directOverride.authority_override != null ? esc(Number(directOverride.authority_override).toFixed(2)) : ""}" placeholder="0.48">
-              <div class="table-meta">Use only for edge cases. Preferred workflow is source type + policy + topic fit.</div>
+              <div class="table-meta">This is mostly pre-rewire compatibility. Preferred workflow is source type + policy + topic fit, so leave this blank unless you are handling a real edge case.</div>
             </div>
             <div class="table-meta">${esc(directEntrySummary)}${recentUsers.length ? ` Recent users: ${esc(recentUsers.map((row) => `${row.user} (${row.count})`).join(", "))}.` : ""}</div>
           </div>

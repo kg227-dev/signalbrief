@@ -224,10 +224,12 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
 
   let recommendation = "PENDING HUMAN REVIEW";
   let recommendationReason = "Human A/B review on gold set not yet completed.";
-  for (const v of variants.filter(function(x) { return x !== baseV; })) {
+  const evalVariants = variants.filter(function(x) { return x !== baseV; });
+  const evalTargets = evalVariants.length > 0 ? evalVariants : variants;
+  for (const v of evalTargets) {
     const gates = checkGates(v);
     if (gates.every(function(g) { return g.pass; })) {
-      recommendation = `CONDITIONAL SHIP — ${v}`;
+      recommendation = evalVariants.length > 0 ? `CONDITIONAL SHIP — ${v}` : "CONDITIONAL SHIP — baseline";
       recommendationReason = `${v} passes all model-only gates. Human A/B review required to confirm.`;
     } else {
       const failed = gates.filter(function(g) { return !g.pass; }).map(function(g) { return g.name; }).join(", ");
@@ -323,8 +325,10 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
 
   lines.push(`\n## 9. Ship Gate Assessment`);
   lines.push(`\n### Model-only gates`);
-  for (const v of variants.filter(function(x) { return x !== baseV; })) {
-    lines.push(`\n**${v}:**`);
+  const gatedVariants = variants.filter(function(x) { return x !== baseV; });
+  const showVariants = gatedVariants.length > 0 ? gatedVariants : variants;
+  for (const v of showVariants) {
+    if (showVariants.length > 1) lines.push(`\n**${v}:**`);
     lines.push(`| Gate | Threshold | Actual | Pass? |`);
     lines.push(`|---|---|---|---|`);
     for (const g of checkGates(v)) {

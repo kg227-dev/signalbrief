@@ -122,6 +122,8 @@ async function runJudgePhase(opts) {
     const item = itemById[row.id];
     if (!item || !row.generatedWim) {
       judgedRows.push(Object.assign({}, row, {
+        topic: item ? item.topic : undefined,
+        inGoldSet: goldIds.has(row.id),
         judgeModel: model,
         rubricVersion: rubric.rubricVersion,
         passFail: "fail",
@@ -159,6 +161,8 @@ async function runJudgePhase(opts) {
     }
 
     judgedRows.push(Object.assign({}, row, {
+      topic: item.topic,
+      inGoldSet: goldIds.has(row.id),
       judgeModel: model,
       rubricVersion: rubric.rubricVersion,
       passFail: judgeResult.passFail,

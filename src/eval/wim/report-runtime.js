@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  writeJsonAtomic,
   readJson,
   readManifest,
   markPhaseComplete,
@@ -111,8 +110,8 @@ function buildReportCsv(judgedRows, datasetItems, baselineVariant) {
 
   function esc(v) {
     if (v == null) return "";
-    const s = String(v).replace(/\r?\n/g, " ");
-    if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+    const s = String(v);
+    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) return `"${s.replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
     return s;
   }
 

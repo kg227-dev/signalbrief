@@ -21,12 +21,11 @@
       "reported": [
         "statnews.com",
         "endpointsnews.com",
-        "medtechdive.com"
+        "medtechdive.com",
+        "modernhealthcare.com",
+        "healthcarefinancenews.com"
       ],
-      "official": [
-        "fda.gov",
-        "cms.gov"
-      ]
+      "official": []
     },
     "life sciences": {
       "reported": [

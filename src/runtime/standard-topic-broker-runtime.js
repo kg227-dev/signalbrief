@@ -23,7 +23,6 @@ const ATOM_ENTRY_PATTERN = /<entry\b[\s\S]*?<\/entry>/gi;
 const ATOM_LINK_PATTERN = /<link\b[^>]*href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/gi;
 const BROKER_OFFICIAL_QUERY_HINT_PATTERN = /\b(rule|rules|rulemaking|filing|filings|approval|approves?|approved|agency|register|proposed|guidance|enforcement|regulation|regulatory|directive|law|laws|compliance)\b/i;
 const OFFICIAL_FRIENDLY_TOPIC_TAGS = new Set([
-  "HEALTHCARE",
   "LIFE SCIENCES",
   "FINANCIAL SERVICES",
   "ENERGY",

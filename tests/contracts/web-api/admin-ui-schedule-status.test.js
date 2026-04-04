@@ -12,13 +12,13 @@ for (const snippet of [
   "delivered_count: Number(u.last_scheduled_digest_item_count || u.last_digest_item_count || 0),",
   "archive_url: String(u.last_scheduled_archive_url || u.archive_url || \"\").trim(),",
   "ev.status === \"sent\" && ev.archive_url",
-  ">View archive</a>",
+  ">View digest</a>",
 ]) {
   if (!source.includes(snippet)) {
     throw new Error(`admin schedule status logic is missing required snippet: ${snippet}`);
   }
 }
 
-if (source.includes(">View digest</a>")) {
-  throw new Error("admin schedule status should not render stale view digest links");
+if (source.includes(">View archive</a>")) {
+  throw new Error("admin schedule status should keep the working sent-state action labeled view digest");
 }

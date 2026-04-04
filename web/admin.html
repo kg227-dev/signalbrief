@@ -3864,7 +3864,7 @@ function renderSchedule(roster) {
           <div class="schedule-meta">${ev.topics} topic${ev.topics !== 1 ? "s" : ""} · ${esc(ev.depth)}</div>
           <div class="schedule-actions">
             ${ev.status === "sent" && ev.archive_url
-              ? `<a class="schedule-set-btn" href="${esc(normalizeAdminActionHref(ev.archive_url))}" target="_blank" rel="noopener">View archive</a>`
+              ? `<a class="schedule-set-btn" href="${esc(normalizeAdminActionHref(ev.archive_url))}" target="_blank" rel="noopener">View digest</a>`
               : ev.email && ev.status !== "sent"
               ? `<button class="schedule-set-btn" onclick='editDeliveryTime(${JSON.stringify(ev.email || "")}, ${JSON.stringify(ev.delivery_time_raw || "07:00")}, this)'>set time</button>`
               : `<span style="color:var(--text-secondary);font-size:11px;">—</span>`}

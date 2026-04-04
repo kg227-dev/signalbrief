@@ -45,6 +45,8 @@ function formatDeliveryTimeLabel(deliveryTime) {
   return `${hour}${min} ${ampm} ET`;
 }
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 function buildArchivePath(user, adminUserPath) {
   if (!user.email) return null;
   if (user.token) {
@@ -136,6 +138,15 @@ function getRecentDigestRow(lookup, user) {
   return null;
 }
 
+function buildArchiveDigestPath(user, adminUserPath, dateKey) {
+  const base = buildArchivePath(user, adminUserPath);
+  const key = String(dateKey || "").trim();
+  if (!base || !DATE_KEY_RE.test(key)) return base;
+  const params = new URLSearchParams(base.split("?")[1] || "");
+  params.set("date", key);
+  return `/archive?${params.toString()}`;
+}
+
 function buildAdminRosterEntry({
   user,
   countArchiveDigestsForUser,
@@ -155,6 +166,7 @@ function buildAdminRosterEntry({
     ? (Array.isArray(anyRecentRow?.sent_items) ? anyRecentRow.sent_items : [])
     : (Array.isArray(user.last_digest_items) ? user.last_digest_items : []);
   const recentScheduledAt = String(recentScheduledRow?.run_at_utc || recentScheduledRow?.sent_at_utc || "").trim() || null;
+  const recentScheduledDateEt = toETDate(recentScheduledAt);
   const recentScheduledDigestUrl = String(recentScheduledRow?.digest_url || "").trim() || "";
   const qualityTrend = computeQualityTrend(user.quality_history || []);
   const allowedDays = prefs.days_of_week || [1, 2, 3, 4, 5];
@@ -188,7 +200,7 @@ function buildAdminRosterEntry({
     last_digest_item_count: effectiveLastDigestItems.length,
     last_scheduled_digest_item_count: Array.isArray(recentScheduledRow?.sent_items) ? recentScheduledRow.sent_items.length : 0,
     last_scheduled_digest_url: recentScheduledDigestUrl,
-    last_scheduled_archive_url: archivePath || "",
+    last_scheduled_archive_url: buildArchiveDigestPath(user, adminUserPath, recentScheduledDateEt) || archivePath || "",
     days_missed: user.status === "active" ? calcDaysMissed(effectiveLastDigestAt, allowedDays) : 0,
     delivery_time: formatDeliveryTimeLabel(prefs.delivery_time || "07:00"),
     delivery_time_raw: prefs.delivery_time || "07:00",

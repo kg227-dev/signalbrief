@@ -498,6 +498,18 @@ async function flushMicrotasks() {
     "benzinga.com",
     "inspect field should reflect the selected domain"
   );
+  assert.ok(
+    elements.get("sourceRegistryInspector").innerHTML.includes("Edit this source"),
+    "inspector should keep the edit form visible in the simplified layout"
+  );
+  assert.ok(
+    elements.get("sourceRegistryInspector").innerHTML.includes("What This Source Is"),
+    "inspector should summarize the source in plain language"
+  );
+  assert.ok(
+    !elements.get("sourceRegistryInspector").innerHTML.includes("Policy source:"),
+    "inspector should hide low-signal policy-source internals from the default layout"
+  );
 
   fetchCalls.length = 0;
   await context.inspectSourceRegistryDomain("youtube.com", true, "youtube:@insideboardroom");

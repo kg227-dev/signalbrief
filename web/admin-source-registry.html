@@ -1511,15 +1511,11 @@ function renderSourceRegistryInspector(detail, overview) {
   if (!container) return;
   const historyWindow = describeHistoryWindow(overview);
   const governancePath = overview?.governance_registry?.active_path || overview?.source_registry_path || "";
-  const governanceHint = governancePath
-    ? `Governance overrides live in broker config: ${governancePath}`
-    : "Governance overrides live inside the active broker config.";
   if (!detail) {
-    container.innerHTML = `<div class="table-meta">${esc(governanceHint)} Current inspector window: ${esc(historyWindow.label)}. Search for a domain to inspect its effective policy and sent impact.</div>`;
+    container.innerHTML = `<div class="table-meta">Search for a domain to see its current status, recent sends, sample items, and edit controls. Current window: ${esc(historyWindow.label)}.</div>`;
     return;
   }
   const policy = detail.effective_policy || {};
-  const adminOverride = detail.admin_override || {};
   const directOverride = detail.direct_override || {};
   const recent = detail.recent_metrics || {};
   const auditEntries = Array.isArray(detail.audit_entries) ? detail.audit_entries : [];
@@ -1535,13 +1531,30 @@ function renderSourceRegistryInspector(detail, overview) {
     ? `${selectedIdentity.source_identity_label || selectedIdentity.identity_key} (${selectedIdentity.source_identity_scope || "identity"})`
     : "Domain-level policy";
   const directOverrideScope = directOverride?.identity_key ? "identity override" : "domain override";
+  const hasIdentityChoices = !!selectedIdentity || identityCandidates.length > 0;
+  const sourceTypeLabel = titleizeSourceValue(policy.source_type || "unclassified");
+  const topicFitSummary = formatTopicFitSummary(policy.topic_fit_map);
+  const weakExposureCount = Math.max(0, Number(recent.weak_source_item_count || 0));
+  const sendsCount = Math.max(0, Number(recent.send_count || 0));
+  const usersCount = Math.max(0, Number(recent.user_count || 0));
+  const digestsCount = Math.max(0, Number(recent.digest_count || 0));
+  const directEntrySummary = directOverride
+    ? `Editing a saved ${directOverrideScope}.`
+    : "No direct override saved yet. This source is using its current baseline rules.";
+  const advancedSummaryBits = [
+    `Ranking behavior: ${formatRankingEffectSummary(policyEffects)}.`,
+    policy.source_authority != null ? `Authority ${Number(policy.source_authority).toFixed(2)}.` : "",
+    policy.baseline_source_authority != null ? `Baseline ${policy.baseline_source_tier || "unknown"} ${Number(policy.baseline_source_authority).toFixed(2)}.` : "",
+    inheritedFrom ? `Inherited from ${inheritedFrom}.` : "",
+    governancePath ? `Live config: ${governancePath}.` : "",
+  ].filter(Boolean);
   container.innerHTML = `
     <div class="table-toolbar" style="margin-bottom:16px;">
       <div>
         <div class="subscriber-main">${esc(detail.domain || "Unknown domain")}</div>
-        <div class="subscriber-sub">${esc(governanceHint)} · ${esc(historyWindow.label)} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherited from ${esc(inheritedFrom)}` : ""}</div>
+        <div class="subscriber-sub">${esc(historyWindow.label)} · ${esc(selectedScopeLabel)}${inheritedFrom ? ` · inherits from ${esc(inheritedFrom)}` : ""}</div>
       </div>
-      <div class="table-meta">Policy source: ${esc(policy.policy_source || "baseline")} · window sends ${Math.max(0, Number(recent.send_count || 0))}</div>
+      <div class="table-meta">${sendsCount} sends · ${usersCount} users · ${digestsCount} digests</div>
     </div>
     <div style="display:grid;grid-template-columns:1.2fr .9fr;gap:18px;align-items:start;">
       <div style="display:flex;flex-direction:column;gap:14px;">
@@ -1549,79 +1562,77 @@ function renderSourceRegistryInspector(detail, overview) {
           ${renderPolicyPill(policy.source_policy)}
           ${renderReviewPill(policy.review_status)}
           ${renderSourceTierPill(policy.source_tier, policy.hard_block)}
-          <span class="mono" style="font-size:12px;color:var(--text-secondary);">effective authority ${policy.source_authority != null ? Number(policy.source_authority).toFixed(2) : "—"}</span>
-          <span class="mono" style="font-size:12px;color:var(--text-secondary);">baseline ${esc(policy.baseline_source_tier || "unknown")} ${policy.baseline_source_authority != null ? Number(policy.baseline_source_authority).toFixed(2) : "—"}</span>
         </div>
+        <div class="table-meta">Source type: ${esc(sourceTypeLabel)}. ${topicFitSummary === "Baseline only" ? "No topic-specific override is set." : `Topic fit: ${esc(topicFitSummary)}.`} ${weakExposureCount > 0 ? `${weakExposureCount} constrained-source item${weakExposureCount === 1 ? "" : "s"} showed up in tracked history.` : "No constrained-source items showed up in tracked history."}</div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
           <div class="explain-block">
-            <div class="explain-label">Identity</div>
-            <div class="explain-copy">Source type ${esc(titleizeSourceValue(policy.source_type || "unclassified"))}. Editing ${esc(selectedIdentityLabel)}. ${policy.source_family_domain ? `Family ${esc(policy.source_family_domain)}.` : ""} ${inheritedFrom ? `Inherited from ${esc(inheritedFrom)}.` : "No inherited parent override."}</div>
+            <div class="explain-label">What This Source Is</div>
+            <div class="explain-copy">${esc(sourceTypeLabel)}. ${selectedIdentity ? `You are editing ${esc(selectedIdentityLabel)}.` : "You are editing the whole domain."}${policy.source_family_domain ? ` Family ${esc(policy.source_family_domain)}.` : ""}</div>
           </div>
           <div class="explain-block">
-            <div class="explain-label">Policy</div>
-            <div class="explain-copy">${esc(policy.source_policy || "review")} policy with ${esc(policy.review_status || "unreviewed")} review status. ${esc(formatRankingEffectSummary(policyEffects))}.</div>
+            <div class="explain-label">Current Status</div>
+            <div class="explain-copy">${esc(policy.source_policy || "review")} with ${esc(policy.review_status || "unreviewed")} review status. ${directEntrySummary}</div>
           </div>
           <div class="explain-block">
-            <div class="explain-label">Topic fit</div>
-            <div class="explain-copy">${esc(formatTopicFitSummary(policy.topic_fit_map))}${policy.topic_fit_band ? ` · current match ${esc(policy.topic_fit_band)}` : ""}</div>
+            <div class="explain-label">Tracked Usage</div>
+            <div class="explain-copy">${sendsCount} sends across ${usersCount} users and ${digestsCount} digests.</div>
           </div>
           <div class="explain-block">
-            <div class="explain-label">Originality</div>
-            <div class="explain-copy">${esc(titleizeSourceValue(policy.originality_profile || "unknown"))}</div>
+            <div class="explain-label">Risk Flags</div>
+            <div class="explain-copy">${weakExposureCount > 0 ? `${weakExposureCount} constrained-source item${weakExposureCount === 1 ? "" : "s"} in tracked history.` : "No constrained-source items in tracked history."} Common topics: ${esc(formatSourceMetricTags(topTags))}</div>
           </div>
-          <div class="explain-block">
-            <div class="explain-label">Tracked impact</div>
-            <div class="explain-copy">${Math.max(0, Number(recent.send_count || 0))} sends across ${Math.max(0, Number(recent.user_count || 0))} users and ${Math.max(0, Number(recent.digest_count || 0))} digests.</div>
-          </div>
-          <div class="explain-block">
-            <div class="explain-label">Tracked exposure</div>
-            <div class="explain-copy">${Math.max(0, Number(recent.weak_source_item_count || 0))} constrained-source item${Number(recent.weak_source_item_count || 0) === 1 ? "" : "s"} in tracked history. Common topics: ${esc(formatSourceMetricTags(topTags))}</div>
-          </div>
-        </div>
-        <div class="explain-block">
-          <div class="explain-label">Identity candidates</div>
-          <div class="explain-copy">${identityCandidates.length
-            ? esc(identityCandidates.map((candidate) => {
-              const label = String(candidate?.source_identity_label || candidate?.identity_key || "identity").trim();
-              const scope = String(candidate?.source_identity_scope || "identity").trim();
-              return `${label} (${scope}, ${Math.max(0, Number(candidate?.send_count || 0))} sends)`;
-            }).join(" · "))
-            : "No distinct publisher identities observed yet for this domain."}</div>
         </div>
         <div>
           <div class="section-title" style="font-size:11px;margin-bottom:6px;">Latest sample items</div>
           ${sampleItems.length ? sampleItems.map((item) => `
             <div style="padding:8px 0;border-top:1px solid var(--border-subtle);">
               <div style="font-size:12px;font-weight:600;line-height:1.45;">${item.url ? `<a href="${esc(item.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${esc(item.headline || item.url)}</a>` : esc(item.headline || "Untitled item")}</div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")} · ${esc(titleizeSourceValue(item.source_policy || "policy pending"))}${item.source_identity_label ? ` · ${esc(item.source_identity_label)}` : ""}</div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${esc(item.tag || "unknown tag")} · ${esc(item.recipient || "unknown user")} · ${esc(item.date_et || "unknown date")} · ${esc(titleizeSourceValue(item.source_policy || policy.source_policy || "current policy"))}${item.source_identity_label ? ` · ${esc(item.source_identity_label)}` : ""}</div>
             </div>
           `).join("") : `<div class="empty" style="padding:10px 0;">No tracked sent items for this domain.</div>`}
         </div>
-        <details ${auditEntries.length ? "" : "disabled"} style="border-top:1px solid var(--border-subtle);padding-top:10px;">
-          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Source policy audit</summary>
+        <details style="border-top:1px solid var(--border-subtle);padding-top:10px;">
+          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">More details</summary>
           <div style="margin-top:8px;">
-            ${auditEntries.length ? auditEntries.map((entry) => `
-              <div style="padding:7px 0;border-top:1px solid var(--border-subtle);font-size:12px;line-height:1.45;">
-                <div style="font-weight:600;color:var(--text);">${esc(entry.action)} · ${esc(entry.actor || "unknown")}</div>
-                <div style="color:var(--text-secondary);">${esc(formatEtTimestamp(entry.at))}${entry.note ? ` · ${esc(entry.note)}` : ""}</div>
+            <div class="table-meta">${esc(advancedSummaryBits.join(" "))}</div>
+            ${hasIdentityChoices ? `
+              <div class="explain-block" style="margin-top:10px;">
+                <div class="explain-label">Publisher identities</div>
+                <div class="explain-copy">${esc(identityCandidates.map((candidate) => {
+                  const label = String(candidate?.source_identity_label || candidate?.identity_key || "identity").trim();
+                  const scope = String(candidate?.source_identity_scope || "identity").trim();
+                  return `${label} (${scope}, ${Math.max(0, Number(candidate?.send_count || 0))} sends)`;
+                }).join(" · "))}</div>
               </div>
-            `).join("") : `<div class="empty" style="padding:8px 0;">No source policy changes recorded yet.</div>`}
+            ` : ""}
+            <div style="margin-top:10px;">
+              <div class="section-title" style="font-size:11px;margin-bottom:4px;">Source policy audit</div>
+              ${auditEntries.length ? auditEntries.map((entry) => `
+                <div style="padding:7px 0;border-top:1px solid var(--border-subtle);font-size:12px;line-height:1.45;">
+                  <div style="font-weight:600;color:var(--text);">${esc(entry.action)} · ${esc(entry.actor || "unknown")}</div>
+                  <div style="color:var(--text-secondary);">${esc(formatEtTimestamp(entry.at))}${entry.note ? ` · ${esc(entry.note)}` : ""}</div>
+                </div>
+              `).join("") : `<div class="empty" style="padding:8px 0;">No source policy changes recorded yet.</div>`}
+            </div>
           </div>
         </details>
       </div>
       <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:#FAFAFB;">
-        <div class="section-title" style="font-size:11px;margin-bottom:10px;">Edit governance</div>
+        <div class="section-title" style="font-size:11px;margin-bottom:10px;">Edit this source</div>
+        <div class="table-meta" style="margin-bottom:12px;">Only change this when the source is clearly misclassified or needs a different policy.</div>
         <div class="modal-field">
           <label for="sourceRegistryDomainInput">Domain</label>
           <input id="sourceRegistryDomainInput" class="modal-input" type="text" value="${esc(detail.domain || "")}" placeholder="benzinga.com">
         </div>
-        <div class="modal-field">
-          <label for="sourceRegistryScopeInput">Edit scope</label>
-          <select id="sourceRegistryScopeInput" class="table-filter" style="width:100%;" onchange="changeSourceRegistryInspectScope()">
-            ${renderIdentityScopeOptions(detail)}
-          </select>
-          <div class="table-meta">Identity overrides win before domain fallback when a parsed publisher identity exists. Current direct entry: ${esc(directOverride ? directOverrideScope : "no direct override")}</div>
-        </div>
+        ${hasIdentityChoices ? `
+          <div class="modal-field">
+            <label for="sourceRegistryScopeInput">Edit scope</label>
+            <select id="sourceRegistryScopeInput" class="table-filter" style="width:100%;" onchange="changeSourceRegistryInspectScope()">
+              ${renderIdentityScopeOptions(detail)}
+            </select>
+            <div class="table-meta">Choose whether this applies to the whole domain or one specific publisher identity.</div>
+          </div>
+        ` : `<div class="table-meta" style="margin-bottom:12px;">Editing the whole domain. No separate publisher identity is being tracked here.</div>`}
         <div class="modal-field">
           <label for="sourceRegistrySourceTypeInput">Source type</label>
           <select id="sourceRegistrySourceTypeInput" class="table-filter" style="width:100%;">
@@ -1635,7 +1646,7 @@ function renderSourceRegistryInspector(detail, overview) {
             <option value="">Use baseline (${esc(policy.source_policy || "review")})</option>
             ${["preferred","allowed","limited","review","blocked"].map((policyValue) => `<option value="${policyValue}" ${directOverride.policy === policyValue ? "selected" : ""}>${esc(policyValue)}</option>`).join("")}
           </select>
-          <div class="table-meta">Policy drives ranking behavior: ${esc(formatRankingEffectSummary(policyEffects))}</div>
+          <div class="table-meta">Use this to tighten or loosen how heavily the source can influence ranking.</div>
         </div>
         <div class="modal-field">
           <label for="sourceRegistryReviewStatusInput">Review status</label>
@@ -1644,13 +1655,18 @@ function renderSourceRegistryInspector(detail, overview) {
             ${["reviewed","monitor","unreviewed"].map((status) => `<option value="${status}" ${directOverride.review_status === status ? "selected" : ""}>${esc(status)}</option>`).join("")}
           </select>
         </div>
-        <div class="modal-field">
-          <label for="sourceRegistryTopicFitInput">Topic fit overrides</label>
-          <textarea id="sourceRegistryTopicFitInput" class="modal-textarea" placeholder="healthcare: high&#10;technology: low">${esc(formatTopicFitText(directOverride.topic_fit || {}))}</textarea>
-          <div class="table-meta">One topic per line using <span class="mono">topic: high|medium|low</span>. Leave blank to use baseline topic fit.</div>
-        </div>
         <details style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff;">
-          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Advanced compatibility controls</summary>
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Optional topic rules</summary>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px;">
+            <div class="modal-field" style="margin-bottom:0;">
+              <label for="sourceRegistryTopicFitInput">Topic fit overrides</label>
+              <textarea id="sourceRegistryTopicFitInput" class="modal-textarea" placeholder="healthcare: high&#10;technology: low">${esc(formatTopicFitText(directOverride.topic_fit || {}))}</textarea>
+              <div class="table-meta">One topic per line using <span class="mono">topic: high|medium|low</span>. Leave blank to use the current topic fit.</div>
+            </div>
+          </div>
+        </details>
+        <details style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff;margin-top:12px;">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-secondary);">Advanced controls</summary>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px;">
             <div class="modal-field" style="margin-bottom:0;">
               <label for="sourceRegistryTierInput">Legacy tier override</label>
@@ -1664,6 +1680,7 @@ function renderSourceRegistryInspector(detail, overview) {
               <input id="sourceRegistryAuthorityInput" class="modal-input mono" type="number" min="0" max="1" step="0.01" value="${directOverride.authority_override != null ? esc(Number(directOverride.authority_override).toFixed(2)) : ""}" placeholder="0.48">
               <div class="table-meta">Use only for edge cases. Preferred workflow is source type + policy + topic fit.</div>
             </div>
+            <div class="table-meta">${esc(directEntrySummary)}${recentUsers.length ? ` Recent users: ${esc(recentUsers.map((row) => `${row.user} (${row.count})`).join(", "))}.` : ""}</div>
           </div>
         </details>
         <div class="modal-field" style="margin-top:12px;margin-bottom:12px;">
@@ -1674,9 +1691,6 @@ function renderSourceRegistryInspector(detail, overview) {
         <div class="modal-actions">
           <button class="modal-btn" type="button" onclick="resetSourceRegistryDomain()">Reset to default</button>
           <button class="modal-btn primary" type="button" onclick="saveSourceRegistryDomain()">Save governance</button>
-        </div>
-        <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);">
-          Recent users: ${recentUsers.length ? esc(recentUsers.map((row) => `${row.user} (${row.count})`).join(", ")) : "none"}
         </div>
       </div>
     </div>`;

@@ -8,7 +8,6 @@ const {
   normalizeReason,
   computeDropPct,
   computeConversionRate,
-  computeClassifierDropRatePct,
 } = require("./admin-api-funnel-shared");
 
 // STAGES order and shape
@@ -60,6 +59,5 @@ assert.strictEqual(computeDropPct(0, 34), 0);
 assert.strictEqual(computeDropPct(5, 0), 0); // guard against div/0
 assert.strictEqual(computeConversionRate(3, 34), Number((3/34).toFixed(4)));
 assert.strictEqual(computeConversionRate(0, 0), 0);
-assert.strictEqual(computeClassifierDropRatePct(9, 18), 50);
 
 console.log("admin-api-funnel-shared tests pass ✓");

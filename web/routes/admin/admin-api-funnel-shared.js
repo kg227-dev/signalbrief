@@ -70,10 +70,6 @@ function computeConversionRate(selected, fetched) {
   return Number((s / f).toFixed(4));
 }
 
-function computeClassifierDropRatePct(classifierDropped, classifierIn) {
-  return computeDropPct(classifierDropped, classifierIn);
-}
-
 module.exports = {
   STAGES,
   STAGE_INDEX,
@@ -83,5 +79,4 @@ module.exports = {
   normalizeReason,
   computeDropPct,
   computeConversionRate,
-  computeClassifierDropRatePct,
 };

@@ -80,6 +80,7 @@ TASK: For each news item below, return these fields:
      "this highlights"
      "this underscores"
    - Do NOT just restate the article.
+   - Do NOT write a dismissal or meta-commentary. Phrases like "no strategic shift is evident", "this is an awards announcement with no business implication", or "not a new regulatory action" are FORBIDDEN. Every item has at least one sentence of genuine analytical insight — write that.
    - Keep hedging minimal.
    - No HTML tags.
 
@@ -140,6 +141,7 @@ HARD CONSTRAINTS — the "failed_writeup_reasons" field on each item tells you e
 - "hedged": remove every instance of "could", "may", "might", "potentially", "possibly", "appears to", "seems to", "suggests that". State the implication directly.
 - "missing_business_lever": name at least one concrete lever in wim — pricing, margin, demand, cost, capex, valuation, market share, inventory, utilization, reimbursement, credit, funding, capacity, or workflow.
 - "missing_story_anchor": wim must name a specific entity, transaction, product, rule, number, or timing anchor tied to this exact story.
+- "self_rejecting_wim": you wrote a dismissal or meta-commentary instead of analysis. Phrases like "no strategic shift", "no operational implication", "This is an awards announcement", "This is commentary", or "not a new regulatory action" are FORBIDDEN. Every item can yield at least one sentence of genuine analytical insight — write that instead.
 
 REPAIR RULES:
 - Do not restate the headline or source summary.

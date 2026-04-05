@@ -29,6 +29,7 @@ const COMPETITION_SIGNAL_PATTERN = /\b(competitive set|competition|competitor|ri
 const INTERPRETATION_CUE_PATTERN = /\b(signals?|shifts?|tightens?|loosens?|resets?|raises?|lowers?|compress(?:es|ing)?|forces?|pushes?|puts?|reprices?|consolidates?|widens?|narrows?|accelerates?|delays?|reshapes?|hardens?|softens?|pulls?|locks?|redirects?|changes?|moves?|resets?)\b/i;
 const HEDGE_PATTERN = /\b(could|may|might|potentially|possibly|appears to|seems to|suggests that)\b/i;
 const JOURNALISM_PATTERN = /\baccording to\b|\bsaid\b|\breported\b/i;
+const SELF_REJECTING_WIM_PATTERN = /\bno (?:strategic|operational|business) (?:shift|implication|implications?|value|relevance|decision context)\b|\bno (?:new|clear|obvious|direct) (?:regulatory|market|competitive|strategic) (?:action|event|shift|development)\b|\bthis is (?:an? )?(?:awards?|award announcement|press release|promotional|list|listing|roundup|directory)\b|\bthis (?:article|piece|story|post) (?:does not|doesn't) (?:represent|contain|offer|provide)\b|\bnot (?:a new|an? actionable)\b/i;
 const CAPITALIZED_TOKEN_PATTERN = /\b(?:[A-Z]{2,}(?:\s+[A-Z]{2,})*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/g;
 const QUANT_ANCHOR_PATTERN = /[$%]|\b\d[\d,.]*\b|\bQ[1-4]\b|\b(?:day|days|week|weeks|month|months|quarter|quarters|year|years)\b|\bby\s+20\d{2}\b/i;
 const TITLE_STOPWORDS = new Set([
@@ -250,6 +251,7 @@ function validateStrategicWriteup(item, candidate = {}) {
     if (overlapRatio(plain, contextText) >= 0.74) reasons.push("summary_like");
     if (HEDGE_PATTERN.test(plain)) reasons.push("hedged");
     if (JOURNALISM_PATTERN.test(plain) && !INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("journalistic_tone");
+    if (SELF_REJECTING_WIM_PATTERN.test(plain)) reasons.push("self_rejecting_wim");
   }
 
   return {

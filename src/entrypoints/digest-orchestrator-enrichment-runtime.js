@@ -414,7 +414,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       : {};
     const backfillPolicy = {
       itemsPerTopic: Math.max(1, Number(writeupBackfillPolicy?.itemsPerTopic || 5)),
-      maxItemsPerSourceDomain: Math.max(1, Number(writeupBackfillPolicy?.maxItemsPerSourceDomain || 5)),
+      maxItemsPerSourceDomain: Math.max(1, Number(writeupBackfillPolicy?.maxItemsPerSourceDomain || 2)),
       maxDiscoveryPerTopic: Math.max(0, Number(writeupBackfillPolicy?.maxDiscoveryPerTopic ?? 1)),
       commentaryCapPerTopic: Math.max(0, Number(writeupBackfillPolicy?.commentaryCapPerTopic ?? 1)),
     };
@@ -487,20 +487,26 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
     async function enrichTaggedEntries(taggedEntries = [], meta = {}) {
       const rows = Array.isArray(taggedEntries) ? taggedEntries.filter((entry) => entry?.item) : [];
       if (!rows.length) return [];
-      const enrichment = await enrichItems(rows.map((entry) => entry.item), enrichOpts);
-      aggregateUsage.input_tokens += Number(enrichment?.usage?.input_tokens || 0);
-      aggregateUsage.output_tokens += Number(enrichment?.usage?.output_tokens || 0);
-      await maybeEmitDegradationIncident(enrichment, {
-        ...meta,
-        selected_items: rows.length,
-      });
-      const enrichedItems = Array.isArray(enrichment?.items) ? enrichment.items : [];
-      const taggedOut = rows.map((entry, index) => ({
-        tag: String(entry?.tag || "").trim().toUpperCase(),
-        item: enrichedItems[index] || entry.item,
-      }));
-      accumulateWriteupStatsFromTaggedItems(writeupStats, taggedOut);
-      return taggedOut;
+      const MAX_BATCH = 10;
+      const allTaggedOut = [];
+      for (let i = 0; i < rows.length; i += MAX_BATCH) {
+        const chunk = rows.slice(i, i + MAX_BATCH);
+        const enrichment = await enrichItems(chunk.map((entry) => entry.item), enrichOpts);
+        aggregateUsage.input_tokens += Number(enrichment?.usage?.input_tokens || 0);
+        aggregateUsage.output_tokens += Number(enrichment?.usage?.output_tokens || 0);
+        await maybeEmitDegradationIncident(enrichment, {
+          ...meta,
+          selected_items: chunk.length,
+        });
+        const enrichedItems = Array.isArray(enrichment?.items) ? enrichment.items : [];
+        const taggedChunk = chunk.map((entry, index) => ({
+          tag: String(entry?.tag || "").trim().toUpperCase(),
+          item: enrichedItems[index] || entry.item,
+        }));
+        accumulateWriteupStatsFromTaggedItems(writeupStats, taggedChunk);
+        allTaggedOut.push(...taggedChunk);
+      }
+      return allTaggedOut;
     }
 
     function evaluateCandidateForTopic(topicTag, item, acceptedItems, remainingExceptions) {

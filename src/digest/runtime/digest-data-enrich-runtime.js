@@ -274,7 +274,7 @@ function createDigestDataEnrichRuntime(deps) {
             },
             {
               model: enrichModel,
-              max_tokens: 2200,
+              max_tokens: Math.min(4500, Math.max(1200, repairItems.length * 300)),
               messages: [{ role: "user", content: buildDigestDataEnrichRepairPrompt(repairItems) }],
             },
             {

@@ -30,6 +30,7 @@ test-results/
 # Tooling and dependency artifacts
 node_modules/
 .claude/worktrees/
+.worktrees/
 artifacts/*
 !artifacts/README.md
 

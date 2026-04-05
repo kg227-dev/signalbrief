@@ -49,7 +49,7 @@ const DEFAULT_LANE_BONUSES = Object.freeze({
 // Items at 0h score 1.0; items at maxAgeHours score 0.05 (not 0 — they're still eligible).
 const DEFAULT_MAX_AGE_HOURS = 48;
 const FRESHNESS_FLOOR = 0.05;
-const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety communication|recall|warns consumers|alerts customers|consumer update|fact sheet|guidance for industry|companies that have not submitted|drug amount reports|shortage mitigation efforts|proactively posted|final rule|proposed rule)\b/i;
+const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety communication|recall|warns consumers|alerts customers|consumer update|fact sheet|guidance for industry|companies that have not submitted|drug amount reports|shortage mitigation efforts|proactively posted|final rule|proposed rule|podcast(?:s)?|things? to know|how you can find|user fee amendments?|labeling resources?|facilities?, sites? and organization|drug safety and availability|notice of (?:public )?meeting|advisory committee meeting)\b/i;
 const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(commentary|analysis|feature)\b|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|excerpt from|reporter goes up against)\b/i;
 const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b)\b/i;
 

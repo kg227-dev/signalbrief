@@ -131,10 +131,19 @@ For each item, return:
 - "wim_brief"
 - "wim"
 
+HARD CONSTRAINTS — the "failed_writeup_reasons" field on each item tells you exactly which rules were violated. Fix those specifically:
+- "brief_too_long": wim_brief must be 18 words or fewer. Count every word. Cut ruthlessly.
+- "brief_multi_sentence": wim_brief must be exactly one sentence. No period followed by more text.
+- "signal_shift_too_long": signal_shift must be 16 words or fewer.
+- "invalid_implication_type": implication_type must be exactly one of: cost, competition, regulation, workflow, structure, demand, capital, other. No other values accepted.
+- "missing_interpretation": wim must open with a verb that signals direction — "signals", "shifts", "tightens", "resets", "raises", "lowers", "forces", "compresses", "accelerates", "reshapes", or similar.
+- "hedged": remove every instance of "could", "may", "might", "potentially", "possibly", "appears to", "seems to", "suggests that". State the implication directly.
+- "missing_business_lever": name at least one concrete lever in wim — pricing, margin, demand, cost, capex, valuation, market share, inventory, utilization, reimbursement, credit, funding, capacity, or workflow.
+- "missing_story_anchor": wim must name a specific entity, transaction, product, rule, number, or timing anchor tied to this exact story.
+
 REPAIR RULES:
 - Do not restate the headline or source summary.
 - Anchor the writeup to the actual event, not the general category.
-- Name a concrete business lever when warranted: pricing, margin, demand, cost, capex, valuation, market share, inventory, utilization, reimbursement, credit, funding, load growth, capacity, or workflow.
 - Use 1-2 sentences by default; 3 only for a real second-order effect or near-term watchpoint.
 - Ban vague filler such as "this highlights", "this underscores", "worth watching", "could have implications", "stakeholders", or "monitor developments".
 - Ban reusable phrasing like "For X teams, this matters for...".

@@ -212,7 +212,6 @@ function createRenderPublicPages(deps) {
       const scoreHtml = renderScorePill(readItemScore(item));
       const sourceBadge = renderSourceBadge(item?.source_tier);
       const corrNote = renderCorroborationNote(item?.cross_source_count, item?.supporting_sources);
-      const flagsHtml = renderContentFlags(item?.content_flags);
       const freshnessHtml = isPersonalized ? renderFreshnessLabel(item?.published_date, dateKey) : "";
       const sourceLink = href
         ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">Read more → ${source}</a>`
@@ -236,7 +235,6 @@ function createRenderPublicPages(deps) {
           <div class="item-meta-left">
             <span class="item-index">${idx + 1}</span>
             <span class="item-tag">${tag}</span>
-            ${flagsHtml}
           </div>
           ${scoreHtml}
         </div>

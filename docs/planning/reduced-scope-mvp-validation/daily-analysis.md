@@ -7,18 +7,20 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 
 | Metric | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 | D10 | D11 | D12 | D13 | D14 | Target |
 |--------|----|----|----|----|----|----|-----|----|----|-----|-----|-----|-----|-----|--------|
-| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
-| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | TBD | 7/7 |
-| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | **31.4%** | TBD | TBD | TBD | TBD | TBD | TBD | >=80% |
-| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | >=70% |
-| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | TBD | >=90% |
-| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | 20 | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
-| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | n/a* | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
-| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | TBD | TBD | TBD | TBD | TBD | TBD | 0 |
-| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | 5 | TBD | TBD | TBD | TBD | TBD | TBD | 7 |
-| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | Yellow | TBD | TBD | TBD | TBD | TBD | TBD | Green |
+| Full 5-item (7 topics) | 7/7 | **4/7** | **4/7** | **7/7** | **7/7** | **7/7** | **7/7** | **7/7** | **6/7** | TBD | TBD | TBD | TBD | TBD | 7/7 |
+| Depth >=15 (7 topics) | 5/7 | **4/7** | **1/7** | 7/7 | 7/7 | **7/7** | **7/7** | **7/7** | **7/7** | TBD | TBD | TBD | TBD | TBD | 7/7 |
+| Trusted T1/2 share | ~83% | **~46%** | **~52%** | **65.7%** | **77.1%** | **80.0%** | **80.0%** | **31.4%** | **35.3%** | TBD | TBD | TBD | TBD | TBD | >=80% |
+| Broker/RSS share | 96% | 100% | 97% | 100% | 100% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | >=70% |
+| Source success rate | 89% | **98%** | 100% | 98.3% | 100% | 100% | 100% | 100% | 100% | TBD | TBD | TBD | TBD | TBD | >=90% |
+| Missed-story flags | 19 | 14 | 10 | 20 | 19 | 19 | 21 | 20 | 6 | TBD | TBD | TBD | TBD | TBD | 0 |
+| True miss flags | 3 | 3 | 3 | 6 | 5 | ~6 | ~8 | n/a* | 6† | TBD | TBD | TBD | TBD | TBD | 0 |
+| Manual intervention | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | TBD | TBD | TBD | TBD | TBD | 0 |
+| Consecutive full days | 0 | 0 | 0 | 1 | 2 | 3 | 4 | 5 | 0 | TBD | TBD | TBD | TBD | TBD | 7 |
+| Day color | Red | Red | Red | Yellow | Yellow | Yellow | Yellow | Yellow | **Yellow** | TBD | TBD | TBD | TBD | TBD | Green |
 
 *Day 8 still reports 20 missed-story flags at the run-summary level, but the candidate-level audit surface is now dominated by `writeup_failed` drops and backfills. The more actionable Day 8 failure mode is 63 dropped writeup attempts rather than a stable true-miss count, so D8 true-miss is left `n/a*` instead of invented.*
+
+†Day 9 missed-story flags are 6 flagged and all 6 are true misses: 3 in Technology (NASA budget, Anthropic private markets, Ice Age dice), 3 in Financial Services (FCC telecom enforcement, Coinbase OCC charter, March jobs report). The FCC/Coinbase/jobs stories were blocked by the marketwatch.com source monopoly patched on 2026-04-05.
 
 ## Completed days
 
@@ -30,6 +32,7 @@ Completed day write-ups are archived under `docs/archive/planning/2026-03/mvp-da
 - [Day 6 — 2026-04-02 (Thursday)](../../archive/planning/2026-03/mvp-day-6-2026-04-02.md)
 - [Day 7 — 2026-04-03 (Friday)](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md)
 - [Day 8 — 2026-04-04 (Saturday)](../../archive/planning/2026-03/mvp-day-8-2026-04-04.md)
+- [Day 9 — 2026-04-05 (Sunday)](../../archive/planning/2026-03/mvp-day-9-2026-04-05.md)
 
 ## Days 8-14 continuation focus
 
@@ -56,6 +59,10 @@ Day 7 prep is now explicit: restore non-empty deep-mode body text even when sche
 ## Day 7 — 2026-04-03
 
 See [archive](../../archive/planning/2026-03/mvp-day-7-2026-04-03.md). **Yellow.** Day 7 closed the week with a fourth consecutive mechanically healthy weekday: 618 candidates, 35 selected, 7/7 topics at 5 items, 7/7 topics above the depth gate, 80.0% trusted T1/2 share, 100% broker backbone, 100% source success, and 10/10 canaries delivered. It is still not green. The renderer mitigation worked, so no deep card shipped blank, but all 10 scheduled canary records still stored `0/80` populated `wim` / `wim_brief` fields. The selected set also still shows official-content leakage: Life Sciences selected 3 FDA items, Consumer & Retail selected an FDA recall, Financial Services selected a CMS rule item, and Healthcare still leaned on STAT opinion plus CMS rulemaking despite a deep trade pool. FierceBiotech and FiercePharma improved the Life Sciences candidate pool, but they still did not win any of the 5 selected slots.
+
+## Day 9 — 2026-04-05
+
+See [archive](../../archive/planning/2026-03/mvp-day-9-2026-04-05.md). **Yellow.** Delivery held at 7/7 topics passing (6/7 at full 5 — Life Sciences short by 1). All depth gates clear. Broker backbone 100%, source success 100%. The run exposed two structural failures: (1) the initial 35-item enrichment batch overflowed the 4,500-token API limit, marking all items with `provider_parse_failure` and collapsing trusted share to 35.3%; (2) the backfill source cap defaulted to 5, letting marketwatch.com take all 5 Financial Services slots and fda.gov take all 4 Life Sciences slots. Writeup failure rate was 67% (69/103), repair recovered 0/29. Five fixes shipped post-run: batch enrichment chunked to 10 items, repair token budget scaled to item count, backfill cap tightened, repair prompt given explicit per-reason rules, and OFFICIAL_FILLER_PATTERN extended to catch FDA podcast/FAQ/resource pages. Consecutive-full-days streak reset to 0.
 
 ## Day 8 — 2026-04-04
 

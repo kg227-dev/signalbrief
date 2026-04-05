@@ -105,7 +105,7 @@ function selectTopicItemsWithFallback(params = {}) {
   } = params;
 
   const targetCount = Math.max(1, Number(itemsPerTopic || 5));
-  const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 3));
+  const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 2));
   const discoveryCap = Math.max(0, Number(maxDiscoveryPerTopic ?? 1));
   const pools = buildTopicFallbackPools(topicItems, nowMs);
   const selected = [];
@@ -189,7 +189,7 @@ function buildTopicSelectionState(selectedItems = []) {
 }
 
 function getBackfillRejectionReason(candidate, currentSelected = [], opts = {}) {
-  const perSourceCap = Math.max(1, Number(opts.maxItemsPerSourceDomain || 3));
+  const perSourceCap = Math.max(1, Number(opts.maxItemsPerSourceDomain || 2));
   const discoveryCap = Math.max(0, Number(opts.maxDiscoveryPerTopic ?? 1));
   const commentaryCap = Math.max(0, Number(opts.commentaryCap ?? 1));
   const state = buildTopicSelectionState(currentSelected);
@@ -233,9 +233,9 @@ function resolveEffectiveSourceCap(paramScoringConfig, configDigest) {
       ? paramScoringConfig.maxItemsPerSourceDomain
       : (configDigest && configDigest.maxItemsPerSourceDomain != null)
         ? configDigest.maxItemsPerSourceDomain
-        : 5
+        : 2
   );
-  if (!Number.isFinite(configured)) return 5;
+  if (!Number.isFinite(configured)) return 2;
   return Math.max(1, Math.trunc(configured));
 }
 

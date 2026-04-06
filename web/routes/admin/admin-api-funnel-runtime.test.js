@@ -125,3 +125,89 @@ assert.strictEqual(rangeSummary.totals.fetched, 34 + 10); // sum across both day
 assert.strictEqual(rangeSummary.totals.selected, 3 + 2);
 
 console.log("buildSummaryFromAuditDocs tests pass ✓");
+
+const { buildTopicResponse } = require("./admin-api-funnel-runtime");
+
+const topicAuditDoc = {
+  digestDateKey: "2026-04-05",
+  summary: {
+    candidate_pool_before_dedup: 6,
+    candidate_pool_after_editorial: 5,
+    candidate_pool_after_archive_dedup: 5,
+    candidate_pool_after_freshness: 4,
+    candidate_pool_after_story_relationship: 3,
+    candidate_pool_scored: 3,
+    stale_removed_count: 1,
+    archive_repeat_block_count: 0,
+    editorial_excluded_count: 1,
+    story_relationship_continuation_removed: 1,
+  },
+  topics: {
+    TECHNOLOGY: {
+      total_candidates: 6,
+      selected_count: 1,
+      rejected_count: 2,
+      rejection_reason_counts: { selection_not_selected: 1, selection_source_cap: 1 },
+      candidates: [
+        { headline: "Winner", url: "https://techcrunch.com/winner",
+          source_domain: "techcrunch.com", lane: "broker_publisher_feed",
+          _score: 0.98, _score_components: { freshness: 1, source_tier: 1, lane_bonus: 0.8, novelty: 0.8 },
+          selected: true, selection_reason: null,
+          strategic_relevance: "HIGH", strategic_relevance_reason: "Major shift",
+          published_at: "2026-04-05T08:00:00Z" },
+        { headline: "Rejected-cap", url: "https://techcrunch.com/cap",
+          source_domain: "techcrunch.com", lane: "broker_publisher_feed",
+          _score: 0.8, _score_components: { freshness: 0.9, source_tier: 1, lane_bonus: 0.8, novelty: 0.6 },
+          selected: false, selection_reason: "selection_source_cap",
+          strategic_relevance: "HIGH", strategic_relevance_reason: "Relevant",
+          published_at: "2026-04-05T07:00:00Z" },
+        { headline: "Rejected-not-selected", url: "https://openai.com/blog/x",
+          source_domain: "openai.com", lane: "perplexity_discovery",
+          _score: 0.51, _score_components: { freshness: 0.7, source_tier: 0.7, lane_bonus: 0.3, novelty: 0.5 },
+          selected: false, selection_reason: "selection_not_selected",
+          strategic_relevance: "MEDIUM", strategic_relevance_reason: "Somewhat relevant",
+          published_at: "2026-04-04T12:00:00Z" },
+      ],
+    },
+  },
+  fetch: {
+    broker_candidate_count: 4, discovery_candidate_count: 2,
+    topic_diagnostics: [{ tag: "TECHNOLOGY", broker_item_count: 4, discovery_item_count: 2 }],
+    standard_topic_broker: { source_diagnostics: [] },
+  },
+};
+
+const topicResp = buildTopicResponse(topicAuditDoc, "TECHNOLOGY");
+assert.ok(topicResp, "should return a response");
+assert.strictEqual(topicResp.topic, "TECHNOLOGY");
+assert.strictEqual(topicResp.stages.length, 9);
+// Stage order matches STAGES enum
+assert.strictEqual(topicResp.stages[0].stage, "fetch");
+assert.strictEqual(topicResp.stages[8].stage, "enrichment");
+// Fetch is pass-through: dropped=0
+assert.strictEqual(topicResp.stages[0].dropped, 0);
+// final_selection is instrumented (has candidates)
+const finalStage = topicResp.stages.find((s) => s.stage === "final_selection");
+assert.ok(finalStage.instrumented, "final_selection should be instrumented");
+assert.ok(finalStage.items.length > 0, "final_selection should have items");
+// selected item uses correct lane normalization
+const selectedItem = finalStage.items.find((i) => i.status === "selected");
+assert.ok(selectedItem, "should have a selected item");
+assert.strictEqual(selectedItem.lane, "broker", "lane should be normalized from broker_publisher_feed");
+assert.strictEqual(selectedItem.domain, "techcrunch.com");
+// stage consistency check: stages[n].out === stages[n+1].in (or integrity_warning present)
+for (let i = 0; i < topicResp.stages.length - 1; i++) {
+  const curr = topicResp.stages[i];
+  const next = topicResp.stages[i + 1];
+  if (curr.out !== next.in) {
+    assert.ok(topicResp.integrity_warning, `Expected integrity_warning for mismatch at ${curr.stage} → ${next.stage}`);
+  }
+}
+// source_domains table present
+assert.ok(Array.isArray(topicResp.source_domains));
+assert.ok(topicResp.source_domains.length > 0);
+
+// null topic returns null
+assert.strictEqual(buildTopicResponse(topicAuditDoc, "NONEXISTENT"), null);
+
+console.log("buildTopicResponse tests pass ✓");

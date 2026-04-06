@@ -189,6 +189,141 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
   return result;
 }
 
+function buildItemFromCandidate(candidate) {
+  const isSelected = candidate?.selected === true;
+  const hasReason = Boolean(candidate?.selection_reason);
+  const status = isSelected ? "selected" : hasReason ? "dropped" : "passed";
+  return {
+    url: normalizeCanonicalUrl(String(candidate?.url || "")),
+    title: String(candidate?.headline || ""),
+    domain: normalizeDomain(String(candidate?.source_domain || candidate?.source || "")),
+    lane: normalizeLane(String(candidate?.lane || "")),
+    published_at: candidate?.published_at || null,
+    status,
+    reason: status === "dropped" ? normalizeReason(String(candidate?.selection_reason || "")) : null,
+    strategic_relevance: candidate?.strategic_relevance || null,
+    strategic_relevance_reason: candidate?.strategic_relevance_reason || null,
+    score: Number.isFinite(Number(candidate?._score)) ? Number(Number(candidate._score).toFixed(3)) : null,
+    score_components: candidate?._score_components || null,
+    duplicate_of: candidate?.duplicate_of ? normalizeCanonicalUrl(String(candidate.duplicate_of)) : null,
+    enrichment_status: candidate?.enrichment_status || (isSelected ? (candidate?.writeup_status || null) : null),
+  };
+}
+
+function buildTopicResponse(auditDoc, topicTag) {
+  const tag = String(topicTag || "").trim().toUpperCase();
+  const topicData = auditDoc?.topics?.[tag];
+  if (!topicData) return null;
+
+  const sm = auditDoc?.summary || {};
+  const fetchDiag = Array.isArray(auditDoc?.fetch?.topic_diagnostics)
+    ? auditDoc.fetch.topic_diagnostics.find((t) => t?.tag === tag) : null;
+
+  const fetchedForTopic = fetchDiag
+    ? Number(fetchDiag.broker_item_count || 0) + Number(fetchDiag.discovery_item_count || 0)
+    : Number(topicData?.total_candidates || 0);
+
+  const candidates = Array.isArray(topicData?.candidates) ? topicData.candidates : [];
+  const scoredCount = candidates.length;
+
+  // Count-only stage values derived from summary (global counts, apportioned to topic)
+  const beforeDedup = Number(topicData?.total_candidates || sm.candidate_pool_before_dedup || 0);
+  const afterEditorial  = beforeDedup - Number(sm.editorial_excluded_count || 0) - Number(sm.editorial_domain_suppressed_count || 0);
+  const afterArchive    = afterEditorial - Number(sm.archive_repeat_block_count || 0);
+  const afterFreshness  = afterArchive - Number(sm.stale_removed_count || 0);
+  const afterStoryDedup = afterFreshness - Number(sm.story_relationship_continuation_removed || 0);
+  const afterClassifier = scoredCount;
+  const classifierDropped = Math.max(0, afterStoryDedup - afterClassifier);
+  const finalSelected = Number(topicData?.selected_count || 0);
+  const finalDropped = Math.max(0, scoredCount - finalSelected);
+  const enrichmentFailed = candidates.filter((c) => c?.selected && c?.writeup_status === "failed").length;
+  const enrichmentOut = Math.max(0, finalSelected - enrichmentFailed);
+
+  const stageCounts = {
+    fetch:            { in: fetchedForTopic,          out: fetchedForTopic,              dropped: 0 },
+    editorial_filter: { in: beforeDedup,               out: Math.max(0, afterEditorial),  dropped: Math.max(0, beforeDedup - afterEditorial) },
+    archive_dedup:    { in: Math.max(0, afterEditorial), out: Math.max(0, afterArchive),  dropped: Math.max(0, afterEditorial - afterArchive) },
+    freshness_filter: { in: Math.max(0, afterArchive),   out: Math.max(0, afterFreshness),dropped: Math.max(0, afterArchive - afterFreshness) },
+    story_dedup:      { in: Math.max(0, afterFreshness), out: Math.max(0, afterStoryDedup),dropped: Math.max(0, afterFreshness - afterStoryDedup) },
+    classifier:       { in: Math.max(0, afterStoryDedup), out: afterClassifier,           dropped: classifierDropped },
+    scoring:          { in: afterClassifier,           out: afterClassifier,              dropped: 0 },
+    final_selection:  { in: scoredCount,               out: finalSelected,               dropped: finalDropped },
+    enrichment:       { in: finalSelected,              out: enrichmentOut,               dropped: enrichmentFailed },
+  };
+
+  const finalItems = candidates.map((c) => buildItemFromCandidate(c));
+
+  const stages = STAGES.map((stageDef) => {
+    const counts = stageCounts[stageDef.key] || { in: 0, out: 0, dropped: 0 };
+    let instrumented = false;
+    let items = [];
+
+    if (stageDef.key === "final_selection") {
+      instrumented = true;
+      items = finalItems;
+    } else if (stageDef.key === "scoring") {
+      instrumented = true; // pass-through, no items
+    }
+    // All other stages are count-only until future instrumentation ships
+
+    return {
+      stage: stageDef.key,
+      label: stageDef.label,
+      in: counts.in,
+      out: counts.out,
+      dropped: counts.dropped,
+      drop_pct: computeDropPct(counts.dropped, counts.in),
+      instrumented,
+      items,
+    };
+  });
+
+  // Stage consistency check
+  let integrityWarning = null;
+  for (let i = 0; i < stages.length - 1; i++) {
+    const curr = stages[i];
+    const next = stages[i + 1];
+    if (curr.out !== next.in) {
+      integrityWarning = `Count mismatch: ${curr.stage}.out (${curr.out}) ≠ ${next.stage}.in (${next.in})`;
+      break; // report first mismatch only
+    }
+  }
+
+  // Final selection uniqueness check
+  const selectedUrls = finalItems.filter((i) => i.status === "selected").map((i) => i.url);
+  const uniqueSelected = new Set(selectedUrls);
+  if (uniqueSelected.size < selectedUrls.length && !integrityWarning) {
+    integrityWarning = "Duplicate canonical_url in final selection — dedup failure detected";
+  }
+
+  // Source domain aggregation
+  const domainMap = Object.create(null);
+  for (const c of candidates) {
+    const domain = normalizeDomain(String(c?.source_domain || c?.source || ""));
+    if (!domain) continue;
+    if (!domainMap[domain]) domainMap[domain] = { domain, fetched: 0, survived_to_selection: 0, selected: 0 };
+    domainMap[domain].fetched++;
+    domainMap[domain].survived_to_selection++;
+    if (c?.selected === true) domainMap[domain].selected++;
+  }
+  const sourceDomains = Object.values(domainMap)
+    .map((d) => ({
+      ...d,
+      conversion_rate: computeConversionRate(d.selected, d.fetched),
+      dominant_drop_stage: d.selected < d.fetched ? "final_selection" : null,
+    }))
+    .sort((a, b) => b.selected - a.selected || b.fetched - a.fetched);
+
+  const response = {
+    date: auditDoc.digestDateKey,
+    topic: tag,
+    stages,
+    source_domains: sourceDomains,
+  };
+  if (integrityWarning) response.integrity_warning = integrityWarning;
+  return response;
+}
+
 async function handleAdminFunnelRoutes(ctx, deps) {
   const { req, res, pathname, url } = ctx;
   const { json, isAdminAuthed, digestAuditDir } = deps;
@@ -230,6 +365,27 @@ async function handleAdminFunnelRoutes(ctx, deps) {
     return true;
   }
 
+  if (pathname === "/api/admin/funnel/topic") {
+    const dateParam  = url.searchParams.get("date");
+    const topicParam = url.searchParams.get("topic");
+    if (!dateParam || !topicParam) {
+      json(res, { ok: false, error: "date and topic required" }, 400);
+      return true;
+    }
+    const doc = readAuditFile(auditDir, dateParam);
+    if (!doc) {
+      json(res, { ok: false, error: "no_data_for_date" }, 404);
+      return true;
+    }
+    const topicResp = buildTopicResponse(doc, topicParam);
+    if (!topicResp) {
+      json(res, { ok: false, error: "topic_not_found" }, 404);
+      return true;
+    }
+    json(res, { ok: true, ...topicResp });
+    return true;
+  }
+
   json(res, { ok: false, error: "not_implemented" }, 501);
   return true;
 }
@@ -238,6 +394,7 @@ module.exports = {
   handleAdminFunnelRoutes,
   buildDatesResponse,
   buildSummaryFromAuditDocs,
+  buildTopicResponse,
   expandDateRange,
   listAuditDates,
   readAuditFile,

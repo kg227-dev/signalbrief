@@ -60,6 +60,19 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .conv-rate { color:var(--green); font-weight:600; }
 .conv-rate.zero { color:var(--red); }
 
+.source-registry-table { width:100%; border-collapse:collapse; font-size:13px; }
+.source-registry-table th { text-align:left; font-weight:600; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-secondary); padding:0 10px 8px; border-bottom:1px solid var(--border); }
+.source-registry-table td { padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+.source-registry-table tr:last-child td { border-bottom:none; }
+.source-registry-table tr.row-silent td { color:var(--text-light); }
+.source-registry-table tr.row-disabled td { color:var(--text-light); opacity:0.55; }
+.source-pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; }
+.source-pill-active   { background:#DCFCE7; color:#166534; }
+.source-pill-silent   { background:#F3F4F6; color:#6B7280; }
+.source-pill-disabled { background:#FEE2E2; color:#991B1B; }
+.registry-summary { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.registry-summary span { font-size:12px; font-weight:600; padding:3px 10px; background:#F3F4F6; border-radius:999px; color:var(--text-secondary); }
+
 .topics-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px; margin-bottom:24px; }
 .topic-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; cursor:pointer; transition:box-shadow 0.15s; }
 .topic-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); }
@@ -409,6 +422,47 @@ async function loadTopicDetail(tag) {
   renderTopicDetail(state.topicCache[cacheKey]);
 }
 
+function buildSourceRegistryHtml(registry) {
+  if (!registry || !registry.sources || !registry.sources.length) {
+    return `<p style="font-size:13px;color:var(--text-secondary)">No configured sources found for this topic.</p>`;
+  }
+  const summaryHtml = `<div class="registry-summary">
+    <span>${registry.configured_count} configured</span>
+    <span style="color:var(--green)">${registry.active_count} active today</span>
+    <span>${registry.silent_count} silent</span>
+  </div>`;
+  const rows = registry.sources.map((s) => {
+    const rowClass = s.status === "disabled" ? "row-disabled" : s.status === "silent" ? "row-silent" : "";
+    const pillClass = `source-pill source-pill-${s.status}`;
+    const domain = s.domains && s.domains.length ? esc(s.domains[0]) : "—";
+    const tier = s.tier ? `T${s.tier}` : "—";
+    const lane = s.lane === "publisher_feed" ? "Broker"
+               : s.lane === "official" ? "Official"
+               : esc(s.lane || "—");
+    const fetchedCell = s.status === "disabled" ? "—" : s.fetched > 0 ? s.fetched : `<span style="color:var(--text-light)">0</span>`;
+    const scoringCell = s.to_scoring > 0 ? s.to_scoring : `<span style="color:var(--text-light)">—</span>`;
+    const selectedCell = s.selected > 0 ? `<strong style="color:var(--green)">${s.selected}</strong>` : `<span style="color:var(--text-light)">—</span>`;
+    return `<tr class="${rowClass}">
+      <td><strong>${esc(s.name)}</strong></td>
+      <td><span class="domain-link">${domain}</span></td>
+      <td>${tier}</td>
+      <td>${lane}</td>
+      <td>${fetchedCell}</td>
+      <td>${scoringCell}</td>
+      <td>${selectedCell}</td>
+      <td><span class="${pillClass}">${esc(s.status)}</span></td>
+    </tr>`;
+  }).join("");
+  return `${summaryHtml}
+    <table class="source-registry-table">
+      <thead><tr>
+        <th>Source</th><th>Domain</th><th>Tier</th><th>Lane</th>
+        <th>Fetched</th><th>→ Scoring</th><th>Selected</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function renderTopicDetail(data) {
   const detailEl = document.getElementById("topicDetail");
   const laneF = state.laneFilter;
@@ -433,18 +487,6 @@ function renderTopicDetail(data) {
     </tr>`;
   }).join("");
 
-  const domainRows = (data.source_domains || []).slice(0, 20).map((d) => {
-    const rate = d.conversion_rate != null ? Math.round(d.conversion_rate * 100) + "%" : "—";
-    const rateClass = d.selected === 0 ? "conv-rate zero" : "conv-rate";
-    return `<tr>
-      <td><strong>${esc(d.domain)}</strong></td>
-      <td>${d.fetched}</td>
-      <td>${d.survived_to_scoring}</td>
-      <td>${d.selected}</td>
-      <td><span class="${rateClass}">${rate}</span></td>
-      <td>${d.dominant_drop_stage ? esc(STAGE_LABELS[d.dominant_drop_stage] || d.dominant_drop_stage) : "—"}</td>
-    </tr>`;
-  }).join("");
 
   const accordionHtml = buildAccordion(data.stages || [], laneF, outcomeF);
 
@@ -501,11 +543,8 @@ function renderTopicDetail(data) {
       <tbody>${funnelRows}</tbody>
     </table>
     ${classifierHtml}
-    <div class="section-title">Source Domains</div>
-    <table class="data-table" style="margin-bottom:24px">
-      <thead><tr><th>Domain</th><th>Fetched</th><th>To Scoring</th><th>Selected</th><th>Conversion</th><th>Top Drop Stage</th></tr></thead>
-      <tbody>${domainRows || '<tr><td colspan="6" class="missing-date">No domain data</td></tr>'}</tbody>
-    </table>
+    <div class="section-title">Source Registry</div>
+    <div style="margin-bottom:24px">${buildSourceRegistryHtml(data.source_registry)}</div>
     <div class="section-title">Item Explorer</div>
     <div class="accordion">${accordionHtml}</div>
   </div>`;

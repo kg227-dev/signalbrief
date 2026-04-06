@@ -12,7 +12,90 @@ const {
   computeConversionRate,
 } = require("./admin-api-funnel-shared");
 
+const BROKER_SOURCES_CONFIG = require("../../../config/standard-topic-broker-sources.json");
+
 const DATE_FILE_RE = /^(\d{4}-\d{2}-\d{2})\.json$/;
+
+// Normalize topic tag for config matching: "LIFE SCIENCES", "LIFE_SCIENCES" → "lifesciences"
+function normalizeTopicTag(str) {
+  return String(str || "").replace(/[\s_]+/g, "").toLowerCase();
+}
+
+// Extract human name from _comment field: "STAT News — gold standard..." → "STAT News"
+function parseSourceName(comment, id) {
+  if (comment) {
+    const idx = comment.indexOf(" \u2014 ");
+    if (idx > 0) return comment.slice(0, idx).trim();
+    const emIdx = comment.indexOf("\u2014");
+    if (emIdx > 0) return comment.slice(0, emIdx).trim();
+    const dashIdx = comment.indexOf(" -- ");
+    if (dashIdx > 0) return comment.slice(0, dashIdx).trim();
+  }
+  return String(id || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function buildSourceRegistry(auditDoc, tag) {
+  const normTag = normalizeTopicTag(tag);
+  const allSources = Array.isArray(BROKER_SOURCES_CONFIG.sources) ? BROKER_SOURCES_CONFIG.sources : [];
+
+  const configuredSources = allSources.filter(
+    (s) => Array.isArray(s.topic_tags) && s.topic_tags.some((t) => normalizeTopicTag(t) === normTag)
+  );
+
+  // Domain → fetched count from broker_fetch_items (filtered to this topic)
+  const fetchDomainMap = Object.create(null);
+  const brokerFetchItems = Array.isArray(auditDoc?.fetch?.broker_fetch_items)
+    ? auditDoc.fetch.broker_fetch_items.filter(
+        (i) => !i?.topic || String(i.topic).toUpperCase() === tag
+      )
+    : [];
+  for (const item of brokerFetchItems) {
+    const d = normalizeDomain(String(item?.domain || ""));
+    if (d) fetchDomainMap[d] = (fetchDomainMap[d] || 0) + 1;
+  }
+
+  // Domain → {to_scoring, selected} from scored candidates
+  const topicData = auditDoc?.topics?.[tag] || {};
+  const candidates = Array.isArray(topicData.candidates) ? topicData.candidates : [];
+  const candidateDomainMap = Object.create(null);
+  for (const c of candidates) {
+    const d = normalizeDomain(String(c?.source_domain || c?.source || ""));
+    if (!d) continue;
+    if (!candidateDomainMap[d]) candidateDomainMap[d] = { to_scoring: 0, selected: 0 };
+    candidateDomainMap[d].to_scoring++;
+    if (c?.selected === true) candidateDomainMap[d].selected++;
+  }
+
+  const sources = configuredSources.map((s) => {
+    const domains = Array.isArray(s.domains) ? s.domains : [];
+    let fetched = 0, to_scoring = 0, selected = 0;
+    for (const d of domains) {
+      fetched    += fetchDomainMap[d]                    || 0;
+      to_scoring += candidateDomainMap[d]?.to_scoring   || 0;
+      selected   += candidateDomainMap[d]?.selected     || 0;
+    }
+    const status = !s.enabled ? "disabled" : fetched === 0 ? "silent" : "active";
+    return {
+      id: s.id,
+      name: parseSourceName(s._comment, s.id),
+      domains,
+      tier: s.tier || null,
+      lane: s.lane || null,
+      enabled: s.enabled !== false,
+      status,
+      fetched,
+      to_scoring,
+      selected,
+    };
+  });
+
+  return {
+    configured_count: sources.length,
+    active_count:  sources.filter((s) => s.status === "active").length,
+    silent_count:  sources.filter((s) => s.status === "silent").length,
+    sources,
+  };
+}
 
 function readAuditFile(auditDir, dateKey) {
   try {
@@ -512,6 +595,7 @@ function buildTopicResponse(auditDoc, topicTag) {
     classifier_breakdown: classifierBreakdown,
     stages,
     source_domains: sourceDomains,
+    source_registry: buildSourceRegistry(auditDoc, tag),
   };
   if (integrityWarning) response.integrity_warning = integrityWarning;
   return response;

@@ -70,6 +70,7 @@ function createArchiveHistoryRuntime(deps) {
     return {
       items: deduped.items,
       removed: deduped.removed.length,
+      removed_items: deduped.removed,
       archive_days_used: dedupDays,
       backfilled: 0,
     };

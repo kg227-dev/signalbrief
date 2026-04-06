@@ -67,7 +67,7 @@ function getFetchedCount(auditDoc) {
 
 function buildSummaryFromAuditDocs(auditDocs, period) {
   const validDocs = auditDocs.filter(Boolean);
-  const docMap = Object.fromEntries(validDocs.map((d) => [d.digestDateKey, d]));
+  const docMap = Object.fromEntries(validDocs.map((d) => [d.date_et, d]));
 
   const allDates = expandDateRange(period.from, period.to);
   const runDates = allDates.filter((d) => docMap[d]);
@@ -99,9 +99,9 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
     const sm = doc?.summary || {};
     const beforeDedup = Number(sm.candidate_pool_before_dedup || 0);
     stageDrop.editorial_filter  += Math.max(0, beforeDedup - Number(sm.candidate_pool_after_editorial || beforeDedup));
-    stageDrop.archive_dedup     += Number(sm.archive_repeat_block_count || 0);
-    stageDrop.freshness_filter  += Number(sm.stale_removed_count || 0);
-    stageDrop.story_dedup       += Number(sm.story_relationship_continuation_removed || 0);
+    stageDrop.archive_dedup     += Number(sm.dedup_removed || 0);
+    stageDrop.freshness_filter  += Number(sm.stale_removed || 0);
+    stageDrop.story_dedup       += Number(sm.continuation_removed || 0);
     const allCandidates = Object.values(doc?.topics || {}).flatMap((t) => Array.isArray(t?.candidates) ? t.candidates : []);
     stageDrop.classifier += allCandidates.filter((c) => c?.strategic_relevance === "LOW" && c?.selected !== true).length;
     const rejCounts = allCandidates.reduce((acc, c) => {
@@ -246,10 +246,10 @@ function buildTopicResponse(auditDoc, topicTag) {
 
   // Count-only stage values derived from summary (global counts, apportioned to topic)
   const beforeDedup = Number(topicData?.total_candidates || sm.candidate_pool_before_dedup || 0);
-  const afterEditorial  = beforeDedup - Number(sm.editorial_excluded_count || 0) - Number(sm.editorial_domain_suppressed_count || 0);
-  const afterArchive    = afterEditorial - Number(sm.archive_repeat_block_count || 0);
-  const afterFreshness  = afterArchive - Number(sm.stale_removed_count || 0);
-  const afterStoryDedup = afterFreshness - Number(sm.story_relationship_continuation_removed || 0);
+  const afterEditorial  = beforeDedup - Number(sm.editorial_excluded || 0) - Number(sm.editorial_domain_suppressed || 0);
+  const afterArchive    = afterEditorial - Number(sm.dedup_removed || 0);
+  const afterFreshness  = afterArchive - Number(sm.stale_removed || 0);
+  const afterStoryDedup = afterFreshness - Number(sm.continuation_removed || 0);
   const afterClassifier = scoredCount;
   const classifierDropped = Math.max(0, afterStoryDedup - afterClassifier);
   const finalSelected = Number(topicData?.selected_count || 0);
@@ -398,7 +398,7 @@ function buildTopicResponse(auditDoc, topicTag) {
     .sort((a, b) => b.selected - a.selected || b.fetched - a.fetched);
 
   const response = {
-    date: auditDoc.digestDateKey,
+    date: auditDoc.date_et,
     topic: tag,
     stages,
     source_domains: sourceDomains,

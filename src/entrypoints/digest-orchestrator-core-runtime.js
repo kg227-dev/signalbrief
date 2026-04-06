@@ -861,7 +861,7 @@ function serializeBrokerDiagnostics(fetchDiagnostics) {
   };
 }
 
-function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics }) {
+function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics, enrichmentDiagnostics }) {
   const selectedUrls = new Set(
     (Array.isArray(selected) ? selected : []).map((item) => String(item?.url || "").trim()).filter(Boolean)
   );
@@ -928,6 +928,14 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       retrieval_origin_counts: sanitizeCountMap(fetchDiagnostics?.retrieval_origin_counts),
       topic_diagnostics: serializeFetchTopicDiagnostics(fetchDiagnostics),
       standard_topic_broker: serializeBrokerDiagnostics(fetchDiagnostics),
+      discovery_fetch_items: Array.isArray(fetchDiagnostics?.discovery_fetch_items)
+        ? fetchDiagnostics.discovery_fetch_items
+        : [],
+    },
+    enrichmentDiagnostics: {
+      item_outcomes: Array.isArray(enrichmentDiagnostics?.item_outcomes)
+        ? enrichmentDiagnostics.item_outcomes
+        : [],
     },
   };
 }
@@ -1072,7 +1080,7 @@ function mergeTopicAuditDocument(existingDoc, freshDoc, mergeTopicTag) {
   return recomputeDigestAuditRollups(merged);
 }
 
-function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics, mergeTopicTag = "" }) {
+function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectionDiagnostics, fetchDiagnostics, enrichmentDiagnostics, mergeTopicTag = "" }) {
   try {
     fs.mkdirSync(DIGEST_AUDIT_DIR, { recursive: true });
     const auditDoc = buildDigestAuditDocument({
@@ -1082,6 +1090,7 @@ function writeDigestAuditLog({ digestDateKey, runId, runMode, selected, selectio
       selected,
       selectionDiagnostics,
       fetchDiagnostics,
+      enrichmentDiagnostics,
     });
     const normalizedMergeTopicTag = String(mergeTopicTag || "").trim().toUpperCase();
     const filePath = path.join(DIGEST_AUDIT_DIR, `${digestDateKey}.json`);
@@ -1608,6 +1617,7 @@ async function main() {
     selectionDiagnostics: finalSelectionDiagnostics,
     claudeUsage,
     writeupDiagnostics,
+    enrichmentDiagnostics,
   } = await enrichmentRuntime.enrichSelectedItems({
     selected,
     selectedByTopic,
@@ -1626,6 +1636,7 @@ async function main() {
     selected: enriched,
     selectionDiagnostics: finalSelectionDiagnostics,
     fetchDiagnostics,
+    enrichmentDiagnostics,
     mergeTopicTag: auditTopicRerun ? auditTopicTag : "",
   });
 

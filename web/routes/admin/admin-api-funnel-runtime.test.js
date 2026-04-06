@@ -34,7 +34,7 @@ console.log("buildDatesResponse tests pass ✓");
 const { buildSummaryFromAuditDocs } = require("./admin-api-funnel-runtime");
 
 const sampleDoc = {
-  digestDateKey: "2026-04-05",
+  date_et: "2026-04-05",
   summary: {
     candidate_pool_before_dedup: 34,
     candidate_pool_after_editorial: 32,
@@ -42,9 +42,9 @@ const sampleDoc = {
     candidate_pool_after_freshness: 22,
     candidate_pool_after_story_relationship: 18,
     candidate_pool_scored: 9,
-    stale_removed_count: 9,
-    editorial_excluded_count: 2,
-    archive_repeat_block_count: 1,
+    stale_removed: 9,
+    editorial_excluded: 2,
+    dedup_removed: 1,
   },
   topics: {
     TECHNOLOGY: {
@@ -98,7 +98,7 @@ assert.strictEqual(summary.daily_trend, undefined, "daily_trend should be absent
 
 // Range view test
 const docDay2 = {
-  digestDateKey: "2026-04-04",
+  date_et: "2026-04-04",
   summary: { candidate_pool_before_dedup: 10, candidate_pool_scored: 5 },
   topics: {
     TECHNOLOGY: {
@@ -129,7 +129,7 @@ console.log("buildSummaryFromAuditDocs tests pass ✓");
 const { buildTopicResponse } = require("./admin-api-funnel-runtime");
 
 const topicAuditDoc = {
-  digestDateKey: "2026-04-05",
+  date_et: "2026-04-05",
   summary: {
     candidate_pool_before_dedup: 6,
     candidate_pool_after_editorial: 5,
@@ -137,10 +137,10 @@ const topicAuditDoc = {
     candidate_pool_after_freshness: 4,
     candidate_pool_after_story_relationship: 3,
     candidate_pool_scored: 3,
-    stale_removed_count: 1,
-    archive_repeat_block_count: 0,
-    editorial_excluded_count: 1,
-    story_relationship_continuation_removed: 1,
+    stale_removed: 1,
+    dedup_removed: 0,
+    editorial_excluded: 1,
+    continuation_removed: 1,
   },
   topics: {
     TECHNOLOGY: {
@@ -214,7 +214,7 @@ console.log("buildTopicResponse tests pass ✓");
 
 // Test: buildTopicResponse consumes new instrumentation fields
 const docWithInstrumentation = {
-  digestDateKey: "2026-04-06",
+  date_et: "2026-04-06",
   summary: {
     candidate_pool_before_dedup: 5,
     candidate_pool_after_editorial: 4,
@@ -222,10 +222,10 @@ const docWithInstrumentation = {
     candidate_pool_after_freshness: 4,
     candidate_pool_after_story_relationship: 3,
     candidate_pool_scored: 2,
-    stale_removed_count: 0,
-    archive_repeat_block_count: 0,
-    editorial_excluded_count: 1,
-    story_relationship_continuation_removed: 1,
+    stale_removed: 0,
+    dedup_removed: 0,
+    editorial_excluded: 1,
+    continuation_removed: 1,
   },
   topics: {
     TECH: {

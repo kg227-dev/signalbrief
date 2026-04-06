@@ -484,17 +484,9 @@ function buildItemRow(item, stageKey, idx) {
   const scoreHtml = item.score != null
     ? `<button class="expand-btn" onclick="toggleExpand('score-${stageKey}-${idx}')">▶ Score breakdown</button>
        <div class="expand-content" id="score-${stageKey}-${idx}">
-         ${item.score_components ? Object.entries(item.score_components).map(([k,v]) => `<div class="score-row"><span>${esc(k)}</span><span>${v}</span></div>`).join("") : ""}
+         ${item.score_components ? Object.entries(item.score_components).map(([k,v]) => `<div class="score-row"><span>${esc(k)}</span><span>${esc(String(v))}</span></div>`).join("") : ""}
          <hr class="score-divider">
          <div class="score-row"><strong>Final score</strong><strong>${item.score}</strong></div>
-       </div>`
-    : "";
-
-  const enrichHtml = item.enrichment
-    ? `<button class="expand-btn" onclick="toggleExpand('enrich-${stageKey}-${idx}')">▶ Enrichment output</button>
-       <div class="expand-content" id="enrich-${stageKey}-${idx}">
-         ${item.enrichment.signal_shift ? `<div><strong>Signal Shift:</strong> ${esc(item.enrichment.signal_shift)}</div>` : ""}
-         ${item.enrichment.wim_brief ? `<div style="margin-top:6px"><strong>WIM Brief:</strong> ${esc(item.enrichment.wim_brief)}</div>` : ""}
        </div>`
     : "";
 
@@ -509,7 +501,6 @@ function buildItemRow(item, stageKey, idx) {
     ${reasonHtml}
     ${classificationHtml}
     ${scoreHtml}
-    ${enrichHtml}
   </div>`;
 }
 
@@ -566,6 +557,7 @@ function loadFromUrl() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("range")) {
     state.range = params.get("range");
+    document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
     document.querySelector(`[data-range="${state.range}"]`)?.classList.add("active");
   }
   if (params.get("date")) {

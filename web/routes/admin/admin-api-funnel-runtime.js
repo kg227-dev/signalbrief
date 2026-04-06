@@ -316,6 +316,8 @@ function buildTopicResponse(auditDoc, topicTag) {
         instrumented = true;
         items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
       }
+    } else if (stageDef.key === "story_dedup") {
+      // count-only: no dedicated drop-item audit array yet (§4.1.5 tracking duplicate_of only)
     } else if (stageDef.key === "classifier") {
       // candidates array contains all items that reached scoring;
       // classifier drops are candidates that were rejected but not in final_selection items

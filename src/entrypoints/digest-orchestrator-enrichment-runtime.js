@@ -833,6 +833,30 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       },
     });
 
+    const allEnrichedItems = [
+      ...finalSelected,
+      ...Object.values(failedByTopic).flatMap((items) => (Array.isArray(items) ? items : [])),
+    ];
+    const itemOutcomes = allEnrichedItems.map((item) => {
+      const status = String(item?.writeup_status || "").trim().toLowerCase();
+      const attemptCount = Number(item?.writeup_attempt_count || 0);
+      const reasons = Array.isArray(item?.writeup_rejection_reasons) ? item.writeup_rejection_reasons : [];
+      const isFailed = status === "failed_dropped";
+      const isRepaired = !isFailed && attemptCount > 1;
+      let failureReason = null;
+      if (isFailed) {
+        if (reasons.includes("timeout")) failureReason = "timeout";
+        else if (reasons.includes("parse_failure")) failureReason = "parse_failure";
+        else failureReason = "model_error";
+      }
+      return {
+        url: String(item?.url || ""),
+        enrichment_status: isFailed ? "failed" : isRepaired ? "repaired" : "success",
+        repair_applied: isRepaired,
+        failure_reason: failureReason,
+      };
+    });
+
     return {
       enriched: finalSelected,
       finalSelectedByTopic: finalTopicBuckets,
@@ -841,6 +865,9 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       degraded,
       degradation,
       selectionDiagnostics: updatedSelectionDiagnostics,
+      enrichmentDiagnostics: {
+        item_outcomes: itemOutcomes,
+      },
       writeupDiagnostics: {
         ...normalizedWriteupSummary,
         topic_stats: normalizedTopicWriteupStats,

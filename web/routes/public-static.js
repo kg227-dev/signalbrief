@@ -1,6 +1,6 @@
 const DIGEST_ROUTE_RE = /^\/digest(?:\/(\d{4}-\d{2}-\d{2})\/?)?$/;
-const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/source-registry"]);
-const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/source-registry"]);
+const ADMIN_HTML_ROUTES = new Set(["/admin", "/admin.html", "/admin/user", "/admin/source-registry", "/admin/funnel"]);
+const NO_STORE_STATIC_ROUTES = new Set(["/admin/login", "/admin", "/admin.html", "/admin/user", "/admin/source-registry", "/admin/funnel"]);
 const SHORT_CACHE_STATIC_ROUTES = new Set(["/", "/index.html", "/signup", "/signup.html"]);
 const NO_CACHE_STATIC_ROUTES = new Set(["/index.js"]);
 const INDEX_ASSET_VERSION_TOKEN = "__ASSET_VERSION__";
@@ -19,6 +19,7 @@ const STATIC_ROUTE_FILES = new Map([
   ["/admin.html", "admin.html"],
   ["/admin/user", "admin-user.html"],
   ["/admin/source-registry", "admin-source-registry.html"],
+  ["/admin/funnel", "admin-funnel.html"],
   ["/robots.txt", "robots.txt"],
   ["/style.css", "style.css"],
   ["/preferences-topic-runtime.js", "preferences-topic-runtime.js"],

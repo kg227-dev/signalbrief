@@ -9,6 +9,7 @@ const { handleAdminDigestAuditRoutes } = require("./admin-api-digest-audit-runti
 const { handleAdminSourceHealthRoutes } = require("./admin-api-source-health-runtime");
 const { handleAdminDigestTuningRoutes } = require("./admin-api-digest-tuning-runtime");
 const { handleAdminEditorialOverridesRoutes } = require("./admin-api-editorial-overrides-runtime");
+const { handleAdminFunnelRoutes } = require("./admin-api-funnel-runtime");
 
 function createAdminApiRouteHandler(deps) {
   return async function handleAdminApiRoutes(ctx) {
@@ -30,6 +31,7 @@ function createAdminApiRouteHandler(deps) {
     if (await handleAdminUserRoutes(ctx, deps)) return true;
     if (await handleAdminBulkRoute(ctx, deps)) return true;
     if (await handleAdminMessageRoute(ctx, deps)) return true;
+    if (await handleAdminFunnelRoutes(ctx, deps)) return true;
 
     return false;
   };

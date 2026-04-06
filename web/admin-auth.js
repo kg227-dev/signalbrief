@@ -9,6 +9,7 @@ const LOCAL_BYPASS_HTML_ROUTES = new Set([
   "/admin.html",
   "/admin/user",
   "/admin/source-registry",
+  "/admin/funnel",
 ]);
 const LOCAL_BYPASS_API_ROUTES = new Set([
   "/api/admin/check",
@@ -16,6 +17,9 @@ const LOCAL_BYPASS_API_ROUTES = new Set([
   "/api/admin/user-by-email",
   "/api/admin/audit",
   "/api/admin/digest-audit",
+  "/api/admin/funnel/dates",
+  "/api/admin/funnel/summary",
+  "/api/admin/funnel/topic",
 ]);
 
 const LOGIN_LIMIT = 5;

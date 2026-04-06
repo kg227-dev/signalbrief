@@ -417,9 +417,10 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     }
 
     // Remove excluded URLs
-    const excludedCount = allItems.filter((item) =>
+    const urlExcludedItems = allItems.filter((item) =>
       isUrlExcluded(String(item?.url || ""), editorialOverrides.excludes, todayStr)
-    ).length;
+    );
+    const excludedCount = urlExcludedItems.length;
     if (excludedCount > 0) {
       log(`Editorial overrides: excluded ${excludedCount} item(s) by URL`);
     }
@@ -428,10 +429,11 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     );
 
     // Remove domain-suppressed items
-    const suppressedCount = allItems.filter((item) => {
+    const domainSuppressedItems = allItems.filter((item) => {
       const domain = String(item?.source_domain || item?.source || "").toLowerCase();
       return isDomainSuppressed(domain, editorialOverrides.source_suppressions, todayStr);
-    }).length;
+    });
+    const suppressedCount = domainSuppressedItems.length;
     if (suppressedCount > 0) {
       log(`Editorial overrides: suppressed ${suppressedCount} item(s) by source domain`);
     }
@@ -439,6 +441,29 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       const domain = String(item?.source_domain || item?.source || "").toLowerCase();
       return !isDomainSuppressed(domain, editorialOverrides.source_suppressions, todayStr);
     });
+
+    const editorialDroppedItems = [
+      ...urlExcludedItems.map((item) => ({
+        stage: "editorial_filter",
+        status: "dropped",
+        reason: "url_excluded",
+        url: String(item?.url || ""),
+        title: String(item?.headline || item?.title || "").slice(0, 160),
+        domain: String(item?.source_domain || item?.source || "").toLowerCase().replace(/^www\./, ""),
+        topic: String(item?.topic_tag || item?.tag || ""),
+        published_at: item?.published_at || null,
+      })),
+      ...domainSuppressedItems.map((item) => ({
+        stage: "editorial_filter",
+        status: "dropped",
+        reason: "domain_suppressed",
+        url: String(item?.url || ""),
+        title: String(item?.headline || item?.title || "").slice(0, 160),
+        domain: String(item?.source_domain || item?.source || "").toLowerCase().replace(/^www\./, ""),
+        topic: String(item?.topic_tag || item?.tag || ""),
+        published_at: item?.published_at || null,
+      })),
+    ];
 
     // Inject pinned items (mark them so selection policy keeps them)
     const activePins = typeof getPinsForDate === "function"
@@ -510,10 +535,44 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       : 48;
     const ageFilter = typeof articleAgeTooOld === "function" ? articleAgeTooOld : () => false;
     const freshItems = dedupRes.items.filter((item) => !ageFilter(item, maxArticleAgeHours));
-    const staleRemoved = dedupRes.items.length - freshItems.length;
+    const staleItems = dedupRes.items.filter((item) => ageFilter(item, maxArticleAgeHours));
+    const staleRemoved = staleItems.length;
     if (staleRemoved > 0) {
       log(`Freshness gate removed ${staleRemoved} stale item(s) older than ${maxArticleAgeHours}h`);
     }
+
+    const archiveDedupDroppedItems = (dedupRes.removed_items || []).map((item) => ({
+      stage: "archive_dedup",
+      status: "dropped",
+      reason: "already_seen",
+      url: String(item?.url || ""),
+      title: String(item?.headline || item?.title || "").slice(0, 160),
+      domain: String(item?.source_domain || item?.source || "").toLowerCase().replace(/^www\./, ""),
+      topic: String(item?.topic_tag || item?.tag || ""),
+      matched_reference: item?._archive_match || null,
+    }));
+
+    const _nowMsForFreshness = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
+    const freshnessDroppedItems = staleItems.map((item) => {
+      const h = computeItemAgeHours(item, _nowMsForFreshness);
+      let freshness_bucket = "unknown";
+      if (Number.isFinite(h)) {
+        if (h <= 24) freshness_bucket = "0_24h";
+        else if (h <= 48) freshness_bucket = "24_48h";
+        else freshness_bucket = "over_48h";
+      }
+      return {
+        stage: "freshness_filter",
+        status: "dropped",
+        reason: "too_old",
+        freshness_bucket,
+        url: String(item?.url || ""),
+        title: String(item?.headline || item?.title || "").slice(0, 160),
+        domain: String(item?.source_domain || item?.source || "").toLowerCase().replace(/^www\./, ""),
+        topic: String(item?.topic_tag || item?.tag || ""),
+        published_at: item?.published_at || null,
+      };
+    });
     const repeatIndex = buildRecentRepeatIndex(crossDayDedupDays);
     const repeatPenalty = Number(rankingPolicy.repeatPenalty || 0);
 
@@ -827,6 +886,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         selection_rejection_counts: selectionRejectionCounts,
         scored_candidates: postScoreItems.map((item) => toSelectionAuditCandidate(item)),
         topic_selection_audit: topicSelectionAudit,
+        editorial_dropped_items: editorialDroppedItems,
+        archive_dedup_dropped_items: archiveDedupDroppedItems,
+        freshness_dropped_items: freshnessDroppedItems,
       },
     };
   }

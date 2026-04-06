@@ -65,6 +65,8 @@ writeDigestAuditLog({
             _score_components: { freshness: 1, source_tier: 1, lane_bonus: 0.8, novelty: 0.8 },
             selected: true,
             selection_reason: null,
+            strategic_relevance: "HIGH",
+            strategic_relevance_reason: "Major regulatory shift with immediate market impact",
           },
           {
             tag: "TECHNOLOGY",
@@ -185,5 +187,13 @@ assert.strictEqual(auditDoc.fetch.retrieval_origin_counts.broad, 1);
 assert.strictEqual(auditDoc.fetch.topic_diagnostics[0].discovery_candidate_share_pct, 33.33);
 assert.strictEqual(auditDoc.fetch.standard_topic_broker.source_diagnostics.length, 2);
 assert.strictEqual(auditDoc.fetch.standard_topic_broker.topic_diagnostics[0].errors.length, 1);
+assert.strictEqual(
+  auditDoc.topics.TECHNOLOGY.candidates[0].strategic_relevance_reason,
+  "Major regulatory shift with immediate market impact"
+);
+assert.strictEqual(
+  auditDoc.topics.TECHNOLOGY.candidates[0].strategic_relevance,
+  "HIGH"
+);
 
 console.log("writeDigestAuditLog persists selection and broker telemetry shape ✓");

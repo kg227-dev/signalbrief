@@ -49,30 +49,36 @@ function dedupeCandidates(items, adapterFns) {
 }
 
 function dedupeCandidatesDetailed(items, adapterFns) {
+  const fns = resolveAdapters(adapterFns || {});
   const seenHeadlineTokenSets = []; // fuzzy: array of token Sets
+  const seenHeadlineUrls = []; // parallel array: URL of the survivor for each token set
   const seenUrl = new Set();
   const deduped = [];
   const rejected = [];
   for (const item of (Array.isArray(items) ? items : [])) {
-    const headlineKey = String(adapterFns.headlineFingerprint(item) || "");
-    const urlKey = String(adapterFns.normalizeUrl(item?.url || "") || "");
-    if (!adapterFns.isCandidate(item, { headlineKey, urlKey })) {
+    const headlineKey = String(fns.headlineFingerprint(item) || "");
+    const urlKey = String(fns.normalizeUrl(item?.url || "") || "");
+    if (!fns.isCandidate(item, { headlineKey, urlKey })) {
       rejected.push({ item, reason: "selection_invalid_candidate" });
       continue;
     }
     // URL check runs first — cheaper and equally authoritative; headline fuzzy check follows.
     if (urlKey && seenUrl.has(urlKey)) {
-      rejected.push({ item, reason: "selection_duplicate_url" });
+      rejected.push({ item, reason: "selection_duplicate_url", duplicate_of: String(item.url || "") });
       continue;
     }
     const tokenSet = tokenizeHeadline(String(item?.headline || ""));
     // Items with no tokens (numeric/punctuation-only headlines) bypass fuzzy dedup — safe, not an oversight.
     if (tokenSet.size > 0 && isFuzzyDuplicateHeadline(tokenSet, seenHeadlineTokenSets)) {
-      rejected.push({ item, reason: "selection_duplicate_headline" });
+      const matchIdx = seenHeadlineTokenSets.findIndex((s) => isFuzzyDuplicateHeadline(tokenSet, [s]));
+      rejected.push({ item, reason: "selection_duplicate_headline", duplicate_of: seenHeadlineUrls[matchIdx] || null });
       continue;
     }
     if (urlKey) seenUrl.add(urlKey);
-    if (tokenSet.size > 0) seenHeadlineTokenSets.push(tokenSet);
+    if (tokenSet.size > 0) {
+      seenHeadlineTokenSets.push(tokenSet);
+      seenHeadlineUrls.push(String(item.url || ""));
+    }
     deduped.push(item);
   }
   return { deduped, rejected };
@@ -226,4 +232,5 @@ function selectItemsByPolicyDetailed(allItems, selectionPolicy = {}, adapters = 
 module.exports = {
   selectItemsByPolicy,
   selectItemsByPolicyDetailed,
+  dedupeCandidatesDetailed,
 };

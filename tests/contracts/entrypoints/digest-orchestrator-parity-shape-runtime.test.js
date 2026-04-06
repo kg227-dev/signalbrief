@@ -174,6 +174,7 @@ function sortedKeys(obj) {
       "degradation",
       "degraded",
       "enriched",
+      "enrichmentDiagnostics",
       "failedByTopic",
       "finalSelectedByTopic",
       "selectionDiagnostics",

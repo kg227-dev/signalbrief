@@ -301,9 +301,9 @@ function buildTopicResponse(auditDoc, topicTag) {
   for (const c of candidates) {
     const domain = normalizeDomain(String(c?.source_domain || c?.source || ""));
     if (!domain) continue;
-    if (!domainMap[domain]) domainMap[domain] = { domain, fetched: 0, survived_to_selection: 0, selected: 0 };
+    if (!domainMap[domain]) domainMap[domain] = { domain, fetched: 0, survived_to_scoring: 0, selected: 0 };
     domainMap[domain].fetched++;
-    domainMap[domain].survived_to_selection++;
+    domainMap[domain].survived_to_scoring++;
     if (c?.selected === true) domainMap[domain].selected++;
   }
   const sourceDomains = Object.values(domainMap)

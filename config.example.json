@@ -78,64 +78,64 @@
     {
       "tag": "HEALTHCARE",
       "queries": [
-        "hospital system merger acquisition payer provider strategy Modern Healthcare STAT last 48 hours",
-        "Medicare Advantage payer provider value-based care CMS hospital strategy last 48 hours",
-        "clinical AI hospital operations FDA healthcare rollout provider strategy last 48 hours",
-        "health system labor reimbursement payer prior authorization healthcare last 48 hours"
+        "hospital system merger acquisition payer provider strategy Modern Healthcare STAT",
+        "Medicare Advantage payer provider value-based care CMS hospital strategy",
+        "clinical AI hospital operations FDA healthcare rollout provider strategy",
+        "health system labor reimbursement payer prior authorization healthcare"
       ]
     },
     {
       "tag": "LIFE SCIENCES",
       "queries": [
-        "FDA approval clinical trial pharma licensing biotech STAT Fierce last 48 hours",
-        "biopharma M&A licensing deal trial readout last 48 hours",
-        "drug pricing obesity drug biotech manufacturing last 48 hours",
-        "clinical readout trial setback biotech financing last 48 hours"
+        "FDA approval clinical trial pharma licensing biotech STAT Fierce",
+        "biopharma M&A licensing deal trial readout",
+        "drug pricing obesity drug biotech manufacturing",
+        "clinical readout trial setback biotech financing"
       ]
     },
     {
       "tag": "TECHNOLOGY",
       "queries": [
-        "enterprise software cloud infrastructure CIO platform strategy Reuters Bloomberg FT last 48 hours",
-        "data center AI infrastructure enterprise tech capex export controls last 48 hours",
-        "cybersecurity enterprise software vendor strategy regulation last 48 hours",
-        "semiconductor cloud enterprise platform pricing product launch last 48 hours"
+        "enterprise software cloud infrastructure CIO platform strategy Reuters Bloomberg FT",
+        "data center AI infrastructure enterprise tech capex export controls",
+        "cybersecurity enterprise software vendor strategy regulation",
+        "semiconductor cloud enterprise platform pricing product launch"
       ]
     },
     {
       "tag": "ENERGY",
       "queries": [
-        "utility grid transmission interconnection power demand policy Reuters Utility Dive FERC last 48 hours",
-        "renewables battery storage utility strategy power demand last 48 hours",
-        "oil gas LNG refinery energy markets capex strategy last 48 hours",
-        "transformer transmission data center load energy reliability last 48 hours"
+        "utility grid transmission interconnection power demand policy Reuters Utility Dive FERC",
+        "renewables battery storage utility strategy power demand",
+        "oil gas LNG refinery energy markets capex strategy",
+        "transformer transmission data center load energy reliability"
       ]
     },
     {
       "tag": "FINANCIAL SERVICES",
       "queries": [
-        "bank regulation capital liquidity private credit lending Reuters Bloomberg FT last 48 hours",
-        "Federal Reserve OCC FDIC CFPB bank supervision capital rule last 48 hours",
-        "payments cards fintech bank partnership enforcement last 48 hours",
-        "asset management insurance wealth regulation strategy last 48 hours"
+        "bank regulation capital liquidity private credit lending Reuters Bloomberg FT",
+        "Federal Reserve OCC FDIC CFPB bank supervision capital rule",
+        "payments cards fintech bank partnership enforcement",
+        "asset management insurance wealth regulation strategy"
       ]
     },
     {
       "tag": "CONSUMER & RETAIL",
       "queries": [
-        "retail earnings pricing promotion store traffic consumer demand Reuters WSJ last 48 hours",
-        "consumer brand strategy supply chain tariff pricing last 48 hours",
-        "ecommerce marketplace retail media grocery apparel last 48 hours",
-        "restaurant grocery apparel retail restructuring antitrust FTC last 48 hours"
+        "retail earnings pricing promotion store traffic consumer demand Reuters WSJ",
+        "consumer brand strategy supply chain tariff pricing",
+        "ecommerce marketplace retail media grocery apparel",
+        "restaurant grocery apparel retail restructuring antitrust FTC"
       ]
     },
     {
       "tag": "INDUSTRIALS",
       "queries": [
-        "manufacturing automation reshoring supply chain industrial strategy Reuters last 48 hours",
-        "aerospace defense logistics freight industrial demand last 48 hours",
-        "factory capex industrial order book pricing tariff last 48 hours",
-        "procurement supply chain disruption trade industrial last 48 hours"
+        "manufacturing automation reshoring supply chain industrial strategy Reuters",
+        "aerospace defense logistics freight industrial demand",
+        "factory capex industrial order book pricing tariff",
+        "procurement supply chain disruption trade industrial"
       ]
     }
   ],

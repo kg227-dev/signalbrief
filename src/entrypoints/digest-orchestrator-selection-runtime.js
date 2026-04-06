@@ -260,6 +260,11 @@ function toSelectionAuditCandidate(item, extras = {}) {
       ? Number(Number(extras.freshness_hours).toFixed(2))
       : null,
     content_flags: Array.isArray(item?.content_flags) ? item.content_flags.slice() : [],
+    strategic_relevance: item?.strategic_relevance || null,
+    strategic_relevance_reason: item?.strategic_relevance_reason
+      ? String(item.strategic_relevance_reason).slice(0, 120)
+      : null,
+    duplicate_of: item?.duplicate_of ? String(item.duplicate_of) : null,
     ...extras,
   };
 }

@@ -643,6 +643,7 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
     strategic_relevance_reason: candidate?.strategic_relevance_reason
       ? String(candidate.strategic_relevance_reason).slice(0, 120)
       : null,
+    duplicate_of: candidate?.duplicate_of ? String(candidate.duplicate_of) : null,
   };
 }
 

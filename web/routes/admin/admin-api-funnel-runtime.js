@@ -112,7 +112,9 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
     stageDrop.final_selection += Number(rejCounts.selection_not_selected || 0) + Number(rejCounts.selection_source_cap || 0);
   }
 
-  const topDropStage = Object.entries(stageDrop).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const topDropStage = Object.entries(stageDrop)
+    .filter(([key]) => key !== "final_selection")
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
   const topDropDomains = Object.values(globalDomainMap)
     .map((d) => ({ ...d, conversion_rate: computeConversionRate(d.selected, d.fetched) }))
@@ -233,7 +235,6 @@ function buildTopicResponse(auditDoc, topicTag) {
   const topicData = auditDoc?.topics?.[tag];
   if (!topicData) return null;
 
-  const sm = auditDoc?.summary || {};
   const fetchDiag = Array.isArray(auditDoc?.fetch?.topic_diagnostics)
     ? auditDoc.fetch.topic_diagnostics.find((t) => t?.tag === tag) : null;
 
@@ -242,104 +243,148 @@ function buildTopicResponse(auditDoc, topicTag) {
     : Number(topicData?.total_candidates || 0);
 
   const candidates = Array.isArray(topicData?.candidates) ? topicData.candidates : [];
-  const scoredCount = candidates.length;
+  const scoredCount = candidates.length; // items that passed classifier and entered scoring
 
-  // Count-only stage values derived from summary (global counts, apportioned to topic)
-  const beforeDedup = Number(topicData?.total_candidates || sm.candidate_pool_before_dedup || 0);
-  const afterEditorial  = beforeDedup - Number(sm.editorial_excluded || 0) - Number(sm.editorial_domain_suppressed || 0);
-  const afterArchive    = afterEditorial - Number(sm.dedup_removed || 0);
-  const afterFreshness  = afterArchive - Number(sm.stale_removed || 0);
-  const afterStoryDedup = afterFreshness - Number(sm.continuation_removed || 0);
-  const afterClassifier = scoredCount;
-  const classifierDropped = Math.max(0, afterStoryDedup - afterClassifier);
   const finalSelected = Number(topicData?.selected_count || 0);
-  const finalDropped = Math.max(0, scoredCount - finalSelected);
   const enrichmentFailed = candidates.filter((c) => c?.selected && c?.writeup_status === "failed").length;
   const enrichmentOut = Math.max(0, finalSelected - enrichmentFailed);
 
-  const stageCounts = {
-    fetch:            { in: fetchedForTopic,          out: fetchedForTopic,              dropped: 0 },
-    editorial_filter: { in: beforeDedup,               out: Math.max(0, afterEditorial),  dropped: Math.max(0, beforeDedup - afterEditorial) },
-    archive_dedup:    { in: Math.max(0, afterEditorial), out: Math.max(0, afterArchive),  dropped: Math.max(0, afterEditorial - afterArchive) },
-    freshness_filter: { in: Math.max(0, afterArchive),   out: Math.max(0, afterFreshness),dropped: Math.max(0, afterArchive - afterFreshness) },
-    story_dedup:      { in: Math.max(0, afterFreshness), out: Math.max(0, afterStoryDedup),dropped: Math.max(0, afterFreshness - afterStoryDedup) },
-    classifier:       { in: Math.max(0, afterStoryDedup), out: afterClassifier,           dropped: classifierDropped },
-    scoring:          { in: afterClassifier,           out: afterClassifier,              dropped: 0 },
-    final_selection:  { in: scoredCount,               out: finalSelected,               dropped: finalDropped },
-    enrichment:       { in: finalSelected,              out: enrichmentOut,               dropped: enrichmentFailed },
+  // Resolve per-topic drop arrays from instrumentation.
+  // If records carry a topic field, filter by this topic.
+  // If no topic field: only usable when there's a single topic in the audit (avoids double-counting).
+  const topicCount = Object.keys(auditDoc?.topics || {}).length;
+  function getTopicDrops(arr) {
+    if (!Array.isArray(arr)) return null;
+    const hasTopic = arr.some((r) => r?.topic != null);
+    if (hasTopic) return arr.filter((r) => !r?.topic || r.topic === tag);
+    // No topic tagging — only attribute to this topic when it's the sole topic
+    return topicCount === 1 ? arr : null;
+  }
+
+  const editorialDropped  = getTopicDrops(auditDoc?.selectionDiagnostics?.editorial_dropped_items);
+  const archiveDedupDropped = getTopicDrops(auditDoc?.selectionDiagnostics?.archive_dedup_dropped_items);
+  const freshnessDropped  = getTopicDrops(auditDoc?.selectionDiagnostics?.freshness_dropped_items);
+
+  // Build stage chain: each stage's out feeds the next stage's in.
+  // Ground truth anchors: fetchedForTopic (start), scoredCount (post-classifier), finalSelected (end).
+  // For stages without per-topic instrumentation, pass count through (0 drops) so the
+  // classifier absorbs the true cumulative drop rather than fabricating broken counts.
+  const chain = {};
+
+  chain.fetch = {
+    in: fetchedForTopic,
+    out: fetchedForTopic,
+    dropped: 0,
+    instrumented: fetchDiag != null,
+  };
+
+  const editDropCount = editorialDropped ? editorialDropped.length : 0;
+  chain.editorial_filter = {
+    in: chain.fetch.out,
+    out: Math.max(0, chain.fetch.out - editDropCount),
+    dropped: editDropCount,
+    instrumented: editorialDropped !== null,
+  };
+
+  const archDropCount = archiveDedupDropped ? archiveDedupDropped.length : 0;
+  chain.archive_dedup = {
+    in: chain.editorial_filter.out,
+    out: Math.max(0, chain.editorial_filter.out - archDropCount),
+    dropped: archDropCount,
+    instrumented: archiveDedupDropped !== null,
+  };
+
+  const freshDropCount = freshnessDropped ? freshnessDropped.length : 0;
+  chain.freshness_filter = {
+    in: chain.archive_dedup.out,
+    out: Math.max(0, chain.archive_dedup.out - freshDropCount),
+    dropped: freshDropCount,
+    instrumented: freshnessDropped !== null,
+  };
+
+  // story_dedup: count-only — no dedicated per-topic drop array yet
+  chain.story_dedup = {
+    in: chain.freshness_filter.out,
+    out: chain.freshness_filter.out,
+    dropped: 0,
+    instrumented: false,
+  };
+
+  // classifier: in = story_dedup.out, out = scoredCount.
+  // dropped absorbs true classifier + any un-instrumented upstream drops — never negative.
+  chain.classifier = {
+    in: chain.story_dedup.out,
+    out: scoredCount,
+    dropped: Math.max(0, chain.story_dedup.out - scoredCount),
+    instrumented: false,
+  };
+
+  // scoring: passthrough (all items that reach scoring pass through to final_selection)
+  chain.scoring = {
+    in: scoredCount,
+    out: scoredCount,
+    dropped: 0,
+    instrumented: true,
+  };
+
+  chain.final_selection = {
+    in: scoredCount,
+    out: finalSelected,
+    dropped: Math.max(0, scoredCount - finalSelected),
+    instrumented: true,
+  };
+
+  chain.enrichment = {
+    in: finalSelected,
+    out: enrichmentOut,
+    dropped: enrichmentFailed,
+    instrumented: Array.isArray(auditDoc?.enrichmentDiagnostics?.item_outcomes),
   };
 
   const finalItems = candidates.map((c) => buildItemFromCandidate(c));
 
   const stages = STAGES.map((stageDef) => {
-    const counts = stageCounts[stageDef.key] || { in: 0, out: 0, dropped: 0 };
-    let instrumented = false;
+    const counts = chain[stageDef.key] || { in: 0, out: 0, dropped: 0, instrumented: false };
     let items = [];
 
     if (stageDef.key === "fetch") {
       const discoveryItems = Array.isArray(auditDoc?.fetch?.discovery_fetch_items)
         ? auditDoc.fetch.discovery_fetch_items.filter((i) => !i?.topic || i.topic === tag)
         : [];
-      if (discoveryItems.length > 0) {
-        instrumented = true;
-        items = discoveryItems.map((i) => ({
-          url: normalizeCanonicalUrl(String(i?.url || "")),
-          title: String(i?.title || ""),
-          domain: normalizeDomain(String(i?.domain || "")),
-          lane: normalizeLane(String(i?.lane || "discovery")),
-          published_at: i?.published_at || null,
-          status: "passed",
-          reason: null,
-          strategic_relevance: null,
-          strategic_relevance_reason: null,
-          score: null,
-          score_components: null,
-          duplicate_of: null,
-          enrichment_status: null,
-        }));
-      }
-    } else if (stageDef.key === "editorial_filter") {
-      const dropped = auditDoc?.selectionDiagnostics?.editorial_dropped_items;
-      if (Array.isArray(dropped)) {
-        instrumented = true;
-        items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
-      }
-    } else if (stageDef.key === "archive_dedup") {
-      const dropped = auditDoc?.selectionDiagnostics?.archive_dedup_dropped_items;
-      if (Array.isArray(dropped)) {
-        instrumented = true;
-        items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
-      }
-    } else if (stageDef.key === "freshness_filter") {
-      const dropped = auditDoc?.selectionDiagnostics?.freshness_dropped_items;
-      if (Array.isArray(dropped)) {
-        instrumented = true;
-        items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
-      }
-    } else if (stageDef.key === "story_dedup") {
-      // count-only: no dedicated drop-item audit array yet (§4.1.5 tracking duplicate_of only)
-    } else if (stageDef.key === "classifier") {
-      // candidates array contains all items that reached scoring;
-      // classifier drops are candidates that were rejected but not in final_selection items
-      // (currently count-only — classifier items aren't in a dedicated audit array yet)
-      instrumented = false;
-      items = [];
-    } else if (stageDef.key === "scoring") {
-      instrumented = true;
-      items = [];
+      items = discoveryItems.map((i) => ({
+        url: normalizeCanonicalUrl(String(i?.url || "")),
+        title: String(i?.title || ""),
+        domain: normalizeDomain(String(i?.domain || "")),
+        lane: normalizeLane(String(i?.lane || "discovery")),
+        published_at: i?.published_at || null,
+        status: "passed",
+        reason: null,
+        strategic_relevance: null,
+        strategic_relevance_reason: null,
+        score: null,
+        score_components: null,
+        duplicate_of: null,
+        enrichment_status: null,
+      }));
+    } else if (stageDef.key === "editorial_filter" && editorialDropped) {
+      items = editorialDropped.map(buildItemFromDropRecord);
+    } else if (stageDef.key === "archive_dedup" && archiveDedupDropped) {
+      items = archiveDedupDropped.map(buildItemFromDropRecord);
+    } else if (stageDef.key === "freshness_filter" && freshnessDropped) {
+      items = freshnessDropped.map(buildItemFromDropRecord);
     } else if (stageDef.key === "final_selection") {
-      instrumented = true;
       items = finalItems;
     } else if (stageDef.key === "enrichment") {
       const outcomes = Array.isArray(auditDoc?.enrichmentDiagnostics?.item_outcomes)
-        ? auditDoc.enrichmentDiagnostics.item_outcomes
-        : null;
+        ? auditDoc.enrichmentDiagnostics.item_outcomes : null;
       if (outcomes) {
-        instrumented = true;
         items = candidates
           .filter((c) => c?.selected === true)
           .map((c) => {
-            const outcome = outcomes.find((o) => o.url === c.url || normalizeCanonicalUrl(String(o?.url || "")) === normalizeCanonicalUrl(String(c.url || "")));
+            const outcome = outcomes.find((o) =>
+              o.url === c.url ||
+              normalizeCanonicalUrl(String(o?.url || "")) === normalizeCanonicalUrl(String(c.url || ""))
+            );
             return {
               ...buildItemFromCandidate(c),
               enrichment_status: outcome?.enrichment_status || "success",
@@ -356,7 +401,7 @@ function buildTopicResponse(auditDoc, topicTag) {
       out: counts.out,
       dropped: counts.dropped,
       drop_pct: computeDropPct(counts.dropped, counts.in),
-      instrumented,
+      instrumented: counts.instrumented,
       items,
     };
   });

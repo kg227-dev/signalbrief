@@ -639,6 +639,10 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
     inclusion_reason: candidate?.inclusion_reason || strictQuality?.inclusion_reason || null,
     major_story_candidate: candidate?.major_story_candidate === true || strictQuality?.major_story_candidate === true,
     major_story_block_reason: candidate?.major_story_block_reason || strictQuality?.major_story_block_reason || null,
+    strategic_relevance: candidate?.strategic_relevance || null,
+    strategic_relevance_reason: candidate?.strategic_relevance_reason
+      ? String(candidate.strategic_relevance_reason).slice(0, 120)
+      : null,
   };
 }
 

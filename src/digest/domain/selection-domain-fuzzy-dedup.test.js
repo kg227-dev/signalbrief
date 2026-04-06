@@ -66,7 +66,25 @@ const { selectItemsByPolicyDetailed } = require("./selection-domain-runtime");
   });
   const dupRejection = result.rejected.find((r) => r.reason === "selection_duplicate_headline");
   assert(dupRejection, "dedupeCandidatesDetailed should emit selection_duplicate_headline for fuzzy dup");
+  // The fuzzy dup rejection should have duplicate_of set
+  assert.ok(dupRejection.duplicate_of != null, "fuzzy dup should have duplicate_of field set");
   console.log("dedupeCandidatesDetailed rejection reason ✓");
+  console.log("dedupeCandidatesDetailed fuzzy headline duplicate_of ✓");
+}
+
+// Test: duplicate_of survivor linkage for URL dedup
+const { dedupeCandidatesDetailed: dedup2 } = require("./selection-domain-runtime");
+{
+  const exactDups = [
+    { url: "https://example.com/story", headline: "Story A" },
+    { url: "https://example.com/story", headline: "Story A duplicate" },
+  ];
+  const exact = dedup2(exactDups);
+  const exactDupRej = exact.rejected.find((r) => r.reason === "selection_duplicate_url");
+  assert.ok(exactDupRej, "should reject exact duplicate URL");
+  assert.ok(exactDupRej.duplicate_of, "exact URL dup should have duplicate_of");
+  assert.strictEqual(exactDupRej.duplicate_of, "https://example.com/story");
+  console.log("dedupeCandidatesDetailed exact URL duplicate_of ✓");
 }
 
 console.log("All selection-domain fuzzy dedup tests passed ✓");

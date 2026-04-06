@@ -39,6 +39,16 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 .stat-tile .label { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:6px; }
 .stat-tile .value { font-size:26px; font-weight:700; letter-spacing:-0.5px; }
 .stat-tile .sub { font-size:12px; color:var(--text-secondary); margin-top:2px; }
+.stat-tile .lane-breakdown { display:flex; gap:10px; margin-top:6px; font-size:11px; font-weight:600; }
+.stat-tile .lane-b { color:#1D4ED8; background:#EFF6FF; padding:2px 7px; border-radius:999px; }
+.stat-tile .lane-d { color:#6D28D9; background:#F5F3FF; padding:2px 7px; border-radius:999px; }
+.classifier-bar { display:flex; gap:4px; margin-top:6px; flex-wrap:wrap; }
+.clf-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+.clf-high   { background:#DCFCE7; color:#166534; }
+.clf-medium { background:#FEF9C3; color:#854D0E; }
+.clf-low    { background:#FEE2E2; color:#991B1B; }
+.clf-unknown { background:#F3F4F6; color:#6B7280; }
+.instrumentation-note { padding:10px 16px; font-size:12px; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; margin-bottom:16px; }
 
 .section-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; margin-bottom:20px; }
 .section-title { font-size:13px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:14px; }
@@ -153,15 +163,26 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
   </div>
 
   <div class="summary-strip" id="summaryStrip">
-    <div class="stat-tile"><div class="label">Total Fetched</div><div class="value" id="statFetched">—</div></div>
-    <div class="stat-tile"><div class="label">Total Selected</div><div class="value" id="statSelected">—</div></div>
+    <div class="stat-tile">
+      <div class="label">Total Fetched</div>
+      <div class="value" id="statFetched">—</div>
+      <div class="lane-breakdown" id="statFetchBreakdown" style="display:none">
+        <span class="lane-b" id="statBroker">broker: —</span>
+        <span class="lane-d" id="statDiscovery">discovery: —</span>
+      </div>
+    </div>
+    <div class="stat-tile">
+      <div class="label">Total Selected</div>
+      <div class="value" id="statSelected">—</div>
+      <div class="sub" id="statClassifierSub" style="display:none"></div>
+    </div>
     <div class="stat-tile"><div class="label">Drop Rate</div><div class="value" id="statDropRate">—</div></div>
     <div class="stat-tile"><div class="label">Top Drop Stage</div><div class="value" id="statTopDropStage" style="font-size:16px">—</div></div>
     <div class="stat-tile"><div class="label">Enrichment Failures</div><div class="value" id="statEnrichFailures">—</div></div>
   </div>
 
   <div class="section-card" id="topDomainsCard">
-    <div class="section-title">Top Drop Domains</div>
+    <div class="section-title">Source Performance</div>
     <table class="data-table" id="topDomainsTable">
       <thead><tr><th>Domain</th><th>Fetched</th><th>Selected</th><th>Conversion</th></tr></thead>
       <tbody id="topDomainsTbody"></tbody>
@@ -289,6 +310,26 @@ function renderSummaryStrip(data) {
   document.getElementById("statTopDropStage").textContent = data.top_drop_stage
     ? (STAGE_LABELS[data.top_drop_stage] || data.top_drop_stage) : "—";
   document.getElementById("statEnrichFailures").textContent = (t.enrichment_failures || 0).toLocaleString();
+
+  // Broker / discovery breakdown under Fetched tile
+  const fb = t.fetch_breakdown;
+  if (fb && (fb.broker > 0 || fb.discovery > 0)) {
+    document.getElementById("statBroker").textContent    = "broker: " + fb.broker.toLocaleString();
+    document.getElementById("statDiscovery").textContent = "discovery: " + fb.discovery.toLocaleString();
+    document.getElementById("statFetchBreakdown").style.display = "";
+  } else {
+    document.getElementById("statFetchBreakdown").style.display = "none";
+  }
+
+  // Classifier breakdown sub under Selected tile
+  const cb = t.classifier_breakdown;
+  const subEl = document.getElementById("statClassifierSub");
+  if (cb && (cb.high + cb.medium + cb.low + cb.unknown) > 0) {
+    subEl.textContent = `Scored: H:${cb.high} M:${cb.medium} L:${cb.low}`;
+    subEl.style.display = "";
+  } else {
+    subEl.style.display = "none";
+  }
 }
 
 function renderTopDomainsTable(domains) {
@@ -411,14 +452,48 @@ function renderTopicDetail(data) {
     ? `<div style="padding:10px 14px;background:#FEE2E2;border-radius:8px;font-size:13px;color:#991B1B;margin-bottom:16px;"><strong>Integrity warning:</strong> ${esc(data.integrity_warning)}</div>`
     : "";
 
+  // Instrumentation completeness note
+  const uninstrumentedStages = (data.stages || []).filter((s) => !s.instrumented && s.stage !== "scoring").map((s) => STAGE_LABELS[s.stage] || s.stage);
+  const instrNote = uninstrumentedStages.length
+    ? `<div class="instrumentation-note">⚠ Count-only stages (no item visibility): ${esc(uninstrumentedStages.join(", "))}. Counts are ground-truth; dropped items aren't captured yet for these stages.</div>`
+    : "";
+
+  // Fetch breakdown header
+  const fb = data.fetch_breakdown;
+  const fetchBreakdownHtml = fb
+    ? `<div class="lane-breakdown" style="margin-bottom:16px">
+        <span class="lane-b">broker: ${fb.broker}</span>
+        <span class="lane-d">discovery: ${fb.discovery}</span>
+      </div>`
+    : "";
+
+  // Classifier breakdown
+  const cb = data.classifier_breakdown;
+  const classifierTotal = cb ? (cb.high + cb.medium + cb.low + cb.unknown) : 0;
+  const classifierHtml = cb && classifierTotal > 0
+    ? `<div style="margin-bottom:20px">
+        <div class="section-title">Classifier Distribution (scored items)</div>
+        <div class="classifier-bar">
+          ${cb.high    ? `<span class="clf-chip clf-high">HIGH ${cb.high}</span>` : ""}
+          ${cb.medium  ? `<span class="clf-chip clf-medium">MED ${cb.medium}</span>` : ""}
+          ${cb.low     ? `<span class="clf-chip clf-low">LOW ${cb.low}</span>` : ""}
+          ${cb.unknown ? `<span class="clf-chip clf-unknown">? ${cb.unknown}</span>` : ""}
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">These are items that <em>passed</em> the classifier and entered scoring. Items dropped by the classifier are not yet individually tracked.</div>
+      </div>`
+    : "";
+
   detailEl.innerHTML = `<div class="topic-detail">
     <div class="topic-detail-title">${esc(formatTopicLabel(data.topic))}</div>
+    ${fetchBreakdownHtml}
     ${warningBanner}
+    ${instrNote}
     <div class="section-title">Stage Funnel</div>
     <table class="funnel-table">
       <thead><tr><th>Stage</th><th>In</th><th>Out</th><th>Dropped</th><th>Drop %</th><th>Data</th></tr></thead>
       <tbody>${funnelRows}</tbody>
     </table>
+    ${classifierHtml}
     <div class="section-title">Source Domains</div>
     <table class="data-table" style="margin-bottom:24px">
       <thead><tr><th>Domain</th><th>Fetched</th><th>To Scoring</th><th>Selected</th><th>Conversion</th><th>Top Drop Stage</th></tr></thead>

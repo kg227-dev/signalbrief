@@ -76,6 +76,9 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
   let totalFetched = 0;
   let totalSelected = 0;
   let totalEnrichmentFailures = 0;
+  let totalBroker = 0;
+  let totalDiscovery = 0;
+  const sumClassifier = { high: 0, medium: 0, low: 0, unknown: 0 };
   const stageDrop = Object.fromEntries(
     STAGES.filter((s) => s.type === "drop-capable").map((s) => [s.key, 0])
   );
@@ -83,12 +86,19 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
 
   for (const doc of validDocs) {
     totalFetched += getFetchedCount(doc);
+    totalBroker   += Number(doc?.fetch?.broker_candidate_count || 0);
+    totalDiscovery += Number(doc?.fetch?.discovery_candidate_count || 0);
     const topics = doc?.topics && typeof doc.topics === "object" ? doc.topics : {};
     for (const [, topicData] of Object.entries(topics)) {
       totalSelected += Number(topicData?.selected_count || 0);
       const candidates = Array.isArray(topicData?.candidates) ? topicData.candidates : [];
       for (const c of candidates) {
         if (c?.writeup_status === "failed") totalEnrichmentFailures++;
+        const rel = String(c?.strategic_relevance || "").toUpperCase();
+        if      (rel === "HIGH")                 sumClassifier.high++;
+        else if (rel === "MEDIUM" || rel === "MED") sumClassifier.medium++;
+        else if (rel === "LOW")                  sumClassifier.low++;
+        else                                     sumClassifier.unknown++;
         const domain = normalizeDomain(String(c?.source_domain || c?.source || ""));
         if (!domain) continue;
         if (!globalDomainMap[domain]) globalDomainMap[domain] = { domain, fetched: 0, selected: 0 };
@@ -182,6 +192,8 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
       dropped: totalFetched - totalSelected,
       selected: totalSelected,
       enrichment_failures: totalEnrichmentFailures,
+      fetch_breakdown: { broker: totalBroker, discovery: totalDiscovery },
+      classifier_breakdown: sumClassifier,
     },
     top_drop_stage: topDropStage,
     top_drop_domains: topDropDomains,
@@ -248,6 +260,21 @@ function buildTopicResponse(auditDoc, topicTag) {
   const finalSelected = Number(topicData?.selected_count || 0);
   const enrichmentFailed = candidates.filter((c) => c?.selected && c?.writeup_status === "failed").length;
   const enrichmentOut = Math.max(0, finalSelected - enrichmentFailed);
+
+  // Fetch lane breakdown
+  const fetchBreakdown = fetchDiag
+    ? { broker: Number(fetchDiag.broker_item_count || 0), discovery: Number(fetchDiag.discovery_item_count || 0) }
+    : null;
+
+  // Classifier visibility — distribution among items that reached scoring
+  const classifierBreakdown = { high: 0, medium: 0, low: 0, unknown: 0 };
+  for (const c of candidates) {
+    const rel = String(c?.strategic_relevance || "").toUpperCase();
+    if      (rel === "HIGH")                    classifierBreakdown.high++;
+    else if (rel === "MEDIUM" || rel === "MED") classifierBreakdown.medium++;
+    else if (rel === "LOW")                     classifierBreakdown.low++;
+    else                                        classifierBreakdown.unknown++;
+  }
 
   // Resolve per-topic drop arrays from instrumentation.
   // If records carry a topic field, filter by this topic.
@@ -445,6 +472,8 @@ function buildTopicResponse(auditDoc, topicTag) {
   const response = {
     date: auditDoc.date_et,
     topic: tag,
+    fetch_breakdown: fetchBreakdown,
+    classifier_breakdown: classifierBreakdown,
     stages,
     source_domains: sourceDomains,
   };

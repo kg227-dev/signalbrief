@@ -1414,12 +1414,12 @@ function createDigestOrchestratorFetchRuntime(deps) {
         ? scoringConfig.maxAgeHours
         : (digestConfig.maxArticleAgeHours || 48)
     );
-    // On Mondays the 07:00 ET run window covers Saturday→Monday (the weekend trough).
-    // Extend the lookback to 72h so Friday content is eligible, supplementing the thin
-    // weekend pool. Cross-day dedup prevents repeating items already selected Sunday.
+    // Sat/Sun/Mon all run against a thin publishing window — trade pubs don't publish
+    // on weekends. Extend lookback to 72h so earlier-week content stays eligible.
+    // Archive dedup still prevents repeating items already selected in prior runs.
     const etDayOfWeek = new Date().toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short" });
-    const isMonday = etDayOfWeek.startsWith("Mon");
-    const maxAgeCapHours = isMonday ? 72 : 48;
+    const isLowPublishDay = etDayOfWeek.startsWith("Mon") || etDayOfWeek.startsWith("Sat") || etDayOfWeek.startsWith("Sun");
+    const maxAgeCapHours = isLowPublishDay ? 72 : 48;
     const maxAgeHours = Number.isFinite(resolvedMaxAgeHours)
       ? Math.min(maxAgeCapHours, Math.max(1, resolvedMaxAgeHours))
       : maxAgeCapHours;

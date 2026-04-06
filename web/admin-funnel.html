@@ -453,9 +453,16 @@ function renderTopicDetail(data) {
     : "";
 
   // Instrumentation completeness note
-  const uninstrumentedStages = (data.stages || []).filter((s) => !s.instrumented && s.stage !== "scoring").map((s) => STAGE_LABELS[s.stage] || s.stage);
-  const instrNote = uninstrumentedStages.length
-    ? `<div class="instrumentation-note">⚠ Count-only stages (no item visibility): ${esc(uninstrumentedStages.join(", "))}. Counts are ground-truth; dropped items aren't captured yet for these stages.</div>`
+  const countOnlyStages = (data.stages || []).filter((s) =>
+    !s.instrumented && !s.global_items && s.stage !== "scoring"
+  ).map((s) => STAGE_LABELS[s.stage] || s.stage);
+  const globalItemStages = (data.stages || []).filter((s) => s.global_items)
+    .map((s) => STAGE_LABELS[s.stage] || s.stage);
+  const instrParts = [];
+  if (countOnlyStages.length) instrParts.push(`Count-only (no item visibility): ${esc(countOnlyStages.join(", "))}`);
+  if (globalItemStages.length) instrParts.push(`Global pool items (all topics, not filtered): ${esc(globalItemStages.join(", "))}`);
+  const instrNote = instrParts.length
+    ? `<div class="instrumentation-note">⚠ ${instrParts.join(" · ")}. Pre-topic stages run on the combined feed before topic assignment.</div>`
     : "";
 
   // Fetch breakdown header
@@ -507,33 +514,60 @@ function renderTopicDetail(data) {
 function buildAccordion(stages, laneFilter, outcomeFilter) {
   return stages.map((stage) => {
     const header = `${STAGE_LABELS[stage.stage] || stage.stage}  ·  ${stage.in} in → ${stage.dropped} dropped`;
+    const id = `acc-${esc(stage.stage)}`;
 
-    if (!stage.instrumented) {
+    // Truly count-only: no instrumentation and no items at all
+    if (!stage.instrumented && !stage.global_items && stage.stage !== "classifier") {
       return `<div>
-        <div class="acc-header" onclick="toggleAcc('acc-${esc(stage.stage)}')">${esc(header)} <span>▶</span></div>
-        <div class="acc-body" id="acc-${esc(stage.stage)}">
-          <div class="count-only-note">Count-only · Item visibility coming soon</div>
+        <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
+        <div class="acc-body" id="${id}">
+          <div class="count-only-note">Count-only · Item visibility not available for this stage yet</div>
         </div>
       </div>`;
     }
 
     let items = stage.items || [];
+    let globalBanner = "";
+
+    if (stage.global_items) {
+      globalBanner = `<div class="count-only-note" style="background:#FFF7ED;border-bottom:1px solid var(--border)">⚠ Global pool — these drops are from the combined feed across all topics. Counts in the funnel table above reflect per-topic throughput only.</div>`;
+    }
+
+    if (stage.stage === "classifier") {
+      // Show LOW-scored items; true classifier-rejected items aren't individually tracked yet
+      const lowItems = items; // already filtered to LOW scored
+      if (!lowItems.length) {
+        return `<div>
+          <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
+          <div class="acc-body" id="${id}">
+            <div class="count-only-note">No LOW-scored items for this topic. True classifier-rejected items (before scoring) aren't individually tracked yet.</div>
+          </div>
+        </div>`;
+      }
+      const note = `<div class="count-only-note" style="background:#FFF7ED;border-bottom:1px solid var(--border)">Showing ${lowItems.length} LOW-scored item${lowItems.length !== 1 ? "s" : ""} that reached scoring. Items rejected before scoring are not yet individually tracked.</div>`;
+      const itemRows = lowItems.map((item, idx) => buildItemRow(item, stage.stage, idx)).join("");
+      return `<div>
+        <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
+        <div class="acc-body" id="${id}">${note}${itemRows}</div>
+      </div>`;
+    }
+
     if (laneFilter) items = items.filter((i) => i.lane === laneFilter);
     if (outcomeFilter) items = items.filter((i) => i.status === outcomeFilter);
 
     if (!items.length) {
       return `<div>
-        <div class="acc-header" onclick="toggleAcc('acc-${esc(stage.stage)}')">${esc(header)} <span>▶</span></div>
-        <div class="acc-body" id="acc-${esc(stage.stage)}">
-          <div class="count-only-note">No items match current filters.</div>
+        <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
+        <div class="acc-body" id="${id}">
+          ${globalBanner}<div class="count-only-note">No items match current filters.</div>
         </div>
       </div>`;
     }
 
     const itemRows = items.map((item, idx) => buildItemRow(item, stage.stage, idx)).join("");
     return `<div>
-      <div class="acc-header" onclick="toggleAcc('acc-${esc(stage.stage)}')">${esc(header)} <span>▶</span></div>
-      <div class="acc-body" id="acc-${esc(stage.stage)}">${itemRows}</div>
+      <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
+      <div class="acc-body" id="${id}">${globalBanner}${itemRows}</div>
     </div>`;
   }).join("");
 }

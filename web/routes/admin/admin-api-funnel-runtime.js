@@ -276,26 +276,23 @@ function buildTopicResponse(auditDoc, topicTag) {
     else                                        classifierBreakdown.unknown++;
   }
 
-  // Resolve per-topic drop arrays from instrumentation.
-  // If records carry a topic field, filter by this topic.
-  // If no topic field: only usable when there's a single topic in the audit (avoids double-counting).
-  const topicCount = Object.keys(auditDoc?.topics || {}).length;
-  function getTopicDrops(arr) {
-    if (!Array.isArray(arr)) return null;
-    const hasTopic = arr.some((r) => r?.topic != null);
-    if (hasTopic) return arr.filter((r) => !r?.topic || r.topic === tag);
-    // No topic tagging — only attribute to this topic when it's the sole topic
-    return topicCount === 1 ? arr : null;
+  // Pre-topic drop arrays (editorial, archive dedup, freshness) are global operations —
+  // they run on the combined feed before topic assignment. We cannot attribute their counts
+  // to individual topics without explicit per-item topic tags, so they never affect the
+  // per-topic stage chain. They are available for item visibility only (labeled as global).
+  function getGlobalDropItems(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    return arr; // returned for item display only, not used in count chain
   }
 
-  const editorialDropped  = getTopicDrops(auditDoc?.selectionDiagnostics?.editorial_dropped_items);
-  const archiveDedupDropped = getTopicDrops(auditDoc?.selectionDiagnostics?.archive_dedup_dropped_items);
-  const freshnessDropped  = getTopicDrops(auditDoc?.selectionDiagnostics?.freshness_dropped_items);
+  const editorialDropItems    = getGlobalDropItems(auditDoc?.selectionDiagnostics?.editorial_dropped_items);
+  const archiveDedupDropItems = getGlobalDropItems(auditDoc?.selectionDiagnostics?.archive_dedup_dropped_items);
+  const freshnessDropItems    = getGlobalDropItems(auditDoc?.selectionDiagnostics?.freshness_dropped_items);
 
   // Build stage chain: each stage's out feeds the next stage's in.
-  // Ground truth anchors: fetchedForTopic (start), scoredCount (post-classifier), finalSelected (end).
-  // For stages without per-topic instrumentation, pass count through (0 drops) so the
-  // classifier absorbs the true cumulative drop rather than fabricating broken counts.
+  // Pre-topic stages (fetch → story_dedup) pass fetchedForTopic through with 0 drops —
+  // their counts cannot be attributed per-topic without topic-tagged records.
+  // The classifier absorbs all un-attributed upstream drops via: in=fetchedForTopic, out=scoredCount.
   const chain = {};
 
   chain.fetch = {
@@ -305,44 +302,41 @@ function buildTopicResponse(auditDoc, topicTag) {
     instrumented: fetchDiag != null,
   };
 
-  const editDropCount = editorialDropped ? editorialDropped.length : 0;
   chain.editorial_filter = {
-    in: chain.fetch.out,
-    out: Math.max(0, chain.fetch.out - editDropCount),
-    dropped: editDropCount,
-    instrumented: editorialDropped !== null,
+    in: fetchedForTopic,
+    out: fetchedForTopic,
+    dropped: 0,
+    instrumented: editorialDropItems !== null, // items available, counts are global
   };
 
-  const archDropCount = archiveDedupDropped ? archiveDedupDropped.length : 0;
   chain.archive_dedup = {
-    in: chain.editorial_filter.out,
-    out: Math.max(0, chain.editorial_filter.out - archDropCount),
-    dropped: archDropCount,
-    instrumented: archiveDedupDropped !== null,
+    in: fetchedForTopic,
+    out: fetchedForTopic,
+    dropped: 0,
+    instrumented: archiveDedupDropItems !== null,
   };
 
-  const freshDropCount = freshnessDropped ? freshnessDropped.length : 0;
   chain.freshness_filter = {
-    in: chain.archive_dedup.out,
-    out: Math.max(0, chain.archive_dedup.out - freshDropCount),
-    dropped: freshDropCount,
-    instrumented: freshnessDropped !== null,
+    in: fetchedForTopic,
+    out: fetchedForTopic,
+    dropped: 0,
+    instrumented: freshnessDropItems !== null,
   };
 
-  // story_dedup: count-only — no dedicated per-topic drop array yet
   chain.story_dedup = {
-    in: chain.freshness_filter.out,
-    out: chain.freshness_filter.out,
+    in: fetchedForTopic,
+    out: fetchedForTopic,
     dropped: 0,
     instrumented: false,
   };
 
-  // classifier: in = story_dedup.out, out = scoredCount.
-  // dropped absorbs true classifier + any un-instrumented upstream drops — never negative.
+  // classifier: absorbs all pre-classifier drops for this topic.
+  // in = fetchedForTopic (all items that were fetched for this topic),
+  // out = scoredCount (items that passed classifier and entered scoring).
   chain.classifier = {
-    in: chain.story_dedup.out,
+    in: fetchedForTopic,
     out: scoredCount,
-    dropped: Math.max(0, chain.story_dedup.out - scoredCount),
+    dropped: Math.max(0, fetchedForTopic - scoredCount),
     instrumented: false,
   };
 
@@ -370,9 +364,16 @@ function buildTopicResponse(auditDoc, topicTag) {
 
   const finalItems = candidates.map((c) => buildItemFromCandidate(c));
 
+  // LOW-scored items: candidates that reached scoring but were rated LOW relevance.
+  // These are available for classifier-stage item visibility.
+  const lowScoredItems = candidates
+    .filter((c) => String(c?.strategic_relevance || "").toUpperCase() === "LOW")
+    .map((c) => buildItemFromCandidate(c));
+
   const stages = STAGES.map((stageDef) => {
     const counts = chain[stageDef.key] || { in: 0, out: 0, dropped: 0, instrumented: false };
     let items = [];
+    let globalItems = false; // flag: items are from global pool, not topic-specific
 
     if (stageDef.key === "fetch") {
       const discoveryItems = Array.isArray(auditDoc?.fetch?.discovery_fetch_items)
@@ -393,12 +394,19 @@ function buildTopicResponse(auditDoc, topicTag) {
         duplicate_of: null,
         enrichment_status: null,
       }));
-    } else if (stageDef.key === "editorial_filter" && editorialDropped) {
-      items = editorialDropped.map(buildItemFromDropRecord);
-    } else if (stageDef.key === "archive_dedup" && archiveDedupDropped) {
-      items = archiveDedupDropped.map(buildItemFromDropRecord);
-    } else if (stageDef.key === "freshness_filter" && freshnessDropped) {
-      items = freshnessDropped.map(buildItemFromDropRecord);
+    } else if (stageDef.key === "editorial_filter" && editorialDropItems) {
+      items = editorialDropItems.map(buildItemFromDropRecord);
+      globalItems = true;
+    } else if (stageDef.key === "archive_dedup" && archiveDedupDropItems) {
+      items = archiveDedupDropItems.map(buildItemFromDropRecord);
+      globalItems = true;
+    } else if (stageDef.key === "freshness_filter" && freshnessDropItems) {
+      items = freshnessDropItems.map(buildItemFromDropRecord);
+      globalItems = true;
+    } else if (stageDef.key === "classifier") {
+      // Show LOW-scored items as a proxy for classifier signal.
+      // Note: true classifier-rejected items (never reached scoring) are not yet individually tracked.
+      items = lowScoredItems;
     } else if (stageDef.key === "final_selection") {
       items = finalItems;
     } else if (stageDef.key === "enrichment") {
@@ -429,18 +437,24 @@ function buildTopicResponse(auditDoc, topicTag) {
       dropped: counts.dropped,
       drop_pct: computeDropPct(counts.dropped, counts.in),
       instrumented: counts.instrumented,
+      global_items: globalItems,
       items,
     };
   });
 
-  // Stage consistency check
+  // Stage consistency check — skip the story_dedup→classifier boundary since pre-topic
+  // stages intentionally share fetchedForTopic and the classifier collapses them to scoredCount.
+  // Check the post-classifier chain: classifier.out == scoring.in == final_selection.in.
   let integrityWarning = null;
-  for (let i = 0; i < stages.length - 1; i++) {
-    const curr = stages[i];
-    const next = stages[i + 1];
+  const postClassifierStages = stages.filter((s) =>
+    ["classifier", "scoring", "final_selection", "enrichment"].includes(s.stage)
+  );
+  for (let i = 0; i < postClassifierStages.length - 1; i++) {
+    const curr = postClassifierStages[i];
+    const next = postClassifierStages[i + 1];
     if (curr.out !== next.in) {
       integrityWarning = `Count mismatch: ${curr.stage}.out (${curr.out}) ≠ ${next.stage}.in (${next.in})`;
-      break; // report first mismatch only
+      break;
     }
   }
 

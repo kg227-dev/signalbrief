@@ -66,15 +66,42 @@ function buildSourceRegistry(auditDoc, tag) {
     if (c?.selected === true) candidateDomainMap[d].selected++;
   }
 
+  // Source ID → broker fetch diagnostic (parsed/retained/error per source)
+  const brokerSourceDiags = Array.isArray(auditDoc?.fetch?.standard_topic_broker?.source_diagnostics)
+    ? auditDoc.fetch.standard_topic_broker.source_diagnostics
+    : [];
+  const sourceDiagById = Object.create(null);
+  for (const d of brokerSourceDiags) {
+    if (d?.id) sourceDiagById[d.id] = d;
+  }
+
   const sources = configuredSources.map((s) => {
     const domains = Array.isArray(s.domains) ? s.domains : [];
     let fetched = 0, to_scoring = 0, selected = 0;
     for (const d of domains) {
-      fetched    += fetchDomainMap[d]                    || 0;
-      to_scoring += candidateDomainMap[d]?.to_scoring   || 0;
-      selected   += candidateDomainMap[d]?.selected     || 0;
+      fetched    += fetchDomainMap[d]                  || 0;
+      to_scoring += candidateDomainMap[d]?.to_scoring || 0;
+      selected   += candidateDomainMap[d]?.selected   || 0;
     }
-    const status = !s.enabled ? "disabled" : fetched === 0 ? "silent" : "active";
+
+    const diag = sourceDiagById[s.id] || null;
+    const attempted = diag !== null;
+    const fetchOk = diag?.ok === true;
+    const parsedCount = Number(diag?.parsed_count || 0);
+    const retainedCount = Number(diag?.retained_count || 0);
+    const staleCount = Number(diag?.stale_count || 0);
+    const feedError = diag?.error ? String(diag.error).slice(0, 120) : null;
+
+    // Granular status: disabled > no_data > error > empty > stale > silent > active
+    let status;
+    if (!s.enabled)       status = "disabled";
+    else if (!attempted)  status = "no_data";   // old audit or source not polled
+    else if (!fetchOk)    status = "error";     // HTTP/network failure
+    else if (parsedCount === 0) status = "empty";  // feed had no articles
+    else if (retainedCount === 0) status = "stale"; // all articles too old
+    else if (fetched === 0) status = "silent";  // items passed normalization but none for this topic
+    else                  status = "active";
+
     return {
       id: s.id,
       name: parseSourceName(s._comment, s.id),
@@ -86,13 +113,14 @@ function buildSourceRegistry(auditDoc, tag) {
       fetched,
       to_scoring,
       selected,
+      feed: attempted ? { ok: fetchOk, parsed: parsedCount, retained: retainedCount, stale: staleCount, error: feedError } : null,
     };
   });
 
   return {
     configured_count: sources.length,
     active_count:  sources.filter((s) => s.status === "active").length,
-    silent_count:  sources.filter((s) => s.status === "silent").length,
+    silent_count:  sources.filter((s) => s.status === "silent" || s.status === "empty" || s.status === "stale" || s.status === "error").length,
     sources,
   };
 }

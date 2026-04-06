@@ -1710,6 +1710,23 @@ function createDigestOrchestratorFetchRuntime(deps) {
     fetchDiagnostics.discovery_candidate_cap_count = Number(discoverySupplementDiagnostics?.discovery_candidate_cap_count || 0);
     fetchDiagnostics.max_discovery_candidate_share_pct = Number(discoverySupplementDiagnostics?.max_discovery_candidate_share_pct || 0);
 
+    const discoveryAuditItems = standardStates.flatMap((state) => {
+      const topicTag = String(state?.topic?.tag || "");
+      return (Array.isArray(state?.items) ? state.items : [])
+        .filter((item) => isDiscoverySupplementItem(item))
+        .map((item) => ({
+          stage: "fetch",
+          lane: "discovery",
+          status: "passed",
+          topic: topicTag,
+          url: String(item?.url || ""),
+          title: String(item?.headline || item?.title || "").slice(0, 160),
+          domain: String(item?.source_domain || item?.source || "").toLowerCase().replace(/^www\./, ""),
+          published_at: item?.published_at || null,
+        }));
+    });
+    fetchDiagnostics.discovery_fetch_items = discoveryAuditItems;
+
     logger(`Fetched ${allItems.length} retained candidate(s) after lane balancing`);
 
     const attemptedStandardStates = standardStates.filter((state) => Number(state?.totalCallsScheduled || 0) > 0);

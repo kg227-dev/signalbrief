@@ -1,5 +1,590 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Funnel — SignalBrief Admin</title></head>
-<body><p>Funnel page — coming in Task 6</p></body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Funnel — SignalBrief Admin</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #edeae4; --card: #FFFFFF; --text: #1a1a1a; --text-secondary: #6b6560;
+  --text-2: #3d3833; --text-light: #9a9490;
+  --accent: #3b5fc0; --accent-hover: #2d4ea0; --accent-light: #e8edf8;
+  --border: rgba(0,0,0,0.06); --border-subtle: rgba(0,0,0,0.04); --radius: 12px;
+  --green: #16A34A; --yellow: #D97706; --red: #DC2626;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+.container { max-width:1560px; margin:0 auto; padding:40px 24px 80px; }
+
+.header { margin-bottom:40px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+.header-top { display:flex; align-items:center; gap:12px; margin-bottom:6px; flex-wrap:wrap; }
+.header .header-brand { font-family:'Playfair Display',serif; font-size:30px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
+.header .nav-link { display:inline-flex; align-items:center; justify-content:center; min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--accent); text-decoration:none; font-size:12px; font-weight:700; }
+.header .nav-link.current { background:var(--accent-light); border-color:transparent; }
+.header .signout-btn { min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; }
+.header .nav-link:hover, .header .signout-btn:hover { background:var(--accent-light); }
+.header p { font-size:14px; color:var(--text-secondary); }
+
+.controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:28px; padding:16px 20px; background:var(--card); border-radius:var(--radius); border:1px solid var(--border); }
+.range-btn { padding:6px 14px; border-radius:999px; border:1px solid var(--border); background:transparent; font:inherit; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-secondary); }
+.range-btn.active { background:var(--accent); color:#fff; border-color:transparent; }
+.date-input { padding:6px 10px; border:1px solid var(--border); border-radius:8px; font:inherit; font-size:13px; background:var(--card); }
+.filter-select { padding:6px 10px; border:1px solid var(--border); border-radius:8px; font:inherit; font-size:13px; background:var(--card); }
+.controls-sep { width:1px; height:24px; background:var(--border); margin:0 4px; }
+
+.summary-strip { display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:24px; }
+.stat-tile { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; }
+.stat-tile .label { font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:6px; }
+.stat-tile .value { font-size:26px; font-weight:700; letter-spacing:-0.5px; }
+.stat-tile .sub { font-size:12px; color:var(--text-secondary); margin-top:2px; }
+
+.section-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; margin-bottom:20px; }
+.section-title { font-size:13px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:14px; }
+.data-table { width:100%; border-collapse:collapse; font-size:13px; }
+.data-table th { text-align:left; font-weight:600; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-secondary); padding:0 0 8px; border-bottom:1px solid var(--border); }
+.data-table td { padding:8px 0; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+.data-table tr:last-child td { border-bottom:none; }
+.domain-link { color:var(--text); font-weight:500; }
+.conv-rate { color:var(--green); font-weight:600; }
+.conv-rate.zero { color:var(--red); }
+
+.topics-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px; margin-bottom:24px; }
+.topic-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; cursor:pointer; transition:box-shadow 0.15s; }
+.topic-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+.topic-card.expanded { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-light); }
+.topic-card .topic-name { font-size:15px; font-weight:700; margin-bottom:8px; }
+.topic-card .topic-counts { font-size:22px; font-weight:700; letter-spacing:-0.5px; }
+.topic-card .topic-counts span { font-size:14px; font-weight:500; color:var(--text-secondary); }
+.topic-card .topic-drop { font-size:12px; color:var(--text-secondary); margin-top:4px; }
+.drop-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; background:#FEF3C7; color:#B45309; margin-top:6px; }
+
+.topic-detail { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:24px; }
+.topic-detail-title { font-size:18px; font-weight:700; margin-bottom:20px; }
+
+.funnel-table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:24px; }
+.funnel-table th { text-align:left; font-weight:600; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-secondary); padding:0 12px 8px; border-bottom:1px solid var(--border); }
+.funnel-table td { padding:9px 12px; border-bottom:1px solid var(--border-subtle); }
+.funnel-table tr:last-child td { border-bottom:none; }
+.funnel-table tr.clickable:hover td { background:var(--accent-light); cursor:pointer; }
+.stage-label { font-weight:600; }
+.count-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; }
+.badge-full { background:#DCFCE7; color:#166534; }
+.badge-count-only { background:#FEF9C3; color:#854D0E; }
+.badge-mismatch { background:#FEE2E2; color:#991B1B; }
+
+.accordion { margin-top:16px; }
+.acc-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#F9F8F6; border:1px solid var(--border); border-radius:8px; cursor:pointer; margin-bottom:4px; font-size:13px; font-weight:600; }
+.acc-header:hover { background:var(--accent-light); }
+.acc-body { display:none; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; }
+.acc-body.open { display:block; }
+.count-only-note { padding:14px 16px; font-size:13px; color:var(--text-secondary); font-style:italic; }
+
+.item-row { padding:12px 16px; border-bottom:1px solid var(--border-subtle); }
+.item-row:last-child { border-bottom:none; }
+.item-row-top { display:flex; align-items:flex-start; gap:10px; margin-bottom:4px; }
+.status-pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; flex-shrink:0; }
+.pill-selected { background:#DCFCE7; color:#166534; }
+.pill-dropped  { background:#FEE2E2; color:#991B1B; }
+.pill-passed   { background:#F3F4F6; color:#6B7280; }
+.item-title { font-size:13px; font-weight:600; flex:1; color:var(--text); text-decoration:none; }
+.item-title:hover { text-decoration:underline; }
+.item-domain { font-size:11px; font-weight:600; color:var(--text-secondary); }
+.lane-badge { display:inline-block; padding:1px 6px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+.lane-broker    { background:#EFF6FF; color:#1D4ED8; }
+.lane-discovery { background:#F5F3FF; color:#6D28D9; }
+.item-meta { font-size:12px; color:var(--text-secondary); margin-bottom:4px; }
+.item-reason { font-size:12px; color:var(--text-secondary); margin-bottom:2px; }
+.item-reason strong { color:var(--text); }
+.reason-dup-link { color:var(--accent); cursor:pointer; text-decoration:underline; }
+.expand-btn { font-size:11px; font-weight:600; color:var(--accent); background:none; border:none; cursor:pointer; padding:2px 0; margin-top:4px; }
+.expand-content { margin-top:8px; padding:10px 12px; background:#F9F8F6; border-radius:6px; font-size:12px; display:none; }
+.expand-content.open { display:block; }
+.score-row { display:flex; justify-content:space-between; padding:2px 0; }
+.score-divider { border:none; border-top:1px solid var(--border); margin:4px 0; }
+
+.skeleton { background:linear-gradient(90deg, #e5e4e0 25%, #d8d7d3 50%, #e5e4e0 75%); background-size:200% 100%; animation:shimmer 1.2s infinite; border-radius:6px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+.empty-state { text-align:center; padding:40px 20px; color:var(--text-secondary); }
+.empty-state p { font-size:14px; }
+.missing-date { padding:8px 16px; font-size:13px; color:var(--text-secondary); font-style:italic; }
+.range-disabled-note { padding:14px 16px; font-size:13px; color:var(--text-secondary); background:#FFF7ED; border:1px solid #FED7AA; border-radius:8px; margin-top:8px; }
+
+@media (max-width: 900px) {
+  .summary-strip { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .summary-strip { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-top">
+      <span class="header-brand">SignalBrief</span>
+      <a href="/admin" class="nav-link">Admin</a>
+      <a href="/admin/source-registry" class="nav-link">Sources</a>
+      <a href="/admin/funnel" class="nav-link current">Funnel</a>
+      <button class="signout-btn" id="signoutBtn">Sign out</button>
+    </div>
+    <p>Pipeline funnel — stage-by-stage article visibility</p>
+  </div>
+
+  <div class="controls" id="controls">
+    <input type="date" class="date-input" id="datePicker" />
+    <div class="controls-sep"></div>
+    <button class="range-btn active" data-range="single">Single Day</button>
+    <button class="range-btn" data-range="7">Last 7 Days</button>
+    <button class="range-btn" data-range="30">Last 30 Days</button>
+    <div class="controls-sep"></div>
+    <select class="filter-select" id="laneFilter">
+      <option value="">All Lanes</option>
+      <option value="broker">Broker</option>
+      <option value="discovery">Discovery</option>
+    </select>
+    <select class="filter-select" id="outcomeFilter">
+      <option value="">All Outcomes</option>
+      <option value="selected">Selected</option>
+      <option value="dropped">Dropped</option>
+    </select>
+  </div>
+
+  <div class="summary-strip" id="summaryStrip">
+    <div class="stat-tile"><div class="label">Total Fetched</div><div class="value" id="statFetched">—</div></div>
+    <div class="stat-tile"><div class="label">Total Selected</div><div class="value" id="statSelected">—</div></div>
+    <div class="stat-tile"><div class="label">Drop Rate</div><div class="value" id="statDropRate">—</div></div>
+    <div class="stat-tile"><div class="label">Top Drop Stage</div><div class="value" id="statTopDropStage" style="font-size:16px">—</div></div>
+    <div class="stat-tile"><div class="label">Enrichment Failures</div><div class="value" id="statEnrichFailures">—</div></div>
+  </div>
+
+  <div class="section-card" id="topDomainsCard">
+    <div class="section-title">Top Drop Domains</div>
+    <table class="data-table" id="topDomainsTable">
+      <thead><tr><th>Domain</th><th>Fetched</th><th>Selected</th><th>Conversion</th></tr></thead>
+      <tbody id="topDomainsTbody"></tbody>
+    </table>
+  </div>
+
+  <div class="topics-grid" id="topicsGrid"></div>
+
+  <div id="topicDetail" style="display:none"></div>
+</div>
+
+<script>
+const STAGE_LABELS = {
+  fetch: "Fetch", editorial_filter: "Editorial Filter", archive_dedup: "Archive Dedup",
+  freshness_filter: "Freshness Filter", story_dedup: "Story Dedup",
+  classifier: "Strategic Classifier", scoring: "Scoring / Ranking",
+  final_selection: "Final Selection", enrichment: "Enrichment",
+};
+
+let state = {
+  range: "single",
+  date: "",
+  from: "",
+  to: "",
+  laneFilter: "",
+  outcomeFilter: "",
+  expandedTopic: null,
+  summaryData: null,
+  topicCache: {},
+};
+
+function esc(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function apiFetch(url) {
+  return fetch(url).then((r) => r.json());
+}
+
+async function init() {
+  const datesResp = await apiFetch("/api/admin/funnel/dates");
+  if (datesResp.ok && datesResp.newest) {
+    state.date = datesResp.newest;
+    document.getElementById("datePicker").value = state.date;
+  } else {
+    state.date = new Date().toISOString().slice(0, 10);
+    document.getElementById("datePicker").value = state.date;
+  }
+  bindControls();
+  await loadSummary();
+}
+
+function bindControls() {
+  document.getElementById("datePicker").addEventListener("change", (e) => {
+    state.date = e.target.value;
+    state.expandedTopic = null;
+    loadSummary();
+    updateUrl();
+  });
+
+  document.querySelectorAll(".range-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.range = btn.dataset.range;
+      state.expandedTopic = null;
+      computeRange();
+      loadSummary();
+      updateUrl();
+    });
+  });
+
+  document.getElementById("laneFilter").addEventListener("change", (e) => {
+    state.laneFilter = e.target.value;
+    loadSummary();
+    updateUrl();
+  });
+
+  document.getElementById("outcomeFilter").addEventListener("change", (e) => {
+    state.outcomeFilter = e.target.value;
+    if (state.expandedTopic) loadTopicDetail(state.expandedTopic);
+    updateUrl();
+  });
+
+  document.getElementById("signoutBtn").addEventListener("click", () => {
+    fetch("/api/admin/signout", { method: "POST" }).then(() => { window.location.href = "/admin/login"; });
+  });
+}
+
+function computeRange() {
+  const today = state.date || new Date().toISOString().slice(0, 10);
+  if (state.range === "single") { state.from = state.to = today; return; }
+  const days = parseInt(state.range, 10);
+  const from = new Date(today + "T00:00:00Z");
+  from.setUTCDate(from.getUTCDate() - days + 1);
+  state.from = from.toISOString().slice(0, 10);
+  state.to = today;
+}
+
+function buildSummaryUrl() {
+  if (state.range === "single") return `/api/admin/funnel/summary?date=${state.date}`;
+  computeRange();
+  return `/api/admin/funnel/summary?from=${state.from}&to=${state.to}`;
+}
+
+async function loadSummary() {
+  if (state.range === "single") { state.from = state.to = state.date; }
+  else computeRange();
+
+  const resp = await apiFetch(buildSummaryUrl());
+  if (!resp.ok) { renderSummaryError(resp.error); return; }
+  state.summaryData = resp;
+  renderSummaryStrip(resp);
+  renderTopDomainsTable(resp.top_drop_domains || []);
+  renderTopicCards(resp.topics || [], resp.missing_dates || []);
+  if (state.expandedTopic) loadTopicDetail(state.expandedTopic);
+}
+
+function renderSummaryStrip(data) {
+  const t = data.totals || {};
+  document.getElementById("statFetched").textContent = (t.fetched || 0).toLocaleString();
+  document.getElementById("statSelected").textContent = (t.selected || 0).toLocaleString();
+  const dropRate = t.fetched > 0 ? Math.round(((t.fetched - t.selected) / t.fetched) * 100) : 0;
+  document.getElementById("statDropRate").textContent = dropRate + "%";
+  document.getElementById("statTopDropStage").textContent = data.top_drop_stage
+    ? (STAGE_LABELS[data.top_drop_stage] || data.top_drop_stage) : "—";
+  document.getElementById("statEnrichFailures").textContent = (t.enrichment_failures || 0).toLocaleString();
+}
+
+function renderTopDomainsTable(domains) {
+  const tbody = document.getElementById("topDomainsTbody");
+  if (!domains.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="missing-date">No domain data available</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = domains.slice(0, 10).map((d) => {
+    const rate = d.conversion_rate != null ? Math.round(d.conversion_rate * 100) + "%" : "—";
+    const rateClass = d.selected === 0 ? "conv-rate zero" : "conv-rate";
+    return `<tr>
+      <td><span class="domain-link">${esc(d.domain)}</span></td>
+      <td>${d.fetched}</td>
+      <td>${d.selected}</td>
+      <td><span class="${rateClass}">${rate}</span></td>
+    </tr>`;
+  }).join("");
+}
+
+function renderTopicCards(topics, missingDates) {
+  const grid = document.getElementById("topicsGrid");
+  if (!topics.length && !missingDates.length) {
+    grid.innerHTML = `<div class="empty-state"><p>No topics found for this period.</p></div>`;
+    return;
+  }
+  grid.innerHTML = topics.map((t) => {
+    const dropPct = t.drop_rate_pct != null ? Math.round(t.drop_rate_pct) + "%" : "—";
+    const isExpanded = state.expandedTopic === t.tag;
+    return `<div class="topic-card${isExpanded ? " expanded" : ""}" data-topic="${esc(t.tag)}" onclick="toggleTopic('${esc(t.tag)}')">
+      <div class="topic-name">${esc(formatTopicLabel(t.tag))}</div>
+      <div class="topic-counts">${t.fetched} <span>fetched →</span> ${t.selected} <span>selected</span></div>
+      <div class="topic-drop">Drop rate: ${dropPct}</div>
+      ${t.dominant_drop_stage ? `<div><span class="drop-badge">${esc(STAGE_LABELS[t.dominant_drop_stage] || t.dominant_drop_stage)}</span></div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function formatTopicLabel(tag) {
+  return tag.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function toggleTopic(tag) {
+  if (state.expandedTopic === tag) {
+    state.expandedTopic = null;
+    document.getElementById("topicDetail").style.display = "none";
+    document.querySelectorAll(".topic-card").forEach((c) => c.classList.remove("expanded"));
+    updateUrl();
+    return;
+  }
+  state.expandedTopic = tag;
+  document.querySelectorAll(".topic-card").forEach((c) => {
+    c.classList.toggle("expanded", c.dataset.topic === tag);
+  });
+  loadTopicDetail(tag);
+  updateUrl();
+}
+
+async function loadTopicDetail(tag) {
+  const detailEl = document.getElementById("topicDetail");
+  if (state.range !== "single") {
+    detailEl.style.display = "block";
+    detailEl.innerHTML = `<div class="topic-detail"><div class="topic-detail-title">${esc(formatTopicLabel(tag))}</div><div class="range-disabled-note">Select a single day to browse individual items.</div></div>`;
+    return;
+  }
+  const cacheKey = `${tag}:${state.date}`;
+  detailEl.style.display = "block";
+  if (!state.topicCache[cacheKey]) {
+    detailEl.innerHTML = `<div class="topic-detail"><div class="skeleton" style="height:200px;border-radius:8px"></div></div>`;
+    const resp = await apiFetch(`/api/admin/funnel/topic?date=${state.date}&topic=${encodeURIComponent(tag)}`);
+    if (!resp.ok) {
+      detailEl.innerHTML = `<div class="topic-detail"><p style="color:var(--red)">Failed to load: ${esc(resp.error)}</p></div>`;
+      return;
+    }
+    state.topicCache[cacheKey] = resp;
+  }
+  renderTopicDetail(state.topicCache[cacheKey]);
+}
+
+function renderTopicDetail(data) {
+  const detailEl = document.getElementById("topicDetail");
+  const laneF = state.laneFilter;
+  const outcomeF = state.outcomeFilter;
+
+  const funnelRows = (data.stages || []).map((stage) => {
+    let badgeHtml;
+    if (data.integrity_warning && !stage.instrumented) {
+      badgeHtml = `<span class="count-badge badge-mismatch">Data mismatch</span>`;
+    } else if (stage.instrumented) {
+      badgeHtml = `<span class="count-badge badge-full">Full</span>`;
+    } else {
+      badgeHtml = `<span class="count-badge badge-count-only">Count only</span>`;
+    }
+    return `<tr class="clickable" onclick="scrollToStage('${esc(stage.stage)}')">
+      <td><span class="stage-label">${esc(STAGE_LABELS[stage.stage] || stage.stage)}</span></td>
+      <td>${stage.in}</td>
+      <td>${stage.out}</td>
+      <td>${stage.dropped}</td>
+      <td>${stage.drop_pct != null ? stage.drop_pct + "%" : "—"}</td>
+      <td>${badgeHtml}</td>
+    </tr>`;
+  }).join("");
+
+  const domainRows = (data.source_domains || []).slice(0, 20).map((d) => {
+    const rate = d.conversion_rate != null ? Math.round(d.conversion_rate * 100) + "%" : "—";
+    const rateClass = d.selected === 0 ? "conv-rate zero" : "conv-rate";
+    return `<tr>
+      <td><strong>${esc(d.domain)}</strong></td>
+      <td>${d.fetched}</td>
+      <td>${d.survived_to_scoring}</td>
+      <td>${d.selected}</td>
+      <td><span class="${rateClass}">${rate}</span></td>
+      <td>${d.dominant_drop_stage ? esc(STAGE_LABELS[d.dominant_drop_stage] || d.dominant_drop_stage) : "—"}</td>
+    </tr>`;
+  }).join("");
+
+  const accordionHtml = buildAccordion(data.stages || [], laneF, outcomeF);
+
+  const warningBanner = data.integrity_warning
+    ? `<div style="padding:10px 14px;background:#FEE2E2;border-radius:8px;font-size:13px;color:#991B1B;margin-bottom:16px;"><strong>Integrity warning:</strong> ${esc(data.integrity_warning)}</div>`
+    : "";
+
+  detailEl.innerHTML = `<div class="topic-detail">
+    <div class="topic-detail-title">${esc(formatTopicLabel(data.topic))}</div>
+    ${warningBanner}
+    <div class="section-title">Stage Funnel</div>
+    <table class="funnel-table">
+      <thead><tr><th>Stage</th><th>In</th><th>Out</th><th>Dropped</th><th>Drop %</th><th>Data</th></tr></thead>
+      <tbody>${funnelRows}</tbody>
+    </table>
+    <div class="section-title">Source Domains</div>
+    <table class="data-table" style="margin-bottom:24px">
+      <thead><tr><th>Domain</th><th>Fetched</th><th>To Scoring</th><th>Selected</th><th>Conversion</th><th>Top Drop Stage</th></tr></thead>
+      <tbody>${domainRows || '<tr><td colspan="6" class="missing-date">No domain data</td></tr>'}</tbody>
+    </table>
+    <div class="section-title">Item Explorer</div>
+    <div class="accordion">${accordionHtml}</div>
+  </div>`;
+}
+
+function buildAccordion(stages, laneFilter, outcomeFilter) {
+  return stages.map((stage) => {
+    const header = `${STAGE_LABELS[stage.stage] || stage.stage}  ·  ${stage.in} in → ${stage.dropped} dropped`;
+
+    if (!stage.instrumented) {
+      return `<div>
+        <div class="acc-header" onclick="toggleAcc('acc-${esc(stage.stage)}')">${esc(header)} <span>▶</span></div>
+        <div class="acc-body" id="acc-${esc(stage.stage)}">
+          <div class="count-only-note">Count-only · Item visibility coming soon</div>
+        </div>
+      </div>`;
+    }
+
+    let items = stage.items || [];
+    if (laneFilter) items = items.filter((i) => i.lane === laneFilter);
+    if (outcomeFilter) items = items.filter((i) => i.status === outcomeFilter);
+
+    if (!items.length) {
+      return `<div>
+        <div class="acc-header" onclick="toggleAcc('acc-${esc(stage.stage)}')">${esc(header)} <span>▶</span></div>
+        <div class="acc-body" id="acc-${esc(stage.stage)}">
+          <div class="count-only-note">No items match current filters.</div>
+        </div>
+      </div>`;
+    }
+
+    const itemRows = items.map((item, idx) => buildItemRow(item, stage.stage, idx)).join("");
+    return `<div>
+      <div class="acc-header" onclick="toggleAcc('acc-${esc(stage.stage)}')">${esc(header)} <span>▶</span></div>
+      <div class="acc-body" id="acc-${esc(stage.stage)}">${itemRows}</div>
+    </div>`;
+  }).join("");
+}
+
+function buildItemRow(item, stageKey, idx) {
+  const pillClass = item.status === "selected" ? "pill-selected" : item.status === "dropped" ? "pill-dropped" : "pill-passed";
+  const laneClass = item.lane === "discovery" ? "lane-discovery" : "lane-broker";
+  const age = item.published_at ? relativeTime(item.published_at) : "";
+
+  let reasonHtml = "";
+  if (item.status === "dropped" && item.reason) {
+    if ((item.reason === "duplicate_headline" || item.reason === "duplicate_url") && item.duplicate_of) {
+      reasonHtml = `<div class="item-reason">Reason: <strong>${esc(item.reason)}</strong> · Duplicate of: <span class="reason-dup-link" onclick="scrollToUrl('${esc(item.duplicate_of)}')">${esc(item.duplicate_of)}</span></div>`;
+    } else {
+      reasonHtml = `<div class="item-reason">Reason: <strong>${esc(item.reason)}</strong></div>`;
+    }
+  }
+
+  const classificationHtml = item.strategic_relevance
+    ? `<div class="item-reason">Classification: <strong>${esc(item.strategic_relevance)}</strong>${item.strategic_relevance_reason ? ` · "${esc(item.strategic_relevance_reason)}"` : ""}</div>`
+    : "";
+
+  const scoreHtml = item.score != null
+    ? `<button class="expand-btn" onclick="toggleExpand('score-${stageKey}-${idx}')">▶ Score breakdown</button>
+       <div class="expand-content" id="score-${stageKey}-${idx}">
+         ${item.score_components ? Object.entries(item.score_components).map(([k,v]) => `<div class="score-row"><span>${esc(k)}</span><span>${v}</span></div>`).join("") : ""}
+         <hr class="score-divider">
+         <div class="score-row"><strong>Final score</strong><strong>${item.score}</strong></div>
+       </div>`
+    : "";
+
+  const enrichHtml = item.enrichment
+    ? `<button class="expand-btn" onclick="toggleExpand('enrich-${stageKey}-${idx}')">▶ Enrichment output</button>
+       <div class="expand-content" id="enrich-${stageKey}-${idx}">
+         ${item.enrichment.signal_shift ? `<div><strong>Signal Shift:</strong> ${esc(item.enrichment.signal_shift)}</div>` : ""}
+         ${item.enrichment.wim_brief ? `<div style="margin-top:6px"><strong>WIM Brief:</strong> ${esc(item.enrichment.wim_brief)}</div>` : ""}
+       </div>`
+    : "";
+
+  return `<div class="item-row" data-url="${esc(item.url)}">
+    <div class="item-row-top">
+      <span class="status-pill ${pillClass}">${esc(item.status.toUpperCase())}</span>
+      <a class="item-title" href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.title || item.url)}</a>
+      <span class="item-domain">${esc(item.domain)}</span>
+      <span class="lane-badge ${laneClass}">${esc(item.lane)}</span>
+    </div>
+    <div class="item-meta">${esc(item.domain)}${age ? " · " + esc(age) : ""}</div>
+    ${reasonHtml}
+    ${classificationHtml}
+    ${scoreHtml}
+    ${enrichHtml}
+  </div>`;
+}
+
+function relativeTime(iso) {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const h = Math.floor(diff / 3600000);
+    if (h < 1) return "< 1h ago";
+    if (h < 24) return h + "h ago";
+    return Math.floor(h / 24) + "d ago";
+  } catch { return ""; }
+}
+
+function toggleAcc(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle("open");
+}
+
+function toggleExpand(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle("open");
+}
+
+function scrollToStage(stageKey) {
+  const accHeader = document.querySelector(`[onclick="toggleAcc('acc-${stageKey}')"]`);
+  if (accHeader) {
+    accHeader.scrollIntoView({ behavior: "smooth", block: "start" });
+    toggleAcc("acc-" + stageKey);
+  }
+}
+
+function scrollToUrl(url) {
+  const row = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
+  if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderSummaryError(err) {
+  document.getElementById("statFetched").textContent = "Error";
+  console.error("Funnel summary error:", err);
+}
+
+function updateUrl() {
+  const params = new URLSearchParams();
+  if (state.range !== "single") params.set("range", state.range);
+  if (state.date) params.set("date", state.date);
+  if (state.expandedTopic) params.set("topic", state.expandedTopic);
+  if (state.laneFilter) params.set("lane", state.laneFilter);
+  if (state.outcomeFilter) params.set("outcome", state.outcomeFilter);
+  const qs = params.toString();
+  history.replaceState(null, "", "/admin/funnel" + (qs ? "?" + qs : ""));
+}
+
+function loadFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("range")) {
+    state.range = params.get("range");
+    document.querySelector(`[data-range="${state.range}"]`)?.classList.add("active");
+  }
+  if (params.get("date")) {
+    state.date = params.get("date");
+    document.getElementById("datePicker").value = state.date;
+  }
+  if (params.get("lane")) {
+    state.laneFilter = params.get("lane");
+    document.getElementById("laneFilter").value = state.laneFilter;
+  }
+  if (params.get("outcome")) {
+    state.outcomeFilter = params.get("outcome");
+    document.getElementById("outcomeFilter").value = state.outcomeFilter;
+  }
+  if (params.get("topic")) state.expandedTopic = params.get("topic");
+}
+
+loadFromUrl();
+init();
+</script>
+</body>
 </html>

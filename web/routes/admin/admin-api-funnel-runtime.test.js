@@ -211,3 +211,72 @@ assert.ok(topicResp.source_domains.length > 0);
 assert.strictEqual(buildTopicResponse(topicAuditDoc, "NONEXISTENT"), null);
 
 console.log("buildTopicResponse tests pass ✓");
+
+// Test: buildTopicResponse consumes new instrumentation fields
+const docWithInstrumentation = {
+  digestDateKey: "2026-04-06",
+  summary: {
+    candidate_pool_before_dedup: 5,
+    candidate_pool_after_editorial: 4,
+    candidate_pool_after_archive_dedup: 4,
+    candidate_pool_after_freshness: 4,
+    candidate_pool_after_story_relationship: 3,
+    candidate_pool_scored: 2,
+    stale_removed_count: 0,
+    archive_repeat_block_count: 0,
+    editorial_excluded_count: 1,
+    story_relationship_continuation_removed: 1,
+  },
+  topics: {
+    TECH: {
+      total_candidates: 5,
+      selected_count: 1,
+      candidates: [
+        { headline: "Selected", url: "https://tc.com/a", source_domain: "tc.com",
+          lane: "broker_publisher_feed", selected: true, selection_reason: null,
+          _score: 0.9, _score_components: {} },
+      ],
+    },
+  },
+  fetch: {
+    broker_candidate_count: 3, discovery_candidate_count: 2,
+    topic_diagnostics: [{ tag: "TECH", broker_item_count: 3, discovery_item_count: 2 }],
+    standard_topic_broker: { source_diagnostics: [] },
+    discovery_fetch_items: [
+      { stage: "fetch", lane: "perplexity_discovery", status: "passed", topic: "TECH",
+        url: "https://perp.ai/x", title: "Discovery item", domain: "perp.ai", published_at: null },
+    ],
+  },
+  selectionDiagnostics: {
+    editorial_dropped_items: [
+      { stage: "editorial_filter", status: "dropped", reason: "url_excluded",
+        url: "https://excluded.com/a", title: "Excluded", domain: "excluded.com", topic: "TECH" },
+    ],
+    archive_dedup_dropped_items: [],
+    freshness_dropped_items: [],
+  },
+  enrichmentDiagnostics: {
+    item_outcomes: [
+      { url: "https://tc.com/a", enrichment_status: "success", repair_applied: false, failure_reason: null },
+    ],
+  },
+};
+
+const instrResp = buildTopicResponse(docWithInstrumentation, "TECH");
+assert.ok(instrResp, "should return response for instrumented doc");
+
+const fetchStage = instrResp.stages.find((s) => s.stage === "fetch");
+assert.ok(fetchStage.instrumented, "fetch stage should be instrumented when discovery_fetch_items present");
+assert.ok(fetchStage.items.length > 0, "fetch stage should have items");
+assert.strictEqual(fetchStage.items[0].lane, "discovery");
+
+const editorialStage = instrResp.stages.find((s) => s.stage === "editorial_filter");
+assert.ok(editorialStage.instrumented, "editorial_filter should be instrumented");
+assert.strictEqual(editorialStage.items.length, 1);
+assert.strictEqual(editorialStage.items[0].reason, "url_excluded");
+
+const enrichmentStage = instrResp.stages.find((s) => s.stage === "enrichment");
+assert.ok(enrichmentStage.instrumented, "enrichment should be instrumented");
+assert.strictEqual(enrichmentStage.items[0].enrichment_status, "success");
+
+console.log("buildTopicResponse instrumentation wiring tests pass ✓");

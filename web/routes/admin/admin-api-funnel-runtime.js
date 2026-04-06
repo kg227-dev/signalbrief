@@ -189,6 +189,24 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
   return result;
 }
 
+function buildItemFromDropRecord(record) {
+  return {
+    url: normalizeCanonicalUrl(String(record?.url || "")),
+    title: String(record?.title || ""),
+    domain: normalizeDomain(String(record?.domain || "")),
+    lane: record?.lane ? normalizeLane(record.lane) : null,
+    published_at: record?.published_at || null,
+    status: "dropped",
+    reason: normalizeReason(String(record?.reason || "")),
+    strategic_relevance: null,
+    strategic_relevance_reason: null,
+    score: null,
+    score_components: null,
+    duplicate_of: record?.duplicate_of ? normalizeCanonicalUrl(String(record.duplicate_of)) : null,
+    enrichment_status: null,
+  };
+}
+
 function buildItemFromCandidate(candidate) {
   const isSelected = candidate?.selected === true;
   const hasReason = Boolean(candidate?.selection_reason);
@@ -258,13 +276,76 @@ function buildTopicResponse(auditDoc, topicTag) {
     let instrumented = false;
     let items = [];
 
-    if (stageDef.key === "final_selection") {
+    if (stageDef.key === "fetch") {
+      const discoveryItems = Array.isArray(auditDoc?.fetch?.discovery_fetch_items)
+        ? auditDoc.fetch.discovery_fetch_items.filter((i) => !i?.topic || i.topic === tag)
+        : [];
+      if (discoveryItems.length > 0) {
+        instrumented = true;
+        items = discoveryItems.map((i) => ({
+          url: normalizeCanonicalUrl(String(i?.url || "")),
+          title: String(i?.title || ""),
+          domain: normalizeDomain(String(i?.domain || "")),
+          lane: normalizeLane(String(i?.lane || "discovery")),
+          published_at: i?.published_at || null,
+          status: "passed",
+          reason: null,
+          strategic_relevance: null,
+          strategic_relevance_reason: null,
+          score: null,
+          score_components: null,
+          duplicate_of: null,
+          enrichment_status: null,
+        }));
+      }
+    } else if (stageDef.key === "editorial_filter") {
+      const dropped = auditDoc?.selectionDiagnostics?.editorial_dropped_items;
+      if (Array.isArray(dropped)) {
+        instrumented = true;
+        items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
+      }
+    } else if (stageDef.key === "archive_dedup") {
+      const dropped = auditDoc?.selectionDiagnostics?.archive_dedup_dropped_items;
+      if (Array.isArray(dropped)) {
+        instrumented = true;
+        items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
+      }
+    } else if (stageDef.key === "freshness_filter") {
+      const dropped = auditDoc?.selectionDiagnostics?.freshness_dropped_items;
+      if (Array.isArray(dropped)) {
+        instrumented = true;
+        items = dropped.filter((i) => !i?.topic || i.topic === tag).map(buildItemFromDropRecord);
+      }
+    } else if (stageDef.key === "classifier") {
+      // candidates array contains all items that reached scoring;
+      // classifier drops are candidates that were rejected but not in final_selection items
+      // (currently count-only — classifier items aren't in a dedicated audit array yet)
+      instrumented = false;
+      items = [];
+    } else if (stageDef.key === "scoring") {
+      instrumented = true;
+      items = [];
+    } else if (stageDef.key === "final_selection") {
       instrumented = true;
       items = finalItems;
-    } else if (stageDef.key === "scoring") {
-      instrumented = true; // pass-through, no items
+    } else if (stageDef.key === "enrichment") {
+      const outcomes = Array.isArray(auditDoc?.enrichmentDiagnostics?.item_outcomes)
+        ? auditDoc.enrichmentDiagnostics.item_outcomes
+        : null;
+      if (outcomes) {
+        instrumented = true;
+        items = candidates
+          .filter((c) => c?.selected === true)
+          .map((c) => {
+            const outcome = outcomes.find((o) => o.url === c.url || normalizeCanonicalUrl(String(o?.url || "")) === normalizeCanonicalUrl(String(c.url || "")));
+            return {
+              ...buildItemFromCandidate(c),
+              enrichment_status: outcome?.enrichment_status || "success",
+              failure_reason: outcome?.failure_reason || null,
+            };
+          });
+      }
     }
-    // All other stages are count-only until future instrumentation ships
 
     return {
       stage: stageDef.key,

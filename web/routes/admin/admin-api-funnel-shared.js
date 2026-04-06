@@ -23,7 +23,7 @@ const REASON_ALIAS_MAP = {
 
 function normalizeLane(raw) {
   const s = String(raw || "").trim().toLowerCase();
-  if (s === "perplexity_discovery" || s === "broad") return "discovery";
+  if (s === "perplexity_discovery" || s === "broad" || s === "discovery") return "discovery";
   return "broker"; // default: any broker lane or unknown
 }
 

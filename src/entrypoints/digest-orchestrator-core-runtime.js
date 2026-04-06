@@ -931,6 +931,9 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       discovery_fetch_items: Array.isArray(fetchDiagnostics?.discovery_fetch_items)
         ? fetchDiagnostics.discovery_fetch_items
         : [],
+      broker_fetch_items: Array.isArray(fetchDiagnostics?.broker_fetch_items)
+        ? fetchDiagnostics.broker_fetch_items
+        : [],
     },
     enrichmentDiagnostics: {
       item_outcomes: Array.isArray(enrichmentDiagnostics?.item_outcomes)

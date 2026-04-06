@@ -1727,6 +1727,23 @@ function createDigestOrchestratorFetchRuntime(deps) {
     });
     fetchDiagnostics.discovery_fetch_items = discoveryAuditItems;
 
+    const brokerAuditItems = standardStates.flatMap((state) => {
+      const topicTag = String(state?.topic?.tag || "");
+      return (Array.isArray(state?.items) ? state.items : [])
+        .filter((item) => !isDiscoverySupplementItem(item))
+        .map((item) => ({
+          stage: "fetch",
+          lane: "broker",
+          status: "passed",
+          topic: topicTag,
+          url: String(item?.url || ""),
+          title: String(item?.headline || item?.title || "").slice(0, 160),
+          domain: String(item?.source_domain || item?.source || "").toLowerCase().replace(/^www\./, ""),
+          published_at: item?.published_at || null,
+        }));
+    });
+    fetchDiagnostics.broker_fetch_items = brokerAuditItems;
+
     logger(`Fetched ${allItems.length} retained candidate(s) after lane balancing`);
 
     const attemptedStandardStates = standardStates.filter((state) => Number(state?.totalCallsScheduled || 0) > 0);

@@ -529,8 +529,9 @@ function buildAccordion(stages, laneFilter, outcomeFilter) {
     let items = stage.items || [];
     let globalBanner = "";
 
+    // global_items flag retained for backwards compat — no longer emitted by API but guard kept
     if (stage.global_items) {
-      globalBanner = `<div class="count-only-note" style="background:#FFF7ED;border-bottom:1px solid var(--border)">⚠ Global pool — these drops are from the combined feed across all topics. Counts in the funnel table above reflect per-topic throughput only.</div>`;
+      globalBanner = `<div class="count-only-note" style="background:#FFF7ED;border-bottom:1px solid var(--border)">⚠ Global pool — these drops span all topics. Counts above reflect per-topic throughput only.</div>`;
     }
 
     if (stage.stage === "classifier") {

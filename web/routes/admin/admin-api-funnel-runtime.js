@@ -116,7 +116,7 @@ function buildSummaryFromAuditDocs(auditDocs, period) {
 
   const topDropDomains = Object.values(globalDomainMap)
     .map((d) => ({ ...d, conversion_rate: computeConversionRate(d.selected, d.fetched) }))
-    .sort((a, b) => b.fetched - a.fetched)
+    .sort((a, b) => (b.fetched - b.selected) - (a.fetched - a.selected))
     .slice(0, 10);
 
   const topicMap = Object.create(null);

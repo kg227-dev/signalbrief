@@ -87,4 +87,41 @@ assert.strictEqual(summary.topics[0].fetched, 34);
 assert.strictEqual(summary.topics[0].selected, 3);
 assert.ok(Array.isArray(summary.topics[0].top_domains));
 
+// top_drop_domains present and has correct shape
+assert.ok(Array.isArray(summary.top_drop_domains), "top_drop_domains should be an array");
+
+// top_drop_stage should be the stage that dropped the most items
+assert.ok(typeof summary.top_drop_stage === "string" || summary.top_drop_stage === null, "top_drop_stage should be string or null");
+
+// Range view: daily_trend should not appear for single-day view
+assert.strictEqual(summary.daily_trend, undefined, "daily_trend should be absent in single-day view");
+
+// Range view test
+const docDay2 = {
+  digestDateKey: "2026-04-04",
+  summary: { candidate_pool_before_dedup: 10, candidate_pool_scored: 5 },
+  topics: {
+    TECHNOLOGY: {
+      total_candidates: 10,
+      selected_count: 2,
+      candidates: [
+        { headline: "X", url: "https://example.com/x", source_domain: "example.com",
+          lane: "broker_publisher_feed", selected: true, selection_reason: null, _score: 0.9, _score_components: {} },
+        { headline: "Y", url: "https://example.com/y", source_domain: "example.com",
+          lane: "broker_publisher_feed", selected: true, selection_reason: null, _score: 0.8, _score_components: {} },
+      ],
+    },
+  },
+  fetch: { broker_candidate_count: 10, discovery_candidate_count: 0 },
+};
+
+const rangeSummary = buildSummaryFromAuditDocs([sampleDoc, docDay2], { from: "2026-04-04", to: "2026-04-05" });
+assert.strictEqual(rangeSummary.run_dates.length, 2);
+assert.deepStrictEqual(rangeSummary.missing_dates, []);
+assert.ok(Array.isArray(rangeSummary.daily_trend), "daily_trend should be an array in range view");
+assert.strictEqual(rangeSummary.daily_trend.length, 2, "daily_trend should have one entry per run date");
+assert.ok(rangeSummary.daily_trend.every(d => typeof d.date === "string" && typeof d.fetched === "number" && typeof d.selected === "number"), "daily_trend entries have correct shape");
+assert.strictEqual(rangeSummary.totals.fetched, 34 + 10); // sum across both days
+assert.strictEqual(rangeSummary.totals.selected, 3 + 2);
+
 console.log("buildSummaryFromAuditDocs tests pass ✓");

@@ -486,7 +486,7 @@ function renderTopicDetail(data) {
           ${cb.low     ? `<span class="clf-chip clf-low">LOW ${cb.low}</span>` : ""}
           ${cb.unknown ? `<span class="clf-chip clf-unknown">? ${cb.unknown}</span>` : ""}
         </div>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">These are items that <em>passed</em> the classifier and entered scoring. Items dropped by the classifier are not yet individually tracked.</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">Distribution of items that reached the classifier (scored items only). LOW items may have been dropped before scoring was applied.</div>
       </div>`
     : "";
 
@@ -585,6 +585,9 @@ function buildItemRow(item, stageKey, idx) {
   if (item.status === "dropped" && item.reason) {
     if ((item.reason === "duplicate_headline" || item.reason === "duplicate_url") && item.duplicate_of) {
       reasonHtml = `<div class="item-reason">Reason: <strong>${esc(item.reason)}</strong> · Duplicate of: <span class="reason-dup-link" onclick="scrollToUrl('${esc(item.duplicate_of)}')">${esc(item.duplicate_of)}</span></div>`;
+    } else if (item.reason === "too_old" && item.freshness_bucket) {
+      const bucketLabel = { "0_24h": "0–24h old", "24_48h": "24–48h old", "over_48h": ">48h old" }[item.freshness_bucket] || item.freshness_bucket;
+      reasonHtml = `<div class="item-reason">Reason: <strong>${esc(item.reason)}</strong> · Age: ${esc(bucketLabel)}</div>`;
     } else {
       reasonHtml = `<div class="item-reason">Reason: <strong>${esc(item.reason)}</strong></div>`;
     }

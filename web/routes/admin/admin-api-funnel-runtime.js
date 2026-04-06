@@ -208,16 +208,19 @@ function buildItemFromDropRecord(record) {
     url: normalizeCanonicalUrl(String(record?.url || "")),
     title: String(record?.title || ""),
     domain: normalizeDomain(String(record?.domain || "")),
-    lane: record?.lane ? normalizeLane(record.lane) : null,
+    lane: normalizeLane(String(record?.lane || "broker")),
     published_at: record?.published_at || null,
     status: "dropped",
     reason: normalizeReason(String(record?.reason || "")),
-    strategic_relevance: null,
-    strategic_relevance_reason: null,
+    strategic_relevance: record?.strategic_relevance || null,
+    strategic_relevance_reason: record?.strategic_relevance_reason
+      ? String(record.strategic_relevance_reason).slice(0, 120)
+      : null,
     score: null,
     score_components: null,
     duplicate_of: record?.duplicate_of ? normalizeCanonicalUrl(String(record.duplicate_of)) : null,
     enrichment_status: null,
+    freshness_bucket: record?.freshness_bucket || null,
   };
 }
 

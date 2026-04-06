@@ -1067,6 +1067,13 @@ function mergeTopicAuditDocument(existingDoc, freshDoc, mergeTopicTag) {
   const freshBrokerTopicDiagnostic = (Array.isArray(freshBroker.topic_diagnostics) ? freshBroker.topic_diagnostics : [])
     .find((topic) => String(topic?.tag || "").trim().toUpperCase() === tag);
 
+  function mergeFetchItemArray(existingArr, freshArr) {
+    const existing = Array.isArray(existingArr)
+      ? existingArr.filter((r) => String(r?.topic || "").toUpperCase() !== tag) : [];
+    const fresh = Array.isArray(freshArr) ? freshArr : [];
+    return existing.concat(fresh);
+  }
+
   merged.fetch = {
     ...existingFetch,
     max_discovery_candidate_share_pct: freshFetch.max_discovery_candidate_share_pct ?? existingFetch.max_discovery_candidate_share_pct ?? 0,
@@ -1085,6 +1092,8 @@ function mergeTopicAuditDocument(existingDoc, freshDoc, mergeTopicTag) {
         refreshed_at: freshDoc?.generated_at || new Date().toISOString(),
       },
     },
+    broker_fetch_items: mergeFetchItemArray(existingFetch.broker_fetch_items, freshFetch.broker_fetch_items),
+    discovery_fetch_items: mergeFetchItemArray(existingFetch.discovery_fetch_items, freshFetch.discovery_fetch_items),
   };
 
   const priorRefreshes = Array.isArray(merged.partial_refreshes) ? merged.partial_refreshes : [];

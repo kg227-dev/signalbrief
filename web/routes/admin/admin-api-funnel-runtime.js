@@ -289,6 +289,15 @@ function buildTopicResponse(auditDoc, topicTag) {
   const archiveDedupDropItems = getGlobalDropItems(auditDoc?.selectionDiagnostics?.archive_dedup_dropped_items);
   const freshnessDropItems    = getGlobalDropItems(auditDoc?.selectionDiagnostics?.freshness_dropped_items);
 
+  // story_dedup and classifier drop arrays have topic tags — filter per-topic.
+  function getTopicTaggedDrops(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    return arr.filter((r) => !r?.topic || String(r.topic).toUpperCase() === tag);
+  }
+
+  const storyDedupDropItems  = getTopicTaggedDrops(auditDoc?.selectionDiagnostics?.story_dedup_dropped_items);
+  const classifierDropItems  = getTopicTaggedDrops(auditDoc?.selectionDiagnostics?.classifier_dropped_items);
+
   // Build stage chain: each stage's out feeds the next stage's in.
   // Pre-topic stages (fetch → story_dedup) pass fetchedForTopic through with 0 drops —
   // their counts cannot be attributed per-topic without topic-tagged records.
@@ -323,21 +332,25 @@ function buildTopicResponse(auditDoc, topicTag) {
     instrumented: freshnessDropItems !== null,
   };
 
+  const storyDropCount = storyDedupDropItems ? storyDedupDropItems.length : 0;
   chain.story_dedup = {
     in: fetchedForTopic,
-    out: fetchedForTopic,
-    dropped: 0,
-    instrumented: false,
+    out: Math.max(0, fetchedForTopic - storyDropCount),
+    dropped: storyDropCount,
+    instrumented: storyDedupDropItems !== null,
   };
 
-  // classifier: absorbs all pre-classifier drops for this topic.
-  // in = fetchedForTopic (all items that were fetched for this topic),
-  // out = scoredCount (items that passed classifier and entered scoring).
+  // classifier: when classifier_dropped_items is present, use its count for dropped.
+  // out is always scoredCount (ground truth). in = story_dedup.out.
+  // If classifierDropItems is available, in = scoredCount + classifierDropItems.length.
+  const classifierIn = classifierDropItems !== null
+    ? scoredCount + classifierDropItems.length
+    : chain.story_dedup.out;
   chain.classifier = {
-    in: fetchedForTopic,
+    in: classifierIn,
     out: scoredCount,
-    dropped: Math.max(0, fetchedForTopic - scoredCount),
-    instrumented: false,
+    dropped: classifierDropItems !== null ? classifierDropItems.length : Math.max(0, chain.story_dedup.out - scoredCount),
+    instrumented: classifierDropItems !== null,
   };
 
   // scoring: passthrough (all items that reach scoring pass through to final_selection)
@@ -403,10 +416,16 @@ function buildTopicResponse(auditDoc, topicTag) {
     } else if (stageDef.key === "freshness_filter" && freshnessDropItems) {
       items = freshnessDropItems.map(buildItemFromDropRecord);
       globalItems = true;
+    } else if (stageDef.key === "story_dedup" && storyDedupDropItems) {
+      items = storyDedupDropItems.map(buildItemFromDropRecord);
     } else if (stageDef.key === "classifier") {
-      // Show LOW-scored items as a proxy for classifier signal.
-      // Note: true classifier-rejected items (never reached scoring) are not yet individually tracked.
-      items = lowScoredItems;
+      if (classifierDropItems) {
+        // True classifier-rejected items (LOW relevance, filtered before scoring)
+        items = classifierDropItems.map(buildItemFromDropRecord);
+      } else {
+        // Fallback: show LOW-scored items from candidates as a proxy
+        items = lowScoredItems;
+      }
     } else if (stageDef.key === "final_selection") {
       items = finalItems;
     } else if (stageDef.key === "enrichment") {

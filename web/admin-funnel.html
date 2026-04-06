@@ -454,7 +454,7 @@ function renderTopicDetail(data) {
 
   // Instrumentation completeness note
   const countOnlyStages = (data.stages || []).filter((s) =>
-    !s.instrumented && !s.global_items && s.stage !== "scoring"
+    !s.instrumented && !s.global_items && s.stage !== "scoring" && s.stage !== "fetch"
   ).map((s) => STAGE_LABELS[s.stage] || s.stage);
   const globalItemStages = (data.stages || []).filter((s) => s.global_items)
     .map((s) => STAGE_LABELS[s.stage] || s.stage);
@@ -534,21 +534,24 @@ function buildAccordion(stages, laneFilter, outcomeFilter) {
     }
 
     if (stage.stage === "classifier") {
-      // Show LOW-scored items; true classifier-rejected items aren't individually tracked yet
-      const lowItems = items; // already filtered to LOW scored
-      if (!lowItems.length) {
+      if (!items.length) {
         return `<div>
           <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
           <div class="acc-body" id="${id}">
-            <div class="count-only-note">No LOW-scored items for this topic. True classifier-rejected items (before scoring) aren't individually tracked yet.</div>
+            <div class="count-only-note">${stage.instrumented ? "No items dropped by classifier for this topic." : "No LOW-scored items for this topic."}</div>
           </div>
         </div>`;
       }
-      const note = `<div class="count-only-note" style="background:#FFF7ED;border-bottom:1px solid var(--border)">Showing ${lowItems.length} LOW-scored item${lowItems.length !== 1 ? "s" : ""} that reached scoring. Items rejected before scoring are not yet individually tracked.</div>`;
-      const itemRows = lowItems.map((item, idx) => buildItemRow(item, stage.stage, idx)).join("");
+      const classifierNote = stage.instrumented
+        ? ""
+        : `<div class="count-only-note" style="background:#FFF7ED;border-bottom:1px solid var(--border)">Showing ${items.length} LOW-scored item${items.length !== 1 ? "s" : ""} that reached scoring (proxy). True pre-scoring rejections not yet tracked.</div>`;
+      let filteredItems = items;
+      if (laneFilter) filteredItems = filteredItems.filter((i) => i.lane === laneFilter);
+      if (outcomeFilter && outcomeFilter !== "dropped") filteredItems = []; // classifier items are all dropped
+      const itemRows = filteredItems.map((item, idx) => buildItemRow(item, stage.stage, idx)).join("");
       return `<div>
         <div class="acc-header" onclick="toggleAcc('${id}')">${esc(header)} <span>▶</span></div>
-        <div class="acc-body" id="${id}">${note}${itemRows}</div>
+        <div class="acc-body" id="${id}">${classifierNote}${itemRows || '<div class="count-only-note">No items match current filters.</div>'}</div>
       </div>`;
     }
 

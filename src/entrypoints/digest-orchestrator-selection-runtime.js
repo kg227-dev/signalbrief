@@ -617,6 +617,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     let annotatedItems = dedupedItems;
     let continuationRemovedCount = 0;
     let followUpCount = 0;
+    const storyDedupDroppedItems = [];
 
     if (typeof classifyStoryRelationship === "function") {
       // Build a flat list of past headlines from the archive-by-date result.
@@ -634,7 +635,14 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         const relationship = classifyStoryRelationship(item, pastItems);
         if (relationship === "continuation") {
           continuationRemovedCount += 1;
-          // Skip: same story, no meaningful update
+          storyDedupDroppedItems.push({
+            url: String(item?.url || ""),
+            title: String(item?.headline || item?.title || ""),
+            domain: String(item?.source_domain || item?.source || ""),
+            lane: String(item?.lane || ""),
+            published_at: item?.published_at || null,
+            reason: "story_continuation",
+          });
           continue;
         }
         classified.push({ ...item, _story_relationship: relationship });
@@ -669,6 +677,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     }
     const classificationEnabled = CONFIG.digest?.classification?.enabled === true;
     let scoringInput = preRankingItems;
+    let classifierDroppedItems = null;
 
     if (classificationEnabled) {
       const cachePath = path.resolve(process.cwd(), "data", "strategic-classification-cache.json");
@@ -688,6 +697,19 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       const { filtered, dropped, diagnostics: filterDiag } = filterLowRelevance(classified, { log });
       filterDiagnostics = filterDiag;
       scoringInput = filtered;
+      classifierDroppedItems = dropped.map((item) => ({
+        url: String(item?.url || ""),
+        title: String(item?.headline || item?.title || ""),
+        domain: String(item?.source_domain || item?.source || ""),
+        lane: String(item?.lane || ""),
+        published_at: item?.published_at || null,
+        topic: String(item?.tag || ""),
+        reason: "low_relevance",
+        strategic_relevance: "LOW",
+        strategic_relevance_reason: item?.strategic_relevance_reason
+          ? String(item.strategic_relevance_reason).slice(0, 120)
+          : null,
+      }));
 
       log(`Strategic classifier: ${classRunDiag.total_classified} classified (${classRunDiag.cache_hits} cached, ${classRunDiag.model_calls} model), ${dropped.length} LOW dropped, ${filtered.length} remain`);
     }
@@ -889,6 +911,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         editorial_dropped_items: editorialDroppedItems,
         archive_dedup_dropped_items: archiveDedupDroppedItems,
         freshness_dropped_items: freshnessDroppedItems,
+        story_dedup_dropped_items: storyDedupDroppedItems,
+        classifier_dropped_items: classifierDroppedItems,
       },
     };
   }

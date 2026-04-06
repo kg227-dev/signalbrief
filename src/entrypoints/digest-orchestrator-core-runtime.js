@@ -935,6 +935,25 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
         ? fetchDiagnostics.broker_fetch_items
         : [],
     },
+    selectionDiagnostics: {
+      editorial_dropped_items: Array.isArray(selectionDiagnostics?.editorial_dropped_items)
+        ? selectionDiagnostics.editorial_dropped_items
+        : [],
+      archive_dedup_dropped_items: Array.isArray(selectionDiagnostics?.archive_dedup_dropped_items)
+        ? selectionDiagnostics.archive_dedup_dropped_items
+        : [],
+      freshness_dropped_items: Array.isArray(selectionDiagnostics?.freshness_dropped_items)
+        ? selectionDiagnostics.freshness_dropped_items
+        : [],
+      story_dedup_dropped_items: Array.isArray(selectionDiagnostics?.story_dedup_dropped_items)
+        ? selectionDiagnostics.story_dedup_dropped_items
+        : [],
+      classifier_dropped_items: selectionDiagnostics?.classifier_dropped_items === null
+        ? null // null means classifier ran but dropped nothing, vs [] meaning not available
+        : Array.isArray(selectionDiagnostics?.classifier_dropped_items)
+          ? selectionDiagnostics.classifier_dropped_items
+          : null,
+    },
     enrichmentDiagnostics: {
       item_outcomes: Array.isArray(enrichmentDiagnostics?.item_outcomes)
         ? enrichmentDiagnostics.item_outcomes
@@ -1079,6 +1098,31 @@ function mergeTopicAuditDocument(existingDoc, freshDoc, mergeTopicTag) {
     .concat(nextRefresh)
     .slice(-20);
   merged.partial_refresh = nextRefresh;
+
+  // Merge per-topic selectionDiagnostics drop arrays: keep existing records for other
+  // topics and replace with the fresh set for the rerun topic.
+  const existingSD = merged.selectionDiagnostics && typeof merged.selectionDiagnostics === "object"
+    ? merged.selectionDiagnostics : {};
+  const freshSD = freshDoc?.selectionDiagnostics && typeof freshDoc.selectionDiagnostics === "object"
+    ? freshDoc.selectionDiagnostics : {};
+  function mergeDropArray(existingArr, freshArr) {
+    const existing = Array.isArray(existingArr)
+      ? existingArr.filter((r) => String(r?.topic || "").toUpperCase() !== tag) : [];
+    const fresh = Array.isArray(freshArr) ? freshArr : [];
+    return existing.concat(fresh);
+  }
+  merged.selectionDiagnostics = {
+    editorial_dropped_items:    mergeDropArray(existingSD.editorial_dropped_items,    freshSD.editorial_dropped_items),
+    archive_dedup_dropped_items: mergeDropArray(existingSD.archive_dedup_dropped_items, freshSD.archive_dedup_dropped_items),
+    freshness_dropped_items:    mergeDropArray(existingSD.freshness_dropped_items,    freshSD.freshness_dropped_items),
+    story_dedup_dropped_items:  mergeDropArray(existingSD.story_dedup_dropped_items,  freshSD.story_dedup_dropped_items),
+    // classifier_dropped_items: null means classifier wasn't enabled; preserve existing null unless fresh has data
+    classifier_dropped_items: freshSD.classifier_dropped_items !== undefined
+      ? freshSD.classifier_dropped_items !== null
+        ? mergeDropArray(existingSD.classifier_dropped_items, freshSD.classifier_dropped_items)
+        : (existingSD.classifier_dropped_items !== null ? existingSD.classifier_dropped_items : null)
+      : (existingSD.classifier_dropped_items !== undefined ? existingSD.classifier_dropped_items : null),
+  };
 
   return recomputeDigestAuditRollups(merged);
 }

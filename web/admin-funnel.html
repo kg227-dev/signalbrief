@@ -407,16 +407,20 @@ function toggleTopic(tag) {
 
 async function loadTopicDetail(tag) {
   const detailEl = document.getElementById("topicDetail");
-  if (state.range !== "single") {
-    detailEl.style.display = "block";
-    detailEl.innerHTML = `<div class="topic-detail"><div class="topic-detail-title">${esc(formatTopicLabel(tag))}</div><div class="range-disabled-note">Select a single day to browse individual items.</div></div>`;
-    return;
-  }
-  const cacheKey = `${tag}:${state.date}`;
   detailEl.style.display = "block";
+
+  let cacheKey, apiUrl;
+  if (state.range === "single") {
+    cacheKey = `${tag}:${state.date}`;
+    apiUrl = `/api/admin/funnel/topic?date=${state.date}&topic=${encodeURIComponent(tag)}`;
+  } else {
+    cacheKey = `${tag}:${state.from}:${state.to}`;
+    apiUrl = `/api/admin/funnel/topic?from=${state.from}&to=${state.to}&topic=${encodeURIComponent(tag)}`;
+  }
+
   if (!state.topicCache[cacheKey]) {
     detailEl.innerHTML = `<div class="topic-detail"><div class="skeleton" style="height:200px;border-radius:8px"></div></div>`;
-    const resp = await apiFetch(`/api/admin/funnel/topic?date=${state.date}&topic=${encodeURIComponent(tag)}`);
+    const resp = await apiFetch(apiUrl);
     if (!resp.ok) {
       detailEl.innerHTML = `<div class="topic-detail"><p style="color:var(--red)">Failed to load: ${esc(resp.error)}</p></div>`;
       return;
@@ -447,10 +451,22 @@ function buildSourceRegistryHtml(registry) {
                : s.lane === "official" ? "Official"
                : esc(s.lane || "—");
 
-    // Feed column: shows raw fetch result
+    // Feed column: single-day shows raw result; range mode shows aggregated stats
+    const isRangeRegistry = registry.days_in_range > 0;
     let feedCell;
     if (!s.feed) {
       feedCell = `<span style="color:var(--text-light)">—</span>`;
+    } else if (isRangeRegistry) {
+      // Range mode: show aggregated parsed/retained + active day count
+      if (s.feed.error_days > 0 && s.feed.ok_days === 0) {
+        feedCell = `<span style="color:var(--red);font-size:12px">✕ ${s.feed.error_days}/${s.total_days} days failed</span>`;
+      } else if (s.feed.parsed === 0) {
+        feedCell = `<span style="color:var(--text-light)">0 articles (${s.total_days} days)</span>`;
+      } else if (s.feed.retained === 0) {
+        feedCell = `<span style="color:var(--yellow)">${s.feed.parsed} parsed · ${s.feed.stale} stale</span>`;
+      } else {
+        feedCell = `<span style="color:var(--text-secondary)">${s.feed.parsed} parsed · ${s.feed.retained} retained</span>`;
+      }
     } else if (!s.feed.ok) {
       const errSnippet = s.feed.error ? s.feed.error.slice(0, 60) : `HTTP error`;
       feedCell = `<span style="color:var(--red);font-size:12px" title="${esc(s.feed.error || '')}">✕ ${esc(errSnippet)}</span>`;
@@ -462,9 +478,11 @@ function buildSourceRegistryHtml(registry) {
       feedCell = `<span style="color:var(--text-secondary)">${s.feed.parsed} parsed · ${s.feed.retained} retained</span>`;
     }
 
+    const activeDaysSub = isRangeRegistry && s.total_days > 0
+      ? `<div style="font-size:10px;color:var(--text-light);margin-top:1px">${s.active_days}/${s.total_days} days</div>` : "";
     const fetchedCell = s.status === "disabled" ? `<span style="color:var(--text-light)">—</span>`
-                      : s.fetched > 0 ? `<strong>${s.fetched}</strong>`
-                      : `<span style="color:var(--text-light)">0</span>`;
+                      : s.fetched > 0 ? `<strong>${s.fetched}</strong>${activeDaysSub}`
+                      : `<span style="color:var(--text-light)">0</span>${activeDaysSub}`;
     const scoringCell = s.to_scoring > 0 ? s.to_scoring : `<span style="color:var(--text-light)">—</span>`;
     const selectedCell = s.selected > 0 ? `<strong style="color:var(--green)">${s.selected}</strong>` : `<span style="color:var(--text-light)">—</span>`;
 
@@ -493,10 +511,21 @@ function buildSourceRegistryHtml(registry) {
 
 function renderTopicDetail(data) {
   const detailEl = document.getElementById("topicDetail");
+  const isRange = data.is_range === true;
   const laneF = state.laneFilter;
   const outcomeF = state.outcomeFilter;
 
+  // Funnel table — in range mode drop the "Data" badge column (not meaningful in aggregate)
   const funnelRows = (data.stages || []).map((stage) => {
+    if (isRange) {
+      return `<tr>
+        <td><span class="stage-label">${esc(STAGE_LABELS[stage.stage] || stage.stage)}</span></td>
+        <td>${stage.in}</td>
+        <td>${stage.out}</td>
+        <td>${stage.dropped}</td>
+        <td>${stage.drop_pct != null ? stage.drop_pct + "%" : "—"}</td>
+      </tr>`;
+    }
     let badgeHtml;
     if (data.integrity_warning && !stage.instrumented) {
       badgeHtml = `<span class="count-badge badge-mismatch">Data mismatch</span>`;
@@ -515,27 +544,38 @@ function renderTopicDetail(data) {
     </tr>`;
   }).join("");
 
+  const funnelHead = isRange
+    ? `<tr><th>Stage</th><th>In</th><th>Out</th><th>Dropped</th><th>Drop %</th></tr>`
+    : `<tr><th>Stage</th><th>In</th><th>Out</th><th>Dropped</th><th>Drop %</th><th>Data</th></tr>`;
 
-  const accordionHtml = buildAccordion(data.stages || [], laneF, outcomeF);
+  const accordionHtml = isRange ? null : buildAccordion(data.stages || [], laneF, outcomeF);
 
-  const warningBanner = data.integrity_warning
+  // Single-day-only elements
+  const warningBanner = !isRange && data.integrity_warning
     ? `<div style="padding:10px 14px;background:#FEE2E2;border-radius:8px;font-size:13px;color:#991B1B;margin-bottom:16px;"><strong>Integrity warning:</strong> ${esc(data.integrity_warning)}</div>`
     : "";
 
-  // Instrumentation completeness note
-  const countOnlyStages = (data.stages || []).filter((s) =>
-    !s.instrumented && !s.global_items && s.stage !== "scoring" && s.stage !== "fetch"
-  ).map((s) => STAGE_LABELS[s.stage] || s.stage);
-  const globalItemStages = (data.stages || []).filter((s) => s.global_items)
-    .map((s) => STAGE_LABELS[s.stage] || s.stage);
-  const instrParts = [];
-  if (countOnlyStages.length) instrParts.push(`Count-only (no item visibility): ${esc(countOnlyStages.join(", "))}`);
-  if (globalItemStages.length) instrParts.push(`Global pool items (all topics, not filtered): ${esc(globalItemStages.join(", "))}`);
-  const instrNote = instrParts.length
-    ? `<div class="instrumentation-note">⚠ ${instrParts.join(" · ")}. Pre-topic stages run on the combined feed before topic assignment.</div>`
+  const instrNote = (() => {
+    if (isRange) return "";
+    const countOnlyStages = (data.stages || []).filter((s) =>
+      !s.instrumented && !s.global_items && s.stage !== "scoring" && s.stage !== "fetch"
+    ).map((s) => STAGE_LABELS[s.stage] || s.stage);
+    const globalItemStages = (data.stages || []).filter((s) => s.global_items)
+      .map((s) => STAGE_LABELS[s.stage] || s.stage);
+    const parts = [];
+    if (countOnlyStages.length) parts.push(`Count-only (no item visibility): ${esc(countOnlyStages.join(", "))}`);
+    if (globalItemStages.length) parts.push(`Global pool items (all topics, not filtered): ${esc(globalItemStages.join(", "))}`);
+    return parts.length
+      ? `<div class="instrumentation-note">⚠ ${parts.join(" · ")}. Pre-topic stages run on the combined feed before topic assignment.</div>`
+      : "";
+  })();
+
+  // Range context header
+  const rangeNote = isRange
+    ? `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">${data.days_with_data}-day aggregate · ${esc(data.from)} → ${esc(data.to)} · item-level detail available per day</div>`
     : "";
 
-  // Fetch breakdown header
+  // Fetch breakdown
   const fb = data.fetch_breakdown;
   const fetchBreakdownHtml = fb
     ? `<div class="lane-breakdown" style="margin-bottom:16px">
@@ -556,25 +596,25 @@ function renderTopicDetail(data) {
           ${cb.low     ? `<span class="clf-chip clf-low">LOW ${cb.low}</span>` : ""}
           ${cb.unknown ? `<span class="clf-chip clf-unknown">? ${cb.unknown}</span>` : ""}
         </div>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">Distribution of items that reached the classifier (scored items only). LOW items may have been dropped before scoring was applied.</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${isRange ? `Across ${data.days_with_data} days.` : "Scored items only. LOW items may have been dropped before scoring was applied."}</div>
       </div>`
     : "";
 
   detailEl.innerHTML = `<div class="topic-detail">
     <div class="topic-detail-title">${esc(formatTopicLabel(data.topic))}</div>
+    ${rangeNote}
     ${fetchBreakdownHtml}
     ${warningBanner}
     ${instrNote}
     <div class="section-title">Stage Funnel</div>
     <table class="funnel-table">
-      <thead><tr><th>Stage</th><th>In</th><th>Out</th><th>Dropped</th><th>Drop %</th><th>Data</th></tr></thead>
+      <thead>${funnelHead}</thead>
       <tbody>${funnelRows}</tbody>
     </table>
     ${classifierHtml}
     <div class="section-title">Source Registry</div>
     <div style="margin-bottom:24px">${buildSourceRegistryHtml(data.source_registry)}</div>
-    <div class="section-title">Item Explorer</div>
-    <div class="accordion">${accordionHtml}</div>
+    ${isRange ? "" : `<div class="section-title">Item Explorer</div><div class="accordion">${accordionHtml}</div>`}
   </div>`;
 }
 

@@ -629,6 +629,140 @@ function buildTopicResponse(auditDoc, topicTag) {
   return response;
 }
 
+function buildAggregatedTopicResponse(auditDocs, topicTag, from, to) {
+  const tag = String(topicTag || "").trim().toUpperCase();
+
+  const dayResponses = auditDocs
+    .map((doc) => buildTopicResponse(doc, tag))
+    .filter(Boolean);
+
+  if (dayResponses.length === 0) return null;
+
+  // Aggregate stage counts — the chain invariant still holds in aggregate
+  // (sum of fetch.out across days == sum of editorial.in across days, etc.)
+  const stageAcc = Object.create(null);
+  for (const resp of dayResponses) {
+    for (const stage of (resp.stages || [])) {
+      if (!stageAcc[stage.stage]) {
+        stageAcc[stage.stage] = { stage: stage.stage, in: 0, out: 0, dropped: 0, instrumented: false };
+      }
+      stageAcc[stage.stage].in       += stage.in      || 0;
+      stageAcc[stage.stage].out      += stage.out     || 0;
+      stageAcc[stage.stage].dropped  += stage.dropped || 0;
+      if (stage.instrumented) stageAcc[stage.stage].instrumented = true;
+    }
+  }
+  const stages = STAGES
+    .map((def) => {
+      const a = stageAcc[def.key];
+      if (!a) return null;
+      return {
+        stage: a.stage,
+        in: a.in,
+        out: a.out,
+        dropped: a.dropped,
+        drop_pct: computeDropPct(a.dropped, a.in),
+        instrumented: a.instrumented,
+        global_items: false,
+        items: null,
+      };
+    })
+    .filter(Boolean);
+
+  // Aggregate fetch lane breakdown
+  const fbDays = dayResponses.filter((r) => r.fetch_breakdown);
+  const fetchBreakdown = fbDays.length
+    ? fbDays.reduce((acc, r) => ({
+        broker:    acc.broker    + (r.fetch_breakdown.broker    || 0),
+        discovery: acc.discovery + (r.fetch_breakdown.discovery || 0),
+      }), { broker: 0, discovery: 0 })
+    : null;
+
+  // Aggregate classifier distribution
+  const cbDays = dayResponses.filter((r) => r.classifier_breakdown);
+  const classifierBreakdown = cbDays.length
+    ? cbDays.reduce((acc, r) => ({
+        high:    acc.high    + (r.classifier_breakdown.high    || 0),
+        medium:  acc.medium  + (r.classifier_breakdown.medium  || 0),
+        low:     acc.low     + (r.classifier_breakdown.low     || 0),
+        unknown: acc.unknown + (r.classifier_breakdown.unknown || 0),
+      }), { high: 0, medium: 0, low: 0, unknown: 0 })
+    : null;
+
+  // Aggregate source registry — group by source id across all days
+  const srcAcc = Object.create(null);
+  for (const resp of dayResponses) {
+    for (const s of (resp.source_registry?.sources || [])) {
+      if (!srcAcc[s.id]) {
+        srcAcc[s.id] = {
+          id: s.id, name: s.name, domains: s.domains,
+          tier: s.tier, lane: s.lane, enabled: s.enabled,
+          fetched: 0, to_scoring: 0, selected: 0,
+          active_days: 0, total_days: 0,
+          feed_parsed: 0, feed_retained: 0, feed_stale: 0,
+          feed_ok_days: 0, feed_error_days: 0,
+        };
+      }
+      const a = srcAcc[s.id];
+      a.fetched     += s.fetched     || 0;
+      a.to_scoring  += s.to_scoring  || 0;
+      a.selected    += s.selected    || 0;
+      a.total_days++;
+      if (s.status === "active") a.active_days++;
+      if (s.feed) {
+        a.feed_parsed   += s.feed.parsed   || 0;
+        a.feed_retained += s.feed.retained || 0;
+        a.feed_stale    += s.feed.stale    || 0;
+        if (s.feed.ok) a.feed_ok_days++; else a.feed_error_days++;
+      }
+    }
+  }
+
+  const aggregatedSources = Object.values(srcAcc).map((a) => {
+    let status;
+    if (!a.enabled)                                          status = "disabled";
+    else if (a.fetched > 0)                                  status = "active";
+    else if (a.feed_error_days > 0 && a.feed_ok_days === 0) status = "error";
+    else if (a.feed_parsed === 0 && a.total_days > 0)        status = "empty";
+    else if (a.feed_retained === 0 && a.feed_parsed > 0)     status = "stale";
+    else                                                     status = "silent";
+
+    const hasFeedData = (a.feed_ok_days + a.feed_error_days) > 0;
+    return {
+      id: a.id, name: a.name, domains: a.domains,
+      tier: a.tier, lane: a.lane, enabled: a.enabled,
+      status,
+      fetched: a.fetched, to_scoring: a.to_scoring, selected: a.selected,
+      active_days: a.active_days, total_days: a.total_days,
+      feed: hasFeedData ? {
+        ok: a.feed_error_days === 0,
+        parsed: a.feed_parsed, retained: a.feed_retained, stale: a.feed_stale,
+        ok_days: a.feed_ok_days, error_days: a.feed_error_days,
+      } : null,
+    };
+  });
+
+  const sourceRegistry = {
+    configured_count: aggregatedSources.length,
+    active_count:  aggregatedSources.filter((s) => s.status === "active").length,
+    silent_count:  aggregatedSources.filter((s) => !["active", "disabled"].includes(s.status)).length,
+    days_in_range: dayResponses.length,
+    sources: aggregatedSources,
+  };
+
+  return {
+    topic: tag,
+    from,
+    to,
+    days_with_data: dayResponses.length,
+    is_range: true,
+    fetch_breakdown: fetchBreakdown,
+    classifier_breakdown: classifierBreakdown,
+    stages,
+    source_registry: sourceRegistry,
+  };
+}
+
 async function handleAdminFunnelRoutes(ctx, deps) {
   const { req, res, pathname, url } = ctx;
   const { json, isAdminAuthed, digestAuditDir } = deps;
@@ -672,22 +806,35 @@ async function handleAdminFunnelRoutes(ctx, deps) {
 
   if (pathname === "/api/admin/funnel/topic") {
     const dateParam  = url.searchParams.get("date");
+    const fromParam  = url.searchParams.get("from");
+    const toParam    = url.searchParams.get("to");
     const topicParam = url.searchParams.get("topic");
-    if (!dateParam || !topicParam) {
-      json(res, { ok: false, error: "date and topic required" }, 400);
+
+    if (!topicParam) {
+      json(res, { ok: false, error: "topic required" }, 400);
       return true;
     }
-    const doc = readAuditFile(auditDir, dateParam);
-    if (!doc) {
-      json(res, { ok: false, error: "no_data_for_date" }, 404);
+
+    if (dateParam) {
+      const doc = readAuditFile(auditDir, dateParam);
+      if (!doc) { json(res, { ok: false, error: "no_data_for_date" }, 404); return true; }
+      const topicResp = buildTopicResponse(doc, topicParam);
+      if (!topicResp) { json(res, { ok: false, error: "topic_not_found" }, 404); return true; }
+      json(res, { ok: true, ...topicResp });
       return true;
     }
-    const topicResp = buildTopicResponse(doc, topicParam);
-    if (!topicResp) {
-      json(res, { ok: false, error: "topic_not_found" }, 404);
+
+    if (fromParam && toParam) {
+      const dates = expandDateRange(fromParam, toParam);
+      const auditDocs = dates.map((d) => readAuditFile(auditDir, d)).filter(Boolean);
+      if (auditDocs.length === 0) { json(res, { ok: false, error: "no_data_for_range" }, 404); return true; }
+      const topicResp = buildAggregatedTopicResponse(auditDocs, topicParam, fromParam, toParam);
+      if (!topicResp) { json(res, { ok: false, error: "topic_not_found" }, 404); return true; }
+      json(res, { ok: true, ...topicResp });
       return true;
     }
-    json(res, { ok: true, ...topicResp });
+
+    json(res, { ok: false, error: "date or from+to required" }, 400);
     return true;
   }
 

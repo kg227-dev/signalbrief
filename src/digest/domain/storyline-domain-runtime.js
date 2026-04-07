@@ -79,6 +79,7 @@ const SOURCE_TIER_RULES = Object.freeze({
     domains: [
       "reuters.com", "bloomberg.com", "ft.com", "wsj.com",
       "sec.gov", "fda.gov", "cms.gov", "treasury.gov", "federalreserve.gov",
+      "federalregister.gov",
       "nytimes.com", "economist.com", "nature.com",
       "apnews.com", "washingtonpost.com", "bbc.com", "theguardian.com",
       "lancet.com",
@@ -100,6 +101,7 @@ const SOURCE_TIER_RULES = Object.freeze({
       "cnbc.com", "axios.com", "thehill.com", "politico.com",
       "healthaffairs.org", "statnews.com",
       "utilitydive.com", "energydive.com",
+      "finextra.com",
       // Industry Dive family
       "ciodive.com", "supplychaindive.com", "retaildive.com", "hrdive.com",
       "biopharmadive.com", "healthcaredive.com", "cybersecuritydive.com", "cfodive.com",
@@ -129,6 +131,10 @@ const SOURCE_TIER_RULES = Object.freeze({
       "freightwaves.com", "modernretail.co", "chainstoreage.com", "progressivegrocer.com",
       "commercialobserver.com", "housingwire.com", "workforce.com", "staffingindustry.com",
       "canarymedia.com", "solarpowerworldonline.com",
+      // Previously unknown-tier sources now classified (Change F)
+      "cleantechnica.com", "nrn.com", "consumergoods.com",
+      "constructiondive.com", "joc.com", "supermarketnews.com",
+      "endpoints.news", "marketwatch.com",
     ],
   },
   corporate: {
@@ -184,6 +190,9 @@ const TRADE_SPECIALIST_DOMAINS = new Set([
   "canarymedia.com", "solarpowerworldonline.com", "manufacturingdive.com",
   "beckershospitalreview.com", "medpagetoday.com",
   "insurancejournal.com", "healthleadersmedia.com",
+  // Change F additions
+  "finextra.com", "cleantechnica.com", "nrn.com", "consumergoods.com",
+  "constructiondive.com", "joc.com", "supermarketnews.com", "endpoints.news",
 ]);
 const ANALYSIS_BLOG_DOMAINS = new Set([
   "hbr.org", "mckinsey.com", "bcg.com", "bain.com",
@@ -193,6 +202,7 @@ const AGGREGATOR_DOMAINS = new Set([
   "investing.com", "barchart.com", "benzinga.com",
   "financialcontent.com", "seekingalpha.com", "fool.com",
   "stockstotrade.com", "mexc.com",
+  "marketwatch.com",
 ]);
 const PLATFORM_ROOT_DOMAINS = new Set([
   "youtube.com",

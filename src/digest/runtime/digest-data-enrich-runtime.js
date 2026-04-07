@@ -318,7 +318,8 @@ function createDigestDataEnrichRuntime(deps) {
         writeupDiagnostics: collectWriteupStats(normalized, repeatedPhraseRejectCount, firstPassFailedIndexes),
       };
     } catch (err) {
-      log(`Claude parse error: ${err.message}`);
+      const rawText = String(res.body?.content?.[0]?.text || "").slice(0, 500);
+      log(`Claude parse error: ${err.message} | raw_preview: ${rawText}`);
       return degradedResult(items, usage, {
         provider: "anthropic",
         reason: "parse_failure",

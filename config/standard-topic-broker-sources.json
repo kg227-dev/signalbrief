@@ -1012,7 +1012,8 @@
       ],
       "endpoint": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true
     },
     {
       "_comment": "Reuters Business News — DISABLED: feeds.reuters.com legacy RSS endpoint is dead (status 0 on 2026-03-31). Needs replacement URL before re-enabling.",
@@ -1475,7 +1476,8 @@
       ],
       "endpoint": "https://www.pymnts.com/category/retail/feed/",
       "parser": "rss",
-      "content_kind": "article"
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true
     },
     {
       "_comment": "Manufacturing Dive — factory, production, operations, reshoring. Industry Dive network.",

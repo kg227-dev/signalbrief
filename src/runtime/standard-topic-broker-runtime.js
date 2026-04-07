@@ -933,7 +933,12 @@ function officialListingUrlLooksArticleLike(url) {
     ) {
       return false;
     }
-    if (parsed.search && !/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|csv)$/i.test(lastSegment)) return false;
+    // Only reject if the query string looks like a navigation/filter page (pagination,
+    // category filters, search). Tracking params like ?mod=rss_... are fine on article URLs.
+    if (parsed.search) {
+      const navParams = ["page", "offset", "p", "q", "query", "search", "filter", "category", "tag"];
+      if (navParams.some((k) => parsed.searchParams.has(k))) return false;
+    }
     return true;
   } catch {
     return false;

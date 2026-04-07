@@ -208,6 +208,7 @@ function selectTopicItemsWithFallback(params = {}) {
 
       selected.push(item);
       selectedSet.add(item);
+      item._selection_stage = `stage_${stageName}`;
       domainCounts[domain] = domainCount + 1;
       if (isDiscoveryLaneItem(item)) discoveryCount += 1;
       if (stageName === "commentary" && isCommentary) commentarySelectedCount += 1;
@@ -313,6 +314,16 @@ function resolveEffectiveSourceCap(paramScoringConfig, configDigest) {
   return Math.max(1, Math.trunc(configured));
 }
 
+function classifySourceTypeClass(sourceType) {
+  const st = String(sourceType || "").trim().toLowerCase();
+  if (st === "reported_media" || st === "trade_specialist") return "reported";
+  if (st === "primary_official") return "official";
+  if (st === "corporate_pr") return "corporate";
+  if (st === "analysis_blog") return "commentary";
+  if (st === "aggregator_republisher" || st === "platform_user_generated") return "aggregator";
+  return "unclassified";
+}
+
 function toSelectionAuditCandidate(item, extras = {}) {
   return {
     tag: String(item?.tag || "").trim().toUpperCase() || null,
@@ -322,6 +333,7 @@ function toSelectionAuditCandidate(item, extras = {}) {
     source_domain: String(item?.source_domain || item?.source || ""),
     source_tier: item?.source_tier ?? null,
     source_type: String(item?.source_type || ""),
+    source_type_class: classifySourceTypeClass(item?.source_type),
     source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
     lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
     _score: item?._score ?? null,
@@ -877,7 +889,9 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       const selectedSet = new Set(topicAcceptedItems);
       const topicCandidates = tieredPool.map((item) => {
         const selectedForTopic = selectedSet.has(item);
-        const selectionReason = selectedForTopic ? null : String(rejectionReasonByItem.get(item) || "selection_not_selected");
+        const selectionReason = selectedForTopic
+          ? (item._selection_stage || "primary_selection")
+          : String(rejectionReasonByItem.get(item) || "selection_not_selected");
         if (!selectedForTopic) incrementCount(topicReasonCounts, selectionReason);
         return toSelectionAuditCandidate(item, {
           freshness_hours: computeItemAgeHours(item, nowMs),

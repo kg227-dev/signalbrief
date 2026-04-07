@@ -1,6 +1,6 @@
 # Retrieval Eval Worklog
 
-*Last reviewed: April 6, 2026*
+*Last reviewed: April 7, 2026*
 
 This is the live operator summary for retrieval-evaluation work. The full March 2026 historical log is archived under [`../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md`](../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md).
 
@@ -16,20 +16,21 @@ Track the current retrieval-quality loop without mixing a large historical execu
 
 ## Current Working Conclusion
 
-As of April 6, 2026 (Day 10), the run delivered 24/35 items — the worst count in the validation run. Two distinct failure modes are now active simultaneously and must be addressed separately.
+As of April 7, 2026 (Day 11), the run is the best in the validation run: 35/35 delivered, 7/7 topics full and above depth-15, trusted share 74.3% (26/35), 5 total writeup drops, repair pass at 75%. Day 10's collapse (24/35, 8.3% trusted) was driven by Sunday pool thinness and the Monday 72h freshness extension restored it cleanly.
 
-**Blocker 1 — Fetch-level pool collapse in five of seven topics.**
-Total candidates fell to 100 (vs 228 on Day 9). Consumer & Retail had 3 candidates, Life Sciences had 2. No writeup or selection fix resolves a topic with 2 candidates for a 5-item fill. The collapse likely reflects reduced Sunday publisher volume combined with a broker feed or discovery scheduling gap — but this needs verification against scheduler and fetch logs before attributing it to editorial config. Life Sciences and Consumer & Retail need fetch-level coverage fixes independent of everything else.
+**Active issue — WSJ and pymnts still silently dropping all content (fix not yet deployed).**
+`financial_wsj_markets`: `non_article_count=20` every run. `consumer_pymnts_retail`: `non_article_count=10`. The fix (`allow_article_like_listing_urls: true` on both sources + query-string check fix in `officialListingUrlLooksArticleLike`) was committed as `3800f54` and pushed to GitHub but production has not received it. Deploy before the next Sunday run (2026-04-12). On weekday runs with a full pool these missing sources are not felt; on Sunday with 2–3 candidates per topic they're material.
 
-**Blocker 2 — `provider_parse_failure` still dominating writeup drops.**
-14 of 17 Day 10 drops cite this reason. modernhealthcare.com and statnews.com are both affected; Healthcare delivered 1/5 as a direct result. The repair pass finally showed recovery (6/9 = 66.7%), the first non-zero repair rate after 0/29 on Day 9 and 0/26 on Day 8 — fix the root cause before assuming repair is enough.
+**Active issue — Saturday needs the same 72h freshness extension as Sunday/Monday.**
+Sunday already gets 72h (corrected in the existing `isLowPublishDay` check). Saturday does not — need to verify the current code covers Saturday. If not, Saturday runs will have the same pool collapse that Sunday had on Day 10.
 
-**New failure — selection bypassing top-scored candidate.**
-The highest-scoring Financial Services candidate (americanbanker.com, score=1.0) was marked `selection_not_selected` while 8 lower-quality items were routed to writeup. This is a selection-ordering or pool-routing bug separate from the writeup gate.
+**`provider_parse_failure` appears to be content-quality driven, not a systematic prompt bug.**
+Zero parse failures on Day 11 with 41 attempts and a full 351-candidate pool. Days 8–10 failures correlated exactly with thin Sunday/weekend content. The raw response logging added in `3800f54` will confirm on the next failure. No prompt fix needed until evidence says otherwise.
 
-**Trusted share:** 2/24 (8.3%) on Day 10, down from 35% on Day 9. The collapse reflects both pool thinness and the parse-failure cascade across premium trade sources.
+**Source concentration is now the active quality ceiling.**
+With pool depth and writeup reliability recovered, the main quality gap is per-source saturation. Financial Services delivered 5/5 americanbanker.com items — all good, but the Takeda/Denali dissolution and the AI-priority banker survey both missed because the pool was full. A per-source cap of 3 would force diversity; evaluate after WSJ/pymnts deploy adds new sources to the pool.
 
-Prior working conclusions (operational uptime, broker backbone, freshness) are resolved and no longer the focus.
+Prior working conclusions (operational uptime, broker backbone, freshness, writeup path) are resolved or on track.
 
 ## Update Rules
 

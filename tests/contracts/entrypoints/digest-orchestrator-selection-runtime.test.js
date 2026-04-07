@@ -370,3 +370,48 @@ assert.ok(
 );
 
 console.log("cluster official suppression and preference sort ✓");
+
+// --- Change E: backfill trust floor ---
+
+const { getBackfillRejectionReason } = runtime;
+assert.ok(typeof getBackfillRejectionReason === "function", "getBackfillRejectionReason must be exported");
+
+const trustOpts = { backfillTrustFloor: true };
+
+assert.strictEqual(
+  getBackfillRejectionReason({ source_tier: "unknown", source_type: "trade_specialist" }, [], trustOpts),
+  "selection_low_trust_backfill",
+  "unknown-tier source should be blocked from backfill"
+);
+
+assert.strictEqual(
+  getBackfillRejectionReason({ source_tier: "standard", source_type: "corporate_pr" }, [], trustOpts),
+  "selection_low_trust_backfill",
+  "corporate_pr should be blocked from backfill"
+);
+
+assert.strictEqual(
+  getBackfillRejectionReason({ source_tier: "standard", source_type: "aggregator_republisher" }, [], trustOpts),
+  "selection_low_trust_backfill",
+  "aggregator_republisher should be blocked from backfill"
+);
+
+assert.strictEqual(
+  getBackfillRejectionReason({ source_tier: "premium", source_type: "primary_official", source_domain: "fda.gov" }, [], trustOpts),
+  null,
+  "primary_official should pass trust check (return null)"
+);
+
+assert.strictEqual(
+  getBackfillRejectionReason({ source_tier: "standard", source_type: "trade_specialist", source_domain: "freightwaves.com" }, [], trustOpts),
+  null,
+  "standard tier trade_specialist should pass trust check"
+);
+
+assert.strictEqual(
+  getBackfillRejectionReason({ source_tier: "unknown", source_type: "trade_specialist" }, [], {}),
+  null,
+  "without backfillTrustFloor flag, unknown-tier should not be blocked"
+);
+
+console.log("backfill trust floor ✓");

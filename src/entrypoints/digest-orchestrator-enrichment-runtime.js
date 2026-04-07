@@ -162,6 +162,7 @@ function pickNextReserveCandidate(params = {}) {
       maxItemsPerSourceDomain: policy.maxItemsPerSourceDomain,
       maxDiscoveryPerTopic: policy.maxDiscoveryPerTopic,
       commentaryCap: policy.commentaryCapPerTopic,
+      backfillTrustFloor: policy.backfillTrustFloor === true,
     });
     if (rejectionReason) continue;
     return {
@@ -417,6 +418,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       maxItemsPerSourceDomain: Math.max(1, Number(writeupBackfillPolicy?.maxItemsPerSourceDomain || 2)),
       maxDiscoveryPerTopic: Math.max(0, Number(writeupBackfillPolicy?.maxDiscoveryPerTopic ?? 1)),
       commentaryCapPerTopic: Math.max(0, Number(writeupBackfillPolicy?.commentaryCapPerTopic ?? 1)),
+      backfillTrustFloor: writeupBackfillPolicy?.backfillTrustFloor === true,
     };
     const maxBackfillsPerSlot = strictQualityEnabled
       ? Math.max(1, Number(strictQualityConfig.max_backfills_per_slot || 2))

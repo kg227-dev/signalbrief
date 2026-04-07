@@ -248,7 +248,20 @@ function buildTopicSelectionState(selectedItems = []) {
   };
 }
 
+const LOW_TRUST_BACKFILL_SOURCE_TYPES = new Set([
+  "corporate_pr",
+  "aggregator_republisher",
+  "platform_user_generated",
+]);
+
 function getBackfillRejectionReason(candidate, currentSelected = [], opts = {}) {
+  if (opts.backfillTrustFloor === true) {
+    const sourceTier = String(candidate?.source_tier || "").trim().toLowerCase();
+    if (sourceTier === "unknown") return "selection_low_trust_backfill";
+    const sourceType = String(candidate?.source_type || "").trim().toLowerCase();
+    if (LOW_TRUST_BACKFILL_SOURCE_TYPES.has(sourceType)) return "selection_low_trust_backfill";
+  }
+
   const perSourceCap = Math.max(1, Number(opts.maxItemsPerSourceDomain || 2));
   const discoveryCap = Math.max(0, Number(opts.maxDiscoveryPerTopic ?? 1));
   const commentaryCap = Math.max(0, Number(opts.commentaryCap ?? 1));
@@ -935,6 +948,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         maxItemsPerSourceDomain: effectiveMaxItemsPerSourceDomain,
         maxDiscoveryPerTopic,
         commentaryCapPerTopic: 1,
+        backfillTrustFloor: CONFIG.digest.backfillTrustFloor === true,
       },
       selectionDiagnostics: {
         candidate_pool_before_dedup: rawCandidateCount,
@@ -999,4 +1013,5 @@ module.exports = {
   splitByFreshnessTiers,
   suppressOfficialsByCluster,
   sortWithSourceTypePreference,
+  getBackfillRejectionReason,
 };

@@ -298,3 +298,75 @@ assertModuleExports(() => runtime, TARGET_REL);
   );
   assert.deepStrictEqual(failIncidents, ["no-selectable-items"]);
 })();
+
+// --- Change C: suppressOfficialsByCluster + sortWithSourceTypePreference ---
+
+const { suppressOfficialsByCluster, sortWithSourceTypePreference } = runtime;
+
+assert.ok(typeof suppressOfficialsByCluster === "function", "suppressOfficialsByCluster must be exported");
+assert.ok(typeof sortWithSourceTypePreference === "function", "sortWithSourceTypePreference must be exported");
+
+const reportedItem = {
+  headline: "Reuters: Fed signals pause in rate cycle",
+  storyline_key: "fed-rate-pause",
+  source_type: "reported_media",
+  _score: 0.82,
+};
+const officialItem = {
+  headline: "Federal Reserve press release on monetary policy",
+  storyline_key: "fed-rate-pause",
+  source_type: "primary_official",
+  _score: 0.88,
+};
+const unrelatedOfficial = {
+  headline: "FDA approves new diabetes drug",
+  storyline_key: "fda-diabetes",
+  source_type: "primary_official",
+  _score: 0.90,
+};
+const noKeyItem = {
+  headline: "Tech news without storyline key",
+  storyline_key: "",
+  source_type: "primary_official",
+  _score: 0.91,
+};
+
+const suppressed = suppressOfficialsByCluster([reportedItem, officialItem, unrelatedOfficial, noKeyItem]);
+
+const suppressedOfficialInCluster = suppressed.find((i) => i.headline === officialItem.headline);
+assert.strictEqual(
+  suppressedOfficialInCluster?._official_suppressed_by_cluster,
+  true,
+  "official item in same cluster as reported should be marked as suppressed"
+);
+
+const unrelatedOfficialResult = suppressed.find((i) => i.headline === unrelatedOfficial.headline);
+assert.ok(
+  !unrelatedOfficialResult?._official_suppressed_by_cluster,
+  "official item with no reported in same cluster should NOT be suppressed"
+);
+
+const noKeyResult = suppressed.find((i) => i.headline === noKeyItem.headline);
+assert.ok(
+  !noKeyResult?._official_suppressed_by_cluster,
+  "official item with empty storyline_key should NOT be suppressed"
+);
+
+const officialHigh = { source_type: "primary_official", _score: 0.85, headline: "official high" };
+const reportedLow = { source_type: "reported_media", _score: 0.75, headline: "reported low" };
+const tradeMid = { source_type: "trade_specialist", _score: 0.80, headline: "trade mid" };
+const corporateLow = { source_type: "corporate_pr", _score: 0.70, headline: "corporate" };
+
+const sorted = sortWithSourceTypePreference([officialHigh, reportedLow, tradeMid, corporateLow]);
+assert.ok(
+  sorted[0].source_type === "reported_media" || sorted[0].source_type === "trade_specialist",
+  `first item should be reported/trade, got ${sorted[0].source_type}`
+);
+assert.strictEqual(sorted[sorted.length - 1].source_type, "corporate_pr",
+  "corporate_pr should sort last");
+assert.ok(
+  sorted.indexOf(officialHigh) > sorted.indexOf(reportedLow),
+  "official (even with higher score) should come after reported"
+);
+
+console.log("cluster official suppression and preference sort ✓");

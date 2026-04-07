@@ -80,11 +80,67 @@ function isAnalysisOrCommentaryItem(item) {
     || /\/analysis\//.test(url);
 }
 
-function buildTopicFallbackPools(topicItems, nowMs) {
-  const { tier1, tier2, tier3 } = splitByFreshnessTiers(topicItems, nowMs);
-  const eventTier1 = tier1.filter((item) => !isAnalysisOrCommentaryItem(item));
-  const eventTier2 = tier2.filter((item) => !isAnalysisOrCommentaryItem(item));
+const SOURCE_TYPE_PREFERENCE = Object.freeze({
+  reported_media: 0,
+  trade_specialist: 0,
+  analysis_blog: 2,
+  unclassified: 2,
+  primary_official: 3,
+  corporate_pr: 4,
+  aggregator_republisher: 4,
+  platform_user_generated: 4,
+});
+
+function sortWithSourceTypePreference(items) {
+  return (Array.isArray(items) ? items : []).slice().sort((a, b) => {
+    const rankA = SOURCE_TYPE_PREFERENCE[String(a?.source_type || "").trim().toLowerCase()] ?? 2;
+    const rankB = SOURCE_TYPE_PREFERENCE[String(b?.source_type || "").trim().toLowerCase()] ?? 2;
+    if (rankA !== rankB) return rankA - rankB;
+    return (b._score || 0) - (a._score || 0);
+  });
+}
+
+function suppressOfficialsByCluster(topicItems) {
+  const items = Array.isArray(topicItems) ? topicItems : [];
+  const clusters = new Map();
+  for (const item of items) {
+    const key = String(item?.storyline_key || "").trim();
+    if (!key) continue;
+    if (!clusters.has(key)) clusters.set(key, []);
+    clusters.get(key).push(item);
+  }
+  const suppressed = new Set();
+  for (const [, cluster] of clusters) {
+    const hasReported = cluster.some((i) => {
+      const st = String(i?.source_type || "").toLowerCase();
+      return st === "reported_media" || st === "trade_specialist";
+    });
+    if (!hasReported) continue;
+    for (const item of cluster) {
+      if (String(item?.source_type || "").toLowerCase() === "primary_official") {
+        suppressed.add(item);
+      }
+    }
+  }
+  return items.map((item) => suppressed.has(item)
+    ? { ...item, _official_suppressed_by_cluster: true, _suppression_reason: "selection_official_suppressed_by_reported" }
+    : item
+  );
+}
+
+function buildTopicFallbackPools(topicItems, nowMs, opts = {}) {
+  const items = opts.clusterOfficialSuppression
+    ? suppressOfficialsByCluster(Array.isArray(topicItems) ? topicItems : [])
+    : (Array.isArray(topicItems) ? topicItems : []);
+  const { tier1, tier2, tier3 } = splitByFreshnessTiers(items, nowMs);
+  const eventTier1 = sortWithSourceTypePreference(
+    tier1.filter((item) => !isAnalysisOrCommentaryItem(item) && !item._official_suppressed_by_cluster)
+  );
+  const eventTier2 = sortWithSourceTypePreference(
+    tier2.filter((item) => !isAnalysisOrCommentaryItem(item) && !item._official_suppressed_by_cluster)
+  );
   const commentaryPool = [...tier1, ...tier2].filter((item) => isAnalysisOrCommentaryItem(item));
+  const suppressedOfficials = [...tier1, ...tier2].filter((item) => item._official_suppressed_by_cluster);
   return {
     tier1,
     tier2,
@@ -92,6 +148,7 @@ function buildTopicFallbackPools(topicItems, nowMs) {
     eventTier1,
     eventTier2,
     commentaryPool,
+    suppressedOfficials,
   };
 }
 
@@ -102,12 +159,15 @@ function selectTopicItemsWithFallback(params = {}) {
     maxItemsPerSourceDomain,
     maxDiscoveryPerTopic,
     nowMs,
+    clusterOfficialSuppression,
   } = params;
 
   const targetCount = Math.max(1, Number(itemsPerTopic || 5));
   const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 2));
   const discoveryCap = Math.max(0, Number(maxDiscoveryPerTopic ?? 1));
-  const pools = buildTopicFallbackPools(topicItems, nowMs);
+  const pools = buildTopicFallbackPools(topicItems, nowMs, {
+    clusterOfficialSuppression: clusterOfficialSuppression === true,
+  });
   const selected = [];
   const selectedSet = new Set();
   const rejectionReasonByItem = new Map();
@@ -219,6 +279,7 @@ function buildTopicReserveQueue(params = {}) {
     ...(Array.isArray(pools.eventTier1) ? pools.eventTier1 : []),
     ...(Array.isArray(pools.eventTier2) ? pools.eventTier2 : []),
     ...(Array.isArray(pools.commentaryPool) ? pools.commentaryPool : []),
+    ...(Array.isArray(pools.suppressedOfficials) ? pools.suppressedOfficials : []),
   ].filter((item) => !selectedUrls.has(String(item?.url || "").trim()));
 }
 
@@ -936,4 +997,6 @@ module.exports = {
   computeItemAgeHours,
   prepareSelectionCandidates,
   splitByFreshnessTiers,
+  suppressOfficialsByCluster,
+  sortWithSourceTypePreference,
 };

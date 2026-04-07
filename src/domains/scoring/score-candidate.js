@@ -73,6 +73,8 @@ function resolveScoringConfig(config = {}) {
     tierScores: { ...DEFAULT_TIER_SCORES, ...tierScores },
     laneBonuses: { ...DEFAULT_LANE_BONUSES, ...laneBonuses },
     maxAgeHours: Number(config.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS),
+    officialLaneBonusCap: config.officialLaneBonusCap === true,
+    corporatePrPenalty: config.corporatePrPenalty === true,
   };
 }
 
@@ -120,20 +122,27 @@ function computeSourceTierScore(item, tierScores) {
  * Uses retrieval_origin or retrieval_lane to identify the lane.
  * RSS/direct feeds > official > discovery.
  */
-function computeLaneBonusScore(item, laneBonuses) {
+function computeLaneBonusScore(item, laneBonuses, opts = {}) {
   const origin = String(item?.retrieval_origin || "").trim().toLowerCase();
   const lane = String(item?.retrieval_lane || item?.retrieval_pass || "").trim().toLowerCase();
+  const isPrimaryOfficial = opts.officialLaneBonusCap === true
+    && String(item?.source_type || "").trim().toLowerCase() === "primary_official";
+
+  const resolveOfficialBonus = () => isPrimaryOfficial
+    ? Number(laneBonuses.preferred ?? DEFAULT_LANE_BONUSES.preferred)
+    : Number(laneBonuses.official ?? DEFAULT_LANE_BONUSES.official);
 
   // Try exact match on origin first
-  if (origin && origin in laneBonuses) return Number(laneBonuses[origin]);
+  if (origin && origin in laneBonuses) {
+    if (origin === "official" || origin === "broker_official") return resolveOfficialBonus();
+    return Number(laneBonuses[origin]);
+  }
 
   // Normalize: any broker publisher feed
   if (origin.includes("broker_publisher") || lane.includes("publisher_feed")) {
     return Number(laneBonuses.publisher_feed ?? DEFAULT_LANE_BONUSES.publisher_feed);
   }
-  if (origin.includes("broker_official") || lane.includes("official")) {
-    return Number(laneBonuses.official ?? DEFAULT_LANE_BONUSES.official);
-  }
+  if (origin.includes("broker_official") || lane.includes("official")) return resolveOfficialBonus();
   if (origin.includes("discovery") || lane.includes("discovery") || lane.includes("perplexity")) {
     return Number(laneBonuses.discovery ?? DEFAULT_LANE_BONUSES.discovery);
   }
@@ -186,7 +195,7 @@ function normalizeTopicFitScore(item) {
   return clamp(raw, 0, 1);
 }
 
-function computeQualityAdjustment(item) {
+function computeQualityAdjustment(item, opts = {}) {
   let adjustment = 0;
   const headline = String(item?.headline || "");
   const summary = String(item?.summary || "");
@@ -208,6 +217,11 @@ function computeQualityAdjustment(item) {
   if (sourceType === "primary_official" || sourceFamily === "official" || contentKind === "official_document") {
     adjustment -= 0.05;
     if (OFFICIAL_FILLER_PATTERN.test(combined)) adjustment -= 0.22;
+  }
+
+  if (opts.corporatePrPenalty === true
+      && (sourceType === "corporate_pr" || originalityProfile === "press_release_repost")) {
+    adjustment -= 0.12;
   }
 
   const commentaryLike = sourceType === "analysis_blog"
@@ -246,10 +260,10 @@ function scoreCandidate(item, opts = {}) {
 
   const freshness = computeFreshnessScore(item, nowMs, cfg.maxAgeHours);
   const sourceTier = computeSourceTierScore(item, cfg.tierScores);
-  const laneBonus = computeLaneBonusScore(item, cfg.laneBonuses);
+  const laneBonus = computeLaneBonusScore(item, cfg.laneBonuses, { officialLaneBonusCap: cfg.officialLaneBonusCap });
   const novelty = computeNoveltyScore(item);
   const topicFit = normalizeTopicFitScore(item);
-  const qualityAdjustment = computeQualityAdjustment(item);
+  const qualityAdjustment = computeQualityAdjustment(item, { corporatePrPenalty: cfg.corporatePrPenalty });
 
   const baseScore = clamp(
     freshness * w.freshness

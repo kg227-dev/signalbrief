@@ -65,3 +65,87 @@ assert.ok(
 );
 
 console.log("score candidate quality adjustments ✓");
+
+// --- Change A: official lane bonus cap for primary_official ---
+
+const nowFin = Date.parse("2026-04-06T12:00:00.000Z");
+
+const tier2ReportedFin = scoreCandidate({
+  headline: "Bloomberg: Fed signals pause in rate cycle",
+  tag: "FINANCIAL SERVICES",
+  published_date: "2026-04-06T08:00:00.000Z",
+  source_tier: "strong",
+  source_authority: 0.8,
+  retrieval_origin: "broker_publisher_feed",
+  source_type: "reported_media",
+  topic_fit: 0.88,
+}, { nowMs: nowFin, scoringConfig: { officialLaneBonusCap: true } });
+
+const tier1OfficialFin = scoreCandidate({
+  headline: "Federal Reserve issues statement on monetary policy",
+  tag: "FINANCIAL SERVICES",
+  published_date: "2026-04-06T08:00:00.000Z",
+  source_tier: "premium",
+  source_authority: 1.0,
+  retrieval_origin: "broker_official",
+  source_type: "primary_official",
+  content_kind: "official_document",
+  topic_fit: 0.85,
+}, { nowMs: nowFin, scoringConfig: { officialLaneBonusCap: true } });
+
+assert.ok(
+  tier2ReportedFin._score > tier1OfficialFin._score,
+  `tier-2 reported (${tier2ReportedFin._score}) should outscore tier-1 primary_official (${tier1OfficialFin._score}) with officialLaneBonusCap enabled`
+);
+assert.ok(
+  tier1OfficialFin._score_components.lane_bonus <= 0.65,
+  `primary_official broker_official lane bonus should be ≤0.65, got ${tier1OfficialFin._score_components.lane_bonus}`
+);
+
+// Without flag, official still wins (baseline preserved)
+const tier1OfficialBaseline = scoreCandidate({
+  headline: "Federal Reserve issues statement on monetary policy",
+  tag: "FINANCIAL SERVICES",
+  published_date: "2026-04-06T08:00:00.000Z",
+  source_tier: "premium", source_authority: 1.0,
+  retrieval_origin: "broker_official", source_type: "primary_official",
+  topic_fit: 0.85,
+}, { nowMs: nowFin });
+assert.ok(
+  tier1OfficialBaseline._score_components.lane_bonus > 0.9,
+  `without flag, official lane bonus should remain high, got ${tier1OfficialBaseline._score_components.lane_bonus}`
+);
+
+// --- Change B: corporate_pr base penalty ---
+
+const corporatePrFin = scoreCandidate({
+  headline: "Acme Corp Announces Record Q1 Revenue",
+  tag: "FINANCIAL SERVICES",
+  published_date: "2026-04-06T08:00:00.000Z",
+  source_tier: "standard", source_authority: 0.6,
+  retrieval_origin: "broker_publisher_feed",
+  source_type: "corporate_pr",
+  topic_fit: 0.72,
+}, { nowMs: nowFin, scoringConfig: { corporatePrPenalty: true } });
+
+assert.ok(
+  corporatePrFin._score_components.quality_adjustment <= -0.10,
+  `corporate_pr with corporatePrPenalty flag should get ≤−0.10 quality adjustment, got ${corporatePrFin._score_components.quality_adjustment}`
+);
+
+// Without flag, no extra penalty
+const corporatePrBaseline = scoreCandidate({
+  headline: "Acme Corp Announces Record Q1 Revenue",
+  tag: "FINANCIAL SERVICES",
+  published_date: "2026-04-06T08:00:00.000Z",
+  source_tier: "standard", source_authority: 0.6,
+  retrieval_origin: "broker_publisher_feed", source_type: "corporate_pr",
+  topic_fit: 0.72,
+}, { nowMs: nowFin });
+
+assert.ok(
+  corporatePrBaseline._score_components.quality_adjustment > -0.10,
+  `without flag, corporate_pr quality adjustment should not include extra penalty, got ${corporatePrBaseline._score_components.quality_adjustment}`
+);
+
+console.log("official lane bonus cap and corporate_pr penalty ✓");

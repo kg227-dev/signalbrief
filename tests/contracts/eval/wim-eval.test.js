@@ -102,15 +102,18 @@ const enhancedPrompt = assemblePrompt(promptFile, item, "enhanced");
 assert.ok(enhancedPrompt.includes("Long article text"), "enhanced prompt must include excerpt");
 
 // parseWimResponse: clean JSON
-const cleanResponse = '{"wim_brief":"Short punchline.","wim":"This signals a shift."}';
+const cleanResponse = '{"finalWimBrief":"Short punchline.","finalWim":"This signals a shift."}';
 const parsed = parseWimResponse(cleanResponse);
 assert.strictEqual(parsed.wim, "This signals a shift.");
 assert.strictEqual(parsed.wim_brief, "Short punchline.");
+assert.strictEqual(parsed.finalWim, "This signals a shift.");
+assert.strictEqual(parsed.finalWimBrief, "Short punchline.");
 
 // parseWimResponse: JSON wrapped in markdown fences
 const fencedResponse = '```json\n{"wim_brief":"Short.","wim":"Signals shift."}\n```';
 const parsedFenced = parseWimResponse(fencedResponse);
 assert.strictEqual(parsedFenced.wim, "Signals shift.");
+assert.strictEqual(parsedFenced.finalWim, "Signals shift.");
 
 // parseWimResponse: malformed returns nulls
 const malformed = parseWimResponse("not json at all");
@@ -178,7 +181,7 @@ process.stdout.write("[wim-eval] judge-runtime unit tests: PASS\n");
 
 checkModule("src/eval/wim/report-runtime.js");
 
-const { computeAggregates, formatPct } = require("../../../src/eval/wim/report-runtime.js");
+const { buildReportCsv, buildSummaryMd, computeAggregates, formatPct } = require("../../../src/eval/wim/report-runtime.js");
 
 function makeRow(overrides) {
   return Object.assign({
@@ -195,12 +198,50 @@ function makeRow(overrides) {
 }
 
 const rows = [
-  makeRow({ id: "a:T1:0", topic: "T1", variant: "baseline", passFail: "pass", overallScore: 3.5, failureTags: [] }),
-  makeRow({ id: "a:T1:0", topic: "T1", variant: "variant-a", passFail: "pass", overallScore: 4.5, failureTags: [] }),
-  makeRow({ id: "a:T2:0", topic: "T2", variant: "baseline", passFail: "fail", overallScore: 2.0, failureTags: ["GENERIC"] }),
-  makeRow({ id: "a:T2:0", topic: "T2", variant: "variant-a", passFail: "pass", overallScore: 3.8, failureTags: [] }),
-  makeRow({ id: "a:T1:1", topic: "T1", variant: "baseline", passFail: "fail", overallScore: 1.5, failureTags: ["CATEGORY_CLICHE"], isCatastrophicFailure: false }),
-  makeRow({ id: "a:T1:1", topic: "T1", variant: "variant-a", passFail: "fail", overallScore: 2.0, failureTags: ["VAGUE_IMPLICATION"], isCatastrophicFailure: false }),
+  makeRow({
+    id: "a:T1:0",
+    topic: "T1",
+    variant: "baseline",
+    passFail: "pass",
+    overallScore: 3.5,
+    failureTags: [],
+    candidateTier: "strong",
+    finalStatus: "model_pass",
+    parseFailureType: null,
+    repairType: null,
+    firstPassSucceeded: true,
+    finalWim: "Strong WIM one.",
+    finalWimBrief: "Strong WIM one.",
+    stages: {
+      extraction: { status: "model_pass" },
+      generation: { status: "model_pass" },
+      repair: { status: "not_started" },
+    },
+  }),
+  makeRow({
+    id: "a:T1:0",
+    topic: "T1",
+    variant: "variant-a",
+    passFail: "pass",
+    overallScore: 4.5,
+    failureTags: [],
+    candidateTier: "strong",
+    finalStatus: "repair_pass",
+    parseFailureType: "validator_mismatch",
+    repairType: "simplify_preserve_mechanism",
+    firstPassSucceeded: false,
+    finalWim: "Strong WIM one, repaired.",
+    finalWimBrief: "Strong WIM one, repaired.",
+    stages: {
+      extraction: { status: "retry_pass" },
+      generation: { status: "retry_pass" },
+      repair: { status: "model_pass" },
+    },
+  }),
+  makeRow({ id: "a:T2:0", topic: "T2", variant: "baseline", passFail: "fail", overallScore: 2.0, failureTags: ["GENERIC"], candidateTier: "standard", finalStatus: "failed_dropped", parseFailureType: "malformed_json", stages: { extraction: { status: "failed" }, generation: { status: "failed" }, repair: { status: "not_started" } } }),
+  makeRow({ id: "a:T2:0", topic: "T2", variant: "variant-a", passFail: "pass", overallScore: 3.8, failureTags: [], candidateTier: "standard", finalStatus: "model_pass", parseFailureType: null, stages: { extraction: { status: "model_pass" }, generation: { status: "model_pass" }, repair: { status: "not_started" } } }),
+  makeRow({ id: "a:T1:1", topic: "T1", variant: "baseline", passFail: "fail", overallScore: 1.5, failureTags: ["CATEGORY_CLICHE"], isCatastrophicFailure: false, candidateTier: "strong", finalStatus: "failed_dropped", parseFailureType: "empty_response", stages: { extraction: { status: "failed" }, generation: { status: "failed" }, repair: { status: "not_started" } } }),
+  makeRow({ id: "a:T1:1", topic: "T1", variant: "variant-a", passFail: "fail", overallScore: 2.0, failureTags: ["VAGUE_IMPLICATION"], isCatastrophicFailure: false, candidateTier: "strong", finalStatus: "failed_dropped", parseFailureType: "truncation", stages: { extraction: { status: "model_pass" }, generation: { status: "failed" }, repair: { status: "not_started" } } }),
 ];
 
 const agg = computeAggregates(rows, "baseline", "variant-a");
@@ -214,6 +255,19 @@ assert.ok(agg.byTopic["T2"], "T2 topic missing from breakdown");
 
 assert.strictEqual(formatPct(0.75, 12, 16), "75% (12/16)");
 assert.strictEqual(formatPct(1, 3, 3), "100% (3/3)");
+assert.strictEqual(agg.stageStats.extraction.success_count, 4);
+assert.strictEqual(agg.stageStats.repair.success_count, 1);
+assert.strictEqual(agg.stageStats.strong_tier.attempted_count, 4);
+assert.ok(agg.stageStats.parse_failure_counts.validator_mismatch > 0);
+
+const csv = buildReportCsv(rows, [{ id: "a:T1:0", date: "2026-04-01", topic: "T1", source_domain: "example.com", url: "https://example.com" }], "baseline");
+assert.ok(csv.includes("finalWim"));
+assert.ok(csv.includes("finalWimBrief"));
+assert.ok(csv.includes("generationStatus"));
+
+const summary = buildSummaryMd(agg, { runId: "run-1", judgeModel: "judge", generationModel: "gen", rubricVersion: "v1", compareAgainst: "baseline" }, rows, [], { shipGate: { minPassRate: 0.75, genericClicheMaxRate: 0.1 } });
+assert.ok(summary.includes("Stage Metrics"), "summary should include staged WIM metrics when present");
+assert.ok(summary.includes("Strong-tier attempted"));
 
 process.stdout.write("[wim-eval] report-runtime unit tests: PASS\n");
 

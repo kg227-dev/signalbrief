@@ -19,6 +19,7 @@ function computeOverallScore(scores) {
 }
 
 function buildJudgePrompt(rubric, item, generatedWim, inputMode) {
+  const wimText = String(generatedWim || "");
   const excerptLine = (inputMode === "enhanced" && item.excerpt)
     ? `\nExcerpt: ${String(item.excerpt).slice(0, 500)}`
     : "";
@@ -35,7 +36,7 @@ Headline: ${item.headline || ""}
 Summary: ${item.summary || ""}${excerptLine}
 
 WIM under evaluation:
-"${generatedWim}"
+"${wimText}"
 
 PASS/FAIL CRITERIA — ALL must be true for a PASS:
 ${criteriaText}
@@ -120,7 +121,8 @@ async function runJudgePhase(opts) {
 
   for (const row of rows) {
     const item = itemById[row.id];
-    if (!item || !row.generatedWim) {
+    const finalWim = String(row.finalWim || row.generatedWim || "").trim();
+    if (!item || !finalWim) {
       judgedRows.push(Object.assign({}, row, {
         topic: item ? item.topic : undefined,
         inGoldSet: goldIds.has(row.id),
@@ -133,12 +135,16 @@ async function runJudgePhase(opts) {
         isCatastrophicFailure: false,
         primaryFailureReason: "WIM was not generated.",
         judgeRationale: "Generation failed or returned null.",
+        finalWim: finalWim || null,
+        finalWimBrief: row.finalWimBrief || row.generatedWimBrief || null,
+        generatedWim: row.generatedWim || finalWim || null,
+        generatedWimBrief: row.generatedWimBrief || row.finalWimBrief || null,
         judgedAt: new Date().toISOString(),
       }));
       continue;
     }
 
-    const prompt = buildJudgePrompt(rubric, item, row.generatedWim, row.inputMode);
+    const prompt = buildJudgePrompt(rubric, item, finalWim, row.inputMode);
     let judgeResult = null;
 
     try {
@@ -172,6 +178,10 @@ async function runJudgePhase(opts) {
       isCatastrophicFailure: judgeResult.isCatastrophicFailure,
       primaryFailureReason: judgeResult.primaryFailureReason,
       judgeRationale: judgeResult.judgeRationale,
+      finalWim,
+      finalWimBrief: row.finalWimBrief || row.generatedWimBrief || null,
+      generatedWim: row.generatedWim || finalWim,
+      generatedWimBrief: row.generatedWimBrief || row.finalWimBrief || null,
       judgedAt: new Date().toISOString(),
     }));
 

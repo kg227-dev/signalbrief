@@ -12,6 +12,81 @@ function formatPct(rate, count, total) {
   return `${Math.round(rate * 100)}% (${count}/${total})`;
 }
 
+function resolveRowWim(row = {}) {
+  const finalWim = String(row.finalWim || row.generatedWim || "").trim();
+  const finalWimBrief = String(row.finalWimBrief || row.generatedWimBrief || "").trim();
+  return {
+    finalWim: finalWim || "",
+    finalWimBrief: finalWimBrief || "",
+    generatedWim: String(row.generatedWim || finalWim || "").trim(),
+    generatedWimBrief: String(row.generatedWimBrief || finalWimBrief || "").trim(),
+  };
+}
+
+function getStageRecord(row, stageName) {
+  const stages = row && typeof row.stages === "object" ? row.stages : null;
+  return stages && typeof stages[stageName] === "object" ? stages[stageName] : null;
+}
+
+function getStageStatus(row, stageName) {
+  const stage = getStageRecord(row, stageName);
+  return String(stage?.status || row?.[`${stageName}Status`] || row?.[`${stageName}_status`] || "").trim().toLowerCase() || null;
+}
+
+function collectStageStats(rows) {
+  const stats = {
+    hasStageData: false,
+    extraction: { attempted_count: 0, success_count: 0, failure_count: 0 },
+    generation: { attempted_count: 0, success_count: 0, failure_count: 0 },
+    repair: { attempted_count: 0, success_count: 0, failure_count: 0 },
+    strong_tier: { attempted_count: 0, final_selected_count: 0, drop_count: 0, drop_rate_pct: 0 },
+    parse_failure_counts: {},
+  };
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const extractionStatus = getStageStatus(row, "extraction");
+    const generationStatus = getStageStatus(row, "generation");
+    const repairStatus = getStageStatus(row, "repair");
+    const hasStageRow = Boolean(row?.stages || extractionStatus || generationStatus || repairStatus || row?.finalWim || row?.generatedWim);
+    if (hasStageRow) stats.hasStageData = true;
+
+    if (extractionStatus && extractionStatus !== "not_started") {
+      stats.extraction.attempted_count += 1;
+      if (extractionStatus === "failed") stats.extraction.failure_count += 1;
+      else stats.extraction.success_count += 1;
+    }
+    if (generationStatus && generationStatus !== "not_started") {
+      stats.generation.attempted_count += 1;
+      if (generationStatus === "failed") stats.generation.failure_count += 1;
+      else stats.generation.success_count += 1;
+    }
+    if (repairStatus && repairStatus !== "not_started") {
+      stats.repair.attempted_count += 1;
+      if (repairStatus === "failed") stats.repair.failure_count += 1;
+      else stats.repair.success_count += 1;
+    }
+    const candidateTier = String(row.candidateTier || row.candidate_tier || row?.stages?.generation?.candidate_tier || "").trim().toLowerCase();
+    if (candidateTier === "strong") {
+      stats.strong_tier.attempted_count += 1;
+      if (String(row.finalStatus || row.final_status || row.passFail || "").trim().toLowerCase() === "failed_dropped") {
+        stats.strong_tier.drop_count += 1;
+      } else {
+        stats.strong_tier.final_selected_count += 1;
+      }
+    }
+    const parseFailureType = String(row.parseFailureType || row.parse_failure_type || row?.stages?.generation?.parseFailureType || row?.stages?.generation?.parse_failure_type || "").trim();
+    if (parseFailureType) {
+      stats.parse_failure_counts[parseFailureType] = (stats.parse_failure_counts[parseFailureType] || 0) + 1;
+    }
+  }
+
+  stats.strong_tier.drop_rate_pct = stats.strong_tier.attempted_count > 0
+    ? Number(((stats.strong_tier.drop_count / stats.strong_tier.attempted_count) * 100).toFixed(2))
+    : 0;
+
+  return stats;
+}
+
 function computeAggregates(rows, baselineVariant, compareVariant) {
   baselineVariant = baselineVariant || "baseline";
 
@@ -86,7 +161,18 @@ function computeAggregates(rows, baselineVariant, compareVariant) {
     failureTagCounts[v] = tagMap;
   }
 
-  return { variants, topics, inputModes, byVariant, byTopic, byInputMode, byGoldSet, consistency, failureTagCounts };
+  return {
+    variants,
+    topics,
+    inputModes,
+    byVariant,
+    byTopic,
+    byInputMode,
+    byGoldSet,
+    consistency,
+    failureTagCounts,
+    stageStats: collectStageStats(rows),
+  };
 }
 
 function buildReportCsv(judgedRows, datasetItems, baselineVariant) {
@@ -105,7 +191,9 @@ function buildReportCsv(judgedRows, datasetItems, baselineVariant) {
     "specificity", "insightDepth", "strategicRelevance", "nonRedundancy", "clarityTightness",
     "failureTags", "isCatastrophicFailure", "primaryFailureReason",
     "inGoldSet", "isBaseline", "compareAgainst", "scoreDeltaVsBaseline", "passDeltaVsBaseline",
-    "generatedWim",
+    "candidateTier", "finalStatus", "parseFailureType", "repairType", "firstPassSucceeded",
+    "finalWim", "finalWimBrief", "generatedWim", "generatedWimBrief",
+    "extractionStatus", "generationStatus", "repairStatus",
   ].join(",");
 
   function esc(v) {
@@ -123,6 +211,7 @@ function buildReportCsv(judgedRows, datasetItems, baselineVariant) {
     const baseRef = baselineScoreMap[baseKey];
     const scoreDelta = baseRef ? Math.round((row.overallScore - baseRef.overallScore) * 10) / 10 : "";
     const passDelta = baseRef ? (row.passFail === "pass" ? 1 : 0) - (baseRef.passFail === "pass" ? 1 : 0) : "";
+    const wim = resolveRowWim(row);
     lines.push([
       esc(row.id), esc(item.date || row.id.split(":")[0]), esc(row.topic), esc(item.source_domain), esc(item.url),
       esc(row.variant), esc(row.promptVersion), esc(row.inputMode),
@@ -132,7 +221,13 @@ function buildReportCsv(judgedRows, datasetItems, baselineVariant) {
       esc(row.scores && row.scores.clarityTightness),
       esc((row.failureTags || []).join("|")), esc(row.isCatastrophicFailure), esc(row.primaryFailureReason),
       esc(item.inGoldSet), esc(isBaseline), esc(isBaseline ? "" : baselineVariant),
-      esc(scoreDelta), esc(passDelta), esc(row.generatedWim),
+      esc(scoreDelta), esc(passDelta), esc(row.candidateTier || row.candidate_tier || row?.stages?.generation?.candidate_tier || ""),
+      esc(row.finalStatus || row.final_status || row.passFail || ""),
+      esc(row.parseFailureType || row.parse_failure_type || row?.stages?.generation?.parseFailureType || row?.stages?.generation?.parse_failure_type || ""),
+      esc(row.repairType || row.repair_type || row?.stages?.repair?.repair_type || ""),
+      esc(row.firstPassSucceeded === true || row.first_pass_succeeded === true),
+      esc(wim.finalWim), esc(wim.finalWimBrief), esc(wim.generatedWim), esc(wim.generatedWimBrief),
+      esc(getStageStatus(row, "extraction")), esc(getStageStatus(row, "generation")), esc(getStageStatus(row, "repair")),
     ].join(","));
   }
   return lines.join("\n");
@@ -174,12 +269,14 @@ function buildHumanReviewCsv(judgedRows, datasetItems, baselineVariant, compareV
     const item = itemById[id] || {};
     const hashBit = id.charCodeAt(id.length - 1) % 2;
     const labelAIs = hashBit === 0 ? baselineVariant : compareVariant;
+    const baseWim = resolveRowWim(baseRow || {});
+    const compWim = resolveRowWim(compRow || {});
     const wimA = labelAIs === baselineVariant
-      ? (baseRow && baseRow.generatedWim || "")
-      : (compRow && compRow.generatedWim || "");
+      ? baseWim.finalWim || baseWim.generatedWim || ""
+      : compWim.finalWim || compWim.generatedWim || "";
     const wimB = labelAIs === baselineVariant
-      ? (compRow && compRow.generatedWim || "")
-      : (baseRow && baseRow.generatedWim || "");
+      ? compWim.finalWim || compWim.generatedWim || ""
+      : baseWim.finalWim || baseWim.generatedWim || "";
 
     lines.push([
       esc(id), esc(item.topic), esc(item.headline), esc(labelAIs),
@@ -257,7 +354,22 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
   lines.push(`| Catastrophic | ${variants.map(function(v) { return (agg.byVariant[v] || {}).catastrophicCount || 0; }).join(" | ")} |`);
   lines.push(`| Generic rate | ${variants.map(function(v) { const s = agg.byVariant[v] || {}; return `${Math.round((s.genericClicheRate || 0) * 100)}%`; }).join(" | ")} |`);
 
-  lines.push(`\n## 3. Gold Set Results`);
+  if (agg.stageStats && agg.stageStats.hasStageData) {
+    const stageStats = agg.stageStats;
+    lines.push(`\n## 3. Stage Metrics`);
+    lines.push(`\n| Metric | Value |`);
+    lines.push(`|---|---|`);
+    lines.push(`| Extraction success | ${stageStats.extraction.success_count}/${stageStats.extraction.attempted_count} |`);
+    lines.push(`| Generation success | ${stageStats.generation.success_count}/${stageStats.generation.attempted_count} |`);
+    lines.push(`| Repair success | ${stageStats.repair.success_count}/${stageStats.repair.attempted_count} |`);
+    lines.push(`| Strong-tier attempted | ${stageStats.strong_tier.attempted_count} |`);
+    lines.push(`| Strong-tier final selected | ${stageStats.strong_tier.final_selected_count} |`);
+    lines.push(`| Strong-tier drop rate | ${stageStats.strong_tier.drop_rate_pct}% |`);
+    const parseFailureEntries = Object.entries(stageStats.parse_failure_counts || {}).sort(function(a, b) { return b[1] - a[1]; });
+    lines.push(`\nParse failures: ${parseFailureEntries.map(function([name, count]) { return `${name}=${count}`; }).join(", ") || "none"}`);
+  }
+
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "4" : "3"}. Gold Set Results`);
   lines.push(`\n| Metric | ${variants.join(" | ")} |`);
   lines.push(`|---|${variants.map(function() { return "---"; }).join("|")}|`);
   lines.push(`| Pass rate | ${variants.map(function(v) { const s = agg.byGoldSet[v] || {}; return pct(s.passRate || 0, s.passCount || 0, s.total || 0); }).join(" | ")} |`);
@@ -265,7 +377,7 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
   lines.push(`| Catastrophic | ${variants.map(function(v) { return (agg.byGoldSet[v] || {}).catastrophicCount || 0; }).join(" | ")} |`);
   lines.push(`| Human A/B | ${variants.map(function() { return "(see human-review.csv)"; }).join(" | ")} |`);
 
-  lines.push(`\n## 4. By Topic`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "5" : "4"}. By Topic`);
   lines.push(`\n| Topic | ${variants.map(function(v) { return `${v} pass%`; }).join(" | ")} | Delta | Regression? |`);
   lines.push(`|---|${variants.map(function() { return "---"; }).join("|")}|---|---|`);
   for (const topic of topics) {
@@ -283,14 +395,14 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
     lines.push(`| ${topic} | ${cells.join(" | ")} | ${delta} | ${regression} |`);
   }
 
-  lines.push(`\n## 5. Failure Pattern Analysis`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "6" : "5"}. Failure Pattern Analysis`);
   for (const v of variants) {
     const tagCounts = agg.failureTagCounts[v] || {};
     const sorted = Object.keys(tagCounts).sort(function(a, b) { return tagCounts[b] - tagCounts[a]; });
     lines.push(`\n**${v}:** ${sorted.map(function(t) { return `${t}=${tagCounts[t]}`; }).join(", ") || "none"}`);
   }
 
-  lines.push(`\n## 6. By Input Mode`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "7" : "6"}. By Input Mode`);
   lines.push(`\n| Mode | ${variants.map(function(v) { return `${v} pass%`; }).join(" | ")} |`);
   lines.push(`|---|${variants.map(function() { return "---"; }).join("|")}|`);
   for (const mode of agg.inputModes) {
@@ -298,7 +410,7 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
     lines.push(`| ${mode} | ${cells.join(" | ")} |`);
   }
 
-  lines.push(`\n## 7. Consistency / Variance Check`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "8" : "7"}. Consistency / Variance Check`);
   lines.push(`\nScore standard deviation by topic × variant. High variance (>1.5) signals inconsistent output quality.`);
   lines.push(`\n| Topic | ${variants.join(" | ")} |`);
   lines.push(`|---|${variants.map(function() { return "---"; }).join("|")}|`);
@@ -307,7 +419,7 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
     lines.push(`| ${topic} | ${cells.join(" | ")} |`);
   }
 
-  lines.push(`\n## 8. Notable Wins / Notable Fails`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "9" : "8"}. Notable Wins / Notable Fails`);
   lines.push(`\n### Top improvements vs baseline`);
   if (notableWins.length === 0) lines.push("_(none with positive delta)_");
   for (const d of notableWins) {
@@ -323,7 +435,7 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
     if (d.row.generatedWim) lines.push(`  WIM: ${d.row.generatedWim.slice(0, 120)}`);
   }
 
-  lines.push(`\n## 9. Ship Gate Assessment`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "10" : "9"}. Ship Gate Assessment`);
   lines.push(`\n### Model-only gates`);
   const gatedVariants = variants.filter(function(x) { return x !== baseV; });
   const showVariants = gatedVariants.length > 0 ? gatedVariants : variants;
@@ -340,7 +452,7 @@ function buildSummaryMd(agg, manifest, judgedRows, datasetItems, rubric) {
   lines.push(`|---|---|---|`);
   lines.push(`| Human A/B preference ≥60% | 60% | Fill human-review.csv to assess |`);
 
-  lines.push(`\n## 10. Next Actions`);
+  lines.push(`\n## ${agg.stageStats && agg.stageStats.hasStageData ? "11" : "10"}. Next Actions`);
   lines.push(`\n1. Fill \`human-review.csv\` — blind A/B review of gold set pairs`);
   lines.push(`2. Re-run \`--phase=report\` or update summary manually after human review`);
   const topTags = variants.map(function(v) {

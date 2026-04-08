@@ -75,17 +75,45 @@ function parseWimResponse(text) {
   const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   try {
     const obj = JSON.parse(cleaned);
-    return { wim: obj.wim || null, wim_brief: obj.wim_brief || null };
+    const finalWim = obj.finalWim || obj.wim || null;
+    const finalWimBrief = obj.finalWimBrief || obj.wim_brief || null;
+    return {
+      wim: finalWim,
+      wim_brief: finalWimBrief,
+      finalWim,
+      finalWimBrief,
+    };
   } catch (_) {
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       try {
         const obj = JSON.parse(match[0]);
-        return { wim: obj.wim || null, wim_brief: obj.wim_brief || null };
+        const finalWim = obj.finalWim || obj.wim || null;
+        const finalWimBrief = obj.finalWimBrief || obj.wim_brief || null;
+        return {
+          wim: finalWim,
+          wim_brief: finalWimBrief,
+          finalWim,
+          finalWimBrief,
+        };
       } catch (_2) { /* fall through */ }
     }
-    return { wim: null, wim_brief: null };
+    return { wim: null, wim_brief: null, finalWim: null, finalWimBrief: null };
   }
+}
+
+function buildStageRecord(stage, extras = {}) {
+  return {
+    stage,
+    status: extras.status || "not_started",
+    attemptCount: Number(extras.attemptCount || 0),
+    formattingRetryUsed: extras.formattingRetryUsed === true,
+    parseFailureType: extras.parseFailureType || null,
+    validatorReasons: Array.isArray(extras.validatorReasons) ? extras.validatorReasons.slice() : [],
+    output: extras.output || null,
+    rawText: extras.rawText || null,
+    generatedAt: extras.generatedAt || null,
+  };
 }
 
 function sleep(ms) {
@@ -130,17 +158,40 @@ async function runGeneratePhase(opts) {
         let generatedWim = null;
         let generatedWimBrief = null;
         let tokensUsed = 0;
+        let generationStage = buildStageRecord("generation");
 
         try {
           const response = await callClaude(apiKey, effectiveModel, prompt, maxTokens, temperature);
           const text = (response && response.content && response.content[0] && response.content[0].text) || "";
           const parsedWim = parseWimResponse(text);
-          generatedWim = parsedWim.wim;
-          generatedWimBrief = parsedWim.wim_brief;
+          generatedWim = parsedWim.finalWim || parsedWim.wim;
+          generatedWimBrief = parsedWim.finalWimBrief || parsedWim.wim_brief;
+          generationStage = buildStageRecord("generation", {
+            status: generatedWim ? "model_pass" : "failed",
+            attemptCount: 1,
+            formattingRetryUsed: false,
+            parseFailureType: generatedWim ? null : "validator_mismatch",
+            output: {
+              finalWim: generatedWim,
+              finalWimBrief: generatedWimBrief,
+              generatedWim,
+              generatedWimBrief,
+            },
+            rawText: text,
+            generatedAt: new Date().toISOString(),
+          });
           tokensUsed = ((response.usage && response.usage.input_tokens) || 0) +
                        ((response.usage && response.usage.output_tokens) || 0);
         } catch (err) {
           process.stderr.write(`[wim-eval] generate error ${item.id} ${variantName} ${inputMode}: ${err.message}\n`);
+          generationStage = buildStageRecord("generation", {
+            status: "failed",
+            attemptCount: 1,
+            parseFailureType: "malformed_json",
+            output: null,
+            rawText: "",
+            generatedAt: new Date().toISOString(),
+          });
         }
 
         rows.push({
@@ -153,8 +204,15 @@ async function runGeneratePhase(opts) {
           temperature,
           maxTokens,
           inputPayloadHash: hash,
+          finalWim: generatedWim,
+          finalWimBrief: generatedWimBrief,
           generatedWim,
           generatedWimBrief,
+          stages: {
+            extraction: buildStageRecord("extraction"),
+            generation: generationStage,
+            repair: buildStageRecord("repair"),
+          },
           generatedAt: new Date().toISOString(),
           tokensUsed,
         });
@@ -180,5 +238,6 @@ module.exports = {
   assemblePrompt,
   callClaude,
   parseWimResponse,
+  buildStageRecord,
   runGeneratePhase,
 };

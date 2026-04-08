@@ -4,13 +4,13 @@ const fs = require("fs");
 const path = require("path");
 
 const src = fs.readFileSync(
-  path.resolve(__dirname, "digest-orchestrator-core-runtime.js"),
+  path.resolve(__dirname, "digest-orchestrator-audit-runtime.js"),
   "utf8"
 );
 
-// After fix: the catch block must contain a conditional re-throw for scheduled runs.
+// Scheduled audit writes must still fail closed after extraction.
 assert.ok(
   src.includes('if (runMode === "scheduled") throw'),
   "catch block must re-throw for scheduled runs"
 );
-console.log("writeDigestAuditLog re-throws for scheduled runs ✓");
+console.log("digest-orchestrator-audit-runtime re-throws for scheduled runs ✓");

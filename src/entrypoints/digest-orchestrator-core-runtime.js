@@ -110,6 +110,7 @@ const { createDigestOrchestratorCircuitBreakerRuntime } = require("./digest-orch
 const { createDigestOrchestratorAdmissionGateRuntime } = require("./digest-orchestrator-admission-gate-runtime");
 const { createDigestOrchestratorAuditRuntime } = require("./digest-orchestrator-audit-runtime");
 const { parseDigestRunArgs } = require("./digest-orchestrator-run-args-runtime");
+const { createDigestOrchestratorFetchSetupRuntime } = require("./digest-orchestrator-fetch-setup-runtime");
 const { loadDigestTuning, mergeDigestTuning } = require("../runtime/digest-tuning-runtime");
 const {
   loadEditorialOverrides,
@@ -127,22 +128,11 @@ const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
   appRoot: APP_ROOT,
   env: process.env,
 });
-const DIGEST_TUNING_PATH = RUNTIME_PATHS.digestTuningPath;
 const EDITORIAL_OVERRIDES_PATH = RUNTIME_PATHS.editorialOverridesPath;
-const BROKER_CANDIDATE_INVENTORY_PATH = RUNTIME_PATHS.brokerCandidateInventoryPath;
 const ROLLING_ZERO_VALUE_CAP_USD = getRollingZeroValueCapUsd();
 const DAILY_ZERO_VALUE_CAP_USD = getDailyZeroValueCapUsd();
 const ROLLING_ZERO_VALUE_WINDOW_HOURS = getRollingZeroValueWindowHours();
 const DIGEST_LOCK_STALE_MS = getDigestLockStaleMs();
-const sourceRegistryRuntime = createSourceRegistryRuntime({
-  fs,
-  path,
-  appRoot: APP_ROOT,
-  env: process.env,
-  nodeEnv: getNodeEnv(),
-  standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
-  bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
-});
 let configCache = null;
 let emailTemplateCache = null;
 
@@ -309,6 +299,35 @@ const {
   recordRunCost,
   writeDigestAuditLog,
 } = runtimeRegistry;
+const fetchSetupRuntime = createDigestOrchestratorFetchSetupRuntime({
+  fs,
+  path,
+  processRef: process,
+  appRoot: APP_ROOT,
+  runtimePaths: RUNTIME_PATHS,
+  nodeEnv: getNodeEnv(),
+  CONFIG,
+  log,
+  getDigestTriggerSource,
+  resolveDeliveryModeFromTrigger,
+  resolveDeliveryEventSource,
+  buildPublicDigestUrl,
+  createSourceRegistryRuntime,
+  setAdminSourceRegistry,
+  setPreferredSourceMatcher,
+  loadDigestTuning,
+  mergeDigestTuning,
+  digestTuningPath: RUNTIME_PATHS.digestTuningPath,
+  createBrokerCandidateInventoryRuntime,
+  brokerCandidateInventoryPath: RUNTIME_PATHS.brokerCandidateInventoryPath,
+  createStandardTopicBrokerRuntime,
+  createDigestOrchestratorFetchRuntime,
+  normalizeTopicToken,
+  fetchTopicNews,
+  emitDigestIncident,
+  normalizeUrlForDedup,
+  annotateEditorialSignals,
+});
 
 // Audit document helpers are extracted to digest-orchestrator-audit-runtime.js.
 
@@ -495,101 +514,25 @@ async function main() {
     log(`=== SignalBrief starting — ${dueUsers.length} user(s) due ===`);
   }
 
-  const now = new Date();
-  const triggerSource = getDigestTriggerSource();
-  const deliveryMode = resolveDeliveryModeFromTrigger(triggerSource);
-  const deliveryEventSource = resolveDeliveryEventSource(deliveryMode);
-  const dateStr = now.toLocaleDateString("en-US", {
-    weekday: "long", month: "long", day: "numeric", year: "numeric",
-    timeZone: CONFIG.user.timezone,
-  });
-  const shortDate = now.toLocaleDateString("en-US", {
-    month: "short", day: "numeric", timeZone: CONFIG.user.timezone,
-  });
-  const publicDigestUrl = buildPublicDigestUrl(digestDateKey);
-  const sourceRegistry = sourceRegistryRuntime.loadSourceRegistry();
-  setAdminSourceRegistry(sourceRegistryRuntime.buildRegistryMap(sourceRegistry));
-  if (sourceRegistry && sourceRegistry.domains && Object.keys(sourceRegistry.domains).length > 0) {
-    log(`[source-policy] ${Object.keys(sourceRegistry.domains).length} admin source override(s) applied`);
-  }
-  const rawTuning = loadDigestTuning(DIGEST_TUNING_PATH, fs);
-  const mergedScoringConfig = mergeDigestTuning(CONFIG.digest?.scoring || {}, rawTuning);
-  if (Object.keys(rawTuning).length > 0) {
-    log(`[digest-tuning] overrides active: ${Object.keys(rawTuning).join(", ")}`);
-  }
-  const brokerCandidateInventoryRuntime = createBrokerCandidateInventoryRuntime({
-    fs,
-    path,
-    inventoryPath: BROKER_CANDIDATE_INVENTORY_PATH,
-    log,
-  });
-  const standardTopicBrokerRuntime = createStandardTopicBrokerRuntime({
-    fs,
-    path,
-    appRoot: APP_ROOT,
-    env: process.env,
-    nodeEnv: getNodeEnv(),
-    standardTopicBrokerSourcesPath: RUNTIME_PATHS.standardTopicBrokerSourcesPath,
-    bundledStandardTopicBrokerSourcesPath: path.join(APP_ROOT, "config", "standard-topic-broker-sources.json"),
-    log,
-  });
-  setPreferredSourceMatcher((sourceDomain, tag, options = {}) => (
-    standardTopicBrokerRuntime.matchPreferredSourceFromConfig(sourceDomain, tag, options)
-  ));
-  function buildActivePreferredDomainShortlist(options = {}) {
-    const brokerShortlist = standardTopicBrokerRuntime?.buildPreferredDomainShortlist?.(options);
-    if (brokerShortlist) return brokerShortlist;
-    return {
-      source_of_truth: "standard_topic_broker",
-      domains: [],
-      topic_keys: [],
-      official_friendly: false,
-      active_path: null,
-    };
-  }
-  function buildActivePreferredSourceFamilyShortlists(options = {}) {
-    const brokerShortlists = standardTopicBrokerRuntime?.buildPreferredSourceFamilyShortlists?.(options);
-    if (brokerShortlists) return brokerShortlists;
-    return {
-      source_of_truth: "standard_topic_broker",
-      reported_domains: [],
-      official_domains: [],
-      combined_domains: [],
-      topic_keys: [],
-      official_friendly: false,
-      active_path: null,
-    };
-  }
-  const fetchRuntime = createDigestOrchestratorFetchRuntime({
-    CONFIG,
-    log,
-    normalizeTopicToken,
-    fetchTopicNews,
-    buildPreferredDomainShortlist: buildActivePreferredDomainShortlist,
-    buildPreferredSourceFamilyShortlists: buildActivePreferredSourceFamilyShortlists,
-    emitDigestIncident,
-    normalizeUrlForDedup,
-    isFetchedItemEligible: (item) => {
-      const annotated = annotateEditorialSignals([item]);
-      return annotated.length > 0 && annotated[0].hard_exclude !== true;
-    },
-    annotateFetchedItems: annotateEditorialSignals,
-    standardTopicBrokerRuntime,
-    brokerCandidateInventoryRuntime,
-  });
   const {
+    now,
+    deliveryMode,
+    deliveryEventSource,
+    dateStr,
+    shortDate,
+    publicDigestUrl,
+    mergedScoringConfig,
     selectionTarget,
     tagPriority,
-    allItems: fetchedItems,
+    allItems,
     standardFetchCallsPlanned,
     standardFetchCalls,
     fetchDiagnostics,
-  } = await fetchRuntime.orchestrateFetch({
-    dueUsers: fetchDueUsers,
+  } = await fetchSetupRuntime.prepareFetchRun({
+    digestDateKey,
+    fetchDueUsers,
     runMode,
-    scoringConfig: mergedScoringConfig,
   });
-  let allItems = fetchedItems;
 
   if (inventoryRefreshOnly) {
     recordRunCost({
@@ -938,7 +881,7 @@ async function main() {
       }
     }
 
-    setPreferredSourceMatcher(null);
+    fetchSetupRuntime.resetPreferredSourceMatcher();
   } finally {
     recordRunCost({
       now,

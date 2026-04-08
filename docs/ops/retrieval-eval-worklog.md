@@ -1,6 +1,6 @@
 # Retrieval Eval Worklog
 
-*Last reviewed: April 7, 2026*
+*Last reviewed: April 8, 2026*
 
 This is the live operator summary for retrieval-evaluation work. The full March 2026 historical log is archived under [`../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md`](../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md).
 
@@ -16,21 +16,21 @@ Track the current retrieval-quality loop without mixing a large historical execu
 
 ## Current Working Conclusion
 
-As of April 7, 2026 (Day 11), the run is the best in the validation run: 35/35 delivered, 7/7 topics full and above depth-15, trusted share 74.3% (26/35), 5 total writeup drops, repair pass at 75%. Day 10's collapse (24/35, 8.3% trusted) was driven by Sunday pool thinness and the Monday 72h freshness extension restored it cleanly.
+As of April 8, 2026 (Day 12), the run is mechanically healthy but not exit-green: 35/35 delivered, 7/7 topics full and above depth-15, 568 total candidates, 58/58 broker source fetches successful, and 0 writeup-driven underfills. Trusted share fell to 62.9% (22/35), down from Day 11's 74.3% (26/35) and below the 80% MVP target. The detailed audit is archived at [`../archive/planning/2026-03/mvp-day-12-2026-04-08.md`](../archive/planning/2026-03/mvp-day-12-2026-04-08.md).
 
-**Active issue — WSJ and pymnts still silently dropping all content (fix not yet deployed).**
-`financial_wsj_markets`: `non_article_count=20` every run. `consumer_pymnts_retail`: `non_article_count=10`. The fix (`allow_article_like_listing_urls: true` on both sources + query-string check fix in `officialListingUrlLooksArticleLike`) was committed as `3800f54` and pushed to GitHub but production has not received it. Deploy before the next Sunday run (2026-04-12). On weekday runs with a full pool these missing sources are not felt; on Sunday with 2–3 candidates per topic they're material.
+**Active issue - `provider_parse_failure` is not resolved.**
+Day 12 had 18 writeup drops on 53 attempts. `provider_parse_failure` returned with 10 drops after being absent on Day 11, mostly on strong trade-source items from americanbanker.com, modernhealthcare.com, statnews.com, and bankingdive.com. Use the raw-response logging added around commit `3800f54` to classify these failures before changing prompts blindly.
 
-**Active issue — Saturday needs the same 72h freshness extension as Sunday/Monday.**
-Sunday already gets 72h (corrected in the existing `isLowPublishDay` check). Saturday does not — need to verify the current code covers Saturday. If not, Saturday runs will have the same pool collapse that Sunday had on Day 10.
+**Active issue - trusted-first selection floor is missing.**
+No selected unknown-tier or official filler items appeared on Day 12, but 13/35 selected items were standard-tier. Technology, Life Sciences, Energy, and Industrials all selected standard-tier items even when enough premium/strong candidates existed in the same topic pool. The next selection change should prefer or require premium/strong backfill on adequate-depth days before standard-tier reserves are allowed.
 
-**`provider_parse_failure` appears to be content-quality driven, not a systematic prompt bug.**
-Zero parse failures on Day 11 with 41 attempts and a full 351-candidate pool. Days 8–10 failures correlated exactly with thin Sunday/weekend content. The raw response logging added in `3800f54` will confirm on the next failure. No prompt fix needed until evidence says otherwise.
+**Active issue - Technology strategic relevance is too loose.**
+Technology selected a personal CGM story, an offline dictation app, Vision Pro/Steam Link, Bluesky/vibe-coding culture, and a small open-source AI model-maker profile while stronger AI security, platform-policy, and physical-AI capital-allocation stories missed. Add negative signals for personal device reviews, app-feature-only stories, and culture/meta commentary; add positive signals for AI security, platform governance, compute/infrastructure, and capital allocation.
 
-**Source concentration is now the active quality ceiling.**
-With pool depth and writeup reliability recovered, the main quality gap is per-source saturation. Financial Services delivered 5/5 americanbanker.com items — all good, but the Takeda/Denali dissolution and the AI-priority banker survey both missed because the pool was full. A per-source cap of 3 would force diversity; evaluate after WSJ/pymnts deploy adds new sources to the pool.
+**WSJ/pymnts status changed from non-article failure to stale-only failure.**
+`financial_wsj_markets` parsed 20 with `non_article_count=0` and `consumer_pymnts_retail` parsed 10 with `non_article_count=0`, so the article-like listing fix appears deployed. Both retained 0 because all entries were stale (`WSJ stale=20`, `pymnts stale=10`). Monitor one more weekday before treating this as a remaining parser bug.
 
-Prior working conclusions (operational uptime, broker backbone, freshness, writeup path) are resolved or on track.
+Prior working conclusions on operational uptime, broker backbone, freshness, and exact delivery count are resolved or on track. The current quality blockers are writeup parse reliability, trusted-first reserve ordering, and Technology relevance.
 
 ## Update Rules
 

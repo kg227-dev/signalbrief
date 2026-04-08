@@ -312,6 +312,7 @@ module.exports = {
   DEFAULT_RETENTION_HOURS_FOR_INVENTORY,
   normalizeCandidateDomain,
   matchesDomain,
+  annotateItemsForFetch,
   buildItemDedupKey,
   classifyRetrievedSourceFamily,
   buildTrustedFamilyQueue,

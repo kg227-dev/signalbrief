@@ -1,321 +1,235 @@
 # Codebase Cleanup & Refactoring Plan
 
-*Created: March 28, 2026*
-*Schedule: 5 working days, post-validation week*
-*Status: Draft*
+*Originally created: March 28, 2026*  
+*Refreshed against current codebase: April 8, 2026*  
+*Status: Ready for execution*  
+*Planning horizon: 6-8 focused working days across 2 passes*
 
-## Where We Are
+## Current Snapshot
 
-| Metric | SignalBrief | Healthy Benchmark |
-|---|---|---|
-| Total JS files | 480 | — |
-| Source files (src + web) | 244 | — |
-| Total LOC (src + web) | 45,595 | — |
-| Average file size | 187 LOC | 150–250 is healthy |
-| Largest file | 2,107 LOC (`storyline-domain-runtime.js`) | <500 preferred, <1000 tolerable |
-| Files >800 LOC | 8 | 0–3 |
-| Files ≤15 LOC (shims/barrels) | 11 remaining | 0–5 |
-| Contract test files | 208 | — |
-| Sidecar test files (co-located) | 36 | Pick one convention, not both |
-| Circular dependencies | 0 | 0 |
-| TODO/FIXME markers | 0 | <10 |
-| process.env reads outside config | 67 | <10 (centralize) |
-| Duplicated topic constant sets | 2 | 1 (single source of truth) |
-| Hardcoded topic names in source | 12 files | 1–2 (config + normalization) |
-| Silent catch blocks | 8 files | 0 |
-| Dead shim files | 0 (cleaned today) | 0 |
-
-### What's Already Good
-
-- **Zero circular dependencies.** Module graph is a clean DAG.
-- **Zero TODO/FIXME debt.** No markers rotting in the codebase.
-- **Clean domain separation.** `src/domains/`, `src/digest/`, `src/platform/`, `src/entrypoints/` are distinct layers with clear responsibilities.
-- **Strong test coverage.** 244 test files covering all entrypoints and most runtime modules.
-- **Consistent naming.** 92% of source files use the `-runtime.js` suffix.
-- **Config-driven behavior.** Digest tuning, editorial overrides, and source registry are all file-backed and hot-reloadable.
-
-### What Needs Work
-
-1. **8 oversized files** (>800 LOC) — the top 5 are 1,300–2,100 lines.
-2. **67 scattered `process.env` reads** — no single env config surface.
-3. **36 sidecar tests mixed with 208 contract tests** — two conventions, neither enforced.
-4. **12 files hardcode topic names** — should flow from one constant.
-5. **11 remaining shim/barrel files** — some are load-bearing, some are decorative.
-6. **Import path inconsistency** — same module reachable via barrel, shim, or direct path.
-7. **No centralized date/time utility** — ad-hoc `new Date()` / `.toISOString()` in 60+ files.
-8. **Silent catch blocks** — 8 files swallow errors without logging.
-
----
-
-## 5-Day Plan
-
-### Day 1 — Constants, Config & Single Source of Truth
-
-**Goal:** Every magic value lives in exactly one place. No file reads `process.env` directly except the config gateway.
-
-#### Task 1.1 — Extract `MVP_TOPIC_TAGS` constant *(~1h)*
-
-`PHASE1_TOPIC_TAGS` is defined in both `standard-topic-broker-runtime.js:14` and `digest-orchestrator-fetch-runtime.js:29`. Twelve other files hardcode individual topic strings.
-
-- [ ] Create `src/platform/config/mvp-topics.js` exporting the canonical `MVP_TOPIC_TAGS` Set and a `isMvpTopic(tag)` predicate.
-- [ ] Replace both `PHASE1_TOPIC_TAGS` / `PHASE1_STANDARD_TOPIC_TAGS` definitions with imports from the new module.
-- [ ] Grep every file in the "12 files" list above; replace bare `"HEALTHCARE"` etc. with references to the constant or the predicate, wherever the string is used for logic (not display).
-- [ ] Update `topic-normalization-runtime.js` to import from the same source.
-- [ ] Run `npm test`, `npm run smoke:worker`, `npm run smoke:admin-scheduler`.
-
-#### Task 1.2 — Centralize `process.env` reads *(~2h)*
-
-67 `process.env` reads are scattered across 33 files. Two files already act as gateways: `src/runtime/config-provider.js` (app config) and `web/server-runtime-env-runtime.js` (web env). Everything else should flow through them.
-
-- [ ] Audit the 67 reads. Classify each as: (a) already in a gateway, (b) should move to `config-provider.js`, (c) should move to `server-runtime-env-runtime.js`, (d) is in a script/test and is fine.
-- [ ] For each (b)/(c), add the env var to the appropriate gateway and export a named accessor.
-- [ ] Replace every direct `process.env.X` in source files with the accessor import.
-- [ ] Update `.env.example` with any newly-documented variables.
-- [ ] Run full test suite.
-
-#### Task 1.3 — Consolidate timeout/threshold constants *(~30m)*
-
-Five timeout constants are defined inline in five different files:
-
-| Constant | Value | File |
-|---|---|---|
-| `DEFAULT_PERPLEXITY_TIMEOUT_MS` | 25,000 | `digest-data-fetch-runtime.js` |
-| `DEFAULT_ANTHROPIC_TIMEOUT_MS` | 30,000 | `digest-data-enrich-runtime.js` |
-| `DEFAULT_TIMEOUT_MS` | 12,000 | `digest-search-evidence-resolver-runtime.js` |
-| `DEFAULT_RATE_LIMIT_COOLDOWN_MS` | 1,250 | `digest-orchestrator-fetch-runtime.js` |
-| `DEFAULT_RATE_LIMIT_MAX_COOLDOWN_MS` | 20,000 | `digest-orchestrator-fetch-runtime.js` |
-
-- [ ] Create `src/platform/config/provider-defaults.js` with all provider timeout/retry defaults.
-- [ ] Import from each consumer file. Keep the env-var override logic in each consumer (it's already clean).
-- [ ] Run tests.
-
----
-
-### Day 2 — Break Up the Big Files
-
-**Goal:** No file exceeds 600 LOC. The 8 files above 800 LOC get split along natural seam lines.
-
-#### Files to split (in priority order):
-
-| File | LOC | Split Strategy |
-|---|---|---|
-| `storyline-domain-runtime.js` | 2,107 | Extract storyline classification, relationship scoring, and dedup logic into 3 focused modules. The file already has clear section comments. |
-| `eval/retrieval/runner-runtime.js` | 1,873 | Extract scenario runner, scoring harness, and report builder. This file is eval-only — no production risk. |
-| `digest-orchestrator-core-runtime.js` | 1,780 | Extract audit logging, digest assembly, and email composition into sub-modules. The 47-import count drops naturally. |
-| `digest-orchestrator-fetch-runtime.js` | 1,722 | Extract query-pack builder, rate-limit state machine, and broker orchestration. |
-| `standard-topic-broker-runtime.js` | 1,324 | Extract best-fit topic assignment, source-family resolution, and feed parsing. |
-| `digest-orchestrator-delivery-runtime.js` | 875 | Extract email rendering pipeline from delivery orchestration. |
-| `admin-api-users-actions-runtime.js` | 798 | Split user CRUD actions from bulk operations. |
-| `admin-source-registry-runtime.js` | 798 | Split source CRUD from source health/scoring. |
-
-#### Approach for each:
-
-- [ ] Read the file. Identify 2–4 natural sections (usually marked by comments or blank-line clusters).
-- [ ] Extract each section into a new `-runtime.js` file in the same directory.
-- [ ] The original file becomes a thin composition layer that requires and delegates.
-- [ ] Move corresponding test assertions to match the new file boundaries.
-- [ ] Run `npm test` after each file split (not at the end).
-
-**Day 2 target:** Top 4 files split. Remaining 4 carry to Day 3 morning if needed.
-
----
-
-### Day 3 — Import Hygiene & Shim Consolidation
-
-**Goal:** One canonical import path per module. No shim that isn't load-bearing.
-
-#### Task 3.1 — Remove remaining dead barrels *(~1h)*
-
-| File | Lines | Consumers | Action |
-|---|---|---|---|
-| `web/services/shared/index.js` | 13 | 0 | Delete |
-| `web/services/user/index.js` | 13 | 0 | Delete |
-| `src/digest/application/digest-service-runtime.js` | 7 | 1 (digest.js) | Inline into `digest.js` |
-| `web/server/index.js` | 8 | 1 | Rewire consumer, delete |
-
-- [ ] Delete zero-consumer barrels.
-- [ ] For 1-consumer barrels, rewire the single consumer to import the real module.
-- [ ] Run tests after each deletion.
-
-#### Task 3.2 — Standardize import paths in entrypoints *(~2h)*
-
-`src/entrypoints/digest-orchestrator-core-runtime.js` has 47 imports using 4 different path conventions:
-- `../domains/digest` (barrel) — correct
-- `../digest/runtime/...` (direct, bypassing barrel) — should use barrel
-- `../runtime/...` (compat layer) — some are necessary, some should migrate
-- `./digest-orchestrator-*` (siblings) — correct
-
-- [ ] Audit all imports in every `src/entrypoints/digest-orchestrator-*` file.
-- [ ] Ensure digest domain functionality is imported via `../domains/digest` barrel, not directly from `../digest/runtime/` or `../digest/domain/`.
-- [ ] Where `src/runtime/` files are just re-exporting `src/digest/` or `src/domains/` modules, update imports to use the canonical path and mark the shim for future removal.
-- [ ] Run tests.
-
-#### Task 3.3 — Consolidate duplicate shim pairs *(~1h)*
-
-Three live shim pairs remain where the `-runtime.js` and non-`-runtime.js` variant both exist and re-export the same target:
-
-| Shim A | Shim B | Target | Live consumers |
-|---|---|---|---|
-| `src/runtime/store.js` (6L) | — | `store-core-runtime` | 27+ (keep this one) |
-| `src/jobs/digest-runner-runtime.js` (3L) | — | `digest-runner-core-runtime` | 4 (scheduler-worker, server-runtime, test-critical-paths, module-coverage) |
-
-These are load-bearing — keep them but document their role in a comment header.
-
-- [ ] Add a one-line comment to each surviving shim: `// Facade — canonical module is ./target-name`.
-- [ ] Run tests.
-
----
-
-### Day 4 — Test Organization & Error Handling
-
-**Goal:** One test convention, no silent failures.
-
-#### Task 4.1 — Unify test location *(~3h)*
-
-The codebase has 36 sidecar `.test.js` files next to source and 208 in `tests/contracts/`. Both are valid conventions — but running both is confusing and some overlap.
-
-Decision: **Keep sidecar tests for feature-variant regression; move pure module-contract tests to `tests/contracts/`.**
-
-Concretely:
-- [ ] Sidecar tests with names like `.deprecatedFieldsRemoved.test.js`, `.emailOnlyMvp.test.js`, `.maxCustomKeywords.test.js` stay in place — they're feature-variant assertions tightly coupled to the source.
-- [ ] Sidecar tests that are plain module-shape tests (e.g., `digest-orchestrator-selection-runtime.test.js` in `src/entrypoints/`) should move to `tests/contracts/entrypoints/` if an equivalent doesn't already exist there.
-- [ ] Check for duplicated assertions between sidecar and contract tests. Deduplicate.
-- [ ] Update `tests/README.md` with the convention rule so future contributors know.
-- [ ] Run `npm test`.
-
-#### Task 4.2 — Fix silent catch blocks *(~1h)*
-
-8 files have empty `catch` blocks that swallow errors:
-
-- `src/digest/domain/editorial-overrides-runtime.js`
-- `src/runtime/url-normalization-runtime.js`
-- `src/runtime/structured-logger-runtime.js`
-- `src/digest/runtime/archive-persistence-runtime.js`
-- `src/digest/runtime/digest-formatting-ai-generation-runtime.js`
-- `src/runtime/digest-tuning-runtime.js`
-- (2 more identified in audit)
-
-For each:
-- [ ] Read the catch block. Determine if the silence is intentional (e.g., URL parse fallback) or accidental.
-- [ ] If intentional, add a comment: `// Intentionally silent: <reason>`.
-- [ ] If accidental, add structured logging: `log.warn({ event: "...", error: err.message })`.
-- [ ] Run tests.
-
-#### Task 4.3 — Add JSDoc to barrel/platform modules *(~1h)*
-
-11 key modules lack module-level documentation:
-
-- [ ] `src/domains/digest/index.js` — document the aggregation surface and lazy-load pattern.
-- [ ] `src/domains/engagement/index.js`
-- [ ] `src/domains/scoring/score-candidate.js`
-- [ ] `src/platform/config/index.js`
-- [ ] `src/platform/scheduler/index.js`
-- [ ] `src/platform/mailer/index.js`
-- [ ] `src/platform/store/index.js`
-- [ ] `src/entrypoints/digest.js` — document as the CLI/script entry point.
-- [ ] `src/entrypoints/scheduler-worker.js` — document as the long-running worker entry point.
-- [ ] `web/server.js` — document as the web server entry point.
-- [ ] `src/runtime/store.js` — document the facade contract.
-
-Each gets a `/** @module ... */` block explaining: what it exports, who should import it, and what the canonical import path is.
-
----
-
-### Day 5 — Web Layer Cleanup & Polish
-
-**Goal:** Clean web layer organization. Final pass on naming, orphaned files, and documentation.
-
-#### Task 5.1 — Reorganize web/routes into subdirectories *(~2h)*
-
-`web/routes/` has 34 files in a flat directory. Split by API domain:
-
-```
-web/routes/
-├── admin/          (24 files — admin-api-*.js)
-├── core/           (7 files — core-api-*.js)
-└── public-static.js (1 file)
-```
-
-- [ ] Create `web/routes/admin/` and `web/routes/core/`.
-- [ ] Move files. Update all `require()` paths in consumers.
-- [ ] Keep `public-static.js` at root (only 1 file, not worth a subdirectory).
-- [ ] Update `web/server-runtime-deps-runtime.js` and any other import sites.
-- [ ] Run `npm test`, `npm run smoke:worker`, `npm run smoke:admin-scheduler`.
-
-#### Task 5.2 — Clean up orphaned scripts and barrels *(~30m)*
-
-- [ ] Delete `web/services/admin/index.js` — barrel with 5 consumers but only re-exports; rewire consumers to import the real modules.
-- [ ] Verify `scripts/dependency-links.mjs` and `scripts/module-linkage.mjs` — either add to `package.json` or delete.
-- [ ] Remove any remaining empty directories.
-
-#### Task 5.3 — Formatting fragment consolidation *(~1h)*
-
-Four tiny formatting files in `src/digest/runtime/` compose trivially:
-
-| File | LOC |
+| Metric | Current |
 |---|---|
-| `digest-formatting-topic-display-runtime.js` | 15 |
-| `digest-formatting-topic-learning-runtime.js` | 30 |
-| `digest-formatting-topic-visual-runtime.js` | ~40 |
-| `digest-formatting-topic-runtime.js` | 24 |
+| Total JS files | 606 |
+| Source files (`src/` + `web/`) | 266 |
+| Total LOC (`src/` + `web/`) | 55,235 |
+| Average source file size | 208 LOC |
+| Largest file | 2,119 LOC (`src/digest/domain/storyline-domain-runtime.js`) |
+| Files >800 LOC | 9 |
+| Files >600 LOC | 16 |
+| Small JS shims/facades <=15 LOC | 11 |
+| Contract tests | 218 |
+| Sidecar tests | 42 |
+| Direct `process.env` reads in production source (`src/` + `web/`) | 0 |
+| Remaining `process.env` reads in source tree | 4, both in sidecar tests |
+| Non-test source/web files hardcoding MVP topic tags | 17 |
+| Direct `../digest/runtime/*` imports inside orchestrator entrypoints | 5 |
+| Empty service-grouping directories | 3 (`web/services/admin`, `web/services/shared`, `web/services/user`) |
 
-- [ ] Merge the first three into `digest-formatting-topic-runtime.js` (the existing compositor).
-- [ ] Update all imports.
-- [ ] Run tests.
+## What Changed Since The March Draft
 
-Similarly for the data aggregator:
+The March 28 plan is directionally useful, but several of its assumptions are now stale:
 
-| File | LOC |
-|---|---|
-| `digest-data-runtime.js` | 18 |
+- `src/platform/config/mvp-topics.js` already exists and is now the canonical tag list.
+- `web/routes/` is already split into `admin/`, `core/`, and `public-static.js`.
+- `tests/README.md` already documents the sidecar-vs-contract test convention.
+- Direct `process.env` reads have already been pushed out of production source code.
+- Several barrel/facade docs already landed: `src/domains/digest/index.js`, `src/domains/engagement/index.js`, `src/platform/config/index.js`, `src/platform/mailer/index.js`, `src/platform/store/index.js`, `src/runtime/store.js`, and `web/server.js`.
+- `web/routes/admin/admin-api-users-actions-runtime.js` is already a thin facade (27 LOC), with user work split into query/lifecycle/digest action modules.
+- Source-registry work is already partly separated into `web/services/admin-source-registry-runtime.js`, `admin-source-registry-summary-runtime.js`, and `admin-source-registry-metrics-runtime.js`.
+- `src/digest/runtime/digest-data-enrich-runtime.js` has already been partially split into prompt/result helpers.
 
-- [ ] Inline `digest-data-runtime.js` into its single consumer or merge with `digest-data-fetch-runtime.js`.
-- [ ] Run tests.
+The repo also grew materially since March:
 
-#### Task 5.4 — Final verification pass *(~1h)*
+- Source size increased from the mid-40k LOC range to 55k+ LOC.
+- The largest production hot spots shifted from a few old files to a broader orchestrator cluster plus new web/admin modules.
+- The most valuable cleanup is no longer "foundation hygiene"; it is targeted decomposition of high-risk runtime files plus consolidation of duplicated helper logic.
 
-- [ ] Run full `npm test`.
-- [ ] Run `npm run smoke:worker`.
-- [ ] Run `npm run smoke:admin-scheduler`.
-- [ ] Run `npm run qa:harness`.
-- [ ] `git grep 'process\.env\.'` — confirm all reads are in config gateways or scripts.
-- [ ] `git grep 'PHASE1_TOPIC_TAGS\|PHASE1_STANDARD_TOPIC_TAGS'` — confirm single definition.
-- [ ] `git grep 'catch\s*(\s*)\s*{}'` — confirm no empty catches remain.
-- [ ] Confirm no file exceeds 600 LOC (except `eval/retrieval/runner-runtime.js` which is eval-only and acceptable at ~600 post-split).
-- [ ] Update this document with final metrics vs the table at the top.
+## March Tasks That Are Now Complete Or Obsolete
 
----
+Do not spend execution time redoing these:
+
+- Broad env centralization sweep across `src/` and `web/`. Production source is already clean.
+- `web/routes/` reorganization. It is already done.
+- Standalone test-location policy cleanup. The rule is already documented; only move tests when file boundaries change.
+- Standalone JSDoc sweep for the major barrels listed in the original draft. Most of that work is already done.
+- `admin-api-users-actions-runtime.js` split. It already happened.
+- `web/server.js` split. The real web hot spot is now `web/server-runtime.js`, not `web/server.js`.
+
+## Current Cleanup Priorities
+
+### 1. Split the production orchestrator cluster first
+
+This is now the highest-leverage work. The main operational complexity sits in the digest orchestrator pipeline, not in config or routing structure.
+
+| File | LOC | Why it matters | First split seams |
+|---|---:|---|---|
+| `src/entrypoints/digest-orchestrator-core-runtime.js` | 1,994 | Highest-fan-in production file; owns bootstrap, caches, runtime wiring, audit paths, and run assembly | bootstrap/config wiring, runtime factories/caches, audit+incident logging, pipeline execution helpers |
+| `src/entrypoints/digest-orchestrator-fetch-runtime.js` | 1,819 | Mixes run-mode policy, topic/query policy, broker/discovery orchestration, and rate-limit behavior | run-mode/topic selection policy, query-pack config, broker/discovery execution, inventory/backoff helpers |
+| `src/entrypoints/digest-orchestrator-selection-runtime.js` | 1,172 | Holds freshness logic, source-tier logic, domain-topic scopes, fallback pools, and final selection | source-tier/freshness helpers, domain-topic-scope policy, pool builder, final slot-selection/backfill rules |
+| `src/entrypoints/digest-orchestrator-enrichment-runtime.js` | 1,030 | Mixes enrichment orchestration with stats normalization and ship-ready evaluation | writeup stats accumulators, topic-bucket flatten/map helpers, ship-ready/final-assembly evaluators |
+| `src/entrypoints/digest-orchestrator-delivery-runtime.js` | 1,031 | Delivery policy, ranking, and payload assembly are still bundled together | ranking/slotting helpers, render payload assembly, delivery orchestration |
+
+### 2. Extract shared candidate/topic utilities before touching the next hot spots
+
+Several large files now duplicate the same helper families:
+
+- `normalizeSourceTier` appears in 6 source files.
+- Trusted-tier counting helpers are duplicated across selection and enrichment.
+- Freshness/age helpers are duplicated across strict-quality and selection.
+- Topic-specific query packs and keyword maps still live in multiple files.
+
+Create a canonical shared surface before doing the next wave of splits. That keeps the follow-on work smaller and reduces drift.
+
+Recommended extraction targets:
+
+- `src/domains/digest/candidate-quality-runtime.js` or equivalent:
+  - `normalizeSourceTier`
+  - `isTrustedSourceTier`
+  - `countTrustedSourceTier`
+  - `computeItemAgeHours`
+  - freshness tier helpers
+- `src/platform/config/mvp-topic-metadata.js` or equivalent:
+  - canonical topic list
+  - focused-topic sets
+  - query-pack overrides
+  - topic keyword maps used for matching/scoring
+
+### 3. Finish the web/runtime cleanup that is only half done
+
+The web layer is structurally better than it was in March, but there is still incomplete migration scaffolding:
+
+| Target | Current state | Action |
+|---|---|---|
+| `web/server-runtime.js` | 756 LOC, still the real web hot spot | split bootstrap, route wiring, admin ops wiring, and scheduler-control helpers |
+| `web/routes/admin/admin-api-funnel-runtime.js` | 854 LOC | split audit file IO/date expansion, summary aggregation, and source-registry joining |
+| `web/services/admin/`, `shared/`, `user/` | empty directories with README guidance but no group indexes | either finish the grouping with real entrypoints or delete the empty scaffolding |
+
+### 4. Finish topic-catalog centralization
+
+The tag list is centralized, but the broader topic catalog is still fragmented across runtime, UI, and validation code.
+
+Current non-test files still carrying literal MVP topic tags include:
+
+- `src/entrypoints/digest-orchestrator-fetch-runtime.js`
+- `src/entrypoints/digest-orchestrator-selection-runtime.js`
+- `src/runtime/standard-topic-broker-runtime.js`
+- `src/runtime/user-contract-runtime.js`
+- `web/server-runtime-topic-config-runtime.js`
+- `web/preferences-shared.js`
+- `web/preferences-runtime.js`
+- supporting eval/config files
+
+The next step is not another `Set([...])` cleanup. It is a richer shared topic-catalog surface that gives runtime, UI, and validation code one place to get:
+
+- canonical tags
+- display labels
+- focus sets
+- query packs
+- matching aliases
+
+### 5. Keep import/facade cleanup narrow and opportunistic
+
+This is still worth doing, but it is no longer a top-level day of work.
+
+Keep it scoped to:
+
+- removing the remaining direct `../digest/runtime/*` imports from orchestrator entrypoints where a domain/platform surface exists
+- deciding whether tiny facades such as `src/digest/application/digest-service-runtime.js` still buy anything
+- updating imports only when a split already touches the module boundary
+
+Do not run another broad "barrel cleanup" sweep before the large runtime files are decomposed.
+
+## Two-Pass Execution Plan
+
+### Pass 1 - Production shape and shared utilities
+
+### Step 1 - Split the core orchestrator path
+
+Execution order:
+
+1. `src/entrypoints/digest-orchestrator-core-runtime.js`
+2. `src/entrypoints/digest-orchestrator-fetch-runtime.js`
+3. shared candidate/topic utility extraction
+4. `src/entrypoints/digest-orchestrator-selection-runtime.js`
+5. `src/entrypoints/digest-orchestrator-enrichment-runtime.js`
+6. `src/entrypoints/digest-orchestrator-delivery-runtime.js`
+
+Rules for each split:
+
+- Keep the original file as the composition layer.
+- Move pure helpers first; move orchestration last.
+- Preserve existing exports and sidecar tests before changing behavior.
+- Update contract tests only when module boundaries move.
+
+### Step 2 - Finish the web/admin hot spots
+
+- Split `web/server-runtime.js`.
+- Split `web/routes/admin/admin-api-funnel-runtime.js`.
+- Resolve the empty `web/services/{admin,shared,user}` grouping dirs one way or the other.
+
+### Step 3 - Re-baseline after pass 1
+
+- Recount large files.
+- Update this doc with the new metrics.
+- Only then decide whether pass 2 is still necessary in full.
+
+### Pass 2 - Remaining large modules and low-risk cleanup
+
+Pass 2 starts after the shared utility layer from pass 1 exists.
+
+Priority order:
+
+1. `src/digest/domain/storyline-domain-runtime.js` (2,119 LOC)
+2. `src/runtime/standard-topic-broker-runtime.js` (1,390 LOC)
+3. `src/digest/domain/strict-quality-domain-runtime.js` (753 LOC)
+4. `src/digest/runtime/digest-data-enrich-runtime.js` (744 LOC)
+5. `src/eval/retrieval/runner-runtime.js` (1,874 LOC, eval-only)
+6. narrow import/facade cleanup
+
+Rationale:
+
+- `storyline-domain-runtime.js` and `standard-topic-broker-runtime.js` are still the biggest underlying domain/runtime modules, but both become easier to split after the shared helper extraction above.
+- `strict-quality-domain-runtime.js` and `digest-data-enrich-runtime.js` are smaller, but they currently duplicate logic that should move into shared utilities first.
+- `src/eval/retrieval/runner-runtime.js` is still large, but it is eval-only and should not block production cleanup.
 
 ## Success Criteria
 
-| Metric | Before | After Target |
-|---|---|---|
-| Files >800 LOC | 8 | 0 |
-| Files >600 LOC | 12 | 0–2 (eval-only exceptions) |
-| `process.env` reads outside config gateways | 67 | 0 (in src/web source; scripts exempt) |
-| Duplicated topic constant definitions | 2 | 1 |
-| Files hardcoding topic names | 12 | 2 (config + normalization) |
-| Silent catch blocks | 8 | 0 (all documented or replaced with logging) |
-| Dead shim/barrel files | 0 | 0 |
-| Shim/barrel files ≤15 LOC | 11 | ≤5 (load-bearing only) |
-| Test conventions (mixed sidecar + contract) | 2 | 1 clear rule documented |
-| Barrel modules without JSDoc | 11 | 0 |
-| `web/routes/` flat file count | 34 | 0 (organized into admin/, core/) |
-| Formatting fragment files ≤30 LOC | 4 | 1 (merged) |
+### Hard outcomes
 
-## Risks and Constraints
+- Production files over 1,000 LOC reduced to 0.
+- Files over 800 LOC reduced from 9 to at most 2, with any exception clearly justified.
+- Repeated helper families (`normalizeSourceTier`, trusted-tier checks, freshness-tier helpers) consolidated to one canonical implementation each.
+- Non-test source/web files hardcoding full MVP topic lists reduced from 17 to at most 5.
+- Direct `../digest/runtime/*` imports in orchestrator entrypoints reduced from 5 to 0, or left only where there is a deliberate boundary reason.
+- Empty `web/services/admin`, `shared`, and `user` directories resolved.
 
-- **Import path changes propagate.** Every `require()` rewrite touches the module cache. Run tests after every individual file move, not in batch.
-- **Day 2 (big file splits) is the riskiest day.** Splitting a 2,000-line file means touching the test harness, import coverage map, and sidecar tests. Budget extra time.
-- **The `domains/digest/index.js` barrel is a load-bearing abstraction.** It lazy-loads `topic-domain-runtime` to avoid a circular dependency. Don't refactor the barrel without understanding the lazy-load pattern first.
-- **`standard-topic-broker-runtime.js` is tightly coupled to config JSON structure.** Splitting it requires understanding how `standard-topic-broker-sources.json` is parsed and used.
-- **Sidecar tests are discovered by `test-critical-paths.js` via filesystem walk.** Moving them requires updating the discovery logic or the `assert.ok(sidecarTests.length >= 40)` threshold.
+### Process outcomes
 
-## Not In Scope
+- No standalone redo of already-complete March tasks.
+- Every large split lands with its tests still green.
+- The plan is updated after each pass so the metrics stay current instead of drifting again.
 
-- Feature work, new functionality, or behavioral changes.
-- Database migration (SQLite schema is stable).
-- Dependency additions (zero-dep policy remains).
-- CI/CD pipeline changes.
-- Production deployment or Docker changes.
-- Performance optimization (separate concern).
+## Verification Expectations
+
+Run verification incrementally, not only at the very end:
+
+- `npm test` after each major file split
+- `npm run smoke:worker` after orchestrator/scheduler changes
+- `npm run smoke:admin-scheduler` after web/admin/server changes
+- `npm run qa:harness` after pass 1 and again at final closeout
+
+## Risks And Constraints
+
+- The highest-risk work is still the orchestrator cluster. Avoid batching multiple large splits before tests run.
+- `src/domains/digest/index.js` remains a load-bearing aggregation surface because it lazy-loads topic-domain exports to avoid circularity.
+- `src/runtime/standard-topic-broker-runtime.js` mixes feed parsing, source policy, and topic scoring. Splitting it without the shared topic metadata layer will cause more duplication, not less.
+- `web/services/README.md` describes service grouping that is not actually wired yet. Treat that as migration scaffolding, not current reality.
+- Avoid turning this effort into a repo-wide import-style or documentation sweep. The remaining value is in runtime decomposition and shared utility extraction.
+
+## Out Of Scope
+
+- Feature work or product behavior changes unrelated to the split targets
+- Database or store migration work
+- CI/CD pipeline changes
+- Broad documentation passes on files that are already adequately documented
+- Repeating cleanup tasks that are already complete in the current codebase

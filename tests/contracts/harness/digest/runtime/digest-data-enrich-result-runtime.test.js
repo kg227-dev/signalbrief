@@ -13,30 +13,56 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
   applyBatchWriteupValidation,
+  classifyParseFailure,
+  deriveWimBrief,
   normalizeEnrichedItems,
+  parseJsonObjectLenient,
+  validateExtractionOutput,
   validateStrategicWriteup,
 } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
-function testValidatorRejectsReusableCategoryBoilerplate() {
-  const result = validateStrategicWriteup(
-    {
-      headline: "Bed Bath & Beyond agrees to acquire The Container Store for $150M",
-      summary: "Stores will rebrand as The Container Store / Bed Bath and Beyond and Elfa units will anchor a home services division.",
-    },
-    {
-      signal_shift: "Bed Bath & Beyond is buying The Container Store",
-      implication_type: "competition",
-      wim_brief: "This matters for home retail strategy.",
-      wim: "For consumer operators, this matters for demand, pricing power, inventory, and channel strategy.",
-    }
-  );
-  assert.strictEqual(result.ok, false);
-  assert.ok(result.reasons.includes("generic_language") || result.reasons.includes("missing_interpretation"));
+function testParseHelpers() {
+  assert.strictEqual(classifyParseFailure("", []), "empty_response");
+  assert.strictEqual(classifyParseFailure("{bad-json", []), "truncation");
+  assert.strictEqual(classifyParseFailure("{\"wim\":\"x\"", []), "truncation");
+
+  const parsed = parseJsonObjectLenient('```json\n{"wim":"Shift"}\n```');
+  assert.strictEqual(parsed.ok, true);
+  assert.strictEqual(parsed.value.wim, "Shift");
+  assert.strictEqual(parseJsonObjectLenient("").parseFailureType, "empty_response");
 }
 
-function testValidatorAcceptsStorySpecificInterpretation() {
-  const result = validateStrategicWriteup(
+function testExtractionValidation() {
+  const valid = validateExtractionOutput(
+    {
+      headline: "Blackwell supply expands",
+      summary: "Capacity commitments tighten near-term GPU supply.",
+    },
+    {
+      what_happened: "Nvidia expanded Blackwell supply",
+      mechanism: "Capacity commitments tightened supply",
+      who_it_impacts: "GPU buyers",
+      implication: "buyers face tighter allocation",
+      confidence: "high",
+    }
+  );
+  assert.strictEqual(valid.ok, true);
+
+  const invalid = validateExtractionOutput({}, {
+    what_happened: "Shift",
+    mechanism: "",
+    who_it_impacts: "users",
+    implication: "good",
+    confidence: "maybe",
+  });
+  assert.strictEqual(invalid.ok, false);
+  assert.ok(invalid.reasons.includes("missing_mechanism"));
+  assert.ok(invalid.reasons.includes("invalid_confidence"));
+}
+
+function testWriteupValidation() {
+  const pass = validateStrategicWriteup(
     {
       headline: "Bed Bath & Beyond agrees to acquire The Container Store for $150M",
       summary: "Stores will rebrand as The Container Store / Bed Bath and Beyond and Elfa units will anchor a home services division.",
@@ -44,31 +70,63 @@ function testValidatorAcceptsStorySpecificInterpretation() {
     {
       signal_shift: "Bed Bath & Beyond is combining with The Container Store",
       implication_type: "competition",
+      mechanism: "The deal consolidates the assortment base",
       wim_brief: "The deal turns Bed Bath & Beyond into a broader home platform play.",
-      wim: "Bed Bath & Beyond is using the Container Store deal to build a more consolidated home platform, which changes the competitive set for mid-tier home retailers. If the integration holds, rivals will face more bundled assortment and services pressure rather than just another store footprint.",
+      wim: "Bed Bath & Beyond's Container Store deal consolidates the assortment base and pressures pricing for mid-tier home retailers.",
     }
   );
-  assert.strictEqual(result.ok, true);
+  assert.strictEqual(pass.ok, true);
+
+  const rejection = validateStrategicWriteup(
+    {
+      headline: "A generic market update",
+      summary: "A generic market update",
+    },
+    {
+      signal_shift: "Sentiment is shifting",
+      implication_type: "other",
+      mechanism: "people are reacting",
+      wim: "Market sentiment is shifting and people may respond.",
+    }
+  );
+  assert.strictEqual(rejection.ok, false);
+  assert.ok(rejection.reasons.includes("descriptive_only"));
+  assert.ok(rejection.reasons.includes("missing_mechanism"));
+  assert.ok(rejection.reasons.includes("missing_lever"));
+
+  const overloaded = validateStrategicWriteup(
+    { headline: "Supply chain update", summary: "Supply chain update" },
+    {
+      signal_shift: "Supply chain changed",
+      implication_type: "operations",
+      mechanism: "because suppliers, carriers, and buyers all changed at once",
+      wim: "The supply chain changed because suppliers, carriers, and buyers all changed at once, forcing teams to revisit operations and pricing, and to manage margin pressure.",
+    }
+  );
+  assert.ok(overloaded.reasons.includes("sentence_clause_overload"));
+  assert.ok(overloaded.reasons.includes("invalid_implication_type") || overloaded.reasons.includes("missing_mechanism"));
+
+  assert.strictEqual(deriveWimBrief("First sentence matters. Second sentence here."), "First sentence matters.");
 }
 
-function testBatchValidationRejectsRepeatedLeadPhrases() {
+function testNormalizationAndBatchValidation() {
   const normalized = normalizeEnrichedItems(
     [
-      { headline: "Amazon surcharge", summary: "Amazon passes logistics costs through to sellers.", tag: "CONSUMER & RETAIL" },
-      { headline: "Retail AI ROI shift", summary: "Retail budgets tighten around ROI proof.", tag: "CONSUMER & RETAIL" },
+      { headline: "AI pricing reset", summary: "AI pricing reset", tag: "TECHNOLOGY" },
+      { headline: "Retail margin squeeze", summary: "Retail margin squeeze", tag: "TECHNOLOGY" },
     ],
     [
       {
-        signal_shift: "Amazon is passing logistics costs through to sellers",
+        signal_shift: "Pricing reset",
         implication_type: "cost",
-        wim_brief: "Amazon is raising the effective cost of access for smaller sellers.",
-        wim: "Amazon is passing logistics costs through to sellers, which tightens already thin third-party merchant margins. Smaller brands now have less room to absorb marketplace fees without repricing or sacrificing contribution.",
+        wim_brief: "Pricing resets lift budgets.",
+        wim: "Bed Bath & Beyond's Container Store deal consolidates the assortment base because it tightens pricing leverage for mid-tier home retailers.",
       },
       {
-        signal_shift: "Retail AI budgets are shifting from pilots to ROI proof",
-        implication_type: "workflow",
-        wim_brief: "Retail AI budgets are shifting from pilots to measurable productivity gains.",
-        wim: "Amazon is passing logistics costs through to sellers, which tightens already thin third-party merchant margins. Retail tech vendors now face tougher proof-of-value demands before buyers renew pilots.",
+        signal_shift: "Margin squeeze",
+        implication_type: "cost",
+        wim_brief: "Pricing resets lift budgets.",
+        wim: "Bed Bath & Beyond's Container Store deal consolidates the assortment base because it tightens pricing leverage for mid-tier home retailers.",
       },
     ],
     {
@@ -77,12 +135,16 @@ function testBatchValidationRejectsRepeatedLeadPhrases() {
       writeupStatusOnPass: "model_pass",
     }
   );
+
   const batch = applyBatchWriteupValidation(normalized.items);
   assert.strictEqual(batch.items[0].writeup_status, "model_pass");
   assert.strictEqual(batch.items[1].writeup_status, "failed_dropped");
   assert.ok(batch.items[1].writeup_rejection_reasons.includes("repeated_lead_phrase"));
 }
 
-testValidatorRejectsReusableCategoryBoilerplate();
-testValidatorAcceptsStorySpecificInterpretation();
-testBatchValidationRejectsRepeatedLeadPhrases();
+testParseHelpers();
+testExtractionValidation();
+testWriteupValidation();
+testNormalizationAndBatchValidation();
+
+process.stdout.write("[digest-data-enrich-result-runtime] all assertions passed\n");

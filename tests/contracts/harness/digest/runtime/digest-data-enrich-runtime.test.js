@@ -34,6 +34,16 @@ function createDeps(httpsPostWithRetry) {
   };
 }
 
+function makeResponse(text, usage = { input_tokens: 12, output_tokens: 3 }) {
+  return {
+    status: 200,
+    body: {
+      usage,
+      content: [{ text }],
+    },
+  };
+}
+
 async function testRequestFailureDegradesCleanly() {
   let calls = 0;
   const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => {
@@ -47,6 +57,8 @@ async function testRequestFailureDegradesCleanly() {
   assert.strictEqual(out.degradation.reason, "request_failed");
   assert.strictEqual(out.items[0].wim, null);
   assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
+  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].stage, "extraction");
+  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].provider, "anthropic");
 }
 
 async function testStatusFailureRespectsProviderPolicy() {
@@ -66,25 +78,17 @@ async function testStatusFailureRespectsProviderPolicy() {
   assert.deepStrictEqual(optsSeen[0].retryStatusCodes, [429, 503]);
   assert.strictEqual(optsSeen[0].timeoutMs, 5678);
   assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
+  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].reason, "provider_status_failure");
 }
 
-async function testParseFailureDropsItems() {
-  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => ({
-    status: 200,
-    body: {
-      usage: { input_tokens: 22, output_tokens: 5 },
-      content: [{ text: "{bad-json" }],
-    },
-  })));
+async function testParseFailureTracksStageDiagnostics() {
+  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => makeResponse("{bad-json")));
   const out = await enrichRuntime.enrichItems([{ headline: "C" }]);
   assert.strictEqual(out.degraded, true);
-  assert.strictEqual(out.degradation.reason, "parse_failure");
-  assert.strictEqual(out.degradation.raw_preview, "{bad-json");
-  assert.strictEqual(out.degradation.raw_length, 9);
-  assert.strictEqual(out.usage.input_tokens, 22);
   assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
-  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].reason, "provider_parse_failure");
-  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].raw_preview, "{bad-json");
+  assert.strictEqual(out.items[0].parse_failure_type, "truncation");
+  assert.strictEqual(out.items[0].writeup_stage_diagnostics.extraction.failure_reason, "provider_parse_failure");
+  assert.strictEqual(out.writeupDiagnostics.parse_failure_counts.truncation, 1);
 }
 
 async function testEmptySelectionSkipsProviderCall() {
@@ -99,67 +103,73 @@ async function testEmptySelectionSkipsProviderCall() {
   assert.strictEqual(out.degraded, false);
 }
 
-async function testWeakWriteupTriggersRepairPass() {
-  let calls = 0;
-  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => {
-    calls += 1;
-    if (calls === 1) {
-      return {
-        status: 200,
-        body: {
-          usage: { input_tokens: 30, output_tokens: 10 },
-          content: [{ text: JSON.stringify([{
-            signal_shift: "Retail AI spending is evolving",
-            implication_type: "other",
-            wim_brief: "Retailers are still discussing AI strategy.",
-            wim: "For consumer operators, this matters for demand, pricing power, inventory, and channel strategy.",
-          }]) }],
-        },
-      };
+async function testStrongTierGetsRetryBudgetAndRepairPass() {
+  const calls = [];
+  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async (_host, _path, _headers, body) => {
+    calls.push(String(body?.messages?.[0]?.content || ""));
+    if (calls.length === 1) {
+      return makeResponse("{bad-json", { input_tokens: 10, output_tokens: 1 });
     }
-    return {
-      status: 200,
-      body: {
-        usage: { input_tokens: 12, output_tokens: 8 },
-        content: [{ text: JSON.stringify([{
-          signal_shift: "Shoptalk vendors are being pushed from pilots to ROI proof",
-          implication_type: "workflow",
-          wim_brief: "Retail AI budgets are shifting from pilots to measurable productivity gains.",
-          wim: "Shoptalk's AI messaging has shifted from experimentation to proof of ROI, which raises the bar for retail tech vendors selling into tighter budgets. Retailers now have more leverage to cut pilots that do not show labor or conversion gains before the next planning cycle.",
-        }]) }],
-      },
-    };
+    if (calls.length === 2) {
+      return makeResponse("{still-bad", { input_tokens: 8, output_tokens: 1 });
+    }
+    if (calls.length === 3) {
+      return makeResponse(JSON.stringify({
+        what_happened: "GPU supply expanded",
+        mechanism: "capacity commitments loosened",
+        who_it_impacts: "GPU buyers",
+        implication: "buyers face easier allocation",
+        confidence: "high",
+      }), { input_tokens: 9, output_tokens: 2 });
+    }
+    if (calls.length === 4) {
+      return makeResponse(JSON.stringify({
+        wim: "GPU supply expanded and buyers may respond.",
+      }), { input_tokens: 11, output_tokens: 3 });
+    }
+    if (calls.length === 5) {
+      return makeResponse(JSON.stringify({
+        wim: "GPU supply expanded, which eases allocation pressure for buyers and shifts leverage toward buyers in pricing talks.",
+      }), { input_tokens: 13, output_tokens: 4 });
+    }
+    if (calls.length === 6) {
+      return makeResponse(JSON.stringify({
+        wim: "GPU supply tightening forces GPU buyers to choose between margin protection and capex commitments.",
+      }), { input_tokens: 13, output_tokens: 4 });
+    }
+    throw new Error(`Unexpected call ${calls.length}`);
   }));
 
   const out = await enrichRuntime.enrichItems([{
-    headline: "In 2026, AI talk at retail events shifts to proving real results, defining a true strategy",
-    summary: "At this year's Shoptalk Spring, it wasn't enough for brands and retailers to talk about the ways that they think they will use AI.",
-    tag: "CONSUMER & RETAIL",
-    source: "modernretail.co",
-    source_type: "trade_specialist",
+    headline: "Nvidia expands Blackwell supply",
+    summary: "Capacity commitments tighten near-term GPU supply.",
+    tag: "AI",
+    source: "reuters.com",
+    source_type: "reported_media",
+    source_tier: "strong",
     published_date: "2026-04-01T10:00:00.000Z",
   }]);
 
-  assert.strictEqual(calls, 2, "weak writeups should trigger one repair pass");
+  assert.ok(calls.length >= 5, "strong-tier candidate should get two extraction attempts, a failed generation, and a repair pass");
   assert.strictEqual(out.degraded, false);
-  assert.strictEqual(out.items[0].writeup_status, "repair_pass");
-  assert.ok(/proof of ROI/i.test(out.items[0].wim || ""), "repair pass should replace weak why-it-matters copy");
-  assert.ok(out.usage.input_tokens >= 42, "repair pass usage should be accumulated");
+  assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
+  assert.strictEqual(out.items[0].final_status, "failed_dropped");
+  assert.strictEqual(out.items[0].wim, null);
+  assert.strictEqual(out.items[0].writeup_stage_diagnostics.candidate_tier, "strong");
+  assert.strictEqual(out.items[0].writeup_stage_diagnostics.extraction.attempt_count, 2);
+  assert.strictEqual(out.items[0].writeup_stage_diagnostics.generation.attempt_count, 2);
+  assert.strictEqual(out.items[0].writeup_stage_diagnostics.repair.attempted, true);
+  assert.strictEqual(out.items[0].writeup_stage_diagnostics.repair.status, "failed");
 }
 
 async function testInvalidWriteupIsDroppedWithoutFallback() {
-  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => ({
-    status: 200,
-    body: {
-      usage: { input_tokens: 20, output_tokens: 6 },
-      content: [{ text: JSON.stringify([{
-        signal_shift: "The FDA updated information",
-        implication_type: "other",
-        wim_brief: "This matters for life sciences companies broadly.",
-        wim: "For life sciences teams, this matters for regulatory timing, development risk, and commercial potential.",
-      }]) }],
-    },
-  })));
+  const enrichRuntime = createDigestDataEnrichRuntime(createDeps(async () => makeResponse(JSON.stringify({
+    what_happened: "The FDA updated information",
+    mechanism: "the agency changed reporting timing",
+    who_it_impacts: "drug makers",
+    implication: "companies may need to adjust filings",
+    confidence: "high",
+  }), { input_tokens: 20, output_tokens: 6 })));
 
   const out = await enrichRuntime.enrichItems([{
     headline: "Frequently requested or proactively posted drug-specific and other records",
@@ -167,25 +177,23 @@ async function testInvalidWriteupIsDroppedWithoutFallback() {
     tag: "LIFE SCIENCES",
     source: "fda.gov",
     source_type: "primary_official",
+    source_tier: "standard",
     published_date: "2026-04-01T10:00:00.000Z",
   }]);
 
   assert.strictEqual(out.degraded, false);
   assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
   assert.strictEqual(out.items[0].wim_brief, null);
-  assert.ok(
-    Array.isArray(out.items[0].writeup_rejection_reasons)
-      && out.items[0].writeup_rejection_reasons.length > 0,
-    "failed writeups should preserve rejection reasons instead of falling back to deterministic copy"
-  );
+  assert.ok(Array.isArray(out.items[0].writeup_rejection_reasons) && out.items[0].writeup_rejection_reasons.length > 0);
+  assert.strictEqual(out.items[0].final_status, "failed_dropped");
 }
 
 (async () => {
   await testRequestFailureDegradesCleanly();
   await testStatusFailureRespectsProviderPolicy();
-  await testParseFailureDropsItems();
+  await testParseFailureTracksStageDiagnostics();
   await testEmptySelectionSkipsProviderCall();
-  await testWeakWriteupTriggersRepairPass();
+  await testStrongTierGetsRetryBudgetAndRepairPass();
   await testInvalidWriteupIsDroppedWithoutFallback();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

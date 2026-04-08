@@ -209,7 +209,10 @@ function formatStagingPromotionGateFailure(result) {
     lines.push(`artifact_sha=${sha}`);
     lines.push(`artifact_completed_at=${completedAt}`);
   }
-  lines.push("Run `npm run ops:deploy:staging` for this commit, or use --skip-staging-gate for an explicit override.");
+  lines.push(
+    "Run `npm run ops:deploy:staging` for this commit, or use `npm run ops:deploy:prod:override`"
+    + " (wraps `--skip-staging-gate --allow-outside-window`) for an explicit non-incident override."
+  );
   return lines.filter(Boolean).join("\n");
 }
 

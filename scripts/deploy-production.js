@@ -1171,7 +1171,7 @@ async function main() {
         [
           `now_et=${releaseWindowResult.now_et.weekday_label} ${releaseWindowResult.now_et.time} ${releaseWindowResult.now_et.timezone}`,
           `next_window=${nextWindow}`,
-          "Use --hotfix only for active incidents, or ship in the next planned release window.",
+          "Use `npm run ops:deploy:prod:override` for a documented non-incident override, use --hotfix only for active incidents, or ship in the next planned release window.",
         ].join("\n")
       );
     }

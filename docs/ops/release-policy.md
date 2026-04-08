@@ -1,8 +1,8 @@
 # SignalBrief Release Policy
 
-*Last reviewed: April 2, 2026*
+*Last reviewed: April 8, 2026*
 
-Last updated: **April 2, 2026**
+Last updated: **April 8, 2026**
 
 ## Purpose
 
@@ -52,7 +52,7 @@ Use direct production deploy only for incidents with active user impact (service
 
 Hotfix requirements:
 1. Run local gates (`npm test`, both smoke checks).
-2. Deploy with `npm run ops:deploy:prod`.
+2. Deploy with `npm run ops:deploy:prod:hotfix`.
 3. Post deploy in ops log with:
   - commit SHA
   - incident summary
@@ -63,6 +63,23 @@ Hotfix note:
 - Non-incident manual override is `--skip-staging-gate` (must include owner callout in release notes).
 - If the CI image path is unavailable during an incident, use `--emergency-source-build` as the explicit fallback and record why the normal image promotion path was bypassed.
 
+## Non-Incident Override Path
+
+Use this only when a runtime change must ship outside the normal staged release path but there is no active incident.
+
+Preferred override helpers:
+- `npm run ops:deploy:prod:override`
+  - wraps `--skip-staging-gate --allow-outside-window`
+  - keeps the normal CI-image deploy path
+- `npm run ops:deploy:prod:override:emergency-source`
+  - wraps `--skip-staging-gate --allow-outside-window --emergency-source-build`
+  - use only when the CI image/promotion path is unavailable from the current operator host
+
+Override requirements:
+1. Run local gates appropriate to the change.
+2. Record owner + rationale in release notes or ops log.
+3. Prefer the normal release window and staging promotion path whenever available.
+
 ## Batching Rules
 
 - Non-incident runtime changes are batched into ET release windows enforced by deploy tooling.
@@ -72,10 +89,10 @@ Hotfix note:
 - `npm run ops:deploy:prod` now enforces this gate for `target-env=production`.
 - Outside-window deploys require one of:
   - `--hotfix` (active incident path only)
-  - `--allow-outside-window` (manual exceptional override with explicit owner callout)
+  - `npm run ops:deploy:prod:override` / `--allow-outside-window` (manual exceptional override with explicit owner callout)
 - Staging gate override options:
   - `--hotfix` (incident path)
-  - `--skip-staging-gate` (manual non-incident override with explicit owner/rationale)
+  - `npm run ops:deploy:prod:override` / `--skip-staging-gate` (manual non-incident override with explicit owner/rationale)
 - UI copy/docs-only changes may skip staging deploy.
 - If risk is medium/high, require two-person review before prod promotion.
 

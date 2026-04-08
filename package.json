@@ -16,6 +16,8 @@
     "ops:deploy:prod": "node scripts/deploy-production.js",
     "ops:deploy:prod:emergency-source": "node scripts/deploy-production.js --emergency-source-build",
     "ops:deploy:prod:hotfix": "node scripts/deploy-production.js --hotfix --emergency-source-build",
+    "ops:deploy:prod:override": "node scripts/deploy-production.js --skip-staging-gate --allow-outside-window",
+    "ops:deploy:prod:override:emergency-source": "node scripts/deploy-production.js --skip-staging-gate --allow-outside-window --emergency-source-build",
     "ops:deploy:prod:store:canary": "node scripts/deploy-production.js --store-backend canary",
     "ops:deploy:prod:store:sqlite": "node scripts/deploy-production.js --store-backend sqlite",
     "ops:deploy:staging": "node scripts/deploy-staging.js",

@@ -19,7 +19,7 @@ Key archived materials:
 - [Phase 0 Planning Pack](./phase-0-planning-pack.md)
 - [Reduced-Scope MVP Audit](./reduced-scope-mvp-audit-2026-03-25.md)
 - [Reduced-Scope MVP Audit And Build Plan](./reduced-scope-mvp-audit-and-build-plan-2026-03-27.md)
-- [Codebase Cleanup Draft](./codebase-cleanup-2026-03-28.md)
+- [Codebase Cleanup Refresh](./codebase-cleanup-2026-04-08.md)
 - [Reliability Recovery Progress Tracker](./reliability-recovery-progress.md)
 - [Image-Based Deploy Plan](./image-based-deploy-plan.md)
 - [Source Quality Follow-Ups](./source-quality-follow-ups-2026-03-21.md)

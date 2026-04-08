@@ -71,6 +71,7 @@ const { createDigestOrchestratorEnrichmentRuntime } = require("./digest-orchestr
 const {
   createDigestOrchestratorArchiveRuntime,
 } = require("./digest-orchestrator-archive-runtime");
+const { createDigestOrchestratorCoreRuntimeRegistry } = require("./digest-orchestrator-core-registry-runtime");
 const {
   createDigestOrchestratorCostRuntime,
   DEFAULT_PERPLEXITY_COST_PER_CALL,
@@ -122,13 +123,6 @@ const RUNTIME_PATHS = resolveSignalBriefRuntimePaths({
   appRoot: APP_ROOT,
   env: process.env,
 });
-const COST_LOG = RUNTIME_PATHS.costLogPath;
-const DIGEST_AUDIT_DIR = RUNTIME_PATHS.digestAuditDir;
-const DIGEST_RUN_LOCK = RUNTIME_PATHS.digestRunLockPath;
-const DIGEST_INCIDENT_LOG = RUNTIME_PATHS.digestIncidentLogPath;
-const SPEND_GUARD_STATE = RUNTIME_PATHS.spendGuardStatePath;
-const CIRCUIT_BREAKER_STATE = RUNTIME_PATHS.circuitBreakerStatePath;
-const INCIDENT_STORE = RUNTIME_PATHS.incidentStorePath;
 const DIGEST_TUNING_PATH = RUNTIME_PATHS.digestTuningPath;
 const EDITORIAL_OVERRIDES_PATH = RUNTIME_PATHS.editorialOverridesPath;
 const BROKER_CANDIDATE_INVENTORY_PATH = RUNTIME_PATHS.brokerCandidateInventoryPath;
@@ -147,20 +141,6 @@ const sourceRegistryRuntime = createSourceRegistryRuntime({
 });
 let configCache = null;
 let emailTemplateCache = null;
-let digestFormattingRuntimeCache = null;
-let digestDataRuntimeCache = null;
-let digestArchiveRuntimeCache = null;
-let digestDeliveryRecordRuntimeCache = null;
-let digestRetryStateRuntimeCache = null;
-let digestOrchestratorArchiveRuntimeCache = null;
-let digestOrchestratorCostRuntimeCache = null;
-let digestOrchestratorIncidentRuntimeCache = null;
-let digestOrchestratorLockRuntimeCache = null;
-let digestOrchestratorTransportRuntimeCache = null;
-let digestOrchestratorBootstrapRuntimeCache = null;
-let digestOrchestratorSpendGuardRuntimeCache = null;
-let digestOrchestratorCircuitBreakerRuntimeCache = null;
-let digestOrchestratorAuditRuntimeCache = null;
 
 function getConfig() {
   if (!configCache) configCache = loadConfig();
@@ -189,17 +169,6 @@ function getEmailTemplate() {
     emailTemplateCache = fs.readFileSync(path.join(APP_ROOT, "templates/email.html"), "utf8");
   }
   return emailTemplateCache;
-}
-
-function ensureDigestRuntimeBootstrap() {
-  if (!digestOrchestratorBootstrapRuntimeCache) {
-    digestOrchestratorBootstrapRuntimeCache = createDigestOrchestratorBootstrapRuntime({
-      initStore,
-      releaseDigestLock,
-      processRef: process,
-    });
-  }
-  digestOrchestratorBootstrapRuntimeCache.ensureRuntimeBootstrap();
 }
 
 function buildPublicDigestUrl(dateKey) {
@@ -257,295 +226,91 @@ function logEvent(level, event, fields = {}) {
   return digestLogger.info(event, fields);
 }
 
-function getDigestOrchestratorIncidentRuntime() {
-  if (!digestOrchestratorIncidentRuntimeCache) {
-    digestOrchestratorIncidentRuntimeCache = createDigestOrchestratorIncidentRuntime({
-      fs,
-      path,
-      incidentLogPath: DIGEST_INCIDENT_LOG,
-      incidentStorePath: INCIDENT_STORE,
-      log,
-      formatEtDateKey,
-      resolveOpsAlertTarget: () => getOpsAlertEmail() || CONFIG?.admin?.email || null,
-      sendOpsAlert,
-    });
-  }
-  return digestOrchestratorIncidentRuntimeCache;
-}
+const runtimeRegistry = createDigestOrchestratorCoreRuntimeRegistry({
+  fs,
+  path,
+  https,
+  processRef: process,
+  appRoot: APP_ROOT,
+  runtimePaths: RUNTIME_PATHS,
+  getConfig,
+  getEmailTemplate,
+  getBaseUrl,
+  buildPublicDigestUrl,
+  initStore,
+  log,
+  sendOpsAlert,
+  formatEtDateKey,
+  getOpsAlertEmail,
+  normalizeTopicToken,
+  normalizeUrlForDedup,
+  annotateEditorialSignals,
+  createRepeatIndex,
+  isRepeatedItem,
+  dedupItemsAgainstRepeatIndex,
+  parseSourceDomainShared,
+  createDigestFormattingRuntime,
+  createDigestDataRuntime,
+  createDigestArchiveRuntime,
+  createDigestDeliveryRecordRuntime,
+  createDigestRetryStateRuntime,
+  createDigestOrchestratorArchiveRuntime,
+  createDigestOrchestratorCostRuntime,
+  createDigestOrchestratorIncidentRuntime,
+  createDigestOrchestratorLockRuntime,
+  createDigestOrchestratorTransportRuntime,
+  createDigestOrchestratorBootstrapRuntime,
+  createDigestOrchestratorSpendGuardRuntime,
+  createDigestOrchestratorCircuitBreakerRuntime,
+  createDigestOrchestratorAuditRuntime,
+  lockStates: LOCK_STATES,
+  readDigestLockState,
+  clearDigestLockFile,
+  getDigestLockOwnerStatus,
+  digestLockStaleMs: DIGEST_LOCK_STALE_MS,
+  perplexityCostPerCall: PERPLEXITY_COST_PER_CALL,
+  claudeInputPerMtok: CLAUDE_HAIKU_IN_PER_MTOK,
+  claudeOutputPerMtok: CLAUDE_HAIKU_OUT_PER_MTOK,
+});
 
-function getDigestOrchestratorSpendGuardRuntime() {
-  if (!digestOrchestratorSpendGuardRuntimeCache) {
-    digestOrchestratorSpendGuardRuntimeCache = createDigestOrchestratorSpendGuardRuntime({
-      fs,
-      path,
-      spendGuardStatePath: SPEND_GUARD_STATE,
-      log,
-    });
-  }
-  return digestOrchestratorSpendGuardRuntimeCache;
-}
-
-function getDigestOrchestratorCircuitBreakerRuntime() {
-  if (!digestOrchestratorCircuitBreakerRuntimeCache) {
-    digestOrchestratorCircuitBreakerRuntimeCache = createDigestOrchestratorCircuitBreakerRuntime({
-      fs,
-      path,
-      circuitBreakerStatePath: CIRCUIT_BREAKER_STATE,
-      log,
-    });
-  }
-  return digestOrchestratorCircuitBreakerRuntimeCache;
-}
-
-function getDigestOrchestratorLockRuntime() {
-  if (!digestOrchestratorLockRuntimeCache) {
-    digestOrchestratorLockRuntimeCache = createDigestOrchestratorLockRuntime({
-      fs,
-      path,
-      lockFilePath: DIGEST_RUN_LOCK,
-      lockStaleMs: DIGEST_LOCK_STALE_MS,
-      lockStates: LOCK_STATES,
-      readDigestLockState,
-      clearDigestLockFile,
-      getDigestLockOwnerStatus,
-      log,
-    });
-  }
-  return digestOrchestratorLockRuntimeCache;
-}
-
-function acquireDigestLock(...args) {
-  return getDigestOrchestratorLockRuntime().acquireDigestLock(...args);
-}
-
-function releaseDigestLock(...args) {
-  return getDigestOrchestratorLockRuntime().releaseDigestLock(...args);
-}
-
-function emitDigestIncident(...args) {
-  return getDigestOrchestratorIncidentRuntime().emitDigestIncident(...args);
-}
-
-// ── User state helpers ────────────────────────────────────────────────────────
-// Uses store.js — per-user JSON in data/ directory
-
-// ── HTTP helpers ─────────────────────────────────────────────────────────────
-
-function getDigestOrchestratorTransportRuntime() {
-  if (!digestOrchestratorTransportRuntimeCache) {
-    digestOrchestratorTransportRuntimeCache = createDigestOrchestratorTransportRuntime({
-      https,
-      defaultTimeoutMs: 30_000,
-    });
-  }
-  return digestOrchestratorTransportRuntimeCache;
-}
-
-function httpsPost(hostname, path_, headers, body) {
-  return getDigestOrchestratorTransportRuntime().httpsPost(hostname, path_, headers, body);
-}
-
-function httpsPostWithRetry(hostname, path_, headers, body, opts = {}) {
-  return getDigestOrchestratorTransportRuntime().httpsPostWithRetry(hostname, path_, headers, body, opts);
-}
-
-function getDigestFormattingRuntime() {
-  if (!digestFormattingRuntimeCache) {
-    digestFormattingRuntimeCache = createDigestFormattingRuntime({
-      CONFIG: getConfig(),
-      EMAIL_TEMPLATE: getEmailTemplate(),
-      BASE_URL: getBaseUrl(),
-      httpsPostWithRetry,
-      buildPublicDigestUrl,
-      normalizeTopicToken,
-    });
-  }
-  return digestFormattingRuntimeCache;
-}
-
-function getDigestDataRuntime() {
-  if (!digestDataRuntimeCache) {
-    digestDataRuntimeCache = createDigestDataRuntime({
-      CONFIG: getConfig(),
-      log,
-      httpsPostWithRetry,
-      normalizeUrlForDedup,
-      isFetchedItemEligible: (item) => {
-        const annotated = annotateEditorialSignals([item]);
-        return annotated.length > 0 && annotated[0].hard_exclude !== true;
-      },
-    });
-  }
-  return digestDataRuntimeCache;
-}
-
-function getDigestArchiveRuntime() {
-  if (!digestArchiveRuntimeCache) {
-    digestArchiveRuntimeCache = createDigestArchiveRuntime({
-      APP_ROOT,
-      archiveDir: RUNTIME_PATHS.archiveDir,
-      fs,
-      path,
-      log,
-      formatEtDateKey,
-      createRepeatIndex,
-      isRepeatedItem,
-      dedupItemsAgainstRepeatIndex,
-      normalizeUrlForDedup,
-      parseSourceDomainShared,
-    });
-  }
-  return digestArchiveRuntimeCache;
-}
-
-function getDigestDeliveryRecordRuntime() {
-  if (!digestDeliveryRecordRuntimeCache) {
-    digestDeliveryRecordRuntimeCache = createDigestDeliveryRecordRuntime({
-      APP_ROOT,
-      digestRecordsDir: RUNTIME_PATHS.digestRecordsDir,
-      fs,
-      path,
-      log,
-    });
-  }
-  return digestDeliveryRecordRuntimeCache;
-}
-
-function getDigestRetryStateRuntime() {
-  if (!digestRetryStateRuntimeCache) {
-    digestRetryStateRuntimeCache = createDigestRetryStateRuntime({
-      APP_ROOT,
-      digestRetryStatePath: RUNTIME_PATHS.digestRetryStatePath,
-      fs,
-      path,
-      log,
-    });
-  }
-  return digestRetryStateRuntimeCache;
-}
-
-function getDigestOrchestratorArchiveRuntime() {
-  if (!digestOrchestratorArchiveRuntimeCache) {
-    digestOrchestratorArchiveRuntimeCache = createDigestOrchestratorArchiveRuntime({
-      saveToArchive: (...args) => getDigestArchiveRuntime().saveToArchive(...args),
-    });
-  }
-  return digestOrchestratorArchiveRuntimeCache;
-}
-
-function getDigestOrchestratorCostRuntime() {
-  if (!digestOrchestratorCostRuntimeCache) {
-    digestOrchestratorCostRuntimeCache = createDigestOrchestratorCostRuntime({
-      fs,
-      path,
-      costLogPath: COST_LOG,
-      log,
-      formatEtDateKey,
-      perplexityCostPerCall: PERPLEXITY_COST_PER_CALL,
-      claudeInputPerMtok: CLAUDE_HAIKU_IN_PER_MTOK,
-      claudeOutputPerMtok: CLAUDE_HAIKU_OUT_PER_MTOK,
-    });
-  }
-  return digestOrchestratorCostRuntimeCache;
-}
-
-function scoreColor(...args) {
-  return getDigestFormattingRuntime().scoreColor(...args);
-}
-
-function stripInlineHtml(...args) {
-  return getDigestFormattingRuntime().stripInlineHtml(...args);
-}
-
-function generateLeadSubjectLine(...args) {
-  return getDigestFormattingRuntime().generateLeadSubjectLine(...args);
-}
-
-function generateEditorialNote(...args) {
-  return getDigestFormattingRuntime().generateEditorialNote(...args);
-}
-
-function topicVisual(...args) {
-  return getDigestFormattingRuntime().topicVisual(...args);
-}
-
-function escapeHtml(...args) {
-  return getDigestFormattingRuntime().escapeHtml(...args);
-}
-
-function buildEmailHeaderMeta(...args) {
-  return getDigestFormattingRuntime().buildEmailHeaderMeta(...args);
-}
-
-function renderDigestItemHtml(...args) {
-  return getDigestFormattingRuntime().renderDigestItemHtml(...args);
-}
-
-function applyTemplateSlots(...args) {
-  return getDigestFormattingRuntime().applyTemplateSlots(...args);
-}
-
-function buildEmail(...args) {
-  return getDigestFormattingRuntime().buildEmail(...args);
-}
-
-function fetchTopicNews(...args) {
-  return getDigestDataRuntime().fetchTopicNews(...args);
-}
-
-function enrichItems(...args) {
-  return getDigestDataRuntime().enrichItems(...args);
-}
-
-function parseSourceDomain(...args) {
-  return getDigestArchiveRuntime().parseSourceDomain(...args);
-}
-
-function loadRecentArchiveItems(...args) {
-  return getDigestArchiveRuntime().loadRecentArchiveItems(...args);
-}
-
-function loadRecentArchiveByDate(...args) {
-  return getDigestArchiveRuntime().loadRecentArchiveByDate(...args);
-}
-
-function dedupAgainstRecentArchives(...args) {
-  return getDigestArchiveRuntime().dedupAgainstRecentArchives(...args);
-}
-
-function buildRecentRepeatIndex(...args) {
-  return getDigestArchiveRuntime().buildRecentRepeatIndex(...args);
-}
-
-function persistSharedArchive(...args) {
-  return getDigestOrchestratorArchiveRuntime().persistSharedArchive(...args);
-}
+const {
+  ensureDigestRuntimeBootstrap,
+  acquireDigestLock,
+  releaseDigestLock,
+  emitDigestIncident,
+  getDigestOrchestratorSpendGuardRuntime,
+  getDigestOrchestratorCircuitBreakerRuntime,
+  httpsPost,
+  httpsPostWithRetry,
+  scoreColor,
+  stripInlineHtml,
+  generateLeadSubjectLine,
+  generateEditorialNote,
+  topicVisual,
+  escapeHtml,
+  buildEmailHeaderMeta,
+  renderDigestItemHtml,
+  applyTemplateSlots,
+  buildEmail,
+  fetchTopicNews,
+  enrichItems,
+  parseSourceDomain,
+  loadRecentArchiveItems,
+  loadRecentArchiveByDate,
+  dedupAgainstRecentArchives,
+  buildRecentRepeatIndex,
+  getDigestDeliveryRecordRuntime,
+  getDigestRetryStateRuntime,
+  persistSharedArchive,
+  recordRunCost,
+  writeDigestAuditLog,
+} = runtimeRegistry;
 
 // Audit document helpers are extracted to digest-orchestrator-audit-runtime.js.
 
 function cloneJsonValue(value) {
   if (value == null) return value;
   return JSON.parse(JSON.stringify(value));
-}
-
-function getDigestOrchestratorAuditRuntime() {
-  if (!digestOrchestratorAuditRuntimeCache) {
-    digestOrchestratorAuditRuntimeCache = createDigestOrchestratorAuditRuntime({
-      fs,
-      path,
-      digestAuditDir: DIGEST_AUDIT_DIR,
-      log,
-    });
-  }
-  return digestOrchestratorAuditRuntimeCache;
-}
-
-function writeDigestAuditLog(...args) {
-  return getDigestOrchestratorAuditRuntime().writeDigestAuditLog(...args);
-}
-
-function recordRunCost(...args) {
-  return getDigestOrchestratorCostRuntime().recordRunCost(...args);
 }
 
 // Pipeline helpers — imported from digest-orchestrator-pipeline-runtime.js

@@ -24,11 +24,12 @@ const GENERIC_WIM_PATTERNS = [
   /\bthis is important because\b/i,
 ];
 const REUSABLE_CATEGORY_PATTERN = /\bfor [a-z/& -]{2,50}(?:teams?|operators?|leaders?|companies|businesses), this matters for\b/i;
-const BUSINESS_LEVER_PATTERN = /\b(pricing|price|margins?|demand|costs?|capex|valuation|market share|inventory|utilization|reimbursement|credit|funding|deposits?|loans?|load growth|capacity|lead times?|backlog|premium|throughput|traffic|fees?|fee income|spread|yield|workflow|turnover|churn|volume|gmv|burn|cash|opex|labor|mix|assortment|services?|ecosystem|distribution|footprint|conversion|productivity|contribution|share gains?)\b/i;
-const COMPETITION_SIGNAL_PATTERN = /\b(competitive set|competition|competitor|rivals?|platform|assortment|bundled|consolidat(?:e|es|ed|ion)|footprint|ecosystem|share gains?)\b/i;
-const INTERPRETATION_CUE_PATTERN = /\b(signals?|shifts?|tightens?|loosens?|resets?|raises?|lowers?|compress(?:es|ing)?|forces?|pushes?|puts?|reprices?|consolidates?|widens?|narrows?|accelerates?|delays?|reshapes?|hardens?|softens?|pulls?|locks?|redirects?|changes?|moves?|resets?)\b/i;
-const HEDGE_PATTERN = /\b(could|may|might|potentially|possibly|appears to|seems to|suggests that)\b/i;
-const JOURNALISM_PATTERN = /\baccording to\b|\bsaid\b|\breported\b/i;
+const INTERPRETATION_CUE_PATTERN = /\b(signals?|shifts?|tightens?|loosens?|resets?|raises?|lowers?|compress(?:es|ing)?|forces?|pushes?|puts?|reprices?|consolidates?|widens?|narrows?|accelerates?|delays?|reshapes?|hardens?|softens?|pulls?|locks?|redirects?|changes?|moves?)\b/i;
+const MECHANISM_CONNECTOR_PATTERN = /\b(by|through|via|because|as|which|forcing|driving|tightening|raising|lowering|reducing|increasing)\b/i;
+const REQUIRED_LEVER_PATTERN = /\b(pricing|price|margin|margins|capex|competition|competitive|regulation|regulatory|operations|operational)\b/i;
+const SYSTEM_ANCHOR_PATTERN = /\b(operator|system|platform|workflow|budget|rule|contract|buyer|seller|merchant|provider|payer|bank|retailer|manufacturer|marketplace|network|procurement|supply chain|facility|grid|distribution|pricing|margin|capex|compliance|operations?)\b/i;
+const VAGUE_ACTOR_PATTERN = /\b(users?|people|consumers?|stakeholders?|everyone|market sentiment|sentiment|the market)\b/i;
+const THEMATIC_COMMENTARY_PATTERN = /\b(sentiment|theme|narrative|mood|interest|buzz|conversation|discussion)\b/i;
 const SELF_REJECTING_WIM_PATTERN = /\bno (?:strategic|operational|business) (?:shift|implication|implications?|value|relevance|decision context)\b|\bno (?:new|clear|obvious|direct) (?:regulatory|market|competitive|strategic) (?:action|event|shift|development)\b|\bthis is (?:an? )?(?:awards?|award announcement|press release|promotional|list|listing|roundup|directory)\b|\bthis (?:article|piece|story|post) (?:does not|doesn't) (?:represent|contain|offer|provide)\b|\bnot (?:a new|an? actionable)\b/i;
 const CAPITALIZED_TOKEN_PATTERN = /\b(?:[A-Z]{2,}(?:\s+[A-Z]{2,})*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/g;
 const QUANT_ANCHOR_PATTERN = /[$%]|\b\d[\d,.]*\b|\bQ[1-4]\b|\b(?:day|days|week|weeks|month|months|quarter|quarters|year|years)\b|\bby\s+20\d{2}\b/i;
@@ -56,24 +57,25 @@ const TITLE_STOPWORDS = new Set([
   "Watch",
 ]);
 
-function parseJsonArrayLenient(raw) {
-  const cleaned = String(raw || "")
+function cleanModelText(raw) {
+  return String(raw || "")
     .replace(/```json\n?/gi, "")
     .replace(/```\n?/g, "")
     .trim();
+}
 
+function parseJsonArrayLenient(raw) {
+  const cleaned = cleanModelText(raw);
   if (!cleaned) return [];
-
   try {
     return JSON.parse(cleaned);
   } catch (err) {
     const start = cleaned.indexOf("[");
     if (start === -1) throw err;
-
     let depth = 0;
     let inString = false;
     let escaped = false;
-    for (let i = start; i < cleaned.length; i++) {
+    for (let i = start; i < cleaned.length; i += 1) {
       const ch = cleaned[i];
       if (inString) {
         if (escaped) escaped = false;
@@ -81,7 +83,6 @@ function parseJsonArrayLenient(raw) {
         else if (ch === "\"") inString = false;
         continue;
       }
-
       if (ch === "\"") {
         inString = true;
         continue;
@@ -94,7 +95,6 @@ function parseJsonArrayLenient(raw) {
         }
       }
     }
-
     throw err;
   }
 }
@@ -103,29 +103,6 @@ function stringOrNull(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
-}
-
-function normalizeBaseScore(value) {
-  return typeof value === "number" ? value : 5.0;
-}
-
-function normalizeStrategicValue(value, fallbackBaseScore = 5) {
-  const numeric = Number(value);
-  if (Number.isFinite(numeric)) return Math.max(0, Math.min(1, numeric));
-  return Math.max(0, Math.min(1, Number(fallbackBaseScore || 0) / 10));
-}
-
-function normalizeStringArray(value, maxItems = 6) {
-  if (!Array.isArray(value)) return [];
-  const out = [];
-  for (const entry of value) {
-    if (typeof entry !== "string") continue;
-    const trimmed = entry.trim();
-    if (!trimmed) continue;
-    out.push(trimmed);
-    if (out.length >= maxItems) break;
-  }
-  return out;
 }
 
 function stripHtml(value) {
@@ -161,20 +138,20 @@ function splitSentences(value) {
     .filter(Boolean);
 }
 
-function normalizeComparableText(value) {
-  return stripHtml(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function wordCount(value) {
   return String(value || "")
     .trim()
     .split(/\s+/)
     .filter(Boolean)
     .length;
+}
+
+function normalizeComparableText(value) {
+  return stripHtml(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeImplicationType(value) {
@@ -200,63 +177,190 @@ function mergeRejectionReasons(existing, nextReasons) {
   ]));
 }
 
+function splitClauses(sentence) {
+  return String(sentence || "")
+    .split(/[,;:]|\s[-–—]\s|[-–—]/)
+    .map((segment) => segment.trim())
+    .filter((segment) => wordCount(segment) >= 3);
+}
+
+function isLikelyTruncatedJson(cleaned) {
+  const source = String(cleaned || "");
+  if (!source) return false;
+  const openBraces = (source.match(/\{/g) || []).length;
+  const closeBraces = (source.match(/\}/g) || []).length;
+  const openBrackets = (source.match(/\[/g) || []).length;
+  const closeBrackets = (source.match(/\]/g) || []).length;
+  const quoteCount = (source.match(/"/g) || []).length;
+  return openBraces !== closeBraces
+    || openBrackets !== closeBrackets
+    || (quoteCount % 2) === 1;
+}
+
+function classifyParseFailure(raw, validatorReasons = []) {
+  const cleaned = cleanModelText(raw);
+  if (!cleaned) return "empty_response";
+  if (Array.isArray(validatorReasons) && validatorReasons.length > 0) return "validator_mismatch";
+  return isLikelyTruncatedJson(cleaned) ? "truncation" : "malformed_json";
+}
+
+function parseJsonObjectLenient(raw) {
+  const cleaned = cleanModelText(raw);
+  if (!cleaned) {
+    return {
+      ok: false,
+      cleaned,
+      error: new Error("empty_response"),
+      parseFailureType: "empty_response",
+    };
+  }
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        ok: false,
+        cleaned,
+        error: new Error("json_not_object"),
+        parseFailureType: "validator_mismatch",
+      };
+    }
+    return {
+      ok: true,
+      cleaned,
+      value: parsed,
+      parseFailureType: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      cleaned,
+      error,
+      parseFailureType: classifyParseFailure(cleaned),
+    };
+  }
+}
+
+function normalizeBaseScore(value) {
+  return typeof value === "number" ? value : 5.0;
+}
+
+function normalizeStrategicValue(value, fallbackBaseScore = 5) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.min(1, numeric));
+  return Math.max(0, Math.min(1, Number(fallbackBaseScore || 0) / 10));
+}
+
+function normalizeStringArray(value, maxItems = 6) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    out.push(trimmed);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+function normalizeExtractionOutput(candidate = {}) {
+  return {
+    what_happened: stringOrNull(candidate.what_happened),
+    mechanism: stringOrNull(candidate.mechanism),
+    who_it_impacts: stringOrNull(candidate.who_it_impacts),
+    implication: stringOrNull(candidate.implication),
+    confidence: ["high", "medium", "low"].includes(String(candidate.confidence || "").trim().toLowerCase())
+      ? String(candidate.confidence).trim().toLowerCase()
+      : null,
+  };
+}
+
+function validateExtractionOutput(item, candidate = {}) {
+  const extraction = normalizeExtractionOutput(candidate);
+  const reasons = [];
+  const contextText = `${String(item?.headline || "")} ${String(item?.summary || "")}`.trim();
+  const fields = ["what_happened", "mechanism", "who_it_impacts", "implication"];
+  for (const field of fields) {
+    const value = extraction[field];
+    if (!value) {
+      reasons.push(`missing_${field}`);
+      continue;
+    }
+    if (splitSentences(value).length > 1 || wordCount(value) > 18) {
+      reasons.push(`${field}_not_concise`);
+    }
+  }
+  if (!extraction.confidence) reasons.push("invalid_confidence");
+  if (extraction.mechanism && overlapRatio(extraction.mechanism, contextText) >= 0.95) {
+    reasons.push("mechanism_too_literal");
+  }
+  return {
+    ok: reasons.length === 0,
+    reasons,
+    output: extraction,
+  };
+}
+
+function deriveWimBrief(wim) {
+  const firstSentence = splitSentences(wim)[0] || "";
+  if (!firstSentence) return null;
+  const words = firstSentence.split(/\s+/).filter(Boolean).slice(0, 18);
+  if (!words.length) return null;
+  const brief = words.join(" ").replace(/[.?!,:;]+$/, "");
+  return brief ? `${brief}.` : null;
+}
+
 function validateStrategicWriteup(item, candidate = {}) {
   const reasons = [];
-  const signalShift = stringOrNull(candidate?.signal_shift);
+  const signalShift = stringOrNull(candidate?.signal_shift)
+    || stringOrNull(candidate?.what_happened);
   const implicationType = normalizeImplicationType(candidate?.implication_type);
-  const wimBrief = stringOrNull(candidate?.wim_brief);
   const wim = stringOrNull(candidate?.wim);
+  const wimBrief = stringOrNull(candidate?.wim_brief) || deriveWimBrief(wim);
+  const mechanism = stringOrNull(candidate?.mechanism);
   const headline = String(item?.headline || "");
   const summary = String(item?.summary || "");
   const contextText = `${headline} ${summary}`.trim();
 
   if (!signalShift) reasons.push("missing_signal_shift");
-  else {
-    if (wordCount(signalShift) > 16) reasons.push("signal_shift_too_long");
-    if (!hasNamedAnchor(signalShift) && !QUANT_ANCHOR_PATTERN.test(signalShift)) reasons.push("signal_shift_unanchored");
-    if (overlapRatio(signalShift, contextText) >= 0.95) reasons.push("signal_shift_too_literal");
-  }
-
   if (!implicationType) reasons.push("invalid_implication_type");
-
+  if (!wim) reasons.push("missing_wim");
   if (!wimBrief) reasons.push("missing_wim_brief");
-  else {
-    if (splitSentences(wimBrief).length !== 1) reasons.push("brief_multi_sentence");
-    if (wordCount(wimBrief) > 18) reasons.push("brief_too_long");
-    if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(wimBrief)) || REUSABLE_CATEGORY_PATTERN.test(wimBrief)) {
-      reasons.push("brief_generic");
-    }
-    if (!hasNamedAnchor(wimBrief) && !QUANT_ANCHOR_PATTERN.test(wimBrief) && overlapRatio(wimBrief, contextText) >= 0.72) {
-      reasons.push("brief_summary_like");
-    }
-  }
 
   if (!wim) {
-    reasons.push("missing_wim");
-  } else {
-    const plain = stripHtml(wim);
-    const sentences = splitSentences(plain);
-    if (sentences.length < 1) reasons.push("too_short");
-    if (sentences.length > 4) reasons.push("too_long");
-    if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain)) || REUSABLE_CATEGORY_PATTERN.test(plain)) {
-      reasons.push("generic_language");
-    }
-    if (!INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("missing_interpretation");
-    const hasLeverSignal = BUSINESS_LEVER_PATTERN.test(plain)
-      || (implicationType === "competition" && COMPETITION_SIGNAL_PATTERN.test(plain));
-    if (!hasLeverSignal && implicationType !== "regulation" && implicationType !== "workflow" && implicationType !== "other") {
-      reasons.push("missing_business_lever");
-    }
-    if (!(hasNamedAnchor(plain) || QUANT_ANCHOR_PATTERN.test(plain))) reasons.push("missing_story_anchor");
-    if (overlapRatio(plain, contextText) >= 0.74) reasons.push("summary_like");
-    if (HEDGE_PATTERN.test(plain)) reasons.push("hedged");
-    if (JOURNALISM_PATTERN.test(plain) && !INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("journalistic_tone");
-    if (SELF_REJECTING_WIM_PATTERN.test(plain)) reasons.push("self_rejecting_wim");
+    return { ok: reasons.length === 0, reasons, derivedBrief: wimBrief };
   }
+
+  const plain = stripHtml(wim);
+  const sentences = splitSentences(plain);
+  if (sentences.length < 1) reasons.push("too_short");
+  if (sentences.length > 2) reasons.push("too_long");
+  if (sentences.some((sentence) => splitClauses(sentence).length > 2)) {
+    reasons.push("sentence_clause_overload");
+  }
+  if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain)) || REUSABLE_CATEGORY_PATTERN.test(plain)) {
+    reasons.push("generic_language");
+  }
+  if (SELF_REJECTING_WIM_PATTERN.test(plain)) reasons.push("self_rejecting_wim");
+  if (VAGUE_ACTOR_PATTERN.test(plain) && !hasNamedAnchor(plain)) reasons.push("vague_actor");
+  if (THEMATIC_COMMENTARY_PATTERN.test(plain) && !(hasNamedAnchor(plain) || SYSTEM_ANCHOR_PATTERN.test(plain))) {
+    reasons.push("thematic_commentary");
+  }
+  if (!REQUIRED_LEVER_PATTERN.test(plain)) reasons.push("missing_lever");
+  if (!(hasNamedAnchor(plain) || SYSTEM_ANCHOR_PATTERN.test(plain) || QUANT_ANCHOR_PATTERN.test(plain))) {
+    reasons.push("missing_operational_anchor");
+  }
+  const mechanismReferenced = mechanism
+    ? overlapRatio(plain, mechanism) >= 0.15
+    : MECHANISM_CONNECTOR_PATTERN.test(plain);
+  if (!mechanismReferenced) reasons.push("missing_mechanism");
+  if (!INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("descriptive_only");
+  if (overlapRatio(plain, contextText) >= 0.78) reasons.push("descriptive_only");
 
   return {
     ok: reasons.length === 0,
     reasons,
+    derivedBrief: wimBrief,
   };
 }
 
@@ -268,14 +372,14 @@ function normalizeEnrichedItems(items, enriched, opts = {}) {
     const candidate = enriched[index] || {};
     const baseScore = normalizeBaseScore(candidate.baseScore);
     const writeupCheck = opts.validateWriteups === false
-      ? { ok: true, reasons: [] }
+      ? { ok: true, reasons: [], derivedBrief: stringOrNull(candidate.wim_brief) || deriveWimBrief(candidate.wim) }
       : validateStrategicWriteup(item, candidate);
     const rejected = writeupCheck.ok !== true;
     const normalized = {
       ...item,
-      signal_shift: stringOrNull(candidate.signal_shift),
+      signal_shift: stringOrNull(candidate.signal_shift) || stringOrNull(candidate.what_happened),
       implication_type: normalizeImplicationType(candidate.implication_type),
-      wim_brief: rejected ? null : stringOrNull(candidate.wim_brief),
+      wim_brief: rejected ? null : writeupCheck.derivedBrief,
       wim: rejected ? null : stringOrNull(candidate.wim),
       baseScore,
       strategic_value: normalizeStrategicValue(candidate.strategic_value, baseScore),
@@ -286,7 +390,7 @@ function normalizeEnrichedItems(items, enriched, opts = {}) {
       writeup_status: writeupCheck.ok ? passStatus : "failed_dropped",
       writeup_attempt_count: attemptCount,
       writeup_rejection_reasons: writeupCheck.reasons.slice(),
-      writeup_version: "v2",
+      writeup_version: "v3",
     };
     diagnostics.push({
       index,
@@ -336,8 +440,17 @@ function applyBatchWriteupValidation(items = []) {
 }
 
 module.exports = {
-  parseJsonArrayLenient,
-  normalizeEnrichedItems,
-  validateStrategicWriteup,
   applyBatchWriteupValidation,
+  cleanModelText,
+  classifyParseFailure,
+  deriveWimBrief,
+  normalizeBaseScore,
+  normalizeEnrichedItems,
+  normalizeImplicationType,
+  normalizeStrategicValue,
+  normalizeStringArray,
+  parseJsonArrayLenient,
+  parseJsonObjectLenient,
+  validateExtractionOutput,
+  validateStrategicWriteup,
 };

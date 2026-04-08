@@ -60,6 +60,15 @@ function flattenTopicBuckets(topicBuckets = {}) {
   return flat;
 }
 
+function cloneReserveState(rawState) {
+  const state = rawState && typeof rawState === "object" ? rawState : {};
+  return {
+    strongReserve: Array.isArray(state.strongReserve) ? state.strongReserve.slice() : [],
+    standardReserve: Array.isArray(state.standardReserve) ? state.standardReserve.slice() : [],
+    allReserve: Array.isArray(state.allReserve) ? state.allReserve.slice() : [],
+  };
+}
+
 function mapEnrichedTopicBuckets(flattened = [], enrichedItems = []) {
   const out = Object.create(null);
   for (let index = 0; index < flattened.length; index += 1) {
@@ -76,6 +85,12 @@ function ensureTopicWriteupStats(tag, topicWriteupStats = {}) {
   if (!topicWriteupStats[normalizedTag]) {
     topicWriteupStats[normalizedTag] = {
       attempted_count: 0,
+      extraction_attempted_count: 0,
+      extraction_success_count: 0,
+      extraction_failure_count: 0,
+      generation_attempted_count: 0,
+      generation_success_count: 0,
+      generation_failure_count: 0,
       first_pass_success_count: 0,
       first_pass_failure_count: 0,
       repair_attempted_count: 0,
@@ -84,6 +99,10 @@ function ensureTopicWriteupStats(tag, topicWriteupStats = {}) {
       repeated_phrase_rejection_count: 0,
       model_generated_count: 0,
       final_selected_count: 0,
+      strong_tier_attempted_count: 0,
+      strong_tier_drop_count: 0,
+      strong_tier_final_selected_count: 0,
+      parse_failure_counts: Object.create(null),
       underfill_due_writeup_count: 0,
     };
   }
@@ -96,27 +115,57 @@ function accumulateWriteupStatsFromTaggedItems(target, taggedItems = []) {
     const tag = String(entry?.tag || "").trim().toUpperCase() || "__UNTAGGED__";
     const item = entry?.item || {};
     const status = String(item?.writeup_status || "").trim().toLowerCase();
-    const attemptCount = Math.max(1, Number(item?.writeup_attempt_count || 1));
     const reasons = Array.isArray(item?.writeup_rejection_reasons) ? item.writeup_rejection_reasons : [];
+    const stageDiagnostics = item?.writeup_stage_diagnostics && typeof item.writeup_stage_diagnostics === "object"
+      ? item.writeup_stage_diagnostics
+      : {};
+    const extractionStatus = String(stageDiagnostics?.extraction?.status || "").trim().toLowerCase();
+    const generationStatus = String(stageDiagnostics?.generation?.status || "").trim().toLowerCase();
+    const repairAttempted = stageDiagnostics?.repair?.attempted === true;
+    const repairStatus = String(stageDiagnostics?.repair?.status || "").trim().toLowerCase();
+    const firstPassSucceeded = item?.first_pass_succeeded === true;
+    const candidateTier = String(stageDiagnostics?.candidate_tier || "").trim().toLowerCase();
+    const parseFailureType = String(item?.parse_failure_type || "").trim();
     const topicStats = ensureTopicWriteupStats(tag, target.topicWriteupStats || (target.topicWriteupStats = Object.create(null)));
 
     target.attempted_count += 1;
     topicStats.attempted_count += 1;
-
-    if (attemptCount <= 1) {
-      if (status === "model_pass") {
-        target.first_pass_success_count += 1;
-        topicStats.first_pass_success_count += 1;
+    target.extraction_attempted_count += 1;
+    topicStats.extraction_attempted_count += 1;
+    if (extractionStatus && extractionStatus !== "failed") {
+      target.extraction_success_count += 1;
+      topicStats.extraction_success_count += 1;
+    } else {
+      target.extraction_failure_count += 1;
+      topicStats.extraction_failure_count += 1;
+    }
+    if (generationStatus) {
+      target.generation_attempted_count += 1;
+      topicStats.generation_attempted_count += 1;
+      if (generationStatus === "model_pass" || generationStatus === "retry_pass") {
+        target.generation_success_count += 1;
+        topicStats.generation_success_count += 1;
       } else {
-        target.first_pass_failure_count += 1;
-        topicStats.first_pass_failure_count += 1;
+        target.generation_failure_count += 1;
+        topicStats.generation_failure_count += 1;
       }
+    }
+    if (candidateTier === "strong") {
+      target.strong_tier_attempted_count += 1;
+      topicStats.strong_tier_attempted_count += 1;
+    }
+
+    if (firstPassSucceeded) {
+      target.first_pass_success_count += 1;
+      topicStats.first_pass_success_count += 1;
     } else {
       target.first_pass_failure_count += 1;
       topicStats.first_pass_failure_count += 1;
+    }
+    if (repairAttempted) {
       target.repair_attempted_count += 1;
       topicStats.repair_attempted_count += 1;
-      if (status === "repair_pass") {
+      if (repairStatus === "model_pass" || repairStatus === "retry_pass" || status === "repair_pass") {
         target.repair_success_count += 1;
         topicStats.repair_success_count += 1;
       }
@@ -125,8 +174,12 @@ function accumulateWriteupStatsFromTaggedItems(target, taggedItems = []) {
     if (status === "failed_dropped") {
       target.drop_count += 1;
       topicStats.drop_count += 1;
+      if (candidateTier === "strong") {
+        target.strong_tier_drop_count += 1;
+        topicStats.strong_tier_drop_count += 1;
+      }
     }
-    if (status === "model_pass" || status === "repair_pass") {
+    if (status === "model_pass" || status === "retry_pass" || status === "repair_pass") {
       target.model_generated_count += 1;
       topicStats.model_generated_count += 1;
     }
@@ -134,18 +187,35 @@ function accumulateWriteupStatsFromTaggedItems(target, taggedItems = []) {
       target.repeated_phrase_rejection_count += 1;
       topicStats.repeated_phrase_rejection_count += 1;
     }
+    if (parseFailureType) {
+      addCount(target.parse_failure_counts || (target.parse_failure_counts = Object.create(null)), parseFailureType);
+      addCount(topicStats.parse_failure_counts, parseFailureType);
+    }
   }
 }
 
 function normalizeAggregateWriteupStats(stats = {}, itemsPerTopic = 5) {
   const attemptedCount = Math.max(0, Number(stats.attempted_count || 0));
+  const extractionAttemptedCount = Math.max(0, Number(stats.extraction_attempted_count || attemptedCount));
+  const extractionSuccessCount = Math.max(0, Number(stats.extraction_success_count || 0));
+  const generationAttemptedCount = Math.max(0, Number(stats.generation_attempted_count || 0));
+  const generationSuccessCount = Math.max(0, Number(stats.generation_success_count || 0));
   const repairAttemptedCount = Math.max(0, Number(stats.repair_attempted_count || 0));
   const dropCount = Math.max(0, Number(stats.drop_count || 0));
   const modelGeneratedCount = Math.max(0, Number(stats.model_generated_count || 0));
   const finalSelectedCount = Math.max(0, Number(stats.final_selected_count || 0));
+  const strongTierAttemptedCount = Math.max(0, Number(stats.strong_tier_attempted_count || 0));
+  const strongTierDropCount = Math.max(0, Number(stats.strong_tier_drop_count || 0));
+  const strongTierFinalSelectedCount = Math.max(0, Number(stats.strong_tier_final_selected_count || 0));
   const underfillDueWriteupCount = Math.max(0, Number(stats.underfill_due_writeup_count || 0));
   return {
     attempted_count: attemptedCount,
+    extraction_attempted_count: extractionAttemptedCount,
+    extraction_success_count: extractionSuccessCount,
+    extraction_failure_count: Math.max(0, Number(stats.extraction_failure_count || (extractionAttemptedCount - extractionSuccessCount))),
+    generation_attempted_count: generationAttemptedCount,
+    generation_success_count: generationSuccessCount,
+    generation_failure_count: Math.max(0, Number(stats.generation_failure_count || (generationAttemptedCount - generationSuccessCount))),
     first_pass_success_count: Math.max(0, Number(stats.first_pass_success_count || 0)),
     first_pass_failure_count: Math.max(0, Number(stats.first_pass_failure_count || 0)),
     first_pass_success_rate_pct: attemptedCount > 0
@@ -166,31 +236,40 @@ function normalizeAggregateWriteupStats(stats = {}, itemsPerTopic = 5) {
     dropped_share_pct: attemptedCount > 0
       ? Number(((dropCount / attemptedCount) * 100).toFixed(2))
       : 0,
+    strong_tier_attempted_count: strongTierAttemptedCount,
+    strong_tier_drop_count: strongTierDropCount,
+    strong_tier_drop_rate_pct: strongTierAttemptedCount > 0
+      ? Number(((strongTierDropCount / strongTierAttemptedCount) * 100).toFixed(2))
+      : 0,
+    strong_tier_final_selected_count: strongTierFinalSelectedCount,
+    parse_failure_counts: cloneCountMap(stats.parse_failure_counts),
     final_selected_count: finalSelectedCount,
     items_per_topic_target: Math.max(1, Number(itemsPerTopic || 5)),
   };
 }
 
 function pickNextReserveCandidate(params = {}) {
-  const reserveQueue = Array.isArray(params.reserveQueue) ? params.reserveQueue : [];
-  const reserveCursor = Math.max(0, Number(params.reserveCursor || 0));
+  const reserveState = params.reserveState && typeof params.reserveState === "object" ? params.reserveState : {};
+  const reserveCursor = params.reserveCursor && typeof params.reserveCursor === "object"
+    ? {
+        strong: Math.max(0, Number(params.reserveCursor.strong || 0)),
+        standard: Math.max(0, Number(params.reserveCursor.standard || 0)),
+      }
+    : { strong: 0, standard: 0 };
   const selectedItems = Array.isArray(params.selectedItems) ? params.selectedItems : [];
   const usedUrls = params.usedUrls instanceof Set ? params.usedUrls : new Set();
   const getBackfillRejectionReason = typeof params.getBackfillRejectionReason === "function"
     ? params.getBackfillRejectionReason
     : () => null;
   const policy = params.policy && typeof params.policy === "object" ? params.policy : {};
-  const trustedFloor = policy.trustedFloor && typeof policy.trustedFloor === "object" ? policy.trustedFloor : {};
-  const minTrustedItems = Math.max(0, Number(trustedFloor.minTrustedItemsPerTopic || 0));
-  const needsTrustedBackfill = trustedFloor.active === true
-    && minTrustedItems > 0
-    && countTrustedSourceTier(selectedItems) < minTrustedItems;
-  if (needsTrustedBackfill) {
-    for (let index = reserveCursor; index < reserveQueue.length; index += 1) {
-      const candidate = reserveQueue[index];
+  const strongReserve = Array.isArray(reserveState.strongReserve) ? reserveState.strongReserve : [];
+  const standardReserve = Array.isArray(reserveState.standardReserve) ? reserveState.standardReserve : [];
+
+  function pickFromBucket(bucket, bucketName, cursor) {
+    for (let index = cursor; index < bucket.length; index += 1) {
+      const candidate = bucket[index];
       const url = String(candidate?.url || "").trim();
       if (url && usedUrls.has(url)) continue;
-      if (!isTrustedSourceTier(candidate)) continue;
       const rejectionReason = getBackfillRejectionReason(candidate, selectedItems, {
         maxItemsPerSourceDomain: policy.maxItemsPerSourceDomain,
         maxDiscoveryPerTopic: policy.maxDiscoveryPerTopic,
@@ -200,29 +279,28 @@ function pickNextReserveCandidate(params = {}) {
       if (rejectionReason) continue;
       return {
         candidate,
-        nextCursor: reserveCursor,
+        nextCursor: {
+          ...reserveCursor,
+          [bucketName]: index + 1,
+        },
+        reserve_bucket: bucketName,
       };
     }
+    return null;
   }
-  for (let index = reserveCursor; index < reserveQueue.length; index += 1) {
-    const candidate = reserveQueue[index];
-    const url = String(candidate?.url || "").trim();
-    if (url && usedUrls.has(url)) continue;
-    const rejectionReason = getBackfillRejectionReason(candidate, selectedItems, {
-      maxItemsPerSourceDomain: policy.maxItemsPerSourceDomain,
-      maxDiscoveryPerTopic: policy.maxDiscoveryPerTopic,
-      commentaryCap: policy.commentaryCapPerTopic,
-      backfillTrustFloor: policy.backfillTrustFloor === true,
-    });
-    if (rejectionReason) continue;
-    return {
-      candidate,
-      nextCursor: index + 1,
-    };
-  }
+
+  const strongPick = pickFromBucket(strongReserve, "strong", reserveCursor.strong);
+  if (strongPick) return strongPick;
+  const standardPick = pickFromBucket(standardReserve, "standard", reserveCursor.standard);
+  if (standardPick) return standardPick;
+
   return {
     candidate: null,
-    nextCursor: reserveQueue.length,
+    nextCursor: {
+      strong: strongReserve.length,
+      standard: standardReserve.length,
+    },
+    reserve_bucket: null,
   };
 }
 
@@ -328,6 +406,9 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
   const strictQualityDiagnostics = params.strictQualityDiagnostics && typeof params.strictQualityDiagnostics === "object"
     ? params.strictQualityDiagnostics
     : {};
+  const topicReserveDiagnostics = params.topicReserveDiagnostics && typeof params.topicReserveDiagnostics === "object"
+    ? params.topicReserveDiagnostics
+    : {};
 
   for (const topicAudit of topicAudits) {
     const tag = String(topicAudit?.tag || "").trim().toUpperCase();
@@ -396,6 +477,32 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
     topicAudit.rejected_count = Math.max(0, Number(topicAudit.total_candidates || topicAudit.candidates.length) - finalSelectedItems.length);
     topicAudit.rejection_reason_counts = rejectionCounts;
     const topicStats = topicWriteupStats[tag] || {};
+    const reserveDiagnostics = topicReserveDiagnostics[tag] && typeof topicReserveDiagnostics[tag] === "object"
+      ? topicReserveDiagnostics[tag]
+      : {};
+    const strongSelectedCount = countTrustedSourceTier(finalSelectedItems);
+    const standardSelectedCount = Math.max(0, finalSelectedItems.length - strongSelectedCount);
+    const existingTrustedFloor = topicAudit?.trusted_floor && typeof topicAudit.trusted_floor === "object"
+      ? topicAudit.trusted_floor
+      : {};
+    const floorMinTrusted = Math.max(0, Number(existingTrustedFloor.minTrustedItemsPerTopic || 0));
+    const floorActive = existingTrustedFloor.active === true;
+    const strongPoolExhausted = reserveDiagnostics.strong_pool_exhausted === true
+      || (floorActive && strongSelectedCount < floorMinTrusted && Number(reserveDiagnostics.remaining_strong_reserve_count || 0) <= 0);
+    const standardTierBlockedWhileStrongAvailable = reserveDiagnostics.standard_tier_blocked_while_strong_available !== false;
+    topicAudit.strong_tier_selected_count = strongSelectedCount;
+    topicAudit.standard_tier_selected_count = standardSelectedCount;
+    topicAudit.standard_tier_blocked_while_strong_available = standardTierBlockedWhileStrongAvailable;
+    topicAudit.reserve_candidate_count = Math.max(0, Number(reserveDiagnostics.remaining_reserve_count ?? topicAudit.reserve_candidate_count ?? 0));
+    topicAudit.reserve_strong_count = Math.max(0, Number(reserveDiagnostics.remaining_strong_reserve_count ?? topicAudit.reserve_strong_count ?? 0));
+    topicAudit.reserve_standard_count = Math.max(0, Number(reserveDiagnostics.remaining_standard_reserve_count ?? topicAudit.reserve_standard_count ?? 0));
+    topicAudit.trusted_floor = {
+      ...existingTrustedFloor,
+      selected_trusted_count: strongSelectedCount,
+      standard_tier_blocked_while_strong_available: standardTierBlockedWhileStrongAvailable,
+      strong_pool_exhausted: strongPoolExhausted,
+      relaxed_reason: floorActive && strongPoolExhausted ? "strong_pool_exhausted" : (existingTrustedFloor.relaxed_reason || null),
+    };
     topicAudit.writeup = normalizeAggregateWriteupStats(topicStats, params.itemsPerTopic);
     topicAudit.strict_quality = strictQualityDiagnostics.topic_buckets?.[tag]
       ? JSON.parse(JSON.stringify(strictQualityDiagnostics.topic_buckets[tag]))
@@ -461,7 +568,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
           return grouped;
         })();
     const reserves = reserveByTopic && typeof reserveByTopic === "object"
-      ? Object.fromEntries(Object.entries(reserveByTopic).map(([tag, items]) => [String(tag || "").trim().toUpperCase(), Array.isArray(items) ? items.slice() : []]))
+      ? Object.fromEntries(Object.entries(reserveByTopic).map(([tag, reserveState]) => [String(tag || "").trim().toUpperCase(), cloneReserveState(reserveState)]))
       : {};
     const backfillPolicy = {
       itemsPerTopic: Math.max(1, Number(writeupBackfillPolicy?.itemsPerTopic || 5)),
@@ -481,11 +588,17 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       const normalizedTag = String(tag || "").trim().toUpperCase();
       if (!normalizedTag) continue;
       topicPoolCounts[normalizedTag] = (Array.isArray(topicBuckets[normalizedTag]) ? topicBuckets[normalizedTag].length : 0)
-        + (Array.isArray(reserves[normalizedTag]) ? reserves[normalizedTag].length : 0);
+        + Number(reserves[normalizedTag]?.allReserve?.length || 0);
     }
 
     const writeupStats = {
       attempted_count: 0,
+      extraction_attempted_count: 0,
+      extraction_success_count: 0,
+      extraction_failure_count: 0,
+      generation_attempted_count: 0,
+      generation_success_count: 0,
+      generation_failure_count: 0,
       first_pass_success_count: 0,
       first_pass_failure_count: 0,
       repair_attempted_count: 0,
@@ -494,13 +607,20 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       repeated_phrase_rejection_count: 0,
       model_generated_count: 0,
       final_selected_count: 0,
+      strong_tier_attempted_count: 0,
+      strong_tier_drop_count: 0,
+      strong_tier_final_selected_count: 0,
+      parse_failure_counts: Object.create(null),
       underfill_due_writeup_count: 0,
       topicWriteupStats: Object.create(null),
     };
     const usedUrls = new Set(flattenTopicBuckets(topicBuckets).map(({ item }) => String(item?.url || "").trim()).filter(Boolean));
-    const reserveCursors = Object.fromEntries([...new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])].map((tag) => [tag, 0]));
+    const reserveCursors = Object.fromEntries(
+      [...new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])].map((tag) => [tag, { strong: 0, standard: 0 }])
+    );
     const failedItemsByTopic = Object.create(null);
     const finalTopicBuckets = Object.create(null);
+    const topicReserveDiagnostics = Object.create(null);
     let aggregateUsage = { input_tokens: 0, output_tokens: 0 };
     let degraded = false;
     let degradation = null;
@@ -632,8 +752,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       if (status) return false;
       return !String(item?.wim || "").trim()
         || !String(item?.wim_brief || "").trim()
-        || !String(item?.signal_shift || "").trim()
-        || !String(item?.implication_type || "").trim();
+        || !(item?.wim_extraction && typeof item.wim_extraction === "object");
     }
 
     const flattenedInitial = flattenTopicBuckets(topicBuckets);
@@ -654,6 +773,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       let remainingExceptions = Math.max(0, Number(strictQualityConfig.max_exceptions_per_digest || 0));
       let backfillAttemptCount = 0;
       let underfillCount = 0;
+      let standardTierBlockedWhileStrongAvailable = true;
       const majorStoryDiagnostics = {
         detected_count: 0,
         swap_count: 0,
@@ -680,8 +800,8 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
         let slotFilled = false;
         for (let attempt = 0; attempt < maxBackfillsPerSlot; attempt += 1) {
           const nextCandidate = pickNextReserveCandidate({
-            reserveQueue: reserves[topicTag],
-            reserveCursor: reserveCursors[topicTag] || 0,
+            reserveState: reserves[topicTag],
+            reserveCursor: reserveCursors[topicTag] || { strong: 0, standard: 0 },
             selectedItems: acceptedItems,
             usedUrls,
             getBackfillRejectionReason: resolveBackfillRejection,
@@ -721,7 +841,14 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       if (strictQualityEnabled && strictQualityConfig.major_story.enabled === true) {
         const majorStoryPool = [];
         const seenMajorStoryUrls = new Set();
-        const remainingReserve = Array.isArray(reserves[topicTag]) ? reserves[topicTag].slice(reserveCursors[topicTag] || 0) : [];
+        const remainingReserve = [
+          ...(Array.isArray(reserves[topicTag]?.strongReserve)
+            ? reserves[topicTag].strongReserve.slice(reserveCursors[topicTag]?.strong || 0)
+            : []),
+          ...(Array.isArray(reserves[topicTag]?.standardReserve)
+            ? reserves[topicTag].standardReserve.slice(reserveCursors[topicTag]?.standard || 0)
+            : []),
+        ];
         for (const candidate of [...rejectedItems, ...remainingReserve]) {
           const url = String(candidate?.url || "").trim() || `${topicTag}:${majorStoryPool.length}`;
           if (seenMajorStoryUrls.has(url)) continue;
@@ -839,20 +966,43 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
           nowMs,
           topicCandidates: [
             ...initialItems,
-            ...(Array.isArray(reserves[topicTag]) ? reserves[topicTag] : []),
+            ...(Array.isArray(reserves[topicTag]?.allReserve) ? reserves[topicTag].allReserve : []),
           ],
         });
       }
 
       const topicStats = ensureTopicWriteupStats(topicTag, writeupStats.topicWriteupStats);
       topicStats.underfill_due_writeup_count = Math.max(0, backfillPolicy.itemsPerTopic - acceptedItems.length);
+      const remainingStrongReserveCount = Math.max(
+        0,
+        Number(reserves[topicTag]?.strongReserve?.length || 0) - Number(reserveCursors[topicTag]?.strong || 0)
+      );
+      const remainingStandardReserveCount = Math.max(
+        0,
+        Number(reserves[topicTag]?.standardReserve?.length || 0) - Number(reserveCursors[topicTag]?.standard || 0)
+      );
+      const trustedFloorState = backfillPolicy.trustedFloor?.byTopic?.[topicTag] || {};
+      const currentStrongSelectedCount = countTrustedSourceTier(acceptedItems);
+      const strongPoolExhausted = trustedFloorState.active === true
+        && currentStrongSelectedCount < Math.max(0, Number(trustedFloorState.minTrustedItemsPerTopic || 0))
+        && remainingStrongReserveCount <= 0;
+      topicReserveDiagnostics[topicTag] = {
+        remaining_reserve_count: remainingStrongReserveCount + remainingStandardReserveCount,
+        remaining_strong_reserve_count: remainingStrongReserveCount,
+        remaining_standard_reserve_count: remainingStandardReserveCount,
+        strong_pool_exhausted: strongPoolExhausted,
+        standard_tier_blocked_while_strong_available: standardTierBlockedWhileStrongAvailable,
+      };
 
       if (!strictQualityEnabled || shipReady.pass === true) {
         finalTopicBuckets[topicTag] = acceptedItems.slice();
         topicStats.final_selected_count = acceptedItems.length;
+        topicStats.strong_tier_final_selected_count = countTrustedSourceTier(acceptedItems);
         writeupStats.final_selected_count += acceptedItems.length;
+        writeupStats.strong_tier_final_selected_count += topicStats.strong_tier_final_selected_count;
       } else {
         topicStats.final_selected_count = 0;
+        topicStats.strong_tier_final_selected_count = 0;
         const blockedItems = acceptedItems.map((item) => ({
           ...item,
           selection_reason: `bucket_${shipReady.reason}`,
@@ -878,6 +1028,8 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
         borderline_item_count: Number(shipReady.borderline_item_count || 0),
         strong_item_count: Number(shipReady.strong_item_count || 0),
         major_story: majorStoryDiagnostics,
+        strong_pool_exhausted: strongPoolExhausted,
+        standard_tier_blocked_while_strong_available: standardTierBlockedWhileStrongAvailable,
       };
     }
 
@@ -895,6 +1047,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       topicWriteupStats: normalizedTopicWriteupStats,
       writeupSummary: normalizedWriteupSummary,
       itemsPerTopic: backfillPolicy.itemsPerTopic,
+      topicReserveDiagnostics,
       strictQualityDiagnostics: {
         ...(selectionDiagnostics?.strict_quality && typeof selectionDiagnostics.strict_quality === "object"
           ? selectionDiagnostics.strict_quality
@@ -922,9 +1075,16 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       }
       return {
         url: String(item?.url || ""),
+        candidate_tier: String(item?.writeup_stage_diagnostics?.candidate_tier || "").trim() || null,
         enrichment_status: isFailed ? "failed" : isRepaired ? "repaired" : "success",
         repair_applied: isRepaired,
         failure_reason: failureReason,
+        extraction_output: item?.extraction_output || item?.wim_extraction || null,
+        wim_output: item?.wim_output || item?.wim || null,
+        repair_type: item?.repair_type || null,
+        parse_failure_type: item?.parse_failure_type || null,
+        final_status: item?.final_status || null,
+        first_pass_succeeded: item?.first_pass_succeeded === true,
       };
     });
 

@@ -40,13 +40,21 @@ function withPassingWriteup(item, overrides = {}) {
     summary: "Acme repriced enterprise AI contracts for new buyers.",
     signal_shift: "Acme repriced AI contracts",
     implication_type: "cost",
-    wim_brief: "Acme's pricing reset raises enterprise software costs this quarter.",
-    wim: "Acme repriced AI contracts, which raises enterprise software costs and resets CIO budget assumptions this quarter.",
+    wim_brief: "Acme pricing reset tightens enterprise software budgets this quarter.",
+    wim: "Acme repriced AI contracts, forcing CIO procurement teams to cut lower priority deployments as enterprise software pricing rises this quarter.",
     writeup_status: "model_pass",
     writeup_attempt_count: 1,
     writeup_rejection_reasons: [],
     writeup_version: "v2",
     ...overrides,
+  };
+}
+
+function makeReserveState(strongReserve = [], standardReserve = []) {
+  return {
+    strongReserve: strongReserve.slice(),
+    standardReserve: standardReserve.slice(),
+    allReserve: [...strongReserve, ...standardReserve],
   };
 }
 
@@ -109,7 +117,7 @@ async function testBackfillsDroppedWriteupWithSameTopicReserve() {
       TECHNOLOGY: firstBatch.map((item) => makeSelectedCandidate(item.url, item.headline)),
     },
     reserveByTopic: {
-      TECHNOLOGY: [makeSelectedCandidate("https://example.com/6", "Reserve")],
+      TECHNOLOGY: makeReserveState([makeSelectedCandidate("https://example.com/6", "Reserve")], []),
     },
     selectionDiagnostics,
     writeupBackfillPolicy: {
@@ -196,7 +204,7 @@ async function testTrustedFloorBackfillPrefersTrustedReserveFirst() {
   const out = await enrichmentRuntime.enrichSelectedItems({
     selected: initialRaw.map((item) => ({ ...item })),
     selectedByTopic: { TECHNOLOGY: initialRaw.map((item) => ({ ...item })) },
-    reserveByTopic: { TECHNOLOGY: [standardReserve, trustedReserve] },
+    reserveByTopic: { TECHNOLOGY: makeReserveState([trustedReserve], [standardReserve]) },
     selectionDiagnostics: {
       topic_selection_audit: [{
         tag: "TECHNOLOGY",
@@ -234,6 +242,11 @@ async function testTrustedFloorBackfillPrefersTrustedReserveFirst() {
   assert.ok(out.enriched.some((item) => item.url === trustedReserve.url));
   assert.ok(out.enriched.some((item) => item.url === standardReserve.url));
   assert.strictEqual(out.enrichmentDiagnostics.item_outcomes.filter((item) => item.failure_reason === "parse_failure").length, 2);
+  assert.strictEqual(
+    out.selectionDiagnostics.topic_selection_audit[0].standard_tier_blocked_while_strong_available,
+    true,
+    "topic audit should preserve the standard-tier block invariant after writeup backfill"
+  );
 }
 
 async function testProviderFailureDetailsArePreserved() {
@@ -269,7 +282,7 @@ async function testProviderFailureDetailsArePreserved() {
   const out = await enrichmentRuntime.enrichSelectedItems({
     selected: initialRaw.map((item) => ({ ...item })),
     selectedByTopic: { TECHNOLOGY: initialRaw.map((item) => ({ ...item })) },
-    reserveByTopic: { TECHNOLOGY: [] },
+    reserveByTopic: { TECHNOLOGY: makeReserveState([], []) },
     selectionDiagnostics: {
       topic_selection_audit: [{
         tag: "TECHNOLOGY",
@@ -332,8 +345,8 @@ async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
     }, {
       signal_shift: "The SEC reset AI vendor disclosures",
       implication_type: "regulation",
-      wim_brief: "The SEC's rule reset tightens AI vendor compliance costs immediately.",
-      wim: "The SEC reset AI vendor disclosures, which raises compliance costs and reshapes enterprise software selling this quarter.",
+      wim_brief: "The SEC's regulation reset tightens AI vendor compliance costs immediately.",
+      wim: "The SEC reset AI vendor disclosures, which raises regulatory compliance costs and forces enterprise software sellers to slow deal cycles this quarter.",
       _score: 0.91,
     })],
   ]);
@@ -364,7 +377,7 @@ async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
       TECHNOLOGY: initialSelected.map((item) => makeSelectedCandidate(item.url, item.headline)),
     },
     reserveByTopic: {
-      TECHNOLOGY: reserveRaw.map((item) => ({ ...item })),
+      TECHNOLOGY: makeReserveState(reserveRaw.map((item) => ({ ...item })), []),
     },
     selectionDiagnostics: {
       topic_selection_audit: [{
@@ -399,6 +412,11 @@ async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
   assert.ok(out.failedByTopic.TECHNOLOGY.some((item) => item.selection_reason === "major_story_swapped_out"), "swapped-out item should be logged");
   assert.strictEqual(out.selectionDiagnostics.strict_quality.major_story.swap_count, 1);
   assert.strictEqual(out.selectionDiagnostics.strict_quality.topic_buckets.TECHNOLOGY.pass, true);
+  assert.strictEqual(
+    out.selectionDiagnostics.topic_selection_audit[0].trusted_floor?.relaxed_reason || null,
+    null,
+    "trusted floor should not relax when strong-tier replacements are available"
+  );
 }
 
 (async () => {

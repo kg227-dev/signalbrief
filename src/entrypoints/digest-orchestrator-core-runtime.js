@@ -1809,6 +1809,12 @@ async function main() {
         provider_degraded: Number(fetchDiagnostics?.degraded_topic_rate || 0) > 0,
         writeup_first_pass_success_count: Number(writeupDiagnostics?.first_pass_success_count || 0),
         writeup_first_pass_success_rate_pct: Number(writeupDiagnostics?.first_pass_success_rate_pct || 0),
+        writeup_extraction_attempted_count: Number(writeupDiagnostics?.extraction_attempted_count || 0),
+        writeup_extraction_success_count: Number(writeupDiagnostics?.extraction_success_count || 0),
+        writeup_extraction_failure_count: Number(writeupDiagnostics?.extraction_failure_count || 0),
+        writeup_generation_attempted_count: Number(writeupDiagnostics?.generation_attempted_count || 0),
+        writeup_generation_success_count: Number(writeupDiagnostics?.generation_success_count || 0),
+        writeup_generation_failure_count: Number(writeupDiagnostics?.generation_failure_count || 0),
         writeup_repair_attempted_count: Number(writeupDiagnostics?.repair_attempted_count || 0),
         writeup_repair_success_count: Number(writeupDiagnostics?.repair_success_count || 0),
         writeup_repair_pass_success_rate_pct: Number(writeupDiagnostics?.repair_pass_success_rate_pct || 0),
@@ -1818,6 +1824,13 @@ async function main() {
         writeup_model_generated_count: Number(writeupDiagnostics?.model_generated_count || 0),
         writeup_model_generated_share_pct: Number(writeupDiagnostics?.model_generated_share_pct || 0),
         writeup_dropped_share_pct: Number(writeupDiagnostics?.dropped_share_pct || 0),
+        writeup_strong_tier_attempted_count: Number(writeupDiagnostics?.strong_tier_attempted_count || 0),
+        writeup_strong_tier_drop_count: Number(writeupDiagnostics?.strong_tier_drop_count || 0),
+        writeup_strong_tier_drop_rate_pct: Number(writeupDiagnostics?.strong_tier_drop_rate_pct || 0),
+        writeup_strong_tier_final_selected_count: Number(writeupDiagnostics?.strong_tier_final_selected_count || 0),
+        writeup_parse_failure_counts: writeupDiagnostics?.parse_failure_counts && typeof writeupDiagnostics.parse_failure_counts === "object"
+          ? cloneJsonValue(writeupDiagnostics.parse_failure_counts)
+          : {},
         writeup_allow_underfill_topic_tags: Array.isArray(writeupDiagnostics?.allow_underfill_topic_tags)
           ? writeupDiagnostics.allow_underfill_topic_tags.slice()
           : [],

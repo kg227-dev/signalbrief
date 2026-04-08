@@ -198,9 +198,9 @@ assertModuleExports(() => runtime, TARGET_REL);
     "topic audit should record commentary fallback usage"
   );
   assert.strictEqual(
-    fallbackOut.selectionDiagnostics.selection_rejection_counts.selection_commentary_cap || 0,
+    fallbackOut.selectionDiagnostics.selection_rejection_counts.selection_pool_full || 0,
     1,
-    "extra commentary items should be rejected explicitly once the fallback slot is used"
+    "once the commentary fallback slot fills the topic, later commentary candidates should remain rejected"
   );
 
   const trustedFloorRuntime = createDigestOrchestratorSelectionRuntime({
@@ -214,7 +214,7 @@ assertModuleExports(() => runtime, TARGET_REL);
         trustedSelectionFloor: {
           enabled: true,
           minTrustedItemsPerTopic: 4,
-          adequateTopicCandidateCount: 5,
+          activationStrongCandidateCount: 5,
         },
       },
     },
@@ -249,6 +249,7 @@ assertModuleExports(() => runtime, TARGET_REL);
       { url: "https://example.com/trusted2", headline: "Trusted lower score 2", tag: "TECHNOLOGY", published_date: "2026-03-27T08:00:00.000Z", source_domain: "trusted2.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", source_authority: 0.61, topic_fit: 0.9 },
       { url: "https://example.com/trusted3", headline: "Trusted lower score 3", tag: "TECHNOLOGY", published_date: "2026-03-27T07:00:00.000Z", source_domain: "trusted3.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "premium", source_authority: 0.63, topic_fit: 0.9 },
       { url: "https://example.com/trusted4", headline: "Trusted lower score 4", tag: "TECHNOLOGY", published_date: "2026-03-27T06:00:00.000Z", source_domain: "trusted4.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", source_authority: 0.6, topic_fit: 0.9 },
+      { url: "https://example.com/trusted5", headline: "Trusted lower score 5", tag: "TECHNOLOGY", published_date: "2026-03-27T05:00:00.000Z", source_domain: "trusted5.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", source_authority: 0.59, topic_fit: 0.9 },
       { url: "https://example.com/std3", headline: "Standard high score 3", tag: "TECHNOLOGY", published_date: "2026-03-27T11:45:00.000Z", source_domain: "std3.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", source_authority: 0.97, topic_fit: 0.93 },
     ],
     selectionTarget: 5,
@@ -269,6 +270,17 @@ assertModuleExports(() => runtime, TARGET_REL);
     trustedFloorOut.selectionDiagnostics.topic_selection_audit[0].trusted_floor.active,
     true,
     "topic audit should record when the trusted floor is active"
+  );
+  assert.strictEqual(
+    trustedFloorOut.selectionDiagnostics.topic_selection_audit[0].standard_tier_blocked_while_strong_available,
+    true,
+    "topic audit should record that standard-tier selection was blocked until the strong floor was satisfied"
+  );
+  assert.ok(
+    trustedFloorOut.reserveByTopic.TECHNOLOGY
+      && Array.isArray(trustedFloorOut.reserveByTopic.TECHNOLOGY.strongReserve)
+      && Array.isArray(trustedFloorOut.reserveByTopic.TECHNOLOGY.standardReserve),
+    "reserve state should be split into strong and standard buckets"
   );
 
   const strictPrefilterRuntime = createDigestOrchestratorSelectionRuntime({

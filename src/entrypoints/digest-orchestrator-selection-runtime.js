@@ -106,6 +106,18 @@ function countTrustedSourceTier(items = []) {
   return (Array.isArray(items) ? items : []).filter((item) => isTrustedSourceTier(item)).length;
 }
 
+function isStandardSourceTier(item) {
+  return normalizeSourceTier(item) === 3;
+}
+
+function sortByScoreDesc(items) {
+  return (Array.isArray(items) ? items : []).slice().sort((left, right) => {
+    const scoreDelta = Number(right?._score || 0) - Number(left?._score || 0);
+    if (scoreDelta !== 0) return scoreDelta;
+    return String(left?.headline || "").localeCompare(String(right?.headline || ""));
+  });
+}
+
 const SOURCE_TYPE_PREFERENCE = Object.freeze({
   reported_media: 0,
   trade_specialist: 0,
@@ -204,22 +216,21 @@ function selectTopicItemsWithFallback(params = {}) {
     ? trustedSelectionFloor
     : {};
   const configuredMinTrustedItems = Number(trustedFloorConfig.minTrustedItemsPerTopic);
-  const configuredAdequateCandidateCount = Number(trustedFloorConfig.adequateTopicCandidateCount);
+  const configuredActivationStrongCount = Number(trustedFloorConfig.activationStrongCandidateCount);
   const minTrustedItems = Number.isFinite(configuredMinTrustedItems)
     ? Math.min(targetCount, Math.max(0, Math.trunc(configuredMinTrustedItems)))
     : Math.min(4, targetCount);
-  const adequateCandidateCount = Number.isFinite(configuredAdequateCandidateCount)
-    ? Math.max(targetCount, Math.trunc(configuredAdequateCandidateCount))
-    : Math.max(15, targetCount * 3);
+  const activationStrongCandidateCount = Number.isFinite(configuredActivationStrongCount)
+    ? Math.max(1, Math.trunc(configuredActivationStrongCount))
+    : 5;
   const trustedCandidateCount = countTrustedSourceTier(freshSelectablePool);
   const trustedFloor = {
     enabled: trustedFloorConfig.enabled === true,
     active: trustedFloorConfig.enabled === true
-      && freshSelectablePool.length >= adequateCandidateCount
-      && trustedCandidateCount >= minTrustedItems
+      && trustedCandidateCount >= activationStrongCandidateCount
       && minTrustedItems > 0,
     minTrustedItemsPerTopic: minTrustedItems,
-    adequateTopicCandidateCount: adequateCandidateCount,
+    activationStrongCandidateCount,
     candidate_count: freshSelectablePool.length,
     trusted_candidate_count: trustedCandidateCount,
   };
@@ -229,15 +240,25 @@ function selectTopicItemsWithFallback(params = {}) {
   const domainCounts = Object.create(null);
   let discoveryCount = 0;
   let commentarySelectedCount = 0;
+  let standardTierBlockedWhileStrongAvailable = false;
+  let strongPoolExhausted = false;
 
   function recordRejection(item, reason) {
     if (!item || selectedSet.has(item) || rejectionReasonByItem.has(item)) return;
     rejectionReasonByItem.set(item, String(reason || "selection_not_selected"));
   }
 
-  function attemptStage(items, stageName, { commentaryCap = 0 } = {}) {
+  function attemptStage(items, stageName, { commentaryCap = 0, maxAccepted = Number.MAX_SAFE_INTEGER } = {}) {
+    let acceptedThisStage = 0;
     for (const item of (Array.isArray(items) ? items : [])) {
       if (!item || selectedSet.has(item)) continue;
+      if (selected.length >= targetCount) {
+        if (selected.length >= targetCount) recordRejection(item, "selection_pool_full");
+        break;
+      }
+      if (acceptedThisStage >= maxAccepted) {
+        break;
+      }
       const isCommentary = isAnalysisOrCommentaryItem(item);
       if (commentaryCap > 0 && isCommentary && commentarySelectedCount >= commentaryCap) {
         recordRejection(item, "selection_commentary_cap");
@@ -267,16 +288,19 @@ function selectTopicItemsWithFallback(params = {}) {
       domainCounts[domain] = domainCount + 1;
       if (isDiscoveryLaneItem(item)) discoveryCount += 1;
       if (isCommentary) commentarySelectedCount += 1;
+      acceptedThisStage += 1;
     }
   }
 
   if (trustedFloor.active) {
-    attemptStage(pools.eventTier1.filter((item) => isTrustedSourceTier(item)), "trusted_floor_event_tier1");
-    if (countTrustedSourceTier(selected) < trustedFloor.minTrustedItemsPerTopic && selected.length < targetCount) {
-      attemptStage(pools.eventTier2.filter((item) => isTrustedSourceTier(item)), "trusted_floor_event_tier2");
-    }
-    if (countTrustedSourceTier(selected) < trustedFloor.minTrustedItemsPerTopic && selected.length < targetCount) {
-      attemptStage(pools.commentaryPool.filter((item) => isTrustedSourceTier(item)), "trusted_floor_commentary", { commentaryCap: 1 });
+    standardTierBlockedWhileStrongAvailable = true;
+    attemptStage(
+      sortByScoreDesc(freshSelectablePool.filter((item) => isTrustedSourceTier(item))),
+      "trusted_floor_seed",
+      { commentaryCap: 1, maxAccepted: trustedFloor.minTrustedItemsPerTopic }
+    );
+    if (countTrustedSourceTier(selected) < trustedFloor.minTrustedItemsPerTopic) {
+      strongPoolExhausted = true;
     }
   }
 
@@ -285,6 +309,9 @@ function selectTopicItemsWithFallback(params = {}) {
   if (selected.length < targetCount) attemptStage(pools.commentaryPool, "commentary", { commentaryCap: 1 });
 
   trustedFloor.selected_trusted_count = countTrustedSourceTier(selected);
+  trustedFloor.standard_tier_blocked_while_strong_available = standardTierBlockedWhileStrongAvailable;
+  trustedFloor.relaxed_reason = trustedFloor.active && strongPoolExhausted ? "strong_pool_exhausted" : null;
+  trustedFloor.strong_pool_exhausted = trustedFloor.active && strongPoolExhausted;
 
   for (const item of (Array.isArray(topicItems) ? topicItems : [])) {
     if (selectedSet.has(item)) continue;
@@ -357,12 +384,19 @@ function buildTopicReserveQueue(params = {}) {
   const pools = params.pools && typeof params.pools === "object" ? params.pools : {};
   const selectedItems = Array.isArray(params.selectedItems) ? params.selectedItems : [];
   const selectedUrls = new Set(selectedItems.map((item) => String(item?.url || "").trim()).filter(Boolean));
-  return [
+  const reserveItems = [
     ...(Array.isArray(pools.eventTier1) ? pools.eventTier1 : []),
     ...(Array.isArray(pools.eventTier2) ? pools.eventTier2 : []),
     ...(Array.isArray(pools.commentaryPool) ? pools.commentaryPool : []),
     ...(Array.isArray(pools.suppressedOfficials) ? pools.suppressedOfficials : []),
   ].filter((item) => !selectedUrls.has(String(item?.url || "").trim()));
+  const strongReserve = sortByScoreDesc(reserveItems.filter((item) => isTrustedSourceTier(item)));
+  const standardReserve = sortByScoreDesc(reserveItems.filter((item) => !isTrustedSourceTier(item)));
+  return {
+    strongReserve,
+    standardReserve,
+    allReserve: [...strongReserve, ...standardReserve],
+  };
 }
 
 function incrementCount(target, key) {
@@ -387,17 +421,17 @@ function resolveTrustedSelectionFloor(configDigest = {}, itemsPerTopic = 5) {
   const rawObject = raw && typeof raw === "object" ? raw : {};
   const targetCount = Math.max(1, Number(itemsPerTopic || 5));
   const configuredMin = Number(rawObject.minTrustedItemsPerTopic ?? configDigest?.minTrustedItemsPerTopic);
-  const configuredAdequate = Number(rawObject.adequateTopicCandidateCount ?? configDigest?.trustedFloorAdequateTopicCandidateCount);
+  const configuredActivationStrongCount = Number(rawObject.activationStrongCandidateCount);
   const minTrustedItemsPerTopic = Number.isFinite(configuredMin)
     ? Math.min(targetCount, Math.max(0, Math.trunc(configuredMin)))
     : Math.min(4, targetCount);
-  const adequateTopicCandidateCount = Number.isFinite(configuredAdequate)
-    ? Math.max(targetCount, Math.trunc(configuredAdequate))
-    : Math.max(15, targetCount * 3);
+  const activationStrongCandidateCount = Number.isFinite(configuredActivationStrongCount)
+    ? Math.max(1, Math.trunc(configuredActivationStrongCount))
+    : 5;
   return {
     enabled: raw !== false && rawObject.enabled !== false,
     minTrustedItemsPerTopic,
-    adequateTopicCandidateCount,
+    activationStrongCandidateCount,
   };
 }
 
@@ -978,6 +1012,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         pools,
         selectedItems: topicAcceptedItems,
       });
+      const selectedTrustedCount = countTrustedSourceTier(topicAcceptedItems);
+      const selectedStandardCount = (Array.isArray(topicAcceptedItems) ? topicAcceptedItems : []).filter((item) => isStandardSourceTier(item)).length;
 
       const topicReasonCounts = Object.create(null);
       const selectedSet = new Set(topicAcceptedItems);
@@ -1017,7 +1053,13 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         trusted_floor: {
           ...trustedFloor,
         },
-        reserve_candidate_count: reserveByTopic[topicTag].length,
+        strong_tier_candidate_count: Number(trustedFloor.trusted_candidate_count || 0),
+        strong_tier_selected_count: selectedTrustedCount,
+        standard_tier_selected_count: selectedStandardCount,
+        standard_tier_blocked_while_strong_available: trustedFloor.standard_tier_blocked_while_strong_available === true,
+        reserve_candidate_count: reserveByTopic[topicTag].allReserve.length,
+        reserve_strong_count: reserveByTopic[topicTag].strongReserve.length,
+        reserve_standard_count: reserveByTopic[topicTag].standardReserve.length,
         per_source_cap: effectiveMaxItemsPerSourceDomain,
         lane_breakdown: topicLaneCounts,
         rejection_reason_counts: topicReasonCounts,

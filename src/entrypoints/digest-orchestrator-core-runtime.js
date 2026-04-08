@@ -80,6 +80,10 @@ const {
 } = require("./digest-orchestrator-cost-runtime");
 const { createDigestOrchestratorIncidentRuntime } = require("./digest-orchestrator-incident-runtime");
 const { createDigestOrchestratorLockRuntime } = require("./digest-orchestrator-lock-runtime");
+const {
+  createDigestOrchestratorRunContextRuntime,
+  validateDigestRunOptions,
+} = require("./digest-orchestrator-run-context-runtime");
 const { createDigestOrchestratorTransportRuntime } = require("./digest-orchestrator-transport-runtime");
 const { createDigestOrchestratorBootstrapRuntime } = require("./digest-orchestrator-bootstrap-runtime");
 const {
@@ -414,28 +418,14 @@ async function main() {
     isDigestDryRunEnabled,
   });
   const {
-    dryRun,
     suppressWelcome,
     runMode,
     auditOnly,
     inventoryRefreshOnly,
     auditTopicTag,
-    auditDateKey,
-    todayEt,
     auditTopicRerun,
   } = runOptions;
-  if (inventoryRefreshOnly && auditOnly) {
-    throw new Error("Inventory refresh runs cannot be combined with --auditOnly");
-  }
-  if (auditOnly && !auditTopicRerun) {
-    throw new Error("Audit-only digest runs require --auditTopic=TOPIC");
-  }
-  if (auditTopicRerun && !auditDateKey) {
-    throw new Error("Topic audit reruns require --auditDate=YYYY-MM-DD");
-  }
-  if (auditTopicRerun && auditDateKey !== todayEt) {
-    throw new Error(`Topic audit reruns only support today ET (${todayEt}) to avoid fake historical backfills`);
-  }
+  validateDigestRunOptions(runOptions);
   const runId = `${runMode}:${new Date().toISOString().replace(/[:.]/g, "-")}`;
   setDigestLoggerContext({
     run_id: runId,
@@ -447,7 +437,6 @@ async function main() {
     mode: runMode,
     target_chat_id: null,
   });
-  const allowExampleEmails = isAllowExampleSignupsEnabled();
 
   const lock = acquireDigestLock(runMode);
   if (!lock.ok) {
@@ -467,138 +456,38 @@ async function main() {
     process.exit(4);
   }
 
-  let digestDateKey = auditTopicRerun ? auditDateKey : todayEt;
-  let dueUsers = [];
-  let fetchDueUsers = [];
-  if (inventoryRefreshOnly) {
-    fetchDueUsers = [{
-      chatId: `inventory-refresh:${digestDateKey}`,
-      email: "",
-      status: USER_STATUS.ACTIVE,
-      topics: STANDARD_MVP_TOPIC_TAGS.slice(),
-      preferences: {
-        email_enabled: false,
-        depth: "headline_plus_why",
-      },
-    }];
-    log(`=== SignalBrief inventory refresh starting — ${digestDateKey} (${STANDARD_MVP_TOPIC_TAGS.length} topic(s)) ===`);
-  } else if (auditTopicRerun) {
-    dueUsers = [{
-      chatId: `audit:${auditTopicTag}:${digestDateKey}`,
-      email: "",
-      status: USER_STATUS.ACTIVE,
-      topics: [auditTopicTag],
-      preferences: {
-        email_enabled: false,
-        depth: "headline_plus_why",
-      },
-    }];
-    fetchDueUsers = dueUsers.slice();
-    log(`=== SignalBrief topic audit rerun starting — ${auditTopicTag} (${digestDateKey}) ===`);
-  } else {
-    // ── Check who's due BEFORE any API calls ────────────────────────────────
-    const dueContext = resolveDueUsers({
-      allUsers,
-      USER_STATUS,
-      getEtNow,
-      getEtNowParts,
-      toEtDateString,
-      CONFIG,
-      log,
-      allowExampleEmails,
-      retryStateRuntime: getDigestRetryStateRuntime(),
-    });
-    digestDateKey = String(dueContext?.todayET || "").trim() || todayEt;
-    dueUsers = Array.isArray(dueContext?.dueUsers) ? dueContext.dueUsers.slice() : [];
-
-    if (dueUsers.length > 0) {
-      const digestDeliveryRecordRuntime = getDigestDeliveryRecordRuntime();
-      const preflight = filterAlreadySentScheduledDueUsers(dueUsers, digestDateKey, digestDeliveryRecordRuntime);
-      dueUsers = preflight.dueUsers;
-      if (preflight.skippedUsers.length > 0) {
-        const skippedList = preflight.skippedUsers
-          .map((user) => user?.email || user?.chatId)
-          .filter(Boolean)
-          .join(", ");
-        logEvent("info", "digest.run.skipped", {
-          provider: "delivery-record",
-          outcome: "already_sent_prefilter",
-          skipped_users: preflight.skippedUsers.length,
-          date_et: digestDateKey,
-        });
-        log(`⏭️ Prefiltered ${preflight.skippedUsers.length} user(s) already sent for ${digestDateKey}${skippedList ? ` -> ${skippedList}` : ""}`);
-      }
-    }
-
-    if (dueUsers.length === 0) {
-      logEvent("info", "digest.run.skipped", {
-        provider: "scheduler",
-        outcome: "no_due_users",
-      });
-      process.exit(0); // no users due this window
-    }
-    fetchDueUsers = dueUsers.slice();
+  const runContextRuntimeWithFlags = createDigestOrchestratorRunContextRuntime({
+    allUsers,
+    USER_STATUS,
+    standardMvpTopicTags: STANDARD_MVP_TOPIC_TAGS,
+    log,
+    logEvent,
+    resolveDueUsers,
+    getEtNow,
+    getEtNowParts,
+    toEtDateString,
+    CONFIG,
+    filterAlreadySentScheduledDueUsers,
+    getDigestDeliveryRecordRuntime,
+    getDigestRetryStateRuntime,
+    allowExampleEmails: isAllowExampleSignupsEnabled(),
+    createDigestOrchestratorAdmissionGateRuntime,
+    getDigestOrchestratorSpendGuardRuntime,
+    getDigestOrchestratorCircuitBreakerRuntime,
+    rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
+    rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
+    dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
+    recordRunCost,
+    releaseDigestLock,
+  });
+  const runContext = runContextRuntimeWithFlags.prepareDigestRunContext({
+    runOptions,
+    runId,
+  });
+  if (runContext.shouldExit) {
+    process.exit(runContext.exitCode);
   }
-
-  // ── Pre-spend admission gate (scheduled runs only) ─────────────────────────
-  if (!auditOnly && !inventoryRefreshOnly) {
-    const spendGuard = getDigestOrchestratorSpendGuardRuntime();
-    const circuitBreaker = getDigestOrchestratorCircuitBreakerRuntime();
-    const admissionGate = createDigestOrchestratorAdmissionGateRuntime({
-      circuitBreakerRuntime: circuitBreaker,
-      spendGuardRuntime: spendGuard,
-      rollingWindowCapUsd: ROLLING_ZERO_VALUE_CAP_USD,
-      rollingWindowHours: ROLLING_ZERO_VALUE_WINDOW_HOURS,
-      dailyCapUsd: DAILY_ZERO_VALUE_CAP_USD,
-      log,
-    });
-    const gate = admissionGate.checkScheduledAdmission({
-      dueUsers,
-      dateEt: digestDateKey,
-      retryStateRuntime: getDigestRetryStateRuntime(),
-    });
-    if (!gate.allowed) {
-      logEvent("warn", "digest.run.blocked", {
-        provider: "admission-gate",
-        outcome: gate.runValueState,
-        blocked_reason: gate.blockedReason,
-        due_users: dueUsers.length,
-        date_et: digestDateKey,
-      });
-      log(`⛔ Admission gate blocked: ${gate.blockedReason} (${dueUsers.length} due user(s), date=${digestDateKey})`);
-      recordRunCost({
-        now: new Date(),
-        runId,
-        standardFetchCalls: 0,
-        claudeUsage: {},
-        dueUsers,
-        deliveredUsers: [],
-        failedUsers: [],
-        publicDigestUrl: "",
-        runValueState: gate.runValueState,
-        blockedReason: gate.blockedReason,
-      });
-      releaseDigestLock(runMode);
-      process.exit(0);
-    }
-    if (gate.eligibleUsers.length < dueUsers.length) {
-      const filtered = dueUsers.length - gate.eligibleUsers.length;
-      log(`[admission-gate] filtered ${filtered} user(s) already at zero-value cap`);
-      dueUsers = gate.eligibleUsers;
-    }
-    fetchDueUsers = dueUsers.slice();
-  }
-
-  if (dryRun) {
-    const dueList = dueUsers.map((u) => u.email || u.chatId).filter(Boolean);
-    logEvent("info", "digest.run.skipped", {
-      provider: "orchestrator",
-      outcome: "dry_run",
-      due_users: dueUsers.length,
-    });
-    log(`🧪 Dry run: ${dueUsers.length} user(s) due${dueList.length ? ` -> ${dueList.join(", ")}` : ""}`);
-    process.exit(0);
-  }
+  let { digestDateKey, dueUsers, fetchDueUsers } = runContext;
 
   if (inventoryRefreshOnly) {
     log(`=== SignalBrief inventory refresh running — ${STANDARD_MVP_TOPIC_TAGS.length} topic(s) ===`);

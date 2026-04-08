@@ -4,6 +4,12 @@
 
 Use this file as the router for the repository's live and archived docs.
 
+## Context First
+
+- [Context Router](./context/README.md) — default load order for new work
+- [Current State](./context/current-state.md) — shortest accurate snapshot of live product and repo state
+- [Decision Log](./context/decision-log.md) — durable recent decisions without plan history
+
 ## Engineering Reference
 
 - [Repository Map](./repository-map.md) — codebase layout and canonical surfaces

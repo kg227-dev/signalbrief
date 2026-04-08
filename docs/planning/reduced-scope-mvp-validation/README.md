@@ -9,6 +9,8 @@ Validate the current reduced-scope MVP against real scheduled production behavio
 
 This is a fresh standalone validation artifact. It is intentionally separate from the older reliability recovery and superpower planning docs.
 
+For default task context, start with [`../../context/current-state.md`](../../context/current-state.md) and only open this full bundle when a task needs the detailed validation plan, scorecard, or day-by-day operating contract.
+
 ## Source of Truth
 
 - [Reduced-Scope MVP](../../reduced-scope-mvp.md)

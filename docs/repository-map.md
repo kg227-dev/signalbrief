@@ -35,6 +35,7 @@ Use this document when you need to know where code should live or where to start
 | Path | Purpose |
 | --- | --- |
 | `docs/` | canonical engineering docs and the primary docs router |
+| `docs/context/` | compact current-state, workstream capsules, and durable decision summaries |
 | `docs/ops/` | live operational runbooks, release procedures, and credential guidance |
 | `docs/planning/` | reserved for in-flight execution plan bundles only |
 | `docs/strategy/` | living strategy, marketing, KPI, and private business docs |

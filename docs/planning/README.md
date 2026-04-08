@@ -4,6 +4,8 @@
 
 This directory is reserved for in-flight execution bundles only.
 
+Start with [`../context/current-state.md`](../context/current-state.md) before opening a full plan bundle. Active planning docs are not the default context surface for every task.
+
 The current active execution bundle is the reduced-scope MVP validation bundle:
 
 - [Reduced-Scope MVP Validation](./reduced-scope-mvp-validation/README.md)

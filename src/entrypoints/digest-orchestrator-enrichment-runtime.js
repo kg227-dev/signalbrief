@@ -24,6 +24,32 @@ function addCount(target, key, increment = 1) {
   target[normalizedKey] = (target[normalizedKey] || 0) + Number(increment || 0);
 }
 
+const SOURCE_TIER_ALIASES = Object.freeze({
+  1: 1,
+  2: 2,
+  3: 3,
+  premium: 1,
+  strong: 2,
+  standard: 3,
+});
+
+function normalizeSourceTier(itemOrTier) {
+  const rawTier = itemOrTier && typeof itemOrTier === "object" ? itemOrTier.source_tier : itemOrTier;
+  const numeric = Number(rawTier);
+  if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
+  const alias = SOURCE_TIER_ALIASES[String(rawTier || "").trim().toLowerCase()];
+  return alias || null;
+}
+
+function isTrustedSourceTier(item) {
+  const tier = normalizeSourceTier(item);
+  return tier != null && tier <= 2;
+}
+
+function countTrustedSourceTier(items = []) {
+  return (Array.isArray(items) ? items : []).filter((item) => isTrustedSourceTier(item)).length;
+}
+
 function flattenTopicBuckets(topicBuckets = {}) {
   const flat = [];
   for (const [tag, items] of Object.entries(topicBuckets || {})) {
@@ -154,6 +180,30 @@ function pickNextReserveCandidate(params = {}) {
     ? params.getBackfillRejectionReason
     : () => null;
   const policy = params.policy && typeof params.policy === "object" ? params.policy : {};
+  const trustedFloor = policy.trustedFloor && typeof policy.trustedFloor === "object" ? policy.trustedFloor : {};
+  const minTrustedItems = Math.max(0, Number(trustedFloor.minTrustedItemsPerTopic || 0));
+  const needsTrustedBackfill = trustedFloor.active === true
+    && minTrustedItems > 0
+    && countTrustedSourceTier(selectedItems) < minTrustedItems;
+  if (needsTrustedBackfill) {
+    for (let index = reserveCursor; index < reserveQueue.length; index += 1) {
+      const candidate = reserveQueue[index];
+      const url = String(candidate?.url || "").trim();
+      if (url && usedUrls.has(url)) continue;
+      if (!isTrustedSourceTier(candidate)) continue;
+      const rejectionReason = getBackfillRejectionReason(candidate, selectedItems, {
+        maxItemsPerSourceDomain: policy.maxItemsPerSourceDomain,
+        maxDiscoveryPerTopic: policy.maxDiscoveryPerTopic,
+        commentaryCap: policy.commentaryCapPerTopic,
+        backfillTrustFloor: policy.backfillTrustFloor === true,
+      });
+      if (rejectionReason) continue;
+      return {
+        candidate,
+        nextCursor: reserveCursor,
+      };
+    }
+  }
   for (let index = reserveCursor; index < reserveQueue.length; index += 1) {
     const candidate = reserveQueue[index];
     const url = String(candidate?.url || "").trim();
@@ -419,6 +469,9 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       maxDiscoveryPerTopic: Math.max(0, Number(writeupBackfillPolicy?.maxDiscoveryPerTopic ?? 1)),
       commentaryCapPerTopic: Math.max(0, Number(writeupBackfillPolicy?.commentaryCapPerTopic ?? 1)),
       backfillTrustFloor: writeupBackfillPolicy?.backfillTrustFloor === true,
+      trustedFloor: writeupBackfillPolicy?.trustedFloor && typeof writeupBackfillPolicy.trustedFloor === "object"
+        ? writeupBackfillPolicy.trustedFloor
+        : { enabled: false, byTopic: {} },
     };
     const maxBackfillsPerSlot = strictQualityEnabled
       ? Math.max(1, Number(strictQualityConfig.max_backfills_per_slot || 2))
@@ -452,6 +505,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
     let degraded = false;
     let degradation = null;
     const degradationIncidentKeys = new Set();
+    const writeupFailureDetails = [];
     const strictTopicDiagnostics = Object.create(null);
     const strictMajorStorySummary = {
       detected_count: 0,
@@ -500,6 +554,18 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
           ...meta,
           selected_items: chunk.length,
         });
+        const providerFailureDetails = Array.isArray(enrichment?.writeupDiagnostics?.provider_failure_details)
+          ? enrichment.writeupDiagnostics.provider_failure_details
+          : [];
+        for (const detail of providerFailureDetails) {
+          const batchIndex = Number(detail?.batch_index);
+          const row = Number.isInteger(batchIndex) ? chunk[batchIndex] : null;
+          writeupFailureDetails.push({
+            ...detail,
+            phase: meta.phase || null,
+            topic_tag: String(meta.topic_tag || row?.tag || detail?.topic || "").trim().toUpperCase() || null,
+          });
+        }
         const enrichedItems = Array.isArray(enrichment?.items) ? enrichment.items : [];
         const taggedChunk = chunk.map((entry, index) => ({
           tag: String(entry?.tag || "").trim().toUpperCase(),
@@ -619,7 +685,10 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
             selectedItems: acceptedItems,
             usedUrls,
             getBackfillRejectionReason: resolveBackfillRejection,
-            policy: backfillPolicy,
+            policy: {
+              ...backfillPolicy,
+              trustedFloor: backfillPolicy.trustedFloor?.byTopic?.[topicTag] || { active: false },
+            },
           });
           reserveCursors[topicTag] = nextCandidate.nextCursor;
           if (!nextCandidate.candidate) {
@@ -848,7 +917,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       let failureReason = null;
       if (isFailed) {
         if (reasons.includes("timeout")) failureReason = "timeout";
-        else if (reasons.includes("parse_failure")) failureReason = "parse_failure";
+        else if (reasons.includes("parse_failure") || reasons.includes("provider_parse_failure")) failureReason = "parse_failure";
         else failureReason = "model_error";
       }
       return {
@@ -869,6 +938,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       selectionDiagnostics: updatedSelectionDiagnostics,
       enrichmentDiagnostics: {
         item_outcomes: itemOutcomes,
+        writeup_failure_details: writeupFailureDetails,
       },
       writeupDiagnostics: {
         ...normalizedWriteupSummary,

@@ -79,8 +79,12 @@ async function testParseFailureDropsItems() {
   const out = await enrichRuntime.enrichItems([{ headline: "C" }]);
   assert.strictEqual(out.degraded, true);
   assert.strictEqual(out.degradation.reason, "parse_failure");
+  assert.strictEqual(out.degradation.raw_preview, "{bad-json");
+  assert.strictEqual(out.degradation.raw_length, 9);
   assert.strictEqual(out.usage.input_tokens, 22);
   assert.strictEqual(out.items[0].writeup_status, "failed_dropped");
+  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].reason, "provider_parse_failure");
+  assert.strictEqual(out.writeupDiagnostics.provider_failure_details[0].raw_preview, "{bad-json");
 }
 
 async function testEmptySelectionSkipsProviderCall() {

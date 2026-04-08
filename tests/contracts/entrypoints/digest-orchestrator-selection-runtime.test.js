@@ -14,6 +14,7 @@ const runtime = require(TARGET_PATH);
 const {
   canonicalizeCandidateTopicTags,
   createDigestOrchestratorSelectionRuntime,
+  isTrustedSourceTier,
   prepareSelectionCandidates,
   splitByFreshnessTiers,
 } = runtime;
@@ -200,6 +201,74 @@ assertModuleExports(() => runtime, TARGET_REL);
     fallbackOut.selectionDiagnostics.selection_rejection_counts.selection_commentary_cap || 0,
     1,
     "extra commentary items should be rejected explicitly once the fallback slot is used"
+  );
+
+  const trustedFloorRuntime = createDigestOrchestratorSelectionRuntime({
+    CONFIG: {
+      digest: {
+        itemCount: 5,
+        crossDayDedupDays: 3,
+        minBackfillItemsAfterDedup: 3,
+        maxItemsPerSourceDomain: 5,
+        maxDiscoveryItemsPerTopic: 1,
+        trustedSelectionFloor: {
+          enabled: true,
+          minTrustedItemsPerTopic: 4,
+          adequateTopicCandidateCount: 5,
+        },
+      },
+    },
+    log: () => {},
+    createDigestPolicies: () => ({
+      rankingPolicy: { repeatPenalty: 0, minBaseScoreForFinal: 6.5 },
+      depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+    }),
+    dedupAgainstRecentArchives: (items) => ({ items: items.slice(), removed: 0, archive_days_used: 3, backfilled: 0 }),
+    buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items: items.slice(), suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
+    emitDigestIncident: async () => {},
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
+    annotateEditorialSignals: (items) => items.slice(),
+    buildStorylineCandidates: (items) => items.slice(),
+  });
+
+  const trustedFloorOut = await trustedFloorRuntime.selectForEnrichment({
+    allItems: [
+      { url: "https://example.com/std1", headline: "Standard high score 1", tag: "TECHNOLOGY", published_date: "2026-03-27T11:55:00.000Z", source_domain: "std1.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", source_authority: 0.99, topic_fit: 0.95 },
+      { url: "https://example.com/std2", headline: "Standard high score 2", tag: "TECHNOLOGY", published_date: "2026-03-27T11:50:00.000Z", source_domain: "std2.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", source_authority: 0.98, topic_fit: 0.94 },
+      { url: "https://example.com/trusted1", headline: "Trusted lower score 1", tag: "TECHNOLOGY", published_date: "2026-03-27T09:00:00.000Z", source_domain: "trusted1.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", source_authority: 0.62, topic_fit: 0.9 },
+      { url: "https://example.com/trusted2", headline: "Trusted lower score 2", tag: "TECHNOLOGY", published_date: "2026-03-27T08:00:00.000Z", source_domain: "trusted2.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", source_authority: 0.61, topic_fit: 0.9 },
+      { url: "https://example.com/trusted3", headline: "Trusted lower score 3", tag: "TECHNOLOGY", published_date: "2026-03-27T07:00:00.000Z", source_domain: "trusted3.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "premium", source_authority: 0.63, topic_fit: 0.9 },
+      { url: "https://example.com/trusted4", headline: "Trusted lower score 4", tag: "TECHNOLOGY", published_date: "2026-03-27T06:00:00.000Z", source_domain: "trusted4.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", source_authority: 0.6, topic_fit: 0.9 },
+      { url: "https://example.com/std3", headline: "Standard high score 3", tag: "TECHNOLOGY", published_date: "2026-03-27T11:45:00.000Z", source_domain: "std3.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", source_authority: 0.97, topic_fit: 0.93 },
+    ],
+    selectionTarget: 5,
+    tagPriority: { technology: 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 7,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+  });
+
+  assert.strictEqual(trustedFloorOut.selected.length, 5);
+  assert.ok(
+    trustedFloorOut.selected.filter((item) => isTrustedSourceTier(item)).length >= 4,
+    "trusted floor should reserve at least four topic slots for premium/strong candidates in adequate-depth pools"
+  );
+  assert.strictEqual(
+    trustedFloorOut.selectionDiagnostics.topic_selection_audit[0].trusted_floor.active,
+    true,
+    "topic audit should record when the trusted floor is active"
   );
 
   const strictPrefilterRuntime = createDigestOrchestratorSelectionRuntime({

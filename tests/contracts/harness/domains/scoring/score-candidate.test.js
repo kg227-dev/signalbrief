@@ -64,6 +64,37 @@ assert.ok(
   "off-topic consumer-tech listicles should be penalized in Technology"
 );
 
+const consumerTechnologyItem = scoreCandidate({
+  headline: "Users are mastering a Vision Pro Steam Link setup for travel",
+  summary: "A consumer device culture story follows how people use the headset with a gaming app.",
+  tag: "TECHNOLOGY",
+  published_date: "2026-04-03T10:00:00.000Z",
+  source_tier: 2,
+  retrieval_origin: "broker_publisher_feed",
+  source_type: "reported_media",
+  topic_fit: 0.72,
+}, { nowMs });
+
+const strategicTechnologyItem = scoreCandidate({
+  headline: "Anthropic details AI security controls as enterprise model risk rises",
+  summary: "The frontier model provider outlined model safety and cybersecurity controls for enterprise buyers.",
+  tag: "TECHNOLOGY",
+  published_date: "2026-04-03T10:00:00.000Z",
+  source_tier: 2,
+  retrieval_origin: "broker_publisher_feed",
+  source_type: "reported_media",
+  topic_fit: 0.72,
+}, { nowMs });
+
+assert.ok(
+  consumerTechnologyItem._score_components.quality_adjustment < 0,
+  "consumer device/culture Technology stories should receive a negative adjustment"
+);
+assert.ok(
+  strategicTechnologyItem._score > consumerTechnologyItem._score,
+  "strategic AI security/platform stories should outrank consumer device/culture stories with otherwise similar inputs"
+);
+
 console.log("score candidate quality adjustments ✓");
 
 // --- Change A: official lane bonus cap for primary_official ---

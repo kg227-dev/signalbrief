@@ -51,7 +51,8 @@ const DEFAULT_MAX_AGE_HOURS = 48;
 const FRESHNESS_FLOOR = 0.05;
 const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety communication|recall|warns consumers|alerts customers|consumer update|fact sheet|guidance for industry|companies that have not submitted|drug amount reports|shortage mitigation efforts|proactively posted|final rule|proposed rule|podcast(?:s)?|things? to know|how you can find|user fee amendments?|labeling resources?|facilities?, sites? and organization|drug safety and availability|notice of (?:public )?meeting|advisory committee meeting)\b/i;
 const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(commentary|analysis|feature)\b|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|excerpt from|reporter goes up against)\b/i;
-const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b)\b/i;
+const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b|vision pro|steam link|offline dictation|dictation app|continuous glucose|glucose monitor|vibe coding|rooting for|blaming everything|users are mastering|social app|creator culture|meme)\b/i;
+const TECH_STRATEGIC_PATTERN = /\b(ai security|cybersecurity|ransomware|data breach|platform policy|antitrust|supreme court|scotus|isp|piracy|chip|semiconductor|compute|data centers?|capital allocation|funding round|venture fund|ai infrastructure|open[- ]source model|enterprise ai|procurement|model safety|frontier model|regulator|regulation)\b/i;
 
 function clamp(value, lo, hi) {
   const n = Number(value);
@@ -230,7 +231,10 @@ function computeQualityAdjustment(item, opts = {}) {
     || COMMENTARY_PATTERN.test(combined);
   if (commentaryLike) adjustment -= 0.18;
 
-  if (topicTag === "TECHNOLOGY" && TECH_NOISE_PATTERN.test(combined)) adjustment -= 0.2;
+  if (topicTag === "TECHNOLOGY") {
+    if (TECH_NOISE_PATTERN.test(combined)) adjustment -= 0.24;
+    if (TECH_STRATEGIC_PATTERN.test(combined)) adjustment += 0.06;
+  }
 
   if ((sourceType === "reported_media" || sourceType === "trade_specialist")
     && topicFit >= 0.75

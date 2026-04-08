@@ -77,6 +77,31 @@ function buildFailedWriteupItems(items, rejectionReason = "provider_failure", at
   }));
 }
 
+function buildProviderFailureDetails(items, rejectionReason, degradation = {}) {
+  const rows = Array.isArray(items) ? items : [];
+  return rows.map((item, index) => {
+    const detail = {
+      batch_index: index,
+      provider: degradation?.provider || null,
+      reason: String(rejectionReason || "provider_failure"),
+      message: degradation?.message ? String(degradation.message).slice(0, 240) : null,
+      status_code: degradation?.status_code != null ? Number(degradation.status_code) : null,
+      timeout_ms: degradation?.timeout_ms != null ? Number(degradation.timeout_ms) : null,
+      retries: degradation?.retries != null ? Number(degradation.retries) : null,
+      raw_preview: degradation?.raw_preview ? String(degradation.raw_preview).slice(0, 1000) : null,
+      raw_length: Number.isFinite(Number(degradation?.raw_length)) ? Number(degradation.raw_length) : null,
+      url: String(item?.url || ""),
+      headline: String(item?.headline || item?.title || "").slice(0, 180),
+      source: String(item?.source || item?.source_domain || ""),
+      source_domain: String(item?.source_domain || item?.source || ""),
+      source_tier: item?.source_tier ?? null,
+      source_type: String(item?.source_type || ""),
+      topic: String(item?.tag || item?.topic_tag || "").trim().toUpperCase() || null,
+    };
+    return Object.fromEntries(Object.entries(detail).filter(([, value]) => value !== null && value !== ""));
+  });
+}
+
 function buildUsage(payload) {
   return {
     input_tokens: Number(payload?.usage?.input_tokens || 0),
@@ -88,6 +113,7 @@ function degradedResult(items, usage, degradation) {
   const rejectionReason = degradation?.reason
     ? `provider_${String(degradation.reason).trim().toLowerCase()}`
     : "provider_failure";
+  const providerFailureDetails = buildProviderFailureDetails(items, rejectionReason, degradation);
   return {
     items: buildFailedWriteupItems(items, rejectionReason, 1),
     usage,
@@ -105,6 +131,7 @@ function degradedResult(items, usage, degradation) {
       model_generated_count: 0,
       model_generated_share_pct: 0,
       dropped_share_pct: 100,
+      provider_failure_details: providerFailureDetails,
     },
   };
 }
@@ -318,12 +345,15 @@ function createDigestDataEnrichRuntime(deps) {
         writeupDiagnostics: collectWriteupStats(normalized, repeatedPhraseRejectCount, firstPassFailedIndexes),
       };
     } catch (err) {
-      const rawText = String(res.body?.content?.[0]?.text || "").slice(0, 500);
-      log(`Claude parse error: ${err.message} | raw_preview: ${rawText}`);
+      const rawText = String(res.body?.content?.[0]?.text || "");
+      const rawPreview = rawText.slice(0, 1000);
+      log(`Claude parse error: ${err.message} | raw_preview: ${rawPreview.slice(0, 500)}`);
       return degradedResult(items, usage, {
         provider: "anthropic",
         reason: "parse_failure",
         message: String(err.message || err).slice(0, 180),
+        raw_preview: rawPreview,
+        raw_length: rawText.length,
       });
     }
   }

@@ -173,6 +173,20 @@ writeDigestAuditLog({
       ],
     },
   },
+  enrichmentDiagnostics: {
+    item_outcomes: [
+      { url: "https://example.com/selected-1", enrichment_status: "success", repair_applied: false, failure_reason: null },
+    ],
+    writeup_failure_details: [
+      {
+        url: "https://example.com/rejected-not-selected",
+        provider: "anthropic",
+        reason: "provider_parse_failure",
+        raw_preview: "{bad-json",
+        raw_length: 9,
+      },
+    ],
+  },
 });
 
 const auditDoc = JSON.parse(fs.readFileSync(path.join(auditDir, "2026-03-26.json"), "utf8"));
@@ -195,5 +209,6 @@ assert.strictEqual(
   auditDoc.topics.TECHNOLOGY.candidates[0].strategic_relevance,
   "HIGH"
 );
+assert.strictEqual(auditDoc.enrichmentDiagnostics.writeup_failure_details[0].raw_preview, "{bad-json");
 
 console.log("writeDigestAuditLog persists selection and broker telemetry shape ✓");

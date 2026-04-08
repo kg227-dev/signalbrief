@@ -959,6 +959,9 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
       item_outcomes: Array.isArray(enrichmentDiagnostics?.item_outcomes)
         ? enrichmentDiagnostics.item_outcomes
         : [],
+      writeup_failure_details: Array.isArray(enrichmentDiagnostics?.writeup_failure_details)
+        ? enrichmentDiagnostics.writeup_failure_details
+        : [],
     },
   };
 }

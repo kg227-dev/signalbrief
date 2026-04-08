@@ -133,6 +133,168 @@ async function testBackfillsDroppedWriteupWithSameTopicReserve() {
   assert.strictEqual(out.writeupDiagnostics.final_selected_count, 5);
 }
 
+async function testTrustedFloorBackfillPrefersTrustedReserveFirst() {
+  const initialRaw = [
+    makeSelectedCandidate("https://example.com/21", "One"),
+    makeSelectedCandidate("https://example.com/22", "Two"),
+    makeSelectedCandidate("https://example.com/23", "Three"),
+    makeSelectedCandidate("https://example.com/24", "Four"),
+    makeSelectedCandidate("https://example.com/25", "Five"),
+  ];
+  const initialEnriched = [
+    withPassingWriteup(initialRaw[0]),
+    withPassingWriteup(initialRaw[1]),
+    withPassingWriteup(initialRaw[2]),
+    withPassingWriteup(initialRaw[3], {
+      writeup_status: "failed_dropped",
+      signal_shift: null,
+      wim_brief: null,
+      wim: null,
+      writeup_rejection_reasons: ["provider_parse_failure"],
+    }),
+    withPassingWriteup(initialRaw[4], {
+      writeup_status: "failed_dropped",
+      signal_shift: null,
+      wim_brief: null,
+      wim: null,
+      writeup_rejection_reasons: ["provider_parse_failure"],
+    }),
+  ];
+  const standardReserve = {
+    ...makeSelectedCandidate("https://example.com/26", "Standard reserve"),
+    source_tier: "standard",
+    source_authority: 0.95,
+  };
+  const trustedReserve = {
+    ...makeSelectedCandidate("https://example.com/27", "Trusted reserve"),
+    source_tier: "strong",
+    source_authority: 0.62,
+  };
+  const calls = [];
+  const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
+    enrichItems: async (items) => {
+      calls.push(items.map((item) => item.url));
+      if (calls.length === 1) {
+        return {
+          items: initialEnriched,
+          usage: { input_tokens: 10, output_tokens: 5 },
+          degraded: false,
+          degradation: null,
+        };
+      }
+      return {
+        items: items.map((item) => withPassingWriteup(item)),
+        usage: { input_tokens: 3, output_tokens: 2 },
+        degraded: false,
+        degradation: null,
+      };
+    },
+    emitDigestIncident: async () => false,
+    getBackfillRejectionReason: () => null,
+  });
+
+  const out = await enrichmentRuntime.enrichSelectedItems({
+    selected: initialRaw.map((item) => ({ ...item })),
+    selectedByTopic: { TECHNOLOGY: initialRaw.map((item) => ({ ...item })) },
+    reserveByTopic: { TECHNOLOGY: [standardReserve, trustedReserve] },
+    selectionDiagnostics: {
+      topic_selection_audit: [{
+        tag: "TECHNOLOGY",
+        total_candidates: 7,
+        selected_count: 5,
+        rejected_count: 2,
+        rejection_reason_counts: { selection_pool_full: 2 },
+        candidates: [
+          ...initialRaw.map((item) => ({ url: item.url, headline: item.headline, selected: true, selection_reason: null })),
+          { url: standardReserve.url, headline: standardReserve.headline, selected: false, selection_reason: "selection_pool_full" },
+          { url: trustedReserve.url, headline: trustedReserve.headline, selected: false, selection_reason: "selection_pool_full" },
+        ],
+      }],
+    },
+    writeupBackfillPolicy: {
+      itemsPerTopic: 5,
+      maxItemsPerSourceDomain: 5,
+      maxDiscoveryPerTopic: 1,
+      commentaryCapPerTopic: 1,
+      trustedFloor: {
+        byTopic: {
+          TECHNOLOGY: {
+            active: true,
+            minTrustedItemsPerTopic: 4,
+          },
+        },
+      },
+    },
+    runMode: "scheduled",
+    dueUsersCount: 1,
+  });
+
+  assert.deepStrictEqual(calls[1], [trustedReserve.url], "trusted floor should try the trusted reserve before a standard reserve");
+  assert.deepStrictEqual(calls[2], [standardReserve.url], "standard reserve should remain available once the trusted floor is satisfied");
+  assert.ok(out.enriched.some((item) => item.url === trustedReserve.url));
+  assert.ok(out.enriched.some((item) => item.url === standardReserve.url));
+  assert.strictEqual(out.enrichmentDiagnostics.item_outcomes.filter((item) => item.failure_reason === "parse_failure").length, 2);
+}
+
+async function testProviderFailureDetailsArePreserved() {
+  const initialRaw = [
+    makeSelectedCandidate("https://example.com/31", "Parse failure item"),
+  ];
+  const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
+    enrichItems: async () => ({
+      items: [{
+        ...initialRaw[0],
+        writeup_status: "failed_dropped",
+        writeup_attempt_count: 1,
+        writeup_rejection_reasons: ["provider_parse_failure"],
+      }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+      degraded: true,
+      degradation: { provider: "anthropic", reason: "parse_failure" },
+      writeupDiagnostics: {
+        provider_failure_details: [{
+          batch_index: 0,
+          provider: "anthropic",
+          reason: "provider_parse_failure",
+          raw_preview: "{bad-json",
+          raw_length: 9,
+          url: initialRaw[0].url,
+        }],
+      },
+    }),
+    emitDigestIncident: async () => false,
+    getBackfillRejectionReason: () => null,
+  });
+
+  const out = await enrichmentRuntime.enrichSelectedItems({
+    selected: initialRaw.map((item) => ({ ...item })),
+    selectedByTopic: { TECHNOLOGY: initialRaw.map((item) => ({ ...item })) },
+    reserveByTopic: { TECHNOLOGY: [] },
+    selectionDiagnostics: {
+      topic_selection_audit: [{
+        tag: "TECHNOLOGY",
+        total_candidates: 1,
+        selected_count: 1,
+        rejected_count: 0,
+        rejection_reason_counts: {},
+        candidates: [{ url: initialRaw[0].url, headline: initialRaw[0].headline, selected: true, selection_reason: null }],
+      }],
+    },
+    writeupBackfillPolicy: {
+      itemsPerTopic: 1,
+      maxItemsPerSourceDomain: 5,
+      maxDiscoveryPerTopic: 1,
+      commentaryCapPerTopic: 1,
+    },
+    runMode: "scheduled",
+    dueUsersCount: 1,
+  });
+
+  assert.strictEqual(out.enrichmentDiagnostics.writeup_failure_details.length, 1);
+  assert.strictEqual(out.enrichmentDiagnostics.writeup_failure_details[0].topic_tag, "TECHNOLOGY");
+  assert.strictEqual(out.enrichmentDiagnostics.writeup_failure_details[0].raw_preview, "{bad-json");
+}
+
 async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
   const initialSelected = [
     withPassingWriteup(makeSelectedCandidate("https://example.com/11", "One"), { _score: 0.84 }),
@@ -241,6 +403,8 @@ async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
 
 (async () => {
   await testBackfillsDroppedWriteupWithSameTopicReserve();
+  await testTrustedFloorBackfillPrefersTrustedReserveFirst();
+  await testProviderFailureDetailsArePreserved();
   await testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

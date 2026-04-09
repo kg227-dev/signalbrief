@@ -1,0 +1,182 @@
+"use strict";
+
+const {
+  annotateEditorialSignals: annotateEditorialSignalsDefault,
+  buildStorylineCandidates: buildStorylineCandidatesDefault,
+} = require("../domains/digest");
+const {
+  assignCanonicalTopic: assignCanonicalTopicDefault,
+  scoreBestFitTopicTag: scoreBestFitTopicTagDefault,
+} = require("../runtime/standard-topic-broker-runtime");
+
+// Domain-to-topic scope constraints for best-fit reassignment.
+// Items from these source domains are locked to the listed topic tags and will not
+// be reassigned to any topic outside this set, regardless of keyword scoring.
+// Prevents specialist-source items from bleeding into unrelated topic pools
+// (e.g. STAT health/pharma items scoring into TECHNOLOGY via "ai" keywords,
+//  or The Register tech items scoring into FINANCIAL SERVICES via "payments" keywords).
+const DOMAIN_TOPIC_SCOPE = new Map([
+  ["statnews.com", new Set(["HEALTHCARE", "LIFE SCIENCES"])],
+  ["fiercehealthcare.com", new Set(["HEALTHCARE"])],
+  ["modernhealthcare.com", new Set(["HEALTHCARE"])],
+  ["beckershospitalreview.com", new Set(["HEALTHCARE"])],
+  ["fiercebiotech.com", new Set(["LIFE SCIENCES", "HEALTHCARE"])],
+  ["biopharmadive.com", new Set(["LIFE SCIENCES", "HEALTHCARE"])],
+  ["fiercepharma.com", new Set(["LIFE SCIENCES", "HEALTHCARE"])],
+  ["theregister.com", new Set(["TECHNOLOGY"])],
+  ["go.theregister.com", new Set(["TECHNOLOGY"])],
+  ["freightwaves.com", new Set(["INDUSTRIALS"])],
+  ["supplychaindive.com", new Set(["INDUSTRIALS", "CONSUMER & RETAIL"])],
+  ["americanbanker.com", new Set(["FINANCIAL SERVICES"])],
+  ["bankingdive.com", new Set(["FINANCIAL SERVICES"])],
+  ["canarymedia.com", new Set(["ENERGY"])],
+  ["utilitydive.com", new Set(["ENERGY"])],
+]);
+
+function classifySourceTypeClass(sourceType) {
+  const st = String(sourceType || "").trim().toLowerCase();
+  if (st === "reported_media" || st === "trade_specialist") return "reported";
+  if (st === "primary_official") return "official";
+  if (st === "corporate_pr") return "corporate";
+  if (st === "analysis_blog") return "commentary";
+  if (st === "aggregator_republisher" || st === "platform_user_generated") return "aggregator";
+  return "unclassified";
+}
+
+function toSelectionAuditCandidate(item, extras = {}) {
+  return {
+    tag: String(item?.tag || "").trim().toUpperCase() || null,
+    headline: String(item?.headline || "").slice(0, 160),
+    url: String(item?.url || ""),
+    source: String(item?.source || item?.source_domain || ""),
+    source_domain: String(item?.source_domain || item?.source || ""),
+    source_tier: item?.source_tier ?? null,
+    source_type: String(item?.source_type || ""),
+    source_type_class: classifySourceTypeClass(item?.source_type),
+    source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
+    lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
+    _score: item?._score ?? null,
+    _score_components: item?._score_components ?? null,
+    _story_relationship: item?._story_relationship ?? "new",
+    storyline_key: String(item?.storyline_key || "").trim() || null,
+    cross_source_count: Number.isFinite(Number(item?.cross_source_count)) ? Number(item.cross_source_count) : null,
+    published_at: String(item?.published_date || item?.published_at || item?.date || "") || null,
+    freshness_hours: Number.isFinite(Number(extras?.freshness_hours))
+      ? Number(Number(extras.freshness_hours).toFixed(2))
+      : null,
+    content_flags: Array.isArray(item?.content_flags) ? item.content_flags.slice() : [],
+    strategic_relevance: item?.strategic_relevance || null,
+    strategic_relevance_reason: item?.strategic_relevance_reason
+      ? String(item.strategic_relevance_reason).slice(0, 120)
+      : null,
+    duplicate_of: item?.duplicate_of ? String(item.duplicate_of) : null,
+    ...extras,
+  };
+}
+
+function normalizeBestFitText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveConfiguredTopicTags(configTopics = []) {
+  return Array.from(new Set(
+    (Array.isArray(configTopics) ? configTopics : [])
+      .map((topic) => String(topic?.tag || "").trim().toUpperCase())
+      .filter(Boolean)
+  ));
+}
+
+function canonicalizeCandidateTopicTags(items = [], opts = {}) {
+  const candidates = Array.isArray(items) ? items : [];
+  const configTopicTags = resolveConfiguredTopicTags(opts.configTopics);
+  const assignCanonicalTopic = typeof opts.assignCanonicalTopic === "function"
+    ? opts.assignCanonicalTopic
+    : assignCanonicalTopicDefault;
+  const scoreBestFitTopicTag = typeof opts.scoreBestFitTopicTag === "function"
+    ? opts.scoreBestFitTopicTag
+    : scoreBestFitTopicTagDefault;
+  if (configTopicTags.length === 0 || typeof assignCanonicalTopic !== "function" || typeof scoreBestFitTopicTag !== "function") {
+    return { items: candidates.slice(), bestFitTopicReassignedCount: 0 };
+  }
+
+  let bestFitTopicReassignedCount = 0;
+  const canonicalized = candidates.map((item) => {
+    const originalTag = String(item?.tag || "").trim().toUpperCase();
+    const fitText = normalizeBestFitText([
+      item?.headline,
+      item?.summary,
+      item?.canonical_url,
+      item?.url,
+      ...(Array.isArray(item?.entity_keys) ? item.entity_keys : []),
+      ...(Array.isArray(item?.content_flags) ? item.content_flags : []),
+    ].filter(Boolean).join(" "));
+    if (!fitText) return item;
+    const bestTag = String(assignCanonicalTopic(configTopicTags, item) || "").trim().toUpperCase();
+    if (!bestTag) return item;
+    const bestScore = Number(scoreBestFitTopicTag(bestTag, fitText) || 0);
+    const currentScore = originalTag ? Number(scoreBestFitTopicTag(originalTag, fitText) || 0) : 0;
+    if (bestScore <= 0 || bestTag === originalTag || bestScore <= currentScore) return item;
+    const sourceDomain = String(item?.source_domain || "").trim().toLowerCase();
+    const domainScope = DOMAIN_TOPIC_SCOPE.get(sourceDomain);
+    if (domainScope && !domainScope.has(bestTag)) return item;
+    bestFitTopicReassignedCount += 1;
+    return {
+      ...item,
+      tag: bestTag,
+      original_tag: item?.original_tag || originalTag || null,
+      canonical_topic_reassigned: true,
+    };
+  });
+
+  return {
+    items: canonicalized,
+    bestFitTopicReassignedCount,
+  };
+}
+
+function prepareSelectionCandidates(items = [], opts = {}) {
+  const candidates = Array.isArray(items) ? items.slice() : [];
+  const buildStorylineCandidates = typeof opts.buildStorylineCandidates === "function"
+    ? opts.buildStorylineCandidates
+    : buildStorylineCandidatesDefault;
+  const annotateEditorialSignals = typeof opts.annotateEditorialSignals === "function"
+    ? opts.annotateEditorialSignals
+    : annotateEditorialSignalsDefault;
+
+  let prepared = candidates;
+  let storylineClusterRemovedCount = 0;
+  if (typeof buildStorylineCandidates === "function" && prepared.length > 0) {
+    const clustered = buildStorylineCandidates(prepared);
+    if (Array.isArray(clustered) && clustered.length > 0) {
+      storylineClusterRemovedCount = Math.max(0, prepared.length - clustered.length);
+      prepared = clustered;
+    }
+  }
+
+  const canonicalized = canonicalizeCandidateTopicTags(prepared, opts);
+  prepared = canonicalized.items;
+
+  if (typeof annotateEditorialSignals === "function" && prepared.length > 0) {
+    const annotated = annotateEditorialSignals(prepared);
+    if (Array.isArray(annotated) && annotated.length === prepared.length) {
+      prepared = annotated;
+    }
+  }
+
+  return {
+    items: prepared,
+    storylineClusterRemovedCount,
+    bestFitTopicReassignedCount: canonicalized.bestFitTopicReassignedCount,
+  };
+}
+
+module.exports = {
+  canonicalizeCandidateTopicTags,
+  classifySourceTypeClass,
+  prepareSelectionCandidates,
+  toSelectionAuditCandidate,
+};

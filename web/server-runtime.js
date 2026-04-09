@@ -61,8 +61,10 @@ const {
   formatDaysLabel,
   computeNextDeliveryEt,
 } = require("./services/delivery-schedule");
-const { createServerRouteDependencies } = require("./server-runtime-deps-runtime");
-const { createRouteBootstrapHandler } = require("./server-runtime-route-bootstrap-runtime");
+const {
+  buildWebRouteDependencies,
+  createWebRequestHandler,
+} = require("./server-runtime-web-bootstrap-runtime");
 const {
   applyCanonicalHostPolicy,
   applyResponseCorsPolicy,
@@ -556,162 +558,144 @@ if (!runtimePathAlignment.ok) {
 
 // sendWelcomeEmail is defined in mailer.js and imported above
 
-const {
-  handleCoreApiRoute,
-  handleAdminApiRoute,
-  handlePublicStaticRoute,
-} = createServerRouteDependencies({
-  requireJsonBody,
-  json,
-  getClientIp,
-  checkRateLimit,
-  allUsers,
-  findUserByToken,
-  normalizeReferralToken,
-  generateToken,
-  writeUser,
-  deleteUser,
-  sendReferralThankYou,
-  sendWelcomeEmail,
-  startDigestTrigger,
-  getBaseUrl,
-  DEFAULT_TOPICS,
-  MAX_CUSTOM_KEYWORDS,
-  allowExampleSignups,
-  PROTECTED_FIELDS,
-  isAdminAuthed,
-  getAdminActor,
-  logAdminActionEvent,
-  INDUSTRY_TOPICS,
-  digestRunStatus,
-  getCachedOrRefreshSchedulerHeartbeat,
-  readArchiveFilesForDir,
-  getAllowedArchiveDatesForUser,
-  archiveRelevanceScore,
-  path,
-  fs,
-  APP_ROOT,
-  archiveDir: runtimePaths.archiveDir,
-  decodeDigestIdParam,
-  buildDigestId,
-  toEtDateKey,
-  appendWebEngagementEvent,
-  sendTransparentGif,
-  normalizeEngagementUrl,
-  normalizeBookmarkUrl,
-  sendMagicLinkEmail,
-  checkMagicLinkRateLimit,
-  checkSettingsRateLimit,
-  checkLoginRate,
-  countArchiveDigestsForUser: (...args) => archiveDigestStatsRuntime.countArchiveDigestsForUser(...args),
-  loadCurrentDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadCurrentDigestSnapshot(...args),
-  loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),
-  loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
-  regenerateDigestSnapshot,
-  resendDigestSnapshot,
-  CONFIG,
-  verifyAdminPassword,
-  createAdminSession,
-  clearAdminSessionByRequest,
-  emitIgnoredEventsIfDue,
-  loadCostRunsNewest,
-  loadEngagementEvents,
-  parseIsoTs,
-  computeFeedbackTrend,
-  readJsonLineLog,
-  ADMIN_MESSAGE_LOG,
-  ADMIN_ACTION_LOG,
-  DIGEST_INCIDENT_LOG,
-  maskEmail,
-  normalizeDeliveryTimeInput,
-  logAdminMessageEvent,
-  summarizeMessage,
-  hashText,
-  escapeHtml,
-  sendEmail,
-  formatTimeEt,
-  parseEtNowParts,
-  computeNextDeliveryEt,
-  formatDaysLabel,
-  computeQualityTrend,
-  requestSchedulerWorkerRestart,
-  forkSchedulerWorker,
-  getRuntimeStateHealth: () => runtimeStateInspector.getRuntimeStateHealth(),
-  assetVersion: getWebAssetVersion(),
-  renderPublicDigestMissingPage,
-  formatPublicDigestDateLabel,
-  renderPublicDigestPageTemplate,
-  serveFile,
-  WEB_DIR,
-  getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
-  buildRecentDigestsExport,
-  sourceRegistryPath: sourceRegistryRuntime.sourceRegistryPath,
-  loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),
-  inspectStandardTopicBrokerConfig: () => standardTopicBrokerRuntime.inspectStandardTopicBrokerConfig(),
-  buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
-  listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),
-  getSourceRegistryEntry: (domain) => sourceRegistryRuntime.getSourceRegistryEntry(domain),
-  getSourceRegistryIdentityEntry: (identityKey) => sourceRegistryRuntime.getSourceRegistryIdentityEntry(identityKey),
-  updateBrokerTopicConfig: (input) => standardTopicBrokerRuntime.updateBrokerTopicConfig(input),
-  updateBrokerSourceConfig: (input) => standardTopicBrokerRuntime.updateBrokerSourceConfig(input),
-  upsertSourceRegistryEntry: (input, meta) => sourceRegistryRuntime.upsertSourceRegistryEntry(input, meta),
-  resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
-  resetSourceRegistryIdentityEntry: (identityKey, meta) => sourceRegistryRuntime.resetSourceRegistryIdentityEntry(identityKey, meta),
-  setAdminSourceRegistry,
-  getAdminActor,
-  digestAuditDir: runtimePaths.digestAuditDir,
-  digestTuningPath: runtimePaths.digestTuningPath,
-  editorialOverridesPath: runtimePaths.editorialOverridesPath,
-  todayStr: new Date().toISOString().slice(0, 10),
-  formatEtDateKey: toEtDateKey,
+const webRouteDependencies = buildWebRouteDependencies({
+  request: {
+    requireJsonBody,
+    json,
+    getClientIp,
+    checkRateLimit,
+    checkMagicLinkRateLimit,
+    checkSettingsRateLimit,
+    checkLoginRate,
+  },
+  auth: {
+    allUsers,
+    findUserByToken,
+    isAdminAuthed,
+    getAdminActor,
+    verifyAdminPassword,
+    createAdminSession,
+    clearAdminSessionByRequest,
+  },
+  mail: {
+    sendReferralThankYou,
+    sendWelcomeEmail,
+    sendMagicLinkEmail,
+    sendEmail,
+  },
+  digest: {
+    normalizeReferralToken,
+    generateToken,
+    writeUser,
+    deleteUser,
+    startDigestTrigger,
+    getBaseUrl,
+    DEFAULT_TOPICS,
+    MAX_CUSTOM_KEYWORDS,
+    allowExampleSignups,
+    PROTECTED_FIELDS,
+    INDUSTRY_TOPICS,
+    digestRunStatus,
+    getCachedOrRefreshSchedulerHeartbeat,
+    decodeDigestIdParam,
+    buildDigestId,
+    toEtDateKey,
+    appendWebEngagementEvent,
+    sendTransparentGif,
+    normalizeEngagementUrl,
+    normalizeBookmarkUrl,
+    emitIgnoredEventsIfDue,
+    loadCostRunsNewest,
+    loadEngagementEvents,
+    parseIsoTs,
+    computeFeedbackTrend,
+    readJsonLineLog,
+    normalizeDeliveryTimeInput,
+    logAdminMessageEvent,
+    summarizeMessage,
+    hashText,
+    formatTimeEt,
+    parseEtNowParts,
+    computeNextDeliveryEt,
+    formatDaysLabel,
+    computeQualityTrend,
+    regenerateDigestSnapshot,
+    resendDigestSnapshot,
+  },
+  archive: {
+    path,
+    fs,
+    APP_ROOT,
+    archiveDir: runtimePaths.archiveDir,
+    readArchiveFilesForDir,
+    getAllowedArchiveDatesForUser,
+    archiveRelevanceScore,
+    countArchiveDigestsForUser: (...args) => archiveDigestStatsRuntime.countArchiveDigestsForUser(...args),
+    loadCurrentDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadCurrentDigestSnapshot(...args),
+    loadDigestSnapshotByRunId: (...args) => digestDeliveryRecordRuntime.loadDigestSnapshotByRunId(...args),
+    loadLatestDigestSnapshot: (...args) => digestDeliveryRecordRuntime.loadLatestDigestSnapshot(...args),
+  },
+  registry: {
+    sourceRegistryPath: sourceRegistryRuntime.sourceRegistryPath,
+    loadSourceRegistry: () => sourceRegistryRuntime.loadSourceRegistry(),
+    inspectStandardTopicBrokerConfig: () => standardTopicBrokerRuntime.inspectStandardTopicBrokerConfig(),
+    buildSourceRegistryMap: (registry) => sourceRegistryRuntime.buildRegistryMap(registry),
+    listSourceRegistryEntries: () => sourceRegistryRuntime.listSourceRegistryEntries(),
+    getSourceRegistryEntry: (domain) => sourceRegistryRuntime.getSourceRegistryEntry(domain),
+    getSourceRegistryIdentityEntry: (identityKey) => sourceRegistryRuntime.getSourceRegistryIdentityEntry(identityKey),
+    updateBrokerTopicConfig: (input) => standardTopicBrokerRuntime.updateBrokerTopicConfig(input),
+    updateBrokerSourceConfig: (input) => standardTopicBrokerRuntime.updateBrokerSourceConfig(input),
+    upsertSourceRegistryEntry: (input, meta) => sourceRegistryRuntime.upsertSourceRegistryEntry(input, meta),
+    resetSourceRegistryEntry: (domain, meta) => sourceRegistryRuntime.resetSourceRegistryEntry(domain, meta),
+    resetSourceRegistryIdentityEntry: (identityKey, meta) => sourceRegistryRuntime.resetSourceRegistryIdentityEntry(identityKey, meta),
+    setAdminSourceRegistry,
+  },
+  public: {
+    assetVersion: getWebAssetVersion(),
+    renderPublicDigestMissingPage,
+    formatPublicDigestDateLabel,
+    renderPublicDigestPageTemplate,
+    serveFile,
+    WEB_DIR,
+  },
+  admin: {
+    CONFIG,
+    logAdminActionEvent,
+    ADMIN_MESSAGE_LOG,
+    ADMIN_ACTION_LOG,
+    DIGEST_INCIDENT_LOG,
+    maskEmail,
+    logAdminMessageEvent,
+    summarizeMessage,
+    hashText,
+    escapeHtml,
+    requestSchedulerWorkerRestart,
+    forkSchedulerWorker,
+    getRuntimeStateHealth: () => runtimeStateInspector.getRuntimeStateHealth(),
+    getRuntimeStateDiagnostics: () => runtimeStateInspector.getRuntimeStateDiagnostics(),
+    buildRecentDigestsExport,
+    digestAuditDir: runtimePaths.digestAuditDir,
+    digestTuningPath: runtimePaths.digestTuningPath,
+    editorialOverridesPath: runtimePaths.editorialOverridesPath,
+    todayStr: new Date().toISOString().slice(0, 10),
+    formatEtDateKey: toEtDateKey,
+  },
 });
-const handleDomainRoute = createRouteBootstrapHandler({
-  handleCoreApiRoute,
-  handleAdminApiRoute,
-  handlePublicStaticRoute,
-});
 
-async function handleWebRequest(req, res) {
-  try {
-    ensureStoreInitialized();
-    const port = getServerPort();
-    const url = new URL(req.url, `http://localhost:${port}`);
-    const pathname = url.pathname;
-
-    // Enforce a single canonical public origin for SEO + cache consistency.
-    const redirected = applyCanonicalHostPolicy({
-      req,
-      res,
-      url,
-      pathname,
-      getRequestHost,
-      getRequestScheme,
-      canonicalHost: CANONICAL_HOST,
-      publicHosts: PUBLIC_HOSTS,
-    });
-    if (redirected) return;
-
-    applyResponseCorsPolicy({
-      req,
-      res,
-      trustedCorsOrigins: TRUSTED_CORS_ORIGINS,
-    });
-
-    // CORS preflight
-    const preflightHandled = handleCorsPreflightPolicy({
-      req,
-      res,
-      trustedCorsOrigins: TRUSTED_CORS_ORIGINS,
-    });
-    if (preflightHandled) return;
-
-    const routeCtx = { req, res, url, pathname };
-    const routeHandled = await handleDomainRoute(routeCtx);
-    if (routeHandled !== false) return;
-
-    res.writeHead(404);
-    res.end("Not found");
-  } catch (err) {
+const handleWebRequest = createWebRequestHandler({
+  routeDependencies: webRouteDependencies,
+  ensureStoreInitialized,
+  getServerPort,
+  applyCanonicalHostPolicy,
+  applyResponseCorsPolicy,
+  handleCorsPreflightPolicy,
+  handleRequestErrorPolicy,
+  getRequestHost,
+  getRequestScheme,
+  canonicalHost: CANONICAL_HOST,
+  publicHosts: PUBLIC_HOSTS,
+  trustedCorsOrigins: TRUSTED_CORS_ORIGINS,
+  onError: (err, req) => {
     const requestRunId = `${WEB_PROCESS_RUN_ID}:${Date.now()}`;
     webLogger.error("web.request.error", {
       run_id: requestRunId,
@@ -721,9 +705,8 @@ async function handleWebRequest(req, res) {
       message: String(err?.message || err || "unknown error"),
       stack: String(err?.stack || ""),
     });
-    handleRequestErrorPolicy({ req, res, error: err, logger: () => {} });
-  }
-}
+  },
+});
 
 let crashProtectionInstalled = false;
 function installCrashProtection() {

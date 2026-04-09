@@ -69,8 +69,10 @@ This is still the highest-leverage source/runtime work, but the shape changed af
 |---|---:|---|---|
 | `src/digest/domain/storyline-domain-runtime.js` | 2,118 | Largest pure domain module; still mixes storyline shaping, candidate comparison, and downstream render decisions | narrative assembly, topic/candidate grouping, render evaluation helpers |
 | `src/eval/retrieval/runner-runtime.js` | 1,873 | Large eval-only harness; still bundles retrieval generation, judging, reporting, and artifact wiring | result assembly, judge/report helpers, candidate generation wiring |
-| `src/runtime/standard-topic-broker-runtime.js` | 1,389 | Feed parsing, source policy, and topic scoring remain together | feed parsing, source policy helpers, shortlist/scoring helpers |
+| `src/runtime/standard-topic-broker-topic-fit-runtime.js` | 203 | Pure canonical-topic scoring now lives outside the broker runtime and is shared by broker + selection | canonical-topic normalization, scoring heuristics, topic-fit tests |
 | `src/entrypoints/digest-orchestrator-core-runtime.js` | 981 | Still above the large-file threshold after the first round of extractions | cache/bootstrap wiring, audit/incident helpers, run assembly helpers |
+
+Completed: `src/runtime/standard-topic-broker-runtime.js` is now 627 LOC after the topic-fit split, so it has moved out of the over-800 queue.
 
 ### 2. Extract shared candidate/topic utilities before touching the next hot spots
 
@@ -80,6 +82,7 @@ Several large files now duplicate the same helper families:
 - Trusted-tier counting helpers are duplicated across selection and enrichment.
 - Freshness/age helpers are duplicated across strict-quality and selection.
 - Topic-specific query packs and keyword maps still live in multiple files.
+- `src/runtime/standard-topic-broker-topic-fit-runtime.js` now owns canonical topic scoring for broker and selection code.
 
 Create a canonical shared surface before doing the next wave of splits. That keeps the follow-on work smaller and reduces drift.
 
@@ -185,18 +188,18 @@ Priority order:
 
 1. `src/digest/domain/storyline-domain-runtime.js` (2,118 LOC)
 2. `src/eval/retrieval/runner-runtime.js` (1,873 LOC, eval-only)
-3. `src/runtime/standard-topic-broker-runtime.js` (1,389 LOC)
-4. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
-5. `src/digest/domain/strict-quality-domain-runtime.js` (732 LOC)
-6. `src/digest/runtime/digest-data-enrich-runtime.js` (745 LOC)
-7. narrow import/facade cleanup
+3. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
+4. `src/digest/domain/strict-quality-domain-runtime.js` (732 LOC)
+5. `src/digest/runtime/digest-data-enrich-runtime.js` (745 LOC)
+6. narrow import/facade cleanup
 
 Rationale:
 
-- `storyline-domain-runtime.js` and `standard-topic-broker-runtime.js` are still the biggest underlying domain/runtime modules, but both become easier to split after the shared helper extraction above.
+- `storyline-domain-runtime.js` remains the biggest underlying domain/runtime module, and the broker scoring logic now has its own shared helper surface.
 - `runner-runtime.js` is eval-only but remains large enough to justify cleanup once the higher-fan-in runtime modules settle.
 - `digest-orchestrator-core-runtime.js` is still above the large-file threshold and still has enough orchestration logic left to justify one more pass.
 - `digest-orchestrator-fetch-runtime.js` is now below 800 LOC after the policy extraction, so it has moved out of the main over-800 queue.
+- `standard-topic-broker-runtime.js` is now below 800 LOC after the topic-fit extraction, so it has moved out of the main over-800 queue too.
 - `strict-quality-domain-runtime.js` and `digest-data-enrich-runtime.js` are smaller, but they currently duplicate logic that should move into shared utilities first.
 - `src/eval/retrieval/runner-runtime.js` is still large, but it is eval-only and should not block production cleanup.
 

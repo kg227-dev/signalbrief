@@ -7,7 +7,7 @@ const {
 const {
   assignCanonicalTopic: assignCanonicalTopicDefault,
   scoreBestFitTopicTag: scoreBestFitTopicTagDefault,
-} = require("../runtime/standard-topic-broker-runtime");
+} = require("../runtime/standard-topic-broker-topic-fit-runtime");
 
 // Domain-to-topic scope constraints for best-fit reassignment.
 // Items from these source domains are locked to the listed topic tags and will not

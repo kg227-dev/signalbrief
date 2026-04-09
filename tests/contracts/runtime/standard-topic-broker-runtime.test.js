@@ -12,9 +12,12 @@ const {
 
 const FETCH_TARGET_REL = "src/runtime/standard-topic-broker-fetch-runtime.js";
 const FETCH_TARGET_PATH = path.join(process.cwd(), FETCH_TARGET_REL);
+const TOPIC_FIT_TARGET_REL = "src/runtime/standard-topic-broker-topic-fit-runtime.js";
+const TOPIC_FIT_TARGET_PATH = path.join(process.cwd(), TOPIC_FIT_TARGET_REL);
 const TARGET_REL = "src/runtime/standard-topic-broker-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(FETCH_TARGET_PATH);
+assertNodeSyntaxFile(TOPIC_FIT_TARGET_PATH);
 assertSourceIncludesFile(FETCH_TARGET_PATH, [
   'function parseSourceBody',
   'function buildNormalizedItemsForSource',
@@ -22,12 +25,15 @@ assertSourceIncludesFile(FETCH_TARGET_PATH, [
 ]);
 const fetchRuntime = require(FETCH_TARGET_PATH);
 assertModuleExports(() => fetchRuntime, FETCH_TARGET_REL);
+const topicFitRuntime = require(TOPIC_FIT_TARGET_PATH);
+assertModuleExports(() => topicFitRuntime, TOPIC_FIT_TARGET_REL);
 
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 assertSourceIncludesFile(TARGET_PATH, [
   'require("./standard-topic-broker-fetch-runtime")',
+  'require("./standard-topic-broker-topic-fit-runtime")',
 ]);
 
 const {

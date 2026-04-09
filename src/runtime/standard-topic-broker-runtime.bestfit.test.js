@@ -1,6 +1,10 @@
 "use strict";
 const assert = require("assert");
-const { assignCanonicalTopic } = require("./standard-topic-broker-runtime");
+const {
+  assignCanonicalTopic,
+  chooseBestFitTopicTag,
+  scoreBestFitTopicTag,
+} = require("./standard-topic-broker-topic-fit-runtime");
 
 {
   assert.strictEqual(assignCanonicalTopic(["TECHNOLOGY"]), "TECHNOLOGY", "single tag");
@@ -17,5 +21,11 @@ const { assignCanonicalTopic } = require("./standard-topic-broker-runtime");
 {
   assert.strictEqual(assignCanonicalTopic(null), null, "null → null");
   console.log("✓ assignCanonicalTopic null → null");
+}
+{
+  const text = "Hospital payer reimbursement care delivery";
+  assert.ok(scoreBestFitTopicTag("HEALTHCARE", text) > scoreBestFitTopicTag("TECHNOLOGY", text));
+  assert.strictEqual(chooseBestFitTopicTag(["HEALTHCARE", "TECHNOLOGY"], { headline: text }), "HEALTHCARE");
+  console.log("✓ chooseBestFitTopicTag prefers stronger match");
 }
 console.log("All assignCanonicalTopic tests passed ✓");

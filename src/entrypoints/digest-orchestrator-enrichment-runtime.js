@@ -1,6 +1,11 @@
 "use strict";
 
 const {
+  countTrustedSourceTier,
+  isTrustedSourceTier,
+  normalizeSourceTier,
+} = require("../domains/digest/candidate-quality-runtime");
+const {
   evaluateFinalDigestAssembly,
   evaluateTopicBucketShipReady,
   evaluateTopicItem,
@@ -22,32 +27,6 @@ function cloneCountMap(rawValue) {
 function addCount(target, key, increment = 1) {
   const normalizedKey = String(key || "").trim() || "unknown";
   target[normalizedKey] = (target[normalizedKey] || 0) + Number(increment || 0);
-}
-
-const SOURCE_TIER_ALIASES = Object.freeze({
-  1: 1,
-  2: 2,
-  3: 3,
-  premium: 1,
-  strong: 2,
-  standard: 3,
-});
-
-function normalizeSourceTier(itemOrTier) {
-  const rawTier = itemOrTier && typeof itemOrTier === "object" ? itemOrTier.source_tier : itemOrTier;
-  const numeric = Number(rawTier);
-  if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
-  const alias = SOURCE_TIER_ALIASES[String(rawTier || "").trim().toLowerCase()];
-  return alias || null;
-}
-
-function isTrustedSourceTier(item) {
-  const tier = normalizeSourceTier(item);
-  return tier != null && tier <= 2;
-}
-
-function countTrustedSourceTier(items = []) {
-  return (Array.isArray(items) ? items : []).filter((item) => isTrustedSourceTier(item)).length;
 }
 
 function flattenTopicBuckets(topicBuckets = {}) {

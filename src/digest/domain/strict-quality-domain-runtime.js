@@ -1,6 +1,10 @@
 "use strict";
 
 const { validateStrategicWriteup } = require("../runtime/digest-data-enrich-result-runtime");
+const {
+  computeItemAgeHours,
+  normalizeSourceTier,
+} = require("../../domains/digest/candidate-quality-runtime");
 const { normalizeCanonicalUrl } = require("../../runtime/url-normalization-runtime");
 const { normalizeMatchText } = require("../../runtime/topic-normalization-runtime");
 const { isWeakSourceItem } = require("./storyline-domain-runtime");
@@ -33,27 +37,10 @@ const TRUSTED_SOURCE_TYPES = new Set([
   "trade_specialist",
 ]);
 
-const TIER_ALIASES = Object.freeze({
-  1: 1,
-  2: 2,
-  3: 3,
-  premium: 1,
-  strong: 2,
-  standard: 3,
-});
-
 function clamp(value, lo, hi) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return lo;
   return Math.max(lo, Math.min(hi, numeric));
-}
-
-function computeItemAgeHours(item, nowMs = Date.now()) {
-  const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
-  if (!ts) return Infinity;
-  const publishedMs = typeof ts === "number" ? ts : Date.parse(ts);
-  if (!Number.isFinite(publishedMs)) return Infinity;
-  return Math.max(0, (nowMs - publishedMs) / (1000 * 60 * 60));
 }
 
 function normalizeTopicFit(value) {
@@ -131,13 +118,6 @@ function resolveStrictQualityConfig(configDigest = {}) {
       anchor_strategic_value: clamp(shipReady.anchor_strategic_value ?? DEFAULT_STRICT_QUALITY.ship_ready.anchor_strategic_value, 0, 1),
     },
   };
-}
-
-function normalizeSourceTier(rawTier) {
-  const numeric = Number(rawTier);
-  if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
-  const alias = TIER_ALIASES[String(rawTier || "").trim().toLowerCase()];
-  return alias || null;
 }
 
 function classifySourceQualityBand(item = {}) {

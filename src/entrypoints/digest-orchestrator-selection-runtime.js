@@ -4,6 +4,13 @@ const {
   annotateEditorialSignals: annotateEditorialSignalsDefault,
   buildStorylineCandidates: buildStorylineCandidatesDefault,
 } = require("../domains/digest");
+const {
+  computeItemAgeHours,
+  countTrustedSourceTier,
+  isTrustedSourceTier,
+  normalizeSourceTier,
+  splitByFreshnessTiers,
+} = require("../domains/digest/candidate-quality-runtime");
 const { scoreCandidates } = require("../domains/scoring/score-candidate");
 const {
   assignCanonicalTopic: assignCanonicalTopicDefault,
@@ -42,27 +49,6 @@ const DOMAIN_TOPIC_SCOPE = new Map([
   ["utilitydive.com", new Set(["ENERGY"])],
 ]);
 
-function computeItemAgeHours(item, nowMs) {
-  const ts = item?.published_date || item?.published_at || item?.date || item?.timestamp;
-  if (!ts) return Infinity;
-  const ms = typeof ts === "number" ? ts : new Date(ts).getTime();
-  if (!Number.isFinite(ms)) return Infinity;
-  return Math.max(0, (nowMs - ms) / (1000 * 60 * 60));
-}
-
-function splitByFreshnessTiers(items, nowMs) {
-  const tier1 = []; // 0–24h: breaking / today
-  const tier2 = []; // 24–48h: yesterday
-  const tier3 = []; // >48h: stale overflow, never eligible in the active MVP path
-  for (const item of (Array.isArray(items) ? items : [])) {
-    const age = computeItemAgeHours(item, nowMs);
-    if (age <= 24) tier1.push(item);
-    else if (age <= 48) tier2.push(item);
-    else tier3.push(item);
-  }
-  return { tier1, tier2, tier3 };
-}
-
 function isDiscoveryLaneItem(item) {
   const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").trim().toLowerCase();
   return origin.includes("discovery") || origin.includes("perplexity");
@@ -78,32 +64,6 @@ function isAnalysisOrCommentaryItem(item) {
     || contentFlags.includes("generic_commentary")
     || /\/opinions?\//.test(url)
     || /\/analysis\//.test(url);
-}
-
-const SOURCE_TIER_ALIASES = Object.freeze({
-  1: 1,
-  2: 2,
-  3: 3,
-  premium: 1,
-  strong: 2,
-  standard: 3,
-});
-
-function normalizeSourceTier(itemOrTier) {
-  const rawTier = itemOrTier && typeof itemOrTier === "object" ? itemOrTier.source_tier : itemOrTier;
-  const numeric = Number(rawTier);
-  if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
-  const alias = SOURCE_TIER_ALIASES[String(rawTier || "").trim().toLowerCase()];
-  return alias || null;
-}
-
-function isTrustedSourceTier(item) {
-  const tier = normalizeSourceTier(item);
-  return tier != null && tier <= 2;
-}
-
-function countTrustedSourceTier(items = []) {
-  return (Array.isArray(items) ? items : []).filter((item) => isTrustedSourceTier(item)).length;
 }
 
 function isStandardSourceTier(item) {

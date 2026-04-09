@@ -1,6 +1,7 @@
 "use strict";
 
 const { getAnthropicProviderEnvOverrides } = require("../../runtime/config-provider");
+const { normalizeSourceTier } = require("../../domains/digest/candidate-quality-runtime");
 const {
   buildDigestDataExtractionPrompt,
   buildDigestDataFormattingRetryPrompt,
@@ -81,17 +82,6 @@ function mergeUsage(left, right) {
     input_tokens: Number(left?.input_tokens || 0) + Number(right?.input_tokens || 0),
     output_tokens: Number(left?.output_tokens || 0) + Number(right?.output_tokens || 0),
   };
-}
-
-function normalizeSourceTier(itemOrTier) {
-  const rawTier = itemOrTier && typeof itemOrTier === "object" ? itemOrTier.source_tier : itemOrTier;
-  const numeric = Number(rawTier);
-  if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
-  const normalized = String(rawTier || "").trim().toLowerCase();
-  if (normalized === "premium") return 1;
-  if (normalized === "strong") return 2;
-  if (normalized === "standard") return 3;
-  return null;
 }
 
 function resolveCandidateTier(item) {

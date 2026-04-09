@@ -9,21 +9,21 @@
 
 | Metric | Current |
 |---|---|
-| Total JS files | 606 |
-| Source files (`src/` + `web/`) | 266 |
-| Total LOC (`src/` + `web/`) | 55,235 |
-| Average source file size | 208 LOC |
-| Largest file | 2,119 LOC (`src/digest/domain/storyline-domain-runtime.js`) |
-| Files >800 LOC | 9 |
+| Total JS files | 637 |
+| Source files (`src/` + `web/`) | 303 |
+| Total LOC (`src/` + `web/`) | 56,064 |
+| Average source file size | 185 LOC |
+| Largest file | 2,118 LOC (`src/digest/domain/storyline-domain-runtime.js`) |
+| Files >800 LOC | 4 |
 | Files >600 LOC | 16 |
-| Small JS shims/facades <=15 LOC | 11 |
-| Contract tests | 218 |
+| Small JS shims/facades <=15 LOC | 12 |
+| Contract tests | 235 |
 | Sidecar tests | 42 |
-| Direct `process.env` reads in production source (`src/` + `web/`) | 0 |
-| Remaining `process.env` reads in source tree | 4, both in sidecar tests |
+| Direct `process.env` references in production source (`src/` + `web/`) | 19, mostly child-process/env passthrough plumbing |
+| Remaining `process.env` references in source tree | 4, both in sidecar tests |
 | Non-test source/web files hardcoding MVP topic tags | 17 |
-| Direct `../digest/runtime/*` imports inside orchestrator entrypoints | 5 |
-| Empty service-grouping directories | 3 (`web/services/admin`, `web/services/shared`, `web/services/user`) |
+| Direct `../digest/runtime/*` imports inside orchestrator entrypoints | 0 |
+| Empty service-grouping directories | 0 |
 
 ## What Changed Since The March Draft
 
@@ -32,11 +32,15 @@ The March 28 plan is directionally useful, but several of its assumptions are no
 - `src/platform/config/mvp-topics.js` already exists and is now the canonical tag list.
 - `web/routes/` is already split into `admin/`, `core/`, and `public-static.js`.
 - `tests/README.md` already documents the sidecar-vs-contract test convention.
-- Direct `process.env` reads have already been pushed out of production source code.
+- Direct `process.env` config reads have already been pushed out of production source code; the remaining references are env passthrough/wiring plus a few test-only setup reads.
 - Several barrel/facade docs already landed: `src/domains/digest/index.js`, `src/domains/engagement/index.js`, `src/platform/config/index.js`, `src/platform/mailer/index.js`, `src/platform/store/index.js`, `src/runtime/store.js`, and `web/server.js`.
 - `web/routes/admin/admin-api-users-actions-runtime.js` is already a thin facade (27 LOC), with user work split into query/lifecycle/digest action modules.
 - Source-registry work is already partly separated into `web/services/admin-source-registry-runtime.js`, `admin-source-registry-summary-runtime.js`, and `admin-source-registry-metrics-runtime.js`.
 - `src/digest/runtime/digest-data-enrich-runtime.js` has already been partially split into prompt/result helpers.
+- `web/server-runtime.js` has already been split via `web/server-runtime-web-bootstrap-runtime.js`.
+- `web/routes/admin/admin-api-funnel-runtime.js` has already been split via `web/routes/admin/admin-api-funnel-data-runtime.js`.
+- `web/services/{admin,shared,user}` now have live grouped entrypoints and the README matches reality.
+- `src/entrypoints/digest-orchestrator-fetch-runtime.js` has already been split again via `src/entrypoints/digest-orchestrator-fetch-policy-runtime.js`.
 
 The repo also grew materially since March:
 
@@ -59,15 +63,14 @@ Do not spend execution time redoing these:
 
 ### 1. Split the production orchestrator cluster first
 
-This is now the highest-leverage work. The main operational complexity sits in the digest orchestrator pipeline, not in config or routing structure.
+This is still the highest-leverage source/runtime work, but the shape changed after the pass-1 extractions. The remaining large modules are now split across orchestrator composition, the standalone eval runner, and the larger domain/runtime files.
 
 | File | LOC | Why it matters | First split seams |
 |---|---:|---|---|
-| `src/entrypoints/digest-orchestrator-core-runtime.js` | 1,994 | Highest-fan-in production file; owns bootstrap, caches, runtime wiring, audit paths, and run assembly | bootstrap/config wiring, runtime factories/caches, audit+incident logging, pipeline execution helpers |
-| `src/entrypoints/digest-orchestrator-fetch-runtime.js` | 1,819 | Mixes run-mode policy, topic/query policy, broker/discovery orchestration, and rate-limit behavior | run-mode/topic selection policy, query-pack config, broker/discovery execution, inventory/backoff helpers |
-| `src/entrypoints/digest-orchestrator-selection-runtime.js` | 1,172 | Holds freshness logic, source-tier logic, domain-topic scopes, fallback pools, and final selection | source-tier/freshness helpers, domain-topic-scope policy, pool builder, final slot-selection/backfill rules |
-| `src/entrypoints/digest-orchestrator-enrichment-runtime.js` | 1,030 | Mixes enrichment orchestration with stats normalization and ship-ready evaluation | writeup stats accumulators, topic-bucket flatten/map helpers, ship-ready/final-assembly evaluators |
-| `src/entrypoints/digest-orchestrator-delivery-runtime.js` | 1,031 | Delivery policy, ranking, and payload assembly are still bundled together | ranking/slotting helpers, render payload assembly, delivery orchestration |
+| `src/digest/domain/storyline-domain-runtime.js` | 2,118 | Largest pure domain module; still mixes storyline shaping, candidate comparison, and downstream render decisions | narrative assembly, topic/candidate grouping, render evaluation helpers |
+| `src/eval/retrieval/runner-runtime.js` | 1,873 | Large eval-only harness; still bundles retrieval generation, judging, reporting, and artifact wiring | result assembly, judge/report helpers, candidate generation wiring |
+| `src/runtime/standard-topic-broker-runtime.js` | 1,389 | Feed parsing, source policy, and topic scoring remain together | feed parsing, source policy helpers, shortlist/scoring helpers |
+| `src/entrypoints/digest-orchestrator-core-runtime.js` | 981 | Still above the large-file threshold after the first round of extractions | cache/bootstrap wiring, audit/incident helpers, run assembly helpers |
 
 ### 2. Extract shared candidate/topic utilities before touching the next hot spots
 
@@ -96,13 +99,13 @@ Recommended extraction targets:
 
 ### 3. Finish the web/runtime cleanup that is only half done
 
-The web layer is structurally better than it was in March, but there is still incomplete migration scaffolding:
+The web layer is now mostly structural cleanup-complete. The remaining work is limited to a few source/web hotspots and topic-catalog consistency:
 
 | Target | Current state | Action |
 |---|---|---|
-| `web/server-runtime.js` | 756 LOC, still the real web hot spot | split bootstrap, route wiring, admin ops wiring, and scheduler-control helpers |
-| `web/routes/admin/admin-api-funnel-runtime.js` | 854 LOC | split audit file IO/date expansion, summary aggregation, and source-registry joining |
-| `web/services/admin/`, `shared/`, `user/` | empty directories with README guidance but no group indexes | either finish the grouping with real entrypoints or delete the empty scaffolding |
+| `web/server-runtime.js` | 744 LOC | already split; keep imports aligned with the grouped service entrypoints and avoid re-bundling route policy back into the main file |
+| `web/routes/admin/admin-api-funnel-runtime.js` | 557 LOC | already split; keep the data/runtime seam thin and stable |
+| `web/services/admin/`, `shared/`, `user/` | live grouped entrypoints now exist | keep the grouped entrypoints as the stable import surface and avoid reintroducing flat imports in new code |
 
 ### 4. Finish topic-catalog centralization
 
@@ -163,15 +166,16 @@ Rules for each split:
 
 ### Step 2 - Finish the web/admin hot spots
 
-- Split `web/server-runtime.js`.
-- Split `web/routes/admin/admin-api-funnel-runtime.js`.
-- Resolve the empty `web/services/{admin,shared,user}` grouping dirs one way or the other.
+- Completed: `web/server-runtime.js` split.
+- Completed: `web/routes/admin/admin-api-funnel-runtime.js` split.
+- Completed: `web/services/{admin,shared,user}` grouping entrypoints added.
+- Next, keep the remaining web work opportunistic and focused on topic-catalog consistency or new large-file hotspots.
 
 ### Step 3 - Re-baseline after pass 1
 
-- Recount large files.
-- Update this doc with the new metrics.
-- Only then decide whether pass 2 is still necessary in full.
+- Recount large files. Done.
+- Update this doc with the new metrics. Done.
+- Use the updated snapshot to drive the remaining pass 2 order.
 
 ### Pass 2 - Remaining large modules and low-risk cleanup
 
@@ -179,16 +183,20 @@ Pass 2 starts after the shared utility layer from pass 1 exists.
 
 Priority order:
 
-1. `src/digest/domain/storyline-domain-runtime.js` (2,119 LOC)
-2. `src/runtime/standard-topic-broker-runtime.js` (1,390 LOC)
-3. `src/digest/domain/strict-quality-domain-runtime.js` (753 LOC)
-4. `src/digest/runtime/digest-data-enrich-runtime.js` (744 LOC)
-5. `src/eval/retrieval/runner-runtime.js` (1,874 LOC, eval-only)
-6. narrow import/facade cleanup
+1. `src/digest/domain/storyline-domain-runtime.js` (2,118 LOC)
+2. `src/eval/retrieval/runner-runtime.js` (1,873 LOC, eval-only)
+3. `src/runtime/standard-topic-broker-runtime.js` (1,389 LOC)
+4. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
+5. `src/digest/domain/strict-quality-domain-runtime.js` (732 LOC)
+6. `src/digest/runtime/digest-data-enrich-runtime.js` (745 LOC)
+7. narrow import/facade cleanup
 
 Rationale:
 
 - `storyline-domain-runtime.js` and `standard-topic-broker-runtime.js` are still the biggest underlying domain/runtime modules, but both become easier to split after the shared helper extraction above.
+- `runner-runtime.js` is eval-only but remains large enough to justify cleanup once the higher-fan-in runtime modules settle.
+- `digest-orchestrator-core-runtime.js` is still above the large-file threshold and still has enough orchestration logic left to justify one more pass.
+- `digest-orchestrator-fetch-runtime.js` is now below 800 LOC after the policy extraction, so it has moved out of the main over-800 queue.
 - `strict-quality-domain-runtime.js` and `digest-data-enrich-runtime.js` are smaller, but they currently duplicate logic that should move into shared utilities first.
 - `src/eval/retrieval/runner-runtime.js` is still large, but it is eval-only and should not block production cleanup.
 
@@ -223,7 +231,7 @@ Run verification incrementally, not only at the very end:
 - The highest-risk work is still the orchestrator cluster. Avoid batching multiple large splits before tests run.
 - `src/domains/digest/index.js` remains a load-bearing aggregation surface because it lazy-loads topic-domain exports to avoid circularity.
 - `src/runtime/standard-topic-broker-runtime.js` mixes feed parsing, source policy, and topic scoring. Splitting it without the shared topic metadata layer will cause more duplication, not less.
-- `web/services/README.md` describes service grouping that is not actually wired yet. Treat that as migration scaffolding, not current reality.
+- `web/services/README.md` now mirrors live grouped entrypoints, so keep it aligned with that import surface.
 - Avoid turning this effort into a repo-wide import-style or documentation sweep. The remaining value is in runtime decomposition and shared utility extraction.
 
 ## Out Of Scope

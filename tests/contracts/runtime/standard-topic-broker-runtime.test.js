@@ -7,13 +7,28 @@ const path = require("path");
 const {
   assertNodeSyntaxFile,
   assertModuleExports,
+  assertSourceIncludesFile,
 } = require("../../../test-support/module-contract-helper.js");
 
+const FETCH_TARGET_REL = "src/runtime/standard-topic-broker-fetch-runtime.js";
+const FETCH_TARGET_PATH = path.join(process.cwd(), FETCH_TARGET_REL);
 const TARGET_REL = "src/runtime/standard-topic-broker-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
+assertNodeSyntaxFile(FETCH_TARGET_PATH);
+assertSourceIncludesFile(FETCH_TARGET_PATH, [
+  'function parseSourceBody',
+  'function buildNormalizedItemsForSource',
+  'function defaultFetchEndpoint',
+]);
+const fetchRuntime = require(FETCH_TARGET_PATH);
+assertModuleExports(() => fetchRuntime, FETCH_TARGET_REL);
+
 assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
+assertSourceIncludesFile(TARGET_PATH, [
+  'require("./standard-topic-broker-fetch-runtime")',
+]);
 
 const {
   createStandardTopicBrokerRuntime,

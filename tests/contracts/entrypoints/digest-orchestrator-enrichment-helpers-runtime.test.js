@@ -60,6 +60,11 @@ const {
     parse_failure_counts: Object.create(null),
     underfill_due_writeup_count: 0,
     topicWriteupStats: Object.create(null),
+    hard_fail_count: 0,
+    soft_fail_count: 0,
+    soft_fail_recovery_count: 0,
+    minimum_viable_accept_count: 0,
+    strong_tier_hard_fail_count: 0,
   };
 
   accumulateWriteupStatsFromTaggedItems(stats, [
@@ -70,9 +75,11 @@ const {
         writeup_rejection_reasons: ["repeated_lead_phrase"],
         first_pass_succeeded: true,
         parse_failure_type: "timeout",
+        validation_tier: "soft_fail",
+        minimum_viable_accept: true,
         writeup_stage_diagnostics: {
           extraction: { status: "model_pass" },
-          generation: { status: "retry_pass" },
+          generation: { status: "soft_fail" },
           repair: { attempted: true, status: "model_pass" },
           candidate_tier: "strong",
         },
@@ -83,6 +90,7 @@ const {
       item: {
         writeup_status: "failed_dropped",
         first_pass_succeeded: false,
+        validation_tier: "hard_fail",
         writeup_stage_diagnostics: {
           extraction: { status: "failed" },
           generation: { status: "failed" },
@@ -103,6 +111,10 @@ const {
   assert.strictEqual(stats.repeated_phrase_rejection_count, 1);
   assert.strictEqual(stats.strong_tier_attempted_count, 2);
   assert.strictEqual(stats.strong_tier_drop_count, 1);
+  assert.strictEqual(stats.strong_tier_hard_fail_count, 1);
+  assert.strictEqual(stats.soft_fail_count, 1);
+  assert.strictEqual(stats.soft_fail_recovery_count, 1);
+  assert.strictEqual(stats.minimum_viable_accept_count, 1);
   assert.strictEqual(stats.parse_failure_counts.timeout, 1);
   assert.strictEqual(stats.topicWriteupStats.TECHNOLOGY.attempted_count, 2);
 
@@ -110,6 +122,7 @@ const {
   assert.strictEqual(normalized.attempted_count, 2);
   assert.strictEqual(normalized.model_generated_share_pct, 50);
   assert.strictEqual(normalized.strong_tier_drop_rate_pct, 50);
+  assert.strictEqual(normalized.soft_fail_recovery_rate_pct, 100);
   assert.strictEqual(normalized.items_per_topic_target, 5);
 }
 
@@ -166,6 +179,12 @@ const {
         writeup_attempt_count: 1,
         writeup_rejection_reasons: [],
         writeup_version: "v2",
+        validation_tier: "soft_fail",
+        minimum_viable_accept: true,
+        hard_failure_reasons: [],
+        soft_failure_reasons: ["sentence_clause_overload"],
+        failure_reason: null,
+        final_status: "model_pass",
         strict_quality: { pass: true },
         quality_rule_results: [{ rule: "wim_strength" }],
         rejected_rule: null,
@@ -182,6 +201,11 @@ const {
         writeup_status: "failed_dropped",
         writeup_attempt_count: 1,
         writeup_rejection_reasons: ["generic_language"],
+        validation_tier: "hard_fail",
+        hard_failure_reasons: ["generic_language"],
+        soft_failure_reasons: [],
+        failure_reason: "generic_language",
+        final_status: "failed_dropped",
         strict_quality: { rejected_reason: "generic_language" },
         quality_rule_results: [],
         rejected_rule: "wim_strength",
@@ -209,8 +233,13 @@ const {
         repeated_phrase_rejection_count: 0,
         model_generated_count: 1,
         final_selected_count: 1,
+        hard_fail_count: 1,
+        soft_fail_count: 1,
+        soft_fail_recovery_count: 1,
+        minimum_viable_accept_count: 1,
         strong_tier_attempted_count: 0,
         strong_tier_drop_count: 0,
+        strong_tier_hard_fail_count: 0,
         strong_tier_final_selected_count: 1,
         parse_failure_counts: Object.create(null),
         underfill_due_writeup_count: 0,
@@ -232,8 +261,13 @@ const {
       repeated_phrase_rejection_count: 0,
       model_generated_count: 1,
       final_selected_count: 1,
+      hard_fail_count: 1,
+      soft_fail_count: 1,
+      soft_fail_recovery_count: 1,
+      minimum_viable_accept_count: 1,
       strong_tier_attempted_count: 0,
       strong_tier_drop_count: 0,
+      strong_tier_hard_fail_count: 0,
       strong_tier_final_selected_count: 1,
       parse_failure_counts: Object.create(null),
       underfill_due_writeup_count: 0,
@@ -258,7 +292,10 @@ const {
 
   assert.strictEqual(updated.topic_selection_audit[0].selected_count, 1);
   assert.strictEqual(updated.topic_selection_audit[0].candidates[1].selection_reason, "generic_language");
+  assert.strictEqual(updated.topic_selection_audit[0].candidates[0].validation_tier, "soft_fail");
+  assert.strictEqual(updated.topic_selection_audit[0].candidates[1].validation_tier, "hard_fail");
   assert.strictEqual(updated.topic_selection_audit[0].trusted_floor.selected_trusted_count, 1);
+  assert.strictEqual(updated.writeup.soft_fail_count, 1);
   assert.strictEqual(updated.writeup.attempted_count, 2);
 }
 

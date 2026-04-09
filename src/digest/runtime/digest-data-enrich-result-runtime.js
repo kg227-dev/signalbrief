@@ -275,6 +275,10 @@ function normalizeExtractionOutput(candidate = {}) {
   };
 }
 
+function cloneReasonList(list) {
+  return Array.isArray(list) ? list.slice() : [];
+}
+
 function validateExtractionOutput(item, candidate = {}) {
   const extraction = normalizeExtractionOutput(candidate);
   const reasons = [];
@@ -311,56 +315,114 @@ function deriveWimBrief(wim) {
 }
 
 function validateStrategicWriteup(item, candidate = {}) {
-  const reasons = [];
+  const hardReasons = [];
+  const softReasons = [];
   const signalShift = stringOrNull(candidate?.signal_shift)
     || stringOrNull(candidate?.what_happened);
   const implicationType = normalizeImplicationType(candidate?.implication_type);
   const wim = stringOrNull(candidate?.wim);
   const wimBrief = stringOrNull(candidate?.wim_brief) || deriveWimBrief(wim);
   const mechanism = stringOrNull(candidate?.mechanism);
+  const candidateTier = String(candidate?.candidate_tier || "").trim().toLowerCase();
   const headline = String(item?.headline || "");
   const summary = String(item?.summary || "");
   const contextText = `${headline} ${summary}`.trim();
 
-  if (!signalShift) reasons.push("missing_signal_shift");
-  if (!implicationType) reasons.push("invalid_implication_type");
-  if (!wim) reasons.push("missing_wim");
-  if (!wimBrief) reasons.push("missing_wim_brief");
+  if (!signalShift) hardReasons.push("missing_signal_shift");
+  if (!implicationType) hardReasons.push("invalid_implication_type");
+  if (!wim) hardReasons.push("missing_wim");
+  if (!wimBrief) softReasons.push("missing_wim_brief");
 
   if (!wim) {
-    return { ok: reasons.length === 0, reasons, derivedBrief: wimBrief };
+    return {
+      ok: false,
+      reasons: [...hardReasons, ...softReasons],
+      derivedBrief: wimBrief,
+      validation_tier: "hard_fail",
+      hard_failure_reasons: hardReasons,
+      soft_failure_reasons: softReasons,
+      minimum_viable_accept: false,
+      accepted_without_repair: false,
+      accepted_via_strong_tier_override: false,
+    };
   }
 
   const plain = stripHtml(wim);
   const sentences = splitSentences(plain);
-  if (sentences.length < 1) reasons.push("too_short");
-  if (sentences.length > 2) reasons.push("too_long");
-  if (sentences.some((sentence) => splitClauses(sentence).length > 2)) {
-    reasons.push("sentence_clause_overload");
+  if (sentences.length < 1) hardReasons.push("too_short");
+  if (sentences.length > 2) softReasons.push("too_long");
+  const clauseCounts = sentences.map((sentence) => splitClauses(sentence).length);
+  if (clauseCounts.some((count) => count > 3)) {
+    softReasons.push("sentence_clause_overload");
   }
-  if (GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain)) || REUSABLE_CATEGORY_PATTERN.test(plain)) {
-    reasons.push("generic_language");
+  const namedAnchor = hasNamedAnchor(plain);
+  const systemAnchor = SYSTEM_ANCHOR_PATTERN.test(plain);
+  const quantAnchor = QUANT_ANCHOR_PATTERN.test(plain);
+  const vagueActor = VAGUE_ACTOR_PATTERN.test(plain);
+  const hasActorOrSystemAnchor = systemAnchor || quantAnchor || (namedAnchor && !vagueActor);
+  const genericSignal = GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain)) || REUSABLE_CATEGORY_PATTERN.test(plain);
+  if (SELF_REJECTING_WIM_PATTERN.test(plain)) hardReasons.push("self_rejecting_wim");
+  if (vagueActor && !namedAnchor && !systemAnchor) softReasons.push("vague_actor");
+  if (THEMATIC_COMMENTARY_PATTERN.test(plain) && !hasActorOrSystemAnchor) {
+    softReasons.push("thematic_commentary");
   }
-  if (SELF_REJECTING_WIM_PATTERN.test(plain)) reasons.push("self_rejecting_wim");
-  if (VAGUE_ACTOR_PATTERN.test(plain) && !hasNamedAnchor(plain)) reasons.push("vague_actor");
-  if (THEMATIC_COMMENTARY_PATTERN.test(plain) && !(hasNamedAnchor(plain) || SYSTEM_ANCHOR_PATTERN.test(plain))) {
-    reasons.push("thematic_commentary");
-  }
-  if (!REQUIRED_LEVER_PATTERN.test(plain)) reasons.push("missing_lever");
-  if (!(hasNamedAnchor(plain) || SYSTEM_ANCHOR_PATTERN.test(plain) || QUANT_ANCHOR_PATTERN.test(plain))) {
-    reasons.push("missing_operational_anchor");
+  if (!REQUIRED_LEVER_PATTERN.test(plain)) softReasons.push("missing_lever");
+  if (!hasActorOrSystemAnchor) {
+    hardReasons.push("missing_operational_anchor");
   }
   const mechanismReferenced = mechanism
     ? overlapRatio(plain, mechanism) >= 0.15
     : MECHANISM_CONNECTOR_PATTERN.test(plain);
-  if (!mechanismReferenced) reasons.push("missing_mechanism");
-  if (!INTERPRETATION_CUE_PATTERN.test(plain)) reasons.push("descriptive_only");
-  if (overlapRatio(plain, contextText) >= 0.78) reasons.push("descriptive_only");
+  if (!mechanismReferenced) softReasons.push("missing_mechanism");
+  const descriptiveOnly = !INTERPRETATION_CUE_PATTERN.test(plain) || overlapRatio(plain, contextText) >= 0.78;
+  if (descriptiveOnly) softReasons.push("descriptive_only");
+
+  const hasConcreteImplication = implicationType != null || REQUIRED_LEVER_PATTERN.test(plain);
+  const hasConcreteMechanism = mechanismReferenced || MECHANISM_CONNECTOR_PATTERN.test(plain);
+  if (genericSignal && !hasConcreteMechanism && !hasConcreteImplication) {
+    hardReasons.push("generic_language");
+  } else if (genericSignal) {
+    softReasons.push("generic_language");
+  }
+
+  const hasShippableImplication = implicationType != null
+    && (implicationType !== "other" || REQUIRED_LEVER_PATTERN.test(plain));
+  const readableEnough = sentences.length >= 1
+    && sentences.length <= 2
+    && clauseCounts.every((count) => count <= 3)
+    && wordCount(plain) <= 42;
+  const minimumViableAccept = hardReasons.length === 0
+    && hasShippableImplication
+    && hasActorOrSystemAnchor
+    && !hardReasons.includes("generic_language")
+    && readableEnough;
+
+  const softUnique = Array.from(new Set(softReasons.filter((reason) => !hardReasons.includes(reason))));
+  const hardUnique = Array.from(new Set(hardReasons));
+  const acceptedViaStrongTierOverride = candidateTier === "strong"
+    && hardUnique.length === 0
+    && softUnique.length > 0
+    && minimumViableAccept !== true;
+  const acceptedWithoutRepair = minimumViableAccept === true;
+  const validationTier = hardUnique.length > 0
+    ? "hard_fail"
+    : softUnique.length > 0
+      ? "soft_fail"
+      : "pass";
+  const ok = validationTier === "pass"
+    || acceptedWithoutRepair
+    || acceptedViaStrongTierOverride;
 
   return {
-    ok: reasons.length === 0,
-    reasons,
+    ok,
+    reasons: [...hardUnique, ...softUnique],
     derivedBrief: wimBrief,
+    validation_tier: validationTier,
+    hard_failure_reasons: hardUnique,
+    soft_failure_reasons: softUnique,
+    minimum_viable_accept: minimumViableAccept,
+    accepted_without_repair: acceptedWithoutRepair,
+    accepted_via_strong_tier_override: acceptedViaStrongTierOverride,
   };
 }
 
@@ -372,7 +434,15 @@ function normalizeEnrichedItems(items, enriched, opts = {}) {
     const candidate = enriched[index] || {};
     const baseScore = normalizeBaseScore(candidate.baseScore);
     const writeupCheck = opts.validateWriteups === false
-      ? { ok: true, reasons: [], derivedBrief: stringOrNull(candidate.wim_brief) || deriveWimBrief(candidate.wim) }
+      ? {
+          ok: true,
+          reasons: [],
+          derivedBrief: stringOrNull(candidate.wim_brief) || deriveWimBrief(candidate.wim),
+          validation_tier: "pass",
+          hard_failure_reasons: [],
+          soft_failure_reasons: [],
+          minimum_viable_accept: true,
+        }
       : validateStrategicWriteup(item, candidate);
     const rejected = writeupCheck.ok !== true;
     const normalized = {
@@ -391,6 +461,10 @@ function normalizeEnrichedItems(items, enriched, opts = {}) {
       writeup_attempt_count: attemptCount,
       writeup_rejection_reasons: writeupCheck.reasons.slice(),
       writeup_version: "v3",
+      validation_tier: writeupCheck.validation_tier || (writeupCheck.ok ? "pass" : "hard_fail"),
+      minimum_viable_accept: writeupCheck.minimum_viable_accept === true,
+      hard_failure_reasons: cloneReasonList(writeupCheck.hard_failure_reasons),
+      soft_failure_reasons: cloneReasonList(writeupCheck.soft_failure_reasons),
     };
     diagnostics.push({
       index,

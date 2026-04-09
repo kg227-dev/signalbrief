@@ -175,7 +175,15 @@ writeDigestAuditLog({
   },
   enrichmentDiagnostics: {
     item_outcomes: [
-      { url: "https://example.com/selected-1", enrichment_status: "success", repair_applied: false, failure_reason: null },
+      {
+        url: "https://example.com/selected-1",
+        enrichment_status: "success",
+        repair_applied: false,
+        failure_reason: null,
+        validation_tier: "pass",
+        minimum_viable_accept: false,
+        final_status: "model_pass",
+      },
     ],
     writeup_failure_details: [
       {
@@ -210,5 +218,6 @@ assert.strictEqual(
   "HIGH"
 );
 assert.strictEqual(auditDoc.enrichmentDiagnostics.writeup_failure_details[0].raw_preview, "{bad-json");
+assert.strictEqual(auditDoc.enrichmentDiagnostics.item_outcomes[0].validation_tier, "pass");
 
 console.log("writeDigestAuditLog persists selection and broker telemetry shape ✓");

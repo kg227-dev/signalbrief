@@ -137,6 +137,10 @@ function defaultStageRecord(stage) {
     failure_reason: null,
     parse_failure_type: null,
     validator_reasons: [],
+    validation_tier: null,
+    minimum_viable_accept: false,
+    hard_failure_reasons: [],
+    soft_failure_reasons: [],
     raw_responses: [],
     usage: { input_tokens: 0, output_tokens: 0 },
   };
@@ -175,6 +179,8 @@ function buildProviderFailureDetail(index, item, stageRecord, reason = null) {
 
 function mapRepairType(reasons = []) {
   const reasonSet = new Set(Array.isArray(reasons) ? reasons : []);
+  if (reasonSet.has("vague_actor") || reasonSet.has("missing_operational_anchor")) return "anchor_actor_system";
+  if (reasonSet.has("generic_language") || reasonSet.has("thematic_commentary")) return "sharpen_implication";
   if (reasonSet.has("sentence_clause_overload")) return "simplify_preserve_mechanism";
   if (reasonSet.has("too_long")) return "too_long";
   if (reasonSet.has("missing_mechanism")) return "missing_mechanism";
@@ -196,6 +202,21 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
     || stages.generation.parse_failure_type
     || stages.extraction.parse_failure_type
     || null;
+  const validationTier = stages.repair.validation_tier
+    || stages.generation.validation_tier
+    || null;
+  const minimumViableAccept = stages.repair.minimum_viable_accept === true
+    || stages.generation.minimum_viable_accept === true;
+  const hardFailureReasons = Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
+    ? stages.repair.hard_failure_reasons.slice()
+    : Array.isArray(stages.generation.hard_failure_reasons)
+      ? stages.generation.hard_failure_reasons.slice()
+      : [];
+  const softFailureReasons = Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
+    ? stages.repair.soft_failure_reasons.slice()
+    : Array.isArray(stages.generation.soft_failure_reasons)
+      ? stages.generation.soft_failure_reasons.slice()
+      : [];
   return {
     ...item,
     signal_shift: extractionOutput?.what_happened || null,
@@ -215,6 +236,10 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: parseFailureType,
     final_status: "failed_dropped",
+    validation_tier: validationTier,
+    minimum_viable_accept: minimumViableAccept,
+    hard_failure_reasons: hardFailureReasons,
+    soft_failure_reasons: softFailureReasons,
     first_pass_succeeded: false,
     writeup_status: "failed_dropped",
     writeup_attempt_count: Math.max(
@@ -254,6 +279,18 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: null,
     final_status: status,
+    validation_tier: stages.repair.validation_tier || stages.generation.validation_tier || "pass",
+    minimum_viable_accept: stages.repair.minimum_viable_accept === true || stages.generation.minimum_viable_accept === true,
+    hard_failure_reasons: Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
+      ? stages.repair.hard_failure_reasons.slice()
+      : Array.isArray(stages.generation.hard_failure_reasons)
+        ? stages.generation.hard_failure_reasons.slice()
+        : [],
+    soft_failure_reasons: Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
+      ? stages.repair.soft_failure_reasons.slice()
+      : Array.isArray(stages.generation.soft_failure_reasons)
+        ? stages.generation.soft_failure_reasons.slice()
+        : [],
     first_pass_succeeded: status === "model_pass",
     writeup_status: status,
     writeup_attempt_count: Math.max(
@@ -430,12 +467,37 @@ function createDigestDataEnrichRuntime(deps) {
       }
 
       const validation = validationFn(item, parsed.value);
-      if (!validation.ok) {
+      if (Object.prototype.hasOwnProperty.call(validation || {}, "validation_tier")) {
+        stageRecord.validation_tier = validation.validation_tier || null;
+        stageRecord.minimum_viable_accept = validation.minimum_viable_accept === true;
+        stageRecord.hard_failure_reasons = Array.isArray(validation.hard_failure_reasons) ? validation.hard_failure_reasons.slice() : [];
+        stageRecord.soft_failure_reasons = Array.isArray(validation.soft_failure_reasons) ? validation.soft_failure_reasons.slice() : [];
+      }
+      if (!validation.ok && validation.validation_tier !== "soft_fail") {
         stageRecord.failure_reason = "validator_failure";
         stageRecord.parse_failure_type = "validator_mismatch";
         stageRecord.validator_reasons = validation.reasons.slice();
         stageRecord.raw_responses[stageRecord.raw_responses.length - 1].validator_reasons = validation.reasons.slice();
-        continue;
+        return {
+          ok: false,
+          stageRecord,
+          degradation: null,
+          validation,
+        };
+      }
+      if (validation.validation_tier === "soft_fail") {
+        stageRecord.status = "soft_fail";
+        stageRecord.failure_reason = "validator_soft_failure";
+        stageRecord.parse_failure_type = null;
+        stageRecord.validator_reasons = validation.reasons.slice();
+        stageRecord.raw_responses[stageRecord.raw_responses.length - 1].validator_reasons = validation.reasons.slice();
+        stageRecord.output = validation.output || parsed.value;
+        return {
+          ok: true,
+          stageRecord,
+          degradation: null,
+          validation,
+        };
       }
 
       stageRecord.status = attempt === 1 && stageRecord.formatting_retry_used !== true ? "model_pass" : "retry_pass";
@@ -447,6 +509,7 @@ function createDigestDataEnrichRuntime(deps) {
         ok: true,
         stageRecord,
         degradation: null,
+        validation,
       };
     }
 
@@ -456,7 +519,7 @@ function createDigestDataEnrichRuntime(deps) {
       ok: false,
       stageRecord,
       degradation: stageRecord.failure_reason === "provider_parse_failure"
-        ? {
+      ? {
             provider: "anthropic",
             reason: "parse_failure",
             message: stageRecord.parse_failure_type,
@@ -464,6 +527,7 @@ function createDigestDataEnrichRuntime(deps) {
             raw_length: stageRecord.raw_responses[stageRecord.raw_responses.length - 1]?.raw_length || null,
           }
         : null,
+      validation: null,
     };
   }
 
@@ -521,6 +585,7 @@ function createDigestDataEnrichRuntime(deps) {
       mechanism: extractionOutput?.mechanism,
       what_happened: extractionOutput?.what_happened,
       implication_type: deriveImplicationType(extractionOutput, candidate?.wim),
+      candidate_tier: policy.candidateTier,
     });
     const generationResult = await executeJsonStage({
       item,
@@ -540,7 +605,12 @@ function createDigestDataEnrichRuntime(deps) {
       providerFailureDetails.push(buildProviderFailureDetail(index, item, stages.generation));
     }
 
-    if (generationResult.ok) {
+    const generationValidationResult = generationResult.validation && typeof generationResult.validation === "object"
+      ? generationResult.validation
+      : null;
+    const generationSoftFail = generationValidationResult?.validation_tier === "soft_fail";
+    const generationAcceptWithoutRepair = generationValidationResult?.minimum_viable_accept === true;
+    if (generationResult.ok && (!generationSoftFail || generationAcceptWithoutRepair)) {
       const initialPass = stages.extraction.attempt_count === 1
         && stages.extraction.formatting_retry_used !== true
         && stages.generation.attempt_count === 1
@@ -552,16 +622,20 @@ function createDigestDataEnrichRuntime(deps) {
           stages,
           extractionOutput,
           String(stages.generation.output?.wim || "").trim(),
-          initialPass ? "model_pass" : "retry_pass"
-        ),
-        usage,
-        degraded,
-        degradation,
-        providerFailureDetails,
+            initialPass ? "model_pass" : "retry_pass"
+          ),
+          usage,
+          degraded,
+          degradation,
+          providerFailureDetails,
       };
     }
 
-    const repairType = mapRepairType(stages.generation.validator_reasons);
+    const repairType = mapRepairType(
+      generationValidationResult?.soft_failure_reasons?.length
+        ? generationValidationResult.soft_failure_reasons
+        : stages.generation.validator_reasons
+    );
     stages.repair.attempted = repairType != null && policy.allowRepair === true;
     stages.repair.repair_type = repairType;
     if (stages.repair.attempted) {
@@ -591,7 +665,11 @@ function createDigestDataEnrichRuntime(deps) {
         degradation = degradation || repairResult.degradation;
         providerFailureDetails.push(buildProviderFailureDetail(index, item, stages.repair));
       }
-      if (repairResult.ok) {
+      const repairValidationResult = repairResult.validation && typeof repairResult.validation === "object"
+        ? repairResult.validation
+        : null;
+      const repairHardFail = repairValidationResult?.validation_tier === "hard_fail";
+      if (repairResult.ok && repairHardFail !== true) {
         return {
           item: buildPassedItem(
             item,
@@ -612,11 +690,18 @@ function createDigestDataEnrichRuntime(deps) {
     const failureStage = stages.repair.attempted ? stages.repair : stages.generation;
     const rejectionReasons = failureStage.failure_reason === "provider_parse_failure"
       ? ["provider_parse_failure"]
-      : Array.isArray(failureStage.validator_reasons) && failureStage.validator_reasons.length > 0
-        ? failureStage.validator_reasons
-        : [failureStage.failure_reason];
+      : Array.isArray(failureStage.hard_failure_reasons) && failureStage.hard_failure_reasons.length > 0
+        ? failureStage.hard_failure_reasons
+        : Array.isArray(failureStage.validator_reasons) && failureStage.validator_reasons.length > 0
+          ? failureStage.validator_reasons
+          : [failureStage.failure_reason];
+    const failureReason = failureStage.failure_reason === "validator_failure"
+      && Array.isArray(failureStage.hard_failure_reasons)
+      && failureStage.hard_failure_reasons.length > 0
+      ? failureStage.hard_failure_reasons[0]
+      : failureStage.failure_reason;
     return {
-      item: buildFailedItem(item, policy, stages, failureStage.failure_reason, rejectionReasons, extractionOutput),
+      item: buildFailedItem(item, policy, stages, Array.isArray(failureReason) ? failureReason[0] : failureReason, rejectionReasons, extractionOutput),
       usage,
       degraded,
       degradation,
@@ -636,12 +721,25 @@ function createDigestDataEnrichRuntime(deps) {
     const generationAttemptedCount = rows.filter((item) => Number(item?.writeup_stage_diagnostics?.generation?.attempt_count || 0) > 0).length;
     const generationSuccessCount = rows.filter((item) => {
       const status = String(item?.writeup_stage_diagnostics?.generation?.status || "").trim().toLowerCase();
-      return status === "model_pass" || status === "retry_pass";
+      return status === "model_pass"
+        || status === "retry_pass"
+        || (status === "soft_fail" && String(item?.writeup_status || "").trim().toLowerCase() !== "failed_dropped");
     }).length;
     const strongTierAttemptedCount = rows.filter((item) => item?.writeup_stage_diagnostics?.candidate_tier === "strong").length;
     const strongTierDropCount = rows.filter((item) =>
       item?.writeup_stage_diagnostics?.candidate_tier === "strong"
       && String(item?.writeup_status || "").trim().toLowerCase() === "failed_dropped"
+    ).length;
+    const hardFailCount = rows.filter((item) => String(item?.validation_tier || "").trim().toLowerCase() === "hard_fail").length;
+    const softFailCount = rows.filter((item) => String(item?.validation_tier || "").trim().toLowerCase() === "soft_fail").length;
+    const minimumViableAcceptCount = rows.filter((item) => item?.minimum_viable_accept === true).length;
+    const softFailRecoveryCount = rows.filter((item) =>
+      String(item?.validation_tier || "").trim().toLowerCase() === "soft_fail"
+      && String(item?.writeup_status || "").trim().toLowerCase() !== "failed_dropped"
+    ).length;
+    const strongTierHardFailCount = rows.filter((item) =>
+      item?.writeup_stage_diagnostics?.candidate_tier === "strong"
+      && String(item?.validation_tier || "").trim().toLowerCase() === "hard_fail"
     ).length;
     const parseFailureCounts = Object.create(null);
     for (const item of rows) {
@@ -665,6 +763,11 @@ function createDigestDataEnrichRuntime(deps) {
       repair_success_count: repairSuccessCount,
       repair_pass_success_rate_pct: repairAttemptedCount > 0 ? Number(((repairSuccessCount / repairAttemptedCount) * 100).toFixed(2)) : 0,
       drop_count: dropCount,
+      hard_fail_count: hardFailCount,
+      soft_fail_count: softFailCount,
+      soft_fail_recovery_count: softFailRecoveryCount,
+      soft_fail_recovery_rate_pct: softFailCount > 0 ? Number(((softFailRecoveryCount / softFailCount) * 100).toFixed(2)) : 0,
+      minimum_viable_accept_count: minimumViableAcceptCount,
       underfill_due_writeup_count: dropCount,
       repeated_phrase_rejection_count: Math.max(0, Number(repeatedPhraseRejectCount || 0)),
       model_generated_count: modelGeneratedCount,
@@ -673,6 +776,8 @@ function createDigestDataEnrichRuntime(deps) {
       strong_tier_attempted_count: strongTierAttemptedCount,
       strong_tier_drop_count: strongTierDropCount,
       strong_tier_drop_rate_pct: strongTierAttemptedCount > 0 ? Number(((strongTierDropCount / strongTierAttemptedCount) * 100).toFixed(2)) : 0,
+      strong_tier_hard_fail_count: strongTierHardFailCount,
+      strong_tier_hard_fail_rate_pct: strongTierAttemptedCount > 0 ? Number(((strongTierHardFailCount / strongTierAttemptedCount) * 100).toFixed(2)) : 0,
       parse_failure_counts: parseFailureCounts,
       provider_failure_details: Array.isArray(providerFailureDetails) ? providerFailureDetails : [],
     };

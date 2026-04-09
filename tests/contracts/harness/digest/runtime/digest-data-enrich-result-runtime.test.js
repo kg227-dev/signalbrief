@@ -76,6 +76,7 @@ function testWriteupValidation() {
     }
   );
   assert.strictEqual(pass.ok, true);
+  assert.strictEqual(pass.validation_tier, "pass");
 
   const rejection = validateStrategicWriteup(
     {
@@ -90,21 +91,47 @@ function testWriteupValidation() {
     }
   );
   assert.strictEqual(rejection.ok, false);
-  assert.ok(rejection.reasons.includes("descriptive_only"));
-  assert.ok(rejection.reasons.includes("missing_mechanism"));
-  assert.ok(rejection.reasons.includes("missing_lever"));
+  assert.strictEqual(rejection.validation_tier, "hard_fail");
+  assert.ok(rejection.hard_failure_reasons.includes("missing_operational_anchor"));
+  assert.ok(rejection.soft_failure_reasons.includes("descriptive_only"));
 
   const overloaded = validateStrategicWriteup(
     { headline: "Supply chain update", summary: "Supply chain update" },
     {
       signal_shift: "Supply chain changed",
-      implication_type: "operations",
+      implication_type: "workflow",
       mechanism: "because suppliers, carriers, and buyers all changed at once",
       wim: "The supply chain changed because suppliers, carriers, and buyers all changed at once, forcing teams to revisit operations and pricing, and to manage margin pressure.",
     }
   );
-  assert.ok(overloaded.reasons.includes("sentence_clause_overload"));
-  assert.ok(overloaded.reasons.includes("invalid_implication_type") || overloaded.reasons.includes("missing_mechanism"));
+  assert.strictEqual(overloaded.ok, false);
+  assert.strictEqual(overloaded.validation_tier, "soft_fail");
+  assert.strictEqual(overloaded.minimum_viable_accept, false);
+  assert.ok(overloaded.soft_failure_reasons.includes("sentence_clause_overload"));
+
+  const genericTemplate = validateStrategicWriteup(
+    { headline: "Generic market update", summary: "Generic market update" },
+    {
+      signal_shift: "Conditions changed",
+      implication_type: "other",
+      mechanism: "",
+      wim: "This highlights a shift stakeholders should monitor closely because conditions changed.",
+    }
+  );
+  assert.strictEqual(genericTemplate.validation_tier, "hard_fail");
+  assert.ok(genericTemplate.reasons.includes("generic_language"));
+
+  const highLevelButConcrete = validateStrategicWriteup(
+    { headline: "UK government pay shift", summary: "New digital pay bands affect hiring." },
+    {
+      signal_shift: "Digital roles now pay more than prior bands",
+      implication_type: "workflow",
+      mechanism: "higher pay bands shift hiring leverage",
+      wim: "Higher UK government tech pay resets hiring leverage for public-sector digital teams and pressures competing employers on compensation.",
+    }
+  );
+  assert.strictEqual(highLevelButConcrete.validation_tier, "soft_fail");
+  assert.strictEqual(highLevelButConcrete.minimum_viable_accept, true);
 
   assert.strictEqual(deriveWimBrief("First sentence matters. Second sentence here."), "First sentence matters.");
 }

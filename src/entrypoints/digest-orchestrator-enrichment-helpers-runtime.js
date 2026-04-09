@@ -71,7 +71,12 @@ function ensureTopicWriteupStats(tag, topicWriteupStats = {}) {
       final_selected_count: 0,
       strong_tier_attempted_count: 0,
       strong_tier_drop_count: 0,
+      strong_tier_hard_fail_count: 0,
       strong_tier_final_selected_count: 0,
+      hard_fail_count: 0,
+      soft_fail_count: 0,
+      soft_fail_recovery_count: 0,
+      minimum_viable_accept_count: 0,
       parse_failure_counts: Object.create(null),
       underfill_due_writeup_count: 0,
     };
@@ -96,6 +101,7 @@ function accumulateWriteupStatsFromTaggedItems(target, taggedItems = []) {
     const firstPassSucceeded = item?.first_pass_succeeded === true;
     const candidateTier = String(stageDiagnostics?.candidate_tier || "").trim().toLowerCase();
     const parseFailureType = String(item?.parse_failure_type || "").trim();
+    const validationTier = String(item?.validation_tier || "").trim().toLowerCase();
     const topicStats = ensureTopicWriteupStats(tag, target.topicWriteupStats || (target.topicWriteupStats = Object.create(null)));
 
     target.attempted_count += 1;
@@ -112,7 +118,11 @@ function accumulateWriteupStatsFromTaggedItems(target, taggedItems = []) {
     if (generationStatus) {
       target.generation_attempted_count += 1;
       topicStats.generation_attempted_count += 1;
-      if (generationStatus === "model_pass" || generationStatus === "retry_pass") {
+      if (
+        generationStatus === "model_pass"
+        || generationStatus === "retry_pass"
+        || (generationStatus === "soft_fail" && status !== "failed_dropped")
+      ) {
         target.generation_success_count += 1;
         topicStats.generation_success_count += 1;
       } else {
@@ -123,6 +133,26 @@ function accumulateWriteupStatsFromTaggedItems(target, taggedItems = []) {
     if (candidateTier === "strong") {
       target.strong_tier_attempted_count += 1;
       topicStats.strong_tier_attempted_count += 1;
+    }
+    if (validationTier === "hard_fail") {
+      target.hard_fail_count += 1;
+      topicStats.hard_fail_count += 1;
+      if (candidateTier === "strong") {
+        target.strong_tier_hard_fail_count += 1;
+        topicStats.strong_tier_hard_fail_count += 1;
+      }
+    }
+    if (validationTier === "soft_fail") {
+      target.soft_fail_count += 1;
+      topicStats.soft_fail_count += 1;
+      if (status !== "failed_dropped") {
+        target.soft_fail_recovery_count += 1;
+        topicStats.soft_fail_recovery_count += 1;
+      }
+    }
+    if (item?.minimum_viable_accept === true) {
+      target.minimum_viable_accept_count += 1;
+      topicStats.minimum_viable_accept_count += 1;
     }
 
     if (firstPassSucceeded) {
@@ -176,7 +206,12 @@ function normalizeAggregateWriteupStats(stats = {}, itemsPerTopic = 5) {
   const finalSelectedCount = Math.max(0, Number(stats.final_selected_count || 0));
   const strongTierAttemptedCount = Math.max(0, Number(stats.strong_tier_attempted_count || 0));
   const strongTierDropCount = Math.max(0, Number(stats.strong_tier_drop_count || 0));
+  const strongTierHardFailCount = Math.max(0, Number(stats.strong_tier_hard_fail_count || 0));
   const strongTierFinalSelectedCount = Math.max(0, Number(stats.strong_tier_final_selected_count || 0));
+  const hardFailCount = Math.max(0, Number(stats.hard_fail_count || 0));
+  const softFailCount = Math.max(0, Number(stats.soft_fail_count || 0));
+  const softFailRecoveryCount = Math.max(0, Number(stats.soft_fail_recovery_count || 0));
+  const minimumViableAcceptCount = Math.max(0, Number(stats.minimum_viable_accept_count || 0));
   const underfillDueWriteupCount = Math.max(0, Number(stats.underfill_due_writeup_count || 0));
   return {
     attempted_count: attemptedCount,
@@ -197,6 +232,13 @@ function normalizeAggregateWriteupStats(stats = {}, itemsPerTopic = 5) {
       ? Number((((Number(stats.repair_success_count || 0)) / repairAttemptedCount) * 100).toFixed(2))
       : 0,
     drop_count: dropCount,
+    hard_fail_count: hardFailCount,
+    soft_fail_count: softFailCount,
+    soft_fail_recovery_count: softFailRecoveryCount,
+    soft_fail_recovery_rate_pct: softFailCount > 0
+      ? Number(((softFailRecoveryCount / softFailCount) * 100).toFixed(2))
+      : 0,
+    minimum_viable_accept_count: minimumViableAcceptCount,
     underfill_due_writeup_count: underfillDueWriteupCount,
     repeated_phrase_rejection_count: Math.max(0, Number(stats.repeated_phrase_rejection_count || 0)),
     model_generated_count: modelGeneratedCount,
@@ -210,6 +252,10 @@ function normalizeAggregateWriteupStats(stats = {}, itemsPerTopic = 5) {
     strong_tier_drop_count: strongTierDropCount,
     strong_tier_drop_rate_pct: strongTierAttemptedCount > 0
       ? Number(((strongTierDropCount / strongTierAttemptedCount) * 100).toFixed(2))
+      : 0,
+    strong_tier_hard_fail_count: strongTierHardFailCount,
+    strong_tier_hard_fail_rate_pct: strongTierAttemptedCount > 0
+      ? Number(((strongTierHardFailCount / strongTierAttemptedCount) * 100).toFixed(2))
       : 0,
     strong_tier_final_selected_count: strongTierFinalSelectedCount,
     parse_failure_counts: cloneCountMap(stats.parse_failure_counts),
@@ -403,6 +449,13 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
           writeup_attempt_count: Number(finalSelected.writeup_attempt_count || 0) || null,
           writeup_rejection_reasons: Array.isArray(finalSelected.writeup_rejection_reasons) ? finalSelected.writeup_rejection_reasons.slice() : [],
           writeup_version: finalSelected.writeup_version || null,
+          validation_tier: finalSelected.validation_tier || null,
+          minimum_viable_accept: finalSelected.minimum_viable_accept === true,
+          hard_failure_reasons: Array.isArray(finalSelected.hard_failure_reasons) ? finalSelected.hard_failure_reasons.slice() : [],
+          soft_failure_reasons: Array.isArray(finalSelected.soft_failure_reasons) ? finalSelected.soft_failure_reasons.slice() : [],
+          failure_reason: finalSelected.failure_reason || null,
+          final_status: finalSelected.final_status || null,
+          repair_applied: finalSelected?.writeup_stage_diagnostics?.repair?.attempted === true,
           strict_quality: finalSelected.strict_quality ? { ...finalSelected.strict_quality } : null,
           quality_rule_results: Array.isArray(finalSelected.quality_rule_results) ? finalSelected.quality_rule_results.map((result) => ({ ...result })) : [],
           rejected_rule: finalSelected.rejected_rule || null,
@@ -430,6 +483,13 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
         writeup_attempt_count: Number(failed?.writeup_attempt_count || 0) || null,
         writeup_rejection_reasons: failedReasons,
         writeup_version: failed?.writeup_version || null,
+        validation_tier: failed?.validation_tier || null,
+        minimum_viable_accept: failed?.minimum_viable_accept === true,
+        hard_failure_reasons: Array.isArray(failed?.hard_failure_reasons) ? failed.hard_failure_reasons.slice() : [],
+        soft_failure_reasons: Array.isArray(failed?.soft_failure_reasons) ? failed.soft_failure_reasons.slice() : [],
+        failure_reason: failed?.failure_reason || null,
+        final_status: failed?.final_status || null,
+        repair_applied: failed?.writeup_stage_diagnostics?.repair?.attempted === true,
         strict_quality: failed?.strict_quality ? { ...failed.strict_quality } : null,
         quality_rule_results: Array.isArray(failed?.quality_rule_results) ? failed.quality_rule_results.map((result) => ({ ...result })) : [],
         rejected_rule: failed?.rejected_rule || null,

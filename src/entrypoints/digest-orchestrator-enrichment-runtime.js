@@ -569,18 +569,19 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       const attemptCount = Number(item?.writeup_attempt_count || 0);
       const reasons = Array.isArray(item?.writeup_rejection_reasons) ? item.writeup_rejection_reasons : [];
       const isFailed = status === "failed_dropped";
-      const isRepaired = !isFailed && attemptCount > 1;
+      const repairApplied = item?.writeup_stage_diagnostics?.repair?.attempted === true;
+      const isRepaired = !isFailed && repairApplied;
       let failureReason = null;
       if (isFailed) {
         if (reasons.includes("timeout")) failureReason = "timeout";
         else if (reasons.includes("parse_failure") || reasons.includes("provider_parse_failure")) failureReason = "parse_failure";
-        else failureReason = "model_error";
+        else failureReason = item?.failure_reason || "model_error";
       }
       return {
         url: String(item?.url || ""),
         candidate_tier: String(item?.writeup_stage_diagnostics?.candidate_tier || "").trim() || null,
         enrichment_status: isFailed ? "failed" : isRepaired ? "repaired" : "success",
-        repair_applied: isRepaired,
+        repair_applied: repairApplied,
         failure_reason: failureReason,
         extraction_output: item?.extraction_output || item?.wim_extraction || null,
         wim_output: item?.wim_output || item?.wim || null,
@@ -588,6 +589,8 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
         parse_failure_type: item?.parse_failure_type || null,
         final_status: item?.final_status || null,
         first_pass_succeeded: item?.first_pass_succeeded === true,
+        validation_tier: item?.validation_tier || null,
+        minimum_viable_accept: item?.minimum_viable_accept === true,
       };
     });
 

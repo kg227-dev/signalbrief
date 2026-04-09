@@ -36,7 +36,7 @@ The March 28 plan is directionally useful, but several of its assumptions are no
 - Several barrel/facade docs already landed: `src/domains/digest/index.js`, `src/domains/engagement/index.js`, `src/platform/config/index.js`, `src/platform/mailer/index.js`, `src/platform/store/index.js`, `src/runtime/store.js`, and `web/server.js`.
 - `web/routes/admin/admin-api-users-actions-runtime.js` is already a thin facade (27 LOC), with user work split into query/lifecycle/digest action modules.
 - Source-registry work is already partly separated into `web/services/admin-source-registry-runtime.js`, `admin-source-registry-summary-runtime.js`, and `admin-source-registry-metrics-runtime.js`.
-- `src/digest/runtime/digest-data-enrich-runtime.js` has already been partially split into prompt/result helpers.
+- `src/digest/runtime/digest-data-enrich-runtime.js` has already been split into prompt/result/policy helpers.
 - `web/server-runtime.js` has already been split via `web/server-runtime-web-bootstrap-runtime.js`.
 - `web/routes/admin/admin-api-funnel-runtime.js` has already been split via `web/routes/admin/admin-api-funnel-data-runtime.js`.
 - `web/services/{admin,shared,user}` now have live grouped entrypoints and the README matches reality.
@@ -190,8 +190,7 @@ Priority order:
 2. `src/eval/retrieval/runner-runtime.js` (1,873 LOC, eval-only)
 3. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
 4. `src/digest/domain/strict-quality-domain-runtime.js` (732 LOC)
-5. `src/digest/runtime/digest-data-enrich-runtime.js` (745 LOC)
-6. narrow import/facade cleanup
+5. narrow import/facade cleanup
 
 Rationale:
 
@@ -200,7 +199,8 @@ Rationale:
 - `digest-orchestrator-core-runtime.js` is still above the large-file threshold and still has enough orchestration logic left to justify one more pass.
 - `digest-orchestrator-fetch-runtime.js` is now below 800 LOC after the policy extraction, so it has moved out of the main over-800 queue.
 - `standard-topic-broker-runtime.js` is now below 800 LOC after the topic-fit extraction, so it has moved out of the main over-800 queue too.
-- `strict-quality-domain-runtime.js` and `digest-data-enrich-runtime.js` are smaller, but they currently duplicate logic that should move into shared utilities first.
+- `strict-quality-domain-runtime.js` is smaller, but it still duplicates logic that should move into shared utilities first.
+- `digest-data-enrich-runtime.js` is now below 500 LOC after the policy split, so it has moved out of the main over-800 queue entirely.
 - `src/eval/retrieval/runner-runtime.js` is still large, but it is eval-only and should not block production cleanup.
 
 ## Success Criteria

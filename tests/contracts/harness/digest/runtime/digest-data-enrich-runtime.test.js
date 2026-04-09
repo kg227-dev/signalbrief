@@ -9,10 +9,15 @@ const {
 
 const TARGET_REL = "src/digest/runtime/digest-data-enrich-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
+const POLICY_TARGET_REL = "src/digest/runtime/digest-data-enrich-policy-runtime.js";
+const POLICY_TARGET_PATH = path.join(process.cwd(), POLICY_TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
+assertNodeSyntaxFile(POLICY_TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const { createDigestDataEnrichRuntime } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
+const policyRuntime = require(POLICY_TARGET_PATH);
+assertModuleExports(() => policyRuntime, POLICY_TARGET_REL);
 
 function createDeps(httpsPostWithRetry) {
   return {

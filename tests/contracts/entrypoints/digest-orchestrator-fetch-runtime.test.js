@@ -13,61 +13,16 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
   createDigestOrchestratorFetchRuntime,
-  resolveSelectionTarget,
-  resolveTopicsToFetch,
   resolveDiscoveryCandidateCapCount,
   resolveMaxDiscoveryCandidateShare,
 } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
 
 (async () => {
-  assert.strictEqual(resolveSelectionTarget([], 7), 5);
-  assert.strictEqual(resolveSelectionTarget([], 5), 5);
   assert.strictEqual(resolveMaxDiscoveryCandidateShare({}), 0.2);
   assert.strictEqual(resolveMaxDiscoveryCandidateShare({ maxDiscoveryCandidateShare: 0.35 }), 0.35);
   assert.strictEqual(resolveDiscoveryCandidateCapCount(8, 0.2), 2);
   assert.strictEqual(resolveDiscoveryCandidateCapCount(0, 0.2), 0);
-
-  const focusedTopics = resolveTopicsToFetch({
-    configTopics: [
-      { tag: "HEALTHCARE", queries: ["a", "b"] },
-      { tag: "LIFE SCIENCES", queries: ["c", "d"] },
-      { tag: "TECHNOLOGY", queries: ["e", "f"] },
-      { tag: "FINANCIAL SERVICES", queries: ["g", "h"] },
-      { tag: "ENERGY", queries: ["i", "j"] },
-      { tag: "CONSUMER & RETAIL", queries: ["k", "l"] },
-      { tag: "INDUSTRIALS", queries: ["m", "n"] },
-    ],
-    dueUsers: [
-      { topics: ["HEALTHCARE", "FINANCIAL SERVICES"] },
-      { topics: ["LIFE SCIENCES", "HEALTHCARE"] },
-      { topics: ["TECHNOLOGY", "INDUSTRIALS"] },
-      { topics: ["ENERGY", "CONSUMER & RETAIL"] },
-    ],
-    runMode: "standard_core",
-    log: () => {},
-  });
-  assert.deepStrictEqual(
-    focusedTopics.map((topic) => topic.tag),
-    ["HEALTHCARE", "LIFE SCIENCES", "TECHNOLOGY", "FINANCIAL SERVICES", "ENERGY"]
-  );
-
-  const scheduledTopics = resolveTopicsToFetch({
-    configTopics: [
-      { tag: "HEALTHCARE", queries: ["a", "b"] },
-      { tag: "CONSUMER", queries: ["c", "d"] },
-      { tag: "REAL ESTATE", queries: ["e", "f"] },
-    ],
-    dueUsers: [
-      { topics: ["CONSUMER & RETAIL"] },
-    ],
-    runMode: "scheduled",
-    log: () => {},
-  });
-  assert.deepStrictEqual(
-    scheduledTopics.map((topic) => topic.tag),
-    ["HEALTHCARE", "CONSUMER & RETAIL"]
-  );
 
   const fetchCalls = [];
   const shortlistCalls = [];

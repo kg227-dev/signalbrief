@@ -13,7 +13,7 @@
 | Source files (`src/` + `web/`) | 303 |
 | Total LOC (`src/` + `web/`) | 56,064 |
 | Average source file size | 185 LOC |
-| Largest file | 2,118 LOC (`src/digest/domain/storyline-domain-runtime.js`) |
+| Largest file | 2,061 LOC (`src/digest/domain/storyline-domain-runtime.js`) |
 | Files >800 LOC | 4 |
 | Files >600 LOC | 16 |
 | Small JS shims/facades <=15 LOC | 12 |
@@ -67,7 +67,7 @@ This is still the highest-leverage source/runtime work, but the shape changed af
 
 | File | LOC | Why it matters | First split seams |
 |---|---:|---|---|
-| `src/digest/domain/storyline-domain-runtime.js` | 2,118 | Largest pure domain module; still mixes storyline shaping, candidate comparison, and downstream render decisions | narrative assembly, topic/candidate grouping, render evaluation helpers |
+| `src/digest/domain/storyline-domain-runtime.js` | 2,061 | Largest pure domain module; still mixes storyline shaping, candidate comparison, and downstream render decisions | narrative assembly, topic/candidate grouping, render evaluation helpers |
 | `src/eval/retrieval/runner-runtime.js` | 1,873 | Large eval-only harness; still bundles retrieval generation, judging, reporting, and artifact wiring | result assembly, judge/report helpers, candidate generation wiring |
 | `src/runtime/standard-topic-broker-topic-fit-runtime.js` | 203 | Pure canonical-topic scoring now lives outside the broker runtime and is shared by broker + selection | canonical-topic normalization, scoring heuristics, topic-fit tests |
 | `src/entrypoints/digest-orchestrator-core-runtime.js` | 981 | Still above the large-file threshold after the first round of extractions | cache/bootstrap wiring, audit/incident helpers, run assembly helpers |
@@ -186,7 +186,7 @@ Pass 2 starts after the shared utility layer from pass 1 exists.
 
 Priority order:
 
-1. `src/digest/domain/storyline-domain-runtime.js` (2,118 LOC)
+1. `src/digest/domain/storyline-domain-runtime.js` (2,061 LOC)
 2. `src/eval/retrieval/runner-runtime.js` (1,873 LOC, eval-only)
 3. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
 4. `src/digest/domain/strict-quality-domain-runtime.js` (732 LOC)
@@ -194,7 +194,7 @@ Priority order:
 
 Rationale:
 
-- `storyline-domain-runtime.js` remains the biggest underlying domain/runtime module, and the broker scoring logic now has its own shared helper surface.
+- `storyline-domain-runtime.js` remains the biggest underlying domain/runtime module, and the broker scoring logic plus shared helper utilities now have their own surfaces.
 - `runner-runtime.js` is eval-only but remains large enough to justify cleanup once the higher-fan-in runtime modules settle.
 - `digest-orchestrator-core-runtime.js` is still above the large-file threshold and still has enough orchestration logic left to justify one more pass.
 - `digest-orchestrator-fetch-runtime.js` is now below 800 LOC after the policy extraction, so it has moved out of the main over-800 queue.

@@ -8,5 +8,5 @@ This path remains as a compatibility summary for tooling that still checks `docs
 
 ## Current MVP Validation Note
 
-- Day 12 audit (2026-04-08): [`./archive/planning/2026-03/mvp-day-12-2026-04-08.md`](./archive/planning/2026-03/mvp-day-12-2026-04-08.md)
-- Current conclusion: mechanically healthy, not exit-green. Day 12 delivered 35/35 with 568 candidates and 58/58 broker source fetches, but trusted share fell to 22/35 (62.9%) and writeup drops rose to 18, led by `provider_parse_failure`.
+- Day 13 audit (2026-04-09): [`./archive/planning/2026-03/mvp-day-13-2026-04-09.md`](./archive/planning/2026-03/mvp-day-13-2026-04-09.md)
+- Current conclusion: mechanically healthy, not exit-green. Day 13 delivered 35/35 with 610 candidates and 698/698 broker fetch items passing, trusted share improved to 25/35 (71.4%), but the writeup layer dropped 143 items under `validator_mismatch` and still forced weak Consumer & Retail and Industrials selections.

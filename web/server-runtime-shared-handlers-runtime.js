@@ -1,6 +1,6 @@
 "use strict";
 
-const { createWebUserHandlers } = require("./services/web-user-handlers");
+const { createWebUserHandlers } = require("./services/user");
 
 function createSharedRouteHandlers(deps) {
   const {

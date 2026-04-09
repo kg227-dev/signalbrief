@@ -5,7 +5,7 @@ const {
   resolveAllowedArchiveDatesForUser,
   resolveDeliveredDigestItems,
   sortArchiveDatesDescending,
-} = require("../../services/archive-digest-stats-runtime");
+} = require("../../services/shared");
 const { sortDigestItemsByScoreDescending } = require("../../../src/digest/runtime/digest-item-ordering-runtime");
 
 function mapArchiveItem(item, userTopics, archiveRelevanceScore) {

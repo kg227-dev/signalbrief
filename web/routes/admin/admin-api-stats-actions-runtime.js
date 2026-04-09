@@ -1,33 +1,25 @@
 const { isDebugWebServerEnabled } = require("../../server-runtime-env-runtime");
 const {
-  buildReferrals,
+  buildAdminRoster,
+  buildDeliveryOperationsSnapshot,
+  buildDeliveryReliabilitySnapshot,
+  buildDeliveryWarnings,
+  buildDigestInsights,
   buildEngagementMetrics,
-} = require("../../services/admin-stats-referrals");
-const {
   buildMonthRunSummary,
   buildPerUserCostRollup,
-  buildTrailingWindowCostSummary,
   buildProjectedWindowCostSummary,
-} = require("../../services/admin-stats-costs");
-const {
+  buildReferrals,
+  buildTrailingWindowCostSummary,
   enrichRunsWithDigestMetadata,
   expandRunsByRecipient,
-} = require("../../services/admin-stats-runs");
-const {
-  buildAdminRoster,
-  buildDeliveryWarnings,
-} = require("../../services/admin-stats-roster");
-const {
-  buildDeliveryReliabilitySnapshot,
-  buildDeliveryOperationsSnapshot,
-} = require("../../services/admin-stats-delivery");
-const { summarizeRosterQuality } = require("../../services/admin-stats-quality");
+  summarizeRosterQuality,
+} = require("../../services/admin");
 const {
   mapAdminMessages,
   buildSummaryPayload,
   buildHealthPayload,
 } = require("./admin-api-stats-payload-runtime");
-const { buildDigestInsights } = require("../../services/admin-digest-insights-runtime");
 
 function resolveSchedulerHeartbeatLoader({
   getCachedOrRefreshSchedulerHeartbeat,

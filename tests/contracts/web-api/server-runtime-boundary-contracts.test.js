@@ -12,12 +12,8 @@ function readSource(relPath) {
 
 const serverRuntimeSource = readSource("web/server-runtime.js");
 assert.ok(
-  serverRuntimeSource.includes('require("./server-runtime-deps-runtime")'),
-  "server-runtime.js should compose route handlers via server-runtime-deps-runtime"
-);
-assert.ok(
-  serverRuntimeSource.includes('require("./server-runtime-route-bootstrap-runtime")'),
-  "server-runtime.js should compose route dispatch via server-runtime-route-bootstrap-runtime"
+  serverRuntimeSource.includes('require("./server-runtime-web-bootstrap-runtime")'),
+  "server-runtime.js should compose route wiring via server-runtime-web-bootstrap-runtime"
 );
 assert.ok(
   serverRuntimeSource.includes('require("./server-runtime-auth-session-policy-runtime")'),
@@ -56,14 +52,22 @@ assert.ok(
   "server-runtime-deps-runtime.js should compose route handler deps through bounded registries"
 );
 assert.ok(
-  !depsSource.includes('require("./services/web-user-handlers")'),
+  !depsSource.includes('require("./services/web-user-handlers")')
+    && !depsSource.includes('require("./services/user")'),
   "server-runtime-deps-runtime.js should not directly wire user handler internals"
+);
+
+const webBootstrapSource = readSource("web/server-runtime-web-bootstrap-runtime.js");
+assert.ok(
+  webBootstrapSource.includes('require("./server-runtime-deps-runtime")')
+    && webBootstrapSource.includes('require("./server-runtime-route-bootstrap-runtime")'),
+  "server-runtime-web-bootstrap-runtime.js should compose route dependencies and route dispatch boundaries"
 );
 
 const sharedRegistrySource = readSource("web/server-runtime-shared-handlers-runtime.js");
 assert.ok(
-  sharedRegistrySource.includes('require("./services/web-user-handlers")'),
-  "shared handler registry should be the only module wiring web-user-handlers"
+  sharedRegistrySource.includes('require("./services/user")'),
+  "shared handler registry should be the only module wiring grouped user service handlers"
 );
 
 const coreRegistrySource = readSource("web/server-runtime-core-registry-runtime.js");

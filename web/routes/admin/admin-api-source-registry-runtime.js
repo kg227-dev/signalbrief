@@ -3,7 +3,7 @@
 const {
   buildSourceRegistryOverview,
   buildSourceRegistryDomainDetail,
-} = require("../../services/admin-source-registry-runtime");
+} = require("../../services/admin");
 const {
   normalizeSourcePolicyDomain,
   normalizeSourceIdentityKey,

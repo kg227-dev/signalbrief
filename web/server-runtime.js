@@ -46,21 +46,27 @@ const {
 const {
   createAdminAuthSessionPolicy,
 } = require("./server-runtime-auth-session-policy-runtime");
-const { createAdminOpsService } = require("./services/admin-ops");
-const { createRecentDigestsExporter } = require("./services/admin-recent-digests-export-runtime");
-const { createRuntimeStateInspector } = require("./services/runtime-state-runtime");
-const { createSchedulerWorkerRestartRequester } = require("./server-runtime-scheduler-control-runtime");
-const { getClientIp, getRequestHost, getRequestScheme } = require("./services/request-metadata");
-const { createSignupRateLimiter, createMagicLinkRateLimiter, createSettingsRateLimiter } = require("./services/web-rate-limit");
-const { archiveRelevanceScore } = require("./services/archive-scoring");
-const { createArchiveDigestStatsRuntime } = require("./services/archive-digest-stats-runtime");
 const {
+  createAdminOpsService,
+  createRecentDigestsExporter,
+} = require("./services/admin");
+const { createSchedulerWorkerRestartRequester } = require("./server-runtime-scheduler-control-runtime");
+const {
+  createArchiveDigestStatsRuntime,
+  createMagicLinkRateLimiter,
+  createRuntimeStateInspector,
+  createSettingsRateLimiter,
+  createSignupRateLimiter,
+  archiveRelevanceScore,
+  getClientIp,
+  getRequestHost,
+  getRequestScheme,
   parseEtNowParts,
   formatTimeEt,
   normalizeDeliveryTimeInput,
   formatDaysLabel,
   computeNextDeliveryEt,
-} = require("./services/delivery-schedule");
+} = require("./services/shared");
 const {
   buildWebRouteDependencies,
   createWebRequestHandler,

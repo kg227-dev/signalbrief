@@ -8,4 +8,5 @@ Canonical service grouping for onboarding:
 - `user/`: signup/settings/admin user handlers
 - `shared/`: request metadata, delivery schedule, rate limiting, archive scoring
 
-During migration, source files remain under `web/services/*.js`; group indexes provide stable import paths.
+Live grouped entrypoints now exist at `web/services/admin`, `web/services/shared`, and `web/services/user`.
+During migration, source files remain under `web/services/*.js`; the grouped entrypoints provide stable import paths over those flat modules.

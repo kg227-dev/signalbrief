@@ -1,4 +1,4 @@
-const { sumRuns } = require("../../services/admin-stats-costs");
+const { sumRuns } = require("../../services/admin");
 
 function mapAdminMessages({ readJsonLineLog, adminMessageLog, maskEmail }) {
   return readJsonLineLog(adminMessageLog, 30).map((message) => ({

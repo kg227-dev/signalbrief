@@ -84,6 +84,8 @@ function buildAuditDoc({
         strong_tier_drop_count: 0,
         strong_tier_final_selected_count: 6,
         generation_failure_count: 0,
+        repair_attempted_count: 0,
+        repair_success_count: 0,
         hard_fail_count: 0,
         soft_fail_count: 0,
         soft_fail_recovery_count: 0,
@@ -223,6 +225,109 @@ function buildAuditDoc({
 }
 
 {
+  const repairedTopic = buildTopic({
+    selectedCount: 5,
+    trustedSelectedCount: 4,
+    trustedUnselectedCount: 3,
+    missedStoryFlagCount: 2,
+    writeup: {
+      drop_count: 3,
+      dropped_share_pct: 37.5,
+      strong_tier_attempted_count: 6,
+      strong_tier_drop_count: 2,
+      strong_tier_final_selected_count: 4,
+      soft_fail_count: 6,
+      soft_fail_recovery_count: 5,
+    },
+  });
+
+  repairedTopic.candidates[0] = {
+    ...repairedTopic.candidates[0],
+    writeup_status: "repair_pass",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["what_happened_not_concise"],
+    soft_failure_reasons: ["what_happened_not_concise"],
+  };
+  repairedTopic.candidates[1] = {
+    ...repairedTopic.candidates[1],
+    writeup_status: "repair_pass",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["mechanism_not_concise"],
+    soft_failure_reasons: ["mechanism_not_concise"],
+  };
+  repairedTopic.candidates[2] = {
+    ...repairedTopic.candidates[2],
+    writeup_status: "repair_pass",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["what_happened_not_concise", "mechanism_not_concise"],
+    soft_failure_reasons: ["what_happened_not_concise", "mechanism_not_concise"],
+  };
+  repairedTopic.candidates[3] = {
+    ...repairedTopic.candidates[3],
+    writeup_status: "repair_pass",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["what_happened_not_concise"],
+    soft_failure_reasons: ["what_happened_not_concise"],
+  };
+  repairedTopic.candidates[4] = {
+    ...repairedTopic.candidates[4],
+    writeup_status: "repair_pass",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["mechanism_not_concise"],
+    soft_failure_reasons: ["mechanism_not_concise"],
+  };
+  repairedTopic.candidates[5] = {
+    ...repairedTopic.candidates[5],
+    writeup_status: "failed_dropped",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["what_happened_not_concise"],
+    soft_failure_reasons: ["what_happened_not_concise"],
+  };
+  repairedTopic.candidates[6] = {
+    ...repairedTopic.candidates[6],
+    writeup_status: "failed_dropped",
+    validation_tier: "soft_fail",
+    writeup_rejection_reasons: ["mechanism_not_concise"],
+    soft_failure_reasons: ["mechanism_not_concise"],
+  };
+
+  const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
+    writeup: {
+      attempted_count: 16,
+      drop_count: 6,
+      dropped_share_pct: 37.5,
+      generation_failure_count: 6,
+      repair_attempted_count: 10,
+      repair_success_count: 9,
+      strong_tier_attempted_count: 10,
+      strong_tier_drop_count: 3,
+      strong_tier_final_selected_count: 5,
+      soft_fail_count: 6,
+      soft_fail_recovery_count: 5,
+      minimum_viable_accept_count: 2,
+      parse_failure_counts: {
+        malformed_json: 2,
+      },
+    },
+    topics: {
+      TECHNOLOGY: repairedTopic,
+      HEALTHCARE: buildTopic(),
+    },
+  }));
+
+  assert.strictEqual(doc.runDiagnosis.primaryRootCause, "validator_over_reject");
+  assert.ok(!doc.runDiagnosis.secondaryRootCauses.includes("writeup_generation_failure"));
+  assert.ok(!doc.runDiagnosis.secondaryRootCauses.includes("parse_or_structured_output_failure"));
+  assert.strictEqual(doc.runDiagnosis.topIssues[0].title, "Validator Over Reject (Concision Enforcement)");
+  assert.strictEqual(doc.runDiagnosis.topIssues[0].evidence.failurePatternSummary, "concision-related validator drops dominate");
+  assert.deepStrictEqual(doc.runDiagnosis.topIssues[0].evidence.validatorFailureTypes, [
+    { reason: "what_happened_not_concise", count: 4 },
+    { reason: "mechanism_not_concise", count: 4 },
+  ]);
+  assert.strictEqual(doc.runDiagnosis.actionPriorityOrder[0], "Adjust validator softness");
+}
+
+{
   const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
     topics: {
       TECHNOLOGY: buildTopic({ trustedUnselectedCount: 3, missedStoryFlagCount: 2, trustedSelectedCount: 2 }),
@@ -236,6 +341,53 @@ function buildAuditDoc({
   }));
 
   assert.strictEqual(doc.runDiagnosis.primaryRootCause, "selection_ranking_failure");
+}
+
+{
+  const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
+    writeup: {
+      attempted_count: 16,
+      drop_count: 5,
+      dropped_share_pct: 31.25,
+      strong_tier_attempted_count: 10,
+      strong_tier_drop_count: 3,
+      strong_tier_final_selected_count: 5,
+      soft_fail_count: 3,
+      soft_fail_recovery_count: 1,
+    },
+    topics: {
+      TECHNOLOGY: buildTopic({
+        trustedUnselectedCount: 3,
+        missedStoryFlagCount: 2,
+        trustedSelectedCount: 2,
+        writeup: {
+          drop_count: 2,
+          dropped_share_pct: 28.57,
+          strong_tier_attempted_count: 5,
+          strong_tier_drop_count: 1,
+          strong_tier_final_selected_count: 2,
+        },
+      }),
+      HEALTHCARE: buildTopic({
+        trustedSelectedCount: 2,
+        writeup: {
+          drop_count: 3,
+          dropped_share_pct: 42.86,
+          strong_tier_attempted_count: 5,
+          strong_tier_drop_count: 2,
+          strong_tier_final_selected_count: 3,
+        },
+      }),
+    },
+    selectionRejectionCounts: {
+      selection_not_selected: 5,
+      selection_pool_full: 2,
+    },
+    missedStoryFlagCount: 2,
+  }));
+
+  assert.ok(!doc.runDiagnosis.secondaryRootCauses.includes("selection_ranking_failure"));
+  assert.ok(doc.runDiagnosis.topIssues.every((issue) => issue.issueCode !== "selection_ranking_failure"));
 }
 
 {

@@ -2473,6 +2473,9 @@ function renderDiagnosisEvidence(issue) {
   const validatorRejectionCount = Math.max(0, Number(evidence.validatorRejectionCount || 0));
   const thinTopicCount = Math.max(0, Number(evidence.thinTopicCount || 0));
   const candidateDepthHealthyShare = Number(evidence.candidateDepthHealthyShare || 0);
+  const validatorFailureTypes = Array.isArray(evidence.validatorFailureTypes)
+    ? evidence.validatorFailureTypes.filter((entry) => entry && Number(entry.count) > 0)
+    : [];
   const hasWriteupStageEvidence = parseFailureCount > 0 || validatorRejectionCount > 0;
   const lines = [];
 
@@ -2491,6 +2494,10 @@ function renderDiagnosisEvidence(issue) {
     lines.push(`Selection mix pressure: low-trust winners are displacing stronger available candidates.`);
   } else if (family === "validator") {
     lines.push(`Acceptance strictness: soft-fail recovery ${formatRatioPct(evidence.softFailRecoveryRate)} · minimum viable accept ${formatRatioPct(evidence.minimumViableAcceptRate)}`);
+  }
+
+  if (family === "validator" && validatorFailureTypes.length) {
+    lines.push(`Top validator failure types: ${validatorFailureTypes.map((entry) => `${entry.reason} (${Math.max(0, Number(entry.count || 0))})`).join(" · ")}`);
   }
 
   if (hasWriteupStageEvidence || family === "writeup_generation" || family === "validator") {
@@ -2533,8 +2540,14 @@ function renderPrimaryIssueExplanation(issue) {
     segments.push(`low-trust selection pressure persisted despite available depth`);
   }
 
-  if (!segments.length) return "";
-  return `<div class="diagnosis-issue-copy" style="margin-top:6px;">Primary issue selected because ${esc(segments.join(" and "))}.</div>`;
+  const lines = [];
+  if (segments.length) {
+    lines.push(`<div class="diagnosis-issue-copy" style="margin-top:6px;">Primary issue selected because ${esc(segments.join(" and "))}.</div>`);
+  }
+  if (evidence.failurePatternSummary) {
+    lines.push(`<div class="diagnosis-issue-copy" style="margin-top:6px;">Failure pattern: ${esc(evidence.failurePatternSummary)}</div>`);
+  }
+  return lines.join("");
 }
 
 function renderActionPriorityList(runDiagnosis) {
@@ -2555,7 +2568,7 @@ function renderDiagnosisIssue(issue) {
   return `<div class="diagnosis-issue">
     <div class="diagnosis-issue-head">
       <div style="min-width:0;">
-        <div class="diagnosis-issue-title">${esc(humanizeRootCause(issue.issueCode || "unknown"))}</div>
+        <div class="diagnosis-issue-title">${esc(issue.title || humanizeRootCause(issue.issueCode || "unknown"))}</div>
         ${renderDiagnosisEvidence(issue)}
       </div>
       <div class="digest-audit-row" style="justify-content:flex-end;">

@@ -25,6 +25,11 @@ const TOPIC_ROOT_CAUSES = Object.freeze([
   "unknown",
 ]);
 
+const CONCISION_VALIDATOR_REASONS = Object.freeze([
+  "what_happened_not_concise",
+  "mechanism_not_concise",
+]);
+
 const ROOT_CAUSE_ACTIONS = Object.freeze({
   validator_over_reject: {
     recommendedAction: "Relax soft-fail handling and increase minimum-viable accepts before changing ranking or retrieval.",
@@ -134,6 +139,18 @@ function countMapTotal(countMap) {
   return Object.values(countMap).reduce((sum, value) => sum + num(value, 0), 0);
 }
 
+function sortCountEntries(countMap = {}, limit = Number.POSITIVE_INFINITY) {
+  return Object.entries(countMap || {})
+    .map(([key, value]) => ({ key: String(key || "").trim(), value: num(value, 0) }))
+    .filter((entry) => entry.key && entry.value > 0)
+    .sort((left, right) => {
+      const valueDiff = right.value - left.value;
+      if (valueDiff !== 0) return valueDiff;
+      return left.key.localeCompare(right.key);
+    })
+    .slice(0, limit);
+}
+
 function normalizeSourceTier(rawTier) {
   const numeric = Number(rawTier);
   if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
@@ -225,16 +242,68 @@ function classifyProviderFailureCount(writeupFailureDetails = []) {
   }, 0);
 }
 
+function isGenerationFailureReason(reason) {
+  const normalized = String(reason || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("parse")
+    || normalized.includes("provider")
+    || normalized.includes("json")
+    || normalized.includes("timeout")
+    || normalized.includes("empty");
+}
+
+function collectValidatorFailureReasonCounts(auditDoc = {}) {
+  const counts = Object.create(null);
+  const topicEntries = auditDoc?.topics && typeof auditDoc.topics === "object"
+    ? Object.entries(auditDoc.topics)
+    : [];
+
+  for (const [, topic] of topicEntries) {
+    const candidates = Array.isArray(topic?.candidates) ? topic.candidates : [];
+    for (const candidate of candidates) {
+      const reasons = new Set();
+      const validationTier = String(candidate?.validation_tier || "").trim().toLowerCase();
+      const writeupStatus = String(candidate?.writeup_status || "").trim().toLowerCase();
+      const rejectedReason = String(candidate?.rejected_reason || "").trim();
+      const addReasonList = (values) => {
+        for (const value of (Array.isArray(values) ? values : [])) {
+          const normalized = String(value || "").trim();
+          if (normalized && !isGenerationFailureReason(normalized)) reasons.add(normalized);
+        }
+      };
+
+      addReasonList(candidate?.writeup_rejection_reasons);
+      addReasonList(candidate?.soft_failure_reasons);
+      addReasonList(candidate?.hard_failure_reasons);
+      if (rejectedReason && !isGenerationFailureReason(rejectedReason)) reasons.add(rejectedReason);
+
+      const hasValidatorContext = validationTier === "soft_fail"
+        || validationTier === "hard_fail"
+        || writeupStatus === "failed_dropped"
+        || writeupStatus === "repair_pass";
+      if (!hasValidatorContext && reasons.size === 0) continue;
+      for (const reason of reasons) {
+        counts[reason] = (counts[reason] || 0) + 1;
+      }
+    }
+  }
+
+  return counts;
+}
+
 function buildRunEvidence(summary = {}) {
   const writeup = summary?.writeup && typeof summary.writeup === "object" ? summary.writeup : {};
   const attemptedCount = Math.max(0, num(writeup.attempted_count, 0));
   const softFailCount = Math.max(0, num(writeup.soft_fail_count, 0));
   const softFailRecoveryRate = ratio(writeup.soft_fail_recovery_count, softFailCount);
+  const strongTierAttempted = Math.max(0, num(writeup.strong_tier_attempted_count, 0));
   return {
     droppedSharePct: num(writeup.dropped_share_pct, 0),
-    strongTierAttempted: Math.max(0, num(writeup.strong_tier_attempted_count, 0)),
+    strongTierAttempted,
     strongTierSelected: Math.max(0, num(writeup.strong_tier_final_selected_count, 0)),
+    strongTierDropRate: ratio(writeup.strong_tier_drop_count, strongTierAttempted),
     minimumViableAcceptRate: ratio(writeup.minimum_viable_accept_count, attemptedCount),
+    repairPassSuccessRate: ratio(writeup.repair_success_count, Math.max(0, num(writeup.repair_attempted_count, 0))),
     softFailRate: ratio(softFailCount, attemptedCount),
     softFailRecoveryRate,
     softFailToAcceptRate: softFailRecoveryRate,
@@ -428,6 +497,27 @@ function buildRunStageMetrics(auditDoc = {}) {
     ? writeup.parse_failure_counts
     : {};
   const parseFailureCount = countMapTotal(parseFailureCounts);
+  const validatorFailureReasonCounts = collectValidatorFailureReasonCounts(auditDoc);
+  const validatorFailureReasonEntries = sortCountEntries(validatorFailureReasonCounts);
+  const validatorFailureReasonTotal = validatorFailureReasonEntries.reduce((sum, entry) => sum + entry.value, 0);
+  const concisionFailureTypes = CONCISION_VALIDATOR_REASONS
+    .map((reason) => ({ reason, count: num(validatorFailureReasonCounts[reason], 0) }))
+    .filter((entry) => entry.count > 0)
+    .sort((left, right) => {
+      const countDiff = right.count - left.count;
+      if (countDiff !== 0) return countDiff;
+      return CONCISION_VALIDATOR_REASONS.indexOf(left.reason) - CONCISION_VALIDATOR_REASONS.indexOf(right.reason);
+    });
+  const topValidatorFailureTypes = (concisionFailureTypes.length > 0 ? concisionFailureTypes : validatorFailureReasonEntries)
+    .slice(0, 3)
+    .map((entry) => ({
+      reason: entry.reason || entry.key,
+      count: entry.count ?? entry.value,
+    }));
+  const topNonConcisionValidatorFailureCount = validatorFailureReasonEntries
+    .filter((entry) => !CONCISION_VALIDATOR_REASONS.includes(entry.key))
+    .reduce((maxCount, entry) => Math.max(maxCount, entry.value), 0);
+  const concisionFailureCount = concisionFailureTypes.reduce((sum, entry) => sum + entry.count, 0);
   const candidateDepthHealthyTopics = topics.filter((topic) => num(topic?.total_candidates, 0) >= 15).length;
   const thinTopics = topics.filter((topic) => {
     const count = num(topic?.total_candidates, 0);
@@ -464,6 +554,7 @@ function buildRunStageMetrics(auditDoc = {}) {
     droppedSharePct: Math.max(0, num(writeup.dropped_share_pct, 0)),
     strongTierAttempted: Math.max(0, num(writeup.strong_tier_attempted_count, 0)),
     strongTierDropCount: Math.max(0, num(writeup.strong_tier_drop_count, 0)),
+    strongTierDropRate: ratio(writeup.strong_tier_drop_count, Math.max(0, num(writeup.strong_tier_attempted_count, 0))),
     strongTierSelected: Math.max(0, num(writeup.strong_tier_final_selected_count, 0)),
     generationFailureCount: Math.max(0, num(writeup.generation_failure_count, 0)),
     parseFailureCount,
@@ -472,10 +563,18 @@ function buildRunStageMetrics(auditDoc = {}) {
     softFailCount: Math.max(0, num(writeup.soft_fail_count, 0)),
     softFailRecoveryCount: Math.max(0, num(writeup.soft_fail_recovery_count, 0)),
     softFailRecoveryRate: ratio(writeup.soft_fail_recovery_count, Math.max(0, num(writeup.soft_fail_count, 0))),
+    repairAttemptedCount: Math.max(0, num(writeup.repair_attempted_count, 0)),
+    repairSuccessCount: Math.max(0, num(writeup.repair_success_count, 0)),
+    repairPassSuccessRate: ratio(writeup.repair_success_count, Math.max(0, num(writeup.repair_attempted_count, 0))),
     minimumViableAcceptCount: Math.max(0, num(writeup.minimum_viable_accept_count, 0)),
     minimumViableAcceptRate: ratio(writeup.minimum_viable_accept_count, attemptedCount),
     softFailRate: ratio(writeup.soft_fail_count, attemptedCount),
     validatorRejectionCount,
+    validatorFailureReasonCounts,
+    validatorFailureReasonTotal,
+    topValidatorFailureTypes,
+    concisionFailureCount,
+    concisionFailureDominant: concisionFailureCount >= Math.max(2, topNonConcisionValidatorFailureCount, Math.ceil(validatorFailureReasonTotal * 0.4)),
     trustedSelectedShare: ratio(trustedSelectedCount, selectedCount),
     selectedCount,
     missedStoryFlagCount,
@@ -540,6 +639,12 @@ function deriveRunDiagnosis(auditDoc = {}) {
   const parseDominant = metrics.parseFailureCount >= Math.max(2, metrics.dropCount * 0.4);
   const parseClearlyDominant = metrics.parseFailureCount >= Math.max(3, metrics.dropCount * 0.5)
     && metrics.parseFailureCount >= Math.max(metrics.validatorRejectionCount + 2, Math.ceil(metrics.validatorRejectionCount * 1.35));
+  const upstreamWriteupDominance = metrics.strongTierDropRate > 0.2 || metrics.droppedSharePct > 25;
+  const validatorReasonDominant = metrics.validatorFailureReasonTotal >= Math.max(3, generationFailureSignalCount);
+  const repairedValidatorDominant = metrics.repairPassSuccessRate >= 0.9
+    && !parseDominant
+    && !parseClearlyDominant
+    && validatorReasonDominant;
   const validatorPressure = metrics.droppedSharePct >= 40
     && metrics.candidateDepthHealthyShare >= 0.6
     && metrics.strongTierAttempted >= Math.max(3, metrics.strongTierSelected + 2)
@@ -549,8 +654,10 @@ function deriveRunDiagnosis(auditDoc = {}) {
     && metrics.candidateDepthHealthyShare >= 0.6
     && metrics.strongTierAttempted >= Math.max(3, metrics.strongTierSelected + 2);
   const retrievalThin = metrics.thinTopics >= Math.max(1, Math.ceil(metrics.topicCount / 3));
-  const rankingFailure = num(topicRunCauseCounts.selection_ranking_failure, 0) >= 1
-    || (metrics.poolCutCount >= 4 && metrics.missedStoryFlagCount >= 2 && metrics.droppedSharePct < 25);
+  const rankingFailure = !upstreamWriteupDominance && (
+    num(topicRunCauseCounts.selection_ranking_failure, 0) >= 1
+    || (metrics.poolCutCount >= 4 && metrics.missedStoryFlagCount >= 2 && metrics.droppedSharePct < 25)
+  );
   const backfillDegradation = metrics.weakBackfillTopicCount >= 1 || num(topicRunCauseCounts.same_topic_backfill_degradation, 0) >= 1;
   const lowTrustSelectionMix = metrics.selectedCount > 0
     && metrics.trustedSelectedShare < 0.5
@@ -564,7 +671,10 @@ function deriveRunDiagnosis(auditDoc = {}) {
   let severity = "low";
   const secondaryRootCauses = [];
 
-  if (validatorEscalation && (parseDominant || providerGenerationDominant) && !parseClearlyDominant) {
+  if (repairedValidatorDominant) {
+    primaryRootCause = "validator_over_reject";
+    severity = metrics.dropCount >= 4 || metrics.strongTierDropCount >= 2 ? "high" : "medium";
+  } else if (validatorEscalation && (parseDominant || providerGenerationDominant) && !parseClearlyDominant) {
     primaryRootCause = "validator_over_reject";
     severity = "high";
     pushSecondary(secondaryRootCauses, parseDominant ? "parse_or_structured_output_failure" : "writeup_generation_failure");
@@ -599,8 +709,12 @@ function deriveRunDiagnosis(auditDoc = {}) {
     severity = "low";
   }
 
-  if (primaryRootCause !== "parse_or_structured_output_failure" && parseDominant) pushSecondary(secondaryRootCauses, "parse_or_structured_output_failure");
-  if (primaryRootCause !== "writeup_generation_failure" && providerGenerationDominant && metrics.dropCount >= 2) pushSecondary(secondaryRootCauses, "writeup_generation_failure");
+  if (!repairedValidatorDominant && primaryRootCause !== "parse_or_structured_output_failure" && parseDominant) {
+    pushSecondary(secondaryRootCauses, "parse_or_structured_output_failure");
+  }
+  if (!repairedValidatorDominant && primaryRootCause !== "writeup_generation_failure" && providerGenerationDominant && metrics.dropCount >= 2) {
+    pushSecondary(secondaryRootCauses, "writeup_generation_failure");
+  }
   if (primaryRootCause !== "validator_over_reject" && validatorPressure) pushSecondary(secondaryRootCauses, "validator_over_reject");
   if (primaryRootCause !== "retrieval_thinness" && retrievalThin) pushSecondary(secondaryRootCauses, "retrieval_thinness");
   if (primaryRootCause !== "selection_ranking_failure" && rankingFailure) pushSecondary(secondaryRootCauses, "selection_ranking_failure");
@@ -621,6 +735,12 @@ function deriveRunDiagnosis(auditDoc = {}) {
   const status = severity === "high" ? "red" : primaryRootCause === "unknown" ? "green" : "yellow";
 
   const primaryActions = getActionPair(primaryRootCause);
+  const validatorIssueTitle = metrics.concisionFailureDominant
+    ? "Validator Over Reject (Concision Enforcement)"
+    : null;
+  const failurePatternSummary = metrics.concisionFailureDominant
+    ? "concision-related validator drops dominate"
+    : null;
   const topIssues = [{
     issueCode: primaryRootCause,
     severity,
@@ -634,15 +754,20 @@ function deriveRunDiagnosis(auditDoc = {}) {
       providerFailureCount: metrics.providerFailureCount,
       validatorRejectionCount: metrics.validatorRejectionCount,
       minimumViableAcceptRate: metrics.minimumViableAcceptRate,
+      repairPassSuccessRate: metrics.repairPassSuccessRate,
       softFailRate: metrics.softFailRate,
       softFailRecoveryRate: metrics.softFailRecoveryRate,
+      strongTierDropRate: metrics.strongTierDropRate,
       sourceCapCount: metrics.sourceCapCount,
       missedStoryFlagCount: metrics.missedStoryFlagCount,
+      validatorFailureTypes: primaryRootCause === "validator_over_reject" ? metrics.topValidatorFailureTypes : [],
+      failurePatternSummary: primaryRootCause === "validator_over_reject" ? failurePatternSummary : null,
     },
     impact: {
       topics_affected: primaryCount,
       total_topics: metrics.topicCount,
     },
+    title: primaryRootCause === "validator_over_reject" ? validatorIssueTitle : null,
     recommendedAction: primaryActions.recommendedAction,
     recommendedNonAction: primaryActions.recommendedNonAction,
   }];
@@ -669,15 +794,20 @@ function deriveRunDiagnosis(auditDoc = {}) {
         providerFailureCount: metrics.providerFailureCount,
         validatorRejectionCount: metrics.validatorRejectionCount,
         minimumViableAcceptRate: metrics.minimumViableAcceptRate,
+        repairPassSuccessRate: metrics.repairPassSuccessRate,
         softFailRate: metrics.softFailRate,
         softFailRecoveryRate: metrics.softFailRecoveryRate,
+        strongTierDropRate: metrics.strongTierDropRate,
         sourceCapCount: metrics.sourceCapCount,
         missedStoryFlagCount: metrics.missedStoryFlagCount,
+        validatorFailureTypes: secondaryRootCause === "validator_over_reject" ? metrics.topValidatorFailureTypes : [],
+        failurePatternSummary: secondaryRootCause === "validator_over_reject" ? failurePatternSummary : null,
       },
       impact: {
         topics_affected: affectedTopicCount,
         total_topics: metrics.topicCount,
       },
+      title: secondaryRootCause === "validator_over_reject" ? validatorIssueTitle : null,
       recommendedAction: actions.recommendedAction,
       recommendedNonAction: actions.recommendedNonAction,
     });
@@ -686,6 +816,7 @@ function deriveRunDiagnosis(auditDoc = {}) {
   const topicDerivedIssues = new Map();
   for (const diagnosis of topicDiagnoses) {
     const runCause = mapTopicCauseToRunCause(diagnosis);
+    if (upstreamWriteupDominance && runCause === "selection_ranking_failure") continue;
     if (!runCause || topIssues.some((issue) => issue.issueCode === runCause)) continue;
     const entry = topicDerivedIssues.get(runCause) || {
       issueCode: runCause,

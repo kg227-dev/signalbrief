@@ -2478,13 +2478,19 @@ function renderDiagnosisEvidence(issue) {
 
   if (hasWriteupStageEvidence) {
     lines.push(`Writeup failures: ${parseFailureCount} parse failures (generation)`);
-    lines.push(`Acceptance failures: ${validatorRejectionCount} validator rejections (acceptance)`);
+    if (family === "validator") {
+      lines.push(`Acceptance strictness: ${validatorRejectionCount} validator rejections · soft-fail recovery ${formatRatioPct(evidence.softFailRecoveryRate)}`);
+    } else {
+      lines.push(`Acceptance failures: ${validatorRejectionCount} validator rejections (acceptance)`);
+    }
   } else if (family === "retrieval" && thinTopicCount > 0) {
     lines.push(`Retrieval pressure: ${thinTopicCount} thin topic(s) · healthy-depth share ${formatRatioPct(candidateDepthHealthyShare)}`);
   } else if (family === "selection") {
     lines.push(`Selection pressure: stronger candidates reached the funnel but did not consistently win selection.`);
   } else if (family === "source_mix") {
     lines.push(`Selection mix pressure: low-trust winners are displacing stronger available candidates.`);
+  } else if (family === "validator") {
+    lines.push(`Acceptance strictness: soft-fail recovery ${formatRatioPct(evidence.softFailRecoveryRate)} · minimum viable accept ${formatRatioPct(evidence.minimumViableAcceptRate)}`);
   }
 
   if (hasWriteupStageEvidence || family === "writeup_generation" || family === "validator") {
@@ -2499,6 +2505,36 @@ function renderDiagnosisEvidence(issue) {
   }
   lines.push(`Topics affected: ${Math.max(0, Number(impact.topics_affected || 0))} / ${Math.max(0, Number(impact.total_topics || 0))}`);
   return lines.map((line) => `<div class="diagnosis-issue-copy" style="margin-top:4px;">${esc(line)}</div>`).join("");
+}
+
+function renderPrimaryIssueExplanation(issue) {
+  const primaryIssue = issue && typeof issue === "object" ? issue : null;
+  if (!primaryIssue) return "";
+  const evidence = primaryIssue.evidence && typeof primaryIssue.evidence === "object" ? primaryIssue.evidence : {};
+  const impact = primaryIssue.impact && typeof primaryIssue.impact === "object" ? primaryIssue.impact : {};
+  const segments = [];
+  const topicsAffected = Math.max(0, Number(impact.topics_affected || 0));
+  const totalTopics = Math.max(0, Number(impact.total_topics || 0));
+  const droppedSharePct = Number(evidence.droppedSharePct || 0);
+
+  if (totalTopics > 0) segments.push(`impact reached ${topicsAffected}/${totalTopics} topics`);
+  if (droppedSharePct > 0) segments.push(`writeup drop share is ${droppedSharePct.toFixed(1)}%`);
+
+  const family = getDiagnosisIssueFamily(primaryIssue.issueCode);
+  if (family === "retrieval" && Number(evidence.thinTopicCount || 0) > 0) {
+    segments.push(`${Math.max(0, Number(evidence.thinTopicCount || 0))} topics were thin`);
+  } else if (family === "writeup_generation" && Number(evidence.parseFailureCount || 0) > 0) {
+    segments.push(`${Math.max(0, Number(evidence.parseFailureCount || 0))} parse failures dominated the run`);
+  } else if (family === "validator") {
+    segments.push(`soft-fail recovery held at ${formatRatioPct(evidence.softFailRecoveryRate)}`);
+  } else if (family === "selection") {
+    segments.push(`selection pressure was the strongest surviving issue`);
+  } else if (family === "source_mix") {
+    segments.push(`low-trust selection pressure persisted despite available depth`);
+  }
+
+  if (!segments.length) return "";
+  return `<div class="diagnosis-issue-copy" style="margin-top:6px;">Primary issue selected because ${esc(segments.join(" and "))}.</div>`;
 }
 
 function renderActionPriorityList(runDiagnosis) {
@@ -2543,6 +2579,7 @@ function renderDiagnosisIssue(issue) {
 function renderRunDiagnosisCard(runDiagnosis) {
   const diagnosis = runDiagnosis && typeof runDiagnosis === "object" ? runDiagnosis : null;
   const issues = dedupeDiagnosisIssues(Array.isArray(diagnosis?.topIssues) ? diagnosis.topIssues : []).slice(0, 3);
+  const primaryIssue = issues[0] || null;
   if (!diagnosis || !issues.length) {
     return `<div class="digest-audit-card">
       <div class="digest-audit-topic-head">
@@ -2559,6 +2596,7 @@ function renderRunDiagnosisCard(runDiagnosis) {
         <div class="subscriber-main">Diagnosis & Next Actions</div>
         <div class="subscriber-sub">Deterministic root-cause synthesis for this run. Uses existing audit and writeup telemetry only.</div>
         <div class="diagnosis-issue-copy" style="margin-top:8px;">System blocked at: ${esc(String(diagnosis.systemBlockedAt || "unknown"))}</div>
+        ${renderPrimaryIssueExplanation(primaryIssue)}
       </div>
       <div class="digest-audit-row" style="justify-content:flex-end;">
         ${renderDigestAuditSummaryPill("Status", String(diagnosis.status || "unknown"), diagnosisSeverityTone(diagnosis.status === "red" ? "high" : diagnosis.status === "yellow" ? "medium" : "low"))}

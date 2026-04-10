@@ -1,6 +1,6 @@
 # Retrieval Eval Worklog
 
-*Last reviewed: April 9, 2026*
+*Last reviewed: April 10, 2026*
 
 This is the live operator summary for retrieval-evaluation work. The full March 2026 historical log is archived under [`../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md`](../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md).
 
@@ -16,18 +16,18 @@ Track the current retrieval-quality loop without mixing a large historical execu
 
 ## Current Working Conclusion
 
-As of April 9, 2026 (Day 13), the run is still mechanically healthy but not exit-green: 35/35 delivered, 7/7 topics full and above depth-15, 610 total candidates after story-relationship filtering, 698/698 broker fetch items passed, and 0 writeup-driven underfills. Trusted share improved to 71.4% (25/35) from Day 12's 62.9% (22/35), but it is still below the 80% MVP target. The detailed audit is archived at [`../archive/planning/2026-03/mvp-day-13-2026-04-09.md`](../archive/planning/2026-03/mvp-day-13-2026-04-09.md).
+As of April 10, 2026 (Day 14), the run is healthier than Day 13 but category expansion is still blocked. Day 14 delivered 35/35, kept all 7 topics at 5/5 and above depth-15, produced 601 total candidates after story-relationship filtering, and passed 727/727 broker fetch items across 45 domains. Trusted share reached 28/35 (80.0%) for the day, up from 25/35 (71.4%) on Day 13 and 22/35 (62.9%) on Day 12, but the three-day calibration window is still only 75/105 trusted (71.4%). The detailed audit is archived at [`../archive/planning/2026-03/mvp-day-14-2026-04-10.md`](../archive/planning/2026-03/mvp-day-14-2026-04-10.md).
 
-**Active issue - the writeup validator is the main blocker now.**
-Day 13 attempted 178 writeups and dropped 143 of them, all under `validator_mismatch`. First-pass success was only 15/178 (8.4%), repair success was 19/112 (17.0%), and strong trade-source items were lost across every topic. Retrieval is healthy; the generation-validator contract is not.
+**Active issue - writeup first-pass quality is still weak even though repairs recovered the run.**
+Day 14 attempted 50 writeups, passed only 5 on the first try (10.0%), recovered 30/30 repair attempts, and still dropped 15 writeups (30.0%). Strong-tier writeups improved sharply from Day 13, but 9 of 37 strong attempts still dropped (24.3%), which remains above the <=15% expansion bar.
 
-**Active issue - weak-tier backfill is still too permissive after writeup loss.**
-Industrials finished 0/5 trusted and Consumer & Retail finished 1/5 trusted even though both topic pools were entirely trusted before writeup filtering. Stronger Supply Chain Dive and Retail Dive items died in writeup, then standard or unknown-tier survivors filled the lane.
+**Active issue - Consumer & Retail is still the clearest weak topic, with Industrials only partially recovered.**
+Consumer & Retail improved from 1/5 trusted to 3/5 trusted, but it still dropped 6 of 11 writeup attempts and finished with the worst topic-level drop share in the run. Industrials recovered from 0/5 trusted to 3/5 trusted, but that is still below expansion quality.
 
-**Technology improved; preserve that path.**
-Technology recovered to 5/5 trusted with operator-relevant selections around Intel/Terafab, Meta's public model, Artemis III decision timing, UK public-sector tech pay, and the SCOTUS ISP ruling. This looks like a ranking/relevance improvement, not an area to re-open right now.
+**Active issue - the audit summary counters need parity fixes.**
+The top-level `summary.writeup` block reports `soft_fail_count: 0` and `minimum_viable_accept_count: 0`, while the per-topic writeup blocks sum to 28 soft-fail recoveries and 7 minimum-viable accepts. The docs should continue to trust per-topic counters until the aggregate is corrected.
 
-Prior working conclusions on retrieval uptime, broker depth, and no-underfill delivery remain resolved or on track. The current blockers are validator mismatch at the writeup layer and trusted-first same-topic backfill when good candidates are still available.
+Technology and Life Sciences both look directionally healthy enough to preserve during calibration. The remaining blockers are concise writeup survivability, trusted-first same-topic backfill in weaker lanes, and the summary-counter mismatch in the audit itself.
 
 ## Update Rules
 

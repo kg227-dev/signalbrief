@@ -8,5 +8,5 @@ This path remains as a compatibility summary for tooling that still checks `docs
 
 ## Current MVP Validation Note
 
-- Day 13 audit (2026-04-09): [`./archive/planning/2026-03/mvp-day-13-2026-04-09.md`](./archive/planning/2026-03/mvp-day-13-2026-04-09.md)
-- Current conclusion: mechanically healthy, not exit-green. Day 13 delivered 35/35 with 610 candidates and 698/698 broker fetch items passing, trusted share improved to 25/35 (71.4%), but the writeup layer dropped 143 items under `validator_mismatch` and still forced weak Consumer & Retail and Industrials selections.
+- Day 14 audit (2026-04-10): [`./archive/planning/2026-03/mvp-day-14-2026-04-10.md`](./archive/planning/2026-03/mvp-day-14-2026-04-10.md)
+- Current conclusion: calibration improved, but expansion remains blocked. Day 14 delivered 35/35 with 601 candidates and 727/727 broker fetch items passing, trusted share reached 28/35 (80.0%) for the day, but the three-day calibration window is still only 71.4% trusted overall and the strong-tier writeup drop rate remains 24.3%, above the <=15% target.

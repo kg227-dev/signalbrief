@@ -5,6 +5,7 @@ const assert = require("assert");
 const {
   attachDiagnosisToAuditDocument,
   buildRunEvidence,
+  deriveRunDiagnosis,
   deriveTopicDiagnosis,
 } = require("./root-cause-diagnosis-runtime");
 
@@ -138,6 +139,10 @@ function buildAuditDoc({
   }));
 
   assert.strictEqual(doc.runDiagnosis.primaryRootCause, "validator_over_reject");
+  assert.strictEqual(doc.runDiagnosis.systemBlockedAt, "validator acceptance");
+  assert.ok(Array.isArray(doc.runDiagnosis.actionPriorityOrder));
+  assert.ok(doc.runDiagnosis.topIssues[0].impact);
+  assert.strictEqual(doc.runDiagnosis.topIssues[0].impact.total_topics, 2);
   assert.strictEqual(doc.topics.INDUSTRIALS.topicDiagnosis.primaryRootCause, "writeup_failure_causing_strong_tier_loss");
 }
 
@@ -163,6 +168,58 @@ function buildAuditDoc({
   }));
 
   assert.strictEqual(doc.runDiagnosis.primaryRootCause, "writeup_generation_failure");
+}
+
+{
+  const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
+    writeup: {
+      attempted_count: 15,
+      drop_count: 10,
+      dropped_share_pct: 66.67,
+      strong_tier_attempted_count: 10,
+      strong_tier_drop_count: 7,
+      strong_tier_final_selected_count: 1,
+      hard_fail_count: 2,
+      soft_fail_count: 4,
+      soft_fail_recovery_count: 0,
+      minimum_viable_accept_count: 0,
+      parse_failure_counts: {
+        malformed_json: 4,
+      },
+    },
+    topics: {
+      INDUSTRIALS: buildTopic({
+        selectedCount: 4,
+        trustedSelectedCount: 1,
+        writeup: {
+          drop_count: 3,
+          dropped_share_pct: 60,
+          strong_tier_attempted_count: 4,
+          strong_tier_drop_count: 3,
+          strong_tier_final_selected_count: 1,
+        },
+      }),
+      TECHNOLOGY: buildTopic({
+        selectedCount: 4,
+        trustedSelectedCount: 2,
+        writeup: {
+          drop_count: 2,
+          dropped_share_pct: 40,
+          strong_tier_attempted_count: 4,
+          strong_tier_drop_count: 1,
+          strong_tier_final_selected_count: 2,
+        },
+      }),
+    },
+  }));
+
+  assert.strictEqual(doc.runDiagnosis.primaryRootCause, "validator_over_reject");
+  assert.ok(doc.runDiagnosis.secondaryRootCauses.includes("parse_or_structured_output_failure"));
+  assert.strictEqual(doc.runDiagnosis.topIssues[1].issueCode, "parse_or_structured_output_failure");
+  assert.deepStrictEqual(doc.runDiagnosis.actionPriorityOrder.slice(0, 2), [
+    "Fix generation/parsing reliability",
+    "Then adjust validator softness",
+  ]);
 }
 
 {
@@ -265,7 +322,46 @@ function buildAuditDoc({
   });
   assert.strictEqual(evidence.minimumViableAcceptRate, 0.2);
   assert.strictEqual(evidence.softFailRate, 0.4);
+  assert.strictEqual(evidence.softFailRecoveryRate, 0.25);
   assert.strictEqual(evidence.softFailToAcceptRate, 0.25);
+}
+
+{
+  const diagnosis = deriveRunDiagnosis(buildAuditDoc({
+    writeup: {
+      attempted_count: 12,
+      drop_count: 7,
+      dropped_share_pct: 58.33,
+      generation_failure_count: 6,
+      parse_failure_counts: {
+        malformed_json: 5,
+        truncation: 2,
+      },
+      strong_tier_attempted_count: 8,
+      strong_tier_drop_count: 4,
+      strong_tier_final_selected_count: 2,
+      soft_fail_count: 1,
+      soft_fail_recovery_count: 0,
+      minimum_viable_accept_count: 0,
+    },
+    topics: {
+      TECHNOLOGY: buildTopic({
+        writeup: {
+          drop_count: 4,
+          dropped_share_pct: 50,
+        },
+      }),
+      FINANCE: buildTopic({
+        writeup: {
+          drop_count: 3,
+          dropped_share_pct: 37.5,
+        },
+      }),
+    },
+  }));
+
+  assert.strictEqual(diagnosis.primaryRootCause, "parse_or_structured_output_failure");
+  assert.strictEqual(diagnosis.systemBlockedAt, "writeup generation");
 }
 
 {

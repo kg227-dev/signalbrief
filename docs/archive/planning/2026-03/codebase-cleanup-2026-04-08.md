@@ -42,6 +42,7 @@ The March 28 plan is directionally useful, but several of its assumptions are no
 - `web/services/{admin,shared,user}` now have live grouped entrypoints and the README matches reality.
 - `src/entrypoints/digest-orchestrator-fetch-runtime.js` has already been split again via `src/entrypoints/digest-orchestrator-fetch-policy-runtime.js`.
 - `src/digest/domain/storyline-domain-runtime.js` has been split again via `src/digest/domain/storyline-domain-source-quality-runtime.js`, which now owns the source-tier/governance/originality logic.
+- `src/digest/domain/storyline-domain-source-quality-runtime.js` has since been split again via `src/digest/domain/storyline-domain-source-quality-registry-runtime.js`, which now owns the static tier and authority maps.
 - `src/eval/retrieval/runner-runtime.js` has now been split again via `src/eval/retrieval/runner-eval-cost-runtime.js`, which owns the eval budgeting and scenario cost helpers.
 
 The repo also grew materially since March:
@@ -71,7 +72,8 @@ This is still the highest-leverage source/runtime work, but the shape changed af
 |---|---:|---|---|
 | `src/eval/retrieval/runner-runtime.js` | 1,841 | Large eval-only harness; still bundles retrieval generation, judging, reporting, and artifact wiring | result assembly, judge/report helpers, candidate generation wiring |
 | `src/digest/domain/storyline-domain-runtime.js` | 1,181 | Largest pure domain module after the source-quality split; still mixes storyline shaping, candidate comparison, and downstream render decisions | narrative assembly, topic/candidate grouping, render evaluation helpers |
-| `src/digest/domain/storyline-domain-source-quality-runtime.js` | 965 | Extracted source-tier/governance helper; now the shared surface for authority, policy, and originality logic | registry/state helpers, authority heuristics, originality scoring |
+| `src/digest/domain/storyline-domain-source-quality-runtime.js` | 691 | Extracted source-tier/governance helper; now the shared surface for authority, policy, and originality logic | registry/state helpers, authority heuristics, originality scoring |
+| `src/digest/domain/storyline-domain-source-quality-registry-runtime.js` | 306 | Static source-quality tables and overrides; a low-risk registry seam | tier maps, authority overrides, domain allowlists |
 | `src/runtime/standard-topic-broker-topic-fit-runtime.js` | 203 | Pure canonical-topic scoring now lives outside the broker runtime and is shared by broker + selection | canonical-topic normalization, scoring heuristics, topic-fit tests |
 | `src/entrypoints/digest-orchestrator-core-runtime.js` | 981 | Still above the large-file threshold after the first round of extractions | cache/bootstrap wiring, audit/incident helpers, run assembly helpers |
 
@@ -192,7 +194,7 @@ Priority order:
 1. `src/eval/retrieval/runner-runtime.js` (1,841 LOC, eval-only)
 2. `src/digest/domain/storyline-domain-runtime.js` (1,181 LOC)
 3. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
-4. `src/digest/domain/storyline-domain-source-quality-runtime.js` (965 LOC)
+4. `src/digest/domain/storyline-domain-source-quality-runtime.js` (691 LOC)
 5. narrow import/facade cleanup
 
 Rationale:
@@ -202,7 +204,8 @@ Rationale:
 - `digest-orchestrator-core-runtime.js` is still above the large-file threshold and still has enough orchestration logic left to justify one more pass.
 - `digest-orchestrator-fetch-runtime.js` is now below 800 LOC after the policy extraction, so it has moved out of the main over-800 queue.
 - `standard-topic-broker-runtime.js` is now below 800 LOC after the topic-fit extraction, so it has moved out of the main over-800 queue too.
-- `storyline-domain-source-quality-runtime.js` is the new shared authority surface, but it is still large enough that a second split is justified once the pass-1 queue settles.
+- `storyline-domain-source-quality-runtime.js` is now below 800 LOC after the registry extraction, so it is no longer in the main large-file queue.
+- `storyline-domain-source-quality-registry-runtime.js` is a small registry module; keep it stable and avoid re-embedding the static tables back into the runtime.
 - `strict-quality-domain-runtime.js` is smaller, but it still duplicates logic that should move into shared utilities first.
 - `digest-data-enrich-runtime.js` is now below 500 LOC after the policy split, so it has moved out of the main over-800 queue entirely.
 - `src/eval/retrieval/runner-runtime.js` is still large, but it is eval-only and should not block production cleanup.

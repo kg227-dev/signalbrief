@@ -12,6 +12,7 @@ const TARGET_REL = "src/digest/domain/storyline-domain-source-quality-runtime.js
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
+  'require("./storyline-domain-source-quality-registry-runtime")',
   'require("../../runtime/source-policy-registry-runtime")',
   'require("../../runtime/topic-normalization-runtime")',
 ]);

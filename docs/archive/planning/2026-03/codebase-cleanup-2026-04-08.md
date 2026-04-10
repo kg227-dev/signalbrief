@@ -13,7 +13,7 @@
 | Source files (`src/` + `web/`) | 303 |
 | Total LOC (`src/` + `web/`) | 56,064 |
 | Average source file size | 185 LOC |
-| Largest file | 1,873 LOC (`src/eval/retrieval/runner-runtime.js`) |
+| Largest file | 1,841 LOC (`src/eval/retrieval/runner-runtime.js`) |
 | Files >800 LOC | 4 |
 | Files >600 LOC | 16 |
 | Small JS shims/facades <=15 LOC | 12 |
@@ -42,6 +42,7 @@ The March 28 plan is directionally useful, but several of its assumptions are no
 - `web/services/{admin,shared,user}` now have live grouped entrypoints and the README matches reality.
 - `src/entrypoints/digest-orchestrator-fetch-runtime.js` has already been split again via `src/entrypoints/digest-orchestrator-fetch-policy-runtime.js`.
 - `src/digest/domain/storyline-domain-runtime.js` has been split again via `src/digest/domain/storyline-domain-source-quality-runtime.js`, which now owns the source-tier/governance/originality logic.
+- `src/eval/retrieval/runner-runtime.js` has now been split again via `src/eval/retrieval/runner-eval-cost-runtime.js`, which owns the eval budgeting and scenario cost helpers.
 
 The repo also grew materially since March:
 
@@ -68,7 +69,7 @@ This is still the highest-leverage source/runtime work, but the shape changed af
 
 | File | LOC | Why it matters | First split seams |
 |---|---:|---|---|
-| `src/eval/retrieval/runner-runtime.js` | 1,873 | Large eval-only harness; still bundles retrieval generation, judging, reporting, and artifact wiring | result assembly, judge/report helpers, candidate generation wiring |
+| `src/eval/retrieval/runner-runtime.js` | 1,841 | Large eval-only harness; still bundles retrieval generation, judging, reporting, and artifact wiring | result assembly, judge/report helpers, candidate generation wiring |
 | `src/digest/domain/storyline-domain-runtime.js` | 1,181 | Largest pure domain module after the source-quality split; still mixes storyline shaping, candidate comparison, and downstream render decisions | narrative assembly, topic/candidate grouping, render evaluation helpers |
 | `src/digest/domain/storyline-domain-source-quality-runtime.js` | 965 | Extracted source-tier/governance helper; now the shared surface for authority, policy, and originality logic | registry/state helpers, authority heuristics, originality scoring |
 | `src/runtime/standard-topic-broker-topic-fit-runtime.js` | 203 | Pure canonical-topic scoring now lives outside the broker runtime and is shared by broker + selection | canonical-topic normalization, scoring heuristics, topic-fit tests |
@@ -188,7 +189,7 @@ Pass 2 starts after the shared utility layer from pass 1 exists.
 
 Priority order:
 
-1. `src/eval/retrieval/runner-runtime.js` (1,873 LOC, eval-only)
+1. `src/eval/retrieval/runner-runtime.js` (1,841 LOC, eval-only)
 2. `src/digest/domain/storyline-domain-runtime.js` (1,181 LOC)
 3. `src/entrypoints/digest-orchestrator-core-runtime.js` (981 LOC)
 4. `src/digest/domain/storyline-domain-source-quality-runtime.js` (965 LOC)

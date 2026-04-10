@@ -5,11 +5,15 @@ const path = require("path");
 const {
   assertNodeSyntaxFile,
   assertModuleExports,
+  assertSourceIncludesFile,
 } = require("../../../../../test-support/module-contract-helper.js");
 
 const TARGET_REL = "src/eval/retrieval/runner-runtime.js";
 const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
+assertSourceIncludesFile(TARGET_PATH, [
+  'require("./runner-eval-cost-runtime")',
+]);
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 

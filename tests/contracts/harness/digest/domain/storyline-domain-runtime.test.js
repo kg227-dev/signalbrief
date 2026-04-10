@@ -13,6 +13,7 @@ const TARGET_PATH = path.join(process.cwd(), TARGET_REL);
 assertNodeSyntaxFile(TARGET_PATH);
 assertSourceIncludesFile(TARGET_PATH, [
   'require("./storyline-domain-helpers-runtime")',
+  'require("./storyline-domain-source-quality-runtime")',
 ]);
 const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);

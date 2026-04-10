@@ -292,6 +292,8 @@ function buildCtx(pathname) {
     assert.ok(body.rolling_readiness && typeof body.rolling_readiness === "object", "rolling readiness included");
     assert.ok(body.topic_readiness && typeof body.topic_readiness === "object", "topic readiness included");
     assert.ok(body.source_health && typeof body.source_health === "object", "source health summary included");
+    assert.ok(body.runDiagnosis && typeof body.runDiagnosis === "object", "run diagnosis included");
+    assert.ok(body.topics.TECHNOLOGY.topicDiagnosis && typeof body.topics.TECHNOLOGY.topicDiagnosis === "object", "topic diagnosis included");
     assert.strictEqual(body.summary.missed_story_flag_count, 1, "current audit summary preserved");
     assert.strictEqual(body.rolling_readiness.days_covered, 2, "rolling readiness honors requested days window");
     assert.strictEqual(body.topic_readiness.TECHNOLOGY.days_observed, 2, "topic readiness observed days grows past 1 when older audits are available");

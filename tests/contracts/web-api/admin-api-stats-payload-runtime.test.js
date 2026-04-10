@@ -128,6 +128,37 @@ assert.ok(
   "backfill without failed recipients should not expose review missed users"
 );
 
+const blockerSummary = buildExecutiveHealthSummary({
+  deliveryWarnings: [],
+  deliveryReliability: {
+    success_rate_7d: 99.2,
+    missed_current_7d: 0,
+    last_successful_scheduled_run: "2026-03-13T11:01:00.000Z",
+  },
+  deliveryOperations: {
+    active_recovery_queue: 0,
+    latest_scheduled_run_at: "2026-03-13T11:01:00.000Z",
+    latest_scheduled_run_clean: true,
+    latest_scheduled_run_failed_users: 0,
+    backfill_needed: false,
+    active_incident_open: false,
+  },
+  schedulerWorker: buildHealthyScheduler(),
+  digestRunner: buildIdleRunner(),
+  productBlocker: {
+    audit_date_et: "2026-03-13",
+    status: "yellow",
+    root_cause: "validator_over_reject",
+    severity: "high",
+    confidence: 0.91,
+    recommended_action: "Relax validator soft-fail handling.",
+    recommended_non_action: "Do not add sources.",
+  },
+});
+
+assert.strictEqual(blockerSummary.product_blocker.root_cause, "validator_over_reject");
+assert.strictEqual(blockerSummary.product_blocker.confidence, 0.91);
+
 const summary = buildSummaryPayload({
   runs: [{ total_cost_usd: 0.2, users_served: 2 }, { total_cost_usd: 0.1, users_served: 1 }],
   monthRuns: [{ total_cost_usd: 0.2 }, { total_cost_usd: 0.1 }],

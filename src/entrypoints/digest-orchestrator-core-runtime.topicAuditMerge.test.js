@@ -239,5 +239,7 @@ assert.strictEqual(mergedDoc.fetch.topic_diagnostics.length, 2);
 assert.strictEqual(mergedDoc.fetch.discovery_candidate_capped_count, 1);
 assert.strictEqual(mergedDoc.summary.total_selected, 2);
 assert.strictEqual(mergedDoc.partial_refresh.tag, "TECHNOLOGY");
+assert.ok(mergedDoc.runDiagnosis && typeof mergedDoc.runDiagnosis === "object");
+assert.ok(mergedDoc.topics.TECHNOLOGY.topicDiagnosis && typeof mergedDoc.topics.TECHNOLOGY.topicDiagnosis === "object");
 
 console.log("topic audit rerun merges one topic back into the daily audit log ✓");

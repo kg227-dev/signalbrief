@@ -59,6 +59,7 @@ body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color
 }
 @media (max-width:700px) {
   .cards-kpi, .cards-kpi-4 { grid-template-columns:1fr; }
+  .ceo-product-blocker-body, .diagnosis-issue-actions { grid-template-columns:1fr; }
 }
 .cards-window {
   grid-template-columns:repeat(2, minmax(0, 1fr));
@@ -460,6 +461,55 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   padding:10px;
   background:#F8FAFC;
 }
+.diagnosis-issue-list {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:12px;
+}
+.diagnosis-issue {
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  padding:12px;
+  background:#F8FAFC;
+}
+.diagnosis-issue-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+.diagnosis-issue-title {
+  font-size:13px;
+  font-weight:700;
+  line-height:1.4;
+}
+.diagnosis-issue-copy {
+  font-size:12px;
+  color:var(--text-2);
+  line-height:1.5;
+}
+.diagnosis-issue-actions {
+  margin-top:8px;
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px;
+}
+.diagnosis-issue-action {
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  background:#fff;
+  padding:8px;
+}
+.diagnosis-issue-label {
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
+  margin-bottom:4px;
+}
 .digest-audit-row {
   display:flex;
   flex-wrap:wrap;
@@ -813,6 +863,52 @@ tbody tr:hover td { background:rgba(0,0,0,0.015); }
   color:var(--text-2);
   line-height:1.45;
 }
+.ceo-product-blocker {
+  margin-top:10px;
+  border-radius:8px;
+  border:1px solid var(--border-subtle);
+  background:#fff;
+  padding:10px;
+}
+.ceo-product-blocker-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.ceo-product-blocker-title {
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
+}
+.ceo-product-blocker-body {
+  margin-top:8px;
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px;
+}
+.ceo-product-blocker-row {
+  border:1px solid var(--border-subtle);
+  border-radius:8px;
+  background:#FAFAFB;
+  padding:8px;
+}
+.ceo-product-blocker-label {
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-secondary);
+  margin-bottom:4px;
+}
+.ceo-product-blocker-value {
+  font-size:12px;
+  line-height:1.45;
+  color:var(--text-2);
+}
 .ceo-command-list {
   margin-top:6px;
   display:flex;
@@ -1145,6 +1241,9 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
           </div>
         </div>
         <div id="ceoActionNow" class="ceo-action-now">No action required yet.</div>
+        <div id="ceoProductBlocker" class="ceo-product-blocker">
+          <div class="subscriber-sub">Loading product blocker…</div>
+        </div>
         <div class="health-metric-label" style="margin-top:10px;">CEO command set</div>
         <div id="ceoCommandList" class="ceo-command-list">
           <button type="button" class="ceo-command-btn" onclick="runCeoCommand('refresh_health', this)">Refresh health data</button>
@@ -2290,6 +2389,145 @@ function renderDigestAuditConcern(message) {
   </div>`;
 }
 
+function formatConfidence(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(2) : "—";
+}
+
+function humanizeRootCause(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Unknown";
+  return raw
+    .split("_")
+    .map((part) => part ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : "")
+    .join(" ");
+}
+
+function diagnosisSeverityTone(severity) {
+  const normalized = String(severity || "").trim().toLowerCase();
+  if (normalized === "high") return "var(--red)";
+  if (normalized === "medium") return "var(--yellow)";
+  return "var(--green)";
+}
+
+function summarizeDiagnosisEvidence(issue) {
+  const evidence = issue?.evidence && typeof issue.evidence === "object" ? issue.evidence : {};
+  const segments = [];
+  if (Number.isFinite(Number(evidence.droppedSharePct))) segments.push(`writeup drop ${Number(evidence.droppedSharePct).toFixed(1)}%`);
+  if (Number.isFinite(Number(evidence.strongTierAttempted)) && Number.isFinite(Number(evidence.strongTierSelected))) {
+    segments.push(`strong-tier ${Math.max(0, Number(evidence.strongTierSelected || 0))}/${Math.max(0, Number(evidence.strongTierAttempted || 0))} selected`);
+  }
+  if (Number.isFinite(Number(evidence.softFailToAcceptRate))) segments.push(`soft-fail recovery ${(Number(evidence.softFailToAcceptRate || 0) * 100).toFixed(1)}%`);
+  if (Number.isFinite(Number(evidence.affectedTopicCount)) && Number(evidence.affectedTopicCount) > 0) {
+    segments.push(`${Math.max(0, Number(evidence.affectedTopicCount || 0))} topic(s) affected`);
+  }
+  if (Number.isFinite(Number(evidence.thinTopicCount)) && Number(evidence.thinTopicCount) > 0) {
+    segments.push(`${Math.max(0, Number(evidence.thinTopicCount || 0))} thin topic(s)`);
+  }
+  if (Number.isFinite(Number(evidence.parseFailureCount)) && Number(evidence.parseFailureCount) > 0) {
+    segments.push(`${Math.max(0, Number(evidence.parseFailureCount || 0))} parse failures`);
+  }
+  if (Number.isFinite(Number(evidence.missedStoryFlagCount)) && Number(evidence.missedStoryFlagCount) > 0) {
+    segments.push(`${Math.max(0, Number(evidence.missedStoryFlagCount || 0))} missed-story flags`);
+  }
+  return segments.length ? segments.join(" · ") : "Deterministic diagnosis produced no extra evidence summary for this issue.";
+}
+
+function renderDiagnosisIssue(issue) {
+  if (!issue || typeof issue !== "object") return "";
+  const severity = String(issue.severity || "low").trim().toLowerCase();
+  const tone = diagnosisSeverityTone(severity);
+  return `<div class="diagnosis-issue">
+    <div class="diagnosis-issue-head">
+      <div style="min-width:0;">
+        <div class="diagnosis-issue-title">${esc(humanizeRootCause(issue.issueCode || "unknown"))}</div>
+        <div class="diagnosis-issue-copy" style="margin-top:4px;">${esc(summarizeDiagnosisEvidence(issue))}</div>
+      </div>
+      <div class="digest-audit-row" style="justify-content:flex-end;">
+        ${renderDigestAuditSummaryPill("Severity", severity, tone)}
+        ${renderDigestAuditSummaryPill("Confidence", formatConfidence(issue.confidence))}
+      </div>
+    </div>
+    <div class="diagnosis-issue-actions">
+      <div class="diagnosis-issue-action">
+        <div class="diagnosis-issue-label">Recommended action</div>
+        <div class="diagnosis-issue-copy">${esc(issue.recommendedAction || "—")}</div>
+      </div>
+      <div class="diagnosis-issue-action">
+        <div class="diagnosis-issue-label">Recommended non-action</div>
+        <div class="diagnosis-issue-copy">${esc(issue.recommendedNonAction || "—")}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderRunDiagnosisCard(runDiagnosis) {
+  const diagnosis = runDiagnosis && typeof runDiagnosis === "object" ? runDiagnosis : null;
+  const issues = Array.isArray(diagnosis?.topIssues) ? diagnosis.topIssues.slice(0, 3) : [];
+  if (!diagnosis || !issues.length) {
+    return `<div class="digest-audit-card">
+      <div class="digest-audit-topic-head">
+        <div>
+          <div class="subscriber-main">Diagnosis & Next Actions</div>
+          <div class="subscriber-sub">Diagnosis data is unavailable for this audit run.</div>
+        </div>
+      </div>
+    </div>`;
+  }
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Diagnosis & Next Actions</div>
+        <div class="subscriber-sub">Deterministic root-cause synthesis for this run. Uses existing audit and writeup telemetry only.</div>
+      </div>
+      <div class="digest-audit-row" style="justify-content:flex-end;">
+        ${renderDigestAuditSummaryPill("Status", String(diagnosis.status || "unknown"), diagnosisSeverityTone(diagnosis.status === "red" ? "high" : diagnosis.status === "yellow" ? "medium" : "low"))}
+        ${renderDigestAuditSummaryPill("Primary", humanizeRootCause(diagnosis.primaryRootCause || "unknown"))}
+      </div>
+    </div>
+    <div class="diagnosis-issue-list">
+      ${issues.map((issue) => renderDiagnosisIssue(issue)).join("")}
+    </div>
+  </div>`;
+}
+
+function renderCeoProductBlocker(blocker) {
+  const data = blocker && typeof blocker === "object" ? blocker : null;
+  if (!data) {
+    return `<div class="subscriber-sub">No recent audit diagnosis is available yet.</div>`;
+  }
+  const severity = String(data.severity || "low").trim().toLowerCase();
+  const tone = diagnosisSeverityTone(severity);
+  const auditDate = String(data.audit_date_et || "").trim();
+  return `<div>
+    <div class="ceo-product-blocker-head">
+      <div class="ceo-product-blocker-title">Primary Product Blocker</div>
+      <div class="digest-audit-row" style="justify-content:flex-end;">
+        ${renderDigestAuditSummaryPill("Severity", severity, tone)}
+        ${renderDigestAuditSummaryPill("Confidence", formatConfidence(data.confidence))}
+      </div>
+    </div>
+    <div class="ceo-product-blocker-body">
+      <div class="ceo-product-blocker-row">
+        <div class="ceo-product-blocker-label">Blocker</div>
+        <div class="ceo-product-blocker-value">${esc(humanizeRootCause(data.root_cause || "unknown"))}</div>
+      </div>
+      <div class="ceo-product-blocker-row">
+        <div class="ceo-product-blocker-label">Audit date</div>
+        <div class="ceo-product-blocker-value">${esc(auditDate || "Latest unavailable")}</div>
+      </div>
+      <div class="ceo-product-blocker-row">
+        <div class="ceo-product-blocker-label">Action now</div>
+        <div class="ceo-product-blocker-value">${esc(data.recommended_action || "—")}</div>
+      </div>
+      <div class="ceo-product-blocker-row">
+        <div class="ceo-product-blocker-label">Do not</div>
+        <div class="ceo-product-blocker-value">${esc(data.recommended_non_action || "—")}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderRollingReadinessCard(readiness) {
   const data = readiness && typeof readiness === "object" ? readiness : null;
   if (!data) return "";
@@ -2527,6 +2765,11 @@ function renderMissedStoryFlag(flag) {
   </div>`;
 }
 
+function getDigestAuditTopicAnchorId(tag) {
+  const normalized = String(tag || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized ? `digest-audit-topic-${normalized}` : "";
+}
+
 function canRerunDigestAuditTopic(dateKey) {
   return String(dateKey || "").trim() === getTodayEtDateKey();
 }
@@ -2551,7 +2794,8 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
     : coverageStatus.includes("thin")
       ? "var(--yellow)"
       : "var(--red)";
-  return `<div class="digest-audit-topic">
+  const topicAnchorId = getDigestAuditTopicAnchorId(tag);
+  return `<div class="digest-audit-topic"${topicAnchorId ? ` id="${esc(topicAnchorId)}"` : ""}>
     <div class="digest-audit-topic-head">
       <div>
         <div class="subscriber-main">${esc(tag)}</div>
@@ -2644,6 +2888,9 @@ function renderDigestAuditPanel() {
   const topicReadiness = data.topic_readiness && typeof data.topic_readiness === "object"
     ? data.topic_readiness
     : null;
+  const runDiagnosis = data.runDiagnosis && typeof data.runDiagnosis === "object"
+    ? data.runDiagnosis
+    : null;
   const fetchTopics = new Map((Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : []).map((topic) => [String(topic?.tag || "").trim().toUpperCase(), topic]));
   const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
   const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
@@ -2656,6 +2903,7 @@ function renderDigestAuditPanel() {
     : "";
   meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${rerunLabel}${refreshingLabel}`;
   panel.innerHTML = `
+    ${renderRunDiagnosisCard(runDiagnosis)}
     ${renderRollingReadinessCard(readiness)}
     ${renderBackboneHealthCard(sourceHealth)}
     ${renderWriteupQualityCard(writeup)}
@@ -2878,8 +3126,9 @@ function renderExecutiveSummary(health) {
   const lastSuccess = document.getElementById("ceoLastSuccess");
   const nextExpected = document.getElementById("ceoNextExpected");
   const actionNow = document.getElementById("ceoActionNow");
+  const productBlocker = document.getElementById("ceoProductBlocker");
   const commandList = document.getElementById("ceoCommandList");
-  if (!pill || !headline || !reason || !canDeliver || !usersAtRisk || !lastSuccess || !nextExpected || !actionNow || !commandList) return;
+  if (!pill || !headline || !reason || !canDeliver || !usersAtRisk || !lastSuccess || !nextExpected || !actionNow || !productBlocker || !commandList) return;
 
   if (!summary) {
     pill.className = "ceo-status-pill neutral";
@@ -2894,6 +3143,7 @@ function renderExecutiveSummary(health) {
     actionNow.style.borderColor = "var(--border-subtle)";
     actionNow.style.background = "#fff";
     actionNow.style.color = "var(--text-2)";
+    productBlocker.innerHTML = renderCeoProductBlocker(null);
     commandList.innerHTML = renderCeoCommandButtons([]);
     return;
   }
@@ -2960,6 +3210,7 @@ function renderExecutiveSummary(health) {
     actionNow.style.color = "#065F46";
   }
 
+  productBlocker.innerHTML = renderCeoProductBlocker(summary.product_blocker);
   const commands = Array.isArray(summary.commands) ? summary.commands : [];
   commandList.innerHTML = renderCeoCommandButtons(commands);
 }

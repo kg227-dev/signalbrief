@@ -1,5 +1,7 @@
 "use strict";
 
+const { attachDiagnosisToAuditDocument } = require("../runtime/root-cause-diagnosis-runtime");
+
 function sanitizeCountMap(rawCounts) {
   const sanitized = Object.create(null);
   const entries = rawCounts && typeof rawCounts === "object" ? Object.entries(rawCounts) : [];
@@ -305,7 +307,7 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
     ? cloneJsonValue(selectionDiagnostics.writeup)
     : null;
 
-  return {
+  return attachDiagnosisToAuditDocument({
     run_id: runId || null,
     date_et: digestDateKey,
     mode: runMode,
@@ -388,7 +390,7 @@ function buildDigestAuditDocument({ digestDateKey, runId, runMode, selected, sel
         ? enrichmentDiagnostics.writeup_failure_details
         : [],
     },
-  };
+  });
 }
 
 function replaceTopicDiagnostic(topicDiagnostics, nextTopicDiagnostic) {
@@ -454,7 +456,7 @@ function recomputeDigestAuditRollups(auditDoc) {
       ? Number(((discoveryCandidateCount / totalCandidateCount) * 100).toFixed(2))
       : 0,
   };
-  return doc;
+  return attachDiagnosisToAuditDocument(doc);
 }
 
 function mergeTopicAuditDocument(existingDoc, freshDoc, mergeTopicTag) {

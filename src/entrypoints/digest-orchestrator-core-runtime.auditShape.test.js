@@ -219,5 +219,7 @@ assert.strictEqual(
 );
 assert.strictEqual(auditDoc.enrichmentDiagnostics.writeup_failure_details[0].raw_preview, "{bad-json");
 assert.strictEqual(auditDoc.enrichmentDiagnostics.item_outcomes[0].validation_tier, "pass");
+assert.ok(auditDoc.runDiagnosis && typeof auditDoc.runDiagnosis === "object");
+assert.ok(auditDoc.topics.TECHNOLOGY.topicDiagnosis && typeof auditDoc.topics.TECHNOLOGY.topicDiagnosis === "object");
 
 console.log("writeDigestAuditLog persists selection and broker telemetry shape ✓");

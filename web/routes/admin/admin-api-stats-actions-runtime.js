@@ -1,3 +1,6 @@
+const fs = require("fs");
+const path = require("path");
+
 const { isDebugWebServerEnabled } = require("../../server-runtime-env-runtime");
 const {
   buildAdminRoster,
@@ -15,6 +18,10 @@ const {
   expandRunsByRecipient,
   summarizeRosterQuality,
 } = require("../../services/admin");
+const {
+  attachDiagnosisToAuditDocument,
+  buildProductBlockerFromAuditDoc,
+} = require("../../../src/runtime/root-cause-diagnosis-runtime");
 const {
   mapAdminMessages,
   buildSummaryPayload,
@@ -52,6 +59,23 @@ function emitIgnoredBackfillSafe({
   }
 }
 
+function loadLatestAuditProductBlocker(digestAuditDir) {
+  const auditDir = String(digestAuditDir || "").trim();
+  if (!auditDir) return null;
+  try {
+    const latestFile = fs.readdirSync(auditDir)
+      .filter((file) => /^\d{4}-\d{2}-\d{2}\.json$/.test(file))
+      .sort()
+      .reverse()[0];
+    if (!latestFile) return null;
+    const raw = fs.readFileSync(path.join(auditDir, latestFile), "utf8");
+    const auditDoc = attachDiagnosisToAuditDocument(JSON.parse(raw));
+    return buildProductBlockerFromAuditDoc(auditDoc);
+  } catch {
+    return null;
+  }
+}
+
 function buildAdminStatsPayload({
   deps,
   loadSchedulerHeartbeat,
@@ -76,6 +100,7 @@ function buildAdminStatsPayload({
     CONFIG,
     getRuntimeStateDiagnostics,
     buildRecentDigestsExport,
+    digestAuditDir,
   } = deps;
 
   const usersAll = allUsers();
@@ -195,6 +220,7 @@ function buildAdminStatsPayload({
     ? getRuntimeStateDiagnostics()
     : null;
   const digestInsights = buildDigestInsights(recentDigests.rows, { days: 7 });
+  const productBlocker = loadLatestAuditProductBlocker(digestAuditDir);
   const health = buildHealthPayload({
     runs,
     deliveryWarnings,
@@ -203,6 +229,7 @@ function buildAdminStatsPayload({
     schedulerWorker,
     digestRun,
     ignoredBackfill,
+    productBlocker,
     runtimeState: runtimeStateDiagnostics ? {
       ok: runtimeStateDiagnostics.ok,
       status: runtimeStateDiagnostics.status,
@@ -228,5 +255,6 @@ function buildAdminStatsPayload({
 module.exports = {
   resolveSchedulerHeartbeatLoader,
   emitIgnoredBackfillSafe,
+  loadLatestAuditProductBlocker,
   buildAdminStatsPayload,
 };

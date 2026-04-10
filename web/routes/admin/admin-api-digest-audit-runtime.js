@@ -8,6 +8,7 @@ const {
   loadRecentAuditDocs,
 } = require("./admin-api-source-health-runtime");
 const { isStandardMvpTopicTag } = require("../../../src/runtime/topic-normalization-runtime");
+const { attachDiagnosisToAuditDocument } = require("../../../src/runtime/root-cause-diagnosis-runtime");
 
 function pct(part, whole) {
   const numerator = Number(part || 0);
@@ -455,9 +456,10 @@ async function handleAdminDigestAuditRoutes(ctx, deps) {
   const readinessDays = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 30) : 30;
   const recentAuditDocs = loadRecentAuditDocs(auditDir, readinessDays);
   const sourceHealth = aggregateSourceHealth(recentAuditDocs);
+  const responseAuditDoc = attachDiagnosisToAuditDocument(JSON.parse(JSON.stringify(auditDoc)));
   json(res, {
     ok: true,
-    ...auditDoc,
+    ...responseAuditDoc,
     rolling_readiness: buildRollingMvpReadiness(recentAuditDocs, sourceHealth),
     topic_readiness: buildTopicReadiness(recentAuditDocs, sourceHealth),
     source_health: buildSourceHealthSummary(sourceHealth),

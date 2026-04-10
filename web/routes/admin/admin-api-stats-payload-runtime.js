@@ -80,6 +80,7 @@ function buildExecutiveHealthSummary({
   schedulerWorker,
   digestRunner,
   runtimeState,
+  productBlocker,
 }) {
   const warnings = Array.isArray(deliveryWarnings) ? deliveryWarnings : [];
   const rel = deliveryReliability && typeof deliveryReliability === "object" ? deliveryReliability : {};
@@ -246,6 +247,9 @@ function buildExecutiveHealthSummary({
     backfill_needed: backfillNeeded,
     active_incident_open: activeIncidentOpen,
     active_incident_summary: activeIncidentSummary || null,
+    product_blocker: productBlocker && typeof productBlocker === "object"
+      ? { ...productBlocker }
+      : null,
     commands,
   };
 }
@@ -259,6 +263,7 @@ function buildHealthPayload({
   digestRun,
   ignoredBackfill,
   runtimeState,
+  productBlocker,
 }) {
   const digestRunner = buildDigestRunnerHealth(digestRun);
   const executiveSummary = buildExecutiveHealthSummary({
@@ -268,6 +273,7 @@ function buildHealthPayload({
     schedulerWorker,
     digestRunner,
     runtimeState,
+    productBlocker,
   });
   const lastRun = runs[0] || null;
   const serverUptimeSecs = Math.floor(process.uptime());

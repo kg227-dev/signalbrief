@@ -37,6 +37,9 @@ const {
   createDigestOrchestratorTransportRuntime,
 } = require("../src/entrypoints/digest-orchestrator-transport-runtime");
 const {
+  buildUserQuickScanRows,
+} = require("../src/entrypoints/digest-orchestrator-delivery-helpers-runtime");
+const {
   normalizeDigestHeadlinePreview,
 } = require("../src/digest/runtime/digest-headline-preview-runtime");
 const {
@@ -342,14 +345,19 @@ async function resendDigestSnapshot({ user, snapshot }) {
   const digestId = String(snapshot?.digest_id || "").trim() || buildDigestId(digestDateKey, user.chatId || email);
   const depth = String(snapshot?.depth || user?.preferences?.depth || user?.depth || "headline_plus_why").trim() || "headline_plus_why";
   const dateStr = String(snapshot?.date_str || "").trim() || formatDigestDateLabelFromKey(digestDateKey);
-  const quickScan = String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items);
   const subject = String(snapshot?.subject_line || "").trim() || buildAdminDigestResendSubject(snapshot, dateStr);
   const editorialNote = String(snapshot?.editorial_note || "").trim();
+  const digestFormattingRuntime = getDigestFormattingRuntime();
+  const quickScanRows = buildUserQuickScanRows(items, {
+    stripInlineHtml: digestFormattingRuntime.stripInlineHtml,
+    topicVisual: digestFormattingRuntime.topicVisual,
+    escapeHtml: digestFormattingRuntime.escapeHtml,
+  }) || String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items);
 
-  let html = getDigestFormattingRuntime().buildEmail(
+  let html = digestFormattingRuntime.buildEmail(
     items,
     dateStr,
-    quickScan,
+    quickScanRows,
     user?.token || "",
     false,
     false,

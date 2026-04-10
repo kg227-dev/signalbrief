@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 
 const {
+  DIGEST_AUDIT_ROLLING_WINDOW_DAYS,
   buildSourceHealthSummary,
   buildTopicReadiness,
   handleAdminDigestAuditRoutes,
@@ -35,6 +36,11 @@ function buildCtx(pathname) {
     pathname,
     url,
   };
+}
+
+{
+  assert.strictEqual(DIGEST_AUDIT_ROLLING_WINDOW_DAYS, 7, "digest audit rolling window should be fixed at 7 days");
+  console.log("DIGEST_AUDIT_ROLLING_WINDOW_DAYS ✓");
 }
 
 {
@@ -298,6 +304,63 @@ function buildCtx(pathname) {
     assert.strictEqual(body.rolling_readiness.days_covered, 2, "rolling readiness honors requested days window");
     assert.strictEqual(body.topic_readiness.TECHNOLOGY.days_observed, 2, "topic readiness observed days grows past 1 when older audits are available");
     console.log("handleAdminDigestAuditRoutes ✓");
+  })().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+{
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sb-digest-audit-route-clamp-"));
+  for (let day = 1; day <= 8; day += 1) {
+    const dateKey = `2026-03-${String(day).padStart(2, "0")}`;
+    const auditDoc = {
+      date_et: dateKey,
+      summary: {
+        total_candidates: 20,
+        total_selected: 5,
+        missed_story_flag_count: 0,
+      },
+      topics: {
+        TECHNOLOGY: {
+          total_candidates: 20,
+          selected_count: 5,
+          missed_story_flags: [],
+          candidates: [
+            { headline: `Selected item ${day}`, url: `https://example.com/${day}`, source: "Example", lane: "publisher_feed", _score: 0.9, selected: true },
+          ],
+        },
+      },
+      fetch: {
+        broker_candidate_count: 18,
+        discovery_candidate_count: 2,
+        topic_diagnostics: [],
+      },
+    };
+    fs.writeFileSync(path.join(tmpDir, `${dateKey}.json`), JSON.stringify(auditDoc, null, 2), "utf8");
+  }
+
+  const ctx = buildCtx("/api/admin/digest-audit?date=2026-03-08&days=30");
+  const deps = {
+    json(res, data, status = 200) {
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(data));
+    },
+    isAdminAuthed: () => true,
+    digestAuditDir: tmpDir,
+    formatEtDateKey: () => "2026-03-08",
+  };
+
+  (async () => {
+    const handled = await handleAdminDigestAuditRoutes(ctx, deps);
+    assert.strictEqual(handled, true, "route handled");
+    assert.strictEqual(ctx.res.statusCode, 200, "status 200");
+    const body = JSON.parse(ctx.res.body);
+    assert.strictEqual(body.ok, true, "ok response");
+    assert.strictEqual(body.rolling_readiness.days_covered, 7, "rolling readiness should clamp to 7 audit days");
+    assert.strictEqual(body.source_health.days_covered, 7, "source health should clamp to 7 audit days");
+    assert.strictEqual(body.topic_readiness.TECHNOLOGY.days_observed, 7, "topic readiness should clamp to 7 audit days");
+    console.log("handleAdminDigestAuditRoutes rolling window clamp ✓");
   })().catch((error) => {
     console.error(error);
     process.exit(1);

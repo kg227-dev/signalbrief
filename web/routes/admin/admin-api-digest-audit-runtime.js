@@ -10,6 +10,8 @@ const {
 const { isStandardMvpTopicTag } = require("../../../src/runtime/topic-normalization-runtime");
 const { attachDiagnosisToAuditDocument } = require("../../../src/runtime/root-cause-diagnosis-runtime");
 
+const DIGEST_AUDIT_ROLLING_WINDOW_DAYS = 7;
+
 function pct(part, whole) {
   const numerator = Number(part || 0);
   const denominator = Number(whole || 0);
@@ -452,8 +454,10 @@ async function handleAdminDigestAuditRoutes(ctx, deps) {
     return true;
   }
 
-  const rawDays = Number(url.searchParams.get("days") || "30");
-  const readinessDays = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 30) : 30;
+  const rawDays = Number(url.searchParams.get("days") || String(DIGEST_AUDIT_ROLLING_WINDOW_DAYS));
+  const readinessDays = Number.isFinite(rawDays) && rawDays > 0
+    ? Math.min(rawDays, DIGEST_AUDIT_ROLLING_WINDOW_DAYS)
+    : DIGEST_AUDIT_ROLLING_WINDOW_DAYS;
   const recentAuditDocs = loadRecentAuditDocs(auditDir, readinessDays);
   const sourceHealth = aggregateSourceHealth(recentAuditDocs);
   const responseAuditDoc = attachDiagnosisToAuditDocument(JSON.parse(JSON.stringify(auditDoc)));
@@ -468,6 +472,7 @@ async function handleAdminDigestAuditRoutes(ctx, deps) {
 }
 
 module.exports = {
+  DIGEST_AUDIT_ROLLING_WINDOW_DAYS,
   buildSourceHealthSummary,
   buildTopicReadiness,
   handleAdminDigestAuditRoutes,

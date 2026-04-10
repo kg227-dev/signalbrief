@@ -17,6 +17,7 @@ const path = require("path");
 const crypto = require("crypto");
 const {
   loadConfig,
+  readEnvNumber,
   getMailerTimeoutMs,
   getBaseUrl,
   getUnsubscribeSigningSecretOverride,
@@ -28,6 +29,9 @@ const WELCOME_TEMPLATE_PATH = path.join(APP_ROOT, "templates", "welcome.html");
 let welcomeTemplateCache = null;
 
 const MAILER_TIMEOUT_MS = getMailerTimeoutMs();
+const MAILER_MAX_ATTEMPTS = Math.max(1, Math.trunc(readEnvNumber(["SIGNALBRIEF_MAILER_MAX_ATTEMPTS"], 3)));
+const MAILER_RETRY_BASE_DELAY_MS = Math.max(100, readEnvNumber(["SIGNALBRIEF_MAILER_RETRY_BASE_DELAY_MS"], 1000));
+const MAILER_RETRY_MAX_DELAY_MS = Math.max(MAILER_RETRY_BASE_DELAY_MS, readEnvNumber(["SIGNALBRIEF_MAILER_RETRY_MAX_DELAY_MS"], 10_000));
 
 function getConfig() {
   return loadConfig();
@@ -168,9 +172,58 @@ function buildMailResult({
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(headers) {
+  const raw = headers && typeof headers === "object"
+    ? headers["retry-after"] || headers["Retry-After"]
+    : null;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return 0;
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(MAILER_RETRY_MAX_DELAY_MS, Math.round(seconds * 1000));
+  }
+  const retryAt = Date.parse(trimmed);
+  if (!Number.isFinite(retryAt)) return 0;
+  return Math.max(0, Math.min(MAILER_RETRY_MAX_DELAY_MS, retryAt - Date.now()));
+}
+
+function isRetryableResendStatus(status) {
+  const normalized = Number(status || 0);
+  return normalized === 408 || normalized === 429 || normalized >= 500;
+}
+
+function isRetryableResendError(error) {
+  const message = String(error || "").toLowerCase();
+  if (!message) return false;
+  return [
+    "timed out",
+    "timeout",
+    "socket hang up",
+    "econnreset",
+    "econnrefused",
+    "ehostunreach",
+    "enetunreach",
+    "eai_again",
+    "enotfound",
+    "tls",
+    "network",
+  ].some((token) => message.includes(token));
+}
+
+function computeRetryDelayMs(attemptNumber, retryAfterMs = 0) {
+  if (retryAfterMs > 0) return retryAfterMs;
+  const backoff = MAILER_RETRY_BASE_DELAY_MS * (2 ** Math.max(0, attemptNumber - 1));
+  return Math.min(MAILER_RETRY_MAX_DELAY_MS, backoff);
+}
+
 // ── Resend delivery ───────────────────────────────────────────────────────────
 
-function sendViaResend(to, subject, html, token = null) {
+function sendViaResendOnce(to, subject, html, token = null) {
   const keys = getConfigKeys();
   const apiKey = keys.resendApiKey;
   const fromEmail = keys.fromEmail || "digest@signalbrief.co";
@@ -227,6 +280,7 @@ function sendViaResend(to, subject, html, token = null) {
           ok: false,
           error: pickErrorMessage(data) || String(out || "").trim() || `Resend request failed with status ${status || "unknown"}.`,
           status,
+          headers: res.headers || {},
           code: "resend_request_failed",
         });
       });
@@ -236,6 +290,36 @@ function sendViaResend(to, subject, html, token = null) {
     req.write(body);
     req.end();
   });
+}
+
+async function sendViaResend(to, subject, html, token = null) {
+  let lastResult = null;
+  for (let attempt = 1; attempt <= MAILER_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await sendViaResendOnce(to, subject, html, token);
+      if (result?.ok) return result;
+      lastResult = result;
+      if (attempt >= MAILER_MAX_ATTEMPTS || !isRetryableResendStatus(result?.status)) {
+        break;
+      }
+      await sleep(computeRetryDelayMs(attempt, parseRetryAfterMs(result?.headers)));
+    } catch (error) {
+      lastResult = {
+        ok: false,
+        error: error?.message || String(error),
+        code: "resend_transport_error",
+      };
+      if (attempt >= MAILER_MAX_ATTEMPTS || !isRetryableResendError(lastResult.error)) {
+        break;
+      }
+      await sleep(computeRetryDelayMs(attempt));
+    }
+  }
+  return lastResult || {
+    ok: false,
+    error: "resend send failed",
+    code: "resend_request_failed",
+  };
 }
 
 async function sendEmail(to, subject, html, token = null) {

@@ -57,8 +57,61 @@ function extractFailedScheduledRecipients(run) {
     .map((entry) => ({
       id: String(entry?.id || "").trim(),
       error: String(entry?.error || "Delivery failed"),
+      delivery_outcome: String(entry?.delivery_outcome || "").trim(),
     }))
     .filter((entry) => entry.id);
+}
+
+function classifyScheduledRunFailure(run) {
+  const blockedReason = String(run?.blocked_reason || "").trim();
+  const failedRecipients = Array.isArray(run?.per_user_failed) ? run.per_user_failed : [];
+  const runValueState = String(run?.run_value_state || "").trim();
+
+  if (blockedReason === "circuit_breaker_open") {
+    return {
+      failure_stage: "admission_gate",
+      failure_label: "Admission gate blocked",
+      failure_reason: "circuit_breaker_open",
+    };
+  }
+  if (blockedReason) {
+    return {
+      failure_stage: "admission_gate",
+      failure_label: "Admission gate blocked",
+      failure_reason: blockedReason,
+    };
+  }
+  if (failedRecipients.length > 0) {
+    const failedSend = failedRecipients.every((entry) => {
+      const outcome = String(entry?.delivery_outcome || "").trim().toLowerCase();
+      const error = String(entry?.error || "").trim().toLowerCase();
+      return outcome.startsWith("delivery_failed") || error.includes("no channels succeeded");
+    });
+    if (failedSend) {
+      return {
+        failure_stage: "send",
+        failure_label: "Send failed",
+        failure_reason: "delivery_failed",
+      };
+    }
+    return {
+      failure_stage: "generation",
+      failure_label: "Generation failed",
+      failure_reason: runValueState || "run_failed",
+    };
+  }
+  if (runValueState === "zero_value") {
+    return {
+      failure_stage: "generation",
+      failure_label: "Generation completed but nothing delivered",
+      failure_reason: "zero_value",
+    };
+  }
+  return {
+    failure_stage: null,
+    failure_label: null,
+    failure_reason: null,
+  };
 }
 
 function countPastDueActiveUsersForToday(roster, nowEt) {
@@ -187,6 +240,8 @@ function buildDeliveryOperationsSnapshot({
     digestIncidentLog,
     nowMs,
   });
+  const latestFailure = classifyScheduledRunFailure(latestScheduledRun);
+  const latestRunValueState = String(latestScheduledRun?.run_value_state || "").trim();
 
   return {
     latest_scheduled_run_at: latestRunAt,
@@ -196,6 +251,11 @@ function buildDeliveryOperationsSnapshot({
     latest_scheduled_run_users_due: latestDue,
     latest_scheduled_run_failed_users: failedUsers,
     latest_scheduled_run_failed_recipient_ids: failedRecipients.map((entry) => normalizeRecipientKey(entry.id)).filter(Boolean),
+    latest_scheduled_run_value_state: latestRunValueState || null,
+    latest_scheduled_run_blocked_reason: String(latestScheduledRun?.blocked_reason || "").trim() || null,
+    latest_scheduled_run_failure_stage: latestFailure.failure_stage,
+    latest_scheduled_run_failure_label: latestFailure.failure_label,
+    latest_scheduled_run_failure_reason: latestFailure.failure_reason,
     active_recovery_queue: failedUsers,
     due_today_past_window: pastDueUsersToday,
     backfill_needed: backfillNeeded,

@@ -80,6 +80,8 @@ const recoverySummary = buildExecutiveHealthSummary({
     latest_scheduled_run_at: "2026-03-13T11:01:00.000Z",
     latest_scheduled_run_clean: false,
     latest_scheduled_run_failed_users: 2,
+    latest_scheduled_run_failure_label: "Admission gate blocked",
+    latest_scheduled_run_failure_reason: "circuit_breaker_open",
     backfill_needed: false,
     active_incident_open: false,
   },
@@ -88,6 +90,10 @@ const recoverySummary = buildExecutiveHealthSummary({
 });
 
 assert.strictEqual(recoverySummary.status, "red", "active recovery queue should be red");
+assert.ok(
+  String(recoverySummary.reason || "").includes("Admission gate blocked: circuit_breaker_open"),
+  "recovery reason should surface stage-specific failure detail"
+);
 assert.ok(
   recoverySummary.commands.some((command) => command.id === "review_missed_users"),
   "active recovery queue should expose review missed users"

@@ -3928,6 +3928,13 @@ function buildFailedDeliveryRows(roster, runs) {
   for (const run of todayRuns) {
     const runAtLabel = run.run_at_et || formatEtDateTime(run.run_at);
     const fromScheduled = true;
+    const blockedReason = String(run.blocked_reason || "").trim();
+    const runValueState = String(run.run_value_state || "").trim();
+    const failureStageLabel = blockedReason === "circuit_breaker_open"
+      ? "MISSED: ADMISSION"
+      : blockedReason
+        ? "MISSED: ADMISSION"
+        : ((Array.isArray(run.per_user_failed) ? run.per_user_failed : []).length > 0 ? "MISSED: SEND" : "MISSED");
     (Array.isArray(run.per_user) ? run.per_user : []).forEach((entry) => {
       const resolved = resolveRecipient(entry && entry.id);
       if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
@@ -3953,6 +3960,36 @@ function buildFailedDeliveryRows(roster, runs) {
         user: resolved.user,
         emailKey: resolved.emailKey,
         error: String((entry && entry.error) || "Delivery failed"),
+        failureStageLabel,
+        failureReason: blockedReason || String((entry && entry.delivery_outcome) || "").trim() || runValueState || "",
+        dateKey: String(run.date || ""),
+        runAtIso: run.run_at || null,
+        runAtLabel,
+      });
+    });
+
+    const synthesizedFailures = blockedReason && (!Array.isArray(run.per_user_failed) || run.per_user_failed.length === 0)
+      ? users.filter((user) => {
+          if (String(user?.status || "") !== "active") return false;
+          if (String(user?.last_scheduled_digest || user?.last_digest || "").trim() === String(run.date || "").trim()) return false;
+          return true;
+        })
+      : [];
+    synthesizedFailures.forEach((user) => {
+      const resolved = resolveRecipient(user.email || user.chat_id);
+      if (!resolved.key || latestOutcomeByUser.has(resolved.key)) return;
+      latestOutcomeByUser.set(resolved.key, {
+        status: "failed",
+        fromScheduled,
+        key: resolved.key,
+        runId: resolved.rawId,
+        user,
+        emailKey: resolved.emailKey,
+        error: blockedReason === "circuit_breaker_open"
+          ? "Admission gate blocked the scheduled run before generation/send."
+          : `Scheduled run blocked before delivery (${blockedReason})`,
+        failureStageLabel,
+        failureReason: blockedReason || runValueState || "",
         dateKey: String(run.date || ""),
         runAtIso: run.run_at || null,
         runAtLabel,
@@ -4004,7 +4041,8 @@ function renderFailedDeliveries(roster, runs) {
         <div class="failed-delivery-main">
           <div class="failed-delivery-name">${userLink}</div>
           <div class="failed-delivery-meta">${deliveryTarget} · failed ${esc(row.runAtLabel || "today")}</div>
-          <div class="failed-delivery-error">${esc(row.error || "Delivery failed")}</div>
+          <div class="failed-delivery-error">${esc(row.failureStageLabel || "MISSED")} · ${esc(row.error || "Delivery failed")}</div>
+          ${row.failureReason ? `<div class="failed-delivery-meta">Reason: <span class="mono">${esc(row.failureReason)}</span></div>` : ""}
           <div class="failed-delivery-meta">Stored snapshot controls are available when the failed run already captured a complete 5-item digest.</div>
           ${email && row.dateKey ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary" onclick="regenerateDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Regenerate summaries</button><button type="button" class="btn btn-secondary" onclick="resendDigestSnapshotForUser('${esc(email)}', '${esc(row.dateKey)}', this)">Resend stored digest</button></div>` : ''}
         </div>

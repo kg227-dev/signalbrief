@@ -281,27 +281,55 @@ function cloneReasonList(list) {
 
 function validateExtractionOutput(item, candidate = {}) {
   const extraction = normalizeExtractionOutput(candidate);
-  const reasons = [];
+  const hardReasons = [];
+  const softReasons = [];
   const contextText = `${String(item?.headline || "")} ${String(item?.summary || "")}`.trim();
   const fields = ["what_happened", "mechanism", "who_it_impacts", "implication"];
+  const lenientConcisionFields = new Set(["what_happened", "mechanism"]);
+
+  function isSpecificEnough(text, field) {
+    const plain = stripHtml(text);
+    const clauses = splitClauses(plain).length;
+    const hasConcreteAnchor = hasNamedAnchor(plain)
+      || QUANT_ANCHOR_PATTERN.test(plain)
+      || SYSTEM_ANCHOR_PATTERN.test(plain)
+      || overlapRatio(plain, contextText) >= 0.3;
+    if (!lenientConcisionFields.has(field)) return false;
+    return clauses <= 2 && wordCount(plain) <= 30 && hasConcreteAnchor;
+  }
+
   for (const field of fields) {
     const value = extraction[field];
     if (!value) {
-      reasons.push(`missing_${field}`);
+      hardReasons.push(`missing_${field}`);
       continue;
     }
-    if (splitSentences(value).length > 1 || wordCount(value) > 18) {
-      reasons.push(`${field}_not_concise`);
+    const maxWords = lenientConcisionFields.has(field) ? 24 : 18;
+    if (splitSentences(value).length > 1) {
+      softReasons.push(`${field}_not_concise`);
+      continue;
+    }
+    if (wordCount(value) > maxWords && !isSpecificEnough(value, field)) {
+      softReasons.push(`${field}_not_concise`);
     }
   }
-  if (!extraction.confidence) reasons.push("invalid_confidence");
+  if (!extraction.confidence) hardReasons.push("invalid_confidence");
   if (extraction.mechanism && overlapRatio(extraction.mechanism, contextText) >= 0.95) {
-    reasons.push("mechanism_too_literal");
+    hardReasons.push("mechanism_too_literal");
   }
+  const hardUnique = Array.from(new Set(hardReasons));
+  const softUnique = Array.from(new Set(softReasons.filter((reason) => !hardUnique.includes(reason))));
+  const minimumViableAccept = hardUnique.length === 0
+    && softUnique.length > 0
+    && softUnique.every((reason) => reason === "what_happened_not_concise" || reason === "mechanism_not_concise");
   return {
-    ok: reasons.length === 0,
-    reasons,
+    ok: hardUnique.length === 0,
+    reasons: [...hardUnique, ...softUnique],
     output: extraction,
+    validation_tier: hardUnique.length > 0 ? "hard_fail" : (softUnique.length > 0 ? "soft_fail" : "pass"),
+    hard_failure_reasons: hardUnique,
+    soft_failure_reasons: softUnique,
+    minimum_viable_accept: minimumViableAccept,
   };
 }
 
@@ -389,13 +417,15 @@ function validateStrategicWriteup(item, candidate = {}) {
     && (implicationType !== "other" || REQUIRED_LEVER_PATTERN.test(plain));
   const readableEnough = sentences.length >= 1
     && sentences.length <= 2
-    && clauseCounts.every((count) => count <= 3)
-    && wordCount(plain) <= 42;
+    && clauseCounts.every((count) => count <= 4)
+    && wordCount(plain) <= 54;
+  const concisionOnlySoftFail = softReasons.length > 0
+    && softReasons.every((reason) => reason === "too_long" || reason === "sentence_clause_overload" || reason === "missing_wim_brief");
   const minimumViableAccept = hardReasons.length === 0
     && hasShippableImplication
     && hasActorOrSystemAnchor
     && !hardReasons.includes("generic_language")
-    && readableEnough;
+    && (readableEnough || concisionOnlySoftFail);
 
   const softUnique = Array.from(new Set(softReasons.filter((reason) => !hardReasons.includes(reason))));
   const hardUnique = Array.from(new Set(hardReasons));

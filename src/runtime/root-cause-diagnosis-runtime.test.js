@@ -110,6 +110,43 @@ function buildAuditDoc({
 {
   const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
     writeup: {
+      drop_count: 13,
+      dropped_share_pct: 27.08,
+      strong_tier_attempted_count: 39,
+      strong_tier_drop_count: 13,
+      strong_tier_final_selected_count: 26,
+      repair_pass_success_rate_pct: 100,
+      parse_failure_counts: { validator_mismatch: 13 },
+    },
+    topics: {
+      TECHNOLOGY: buildTopic({
+        writeup: {
+          drop_count: 3,
+          dropped_share_pct: 37.5,
+          strong_tier_attempted_count: 7,
+          strong_tier_drop_count: 3,
+          strong_tier_final_selected_count: 4,
+        },
+      }),
+      INDUSTRIALS: buildTopic({
+        trustedSelectedCount: 2,
+        writeup: {
+          drop_count: 2,
+          dropped_share_pct: 28.5,
+          strong_tier_attempted_count: 4,
+          strong_tier_drop_count: 2,
+          strong_tier_final_selected_count: 2,
+        },
+      }),
+    },
+  }));
+
+  assert.strictEqual(doc.runDiagnosis.primaryRootCause, "validator_over_reject");
+}
+
+{
+  const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
+    writeup: {
       drop_count: 9,
       dropped_share_pct: 60,
       strong_tier_attempted_count: 9,

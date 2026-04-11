@@ -11,9 +11,10 @@ const {
   resolveStrictQualityConfig,
 } = require("../digest/domain/strict-quality-domain-runtime");
 
-const {
-  accumulateWriteupStatsFromTaggedItems,
-  appendRejectedItems,
+  const {
+    accumulateWriteupStatsFromTaggedItems,
+    aggregateTopicWriteupStats,
+    appendRejectedItems,
   attachStrictQuality,
   cloneReserveState,
   ensureTopicWriteupStats,
@@ -120,6 +121,9 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
     const usedUrls = new Set(flattenTopicBuckets(topicBuckets).map(({ item }) => String(item?.url || "").trim()).filter(Boolean));
     const reserveCursors = Object.fromEntries(
       [...new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])].map((tag) => [tag, { strong: 0, standard: 0 }])
+    );
+    const strongBackfillFailureCounts = Object.fromEntries(
+      [...new Set([...Object.keys(topicBuckets), ...Object.keys(reserves)])].map((tag) => [tag, 0])
     );
     const failedItemsByTopic = Object.create(null);
     const finalTopicBuckets = Object.create(null);
@@ -302,6 +306,18 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       while (acceptedItems.length < backfillPolicy.itemsPerTopic && !reserveDepleted) {
         let slotFilled = false;
         for (let attempt = 0; attempt < maxBackfillsPerSlot; attempt += 1) {
+          const currentTrustedFloor = backfillPolicy.trustedFloor?.byTopic?.[topicTag] || { active: false };
+          const remainingStrongReserveCount = Math.max(
+            0,
+            Number(reserves[topicTag]?.strongReserve?.length || 0) - Number(reserveCursors[topicTag]?.strong || 0)
+          );
+          const currentStrongSelectedCount = countTrustedSourceTier(acceptedItems);
+          const strongPoolExhaustedForBackfill = currentTrustedFloor.active === true
+            && currentStrongSelectedCount < Math.max(0, Number(currentTrustedFloor.minTrustedItemsPerTopic || 0))
+            && remainingStrongReserveCount <= 0;
+          const allowStandardBackfill = !currentTrustedFloor.active
+            || currentStrongSelectedCount >= Math.max(0, Number(currentTrustedFloor.minTrustedItemsPerTopic || 0))
+            || (strongPoolExhaustedForBackfill && Number(strongBackfillFailureCounts[topicTag] || 0) >= 2);
           const nextCandidate = pickNextReserveCandidate({
             reserveState: reserves[topicTag],
             reserveCursor: reserveCursors[topicTag] || { strong: 0, standard: 0 },
@@ -310,6 +326,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
             getBackfillRejectionReason: resolveBackfillRejection,
             policy: {
               ...backfillPolicy,
+              allowStandardBackfill,
               trustedFloor: backfillPolicy.trustedFloor?.byTopic?.[topicTag] || { active: false },
             },
           });
@@ -333,6 +350,9 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
             if (evaluation.exception_used === true) remainingExceptions = Math.max(0, remainingExceptions - 1);
             slotFilled = true;
             break;
+          }
+          if (nextCandidate.reserve_bucket === "strong") {
+            strongBackfillFailureCounts[topicTag] = Math.max(0, Number(strongBackfillFailureCounts[topicTag] || 0)) + 1;
           }
           const rejected = attachStrictQuality(enrichedCandidate, evaluation);
           rejectedItems.push(rejected);
@@ -540,9 +560,12 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       Object.entries(failedItemsByTopic).map(([tag, items]) => [tag, Array.isArray(items) ? items.slice() : []])
     );
     const finalSelected = flattenTopicBuckets(finalTopicBuckets).map(({ item }) => item);
-    const normalizedWriteupSummary = normalizeAggregateWriteupStats(writeupStats, backfillPolicy.itemsPerTopic);
     const normalizedTopicWriteupStats = Object.fromEntries(
       Object.entries(writeupStats.topicWriteupStats).map(([tag, stats]) => [tag, normalizeAggregateWriteupStats(stats, backfillPolicy.itemsPerTopic)])
+    );
+    const normalizedWriteupSummary = normalizeAggregateWriteupStats(
+      aggregateTopicWriteupStats(normalizedTopicWriteupStats),
+      backfillPolicy.itemsPerTopic
     );
     const updatedSelectionDiagnostics = updateSelectionDiagnosticsForWriteups(selectionDiagnostics, {
       finalSelectedByTopic: finalTopicBuckets,

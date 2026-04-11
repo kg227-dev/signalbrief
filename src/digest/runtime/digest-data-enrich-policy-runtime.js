@@ -188,25 +188,27 @@ function mapRepairType(reasons = []) {
 }
 
 function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, extractionOutput = null) {
+  const resolvedValidationTier = stages.repair.validation_tier
+    || stages.generation.validation_tier
+    || stages.extraction.validation_tier
+    || null;
   const parseFailureType = stages.repair.parse_failure_type
     || stages.generation.parse_failure_type
     || stages.extraction.parse_failure_type
     || null;
-  const validationTier = stages.repair.validation_tier
-    || stages.generation.validation_tier
-    || null;
   const minimumViableAccept = stages.repair.minimum_viable_accept === true
-    || stages.generation.minimum_viable_accept === true;
-  const hardFailureReasons = Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
-    ? stages.repair.hard_failure_reasons.slice()
-    : Array.isArray(stages.generation.hard_failure_reasons)
-      ? stages.generation.hard_failure_reasons.slice()
-      : [];
-  const softFailureReasons = Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
-    ? stages.repair.soft_failure_reasons.slice()
-    : Array.isArray(stages.generation.soft_failure_reasons)
-      ? stages.generation.soft_failure_reasons.slice()
-      : [];
+    || stages.generation.minimum_viable_accept === true
+    || stages.extraction.minimum_viable_accept === true;
+  const hardFailureReasons = Array.from(new Set([
+    ...(Array.isArray(stages.extraction.hard_failure_reasons) ? stages.extraction.hard_failure_reasons : []),
+    ...(Array.isArray(stages.generation.hard_failure_reasons) ? stages.generation.hard_failure_reasons : []),
+    ...(Array.isArray(stages.repair.hard_failure_reasons) ? stages.repair.hard_failure_reasons : []),
+  ]));
+  const softFailureReasons = Array.from(new Set([
+    ...(Array.isArray(stages.extraction.soft_failure_reasons) ? stages.extraction.soft_failure_reasons : []),
+    ...(Array.isArray(stages.generation.soft_failure_reasons) ? stages.generation.soft_failure_reasons : []),
+    ...(Array.isArray(stages.repair.soft_failure_reasons) ? stages.repair.soft_failure_reasons : []),
+  ]));
   return {
     ...item,
     signal_shift: extractionOutput?.what_happened || null,
@@ -226,7 +228,7 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: parseFailureType,
     final_status: "failed_dropped",
-    validation_tier: validationTier,
+    validation_tier: resolvedValidationTier,
     minimum_viable_accept: minimumViableAccept,
     hard_failure_reasons: hardFailureReasons,
     soft_failure_reasons: softFailureReasons,
@@ -249,6 +251,10 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
 }
 
 function buildPassedItem(item, policy, stages, extractionOutput, wimText, status) {
+  const resolvedValidationTier = stages.repair.validation_tier
+    || stages.generation.validation_tier
+    || stages.extraction.validation_tier
+    || "pass";
   return {
     ...item,
     signal_shift: extractionOutput?.what_happened || null,
@@ -268,18 +274,20 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: null,
     final_status: status,
-    validation_tier: stages.repair.validation_tier || stages.generation.validation_tier || "pass",
-    minimum_viable_accept: stages.repair.minimum_viable_accept === true || stages.generation.minimum_viable_accept === true,
-    hard_failure_reasons: Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
-      ? stages.repair.hard_failure_reasons.slice()
-      : Array.isArray(stages.generation.hard_failure_reasons)
-        ? stages.generation.hard_failure_reasons.slice()
-        : [],
-    soft_failure_reasons: Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
-      ? stages.repair.soft_failure_reasons.slice()
-      : Array.isArray(stages.generation.soft_failure_reasons)
-        ? stages.generation.soft_failure_reasons.slice()
-        : [],
+    validation_tier: resolvedValidationTier,
+    minimum_viable_accept: stages.repair.minimum_viable_accept === true
+      || stages.generation.minimum_viable_accept === true
+      || stages.extraction.minimum_viable_accept === true,
+    hard_failure_reasons: Array.from(new Set([
+      ...(Array.isArray(stages.extraction.hard_failure_reasons) ? stages.extraction.hard_failure_reasons : []),
+      ...(Array.isArray(stages.generation.hard_failure_reasons) ? stages.generation.hard_failure_reasons : []),
+      ...(Array.isArray(stages.repair.hard_failure_reasons) ? stages.repair.hard_failure_reasons : []),
+    ])),
+    soft_failure_reasons: Array.from(new Set([
+      ...(Array.isArray(stages.extraction.soft_failure_reasons) ? stages.extraction.soft_failure_reasons : []),
+      ...(Array.isArray(stages.generation.soft_failure_reasons) ? stages.generation.soft_failure_reasons : []),
+      ...(Array.isArray(stages.repair.soft_failure_reasons) ? stages.repair.soft_failure_reasons : []),
+    ])),
     first_pass_succeeded: status === "model_pass",
     writeup_status: status,
     writeup_attempt_count: Math.max(

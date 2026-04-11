@@ -3962,6 +3962,11 @@ function buildFailedDeliveryRows(roster, runs) {
 
   return Array.from(latestOutcomeByUser.values())
     .filter((row) => row.status === "failed" && row.fromScheduled)
+    .filter((row) => {
+      const scheduledDigestDate = String(row.user && row.user.last_scheduled_digest || "").trim();
+      const deliveredCount = Number(row.user && row.user.last_scheduled_digest_item_count || 0);
+      return !(scheduledDigestDate && scheduledDigestDate === String(row.dateKey || "").trim() && deliveredCount > 0);
+    })
     .map((row) => ({ ...row }));
 }
 

@@ -153,6 +153,49 @@ const {
 })();
 
 (() => {
+  const now = new Date("2026-04-10T15:00:00.000Z");
+  const buildRecentDigestsExport = createRecentDigestsExporter({
+    loadCostRunsNewest: () => [{
+      date: "2026-04-10",
+      run_id: "scheduled:2026-04-10T11-17-13-143Z",
+      run_at: "2026-04-10T11:17:13.143Z",
+      run_at_et: "Apr 10, 7:17 AM",
+      on_demand: false,
+      per_user: [],
+      per_user_failed: [{
+        id: "retry@example.com",
+        error: "no channels succeeded",
+      }],
+    }],
+    allUsers: () => [{ chatId: "chat-retry", email: "retry@example.com" }],
+    loadEngagementEvents: () => [],
+    loadDigestSnapshotByRunId: (_userId, dateEt, runId) => ({
+      digest_id: `${dateEt}:chat-retry`,
+      run_id: runId,
+      mode: "scheduled",
+      status: "sent",
+      sent_at: "2026-04-10T17:55:00.000Z",
+      version: 2,
+      quality_score: 78.2,
+      quality_band: "strong",
+      requested_count: 5,
+      items: [{ index: 1, headline: "Recovered item", url: "https://example.com/recovered", tag: "AI" }],
+    }),
+    loadLatestDigestSnapshot: () => null,
+  });
+
+  const payload = buildRecentDigestsExport({ days: 7, now });
+  assert.strictEqual(payload.row_count, 1);
+  const row = payload.rows[0];
+  assert.strictEqual(row.recipient, "retry@example.com");
+  assert.strictEqual(row.user_id, "chat-retry");
+  assert.strictEqual(row.date_et, "2026-04-10");
+  assert.strictEqual(row.run_id, "scheduled:2026-04-10T11-17-13-143Z");
+  assert.strictEqual(row.sent_at_utc, "2026-04-10T17:55:00.000Z");
+  assert.strictEqual(row.sent_item_count, 1);
+})();
+
+(() => {
   const now = new Date("2026-03-20T15:00:00.000Z");
   const buildRecentDigestsExport = createRecentDigestsExporter({
     loadCostRunsNewest: () => [{

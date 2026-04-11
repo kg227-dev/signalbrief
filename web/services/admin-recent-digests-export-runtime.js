@@ -96,6 +96,11 @@ function normalizeItems(items) {
     .map(normalizeItem);
 }
 
+function isSuccessfulSnapshot(snapshot) {
+  const status = String(snapshot?.status || "").trim().toLowerCase();
+  return status === "sent" && String(snapshot?.sent_at || "").trim();
+}
+
 function createEventAggregate() {
   return {
     channels: new Set(),
@@ -227,6 +232,7 @@ function createRecentDigestsExporter(deps) {
     );
 
     const rows = [];
+    const seenDigestRunKeys = new Set();
     for (const run of (Array.isArray(runs) ? runs : [])) {
       const dateEt = String(run?.date || "").trim();
       if (!dateEt) continue;
@@ -270,6 +276,8 @@ function createRecentDigestsExporter(deps) {
           ? qualityScore
           : (Number.isFinite(Number(events.quality_score)) ? Number(events.quality_score) : null);
         const qualityBand = String(perUserRow?.digest_quality_band || events.quality_band || resolvedSnapshot?.quality_band || "").trim() || null;
+        const digestRunKey = `${digestId}::${runId || ""}`;
+        seenDigestRunKeys.add(digestRunKey);
 
         rows.push({
           recipient: recipient || matchedUser?.email || userId,
@@ -324,6 +332,104 @@ function createRecentDigestsExporter(deps) {
           refill_count: Math.max(0, Number(resolvedSnapshot?.refill_count || perUserRow?.refill_count || 0)),
           thin_pool: resolvedSnapshot?.thin_pool === true || perUserRow?.thin_pool === true,
           dominant_failure_mode: String(resolvedSnapshot?.dominant_failure_mode || perUserRow?.dominant_failure_mode || "").trim() || null,
+          channels: Array.from(events.channels).sort(),
+          engagement: {
+            opens: events.opens,
+            clicks: events.clicks,
+            saves: events.saves,
+            ignored: events.ignored,
+            feedback_submitted: events.feedback_submitted,
+            feedback_labels: events.feedback_labels.slice(),
+            scope: engagementScope,
+          },
+        });
+      }
+
+      for (const failedRow of (Array.isArray(run?.per_user_failed) ? run.per_user_failed : [])) {
+        const recipient = String(failedRow?.id || "").trim();
+        const matchedUser = lookupUser(users, "", recipient);
+        const userId = String(matchedUser?.chatId || "").trim();
+        if (!userId) continue;
+
+        const snapshot = typeof loadDigestSnapshotByRunId === "function"
+          ? loadDigestSnapshotByRunId(userId, dateEt, String(run?.run_id || "").trim())
+          : null;
+        const fallbackSnapshot = !snapshot && typeof loadLatestDigestSnapshot === "function"
+          ? loadLatestDigestSnapshot(userId, dateEt)
+          : null;
+        const resolvedSnapshot = snapshot || fallbackSnapshot || null;
+        if (!isSuccessfulSnapshot(resolvedSnapshot)) continue;
+
+        const digestId = String(resolvedSnapshot?.digest_id || `${dateEt}:${userId}`).trim();
+        const digestRunKey = `${digestId}::${String(run?.run_id || "").trim()}`;
+        if (seenDigestRunKeys.has(digestRunKey)) continue;
+        seenDigestRunKeys.add(digestRunKey);
+
+        const exactEvents = eventIndex.exact.get(digestRunKey) || null;
+        const digestEvents = eventIndex.digestOnly.get(digestId) || null;
+        const events = mergeEventAggregates(exactEvents, digestEvents);
+        const engagementScope = exactEvents ? (digestEvents ? "run+digest" : "run") : (digestEvents ? "digest" : "none");
+        const digestUrl = String(
+          resolvedSnapshot?.digest_url
+          || resolvedSnapshot?.publicDigestUrl
+          || resolvedSnapshot?.public_digest_url
+          || buildPublicDigestUrl(dateEt)
+        ).trim();
+        const sentItems = normalizeItems(
+          Array.isArray(resolvedSnapshot?.items) && resolvedSnapshot.items.length > 0
+            ? resolvedSnapshot.items
+            : events.sent_items
+        );
+
+        rows.push({
+          recipient: recipient || matchedUser?.email || userId,
+          user_id: userId || null,
+          user_email: matchedUser?.email || null,
+          date_et: dateEt,
+          run_id: String(run?.run_id || "").trim() || null,
+          mode: String(resolvedSnapshot?.mode || normalizeMode(failedRow, run)).trim() || "scheduled",
+          run_at_utc: String(run?.run_at || "").trim() || null,
+          run_at_et: String(run?.run_at_et || "").trim() || null,
+          digest_id: digestId,
+          digest_url: digestUrl,
+          delivery_version: Number.isFinite(Number(resolvedSnapshot?.version)) ? Number(resolvedSnapshot.version) : null,
+          quality_score: Number.isFinite(Number(resolvedSnapshot?.quality_score)) ? Number(resolvedSnapshot.quality_score) : null,
+          quality_band: String(resolvedSnapshot?.quality_band || "").trim() || null,
+          requested_count: Number.isFinite(Number(resolvedSnapshot?.requested_count)) ? Number(resolvedSnapshot.requested_count) : null,
+          sent_at_utc: resolvedSnapshot?.sent_at || events.sent_at || null,
+          sent_items: sentItems,
+          sent_item_count: sentItems.length,
+          freshness_block_count: Math.max(0, Number(resolvedSnapshot?.freshness_block_count || 0)),
+          semantic_repeat_block_count: Math.max(0, Number(resolvedSnapshot?.semantic_repeat_block_count || 0)),
+          alternate_queries_used: Math.max(0, Number(resolvedSnapshot?.alternate_queries_used || 0)),
+          preferred_domains_count: Math.max(0, Number(resolvedSnapshot?.preferred_domains_count || 0)),
+          preferred_candidate_count: Math.max(0, Number(resolvedSnapshot?.preferred_candidate_count || 0)),
+          non_preferred_candidate_count: Math.max(0, Number(resolvedSnapshot?.non_preferred_candidate_count || 0)),
+          final_selected_preferred_count: Math.max(0, Number(resolvedSnapshot?.final_selected_preferred_count || 0)),
+          preferred_displaced_weak_count: Math.max(0, Number(resolvedSnapshot?.preferred_displaced_weak_count || 0)),
+          derivative_suppressed_count: Math.max(0, Number(resolvedSnapshot?.derivative_suppressed_count || 0)),
+          specialist_trade_beat_preferred_count: Math.max(0, Number(resolvedSnapshot?.specialist_trade_beat_preferred_count || 0)),
+          platform_identity_ambiguity_count: Math.max(0, Number(resolvedSnapshot?.platform_identity_ambiguity_count || 0)),
+          broader_retrieval_found_better_count: Math.max(0, Number(resolvedSnapshot?.broader_retrieval_found_better_count || 0)),
+          coverage_gap_preferred_missing_count: Math.max(0, Number(resolvedSnapshot?.coverage_gap_preferred_missing_count || 0)),
+          coverage_gap_preferred_weaker_count: Math.max(0, Number(resolvedSnapshot?.coverage_gap_preferred_weaker_count || 0)),
+          search_budget_soft_calls: Math.max(0, Number(resolvedSnapshot?.search_budget_soft_calls || 0)),
+          search_budget_hard_calls: Math.max(0, Number(resolvedSnapshot?.search_budget_hard_calls || 0)),
+          search_budget_calls_used: Math.max(0, Number(resolvedSnapshot?.search_budget_calls_used || 0)),
+          search_budget_exhausted: resolvedSnapshot?.search_budget_exhausted === true,
+          broad_fallback_topics_used: Math.max(0, Number(resolvedSnapshot?.broad_fallback_topics_used || 0)),
+          zero_yield_retry_count: Math.max(0, Number(resolvedSnapshot?.zero_yield_retry_count || 0)),
+          budget_stop_reason: String(resolvedSnapshot?.budget_stop_reason || "").trim() || null,
+          candidate_pool_before_dedup: Number.isFinite(Number(resolvedSnapshot?.candidate_pool_before_dedup))
+            ? Number(resolvedSnapshot.candidate_pool_before_dedup)
+            : null,
+          candidate_pool_after_dedup: Number.isFinite(Number(resolvedSnapshot?.candidate_pool_after_dedup))
+            ? Number(resolvedSnapshot.candidate_pool_after_dedup)
+            : null,
+          fallback_reason: String(resolvedSnapshot?.fallback_reason || "").trim() || null,
+          refill_count: Math.max(0, Number(resolvedSnapshot?.refill_count || 0)),
+          thin_pool: resolvedSnapshot?.thin_pool === true,
+          dominant_failure_mode: String(resolvedSnapshot?.dominant_failure_mode || "").trim() || null,
           channels: Array.from(events.channels).sort(),
           engagement: {
             opens: events.opens,

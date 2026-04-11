@@ -1,6 +1,6 @@
 # Retrieval Eval Worklog
 
-*Last reviewed: April 10, 2026*
+*Last reviewed: April 11, 2026*
 
 This is the live operator summary for retrieval-evaluation work. The full March 2026 historical log is archived under [`../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md`](../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md).
 
@@ -16,18 +16,21 @@ Track the current retrieval-quality loop without mixing a large historical execu
 
 ## Current Working Conclusion
 
-As of April 10, 2026 (Day 14), the run is healthier than Day 13 but category expansion is still blocked. Day 14 delivered 35/35, kept all 7 topics at 5/5 and above depth-15, produced 601 total candidates after story-relationship filtering, and passed 727/727 broker fetch items across 45 domains. Trusted share reached 28/35 (80.0%) for the day, up from 25/35 (71.4%) on Day 13 and 22/35 (62.9%) on Day 12, but the three-day calibration window is still only 75/105 trusted (71.4%). The detailed audit is archived at [`../archive/planning/2026-03/mvp-day-14-2026-04-10.md`](../archive/planning/2026-03/mvp-day-14-2026-04-10.md).
+As of April 11, 2026 (Day 15), category expansion is still blocked. The day had two separate stories:
 
-**Active issue - writeup first-pass quality is still weak even though repairs recovered the run.**
-Day 14 attempted 50 writeups, passed only 5 on the first try (10.0%), recovered 30/30 repair attempts, and still dropped 15 writeups (30.0%). Strong-tier writeups improved sharply from Day 13, but 9 of 37 strong attempts still dropped (24.3%), which remains above the <=15% expansion bar.
+- **runtime/delivery:** the morning scheduled run was blocked by stale circuit-breaker state carried over from April 10, but the deployed breaker-reset fix allowed the team to replay the run later the same day and deliver all 10 canary digests successfully.
+- **content quality:** the audit stayed red even after the recovery send. Day 15 delivered 35/35, kept all 7 topics at 5/5 and above depth-15, produced 365 retained candidates after filtering, and stayed almost entirely broker-backed. Trusted share landed at **26/35 (74.3%)**, down from Day 14's **28/35 (80.0%)**. The detailed audit is archived at [`../archive/planning/2026-03/mvp-day-15-2026-04-11.md`](../archive/planning/2026-03/mvp-day-15-2026-04-11.md).
 
-**Active issue - Consumer & Retail is still the clearest weak topic, with Industrials only partially recovered.**
-Consumer & Retail improved from 1/5 trusted to 3/5 trusted, but it still dropped 6 of 11 writeup attempts and finished with the worst topic-level drop share in the run. Industrials recovered from 0/5 trusted to 3/5 trusted, but that is still below expansion quality.
+**Active issue - structured-output parsing and validator over-reject are still the main blockers.**
+Day 15 attempted 48 writeups, passed only 8 on the first try (16.7%), recovered 27/27 repair attempts, and still dropped 13 writeups (27.1%). Strong-tier writeups worsened relative to Day 14: 13 of 39 strong attempts dropped (33.3%). The run diagnosis labeled the day `parse_or_structured_output_failure`, with `validator_over_reject` and `selection_ranking_failure` as the next two causes.
 
-**Active issue - the audit summary counters need parity fixes.**
-The top-level `summary.writeup` block reports `soft_fail_count: 0` and `minimum_viable_accept_count: 0`, while the per-topic writeup blocks sum to 28 soft-fail recoveries and 7 minimum-viable accepts. The docs should continue to trust per-topic counters until the aggregate is corrected.
+**Active issue - Industrials and Consumer & Retail still fail the trust bar.**
+Both lanes finished only **2/5 trusted** on a day where every topic cleared depth-15. This is no longer a retrieval-volume problem; it is still a same-topic trusted recovery and backfill-quality problem after writeup loss.
 
-Technology and Life Sciences both look directionally healthy enough to preserve during calibration. The remaining blockers are concise writeup survivability, trusted-first same-topic backfill in weaker lanes, and the summary-counter mismatch in the audit itself.
+**Active issue - the audit summary counters are still not trustworthy.**
+The top-level `summary.writeup` block still reports `soft_fail_count: 0` and `minimum_viable_accept_count: 0`, but the Day 15 per-topic writeup blocks sum to **31 soft-fail recoveries** and **9 minimum-viable accepts**. Operator docs should continue to trust the topic-level counters until the summary aggregate is fixed.
+
+The rolling admin readiness view is still below launch quality even with healthy broker retrieval: **63.1% trusted Tier 1/2 share**, **90.4% full-rate**, and **247 missed-story flags** across the 15-day window. Retrieval backbone reliability is no longer the limiting factor; writeup survivability and trusted-lane recovery are.
 
 ## Update Rules
 

@@ -18,6 +18,20 @@ const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_MODEL = "claude-3-haiku-20240307";
 const DEFAULT_MAX_TOKENS = 100;
 
+function buildUsage(payload) {
+  return {
+    input_tokens: Number(payload?.usage?.input_tokens || 0),
+    output_tokens: Number(payload?.usage?.output_tokens || 0),
+  };
+}
+
+function mergeUsage(left = {}, right = {}) {
+  return {
+    input_tokens: Number(left?.input_tokens || 0) + Number(right?.input_tokens || 0),
+    output_tokens: Number(left?.output_tokens || 0) + Number(right?.output_tokens || 0),
+  };
+}
+
 // ─── buildClassificationPrompt ───────────────────────────────────────────────
 
 /**
@@ -110,7 +124,7 @@ async function classifySingle(candidate, opts) {
   const { apiKey, model = DEFAULT_MODEL, timeout, httpsPost } = opts || {};
 
   if (!apiKey || !httpsPost) {
-    return { ...FALLBACK_RESULT, _fallback_type: "no_api_key" };
+    return { ...FALLBACK_RESULT, _fallback_type: "no_api_key", usage: { input_tokens: 0, output_tokens: 0 } };
   }
 
   const { system, user } = buildClassificationPrompt(candidate);
@@ -138,11 +152,11 @@ async function classifySingle(candidate, opts) {
       { timeoutMs: timeout || 15000, retries: 1, retryDelayMs: 500 }
     );
   } catch (err) {
-    return { ...FALLBACK_RESULT, _fallback_type: "network_error" };
+    return { ...FALLBACK_RESULT, _fallback_type: "network_error", usage: { input_tokens: 0, output_tokens: 0 } };
   }
 
   if (res.status >= 400) {
-    return { ...FALLBACK_RESULT, _fallback_type: "network_error" };
+    return { ...FALLBACK_RESULT, _fallback_type: "network_error", usage: buildUsage(res.body) };
   }
 
   // Extract text from response
@@ -154,7 +168,7 @@ async function classifySingle(candidate, opts) {
   }
 
   if (!text) {
-    return { ...FALLBACK_RESULT, _fallback_type: "empty_response" };
+    return { ...FALLBACK_RESULT, _fallback_type: "empty_response", usage: buildUsage(res.body) };
   }
 
   // Parse JSON
@@ -162,16 +176,19 @@ async function classifySingle(candidate, opts) {
   try {
     parsed = JSON.parse(text);
   } catch (_) {
-    return { ...FALLBACK_RESULT, _fallback_type: "parse_failure" };
+    return { ...FALLBACK_RESULT, _fallback_type: "parse_failure", usage: buildUsage(res.body) };
   }
 
   // Validate label
   if (!parsed || !parsed.classification ||
       !VALID_LABELS.includes(parsed.classification.toUpperCase())) {
-    return { ...FALLBACK_RESULT, _fallback_type: "unrecognized_label" };
+    return { ...FALLBACK_RESULT, _fallback_type: "unrecognized_label", usage: buildUsage(res.body) };
   }
 
-  return normalizeClassificationResult(parsed);
+  return {
+    ...normalizeClassificationResult(parsed),
+    usage: buildUsage(res.body),
+  };
 }
 
 // ─── runConcurrent ────────────────────────────────────────────────────────────
@@ -243,6 +260,7 @@ async function classifyCandidates(candidates, opts) {
   let high = 0;
   let medium = 0;
   let low = 0;
+  let usage = { input_tokens: 0, output_tokens: 0 };
 
   // Phase 1: Check cache for all candidates
   const misses = [];
@@ -270,6 +288,7 @@ async function classifyCandidates(candidates, opts) {
   await runConcurrent(misses, async (candidate) => {
     const result = await classifySingle(candidate, { apiKey, model, httpsPost });
     modelCalls++;
+    usage = mergeUsage(usage, result.usage);
 
     if (result._fallback_type) {
       fallbacks++;
@@ -324,6 +343,8 @@ async function classifyCandidates(candidates, opts) {
     low,
     elapsed_ms: Date.now() - startMs,
     classifier_version: CLASSIFIER_VERSION,
+    model,
+    usage,
   };
 
   return { candidates, diagnostics };

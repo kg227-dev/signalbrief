@@ -147,7 +147,37 @@ function createPassDiagnostics(maxAttempts) {
     search_result_domains: [],
     preferred_search_result_domains: [],
     preferred_search_result_hit_count: 0,
+    usage: {
+      input_tokens: 0,
+      output_tokens: 0,
+    },
     conversion_funnel: createConversionFunnel(),
+  };
+}
+
+function extractResponseUsage(payload) {
+  const usage = payload && typeof payload === "object" ? payload.usage : null;
+  if (!usage || typeof usage !== "object") {
+    return {
+      input_tokens: 0,
+      output_tokens: 0,
+    };
+  }
+  const inputTokens = Number(
+    usage.input_tokens
+      ?? usage.prompt_tokens
+      ?? usage.promptTokens
+      ?? 0
+  );
+  const outputTokens = Number(
+    usage.output_tokens
+      ?? usage.completion_tokens
+      ?? usage.completionTokens
+      ?? 0
+  );
+  return {
+    input_tokens: Number.isFinite(inputTokens) ? Math.max(0, inputTokens) : 0,
+    output_tokens: Number.isFinite(outputTokens) ? Math.max(0, outputTokens) : 0,
   };
 }
 
@@ -172,6 +202,8 @@ function mergePassDiagnostics(target, extra) {
     ...(Array.isArray(extra?.preferred_search_result_domains) ? extra.preferred_search_result_domains : []),
   ]));
   target.preferred_search_result_hit_count += Number(extra?.preferred_search_result_hit_count || 0);
+  target.usage.input_tokens += Number(extra?.usage?.input_tokens || 0);
+  target.usage.output_tokens += Number(extra?.usage?.output_tokens || 0);
   target.conversion_funnel = mergeConversionFunnel(target.conversion_funnel, extra?.conversion_funnel);
   for (const [code, count] of Object.entries(extra?.status_counts || {})) {
     target.status_counts[code] = (target.status_counts[code] || 0) + Number(count || 0);
@@ -323,6 +355,9 @@ function createDigestDataFetchRuntime(deps) {
         continue;
       }
       diagnostics.successful_calls += 1;
+      const responseUsage = extractResponseUsage(res.body);
+      diagnostics.usage.input_tokens += Number(responseUsage.input_tokens || 0);
+      diagnostics.usage.output_tokens += Number(responseUsage.output_tokens || 0);
 
       const citations = res.body?.citations || [];
       const searchResults = Array.isArray(res.body?.search_results) ? res.body.search_results : [];
@@ -572,6 +607,10 @@ function createDigestDataFetchRuntime(deps) {
       search_result_domains: [],
       preferred_search_result_domains: [],
       preferred_search_result_hit_count: 0,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+      },
       preferred_search_results_without_preferred_item: false,
       conversion_funnel: createConversionFunnel(),
       freshness_max_age_hours: maxAgeHours,

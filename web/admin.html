@@ -5138,11 +5138,18 @@ async function load(silent = false) {
     } else {
       runsBody.innerHTML = runs.map(r => {
         const typeBadge = `<span class="badge-scheduled">scheduled</span>`;
-        const totalClass = costClass(r.total_cost_usd || 0);
+        const runTotalCost = Number(r.billable_total_cost_usd != null ? r.billable_total_cost_usd : r.total_cost_usd || 0);
+        const totalClass = costClass(runTotalCost);
         // Cost breakdown on hover
-        const perpFmt  = r.perplexity_cost_usd != null ? `$${r.perplexity_cost_usd.toFixed(4)}` : "—";
-        const claudeFmt = r.claude_cost_usd != null ? `$${r.claude_cost_usd.toFixed(4)}` : "—";
-        const costTitle = `Perplexity ${perpFmt} + Claude ${claudeFmt}`;
+        const searchFmt = r.perplexity_cost_usd != null ? `$${r.perplexity_cost_usd.toFixed(4)}` : "—";
+        const anthropicFmt = r.anthropic_cost_usd != null
+          ? `$${r.anthropic_cost_usd.toFixed(4)}`
+          : (r.claude_cost_usd != null ? `$${r.claude_cost_usd.toFixed(4)}` : "—");
+        const enrichFmt = r.enrich_cost_usd != null ? `$${r.enrich_cost_usd.toFixed(4)}` : "—";
+        const classifierFmt = r.classifier_cost_usd != null ? `$${r.classifier_cost_usd.toFixed(4)}` : "—";
+        const costTitle = r.classifier_cost_usd != null || r.enrich_cost_usd != null
+          ? `Search ${searchFmt} + Enrich ${enrichFmt} + Classifier ${classifierFmt} = Total $${runTotalCost.toFixed(4)}`
+          : `Search ${searchFmt} + Anthropic ${anthropicFmt} = Total $${runTotalCost.toFixed(4)}`;
         // ET date/time
         let dateEt = r.date;
         let timeEt = r.run_at_et || "—";
@@ -5173,7 +5180,7 @@ async function load(silent = false) {
           <td class="mono" style="color:#6B7280;">${fmtTokens(tokensIn)} / ${fmtTokens(tokensOut)}</td>
           <td>${digestQuality}</td>
           <td>${digestCell}</td>
-          <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(r.total_cost_usd)}</td>
+          <td class="cost-cell ${totalClass}" title="${esc(costTitle)}" style="cursor:help;">${fmt$(runTotalCost)}</td>
         </tr>`;
       }).join("");
     }

@@ -1,4 +1,4 @@
-const { sumRuns } = require("../../services/admin");
+const { sumRuns, sumRunCosts, getRunCostUsd } = require("../../services/admin");
 
 function mapAdminMessages({ readJsonLineLog, adminMessageLog, maskEmail }) {
   return readJsonLineLog(adminMessageLog, 30).map((message) => ({
@@ -33,10 +33,10 @@ function buildSummaryPayload({
   const trailing = trailing7dCost && typeof trailing7dCost === "object" ? trailing7dCost : {};
   const projected = projected7dCost && typeof projected7dCost === "object" ? projected7dCost : {};
   return {
-    all_time_cost: parseFloat(sumRuns(runs, "total_cost_usd").toFixed(4)),
+    all_time_cost: parseFloat(sumRunCosts(runs).toFixed(4)),
     all_time_runs: runs.length,
     all_time_deliveries: sumRuns(runs, "users_served"),
-    month_cost: parseFloat(sumRuns(monthRuns, "total_cost_usd").toFixed(4)),
+    month_cost: parseFloat(sumRunCosts(monthRuns).toFixed(4)),
     month_runs: monthRuns.length,
     month_users_served: monthUsersServedFromRoster,
     month_unique_users: monthUsersServedFromRoster,
@@ -285,7 +285,7 @@ function buildHealthPayload({
     server_uptime: uptimeStr,
     last_run_at: lastRun ? lastRun.run_at_et || lastRun.run_at : null,
     last_run_users: lastRun ? lastRun.users_served : null,
-    last_run_cost: lastRun ? `$${(lastRun.total_cost_usd || 0).toFixed(4)}` : null,
+    last_run_cost: lastRun ? `$${getRunCostUsd(lastRun).toFixed(4)}` : null,
     cron_schedule: "5-minute worker loop (always-on VM)",
     users_delivery_warning: deliveryWarnings,
     delivery_reliability: deliveryReliability,

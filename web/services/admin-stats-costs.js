@@ -1,4 +1,8 @@
 const { isScheduledRunRecord } = require("./admin-ops-io");
+const {
+  calculateAnthropicUsageCost,
+  calculateSearchUsageCost,
+} = require("../../src/entrypoints/digest-orchestrator-cost-runtime");
 
 function sumRuns(rows, key) {
   return rows.reduce((sum, row) => sum + (row[key] || 0), 0);
@@ -27,6 +31,17 @@ function toFiniteNumber(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function getRunCostUsd(run) {
+  return toFiniteNumber(
+    run?.billable_total_cost_usd,
+    toFiniteNumber(run?.total_cost_usd, 0)
+  );
+}
+
+function sumRunCosts(rows) {
+  return (Array.isArray(rows) ? rows : []).reduce((sum, row) => sum + getRunCostUsd(row), 0);
+}
+
 function normalizeAllowedDays(days) {
   if (!Array.isArray(days) || days.length === 0) return DEFAULT_ALLOWED_DAYS.slice();
   return [...new Set(days.map((day) => Number(day)).filter((day) => Number.isFinite(day) && day >= 0 && day <= 6))];
@@ -39,14 +54,57 @@ function normalizeDeliveryTimeRaw(deliveryTime) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function fallbackEstimateDigestCost({ topics, itemCount }) {
-  const standardCalls = Array.isArray(topics) ? topics.length : 0;
-  const perplexityCost = standardCalls * 0.005;
-  const estInputTokens = 2500 + (Number(itemCount || 5) * 300);
-  const estOutputTokens = Number(itemCount || 5) * 250;
-  const claudeCost = (estInputTokens / 1_000_000 * 0.80) + (estOutputTokens / 1_000_000 * 4.00);
+function buildEstimatedSearchUsage(standardCalls) {
   return {
-    totalUsd: parseFloat((perplexityCost + claudeCost).toFixed(5)),
+    input_tokens: standardCalls * 340,
+    output_tokens: standardCalls * 140,
+  };
+}
+
+function buildEstimatedClassifierUsage({ standardCalls, enabled }) {
+  if (enabled !== true) {
+    return {
+      input_tokens: 0,
+      output_tokens: 0,
+    };
+  }
+  const candidateCount = Math.max(0, Number(standardCalls || 0)) * 3;
+  return {
+    input_tokens: candidateCount * 255,
+    output_tokens: candidateCount * 20,
+  };
+}
+
+function fallbackEstimateDigestCost({ topics, itemCount, config }) {
+  const standardCalls = Array.isArray(topics) ? topics.length : 0;
+  const resolvedItemCount = Math.max(1, Number(itemCount || 5));
+  const searchModel = String(config?.digest?.searchModel || "sonar").trim() || "sonar";
+  const searchCosts = calculateSearchUsageCost({
+    standardFetchCalls: standardCalls,
+    usage: buildEstimatedSearchUsage(standardCalls),
+    searchModel,
+    contextSize: "low",
+  });
+  const enrichCosts = calculateAnthropicUsageCost({
+    usage: {
+      input_tokens: 2500 + (resolvedItemCount * 300),
+      output_tokens: resolvedItemCount * 250,
+    },
+    model: "claude-haiku-4-5",
+  });
+  const classifierCosts = calculateAnthropicUsageCost({
+    usage: buildEstimatedClassifierUsage({
+      standardCalls,
+      enabled: config?.digest?.classification?.enabled === true,
+    }),
+    model: String(config?.digest?.classification?.model || "").trim() || "claude-3-haiku-20240307",
+  });
+  const totalUsd = searchCosts.totalCost + enrichCosts.totalCost + classifierCosts.totalCost;
+  return {
+    totalUsd: parseFloat(totalUsd.toFixed(5)),
+    searchUsd: parseFloat(searchCosts.totalCost.toFixed(5)),
+    anthropicUsd: parseFloat((enrichCosts.totalCost + classifierCosts.totalCost).toFixed(6)),
+    searchCalls: standardCalls,
   };
 }
 
@@ -83,8 +141,8 @@ function buildTrailingWindowCostSummary(runs, { nowParts, days = 7 } = {}) {
     start_date_et: startDateKey,
     end_date_et: endDateKey,
     runs: windowRuns,
-    total_cost: parseFloat(sumRuns(windowRuns, "total_cost_usd").toFixed(4)),
-    scheduled_cost: parseFloat(sumRuns(windowRuns, "total_cost_usd").toFixed(4)),
+    total_cost: parseFloat(sumRunCosts(windowRuns).toFixed(4)),
+    scheduled_cost: parseFloat(sumRunCosts(windowRuns).toFixed(4)),
     scheduled_runs: windowRuns.length,
     deliveries: sumRuns(windowRuns, "users_served"),
   };
@@ -136,7 +194,11 @@ function buildProjectedWindowCostSummary({
 } = {}) {
   const slots = buildProjectedRunSlots(roster, { nowParts, days });
   const configTopics = Array.isArray(config?.topics) ? config.topics : [];
-  const standardTopics = configTopics.map((topic) => topic?.tag).filter(Boolean);
+  const allowedTopicTags = new Set(
+    configTopics
+      .map((topic) => String(topic?.tag || "").trim().toUpperCase())
+      .filter(Boolean)
+  );
 
   let totalCost = 0;
   let projectedDeliveries = 0;
@@ -144,9 +206,15 @@ function buildProjectedWindowCostSummary({
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
     const itemCount = 5;
+    const slotTopics = Array.from(new Set(
+      users.flatMap((user) => (Array.isArray(user?.topics_raw) ? user.topics_raw : []))
+        .map((topic) => String(topic || "").trim().toUpperCase())
+        .filter((topic) => !allowedTopicTags.size || allowedTopicTags.has(topic))
+    ));
     const estimate = fallbackEstimateDigestCost({
-      topics: standardTopics,
+      topics: slotTopics,
       itemCount,
+      config,
     }) || { totalUsd: 0 };
     const estimatedCost = toFiniteNumber(estimate.totalUsd, 0);
     totalCost += estimatedCost;
@@ -154,6 +222,7 @@ function buildProjectedWindowCostSummary({
     return {
       ...slot,
       user_count: users.length,
+      topic_count: slotTopics.length,
       item_count: itemCount,
       estimated_cost_usd: parseFloat(estimatedCost.toFixed(5)),
     };
@@ -192,7 +261,7 @@ function buildPerUserCostRollup(runs) {
     for (const userRow of (Array.isArray(run?.per_user) ? run.per_user : [])) {
       if (!userMap[userRow.id]) userMap[userRow.id] = { id: userRow.id, runs: 0, total_cost: 0 };
       userMap[userRow.id].runs++;
-      userMap[userRow.id].total_cost += (run.total_cost_usd || 0) / usersServed;
+      userMap[userRow.id].total_cost += getRunCostUsd(run) / usersServed;
     }
   }
   return Object.values(userMap)
@@ -202,6 +271,8 @@ function buildPerUserCostRollup(runs) {
 
 module.exports = {
   sumRuns,
+  sumRunCosts,
+  getRunCostUsd,
   buildMonthRunSummary,
   buildPerUserCostRollup,
   buildTrailingWindowCostSummary,

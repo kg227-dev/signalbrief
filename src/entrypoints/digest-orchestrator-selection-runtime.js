@@ -343,6 +343,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     let filterDiagnostics = null;
     let boostDiagnostics = null;
     let strictQualityPrefilterDiagnostics = null;
+    let classifierUsage = { input_tokens: 0, output_tokens: 0 };
+    let classifierModel = null;
     const strictQualityConfig = resolveStrictQualityConfig(CONFIG.digest || {});
     const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
     let preRankingItems = annotatedItems;
@@ -376,6 +378,13 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         }
       );
       classificationDiagnostics = classRunDiag;
+      classifierUsage = classRunDiag?.usage && typeof classRunDiag.usage === "object"
+        ? {
+            input_tokens: Number(classRunDiag.usage.input_tokens || 0),
+            output_tokens: Number(classRunDiag.usage.output_tokens || 0),
+          }
+        : { input_tokens: 0, output_tokens: 0 };
+      classifierModel = String(classRunDiag?.model || CONFIG.digest?.classification?.model || "").trim() || null;
 
       const { filtered, dropped, diagnostics: filterDiag } = filterLowRelevance(classified, { log });
       filterDiagnostics = filterDiag;
@@ -622,6 +631,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         story_dedup_dropped_items: storyDedupDroppedItems,
         classifier_dropped_items: classifierDroppedItems,
       },
+      classifierUsage,
+      classifierModel,
     };
   }
 

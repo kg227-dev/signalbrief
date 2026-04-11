@@ -151,6 +151,7 @@ function createDigestOrchestratorFetchSetupRuntime(deps) {
       allItems,
       standardFetchCallsPlanned,
       standardFetchCalls,
+      searchUsage,
       fetchDiagnostics,
     } = await fetchRuntime.orchestrateFetch({
       dueUsers: fetchDueUsers,
@@ -171,6 +172,7 @@ function createDigestOrchestratorFetchSetupRuntime(deps) {
       allItems,
       standardFetchCallsPlanned,
       standardFetchCalls,
+      searchUsage,
       fetchDiagnostics,
     };
   }

@@ -74,6 +74,7 @@ const {
 const { createDigestOrchestratorCoreRuntimeRegistry } = require("./digest-orchestrator-core-registry-runtime");
 const {
   createDigestOrchestratorCostRuntime,
+  calculateRunCosts,
   DEFAULT_PERPLEXITY_COST_PER_CALL,
   DEFAULT_CLAUDE_HAIKU_IN_PER_MTOK,
   DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK,
@@ -181,14 +182,16 @@ const CLAUDE_HAIKU_OUT_PER_MTOK = DEFAULT_CLAUDE_HAIKU_OUT_PER_MTOK;
 
 // Model cost lookup maps (used by sandbox for dynamic model selection)
 const MODEL_COSTS = {
-  "claude-haiku-4-5":  { input: 0.80,  output: 4.00  },
+  "claude-haiku-4-5":  { input: 1.00,  output: 5.00  },
+  "claude-3-haiku-20240307": { input: 0.25, output: 1.25 },
   "claude-sonnet-4-6": { input: 3.00,  output: 15.00 },
   "claude-opus-4-6":   { input: 15.00, output: 75.00 },
 };
 const SEARCH_COSTS = {
   "sonar": 0.005,
-  "sonar-pro": 0.01,
-  "sonar-reasoning": 0.01,
+  "sonar-pro": 0.014,
+  "sonar-reasoning": 0.014,
+  "sonar-reasoning-pro": 0.014,
 };
 
 const digestBaseLogger = createStructuredLogger({
@@ -527,6 +530,7 @@ async function main() {
     allItems,
     standardFetchCallsPlanned,
     standardFetchCalls,
+    searchUsage,
     fetchDiagnostics,
   } = await fetchSetupRuntime.prepareFetchRun({
     digestDateKey,
@@ -539,7 +543,13 @@ async function main() {
       now,
       runId,
       standardFetchCalls,
+      searchUsage,
       claudeUsage: {},
+      classifierUsage: {},
+      searchModel: CONFIG.digest?.searchModel || "sonar",
+      searchContextSize: "low",
+      enrichModel: null,
+      classifierModel: CONFIG.digest?.classification?.model || null,
       dueUsers: [],
       deliveredUsers: [],
       failedUsers: [],
@@ -593,6 +603,8 @@ async function main() {
     selectionDiagnostics,
     repetitionNote,
     writeupBackfillPolicy,
+    classifierUsage,
+    classifierModel,
   } = await selectionRuntime.selectForEnrichment({
     allItems,
     selectionTarget,
@@ -618,7 +630,13 @@ async function main() {
       now,
       runId,
       standardFetchCalls,
+      searchUsage,
       claudeUsage: {},
+      classifierUsage,
+      searchModel: CONFIG.digest?.searchModel || "sonar",
+      searchContextSize: "low",
+      enrichModel: null,
+      classifierModel,
       dueUsers: [],
       deliveredUsers: [],
       failedUsers: [],
@@ -817,11 +835,24 @@ async function main() {
     if (Array.isArray(failedUsers) && Array.isArray(deliveredUsers)) {
       const spendRuntime = getDigestOrchestratorSpendGuardRuntime();
       const cbRuntime = getDigestOrchestratorCircuitBreakerRuntime();
+      const runCost = calculateRunCosts({
+        standardFetchCalls,
+        searchUsage,
+        claudeUsage,
+        classifierUsage,
+        searchModel: CONFIG.digest?.searchModel || "sonar",
+        searchContextSize: "low",
+        enrichModel: "claude-haiku-4-5",
+        classifierModel,
+        perplexityCostPerCall: PERPLEXITY_COST_PER_CALL,
+        claudeInputPerMtok: CLAUDE_HAIKU_IN_PER_MTOK,
+        claudeOutputPerMtok: CLAUDE_HAIKU_OUT_PER_MTOK,
+      });
 
       // Record zero-value runs per user to spend guard
       if (failedUsers.length > 0) {
-        const zeroCostPerUser = standardFetchCalls > 0
-          ? (standardFetchCalls * 0.005) / failedUsers.length
+        const zeroCostPerUser = Number(failedUsers.length || 0) > 0
+          ? Number(runCost.totalCost || 0) / failedUsers.length
           : 0;
         for (const failed of failedUsers) {
           spendRuntime.recordZeroValueRun({
@@ -887,7 +918,13 @@ async function main() {
       now,
       runId,
       standardFetchCalls,
+      searchUsage,
       claudeUsage,
+      classifierUsage,
+      searchModel: CONFIG.digest?.searchModel || "sonar",
+      searchContextSize: "low",
+      enrichModel: "claude-haiku-4-5",
+      classifierModel,
       dueUsers,
       deliveredUsers,
       failedUsers,

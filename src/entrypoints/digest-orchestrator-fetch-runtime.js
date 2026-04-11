@@ -228,6 +228,11 @@ function createDigestOrchestratorFetchRuntime(deps) {
       state.provider.successful_calls += Number(diagnostics.successful_calls || 0);
       state.provider.last_error = diagnostics.last_error || state.provider.last_error || null;
       mergeStatusCounts(state.provider.status_counts, diagnostics.status_counts);
+      state.provider.usage = state.provider.usage && typeof state.provider.usage === "object"
+        ? state.provider.usage
+        : { input_tokens: 0, output_tokens: 0 };
+      state.provider.usage.input_tokens += Number(diagnostics?.usage?.input_tokens || 0);
+      state.provider.usage.output_tokens += Number(diagnostics?.usage?.output_tokens || 0);
 
       state.searchResultDomains = uniqueValues([
         ...(state.searchResultDomains || []),
@@ -428,6 +433,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
         allItems,
         standardFetchCallsPlanned: 0,
         standardFetchCalls: 0,
+        searchUsage: { input_tokens: 0, output_tokens: 0 },
         fetchDiagnostics,
       };
     }
@@ -578,6 +584,11 @@ function createDigestOrchestratorFetchRuntime(deps) {
     const standardFetchCalls = standardStates.reduce((sum, state) => {
       return sum + Number(state?.apiCalls || 0);
     }, 0);
+    const searchUsage = standardStates.reduce((usage, state) => {
+      usage.input_tokens += Number(state?.provider?.usage?.input_tokens || 0);
+      usage.output_tokens += Number(state?.provider?.usage?.output_tokens || 0);
+      return usage;
+    }, { input_tokens: 0, output_tokens: 0 });
     // brokerDiagnostics was set in Phase 0 (broker-first block above).
     const discoverySupplementDiagnostics = enforceDiscoveryCandidateShare(standardStates, digestConfig, logger);
     const standardItems = standardStates.flatMap((state) => (Array.isArray(state?.items) ? state.items : []));
@@ -677,6 +688,7 @@ function createDigestOrchestratorFetchRuntime(deps) {
       allItems,
       standardFetchCallsPlanned,
       standardFetchCalls,
+      searchUsage,
       fetchDiagnostics,
     };
   }

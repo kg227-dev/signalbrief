@@ -74,7 +74,9 @@ const projected = buildProjectedWindowCostSummary({
 assert.strictEqual(projected.scheduled_runs, 11, "projection should batch users by ET date and delivery time");
 assert.strictEqual(projected.projected_deliveries, 15, "projection should count all future active deliveries in window");
 assert.strictEqual(projected.active_users, 3);
-assert.strictEqual(projected.total_cost, 0.2552);
+assert.strictEqual(projected.total_cost, 0.1949);
 assert.strictEqual(projected.projected_runs[0].date_et, "2026-03-16");
 assert.strictEqual(projected.projected_runs[0].delivery_time_raw, "21:30");
-assert.strictEqual(projected.projected_runs[0].estimated_cost_usd, 0.0232);
+assert.strictEqual(projected.projected_runs[0].estimated_cost_usd, 0.01573);
+assert.strictEqual(projected.projected_runs[1].topic_count, 2);
+assert.strictEqual(projected.projected_runs[1].estimated_cost_usd, 0.02121);

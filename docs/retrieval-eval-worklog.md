@@ -8,5 +8,5 @@ This path remains as a compatibility summary for tooling that still checks `docs
 
 ## Current MVP Validation Note
 
-- Day 13 audit (2026-04-09): [`./archive/planning/2026-03/mvp-day-13-2026-04-09.md`](./archive/planning/2026-03/mvp-day-13-2026-04-09.md)
-- Current conclusion: mechanically healthy, not exit-green. Day 13 delivered 35/35 with 610 candidates and 698/698 broker fetch items passing, trusted share improved to 25/35 (71.4%), but the writeup layer dropped 143 items under `validator_mismatch` and still forced weak Consumer & Retail and Industrials selections.
+- Day 15 audit (2026-04-11): [`./archive/planning/2026-03/mvp-day-15-2026-04-11.md`](./archive/planning/2026-03/mvp-day-15-2026-04-11.md)
+- Current conclusion: delivery was recovered after the stale-breaker bug fix, but expansion remains blocked. Day 15 delivered 35/35 with 365 retained candidates and 26/35 trusted Tier 1/2 selections (74.3%). Writeup drops improved to 13/48 (27.1%), but strong-tier loss worsened to 13/39 (33.3%), and Industrials plus Consumer & Retail still ended only 2/5 trusted.

@@ -102,6 +102,8 @@ function buildExecutiveHealthSummary({
   const latestScheduledRunAt = ops.latest_scheduled_run_at || rel.last_successful_scheduled_run || null;
   const latestScheduledRunClean = ops.latest_scheduled_run_clean === true;
   const latestScheduledRunFailedUsers = Math.max(0, Number(ops.latest_scheduled_run_failed_users || 0));
+  const latestScheduledRunFailureLabel = String(ops.latest_scheduled_run_failure_label || "").trim();
+  const latestScheduledRunFailureReason = String(ops.latest_scheduled_run_failure_reason || "").trim();
   const backfillNeeded = !!ops.backfill_needed;
   const activeIncidentOpen = !!ops.active_incident_open;
   const activeIncidentSummary = String(ops.active_incident_summary || "").trim();
@@ -136,7 +138,10 @@ function buildExecutiveHealthSummary({
   }
   if (usersAtRisk > 0) {
     status = "red";
-    reasons.push(`${usersAtRisk} failed user${usersAtRisk === 1 ? "" : "s"} remain from the latest scheduled run`);
+    const failureSuffix = latestScheduledRunFailureLabel
+      ? ` (${latestScheduledRunFailureLabel}${latestScheduledRunFailureReason ? `: ${latestScheduledRunFailureReason}` : ""})`
+      : "";
+    reasons.push(`${usersAtRisk} failed user${usersAtRisk === 1 ? "" : "s"} remain from the latest scheduled run${failureSuffix}`);
   }
   if (backfillNeeded) {
     status = "red";
@@ -242,6 +247,8 @@ function buildExecutiveHealthSummary({
     latest_scheduled_run_at: latestScheduledRunAt,
     latest_scheduled_run_clean: latestScheduledRunClean,
     latest_scheduled_run_failed_users: latestScheduledRunFailedUsers,
+    latest_scheduled_run_failure_label: latestScheduledRunFailureLabel || null,
+    latest_scheduled_run_failure_reason: latestScheduledRunFailureReason || null,
     next_expected_delivery_et: rel.next_expected_delivery_et || null,
     next_expected_countdown: rel.next_expected_countdown || null,
     backfill_needed: backfillNeeded,

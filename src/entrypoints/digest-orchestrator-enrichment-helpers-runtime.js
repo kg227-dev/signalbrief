@@ -264,6 +264,71 @@ function normalizeAggregateWriteupStats(stats = {}, itemsPerTopic = 5) {
   };
 }
 
+function aggregateTopicWriteupStats(topicWriteupStats = {}) {
+  const aggregate = {
+    attempted_count: 0,
+    extraction_attempted_count: 0,
+    extraction_success_count: 0,
+    extraction_failure_count: 0,
+    generation_attempted_count: 0,
+    generation_success_count: 0,
+    generation_failure_count: 0,
+    first_pass_success_count: 0,
+    first_pass_failure_count: 0,
+    repair_attempted_count: 0,
+    repair_success_count: 0,
+    drop_count: 0,
+    repeated_phrase_rejection_count: 0,
+    model_generated_count: 0,
+    final_selected_count: 0,
+    strong_tier_attempted_count: 0,
+    strong_tier_drop_count: 0,
+    strong_tier_hard_fail_count: 0,
+    strong_tier_final_selected_count: 0,
+    hard_fail_count: 0,
+    soft_fail_count: 0,
+    soft_fail_recovery_count: 0,
+    minimum_viable_accept_count: 0,
+    underfill_due_writeup_count: 0,
+    parse_failure_counts: Object.create(null),
+  };
+  for (const stats of Object.values(topicWriteupStats || {})) {
+    if (!stats || typeof stats !== "object") continue;
+    for (const key of [
+      "attempted_count",
+      "extraction_attempted_count",
+      "extraction_success_count",
+      "extraction_failure_count",
+      "generation_attempted_count",
+      "generation_success_count",
+      "generation_failure_count",
+      "first_pass_success_count",
+      "first_pass_failure_count",
+      "repair_attempted_count",
+      "repair_success_count",
+      "drop_count",
+      "repeated_phrase_rejection_count",
+      "model_generated_count",
+      "final_selected_count",
+      "strong_tier_attempted_count",
+      "strong_tier_drop_count",
+      "strong_tier_hard_fail_count",
+      "strong_tier_final_selected_count",
+      "hard_fail_count",
+      "soft_fail_count",
+      "soft_fail_recovery_count",
+      "minimum_viable_accept_count",
+      "underfill_due_writeup_count",
+    ]) {
+      aggregate[key] += Math.max(0, Number(stats[key] || 0));
+    }
+    for (const [parseKey, parseCount] of Object.entries(stats.parse_failure_counts || {})) {
+      addCount(aggregate.parse_failure_counts, parseKey, Math.max(0, Number(parseCount || 0)));
+    }
+  }
+  return aggregate;
+}
+
 function pickNextReserveCandidate(params = {}) {
   const reserveState = params.reserveState && typeof params.reserveState === "object" ? params.reserveState : {};
   const reserveCursor = params.reserveCursor && typeof params.reserveCursor === "object"
@@ -280,6 +345,7 @@ function pickNextReserveCandidate(params = {}) {
   const policy = params.policy && typeof params.policy === "object" ? params.policy : {};
   const strongReserve = Array.isArray(reserveState.strongReserve) ? reserveState.strongReserve : [];
   const standardReserve = Array.isArray(reserveState.standardReserve) ? reserveState.standardReserve : [];
+  const allowStandardBackfill = policy.allowStandardBackfill !== false;
 
   function pickFromBucket(bucket, bucketName, cursor) {
     for (let index = cursor; index < bucket.length; index += 1) {
@@ -307,6 +373,16 @@ function pickNextReserveCandidate(params = {}) {
 
   const strongPick = pickFromBucket(strongReserve, "strong", reserveCursor.strong);
   if (strongPick) return strongPick;
+  if (!allowStandardBackfill) {
+    return {
+      candidate: null,
+      nextCursor: {
+        strong: reserveCursor.strong,
+        standard: reserveCursor.standard,
+      },
+      reserve_bucket: null,
+    };
+  }
   const standardPick = pickFromBucket(standardReserve, "standard", reserveCursor.standard);
   if (standardPick) return standardPick;
 
@@ -565,6 +641,7 @@ module.exports = {
   groupFailedItemsByTopic,
   mapEnrichedTopicBuckets,
   normalizeAggregateWriteupStats,
+  aggregateTopicWriteupStats,
   pickNextReserveCandidate,
   summarizeRejectedReason,
   updateSelectionDiagnosticsForWriteups,

@@ -470,9 +470,21 @@ function deriveRunDiagnosis(auditDoc = {}) {
   const topicRunCauseCounts = inferTopicCauseCountsForRun(topicDiagnoses);
   const metrics = buildRunStageMetrics(auditDoc);
   const evidence = buildRunEvidence(auditDoc?.summary || {});
+  const writeup = auditDoc?.summary?.writeup && typeof auditDoc.summary.writeup === "object"
+    ? auditDoc.summary.writeup
+    : {};
+  const parseFailureCounts = writeup?.parse_failure_counts && typeof writeup.parse_failure_counts === "object"
+    ? writeup.parse_failure_counts
+    : {};
+  const parseFailureKeys = Object.keys(parseFailureCounts).filter((key) => num(parseFailureCounts[key], 0) > 0);
+  const repairPassSuccessRatePct = Math.max(0, num(writeup.repair_pass_success_rate_pct, 0));
+  const validatorMismatchOnly = parseFailureKeys.length > 0
+    && parseFailureKeys.every((key) => String(key || "").trim() === "validator_mismatch");
+  const recoveredValidatorMismatchDominant = validatorMismatchOnly && repairPassSuccessRatePct >= 90;
 
   const providerGenerationDominant = (metrics.generationFailureCount + metrics.providerFailureCount) >= Math.max(2, metrics.softFailCount + metrics.hardFailCount);
-  const parseDominant = metrics.parseFailureCount >= Math.max(2, metrics.dropCount * 0.4);
+  const parseDominant = metrics.parseFailureCount >= Math.max(2, metrics.dropCount * 0.4)
+    && !recoveredValidatorMismatchDominant;
   const validatorPressure = metrics.droppedSharePct >= 40
     && metrics.candidateDepthHealthyShare >= 0.6
     && metrics.strongTierAttempted >= Math.max(3, metrics.strongTierSelected + 2)
@@ -493,7 +505,10 @@ function deriveRunDiagnosis(auditDoc = {}) {
   let severity = "low";
   const secondaryRootCauses = [];
 
-  if (parseDominant) {
+  if (recoveredValidatorMismatchDominant) {
+    primaryRootCause = "validator_over_reject";
+    severity = metrics.dropCount >= 4 || metrics.strongTierDropCount >= 2 ? "high" : "medium";
+  } else if (parseDominant) {
     primaryRootCause = "parse_or_structured_output_failure";
     severity = "high";
   } else if (providerGenerationDominant && metrics.dropCount >= 2) {
@@ -524,7 +539,7 @@ function deriveRunDiagnosis(auditDoc = {}) {
 
   if (primaryRootCause !== "parse_or_structured_output_failure" && parseDominant) pushSecondary(secondaryRootCauses, "parse_or_structured_output_failure");
   if (primaryRootCause !== "writeup_generation_failure" && providerGenerationDominant && metrics.dropCount >= 2) pushSecondary(secondaryRootCauses, "writeup_generation_failure");
-  if (primaryRootCause !== "validator_over_reject" && validatorPressure) pushSecondary(secondaryRootCauses, "validator_over_reject");
+  if (primaryRootCause !== "validator_over_reject" && (validatorPressure || recoveredValidatorMismatchDominant)) pushSecondary(secondaryRootCauses, "validator_over_reject");
   if (primaryRootCause !== "retrieval_thinness" && retrievalThin) pushSecondary(secondaryRootCauses, "retrieval_thinness");
   if (primaryRootCause !== "selection_ranking_failure" && rankingFailure) pushSecondary(secondaryRootCauses, "selection_ranking_failure");
 

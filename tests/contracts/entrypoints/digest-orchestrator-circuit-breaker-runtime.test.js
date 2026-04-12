@@ -44,6 +44,13 @@ try {
   assert.strictEqual(cb.getState().opened_at, null);
   assert.deepStrictEqual(cb.getState().recent_zero_serve_runs, []);
 
+  cb.openCircuit({ reason: "overnight_test", triggeredBy: "test", dateEt: "2026-03-23" });
+  assert.strictEqual(cb.isOpen(), true, "breaker opens for stale-close test");
+  fakeNow = new Date("2026-03-24T11:00:00.000Z");
+  assert.strictEqual(cb.isOpen(), false, "breaker auto-closes on the next ET day");
+  assert.strictEqual(cb.getState().status, CB_STATUS_CLOSED, "state resets after auto-close");
+  fakeNow = new Date("2026-03-23T12:00:00.000Z");
+
   // Trigger 1: ≥3 users targeted, 0 served, non-transient failure
   const result1 = cb.evaluateRunOutcome({
     dueCount: 3, servedCount: 0, dominantFailureClass: "retrieval_thin",

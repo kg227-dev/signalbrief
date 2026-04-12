@@ -387,6 +387,122 @@ function buildRollingMvpReadiness(auditDocs = [], sourceHealth = aggregateSource
   };
 }
 
+function computeTrustedSharePctForAuditDoc(auditDoc = {}) {
+  const topicEntries = auditDoc?.topics && typeof auditDoc.topics === "object"
+    ? Object.values(auditDoc.topics)
+    : [];
+  let trustedSelectedCount = 0;
+  let selectedCount = 0;
+  for (const topic of topicEntries) {
+    for (const candidate of (Array.isArray(topic?.candidates) ? topic.candidates : [])) {
+      if (candidate?.selected !== true) continue;
+      selectedCount += 1;
+      const tier = normalizeSelectedTier(candidate?.source_tier);
+      if (tier != null && tier <= 2) trustedSelectedCount += 1;
+    }
+  }
+  return pct(trustedSelectedCount, selectedCount);
+}
+
+function computeStrongDropRatePct(writeup = {}) {
+  const strongAttempted = Math.max(0, Number(writeup?.strong_tier_attempted_count || 0));
+  const strongDropped = Math.max(0, Number(writeup?.strong_tier_drop_count || 0));
+  return pct(strongDropped, strongAttempted);
+}
+
+function buildDiagnosisWindow(auditDocs = [], targetDateEt = "") {
+  const docs = (Array.isArray(auditDocs) ? auditDocs : [])
+    .filter((doc) => doc && typeof doc === "object")
+    .map((doc) => {
+      const cloned = JSON.parse(JSON.stringify(doc));
+      return cloned?.runDiagnosis && typeof cloned.runDiagnosis === "object"
+        ? cloned
+        : attachDiagnosisToAuditDocument(cloned);
+    })
+    .sort((left, right) => String(left?.date_et || "").localeCompare(String(right?.date_et || "")));
+  const targetDate = String(targetDateEt || "").trim();
+  const eligibleDocs = targetDate
+    ? docs.filter((doc) => String(doc?.date_et || "").trim() <= targetDate)
+    : docs;
+  const windowDocs = (eligibleDocs.length ? eligibleDocs : docs).slice(-7);
+  if (!windowDocs.length) {
+    return {
+      days_covered: 0,
+      observability_only: true,
+      decision_layer_active: false,
+      primary_issue_distribution: [],
+      average_writeup_drop_share_pct: 0,
+      average_strong_tier_drop_rate_pct: 0,
+      average_trusted_share_pct: 0,
+      latest_trusted_share_pct: 0,
+      trusted_share_delta_pct: 0,
+      latest_primary_root_cause: "unknown",
+    };
+  }
+
+  const issueCounts = Object.create(null);
+  let dropShareSum = 0;
+  let strongDropRateSum = 0;
+  let trustedShareSum = 0;
+  const runMetrics = [];
+
+  for (const doc of windowDocs) {
+    const writeup = doc?.summary?.writeup && typeof doc.summary.writeup === "object"
+      ? doc.summary.writeup
+      : {};
+    const primaryIssue = String(doc?.runDiagnosis?.primaryRootCause || "unknown").trim() || "unknown";
+    const trustedSharePct = computeTrustedSharePctForAuditDoc(doc);
+    const strongDropRatePct = computeStrongDropRatePct(writeup);
+    const writeupDropSharePct = Math.max(0, Number(writeup?.dropped_share_pct || 0));
+    issueCounts[primaryIssue] = (issueCounts[primaryIssue] || 0) + 1;
+    dropShareSum += writeupDropSharePct;
+    strongDropRateSum += strongDropRatePct;
+    trustedShareSum += trustedSharePct;
+    runMetrics.push({
+      date_et: String(doc?.date_et || "").trim(),
+      primary_root_cause: primaryIssue,
+      trusted_share_pct: trustedSharePct,
+      strong_tier_drop_rate_pct: strongDropRatePct,
+      writeup_drop_share_pct: writeupDropSharePct,
+    });
+  }
+
+  const latestRun = runMetrics[runMetrics.length - 1] || {
+    primary_root_cause: "unknown",
+    trusted_share_pct: 0,
+  };
+  const averageTrustedSharePct = Number((trustedShareSum / windowDocs.length).toFixed(2));
+  const trailingDecisionRuns = runMetrics.slice(-3);
+  const decisionLayerActive = trailingDecisionRuns.length === 3
+    && trailingDecisionRuns.every((run) => run.trusted_share_pct >= 75
+      && run.strong_tier_drop_rate_pct <= 15
+      && run.writeup_drop_share_pct <= 20);
+
+  return {
+    days_covered: windowDocs.length,
+    observability_only: !decisionLayerActive,
+    decision_layer_active: decisionLayerActive,
+    primary_issue_distribution: Object.entries(issueCounts)
+      .map(([issueCode, count]) => ({
+        issueCode,
+        run_count: count,
+        share_pct: pct(count, windowDocs.length),
+      }))
+      .sort((left, right) => {
+        const shareDiff = Number(right.share_pct || 0) - Number(left.share_pct || 0);
+        if (shareDiff !== 0) return shareDiff;
+        return String(left.issueCode || "").localeCompare(String(right.issueCode || ""));
+      }),
+    average_writeup_drop_share_pct: Number((dropShareSum / windowDocs.length).toFixed(2)),
+    average_strong_tier_drop_rate_pct: Number((strongDropRateSum / windowDocs.length).toFixed(2)),
+    average_trusted_share_pct: averageTrustedSharePct,
+    latest_trusted_share_pct: Number(latestRun.trusted_share_pct || 0),
+    trusted_share_delta_pct: Number((Number(latestRun.trusted_share_pct || 0) - averageTrustedSharePct).toFixed(2)),
+    latest_primary_root_cause: String(latestRun.primary_root_cause || "unknown").trim() || "unknown",
+    runs: runMetrics,
+  };
+}
+
 /**
  * GET /api/admin/digest-audit
  *
@@ -461,6 +577,7 @@ async function handleAdminDigestAuditRoutes(ctx, deps) {
     ok: true,
     ...responseAuditDoc,
     rolling_readiness: buildRollingMvpReadiness(recentAuditDocs, sourceHealth),
+    diagnosis_window: buildDiagnosisWindow(recentAuditDocs, responseAuditDoc.date_et || dateKey),
     topic_readiness: buildTopicReadiness(recentAuditDocs, sourceHealth),
     source_health: buildSourceHealthSummary(sourceHealth),
   });
@@ -469,6 +586,7 @@ async function handleAdminDigestAuditRoutes(ctx, deps) {
 
 module.exports = {
   buildSourceHealthSummary,
+  buildDiagnosisWindow,
   buildTopicReadiness,
   handleAdminDigestAuditRoutes,
   buildRollingMvpReadiness,

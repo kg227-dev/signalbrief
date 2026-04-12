@@ -37,6 +37,9 @@ const {
   createDigestOrchestratorTransportRuntime,
 } = require("../src/entrypoints/digest-orchestrator-transport-runtime");
 const {
+  buildUserQuickScanRows,
+} = require("../src/entrypoints/digest-orchestrator-delivery-helpers-runtime");
+const {
   normalizeDigestHeadlinePreview,
 } = require("../src/digest/runtime/digest-headline-preview-runtime");
 const {
@@ -340,16 +343,22 @@ async function resendDigestSnapshot({ user, snapshot }) {
   }
 
   const digestId = String(snapshot?.digest_id || "").trim() || buildDigestId(digestDateKey, user.chatId || email);
+  const userId = String(snapshot?.user_id || user?.chatId || "").trim() || null;
   const depth = String(snapshot?.depth || user?.preferences?.depth || user?.depth || "headline_plus_why").trim() || "headline_plus_why";
   const dateStr = String(snapshot?.date_str || "").trim() || formatDigestDateLabelFromKey(digestDateKey);
-  const quickScan = String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items);
   const subject = String(snapshot?.subject_line || "").trim() || buildAdminDigestResendSubject(snapshot, dateStr);
   const editorialNote = String(snapshot?.editorial_note || "").trim();
+  const digestFormattingRuntime = getDigestFormattingRuntime();
+  const quickScanRows = buildUserQuickScanRows(items, {
+    stripInlineHtml: digestFormattingRuntime.stripInlineHtml,
+    topicVisual: digestFormattingRuntime.topicVisual,
+    escapeHtml: digestFormattingRuntime.escapeHtml,
+  }) || String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items);
 
-  let html = getDigestFormattingRuntime().buildEmail(
+  let html = digestFormattingRuntime.buildEmail(
     items,
     dateStr,
-    quickScan,
+    quickScanRows,
     user?.token || "",
     false,
     false,
@@ -378,6 +387,68 @@ async function resendDigestSnapshot({ user, snapshot }) {
   const result = await sendEmail(email, subject, html, user?.token || null);
   if (!result || result.ok !== true) {
     throw new Error(result?.error || "email delivery failed");
+  }
+
+  const resentAt = new Date().toISOString();
+  if (userId) {
+    digestDeliveryRecordRuntime.updateDigestDeliveryRecord({
+      digest_id: digestId,
+      user_id: userId,
+      date_et: digestDateKey,
+      mode: String(snapshot?.mode || "scheduled").trim() || "scheduled",
+      version: Math.max(1, Number(snapshot?.version || 1)),
+      run_id: String(snapshot?.run_id || "").trim() || null,
+      source: String(snapshot?.source || "").trim() || null,
+      trigger: String(snapshot?.trigger || "").trim() || null,
+      status: "sent",
+      selected_at: snapshot?.selected_at || null,
+      sending_at: snapshot?.sending_at || resentAt,
+      sent_at: resentAt,
+      failed_at: null,
+      delivery_outcome: "delivered_manual_resend",
+      attempt_count: Math.max(1, Number(snapshot?.attempt_count || 1)),
+      retry_scheduled_for: null,
+      error: null,
+      channels: ["email"],
+      depth,
+      date_str: dateStr,
+      quick_scan: String(snapshot?.quick_scan || "").trim() || buildFallbackQuickScan(items),
+      subject_line: subject,
+      editorial_note: editorialNote,
+      regenerated_at: snapshot?.regenerated_at || null,
+      regenerated_by: snapshot?.regenerated_by || null,
+      quality_score: snapshot?.quality_score ?? null,
+      quality_band: snapshot?.quality_band ?? null,
+      requested_count: snapshot?.requested_count ?? null,
+      freshness_block_count: snapshot?.freshness_block_count ?? 0,
+      semantic_repeat_block_count: snapshot?.semantic_repeat_block_count ?? 0,
+      alternate_queries_used: snapshot?.alternate_queries_used ?? 0,
+      preferred_domains_count: snapshot?.preferred_domains_count ?? 0,
+      preferred_candidate_count: snapshot?.preferred_candidate_count ?? 0,
+      non_preferred_candidate_count: snapshot?.non_preferred_candidate_count ?? 0,
+      final_selected_preferred_count: snapshot?.final_selected_preferred_count ?? 0,
+      preferred_displaced_weak_count: snapshot?.preferred_displaced_weak_count ?? 0,
+      derivative_suppressed_count: snapshot?.derivative_suppressed_count ?? 0,
+      specialist_trade_beat_preferred_count: snapshot?.specialist_trade_beat_preferred_count ?? 0,
+      platform_identity_ambiguity_count: snapshot?.platform_identity_ambiguity_count ?? 0,
+      broader_retrieval_found_better_count: snapshot?.broader_retrieval_found_better_count ?? 0,
+      coverage_gap_preferred_missing_count: snapshot?.coverage_gap_preferred_missing_count ?? 0,
+      coverage_gap_preferred_weaker_count: snapshot?.coverage_gap_preferred_weaker_count ?? 0,
+      search_budget_soft_calls: snapshot?.search_budget_soft_calls ?? 0,
+      search_budget_hard_calls: snapshot?.search_budget_hard_calls ?? 0,
+      search_budget_calls_used: snapshot?.search_budget_calls_used ?? 0,
+      search_budget_exhausted: snapshot?.search_budget_exhausted === true,
+      broad_fallback_topics_used: snapshot?.broad_fallback_topics_used ?? 0,
+      zero_yield_retry_count: snapshot?.zero_yield_retry_count ?? 0,
+      budget_stop_reason: snapshot?.budget_stop_reason ?? null,
+      candidate_pool_before_dedup: snapshot?.candidate_pool_before_dedup ?? null,
+      candidate_pool_after_dedup: snapshot?.candidate_pool_after_dedup ?? null,
+      fallback_reason: snapshot?.fallback_reason ?? null,
+      refill_count: snapshot?.refill_count ?? 0,
+      thin_pool: snapshot?.thin_pool === true,
+      dominant_failure_mode: snapshot?.dominant_failure_mode ?? null,
+      items,
+    });
   }
 
   return {

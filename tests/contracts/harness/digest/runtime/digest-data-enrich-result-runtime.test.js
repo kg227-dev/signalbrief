@@ -48,6 +48,7 @@ function testExtractionValidation() {
     }
   );
   assert.strictEqual(valid.ok, true);
+  assert.strictEqual(valid.validation_tier, "pass");
 
   const invalid = validateExtractionOutput({}, {
     what_happened: "Shift",
@@ -59,6 +60,24 @@ function testExtractionValidation() {
   assert.strictEqual(invalid.ok, false);
   assert.ok(invalid.reasons.includes("missing_mechanism"));
   assert.ok(invalid.reasons.includes("invalid_confidence"));
+
+  const conciseSoftFail = validateExtractionOutput(
+    {
+      headline: "Bank consortium expands payment rail coverage",
+      summary: "Operators are broadening same-day settlement and treasury routing options.",
+    },
+    {
+      what_happened: "A bank consortium expanded same-day payment rail coverage across treasury and settlement workflows. The change also reaches exception-handling queues.",
+      mechanism: "The rollout broadens routing choices for treasury teams while keeping bank-controlled settlement paths intact across multi-bank payment, reconciliation, and exception-resolution workflows",
+      who_it_impacts: "treasury teams",
+      implication: "operators gain more routing flexibility",
+      confidence: "high",
+    }
+  );
+  assert.strictEqual(conciseSoftFail.ok, true);
+  assert.strictEqual(conciseSoftFail.validation_tier, "soft_fail");
+  assert.strictEqual(conciseSoftFail.minimum_viable_accept, true);
+  assert.ok(conciseSoftFail.soft_failure_reasons.includes("what_happened_not_concise"));
 }
 
 function testWriteupValidation() {
@@ -104,9 +123,9 @@ function testWriteupValidation() {
       wim: "The supply chain changed because suppliers, carriers, and buyers all changed at once, forcing teams to revisit operations and pricing, and to manage margin pressure.",
     }
   );
-  assert.strictEqual(overloaded.ok, false);
+  assert.strictEqual(overloaded.ok, true);
   assert.strictEqual(overloaded.validation_tier, "soft_fail");
-  assert.strictEqual(overloaded.minimum_viable_accept, false);
+  assert.strictEqual(overloaded.minimum_viable_accept, true);
   assert.ok(overloaded.soft_failure_reasons.includes("sentence_clause_overload"));
 
   const genericTemplate = validateStrategicWriteup(

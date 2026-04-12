@@ -3,6 +3,8 @@
 const CB_STATUS_OPEN = "OPEN";
 const CB_STATUS_CLOSED = "CLOSED";
 const CB_VERSION = 1;
+const CIRCUIT_BREAKER_TIMEZONE = "America/New_York";
+const MAX_OPEN_WINDOW_MS = 18 * 60 * 60 * 1000;
 
 function createDigestOrchestratorCircuitBreakerRuntime(deps) {
   const {
@@ -13,6 +15,41 @@ function createDigestOrchestratorCircuitBreakerRuntime(deps) {
     nowProvider = () => new Date(),
   } = deps || {};
   const logger = typeof log === "function" ? log : () => {};
+
+  function getTodayEt(date = nowProvider()) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: CIRCUIT_BREAKER_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(date);
+    } catch {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(date.getUTCDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  function shouldAutoClose(state) {
+    if (String(state?.status || "") !== CB_STATUS_OPEN) return false;
+    const stateDateEt = String(state?.date_et || "").trim();
+    if (stateDateEt && stateDateEt < getTodayEt()) return true;
+
+    const openedAtMs = Date.parse(String(state?.opened_at || ""));
+    if (!Number.isFinite(openedAtMs)) return false;
+    return (nowProvider().getTime() - openedAtMs) >= MAX_OPEN_WINDOW_MS;
+  }
+
+  function resetOpenState(state) {
+    return {
+      ...emptyState(),
+      recent_zero_serve_runs: Array.isArray(state?.recent_zero_serve_runs)
+        ? state.recent_zero_serve_runs
+        : [],
+    };
+  }
 
   function writeJsonAtomic(filePath, payload) {
     const dir = path.dirname(filePath);
@@ -37,7 +74,12 @@ function createDigestOrchestratorCircuitBreakerRuntime(deps) {
 
   function loadState() {
     try {
-      return JSON.parse(fs.readFileSync(circuitBreakerStatePath, "utf8"));
+      const parsed = JSON.parse(fs.readFileSync(circuitBreakerStatePath, "utf8"));
+      if (!shouldAutoClose(parsed)) return parsed;
+      const reset = resetOpenState(parsed);
+      saveState(reset);
+      logger("[circuit-breaker] AUTO-CLOSED stale breaker state");
+      return reset;
     } catch (e) {
       if (e && e.code !== "ENOENT") logger(`[circuit-breaker] load failed: ${e.message}`);
       return emptyState();

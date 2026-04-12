@@ -16,6 +16,7 @@ assertModuleExports(() => runtime, TARGET_REL);
 
 const {
   accumulateWriteupStatsFromTaggedItems,
+  aggregateTopicWriteupStats,
   appendRejectedItems,
   cloneReserveState,
   groupFailedItemsByTopic,
@@ -127,6 +128,29 @@ const {
 }
 
 {
+  const aggregate = aggregateTopicWriteupStats({
+    TECHNOLOGY: {
+      attempted_count: 2,
+      soft_fail_count: 1,
+      soft_fail_recovery_count: 1,
+      minimum_viable_accept_count: 1,
+      parse_failure_counts: { validator_mismatch: 1 },
+    },
+    HEALTHCARE: {
+      attempted_count: 3,
+      soft_fail_count: 2,
+      soft_fail_recovery_count: 1,
+      minimum_viable_accept_count: 2,
+      parse_failure_counts: { validator_mismatch: 2 },
+    },
+  });
+  assert.strictEqual(aggregate.attempted_count, 5);
+  assert.strictEqual(aggregate.soft_fail_count, 3);
+  assert.strictEqual(aggregate.minimum_viable_accept_count, 3);
+  assert.strictEqual(aggregate.parse_failure_counts.validator_mismatch, 3);
+}
+
+{
   const reservePick = pickNextReserveCandidate({
     reserveState: {
       strongReserve: [{ url: "https://example.com/skip" }],
@@ -140,6 +164,23 @@ const {
   });
   assert.strictEqual(reservePick.candidate.url, "https://example.com/fill");
   assert.strictEqual(reservePick.reserve_bucket, "standard");
+}
+
+{
+  const reservePick = pickNextReserveCandidate({
+    reserveState: {
+      strongReserve: [],
+      standardReserve: [{ url: "https://example.com/fill" }],
+    },
+    reserveCursor: { strong: 0, standard: 0 },
+    selectedItems: [],
+    usedUrls: new Set(),
+    getBackfillRejectionReason: () => null,
+    policy: {
+      allowStandardBackfill: false,
+    },
+  });
+  assert.strictEqual(reservePick.candidate, null);
 }
 
 {

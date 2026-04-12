@@ -2418,7 +2418,7 @@ function renderDiagnosisWindowCard(window) {
     <div class="digest-audit-topic-head">
       <div>
         <div class="subscriber-main">Diagnosis trends (${Math.max(0, Number(data.days_covered || 0))}d)</div>
-        <div class="subscriber-sub">${data.observability_only === true ? "Interpret current behavior only until trust/drop thresholds stabilize for 3 runs." : "Thresholds are stable enough for this layer to inform decisions."}</div>
+        <div class="subscriber-sub">${data.observability_only === true ? "Interpret current behavior only until trust/drop thresholds stabilize for 3 runs." : "Thresholds are stable enough for this layer to inform decisions."} Window includes ${Math.max(0, Number(data.days_covered || 0))} run(s).</div>
       </div>
       <div class="digest-audit-row" style="justify-content:flex-end;">
         ${renderDigestAuditSummaryPill("Mode", data.observability_only === true ? "observability only" : "decision ready", modeTone)}

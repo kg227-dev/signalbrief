@@ -2335,7 +2335,110 @@ function renderDigestAuditSummaryPill(label, value, tone = "var(--text-secondary
   return `<span class="digest-audit-pill" style="color:${tone};">${esc(label)}: ${esc(value)}</span>`;
 }
 
-function renderDigestAuditCandidate(candidate) {
+function normalizeAuditCandidateTier(rawTier) {
+  const numeric = Number(rawTier);
+  if (numeric === 1 || numeric === 2 || numeric === 3) return numeric;
+  const normalized = String(rawTier || "").trim().toLowerCase();
+  if (normalized === "premium") return 1;
+  if (normalized === "strong") return 2;
+  if (normalized === "standard") return 3;
+  return null;
+}
+
+function isTrustedAuditCandidate(candidate) {
+  const tier = normalizeAuditCandidateTier(candidate?.source_tier);
+  return tier != null && tier <= 2;
+}
+
+function renderDigestAuditFlagBadge(label, tone) {
+  return `<span class="digest-audit-pill" style="color:${tone};font-weight:700;">${esc(label)}</span>`;
+}
+
+function deriveCandidateCausalityBadges(candidate, topic = null) {
+  const badges = [];
+  const selected = candidate?.selected === true;
+  const trusted = isTrustedAuditCandidate(candidate);
+  const writeupReasons = Array.isArray(candidate?.writeup_rejection_reasons) ? candidate.writeup_rejection_reasons : [];
+  const hardReasons = Array.isArray(candidate?.hard_failure_reasons) ? candidate.hard_failure_reasons : [];
+  const softReasons = Array.isArray(candidate?.soft_failure_reasons) ? candidate.soft_failure_reasons : [];
+  const hasValidatorFailure = !selected
+    && (String(candidate?.writeup_status || "").trim() === "failed_dropped"
+      || String(candidate?.final_status || "").trim() === "failed"
+      || writeupReasons.length > 0
+      || hardReasons.length > 0
+      || softReasons.length > 0
+      || String(candidate?.failure_reason || "").trim().length > 0);
+
+  if (hasValidatorFailure) badges.push(renderDigestAuditFlagBadge("DROPPED_BY_VALIDATOR", "var(--red)"));
+  if (candidate?.minimum_viable_accept === true) badges.push(renderDigestAuditFlagBadge("MIN_VIABLE_ACCEPT", "var(--yellow)"));
+  if (candidate?.repair_applied === true && selected) badges.push(renderDigestAuditFlagBadge("REPAIR_RECOVERED", "var(--green)"));
+  if (trusted && candidate?.repair_applied === true && hasValidatorFailure) {
+    badges.push(renderDigestAuditFlagBadge("STRONG_FAILED_AFTER_REPAIR", "var(--red)"));
+  }
+  if (selected && !trusted && topic && Number(topic?.standard_tier_selected_count || 0) > 0) {
+    badges.push(renderDigestAuditFlagBadge("STANDARD_BACKFILL_USED", "var(--yellow)"));
+  }
+  return badges;
+}
+
+function computeStrongDropRatePct(topic) {
+  const writeup = topic?.writeup && typeof topic.writeup === "object" ? topic.writeup : {};
+  const attempted = Math.max(0, Number(writeup.strong_tier_attempted_count || 0));
+  const dropped = Math.max(0, Number(writeup.strong_tier_drop_count || 0));
+  if (attempted <= 0) return 0;
+  return Number((((dropped / attempted) * 100)).toFixed(1));
+}
+
+function computeStrongMinViableAcceptCount(topic) {
+  const candidates = Array.isArray(topic?.candidates) ? topic.candidates : [];
+  return candidates.filter((candidate) => isTrustedAuditCandidate(candidate) && candidate?.minimum_viable_accept === true).length;
+}
+
+function computeTopicBackfillType(topic) {
+  const strongSelected = Math.max(0, Number(topic?.strong_tier_selected_count || 0));
+  const standardSelected = Math.max(0, Number(topic?.standard_tier_selected_count || 0));
+  if (standardSelected <= 0) return "strong_only";
+  if (strongSelected <= 0) return "standard_fallback";
+  return "mixed";
+}
+
+function formatSignedPctDelta(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(1)} pts`;
+}
+
+function renderDiagnosisWindowCard(window) {
+  const data = window && typeof window === "object" ? window : null;
+  if (!data || Math.max(0, Number(data.days_covered || 0)) <= 0) return "";
+  const issueDistribution = Array.isArray(data.primary_issue_distribution) ? data.primary_issue_distribution : [];
+  const modeTone = data.observability_only === true ? "var(--yellow)" : "var(--green)";
+  const trendTone = Number(data.trusted_share_delta_pct || 0) >= 0 ? "var(--green)" : "var(--yellow)";
+  return `<div class="digest-audit-card">
+    <div class="digest-audit-topic-head">
+      <div>
+        <div class="subscriber-main">Diagnosis trends (${Math.max(0, Number(data.days_covered || 0))}d)</div>
+        <div class="subscriber-sub">${data.observability_only === true ? "Interpret current behavior only until trust/drop thresholds stabilize for 3 runs." : "Thresholds are stable enough for this layer to inform decisions."}</div>
+      </div>
+      <div class="digest-audit-row" style="justify-content:flex-end;">
+        ${renderDigestAuditSummaryPill("Mode", data.observability_only === true ? "observability only" : "decision ready", modeTone)}
+        ${renderDigestAuditSummaryPill("Latest primary", humanizeRootCause(data.latest_primary_root_cause || "unknown"))}
+      </div>
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${issueDistribution.length ? issueDistribution.map((entry) => renderDigestAuditSummaryPill(humanizeRootCause(entry?.issueCode || "unknown"), formatPct(entry?.share_pct || 0), entry?.issueCode === data.latest_primary_root_cause ? "var(--accent)" : "var(--text-secondary)")).join("") : renderDigestAuditSummaryPill("Distribution", "unavailable")}
+    </div>
+    <div class="digest-audit-row" style="margin-top:12px;">
+      ${renderDigestAuditSummaryPill("Avg writeup drop", formatPct(data.average_writeup_drop_share_pct || 0), Number(data.average_writeup_drop_share_pct || 0) <= 20 ? "var(--green)" : "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Avg strong-tier drop", formatPct(data.average_strong_tier_drop_rate_pct || 0), Number(data.average_strong_tier_drop_rate_pct || 0) <= 15 ? "var(--green)" : "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Avg trusted share", formatPct(data.average_trusted_share_pct || 0), Number(data.average_trusted_share_pct || 0) >= 75 ? "var(--green)" : "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Latest trusted share", formatPct(data.latest_trusted_share_pct || 0), Number(data.latest_trusted_share_pct || 0) >= 75 ? "var(--green)" : "var(--yellow)")}
+      ${renderDigestAuditSummaryPill("Trusted vs 7d avg", formatSignedPctDelta(data.trusted_share_delta_pct || 0), trendTone)}
+    </div>
+  </div>`;
+}
+
+function renderDigestAuditCandidate(candidate, topic = null) {
   const headline = esc(candidate?.headline || "Untitled");
   const href = String(candidate?.url || "").trim();
   const title = href
@@ -2359,6 +2462,7 @@ function renderDigestAuditCandidate(candidate) {
   const followUpAllowed = candidate?.follow_up_allowed === true || strictQuality?.follow_up_allowed === true;
   const majorStoryCandidate = candidate?.major_story_candidate === true || strictQuality?.major_story_candidate === true;
   const majorStoryBlockReason = candidate?.major_story_block_reason || strictQuality?.major_story_block_reason || "";
+  const causalityBadges = deriveCandidateCausalityBadges(candidate, topic);
   return `<div class="digest-audit-item">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
       <div style="min-width:0;">
@@ -2377,6 +2481,7 @@ function renderDigestAuditCandidate(candidate) {
       ${followUpAllowed ? renderDigestAuditSummaryPill("Follow-up", "allowed", "var(--green)") : ""}
       ${majorStoryCandidate ? renderDigestAuditSummaryPill("Major story", "candidate", "var(--yellow)") : ""}
     </div>
+    ${causalityBadges.length ? `<div class="digest-audit-row" style="margin-top:8px;">${causalityBadges.join("")}</div>` : ""}
     ${writeupReasons.length ? `<div class="subscriber-sub" style="margin-top:6px;">${esc(writeupReasons.join(" · "))}</div>` : ""}
     ${strictRejectedReason ? `<div class="subscriber-sub" style="margin-top:6px;">Strict reason: ${esc(strictRejectedReason)}</div>` : ""}
     ${majorStoryBlockReason ? `<div class="subscriber-sub" style="margin-top:6px;">Major-story block: ${esc(majorStoryBlockReason)}</div>` : ""}
@@ -2650,7 +2755,7 @@ function renderBackboneHealthCard(sourceHealth) {
   </div>`;
 }
 
-function renderTopicReadinessCard(topicReadiness) {
+function renderTopicReadinessCard(topicReadiness, currentTopics = {}, fetchTopics = new Map()) {
   const entries = topicReadiness && typeof topicReadiness === "object"
     ? Object.entries(topicReadiness).sort((left, right) => {
         const leftDays = Number(left?.[1]?.days_observed || 0);
@@ -2671,6 +2776,14 @@ function renderTopicReadinessCard(topicReadiness) {
       ${entries.map(([tag, readiness]) => {
         const ready = readiness?.exit_ready === true;
         const concerns = Array.isArray(readiness?.concerns) ? readiness.concerns : [];
+        const topic = currentTopics && typeof currentTopics === "object" ? currentTopics[tag] : null;
+        const topicDiagnosis = topic?.topicDiagnosis && typeof topic.topicDiagnosis === "object" ? topic.topicDiagnosis : null;
+        const currentFetchTopic = fetchTopics instanceof Map ? fetchTopics.get(tag) : null;
+        const primaryIssue = topicDiagnosis?.primaryRootCause || "unknown";
+        const strongDropRatePct = topic ? computeStrongDropRatePct(topic) : 0;
+        const backfillType = topic ? computeTopicBackfillType(topic) : "strong_only";
+        const writeupDropSharePct = Number(topic?.writeup?.dropped_share_pct || 0);
+        const statusTone = primaryIssue === "topic_stable" ? "var(--green)" : topicDiagnosis?.severity === "high" ? "var(--red)" : "var(--yellow)";
         return `<div class="digest-audit-item">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
             <div style="min-width:0;">
@@ -2685,6 +2798,13 @@ function renderTopicReadinessCard(topicReadiness) {
             ${renderDigestAuditSummaryPill("Broker/RSS share", formatPct(readiness?.broker_candidate_share_pct || 0), Number(readiness?.broker_candidate_share_pct || 0) >= 70 ? "var(--green)" : "var(--yellow)")}
             ${renderDigestAuditSummaryPill("Source success", formatPct(readiness?.source_success_rate_pct || 0), Number(readiness?.source_success_rate_pct || 0) >= 90 ? "var(--green)" : "var(--yellow)")}
             ${renderDigestAuditSummaryPill("Trusted Tier 1/2", formatPct(readiness?.trusted_selected_share_pct || 0), Number(readiness?.trusted_selected_share_pct || 0) >= 80 ? "var(--green)" : "var(--yellow)")}
+          </div>
+          <div class="digest-audit-row" style="margin-top:8px;">
+            ${renderDigestAuditSummaryPill("Primary issue", humanizeRootCause(primaryIssue), statusTone)}
+            ${renderDigestAuditSummaryPill("Backfill type", backfillType, backfillType === "strong_only" ? "var(--green)" : backfillType === "mixed" ? "var(--yellow)" : "var(--red)")}
+            ${renderDigestAuditSummaryPill("Writeup drop", formatPct(writeupDropSharePct || 0), Number(writeupDropSharePct || 0) <= 20 ? "var(--green)" : "var(--yellow)")}
+            ${renderDigestAuditSummaryPill("Strong drop rate", formatPct(strongDropRatePct || 0), Number(strongDropRatePct || 0) <= 15 ? "var(--green)" : "var(--yellow)")}
+            ${currentFetchTopic?.coverage_status ? renderDigestAuditSummaryPill("Coverage", String(currentFetchTopic.coverage_status || ""), String(currentFetchTopic.coverage_status || "").includes("thin") ? "var(--yellow)" : "var(--green)") : ""}
           </div>
           <div class="digest-audit-row" style="margin-top:8px;">
             ${renderDigestAuditSummaryPill("No-broker days", String(Math.max(0, Number(readiness?.no_broker_days || 0))), Number(readiness?.no_broker_days || 0) > 0 ? "var(--red)" : "var(--green)")}
@@ -2795,6 +2915,10 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
       ? "var(--yellow)"
       : "var(--red)";
   const topicAnchorId = getDigestAuditTopicAnchorId(tag);
+  const topicDiagnosis = topic?.topicDiagnosis && typeof topic.topicDiagnosis === "object" ? topic.topicDiagnosis : null;
+  const strongDropRatePct = computeStrongDropRatePct(topic);
+  const strongMinViableAcceptCount = computeStrongMinViableAcceptCount(topic);
+  const backfillType = computeTopicBackfillType(topic);
   return `<div class="digest-audit-topic"${topicAnchorId ? ` id="${esc(topicAnchorId)}"` : ""}>
     <div class="digest-audit-topic-head">
       <div>
@@ -2812,8 +2936,17 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
       ${renderDigestAuditSummaryPill("Broker", `${Number(fetchTopic?.broker_item_count || 0)} kept`, "var(--green)")}
       ${renderDigestAuditSummaryPill("Discovery", `${Number(fetchTopic?.discovery_item_count || 0)} kept`, "var(--yellow)")}
       ${renderDigestAuditSummaryPill("Discovery capped", String(Number(fetchTopic?.discovery_capped_count || 0)), "var(--red)")}
+      ${topicDiagnosis ? renderDigestAuditSummaryPill("Primary issue", humanizeRootCause(topicDiagnosis.primaryRootCause || "unknown"), topicDiagnosis.severity === "high" ? "var(--red)" : topicDiagnosis.primaryRootCause === "topic_stable" ? "var(--green)" : "var(--yellow)") : ""}
+      ${renderDigestAuditSummaryPill("Backfill", backfillType, backfillType === "strong_only" ? "var(--green)" : backfillType === "mixed" ? "var(--yellow)" : "var(--red)")}
       ${strictQuality ? renderDigestAuditSummaryPill("Bucket", strictQuality.pass === false ? "blocked" : "ready", strictQuality.pass === false ? "var(--red)" : "var(--green)") : ""}
       ${strictQuality?.block_reason ? renderDigestAuditSummaryPill("Block", strictQuality.block_reason, "var(--red)") : ""}
+    </div>
+    <div class="digest-audit-row" style="margin-bottom:10px;">
+      ${renderDigestAuditSummaryPill("Strong attempted", String(Math.max(0, Number(topic?.writeup?.strong_tier_attempted_count || 0))))}
+      ${renderDigestAuditSummaryPill("Strong selected", String(Math.max(0, Number(topic?.writeup?.strong_tier_final_selected_count || 0))), "var(--green)")}
+      ${renderDigestAuditSummaryPill("Strong dropped", String(Math.max(0, Number(topic?.writeup?.strong_tier_drop_count || 0))), Number(topic?.writeup?.strong_tier_drop_count || 0) > 0 ? "var(--yellow)" : "var(--green)")}
+      ${renderDigestAuditSummaryPill("Strong min viable accept", String(Math.max(0, Number(strongMinViableAcceptCount || 0))), Number(strongMinViableAcceptCount || 0) > 0 ? "var(--yellow)" : "var(--text-secondary)")}
+      ${renderDigestAuditSummaryPill("Strong drop rate", formatPct(strongDropRatePct || 0), Number(strongDropRatePct || 0) <= 15 ? "var(--green)" : "var(--yellow)")}
     </div>
     ${strictQuality ? `<div class="digest-audit-row" style="margin-bottom:10px;">
       ${renderDigestAuditSummaryPill("Backfill attempts", String(Number(strictQuality.backfill_attempt_count || 0)))}
@@ -2839,13 +2972,13 @@ function renderDigestAuditTopic(tag, topic, fetchTopic, options = {}) {
       <div class="digest-audit-item-list">${majorStory.blocked_candidates.map((flag) => renderDigestAuditConcern(`${flag.headline || "Untitled"} · ${flag.reason || "blocked"}`)).join("")}</div>
     </div>` : ""}
     <div class="digest-audit-item-list">
-      ${selectedCandidates.length ? selectedCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No selected items captured for this topic.</div>`}
+      ${selectedCandidates.length ? selectedCandidates.map((candidate) => renderDigestAuditCandidate(candidate, topic)).join("") : `<div class="subscriber-sub">No selected items captured for this topic.</div>`}
     </div>
     <details style="margin-top:12px;">
       <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:700;">Candidate audit (${Number(topic?.total_candidates || 0)})</summary>
       ${rejectionPills.length ? `<div class="digest-audit-row" style="margin-top:10px;">${rejectionPills.join("")}</div>` : ""}
       <div class="digest-audit-item-list" style="margin-top:10px;">
-        ${visibleCandidates.length ? visibleCandidates.map((candidate) => renderDigestAuditCandidate(candidate)).join("") : `<div class="subscriber-sub">No candidate detail captured.</div>`}
+        ${visibleCandidates.length ? visibleCandidates.map((candidate) => renderDigestAuditCandidate(candidate, topic)).join("") : `<div class="subscriber-sub">No candidate detail captured.</div>`}
       </div>
       ${hiddenCount > 0 ? `<div class="subscriber-sub" style="margin-top:8px;">+${hiddenCount} more candidates in the audit log</div>` : ""}
     </details>
@@ -2891,6 +3024,9 @@ function renderDigestAuditPanel() {
   const runDiagnosis = data.runDiagnosis && typeof data.runDiagnosis === "object"
     ? data.runDiagnosis
     : null;
+  const diagnosisWindow = data.diagnosis_window && typeof data.diagnosis_window === "object"
+    ? data.diagnosis_window
+    : null;
   const fetchTopics = new Map((Array.isArray(fetch.topic_diagnostics) ? fetch.topic_diagnostics : []).map((topic) => [String(topic?.tag || "").trim().toUpperCase(), topic]));
   const topics = Object.entries(data.topics || {}).sort((left, right) => left[0].localeCompare(right[0]));
   const generatedAt = data.generated_at ? formatEtDateTime(data.generated_at) : "—";
@@ -2903,11 +3039,12 @@ function renderDigestAuditPanel() {
     : "";
   meta.textContent = `Audit for ${data.date_et || state.dateKey || ensureDigestAuditDateInput()} · generated ${generatedAt}${rerunLabel}${refreshingLabel}`;
   panel.innerHTML = `
+    ${renderDiagnosisWindowCard(diagnosisWindow)}
     ${renderRunDiagnosisCard(runDiagnosis)}
     ${renderRollingReadinessCard(readiness)}
     ${renderBackboneHealthCard(sourceHealth)}
     ${renderWriteupQualityCard(writeup)}
-    ${renderTopicReadinessCard(topicReadiness)}
+    ${renderTopicReadinessCard(topicReadiness, data.topics || {}, fetchTopics)}
     <div class="digest-audit-card">
       <div class="digest-audit-kpis">
         <div class="digest-audit-kpi">

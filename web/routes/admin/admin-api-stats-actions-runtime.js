@@ -9,6 +9,7 @@ const {
   buildDeliveryWarnings,
   buildDigestInsights,
   buildEngagementMetrics,
+  buildHistoricalAvgCostPerRun,
   buildMonthRunSummary,
   buildPerUserCostRollup,
   buildProjectedWindowCostSummary,
@@ -143,6 +144,9 @@ function buildAdminStatsPayload({
     monthRuns,
     monthDeliveries,
     monthUniqueUsersLogSize,
+    monthTotalRuns,
+    monthTotalDeliveries,
+    monthTotalUniqueUsersLogSize,
   } = buildMonthRunSummary(runs, monthPrefix);
 
   const referrals = buildReferrals(usersAll);
@@ -196,11 +200,13 @@ function buildAdminStatsPayload({
     nowParts,
     days: 7,
   });
+  const historicalAvg = buildHistoricalAvgCostPerRun(runs, { nowParts, days: 30 });
   const projected7dCost = buildProjectedWindowCostSummary({
     roster,
     nowParts,
     config: CONFIG,
     days: 7,
+    historicalAvg,
   });
   const summary = buildSummaryPayload({
     runs,
@@ -209,6 +215,9 @@ function buildAdminStatsPayload({
     monthLabel,
     monthUsersServedFromRoster,
     monthUniqueUsersLogSize,
+    monthTotalRuns,
+    monthTotalDeliveries,
+    monthTotalUniqueUsersLogSize,
     roster,
     activeUsersCount,
     quality,

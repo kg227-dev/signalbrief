@@ -128,15 +128,38 @@ function buildProjectedRunSlots(roster, { nowParts, days = 7 } = {}) {
   return [...slots.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
+function buildHistoricalAvgCostPerRun(runs, { nowParts, days = 30 } = {}) {
+  const parts = nowParts && typeof nowParts === "object" ? nowParts : null;
+  if (!parts || !Number.isFinite(Number(parts.year))) {
+    return { avg_cost_per_run: 0, avg_users_per_run: 0, sample_size: 0 };
+  }
+  const endKey = buildEtDateKeyFromParts(parts, 0);
+  const startKey = buildEtDateKeyFromParts(parts, -(days - 1));
+  const windowRuns = filterRunsWithinEtWindow(runs, startKey, endKey)
+    .filter((run) => isScheduledRunRecord(run));
+
+  if (windowRuns.length === 0) return { avg_cost_per_run: 0, avg_users_per_run: 0, sample_size: 0 };
+
+  const totalCost = windowRuns.reduce((s, r) => s + (r.total_cost_usd || 0), 0);
+  const totalUsers = windowRuns.reduce((s, r) => s + (r.users_served || 0), 0);
+  return {
+    avg_cost_per_run: parseFloat((totalCost / windowRuns.length).toFixed(5)),
+    avg_users_per_run: parseFloat((totalUsers / windowRuns.length).toFixed(4)),
+    sample_size: windowRuns.length,
+  };
+}
+
 function buildProjectedWindowCostSummary({
   roster,
   nowParts,
   config,
   days = 7,
+  historicalAvg,
 } = {}) {
   const slots = buildProjectedRunSlots(roster, { nowParts, days });
   const configTopics = Array.isArray(config?.topics) ? config.topics : [];
   const standardTopics = configTopics.map((topic) => topic?.tag).filter(Boolean);
+  const useHistorical = historicalAvg && Number(historicalAvg.sample_size || 0) >= 5;
 
   let totalCost = 0;
   let projectedDeliveries = 0;
@@ -144,11 +167,16 @@ function buildProjectedWindowCostSummary({
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
     const itemCount = 5;
-    const estimate = fallbackEstimateDigestCost({
-      topics: standardTopics,
-      itemCount,
-    }) || { totalUsd: 0 };
-    const estimatedCost = toFiniteNumber(estimate.totalUsd, 0);
+    let estimatedCost;
+    if (useHistorical) {
+      estimatedCost = toFiniteNumber(historicalAvg.avg_cost_per_run, 0);
+    } else {
+      const estimate = fallbackEstimateDigestCost({
+        topics: standardTopics,
+        itemCount,
+      }) || { totalUsd: 0 };
+      estimatedCost = toFiniteNumber(estimate.totalUsd, 0);
+    }
     totalCost += estimatedCost;
     projectedDeliveries += users.length;
     return {
@@ -166,22 +194,38 @@ function buildProjectedWindowCostSummary({
     active_users: (Array.isArray(roster) ? roster : []).filter((user) => String(user?.status || "").toLowerCase().trim() === "active").length,
     total_cost: parseFloat(totalCost.toFixed(4)),
     projected_runs: projectedRuns,
+    projection_basis: useHistorical ? "historical_30d" : "fallback_estimate",
+    historical_avg_users_per_run: useHistorical ? toFiniteNumber(historicalAvg.avg_users_per_run, 0) : null,
   };
 }
 
 function buildMonthRunSummary(runs, monthPrefix) {
-  const monthRuns = runs.filter((row) => String(row?.date || "").startsWith(monthPrefix));
-  const monthDeliveries = sumRuns(monthRuns, "users_served");
-  const monthUniqueUsersLog = new Set();
-  for (const run of monthRuns) {
+  const allMonthRuns = runs.filter((row) => String(row?.date || "").startsWith(monthPrefix));
+  const scheduledMonthRuns = allMonthRuns.filter((run) => isScheduledRunRecord(run));
+
+  const scheduledDeliveries = sumRuns(scheduledMonthRuns, "users_served");
+  const uniqueUsersLog = new Set();
+  for (const run of scheduledMonthRuns) {
     for (const userRow of (Array.isArray(run?.per_user) ? run.per_user : [])) {
-      if (userRow && userRow.id) monthUniqueUsersLog.add(String(userRow.id));
+      if (userRow && userRow.id) uniqueUsersLog.add(String(userRow.id));
     }
   }
+
+  const allDeliveries = sumRuns(allMonthRuns, "users_served");
+  const allUniqueUsersLog = new Set();
+  for (const run of allMonthRuns) {
+    for (const userRow of (Array.isArray(run?.per_user) ? run.per_user : [])) {
+      if (userRow && userRow.id) allUniqueUsersLog.add(String(userRow.id));
+    }
+  }
+
   return {
-    monthRuns,
-    monthDeliveries,
-    monthUniqueUsersLogSize: monthUniqueUsersLog.size,
+    monthRuns: scheduledMonthRuns,
+    monthDeliveries: scheduledDeliveries,
+    monthUniqueUsersLogSize: uniqueUsersLog.size,
+    monthTotalRuns: allMonthRuns,
+    monthTotalDeliveries: allDeliveries,
+    monthTotalUniqueUsersLogSize: allUniqueUsersLog.size,
   };
 }
 
@@ -205,5 +249,6 @@ module.exports = {
   buildMonthRunSummary,
   buildPerUserCostRollup,
   buildTrailingWindowCostSummary,
+  buildHistoricalAvgCostPerRun,
   buildProjectedWindowCostSummary,
 };

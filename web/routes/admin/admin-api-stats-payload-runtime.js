@@ -23,6 +23,9 @@ function buildSummaryPayload({
   monthLabel,
   monthUsersServedFromRoster,
   monthUniqueUsersLogSize,
+  monthTotalRuns,
+  monthTotalDeliveries,
+  monthTotalUniqueUsersLogSize,
   roster,
   activeUsersCount,
   quality,
@@ -32,6 +35,7 @@ function buildSummaryPayload({
 }) {
   const trailing = trailing7dCost && typeof trailing7dCost === "object" ? trailing7dCost : {};
   const projected = projected7dCost && typeof projected7dCost === "object" ? projected7dCost : {};
+  const allMonthRuns = Array.isArray(monthTotalRuns) ? monthTotalRuns : [];
   return {
     all_time_cost: parseFloat(sumRuns(runs, "total_cost_usd").toFixed(4)),
     all_time_runs: runs.length,
@@ -42,6 +46,9 @@ function buildSummaryPayload({
     month_unique_users: monthUsersServedFromRoster,
     month_unique_users_log: monthUniqueUsersLogSize,
     month_deliveries: monthDeliveries,
+    month_total_cost: parseFloat(sumRuns(allMonthRuns, "total_cost_usd").toFixed(4)),
+    month_total_runs: allMonthRuns.length,
+    month_total_deliveries: Math.max(0, Number(monthTotalDeliveries || 0)),
     total_users: roster.length,
     active_users: activeUsersCount,
     month_label: monthLabel,
@@ -56,6 +63,8 @@ function buildSummaryPayload({
     projected_7d_runs: Math.max(0, Number(projected.scheduled_runs || 0)),
     projected_7d_deliveries: Math.max(0, Number(projected.projected_deliveries || 0)),
     projected_7d_active_users: Math.max(0, Number(projected.active_users || 0)),
+    projected_7d_projection_basis: projected.projection_basis || null,
+    projected_7d_historical_avg_users_per_run: projected.historical_avg_users_per_run ?? null,
   };
 }
 

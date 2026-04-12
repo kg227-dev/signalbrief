@@ -57,12 +57,17 @@ function buildEngagementMetrics({
   const engagementEvents = loadEngagementEvents({ max_age_days: 120, dedupe: true });
   const inWindow = createWindowPredicate({ nowMs, dayMs, parseIsoTs });
 
-  const openEvents7d = countUniqueEvents(engagementEvents, (event) =>
-    String(event?.event_type || "") === "email_open" && inWindow(event, 7)
-  );
-  const openEvents30d = countUniqueEvents(engagementEvents, (event) =>
-    String(event?.event_type || "") === "email_open" && inWindow(event, 30)
-  );
+  const sentDigestIds7d = new Set();
+  const sentDigestIds30d = new Set();
+  for (const event of engagementEvents) {
+    if (String(event?.event_type || "") !== "digest_sent") continue;
+    if (String(event?.channel || "") !== "email") continue;
+    const digestId = String(event?.digest_id || "").trim();
+    if (!digestId) continue;
+    if (inWindow(event, 7)) sentDigestIds7d.add(digestId);
+    if (inWindow(event, 30)) sentDigestIds30d.add(digestId);
+  }
+
   const digestEmailSent7d = countUniqueEvents(engagementEvents, (event) =>
     String(event?.event_type || "") === "digest_sent"
     && String(event?.channel || "") === "email"
@@ -72,6 +77,16 @@ function buildEngagementMetrics({
     String(event?.event_type || "") === "digest_sent"
     && String(event?.channel || "") === "email"
     && inWindow(event, 30)
+  );
+  const openEvents7d = countUniqueEvents(engagementEvents, (event) =>
+    String(event?.event_type || "") === "email_open"
+    && inWindow(event, 7)
+    && sentDigestIds7d.has(String(event?.digest_id || "").trim())
+  );
+  const openEvents30d = countUniqueEvents(engagementEvents, (event) =>
+    String(event?.event_type || "") === "email_open"
+    && inWindow(event, 30)
+    && sentDigestIds30d.has(String(event?.digest_id || "").trim())
   );
   const openRate7d = digestEmailSent7d > 0 ? Number((openEvents7d / digestEmailSent7d).toFixed(4)) : 0;
   const openRate30d = digestEmailSent30d > 0 ? Number((openEvents30d / digestEmailSent30d).toFixed(4)) : 0;

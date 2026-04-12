@@ -78,6 +78,8 @@ function buildTrailingWindowCostSummary(runs, { nowParts, days = 7 } = {}) {
   const windowRuns = filterRunsWithinEtWindow(runs, startDateKey, endDateKey)
     .filter((run) => isScheduledRunRecord(run));
 
+  const zeroValueRuns = windowRuns.filter((run) => String(run?.run_value_state || "").trim() === "zero_value");
+
   return {
     days: normalizedDays,
     start_date_et: startDateKey,
@@ -87,6 +89,8 @@ function buildTrailingWindowCostSummary(runs, { nowParts, days = 7 } = {}) {
     scheduled_cost: parseFloat(sumRuns(windowRuns, "total_cost_usd").toFixed(4)),
     scheduled_runs: windowRuns.length,
     deliveries: sumRuns(windowRuns, "users_served"),
+    zero_value_runs: zeroValueRuns.length,
+    zero_value_cost: parseFloat(sumRuns(zeroValueRuns, "total_cost_usd").toFixed(4)),
   };
 }
 

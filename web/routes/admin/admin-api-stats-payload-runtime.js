@@ -32,9 +32,11 @@ function buildSummaryPayload({
   feedbackTrend,
   trailing7dCost,
   projected7dCost,
+  historicalAvg,
 }) {
   const trailing = trailing7dCost && typeof trailing7dCost === "object" ? trailing7dCost : {};
   const projected = projected7dCost && typeof projected7dCost === "object" ? projected7dCost : {};
+  const hist = historicalAvg && typeof historicalAvg === "object" ? historicalAvg : {};
   const allMonthRuns = Array.isArray(monthTotalRuns) ? monthTotalRuns : [];
   return {
     all_time_cost: parseFloat(sumRuns(runs, "total_cost_usd").toFixed(4)),
@@ -59,12 +61,16 @@ function buildSummaryPayload({
     trailing_7d_runs: Math.max(0, Number(trailing.runs?.length || 0)),
     trailing_7d_scheduled_runs: Math.max(0, Number(trailing.scheduled_runs || 0)),
     trailing_7d_deliveries: Math.max(0, Number(trailing.deliveries || 0)),
+    trailing_7d_zero_value_runs: Math.max(0, Number(trailing.zero_value_runs || 0)),
+    trailing_7d_zero_value_cost: parseFloat(Number(trailing.zero_value_cost || 0).toFixed(4)),
     projected_7d_cost: parseFloat(Number(projected.total_cost || 0).toFixed(4)),
     projected_7d_runs: Math.max(0, Number(projected.scheduled_runs || 0)),
     projected_7d_deliveries: Math.max(0, Number(projected.projected_deliveries || 0)),
     projected_7d_active_users: Math.max(0, Number(projected.active_users || 0)),
     projected_7d_projection_basis: projected.projection_basis || null,
     projected_7d_historical_avg_users_per_run: projected.historical_avg_users_per_run ?? null,
+    projected_7d_historical_avg_cost_per_run: Number.isFinite(hist.avg_cost_per_run) ? parseFloat(hist.avg_cost_per_run.toFixed(5)) : null,
+    projected_7d_historical_sample_size: Number.isFinite(hist.sample_size) ? hist.sample_size : null,
   };
 }
 

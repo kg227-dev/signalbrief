@@ -224,6 +224,7 @@ function buildAdminStatsPayload({
     feedbackTrend,
     trailing7dCost,
     projected7dCost,
+    historicalAvg,
   });
   const runtimeStateDiagnostics = typeof getRuntimeStateDiagnostics === "function"
     ? getRuntimeStateDiagnostics()

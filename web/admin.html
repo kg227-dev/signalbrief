@@ -1508,9 +1508,9 @@ body.dark .stale-badge { background:rgba(180,83,9,0.15); color:#fcd34d; border-c
       <thead>
         <tr>
           <th>User</th>
-          <th title="Includes scheduled runs and retries (may exceed unique digest dates)">Runs (incl. retries)</th>
-          <th>Total cost</th>
-          <th>Avg cost / run</th>
+          <th title="Count of pipeline runs where this user received a delivery. Retries do not create new runs.">Runs</th>
+          <th title="Approximate — equal split of run cost across all users in that run">Total cost (approx.)</th>
+          <th title="Approximate — equal split of run cost across all users in that run">Avg cost / run (approx.)</th>
         </tr>
       </thead>
       <tbody id="usersBody">
@@ -5146,11 +5146,32 @@ async function load(silent = false) {
     document.getElementById("monthOnDemand").innerHTML =
       `<strong>${monthDeliveries}</strong> deliveries · email-only scheduled path`;
     document.getElementById("costLast7d").textContent = fmt$(summary.trailing_7d_cost);
-    document.getElementById("costLast7dSub").innerHTML =
-      `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries`;
+    {
+      const zeroRuns = summary.trailing_7d_zero_value_runs || 0;
+      const zeroCost = summary.trailing_7d_zero_value_cost || 0;
+      const zeroNote = zeroRuns > 0
+        ? ` · <span title="Scheduled runs that spent budget but delivered 0 digests">${zeroRuns} zero-delivery run${zeroRuns !== 1 ? "s" : ""} (${fmt$(zeroCost)})</span>`
+        : "";
+      document.getElementById("costLast7dSub").innerHTML =
+        `<strong>${summary.trailing_7d_scheduled_runs || 0}</strong> scheduled · <strong>${summary.trailing_7d_deliveries || 0}</strong> deliveries${zeroNote}`;
+    }
     document.getElementById("costNext7d").textContent = fmt$(summary.projected_7d_cost);
-    document.getElementById("costNext7dSub").innerHTML =
-      `<strong>${summary.projected_7d_runs || 0}</strong> scheduled runs · <strong>${summary.projected_7d_deliveries || 0}</strong> projected deliveries · scheduled baseline only`;
+    {
+      const basis = summary.projected_7d_projection_basis;
+      const avgCost = summary.projected_7d_historical_avg_cost_per_run;
+      const sampleSize = summary.projected_7d_historical_sample_size;
+      const avgUsers = summary.projected_7d_historical_avg_users_per_run;
+      let basisNote;
+      if (basis === "historical_30d") {
+        basisNote = `historical avg ${fmt$(avgCost)}/run · ${sampleSize}d sample`;
+      } else if (basis === "degraded_user_count") {
+        basisNote = `scaled — roster grew vs historical avg (${avgUsers ? avgUsers.toFixed(1) : "?"} users/run baseline)`;
+      } else {
+        basisNote = "fallback estimate";
+      }
+      document.getElementById("costNext7dSub").innerHTML =
+        `<strong>${summary.projected_7d_runs || 0}</strong> scheduled runs · <strong>${summary.projected_7d_deliveries || 0}</strong> projected deliveries · ${basisNote}`;
+    }
 
     const totalUsers = roster ? roster.length : (summary.total_users || 0);
     const activeUsers = roster ? countActiveUsers(roster) : (summary.active_users || 0);

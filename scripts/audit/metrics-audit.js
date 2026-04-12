@@ -614,6 +614,20 @@ function buildDiscrepancies(currentLogic, correctedLogic) {
     });
   }
 
+  // Cost conservation: sum of per-user costs should equal all-time total within 0.1¢
+  const conservation = currentLogic.per_user_cost_conservation_check;
+  const conservationTolerance = 0.001; // $0.001 = 0.1¢
+  if (conservation && Math.abs(conservation.delta) > conservationTolerance) {
+    discrepancies.push({
+      metric: "per_user_cost_conservation",
+      current_value: conservation.sum_per_user,
+      corrected_value: conservation.all_time_cost,
+      delta_pct: pctDelta(conservation.all_time_cost, conservation.sum_per_user),
+      root_cause: `sum(per_user_cost) differs from all_time_cost by $${Math.abs(conservation.delta).toFixed(5)}. Likely cause: runs with per_user.length !== users_served (equal-split denominator mismatch).`,
+      trust_level: "conditional",
+    });
+  }
+
   return discrepancies;
 }
 

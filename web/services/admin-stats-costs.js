@@ -163,13 +163,24 @@ function buildProjectedWindowCostSummary({
 
   let totalCost = 0;
   let projectedDeliveries = 0;
+  let anySlotDegraded = false;
+
+  const avgUsersPerRun = useHistorical ? toFiniteNumber(historicalAvg.avg_users_per_run, 0) : 0;
 
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
     const itemCount = 5;
     let estimatedCost;
+    let slotDegraded = false;
     if (useHistorical) {
-      estimatedCost = toFiniteNumber(historicalAvg.avg_cost_per_run, 0);
+      const baseCost = toFiniteNumber(historicalAvg.avg_cost_per_run, 0);
+      if (avgUsersPerRun > 0 && users.length > 2 * avgUsersPerRun) {
+        estimatedCost = baseCost * (users.length / avgUsersPerRun);
+        slotDegraded = true;
+        anySlotDegraded = true;
+      } else {
+        estimatedCost = baseCost;
+      }
     } else {
       const estimate = fallbackEstimateDigestCost({
         topics: standardTopics,
@@ -184,8 +195,18 @@ function buildProjectedWindowCostSummary({
       user_count: users.length,
       item_count: itemCount,
       estimated_cost_usd: parseFloat(estimatedCost.toFixed(5)),
+      ...(slotDegraded ? { degraded_user_count: true } : {}),
     };
   });
+
+  let projectionBasis;
+  if (!useHistorical) {
+    projectionBasis = "fallback_estimate";
+  } else if (anySlotDegraded) {
+    projectionBasis = "degraded_user_count";
+  } else {
+    projectionBasis = "historical_30d";
+  }
 
   return {
     days: Math.max(1, Number(days || 7)),
@@ -194,8 +215,8 @@ function buildProjectedWindowCostSummary({
     active_users: (Array.isArray(roster) ? roster : []).filter((user) => String(user?.status || "").toLowerCase().trim() === "active").length,
     total_cost: parseFloat(totalCost.toFixed(4)),
     projected_runs: projectedRuns,
-    projection_basis: useHistorical ? "historical_30d" : "fallback_estimate",
-    historical_avg_users_per_run: useHistorical ? toFiniteNumber(historicalAvg.avg_users_per_run, 0) : null,
+    projection_basis: projectionBasis,
+    historical_avg_users_per_run: useHistorical ? avgUsersPerRun : null,
   };
 }
 

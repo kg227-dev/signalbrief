@@ -36,6 +36,8 @@ function cloneReserveState(rawState) {
     strongReserve: Array.isArray(state.strongReserve) ? state.strongReserve.slice() : [],
     standardReserve: Array.isArray(state.standardReserve) ? state.standardReserve.slice() : [],
     allReserve: Array.isArray(state.allReserve) ? state.allReserve.slice() : [],
+    initialStrongCount: Math.max(0, Number(state.initialStrongCount || 0)),
+    initialStandardCount: Math.max(0, Number(state.initialStandardCount || 0)),
   };
 }
 
@@ -532,6 +534,18 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
           failure_reason: finalSelected.failure_reason || null,
           final_status: finalSelected.final_status || null,
           repair_applied: finalSelected?.writeup_stage_diagnostics?.repair?.attempted === true,
+          selector_penalties: finalSelected?._selector_penalties && typeof finalSelected._selector_penalties === "object"
+            ? { ...finalSelected._selector_penalties }
+            : (candidate?.selector_penalties || null),
+          trusted_override: finalSelected?._trusted_override && typeof finalSelected._trusted_override === "object"
+            ? { ...finalSelected._trusted_override }
+            : (candidate?.trusted_override || null),
+          better_trusted_available: finalSelected?._better_trusted_available && typeof finalSelected._better_trusted_available === "object"
+            ? { ...finalSelected._better_trusted_available }
+            : (candidate?.better_trusted_available || null),
+          guardrail_swap: finalSelected?.guardrail_swap && typeof finalSelected.guardrail_swap === "object"
+            ? { ...finalSelected.guardrail_swap }
+            : (candidate?.guardrail_swap || null),
           strict_quality: finalSelected.strict_quality ? { ...finalSelected.strict_quality } : null,
           quality_rule_results: Array.isArray(finalSelected.quality_rule_results) ? finalSelected.quality_rule_results.map((result) => ({ ...result })) : [],
           rejected_rule: finalSelected.rejected_rule || null,
@@ -566,6 +580,18 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
         failure_reason: failed?.failure_reason || null,
         final_status: failed?.final_status || null,
         repair_applied: failed?.writeup_stage_diagnostics?.repair?.attempted === true,
+        selector_penalties: failed?._selector_penalties && typeof failed._selector_penalties === "object"
+          ? { ...failed._selector_penalties }
+          : (candidate?.selector_penalties || null),
+        trusted_override: failed?._trusted_override && typeof failed._trusted_override === "object"
+          ? { ...failed._trusted_override }
+          : (candidate?.trusted_override || null),
+        better_trusted_available: failed?._better_trusted_available && typeof failed._better_trusted_available === "object"
+          ? { ...failed._better_trusted_available }
+          : (candidate?.better_trusted_available || null),
+        guardrail_swap: failed?.guardrail_swap && typeof failed.guardrail_swap === "object"
+          ? { ...failed.guardrail_swap }
+          : (candidate?.guardrail_swap || null),
         strict_quality: failed?.strict_quality ? { ...failed.strict_quality } : null,
         quality_rule_results: Array.isArray(failed?.quality_rule_results) ? failed.quality_rule_results.map((result) => ({ ...result })) : [],
         rejected_rule: failed?.rejected_rule || null,
@@ -602,6 +628,23 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
     topicAudit.reserve_candidate_count = Math.max(0, Number(reserveDiagnostics.remaining_reserve_count ?? topicAudit.reserve_candidate_count ?? 0));
     topicAudit.reserve_strong_count = Math.max(0, Number(reserveDiagnostics.remaining_strong_reserve_count ?? topicAudit.reserve_strong_count ?? 0));
     topicAudit.reserve_standard_count = Math.max(0, Number(reserveDiagnostics.remaining_standard_reserve_count ?? topicAudit.reserve_standard_count ?? 0));
+    topicAudit.backfill_unlock_policy = {
+      ...(topicAudit.backfill_unlock_policy && typeof topicAudit.backfill_unlock_policy === "object"
+        ? topicAudit.backfill_unlock_policy
+        : {}),
+      trusted_reserve_failure_count: Math.max(0, Number(reserveDiagnostics.trusted_reserve_failure_count || 0)),
+      trusted_reserve_failure_threshold: Math.max(0, Number(reserveDiagnostics.trusted_reserve_failure_threshold || 0)),
+    };
+    topicAudit.trust_guardrail = {
+      ...(topicAudit.trust_guardrail && typeof topicAudit.trust_guardrail === "object"
+        ? topicAudit.trust_guardrail
+        : {}),
+      triggered: reserveDiagnostics.trust_guardrail_triggered === true,
+      swaps_attempted: Math.max(0, Number(reserveDiagnostics.trust_guardrail_swaps_attempted || 0)),
+      swaps_completed: Math.max(0, Number(reserveDiagnostics.trust_guardrail_swaps_completed || 0)),
+      final_trusted_count: Math.max(0, Number(reserveDiagnostics.final_trusted_count || strongSelectedCount)),
+      better_trusted_available_count: Math.max(0, Number(reserveDiagnostics.better_trusted_available_count || 0)),
+    };
     topicAudit.trusted_floor = {
       ...existingTrustedFloor,
       selected_trusted_count: strongSelectedCount,

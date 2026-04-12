@@ -68,6 +68,7 @@ const unrelatedOfficial = {
     enabled: true,
     minTrustedItemsPerTopic: 4,
     activationStrongCandidateCount: 5,
+    standardOverrideMargin: 0.08,
   });
 }
 
@@ -126,6 +127,54 @@ const unrelatedOfficial = {
   assert.ok(Array.isArray(reserve.strongReserve));
   assert.ok(Array.isArray(reserve.standardReserve));
   assert.ok(reserve.allReserve.length >= reserve.strongReserve.length);
+}
+
+{
+  const topicItems = [
+    { url: "https://example.com/override-standard", headline: "Standard override", published_date: "2026-03-27T11:55:00.000Z", source_domain: "standard.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", _score: 0.81 },
+    { url: "https://example.com/trusted", headline: "Trusted baseline", published_date: "2026-03-27T11:50:00.000Z", source_domain: "trusted.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", _score: 0.70 },
+  ];
+  const topicSelection = selectTopicItemsWithFallback({
+    topicItems,
+    itemsPerTopic: 1,
+    maxItemsPerSourceDomain: 2,
+    maxDiscoveryPerTopic: 1,
+    nowMs,
+    trustedSelectionFloor: {
+      enabled: true,
+      minTrustedItemsPerTopic: 1,
+      activationStrongCandidateCount: 1,
+      standardOverrideMargin: 0.05,
+    },
+  });
+  assert.strictEqual(topicSelection.selected[0].url, "https://example.com/override-standard");
+  assert.strictEqual(topicSelection.trustedFloor.trusted_override_count, 1);
+  assert.strictEqual(topicSelection.trustedFloor.trusted_override_details.length, 1);
+}
+
+{
+  const topicItems = [
+    { url: "https://example.com/blocked-standard", headline: "Standard blocked", published_date: "2026-03-27T11:55:00.000Z", source_domain: "standard.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", _score: 0.74 },
+    { url: "https://example.com/kept-trusted", headline: "Trusted kept", published_date: "2026-03-27T11:50:00.000Z", source_domain: "trusted.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", _score: 0.70 },
+  ];
+  const topicSelection = selectTopicItemsWithFallback({
+    topicItems,
+    itemsPerTopic: 1,
+    maxItemsPerSourceDomain: 2,
+    maxDiscoveryPerTopic: 1,
+    nowMs,
+    trustedSelectionFloor: {
+      enabled: true,
+      minTrustedItemsPerTopic: 1,
+      activationStrongCandidateCount: 1,
+      standardOverrideMargin: 0.08,
+    },
+  });
+  assert.strictEqual(topicSelection.selected[0].url, "https://example.com/kept-trusted");
+  assert.strictEqual(
+    topicSelection.rejectionReasonByItem.get(topicItems[0]),
+    "selection_trusted_first_blocked"
+  );
 }
 
 process.stdout.write("[digest-orchestrator-selection-pools-runtime] all assertions passed\n");

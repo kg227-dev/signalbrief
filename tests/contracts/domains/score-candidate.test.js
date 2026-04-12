@@ -66,5 +66,26 @@ const strongScore = scoreCandidate(strongSignal, { nowMs });
 assert.strictEqual(weakScore.procedural_notice, true);
 assert.ok(weakScore._score < strategicNoticeScore._score, "procedural notice with strategic shift should outrank a generic notice");
 assert.ok(weakScore._score < strongScore._score, "generic notice should rank below a stronger strategic candidate");
+assert.ok(
+  Math.abs(Number(weakScore._score_components.story_shape_penalty || 0)) > Math.abs(Number(weakScore._score_components.domain_penalty || 0)),
+  "story-shape penalties should dominate domain penalties for procedural notices"
+);
+
+const industrialWeakDomain = scoreCandidate({
+  headline: "Freight market update shifts shipper contract expectations",
+  summary: "FreightWaves reports contract pressure as carriers reset industrial logistics pricing.",
+  source_domain: "freightwaves.com",
+  source_type: "trade_specialist",
+  source_tier: "standard",
+  retrieval_origin: "broker_publisher_feed",
+  published_date: "2026-04-11T10:00:00.000Z",
+  tag: "INDUSTRIALS",
+  novelty_score: 0.8,
+  topic_fit: 0.9,
+}, { nowMs });
+assert.ok(
+  Number(industrialWeakDomain._score_components.domain_penalty || 0) < 0,
+  "topic-aware weak domains should receive a negative domain penalty"
+);
 
 process.stdout.write("[score-candidate] all assertions passed\n");

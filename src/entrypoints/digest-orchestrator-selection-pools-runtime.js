@@ -56,6 +56,28 @@ function sortWithSourceTypePreference(items) {
   });
 }
 
+function getSourceTypePreferenceRank(item) {
+  return SOURCE_TYPE_PREFERENCE[String(item?.source_type || "").trim().toLowerCase()] ?? 2;
+}
+
+function compareCandidatePreference(left, right) {
+  const scoreDelta = Number(right?._score || 0) - Number(left?._score || 0);
+  if (scoreDelta !== 0) return scoreDelta;
+  const sourceTypeDelta = getSourceTypePreferenceRank(left) - getSourceTypePreferenceRank(right);
+  if (sourceTypeDelta !== 0) return sourceTypeDelta;
+  return String(left?.headline || "").localeCompare(String(right?.headline || ""));
+}
+
+function sortBySelectionPreference(items) {
+  return (Array.isArray(items) ? items : []).slice().sort(compareCandidatePreference);
+}
+
+function getTrustedOverrideMargin(config = {}) {
+  const configured = Number(config.standardOverrideMargin);
+  if (!Number.isFinite(configured)) return 0.08;
+  return Math.max(0, configured);
+}
+
 function suppressOfficialsByCluster(topicItems) {
   const items = Array.isArray(topicItems) ? topicItems : [];
   const clusters = new Map();
@@ -149,6 +171,7 @@ function selectTopicItemsWithFallback(params = {}) {
       && minTrustedItems > 0,
     minTrustedItemsPerTopic: minTrustedItems,
     activationStrongCandidateCount,
+    standardOverrideMargin: getTrustedOverrideMargin(trustedFloorConfig),
     candidate_count: freshSelectablePool.length,
     trusted_candidate_count: trustedCandidateCount,
   };
@@ -160,43 +183,103 @@ function selectTopicItemsWithFallback(params = {}) {
   let commentarySelectedCount = 0;
   let standardTierBlockedWhileStrongAvailable = false;
   let strongPoolExhausted = false;
+  let standardCandidatesBlockedByTrustedFirstCount = 0;
+  const trustedOverrideDetails = [];
 
   function recordRejection(item, reason) {
     if (!item || selectedSet.has(item) || rejectionReasonByItem.has(item)) return;
     rejectionReasonByItem.set(item, String(reason || "selection_not_selected"));
   }
 
+  function isCandidateEligible(item, commentaryCap = 0) {
+    const isCommentary = isAnalysisOrCommentaryItem(item);
+    if (commentaryCap > 0 && isCommentary && commentarySelectedCount >= commentaryCap) return false;
+    const domain = String(item?.source_domain || item?.source || "unknown").trim().toLowerCase();
+    const domainCount = domainCounts[domain] || 0;
+    if (domainCount >= perSourceCap) return false;
+    if (isDiscoveryLaneItem(item) && discoveryCount >= discoveryCap) return false;
+    return true;
+  }
+
+  function markIneligibleRejection(item, commentaryCap = 0) {
+    const isCommentary = isAnalysisOrCommentaryItem(item);
+    if (commentaryCap > 0 && isCommentary && commentarySelectedCount >= commentaryCap) {
+      recordRejection(item, "selection_commentary_cap");
+      return;
+    }
+    const domain = String(item?.source_domain || item?.source || "unknown").trim().toLowerCase();
+    const domainCount = domainCounts[domain] || 0;
+    if (domainCount >= perSourceCap) {
+      recordRejection(item, `selection_source_cap (${domain}: ${domainCount}/${perSourceCap})`);
+      return;
+    }
+    if (isDiscoveryLaneItem(item) && discoveryCount >= discoveryCap) {
+      recordRejection(item, "selection_discovery_cap");
+    }
+  }
+
   function attemptStage(items, stageName, { commentaryCap = 0, maxAccepted = Number.MAX_SAFE_INTEGER } = {}) {
     let acceptedThisStage = 0;
-    for (const item of (Array.isArray(items) ? items : [])) {
-      if (!item || selectedSet.has(item)) continue;
+    const stageItems = sortBySelectionPreference(items);
+    while (acceptedThisStage < maxAccepted && selected.length < targetCount) {
+      const remaining = stageItems.filter((item) => item && !selectedSet.has(item));
+      if (!remaining.length) break;
+      const eligibleTrusted = remaining.filter((item) => isTrustedSourceTier(item) && isCandidateEligible(item, commentaryCap));
+      const eligibleStandard = remaining.filter((item) => !isTrustedSourceTier(item) && isCandidateEligible(item, commentaryCap));
+
+      for (const item of remaining) {
+        if (selectedSet.has(item) || isCandidateEligible(item, commentaryCap)) continue;
+        markIneligibleRejection(item, commentaryCap);
+      }
+
+      const bestTrusted = eligibleTrusted.length > 0 ? sortBySelectionPreference(eligibleTrusted)[0] : null;
+      const bestStandard = eligibleStandard.length > 0 ? sortBySelectionPreference(eligibleStandard)[0] : null;
+      const trustedStillAvailable = Boolean(bestTrusted);
+
+      if (trustedStillAvailable) standardTierBlockedWhileStrongAvailable = true;
+      if (!bestTrusted && !bestStandard) break;
+
+      let nextItem = bestTrusted || bestStandard;
+      let selectionStage = stageName;
+      if (bestStandard && bestTrusted) {
+        const scoreMargin = Number(bestStandard?._score || 0) - Number(bestTrusted?._score || 0);
+        if (scoreMargin >= trustedFloor.standardOverrideMargin) {
+          nextItem = bestStandard;
+          selectionStage = `${stageName}_trusted_override`;
+          trustedOverrideDetails.push({
+            selected_url: String(bestStandard?.url || "").trim() || null,
+            selected_headline: String(bestStandard?.headline || "").slice(0, 160) || null,
+            selected_score: Number(bestStandard?._score || 0),
+            trusted_url: String(bestTrusted?.url || "").trim() || null,
+            trusted_headline: String(bestTrusted?.headline || "").slice(0, 160) || null,
+            trusted_score: Number(bestTrusted?._score || 0),
+            score_margin: Number(scoreMargin.toFixed(4)),
+            stage: stageName,
+          });
+          bestStandard._trusted_override = {
+            margin: Number(scoreMargin.toFixed(4)),
+            trusted_candidate_url: String(bestTrusted?.url || "").trim() || null,
+            trusted_candidate_score: Number(bestTrusted?._score || 0),
+          };
+        } else {
+          standardCandidatesBlockedByTrustedFirstCount += 1;
+          if (!rejectionReasonByItem.has(bestStandard)) {
+            recordRejection(bestStandard, "selection_trusted_first_blocked");
+          }
+        }
+      }
+
+      const item = nextItem;
       if (selected.length >= targetCount) {
         if (selected.length >= targetCount) recordRejection(item, "selection_pool_full");
         break;
       }
-      if (acceptedThisStage >= maxAccepted) break;
-
       const isCommentary = isAnalysisOrCommentaryItem(item);
-      if (commentaryCap > 0 && isCommentary && commentarySelectedCount >= commentaryCap) {
-        recordRejection(item, "selection_commentary_cap");
-        continue;
-      }
-
       const domain = String(item?.source_domain || item?.source || "unknown").trim().toLowerCase();
       const domainCount = domainCounts[domain] || 0;
-      if (domainCount >= perSourceCap) {
-        recordRejection(item, `selection_source_cap (${domain}: ${domainCount}/${perSourceCap})`);
-        continue;
-      }
-
-      if (isDiscoveryLaneItem(item) && discoveryCount >= discoveryCap) {
-        recordRejection(item, "selection_discovery_cap");
-        continue;
-      }
-
       selected.push(item);
       selectedSet.add(item);
-      item._selection_stage = `stage_${stageName}`;
+      item._selection_stage = `stage_${selectionStage}`;
       domainCounts[domain] = domainCount + 1;
       if (isDiscoveryLaneItem(item)) discoveryCount += 1;
       if (isCommentary) commentarySelectedCount += 1;
@@ -204,26 +287,22 @@ function selectTopicItemsWithFallback(params = {}) {
     }
   }
 
-  if (trustedFloor.active) {
-    standardTierBlockedWhileStrongAvailable = true;
-    attemptStage(
-      sortByScoreDesc(freshSelectablePool.filter((item) => isTrustedSourceTier(item))),
-      "trusted_floor_seed",
-      { commentaryCap: 1, maxAccepted: trustedFloor.minTrustedItemsPerTopic }
-    );
-    if (countTrustedSourceTier(selected) < trustedFloor.minTrustedItemsPerTopic) {
-      strongPoolExhausted = true;
-    }
-  }
-
   attemptStage(pools.eventTier1, "event_tier1");
   if (selected.length < targetCount) attemptStage(pools.eventTier2, "event_tier2");
   if (selected.length < targetCount) attemptStage(pools.commentaryPool, "commentary", { commentaryCap: 1 });
+
+  if (trustedFloor.active) {
+    strongPoolExhausted = countTrustedSourceTier(selected) < trustedFloor.minTrustedItemsPerTopic
+      && !freshSelectablePool.some((item) => !selectedSet.has(item) && isTrustedSourceTier(item));
+  }
 
   trustedFloor.selected_trusted_count = countTrustedSourceTier(selected);
   trustedFloor.standard_tier_blocked_while_strong_available = standardTierBlockedWhileStrongAvailable;
   trustedFloor.relaxed_reason = trustedFloor.active && strongPoolExhausted ? "strong_pool_exhausted" : null;
   trustedFloor.strong_pool_exhausted = trustedFloor.active && strongPoolExhausted;
+  trustedFloor.standard_candidates_blocked_by_trusted_first_count = standardCandidatesBlockedByTrustedFirstCount;
+  trustedFloor.trusted_override_count = trustedOverrideDetails.length;
+  trustedFloor.trusted_override_details = trustedOverrideDetails.slice();
 
   for (const item of (Array.isArray(topicItems) ? topicItems : [])) {
     if (selectedSet.has(item)) continue;
@@ -308,6 +387,8 @@ function buildTopicReserveQueue(params = {}) {
     strongReserve,
     standardReserve,
     allReserve: [...strongReserve, ...standardReserve],
+    initialStrongCount: strongReserve.length,
+    initialStandardCount: standardReserve.length,
   };
 }
 
@@ -317,6 +398,7 @@ function resolveTrustedSelectionFloor(configDigest = {}, itemsPerTopic = 5) {
   const targetCount = Math.max(1, Number(itemsPerTopic || 5));
   const configuredMin = Number(rawObject.minTrustedItemsPerTopic ?? configDigest?.minTrustedItemsPerTopic);
   const configuredActivationStrongCount = Number(rawObject.activationStrongCandidateCount);
+  const configuredOverrideMargin = Number(rawObject.standardOverrideMargin ?? configDigest?.standardOverrideMargin);
   const minTrustedItemsPerTopic = Number.isFinite(configuredMin)
     ? Math.min(targetCount, Math.max(0, Math.trunc(configuredMin)))
     : Math.min(4, targetCount);
@@ -327,6 +409,36 @@ function resolveTrustedSelectionFloor(configDigest = {}, itemsPerTopic = 5) {
     enabled: raw !== false && rawObject.enabled !== false,
     minTrustedItemsPerTopic,
     activationStrongCandidateCount,
+    standardOverrideMargin: Number.isFinite(configuredOverrideMargin)
+      ? Math.max(0, configuredOverrideMargin)
+      : 0.08,
+  };
+}
+
+function resolveBackfillUnlockPolicy(configDigest = {}) {
+  const raw = configDigest?.backfillUnlockPolicy;
+  const rawObject = raw && typeof raw === "object" ? raw : {};
+  const failureRatio = Number(rawObject.failureRatio ?? configDigest?.backfillUnlockFailureRatio);
+  const absoluteFloor = Number(rawObject.absoluteFloor ?? configDigest?.backfillUnlockAbsoluteFloor);
+  return {
+    failureRatio: Number.isFinite(failureRatio) ? Math.min(1, Math.max(0, failureRatio)) : 0.4,
+    absoluteFloor: Number.isFinite(absoluteFloor) ? Math.max(0, Math.trunc(absoluteFloor)) : 2,
+  };
+}
+
+function resolveTrustGuardrailPolicy(configDigest = {}, itemsPerTopic = 5) {
+  const raw = configDigest?.trustGuardrail;
+  const rawObject = raw && typeof raw === "object" ? raw : {};
+  const targetCount = Math.max(1, Number(itemsPerTopic || 5));
+  const minTrusted = Number(rawObject.minTrustedItemsPerTopic ?? configDigest?.minTrustedItemsPerTopicGuardrail);
+  const aspirationalTrusted = Number(rawObject.aspirationalTrustedItemsPerTopic ?? configDigest?.aspirationalTrustedItemsPerTopic);
+  return {
+    minTrustedItemsPerTopic: Number.isFinite(minTrusted)
+      ? Math.min(targetCount, Math.max(0, Math.trunc(minTrusted)))
+      : Math.min(targetCount, Math.ceil(targetCount * 0.6)),
+    aspirationalTrustedItemsPerTopic: Number.isFinite(aspirationalTrusted)
+      ? Math.min(targetCount, Math.max(0, Math.trunc(aspirationalTrusted)))
+      : Math.min(targetCount, Math.ceil(targetCount * 0.8)),
   };
 }
 
@@ -335,6 +447,8 @@ module.exports = {
   buildTopicReserveQueue,
   getBackfillRejectionReason,
   isStandardSourceTier,
+  resolveBackfillUnlockPolicy,
+  resolveTrustGuardrailPolicy,
   resolveTrustedSelectionFloor,
   selectTopicItemsWithFallback,
   sortWithSourceTypePreference,

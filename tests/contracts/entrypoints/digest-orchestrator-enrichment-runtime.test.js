@@ -55,6 +55,8 @@ function makeReserveState(strongReserve = [], standardReserve = []) {
     strongReserve: strongReserve.slice(),
     standardReserve: standardReserve.slice(),
     allReserve: [...strongReserve, ...standardReserve],
+    initialStrongCount: strongReserve.length,
+    initialStandardCount: standardReserve.length,
   };
 }
 
@@ -308,6 +310,69 @@ async function testProviderFailureDetailsArePreserved() {
   assert.strictEqual(out.enrichmentDiagnostics.writeup_failure_details[0].raw_preview, "{bad-json");
 }
 
+async function testTrustGuardrailRepairsTowardHigherTrustedMix() {
+  const initialRaw = [
+    { ...makeSelectedCandidate("https://example.com/41", "Trusted one"), source_tier: "strong", _score: 0.92 },
+    { ...makeSelectedCandidate("https://example.com/42", "Trusted two"), source_tier: "strong", _score: 0.88 },
+    { ...makeSelectedCandidate("https://example.com/43", "Standard one"), source_tier: "standard", _score: 0.61 },
+    { ...makeSelectedCandidate("https://example.com/44", "Standard two"), source_tier: "standard", _score: 0.59 },
+    { ...makeSelectedCandidate("https://example.com/45", "Standard three"), source_tier: "standard", _score: 0.57 },
+  ];
+  const trustedReserve = {
+    ...makeSelectedCandidate("https://example.com/46", "Trusted reserve"),
+    source_tier: "strong",
+    _score: 0.8,
+  };
+
+  const enrichmentRuntime = createDigestOrchestratorEnrichmentRuntime({
+    enrichItems: async (items) => ({
+      items: items.map((item) => withPassingWriteup(item)),
+      usage: { input_tokens: 5, output_tokens: 3 },
+      degraded: false,
+      degradation: null,
+    }),
+    emitDigestIncident: async () => false,
+    getBackfillRejectionReason: () => null,
+  });
+
+  const out = await enrichmentRuntime.enrichSelectedItems({
+    selected: initialRaw.map((item) => ({ ...item })),
+    selectedByTopic: { TECHNOLOGY: initialRaw.map((item) => ({ ...item })) },
+    reserveByTopic: { TECHNOLOGY: makeReserveState([trustedReserve], []) },
+    selectionDiagnostics: {
+      topic_selection_audit: [{
+        tag: "TECHNOLOGY",
+        total_candidates: 6,
+        selected_count: 5,
+        rejected_count: 1,
+        rejection_reason_counts: { selection_pool_full: 1 },
+        candidates: [
+          ...initialRaw.map((item) => ({ url: item.url, headline: item.headline, selected: true, selection_reason: null })),
+          { url: trustedReserve.url, headline: trustedReserve.headline, selected: false, selection_reason: "selection_pool_full" },
+        ],
+      }],
+    },
+    writeupBackfillPolicy: {
+      itemsPerTopic: 5,
+      maxItemsPerSourceDomain: 5,
+      maxDiscoveryPerTopic: 1,
+      commentaryCapPerTopic: 1,
+      trustGuardrailPolicy: {
+        minTrustedItemsPerTopic: 3,
+        aspirationalTrustedItemsPerTopic: 4,
+      },
+    },
+    runMode: "scheduled",
+    dueUsersCount: 1,
+  });
+
+  const trustedSelected = out.enriched.filter((item) => Number(item.source_tier) <= 2 || ["strong", "premium"].includes(String(item.source_tier)));
+  assert.strictEqual(trustedSelected.length, 3, "guardrail should repair the basket to at least 3 trusted items");
+  assert.ok(out.enriched.some((item) => item.url === trustedReserve.url), "trusted reserve should be swapped into the final basket");
+  assert.strictEqual(out.selectionDiagnostics.topic_selection_audit[0].trust_guardrail.triggered, true);
+  assert.strictEqual(out.selectionDiagnostics.topic_selection_audit[0].trust_guardrail.swaps_completed, 1);
+}
+
 async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
   const initialSelected = [
     withPassingWriteup(makeSelectedCandidate("https://example.com/11", "One"), { _score: 0.84 }),
@@ -423,6 +488,7 @@ async function testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory() {
   await testBackfillsDroppedWriteupWithSameTopicReserve();
   await testTrustedFloorBackfillPrefersTrustedReserveFirst();
   await testProviderFailureDetailsArePreserved();
+  await testTrustGuardrailRepairsTowardHigherTrustedMix();
   await testStrictQualityBackfillsWeakWriteupAndSwapsMajorStory();
 })().catch((error) => {
   process.stderr.write(`${error.stack || error.message}\n`);

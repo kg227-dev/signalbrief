@@ -12,6 +12,8 @@ const {
   buildTopicReserveQueue,
   getBackfillRejectionReason,
   isStandardSourceTier,
+  resolveBackfillUnlockPolicy,
+  resolveTrustGuardrailPolicy,
   resolveTrustedSelectionFloor,
   selectTopicItemsWithFallback,
   sortWithSourceTypePreference,
@@ -47,6 +49,100 @@ function resolveEffectiveSourceCap(paramScoringConfig, configDigest) {
   );
   if (!Number.isFinite(configured)) return 2;
   return Math.max(1, Math.trunc(configured));
+}
+
+function findWeakestNonTrustedIndex(items = []) {
+  let weakestIndex = -1;
+  let weakestScore = Infinity;
+  for (let index = 0; index < items.length; index += 1) {
+    if (isTrustedSourceTier(items[index])) continue;
+    const score = Number(items[index]?._score);
+    const normalizedScore = Number.isFinite(score) ? score : -Infinity;
+    if (normalizedScore < weakestScore) {
+      weakestScore = normalizedScore;
+      weakestIndex = index;
+    }
+  }
+  return weakestIndex;
+}
+
+function canSwapCandidateIntoTopic(candidate, selectedItems = [], replaceIndex, policy = {}) {
+  const remaining = (Array.isArray(selectedItems) ? selectedItems : []).filter((_, index) => index !== replaceIndex);
+  return !getBackfillRejectionReason(candidate, remaining, policy);
+}
+
+function applyPrimaryTrustGuardrail(params = {}) {
+  const topicAcceptedItems = Array.isArray(params.topicAcceptedItems) ? params.topicAcceptedItems.slice() : [];
+  const reserveState = params.reserveState && typeof params.reserveState === "object" ? params.reserveState : {};
+  const trustGuardrail = params.trustGuardrail && typeof params.trustGuardrail === "object" ? params.trustGuardrail : {};
+  const topicItems = Array.isArray(params.topicItems) ? params.topicItems : [];
+  const policy = params.policy && typeof params.policy === "object" ? params.policy : {};
+  const diagnostics = {
+    triggered: false,
+    swaps_attempted: 0,
+    swaps_completed: 0,
+    better_trusted_available_count: 0,
+    better_trusted_available_details: [],
+  };
+  const strongReserve = Array.isArray(reserveState.strongReserve) ? reserveState.strongReserve.slice() : [];
+
+  const desiredTrusted = Math.min(
+    topicAcceptedItems.length,
+    Math.max(
+      Number(trustGuardrail.minTrustedItemsPerTopic || 0),
+      Number(trustGuardrail.aspirationalTrustedItemsPerTopic || 0)
+    )
+  );
+  while (countTrustedSourceTier(topicAcceptedItems) < desiredTrusted && strongReserve.length > 0) {
+    const weakestIndex = findWeakestNonTrustedIndex(topicAcceptedItems);
+    if (weakestIndex === -1) break;
+    const replacementIndex = strongReserve.findIndex((candidate) => canSwapCandidateIntoTopic(candidate, topicAcceptedItems, weakestIndex, policy));
+    if (replacementIndex === -1) break;
+    diagnostics.triggered = true;
+    diagnostics.swaps_attempted += 1;
+    const replacement = strongReserve.splice(replacementIndex, 1)[0];
+    const replaced = topicAcceptedItems[weakestIndex];
+    replacement._selection_stage = `${replacement._selection_stage || "reserve"}_guardrail_swap`;
+    replacement._guardrail_swap = {
+      replaced_url: String(replaced?.url || "").trim() || null,
+      replaced_score: Number(replaced?._score || 0),
+    };
+    topicAcceptedItems.splice(weakestIndex, 1, replacement);
+    diagnostics.swaps_completed += 1;
+  }
+
+  const selectedUrls = new Set(topicAcceptedItems.map((item) => String(item?.url || "").trim()).filter(Boolean));
+  const remainingStrongReserve = strongReserve.filter((candidate) => !selectedUrls.has(String(candidate?.url || "").trim()));
+  for (let index = 0; index < topicAcceptedItems.length; index += 1) {
+    const selectedItem = topicAcceptedItems[index];
+    if (isTrustedSourceTier(selectedItem)) continue;
+    const betterTrusted = remainingStrongReserve.find((candidate) =>
+      Number(candidate?._score || 0) > Number(selectedItem?._score || 0)
+      && canSwapCandidateIntoTopic(candidate, topicAcceptedItems, index, policy)
+    );
+    if (!betterTrusted) continue;
+    selectedItem._better_trusted_available = {
+      trusted_url: String(betterTrusted?.url || "").trim() || null,
+      trusted_score: Number(betterTrusted?._score || 0),
+    };
+    diagnostics.better_trusted_available_count += 1;
+    diagnostics.better_trusted_available_details.push({
+      selected_url: String(selectedItem?.url || "").trim() || null,
+      selected_score: Number(selectedItem?._score || 0),
+      trusted_url: String(betterTrusted?.url || "").trim() || null,
+      trusted_score: Number(betterTrusted?._score || 0),
+    });
+  }
+
+  return {
+    selectedItems: topicAcceptedItems,
+    reserveState: {
+      ...reserveState,
+      strongReserve: remainingStrongReserve,
+      allReserve: [...remainingStrongReserve, ...(Array.isArray(reserveState.standardReserve) ? reserveState.standardReserve : [])],
+    },
+    diagnostics,
+  };
 }
 
 function createDigestOrchestratorSelectionRuntime(deps) {
@@ -433,6 +529,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const maxDiscoveryPerTopic = Math.max(0, Number(CONFIG.digest.maxDiscoveryItemsPerTopic ?? 1));
     const effectiveMaxItemsPerSourceDomain = resolveEffectiveSourceCap(paramScoringConfig, CONFIG.digest);
     const trustedSelectionFloor = resolveTrustedSelectionFloor(CONFIG.digest || {}, itemsPerTopic);
+    const trustGuardrailPolicy = resolveTrustGuardrailPolicy(CONFIG.digest || {}, itemsPerTopic);
+    const backfillUnlockPolicy = resolveBackfillUnlockPolicy(CONFIG.digest || {});
 
     // Group scored+sorted candidates by topic tag.
     const byTag = new Map();
@@ -460,7 +558,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         trustedSelectionFloor,
       });
       const {
-        selected: topicAcceptedItems,
+        selected: rawTopicAcceptedItems,
         rejectionReasonByItem,
         pools,
         commentarySelectedCount,
@@ -471,6 +569,23 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       };
       const { tier1, tier2, tier3, commentaryPool } = pools;
       const tieredPool = [...tier1, ...tier2];
+      const initialReserveState = buildTopicReserveQueue({
+        pools,
+        selectedItems: rawTopicAcceptedItems,
+      });
+      const primaryGuardrail = applyPrimaryTrustGuardrail({
+        topicAcceptedItems: rawTopicAcceptedItems,
+        reserveState: initialReserveState,
+        trustGuardrail: trustGuardrailPolicy,
+        topicItems,
+        policy: {
+          maxItemsPerSourceDomain: effectiveMaxItemsPerSourceDomain,
+          maxDiscoveryPerTopic,
+          commentaryCap: 1,
+        },
+      });
+      const topicAcceptedItems = primaryGuardrail.selectedItems;
+      const reserveState = primaryGuardrail.reserveState;
 
       if (topicAcceptedItems.length < itemsPerTopic) {
         log(`⚠️ Topic ${topicTag}: only ${topicAcceptedItems.length}/${itemsPerTopic} items selected (event_0_24=${pools.eventTier1.length}, event_24_48=${pools.eventTier2.length}, commentary=${commentaryPool.length}, stale=${tier3.length})`);
@@ -479,10 +594,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       totalDiscoveryCapped += Array.from(rejectionReasonByItem.values()).filter((reason) => reason === "selection_discovery_cap").length;
       perTopicSelected.push(...topicAcceptedItems);
       selectedByTopic[topicTag] = topicAcceptedItems.slice();
-      reserveByTopic[topicTag] = buildTopicReserveQueue({
-        pools,
-        selectedItems: topicAcceptedItems,
-      });
+      reserveByTopic[topicTag] = reserveState;
       const selectedTrustedCount = countTrustedSourceTier(topicAcceptedItems);
       const selectedStandardCount = (Array.isArray(topicAcceptedItems) ? topicAcceptedItems : []).filter((item) => isStandardSourceTier(item)).length;
 
@@ -524,6 +636,17 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         trusted_floor: {
           ...trustedFloor,
         },
+        trust_guardrail: {
+          min_trusted_items_per_topic: trustGuardrailPolicy.minTrustedItemsPerTopic,
+          aspirational_trusted_items_per_topic: trustGuardrailPolicy.aspirationalTrustedItemsPerTopic,
+          ...primaryGuardrail.diagnostics,
+          final_trusted_count: selectedTrustedCount,
+        },
+        trusted_first_override_count: Number(trustedFloor.trusted_override_count || 0),
+        trusted_first_override_details: Array.isArray(trustedFloor.trusted_override_details)
+          ? trustedFloor.trusted_override_details.slice()
+          : [],
+        standard_candidates_blocked_by_trusted_first_count: Number(trustedFloor.standard_candidates_blocked_by_trusted_first_count || 0),
         strong_tier_candidate_count: Number(trustedFloor.trusted_candidate_count || 0),
         strong_tier_selected_count: selectedTrustedCount,
         standard_tier_selected_count: selectedStandardCount,
@@ -531,6 +654,15 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         reserve_candidate_count: reserveByTopic[topicTag].allReserve.length,
         reserve_strong_count: reserveByTopic[topicTag].strongReserve.length,
         reserve_standard_count: reserveByTopic[topicTag].standardReserve.length,
+        backfill_unlock_policy: {
+          initial_trusted_reserve_count: Number(initialReserveState.initialStrongCount || 0),
+          failure_ratio: backfillUnlockPolicy.failureRatio,
+          absolute_floor: backfillUnlockPolicy.absoluteFloor,
+          required_trusted_failures: Math.min(
+            Number(backfillUnlockPolicy.absoluteFloor || 0),
+            Math.ceil(Number(initialReserveState.initialStrongCount || 0) * Number(backfillUnlockPolicy.failureRatio || 0))
+          ),
+        },
         per_source_cap: effectiveMaxItemsPerSourceDomain,
         lane_breakdown: topicLaneCounts,
         rejection_reason_counts: topicReasonCounts,
@@ -574,6 +706,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         maxDiscoveryPerTopic,
         commentaryCapPerTopic: 1,
         backfillTrustFloor: CONFIG.digest.backfillTrustFloor === true,
+        backfillUnlockPolicy,
+        trustGuardrailPolicy,
         trustedFloor: {
           ...trustedSelectionFloor,
           byTopic: trustedFloorByTopic,

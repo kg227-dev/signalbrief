@@ -111,6 +111,39 @@ function validateConfigSchema(config) {
     if (digest.maxDiscoveryCandidateShare != null) {
       expectNumberRange(errors, "digest.maxDiscoveryCandidateShare", digest.maxDiscoveryCandidateShare, { min: 0, max: 1 });
     }
+    if (digest.trustedSelectionFloor != null && expectObject(errors, "digest.trustedSelectionFloor", digest.trustedSelectionFloor)) {
+      const trustedSelectionFloor = digest.trustedSelectionFloor;
+      if (trustedSelectionFloor.enabled != null) {
+        expectBoolean(errors, "digest.trustedSelectionFloor.enabled", trustedSelectionFloor.enabled);
+      }
+      if (trustedSelectionFloor.minTrustedItemsPerTopic != null) {
+        expectPositiveInteger(errors, "digest.trustedSelectionFloor.minTrustedItemsPerTopic", trustedSelectionFloor.minTrustedItemsPerTopic, { min: 1, max: 5 });
+      }
+      if (trustedSelectionFloor.activationStrongCandidateCount != null) {
+        expectPositiveInteger(errors, "digest.trustedSelectionFloor.activationStrongCandidateCount", trustedSelectionFloor.activationStrongCandidateCount, { min: 1, max: 20 });
+      }
+      if (trustedSelectionFloor.standardOverrideMargin != null) {
+        expectNumberRange(errors, "digest.trustedSelectionFloor.standardOverrideMargin", trustedSelectionFloor.standardOverrideMargin, { min: 0, max: 1 });
+      }
+    }
+    if (digest.backfillUnlockPolicy != null && expectObject(errors, "digest.backfillUnlockPolicy", digest.backfillUnlockPolicy)) {
+      const backfillUnlockPolicy = digest.backfillUnlockPolicy;
+      if (backfillUnlockPolicy.failureRatio != null) {
+        expectNumberRange(errors, "digest.backfillUnlockPolicy.failureRatio", backfillUnlockPolicy.failureRatio, { min: 0, max: 1 });
+      }
+      if (backfillUnlockPolicy.absoluteFloor != null) {
+        expectPositiveInteger(errors, "digest.backfillUnlockPolicy.absoluteFloor", backfillUnlockPolicy.absoluteFloor, { min: 1, max: 10 });
+      }
+    }
+    if (digest.trustGuardrail != null && expectObject(errors, "digest.trustGuardrail", digest.trustGuardrail)) {
+      const trustGuardrail = digest.trustGuardrail;
+      if (trustGuardrail.minTrustedItemsPerTopic != null) {
+        expectPositiveInteger(errors, "digest.trustGuardrail.minTrustedItemsPerTopic", trustGuardrail.minTrustedItemsPerTopic, { min: 1, max: 5 });
+      }
+      if (trustGuardrail.aspirationalTrustedItemsPerTopic != null) {
+        expectPositiveInteger(errors, "digest.trustGuardrail.aspirationalTrustedItemsPerTopic", trustGuardrail.aspirationalTrustedItemsPerTopic, { min: 1, max: 5 });
+      }
+    }
     if (digest.lookbackHours != null) {
       expectPositiveInteger(errors, "digest.lookbackHours", digest.lookbackHours, { min: 1, max: 168 });
     }

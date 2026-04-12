@@ -71,6 +71,18 @@ function toSelectionAuditCandidate(item, extras = {}) {
       : null,
     procedural_notice: item?.procedural_notice === true,
     procedural_notice_has_strategic_shift: item?.procedural_notice_has_strategic_shift === true,
+    selector_penalties: item?._selector_penalties && typeof item._selector_penalties === "object"
+      ? { ...item._selector_penalties }
+      : null,
+    trusted_override: item?._trusted_override && typeof item._trusted_override === "object"
+      ? { ...item._trusted_override }
+      : null,
+    better_trusted_available: item?._better_trusted_available && typeof item._better_trusted_available === "object"
+      ? { ...item._better_trusted_available }
+      : null,
+    guardrail_swap: item?._guardrail_swap && typeof item._guardrail_swap === "object"
+      ? { ...item._guardrail_swap }
+      : null,
     duplicate_of: item?.duplicate_of ? String(item.duplicate_of) : null,
     ...extras,
   };

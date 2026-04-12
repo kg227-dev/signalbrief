@@ -47,6 +47,11 @@ assert.ok(
   officialFillerItem._score_components.quality_adjustment < 0,
   "official filler should receive a negative quality adjustment"
 );
+assert.ok(
+  Math.abs(Number(officialFillerItem._score_components.story_shape_penalty || 0))
+    > Math.abs(Number(officialFillerItem._score_components.domain_penalty || 0)),
+  "story-shape penalty should be stronger than the domain penalty for low-signal official notices"
+);
 
 const offTopicTechnologyItem = scoreCandidate({
   headline: "Best noise-canceling earbuds for spring travel",
@@ -180,3 +185,23 @@ assert.ok(
 );
 
 console.log("official lane bonus cap and corporate_pr penalty ✓");
+
+const industrialWeakDomain = scoreCandidate({
+  headline: "Freight market update shifts shipper contract expectations",
+  summary: "FreightWaves reports contract pressure as carriers reset industrial logistics pricing.",
+  tag: "INDUSTRIALS",
+  published_date: "2026-04-06T08:00:00.000Z",
+  source_tier: "standard",
+  source_authority: 0.6,
+  retrieval_origin: "broker_publisher_feed",
+  source_type: "trade_specialist",
+  source_domain: "freightwaves.com",
+  topic_fit: 0.92,
+}, { nowMs: nowFin });
+
+assert.ok(
+  Number(industrialWeakDomain._score_components.domain_penalty || 0) < 0,
+  "Industrials weak domains should receive a topic-aware domain penalty"
+);
+
+console.log("selector story-shape and domain penalties ✓");

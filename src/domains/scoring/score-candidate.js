@@ -45,6 +45,16 @@ const DEFAULT_LANE_BONUSES = Object.freeze({
   broad: 0.3,
 });
 
+const DEFAULT_SELECTOR_PENALTIES = Object.freeze({
+  proceduralGovDomainPenalty: -0.08,
+  topicDomainPenalties: Object.freeze({
+    INDUSTRIALS: Object.freeze({
+      "freightwaves.com": -0.12,
+      "areadevelopment.com": -0.18,
+    }),
+  }),
+});
+
 // Freshness: how many hours to treat as max age.
 // Items at 0h score 1.0; items at maxAgeHours score 0.05 (not 0 — they're still eligible).
 const DEFAULT_MAX_AGE_HOURS = 48;
@@ -79,6 +89,18 @@ function resolveScoringConfig(config = {}) {
     maxAgeHours: Number(config.maxAgeHours ?? DEFAULT_MAX_AGE_HOURS),
     officialLaneBonusCap: config.officialLaneBonusCap === true,
     corporatePrPenalty: config.corporatePrPenalty === true,
+    selectorPenalties: {
+      proceduralGovDomainPenalty: Number(
+        config?.selectorPenalties?.proceduralGovDomainPenalty
+          ?? DEFAULT_SELECTOR_PENALTIES.proceduralGovDomainPenalty
+      ),
+      topicDomainPenalties: {
+        ...DEFAULT_SELECTOR_PENALTIES.topicDomainPenalties,
+        ...(config?.selectorPenalties?.topicDomainPenalties && typeof config.selectorPenalties.topicDomainPenalties === "object"
+          ? config.selectorPenalties.topicDomainPenalties
+          : {}),
+      },
+    },
   };
 }
 
@@ -217,10 +239,13 @@ function classifyProceduralNotice(item) {
 
 function computeQualityAdjustment(item, opts = {}) {
   let adjustment = 0;
+  let storyShapePenalty = 0;
+  let domainPenalty = 0;
   const headline = String(item?.headline || "");
   const summary = String(item?.summary || "");
   const combined = `${headline} ${summary}`;
   const topicTag = String(item?.tag || "").trim().toUpperCase();
+  const sourceDomain = String(item?.source_domain || item?.source || "").trim().toLowerCase();
   const topicFit = normalizeTopicFitScore(item);
   const sourceType = String(item?.source_type || "").trim().toLowerCase();
   const sourceFamily = String(item?.source_family || item?.retrieval_source_family || "").trim().toLowerCase();
@@ -236,23 +261,23 @@ function computeQualityAdjustment(item, opts = {}) {
   else if (topicFit >= 0.85) adjustment += 0.05;
 
   if (sourceType === "primary_official" || sourceFamily === "official" || contentKind === "official_document") {
-    adjustment -= 0.05;
-    if (OFFICIAL_FILLER_PATTERN.test(combined)) adjustment -= 0.22;
+    storyShapePenalty -= 0.05;
+    if (OFFICIAL_FILLER_PATTERN.test(combined)) storyShapePenalty -= 0.22;
   }
 
   if (opts.corporatePrPenalty === true
       && (sourceType === "corporate_pr" || originalityProfile === "press_release_repost")) {
-    adjustment -= 0.12;
+    storyShapePenalty -= 0.12;
   }
 
   const commentaryLike = sourceType === "analysis_blog"
     || originalityProfile === "derived_synthesis"
     || contentFlags.includes("generic_commentary")
     || COMMENTARY_PATTERN.test(combined);
-  if (commentaryLike) adjustment -= 0.18;
+  if (commentaryLike) storyShapePenalty -= 0.18;
 
   if (topicTag === "TECHNOLOGY") {
-    if (TECH_NOISE_PATTERN.test(combined)) adjustment -= 0.24;
+    if (TECH_NOISE_PATTERN.test(combined)) storyShapePenalty -= 0.24;
     if (TECH_STRATEGIC_PATTERN.test(combined)) adjustment += 0.06;
   }
 
@@ -263,10 +288,30 @@ function computeQualityAdjustment(item, opts = {}) {
   }
 
   if (proceduralNoticeAssessment.proceduralNotice) {
-    adjustment -= proceduralNoticeAssessment.hasStrategicShift ? 0.12 : 0.32;
+    storyShapePenalty -= proceduralNoticeAssessment.hasStrategicShift ? 0.12 : 0.32;
+    if (GOV_NOTICE_DOMAIN_PATTERN.test(sourceDomain)) {
+      domainPenalty += Number(opts?.selectorPenalties?.proceduralGovDomainPenalty || 0);
+    }
   }
 
-  return clamp(adjustment, -0.4, 0.12);
+  const topicDomainPenalties = opts?.selectorPenalties?.topicDomainPenalties
+    && typeof opts.selectorPenalties.topicDomainPenalties === "object"
+    ? opts.selectorPenalties.topicDomainPenalties
+    : {};
+  const topicPenaltyMap = topicDomainPenalties[topicTag]
+    && typeof topicDomainPenalties[topicTag] === "object"
+    ? topicDomainPenalties[topicTag]
+    : null;
+  if (topicPenaltyMap && topicPenaltyMap[sourceDomain] != null) {
+    domainPenalty += Number(topicPenaltyMap[sourceDomain] || 0);
+  }
+
+  adjustment += storyShapePenalty + domainPenalty;
+  return {
+    total: clamp(adjustment, -0.5, 0.12),
+    story_shape_penalty: Number(storyShapePenalty.toFixed(4)),
+    domain_penalty: Number(domainPenalty.toFixed(4)),
+  };
 }
 
 /**
@@ -295,6 +340,7 @@ function scoreCandidate(item, opts = {}) {
   const qualityAdjustment = computeQualityAdjustment(item, {
     corporatePrPenalty: cfg.corporatePrPenalty,
     proceduralNoticeAssessment,
+    selectorPenalties: cfg.selectorPenalties,
   });
 
   const baseScore = clamp(
@@ -304,7 +350,7 @@ function scoreCandidate(item, opts = {}) {
     + novelty * w.novelty,
     0, 1
   );
-  const score = clamp(baseScore + qualityAdjustment, 0, 1);
+  const score = clamp(baseScore + qualityAdjustment.total, 0, 1);
 
   // Build human-readable explanation for the admin audit log
   const reasons = [
@@ -313,7 +359,7 @@ function scoreCandidate(item, opts = {}) {
     `lane_bonus=${laneBonus.toFixed(3)} (weight ${w.lane_bonus}, lane=${item?.retrieval_origin || item?.retrieval_lane || "unknown"})`,
     `novelty=${novelty.toFixed(3)} (weight ${w.novelty})`,
     `topic_fit=${topicFit.toFixed(3)}`,
-    `quality_adjustment=${qualityAdjustment.toFixed(3)}`,
+    `quality_adjustment=${qualityAdjustment.total.toFixed(3)}`,
   ];
   if (proceduralNoticeAssessment.proceduralNotice) {
     reasons.push(`procedural_notice=yes strategic_shift=${proceduralNoticeAssessment.hasStrategicShift ? "yes" : "no"}`);
@@ -330,11 +376,17 @@ function scoreCandidate(item, opts = {}) {
       lane_bonus: Number(laneBonus.toFixed(4)),
       novelty: Number(novelty.toFixed(4)),
       topic_fit: Number(topicFit.toFixed(4)),
-      quality_adjustment: Number(qualityAdjustment.toFixed(4)),
+      quality_adjustment: Number(qualityAdjustment.total.toFixed(4)),
+      story_shape_penalty: qualityAdjustment.story_shape_penalty,
+      domain_penalty: qualityAdjustment.domain_penalty,
       base_score: Number(baseScore.toFixed(4)),
       procedural_notice_penalty_applied: proceduralNoticeAssessment.proceduralNotice,
     },
     _score_reasons: reasons,
+    _selector_penalties: {
+      story_shape_penalty: qualityAdjustment.story_shape_penalty,
+      domain_penalty: qualityAdjustment.domain_penalty,
+    },
   };
 }
 

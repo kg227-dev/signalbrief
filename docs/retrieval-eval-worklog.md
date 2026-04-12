@@ -8,5 +8,5 @@ This path remains as a compatibility summary for tooling that still checks `docs
 
 ## Current MVP Validation Note
 
-- Day 15 audit (2026-04-11): [`./archive/planning/2026-03/mvp-day-15-2026-04-11.md`](./archive/planning/2026-03/mvp-day-15-2026-04-11.md)
-- Current conclusion: delivery was recovered after the stale-breaker bug fix, but expansion remains blocked. Day 15 delivered 35/35 with 365 retained candidates and 26/35 trusted Tier 1/2 selections (74.3%). Writeup drops improved to 13/48 (27.1%), but strong-tier loss worsened to 13/39 (33.3%), and Industrials plus Consumer & Retail still ended only 2/5 trusted.
+- Day 16 audit (2026-04-12): [`./archive/planning/2026-03/mvp-day-16-2026-04-12.md`](./archive/planning/2026-03/mvp-day-16-2026-04-12.md)
+- Current conclusion: the three-run validator calibration window completed with a clean writeup pass, but category expansion remains blocked. Day 16 delivered 35/35 with 284 retained candidates, 0 writeup drops, 0 strong-tier drops, and 23/35 trusted Tier 1/2 selections (65.7%). The blocker has moved from validator mismatch to selector ranking, with Industrials at 0/5 trusted and Consumer & Retail still at 2/5 trusted.

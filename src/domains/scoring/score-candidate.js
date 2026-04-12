@@ -53,6 +53,9 @@ const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety
 const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(commentary|analysis|feature)\b|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|excerpt from|reporter goes up against)\b/i;
 const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b|vision pro|steam link|offline dictation|dictation app|continuous glucose|glucose monitor|vibe coding|rooting for|blaming everything|users are mastering|social app|creator culture|meme)\b/i;
 const TECH_STRATEGIC_PATTERN = /\b(ai security|cybersecurity|ransomware|data breach|platform policy|antitrust|supreme court|scotus|isp|piracy|chip|semiconductor|compute|data centers?|capital allocation|funding round|venture fund|ai infrastructure|open[- ]source model|enterprise ai|procurement|model safety|frontier model|regulator|regulation)\b/i;
+const PROCEDURAL_NOTICE_PATTERN = /\b(notice of|combined notice|notice announcing|informal settlement conference|guidance documents published|federal register|notice of filing|notice of conference|meeting notice|availability of guidance|guidance for industry|filing(?:s)? received)\b/i;
+const STRATEGIC_SHIFT_PATTERN = /\b(enforcement|penalt(?:y|ies)|deadline|effective date|timeline|within \d+ (?:days|weeks|months)|cost|costs|margin|margins|capex|pricing|price|rate increase|fee|fees|competition|competitive|market share|buyer leverage|seller leverage|capacity|throughput|supply|demand|tariff|capital|procurement)\b/i;
+const GOV_NOTICE_DOMAIN_PATTERN = /\b(federalregister\.gov|ferc\.gov|fda\.gov|sec\.gov|cms\.gov|justice\.gov)\b/i;
 
 function clamp(value, lo, hi) {
   const n = Number(value);
@@ -196,6 +199,22 @@ function normalizeTopicFitScore(item) {
   return clamp(raw, 0, 1);
 }
 
+function classifyProceduralNotice(item) {
+  const headline = String(item?.headline || "");
+  const summary = String(item?.summary || "");
+  const sourceDomain = String(item?.source_domain || item?.source || "").trim().toLowerCase();
+  const combined = `${headline} ${summary}`.trim();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const looksProcedural = PROCEDURAL_NOTICE_PATTERN.test(combined)
+    || (sourceType === "primary_official" && OFFICIAL_FILLER_PATTERN.test(combined))
+    || GOV_NOTICE_DOMAIN_PATTERN.test(sourceDomain) && /\b(notice|guidance|filing|conference)\b/i.test(combined);
+  const hasStrategicShift = STRATEGIC_SHIFT_PATTERN.test(combined);
+  return {
+    proceduralNotice: looksProcedural,
+    hasStrategicShift,
+  };
+}
+
 function computeQualityAdjustment(item, opts = {}) {
   let adjustment = 0;
   const headline = String(item?.headline || "");
@@ -210,6 +229,7 @@ function computeQualityAdjustment(item, opts = {}) {
   const contentFlags = Array.isArray(item?.content_flags)
     ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase())
     : [];
+  const proceduralNoticeAssessment = opts.proceduralNoticeAssessment || classifyProceduralNotice(item);
 
   if (topicFit < 0.2) adjustment -= 0.2;
   else if (topicFit < 0.4) adjustment -= 0.12;
@@ -242,6 +262,10 @@ function computeQualityAdjustment(item, opts = {}) {
     adjustment += 0.04;
   }
 
+  if (proceduralNoticeAssessment.proceduralNotice) {
+    adjustment -= proceduralNoticeAssessment.hasStrategicShift ? 0.12 : 0.32;
+  }
+
   return clamp(adjustment, -0.4, 0.12);
 }
 
@@ -267,7 +291,11 @@ function scoreCandidate(item, opts = {}) {
   const laneBonus = computeLaneBonusScore(item, cfg.laneBonuses, { officialLaneBonusCap: cfg.officialLaneBonusCap });
   const novelty = computeNoveltyScore(item);
   const topicFit = normalizeTopicFitScore(item);
-  const qualityAdjustment = computeQualityAdjustment(item, { corporatePrPenalty: cfg.corporatePrPenalty });
+  const proceduralNoticeAssessment = classifyProceduralNotice(item);
+  const qualityAdjustment = computeQualityAdjustment(item, {
+    corporatePrPenalty: cfg.corporatePrPenalty,
+    proceduralNoticeAssessment,
+  });
 
   const baseScore = clamp(
     freshness * w.freshness
@@ -287,9 +315,14 @@ function scoreCandidate(item, opts = {}) {
     `topic_fit=${topicFit.toFixed(3)}`,
     `quality_adjustment=${qualityAdjustment.toFixed(3)}`,
   ];
+  if (proceduralNoticeAssessment.proceduralNotice) {
+    reasons.push(`procedural_notice=yes strategic_shift=${proceduralNoticeAssessment.hasStrategicShift ? "yes" : "no"}`);
+  }
 
   return {
     ...item,
+    procedural_notice: proceduralNoticeAssessment.proceduralNotice,
+    procedural_notice_has_strategic_shift: proceduralNoticeAssessment.hasStrategicShift,
     _score: Number(score.toFixed(4)),
     _score_components: {
       freshness: Number(freshness.toFixed(4)),
@@ -299,6 +332,7 @@ function scoreCandidate(item, opts = {}) {
       topic_fit: Number(topicFit.toFixed(4)),
       quality_adjustment: Number(qualityAdjustment.toFixed(4)),
       base_score: Number(baseScore.toFixed(4)),
+      procedural_notice_penalty_applied: proceduralNoticeAssessment.proceduralNotice,
     },
     _score_reasons: reasons,
   };
@@ -369,6 +403,7 @@ module.exports = {
   computeSourceTierScore,
   computeLaneBonusScore,
   computeNoveltyScore,
+  classifyProceduralNotice,
   DEFAULT_WEIGHTS,
   DEFAULT_TIER_SCORES,
   DEFAULT_LANE_BONUSES,

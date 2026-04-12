@@ -122,6 +122,7 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(selectedOut.selected.length, 6);
   assert.strictEqual(selectedOut.selectionDiagnostics.topic_selection_audit.length, 2);
   assert.strictEqual(selectedOut.selectionDiagnostics.selection_rejection_counts.selection_not_selected || 0, 0);
+  assert.strictEqual(selectedOut.selectionDiagnostics.procedural_notice_selected_count || 0, 0);
   assert.deepStrictEqual(incidents, []);
 
   const strictPrefilterRuntime = createDigestOrchestratorSelectionRuntime({
@@ -178,6 +179,60 @@ assertModuleExports(() => runtime, TARGET_REL);
 
   assert.strictEqual(strictPrefilterOut.selectionDiagnostics.strict_quality.prefilter.removed_count, 2);
   assert.strictEqual(strictPrefilterOut.selectionDiagnostics.candidate_pool_after_pre_ranking_quality, 1);
+
+  const proceduralCountRuntime = createDigestOrchestratorSelectionRuntime({
+    CONFIG: {
+      digest: {
+        itemCount: 5,
+        crossDayDedupDays: 3,
+        minBackfillItemsAfterDedup: 3,
+        maxItemsPerSourceDomain: 2,
+      },
+    },
+    log: () => {},
+    createDigestPolicies: () => ({
+      rankingPolicy: { repeatPenalty: 0, minBaseScoreForFinal: 6.5 },
+      depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+    }),
+    dedupAgainstRecentArchives: (items) => ({ items: items.slice(), removed: 0, archive_days_used: 3, backfilled: 0 }),
+    buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items: items.slice(), suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
+    emitDigestIncident: async () => {},
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
+    annotateEditorialSignals: (items) => items.slice(),
+    buildStorylineCandidates: (items) => items.slice(),
+  });
+
+  const proceduralCountOut = await proceduralCountRuntime.selectForEnrichment({
+    allItems: [
+      {
+        url: "https://example.com/procedural",
+        headline: "Notice of enforcement deadline raises compliance costs",
+        summary: "The deadline moves within 90 days and raises compliance costs for lenders.",
+        tag: "TECHNOLOGY",
+        published_date: "2026-03-27T10:00:00.000Z",
+        source_domain: "federalregister.gov",
+        source_type: "primary_official",
+      },
+    ],
+    selectionTarget: 5,
+    tagPriority: { technology: 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 1,
+    nowMs,
+  });
+  assert.strictEqual(proceduralCountOut.selectionDiagnostics.procedural_notice_selected_count, 1);
 
   const failIncidents = [];
   const failRuntime = createDigestOrchestratorSelectionRuntime({

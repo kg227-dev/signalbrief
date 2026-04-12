@@ -3,6 +3,7 @@
 const {
   buildDigestDataExtractionPrompt,
   buildDigestDataFormattingRetryPrompt,
+  buildDigestDataWimFallbackPrompt,
   buildDigestDataWimPrompt,
   buildDigestDataWimRepairPrompt,
 } = require("./digest-data-enrich-prompt-runtime");
@@ -37,6 +38,78 @@ function createDigestDataEnrichRuntime(deps) {
     log,
     httpsPostWithRetry,
   } = deps;
+
+  const DEFAULT_TOPIC_ACTORS = Object.freeze({
+    HEALTHCARE: "hospital operators and payer teams",
+    "FINANCIAL SERVICES": "bank operators and lending teams",
+    "PE×M&A": "deal teams and corporate operators",
+    ENERGY: "utility operators and power buyers",
+    CONSUMER: "retail operators and brand teams",
+    "LIFE SCIENCES": "biopharma operators and commercialization teams",
+    TECHNOLOGY: "enterprise operators and platform teams",
+    INDUSTRIALS: "industrial operators and procurement teams",
+    "REAL ESTATE": "owners, lenders, and portfolio operators",
+    "PUBLIC SECTOR": "government contractors and compliance operators",
+    "AI×TECH": "AI operators and infrastructure buyers",
+    STRATEGY: "operators and strategy leaders",
+    "POLICY×REGULATORY": "regulated operators and compliance teams",
+    SUSTAINABILITY: "operators and capital planning teams",
+    DIGITAL: "digital operators and CIO teams",
+    "M&A ADVISORY": "advisory teams and transaction operators",
+    TALENT: "operators and workforce planners",
+  });
+
+  const IMPLICATION_FALLBACKS = Object.freeze({
+    cost: "pricing, margin, and budget decisions",
+    competition: "competitive positioning and customer retention decisions",
+    regulation: "compliance timing, enforcement exposure, and regulatory planning",
+    workflow: "operational throughput, staffing, and workflow decisions",
+    capital: "capex, capital allocation, and investment pacing",
+    demand: "demand planning, capacity, and revenue expectations",
+    structure: "market structure, channel leverage, and partnership choices",
+    other: "operating priorities and strategic planning",
+  });
+
+  function cleanSentenceFragment(value, maxLength = 180) {
+    return String(value || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[.?!]+$/g, "")
+      .slice(0, maxLength);
+  }
+
+  function titleCase(text) {
+    const value = cleanSentenceFragment(text, 220);
+    if (!value) return "";
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  function deriveFallbackExtraction(item) {
+    const headline = cleanSentenceFragment(item?.headline, 180);
+    const summary = cleanSentenceFragment(item?.summary, 240);
+    const tag = String(item?.tag || "").trim().toUpperCase();
+    return {
+      what_happened: headline || summary || "A relevant market update emerged",
+      mechanism: summary || "the reported move changes operating conditions for the affected market",
+      who_it_impacts: DEFAULT_TOPIC_ACTORS[tag] || "operators and planning teams",
+      implication: summary || "operators may need to adjust near-term plans as conditions shift",
+      confidence: "low",
+    };
+  }
+
+  function buildDeterministicWim(item, extractionOutput) {
+    const extraction = extractionOutput || deriveFallbackExtraction(item);
+    const whatHappened = titleCase(extraction?.what_happened || item?.headline || item?.summary || "A material development emerged");
+    const mechanism = cleanSentenceFragment(extraction?.mechanism || item?.summary || "the reported change alters operating conditions");
+    const actor = cleanSentenceFragment(extraction?.who_it_impacts || deriveFallbackExtraction(item).who_it_impacts, 120) || "operators and planning teams";
+    const implicationType = deriveImplicationType(extraction, "");
+    const lever = IMPLICATION_FALLBACKS[implicationType] || IMPLICATION_FALLBACKS.other;
+    const firstSentence = `${whatHappened}, and ${mechanism || "the reported change alters operating conditions"}.`;
+    const secondSentence = `For ${actor}, this affects ${lever}.`;
+    return `${firstSentence} ${secondSentence}`.replace(/\s+/g, " ").trim();
+  }
 
   async function callAnthropic(prompt, model, maxTokens, providerPolicy) {
     try {
@@ -243,6 +316,10 @@ function createDigestDataEnrichRuntime(deps) {
         attempted: false,
         repair_type: null,
       },
+      fallback: {
+        ...defaultStageRecord("fallback"),
+        attempted: false,
+      },
     };
     let usage = { input_tokens: 0, output_tokens: 0 };
     const providerFailureDetails = [];
@@ -266,22 +343,9 @@ function createDigestDataEnrichRuntime(deps) {
       degradation = extractionResult.degradation;
       providerFailureDetails.push(buildProviderFailureDetail(index, item, stages.extraction));
     }
-    if (!extractionResult.ok) {
-      const reasons = stages.extraction.failure_reason === "provider_parse_failure"
-        ? ["provider_parse_failure"]
-        : Array.isArray(stages.extraction.validator_reasons) && stages.extraction.validator_reasons.length > 0
-          ? stages.extraction.validator_reasons
-          : [stages.extraction.failure_reason];
-      return {
-        item: buildFailedItem(item, policy, stages, stages.extraction.failure_reason, reasons, null),
-        usage,
-        degraded,
-        degradation,
-        providerFailureDetails,
-      };
-    }
-
-    const extractionOutput = extractionResult.stageRecord.output;
+    const extractionOutput = extractionResult.ok
+      ? extractionResult.stageRecord.output
+      : deriveFallbackExtraction(item);
     const generationValidation = (_item, candidate) => validateStrategicWriteup(_item, {
       ...candidate,
       mechanism: extractionOutput?.mechanism,
@@ -324,8 +388,8 @@ function createDigestDataEnrichRuntime(deps) {
           stages,
           extractionOutput,
           String(stages.generation.output?.wim || "").trim(),
-            initialPass ? "model_pass" : "retry_pass"
-          ),
+          initialPass ? "model_pass" : "retry_pass"
+        ),
           usage,
           degraded,
           degradation,
@@ -389,7 +453,83 @@ function createDigestDataEnrichRuntime(deps) {
       }
     }
 
-    const failureStage = stages.repair.attempted ? stages.repair : stages.generation;
+    const fallbackReasons = Array.from(new Set([
+      ...(Array.isArray(stages.generation.validator_reasons) ? stages.generation.validator_reasons : []),
+      ...(Array.isArray(stages.repair.validator_reasons) ? stages.repair.validator_reasons : []),
+      ...(Array.isArray(stages.repair.hard_failure_reasons) ? stages.repair.hard_failure_reasons : []),
+      ...(Array.isArray(stages.repair.soft_failure_reasons) ? stages.repair.soft_failure_reasons : []),
+    ]));
+    stages.fallback.attempted = true;
+    const fallbackResult = await executeJsonStage({
+      item,
+      stage: "fallback",
+      promptBuilder: () => buildDigestDataWimFallbackPrompt(
+        item,
+        extractionOutput,
+        fallbackReasons,
+        stages.repair.output?.wim || stages.generation.output?.wim || ""
+      ),
+      validationFn: generationValidation,
+      maxAttempts: 1,
+      maxTokens: policy.fallbackMaxTokens,
+      model: enrichModel,
+      providerPolicy,
+    });
+    stages.fallback = {
+      ...fallbackResult.stageRecord,
+      attempted: true,
+    };
+    usage = mergeUsage(usage, fallbackResult.stageRecord.usage);
+    if (fallbackResult.degradation) {
+      degraded = true;
+      degradation = degradation || fallbackResult.degradation;
+      providerFailureDetails.push(buildProviderFailureDetail(index, item, stages.fallback));
+    }
+    const fallbackValidationResult = fallbackResult.validation && typeof fallbackResult.validation === "object"
+      ? fallbackResult.validation
+      : null;
+    const fallbackSoftFail = fallbackValidationResult?.validation_tier === "soft_fail";
+    const fallbackAcceptWithoutRepair = fallbackValidationResult?.minimum_viable_accept === true;
+    if (fallbackResult.ok && (!fallbackSoftFail || fallbackAcceptWithoutRepair)) {
+      return {
+        item: buildPassedItem(
+          item,
+          policy,
+          stages,
+          extractionOutput,
+          String(stages.fallback.output?.wim || "").trim(),
+          "fallback_pass",
+          { missingPrevented: true }
+        ),
+        usage,
+        degraded,
+        degradation,
+        providerFailureDetails,
+      };
+    }
+
+    const deterministicWim = buildDeterministicWim(item, extractionOutput);
+    stages.fallback.status = stages.fallback.status === "not_started" ? "failed" : stages.fallback.status;
+    stages.fallback.output = stages.fallback.output || { wim: deterministicWim };
+    if (deterministicWim) {
+      return {
+        item: buildPassedItem(
+          item,
+          policy,
+          stages,
+          extractionOutput,
+          deterministicWim,
+          "deterministic_fallback_pass",
+          { missingPrevented: true }
+        ),
+        usage,
+        degraded,
+        degradation,
+        providerFailureDetails,
+      };
+    }
+
+    const failureStage = stages.fallback.attempted ? stages.fallback : (stages.repair.attempted ? stages.repair : stages.generation);
     const rejectionReasons = failureStage.failure_reason === "provider_parse_failure"
       ? ["provider_parse_failure"]
       : Array.isArray(failureStage.hard_failure_reasons) && failureStage.hard_failure_reasons.length > 0
@@ -426,7 +566,8 @@ function createDigestDataEnrichRuntime(deps) {
     const providerPolicy = resolveAnthropicResilience(CONFIG?.digest);
     log(`Enriching with ${enrichModel}...`);
 
-    const results = await mapWithConcurrency(items, 4, async (item, index) => {
+    const concurrency = items.length >= 12 ? 3 : 4;
+    const results = await mapWithConcurrency(items, concurrency, async (item, index) => {
       const result = await processCandidate(item, index, enrichModel, providerPolicy);
       if (result.degraded && result.degradation) {
         log(`writeup stage degraded (${result.degradation.reason}) for ${String(item?.url || item?.headline || index).slice(0, 160)}`);

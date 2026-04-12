@@ -538,6 +538,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       });
     }
     let selected = perTopicSelected;
+    const proceduralNoticeSelectedCount = selected.filter((item) => item?.procedural_notice === true).length;
     if (totalDiscoveryCapped > 0) {
       log(`Discovery cap removed ${totalDiscoveryCapped} Perplexity item(s) (max ${maxDiscoveryPerTopic} per topic)`);
     }
@@ -611,6 +612,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         editorial_domain_suppressed_count: suppressedCount,
         editorial_pin_count: injectedPinCount,
         discovery_capped_count: totalDiscoveryCapped,
+        procedural_notice_selected_count: proceduralNoticeSelectedCount,
         score_top: postScoreItems[0]?._score ?? null,
         score_bottom: postScoreItems.length > 0 ? postScoreItems[postScoreItems.length - 1]?._score ?? null : null,
         selection_rejection_counts: selectionRejectionCounts,

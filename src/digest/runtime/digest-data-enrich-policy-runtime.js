@@ -101,9 +101,10 @@ function buildAttemptPolicy(item) {
       extractionAttempts: 2,
       generationAttempts: 2,
       allowRepair: true,
-      extractionMaxTokens: 320,
-      generationMaxTokens: 320,
-      repairMaxTokens: 260,
+      extractionMaxTokens: 280,
+      generationMaxTokens: 280,
+      repairMaxTokens: 220,
+      fallbackMaxTokens: 220,
     };
   }
   return {
@@ -111,9 +112,10 @@ function buildAttemptPolicy(item) {
     extractionAttempts: 1,
     generationAttempts: 1,
     allowRepair: true,
-    extractionMaxTokens: 220,
-    generationMaxTokens: 220,
-    repairMaxTokens: 200,
+    extractionMaxTokens: 200,
+    generationMaxTokens: 200,
+    repairMaxTokens: 180,
+    fallbackMaxTokens: 180,
   };
 }
 
@@ -188,21 +190,29 @@ function mapRepairType(reasons = []) {
 }
 
 function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, extractionOutput = null) {
+  const attemptedFallback = stages.fallback?.attempted === true;
   const parseFailureType = stages.repair.parse_failure_type
+    || stages.fallback?.parse_failure_type
     || stages.generation.parse_failure_type
     || stages.extraction.parse_failure_type
     || null;
-  const validationTier = stages.repair.validation_tier
+  const validationTier = stages.fallback?.validation_tier
+    || stages.repair.validation_tier
     || stages.generation.validation_tier
     || null;
-  const minimumViableAccept = stages.repair.minimum_viable_accept === true
+  const minimumViableAccept = stages.fallback?.minimum_viable_accept === true
+    || stages.repair.minimum_viable_accept === true
     || stages.generation.minimum_viable_accept === true;
-  const hardFailureReasons = Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
+  const hardFailureReasons = Array.isArray(stages.fallback?.hard_failure_reasons) && stages.fallback.hard_failure_reasons.length > 0
+    ? stages.fallback.hard_failure_reasons.slice()
+    : Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
     ? stages.repair.hard_failure_reasons.slice()
     : Array.isArray(stages.generation.hard_failure_reasons)
       ? stages.generation.hard_failure_reasons.slice()
       : [];
-  const softFailureReasons = Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
+  const softFailureReasons = Array.isArray(stages.fallback?.soft_failure_reasons) && stages.fallback.soft_failure_reasons.length > 0
+    ? stages.fallback.soft_failure_reasons.slice()
+    : Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
     ? stages.repair.soft_failure_reasons.slice()
     : Array.isArray(stages.generation.soft_failure_reasons)
       ? stages.generation.soft_failure_reasons.slice()
@@ -234,7 +244,9 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
     writeup_status: "failed_dropped",
     writeup_attempt_count: Math.max(
       1,
-      Number(stages.generation.attempt_count || 0) + (stages.repair.attempted === true ? 1 : 0)
+      Number(stages.generation.attempt_count || 0)
+      + (stages.repair.attempted === true ? 1 : 0)
+      + (attemptedFallback ? 1 : 0)
     ),
     writeup_rejection_reasons: Array.isArray(rejectionReasons) ? rejectionReasons.slice() : [String(failureReason || "provider_failure")],
     writeup_version: "v3",
@@ -243,12 +255,18 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
       extraction: stages.extraction,
       generation: stages.generation,
       repair: stages.repair,
+      fallback: stages.fallback,
       first_pass_succeeded: false,
+      fallback_used: false,
+      missing_prevented: false,
     },
   };
 }
 
-function buildPassedItem(item, policy, stages, extractionOutput, wimText, status) {
+function buildPassedItem(item, policy, stages, extractionOutput, wimText, status, extras = {}) {
+  const attemptedFallback = stages.fallback?.attempted === true;
+  const fallbackUsed = status === "fallback_pass" || status === "deterministic_fallback_pass";
+  const missingPrevented = extras.missingPrevented === true;
   return {
     ...item,
     signal_shift: extractionOutput?.what_happened || null,
@@ -268,14 +286,18 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: null,
     final_status: status,
-    validation_tier: stages.repair.validation_tier || stages.generation.validation_tier || "pass",
-    minimum_viable_accept: stages.repair.minimum_viable_accept === true || stages.generation.minimum_viable_accept === true,
-    hard_failure_reasons: Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
+    validation_tier: stages.fallback?.validation_tier || stages.repair.validation_tier || stages.generation.validation_tier || "pass",
+    minimum_viable_accept: stages.fallback?.minimum_viable_accept === true || stages.repair.minimum_viable_accept === true || stages.generation.minimum_viable_accept === true,
+    hard_failure_reasons: Array.isArray(stages.fallback?.hard_failure_reasons) && stages.fallback.hard_failure_reasons.length > 0
+      ? stages.fallback.hard_failure_reasons.slice()
+      : Array.isArray(stages.repair.hard_failure_reasons) && stages.repair.hard_failure_reasons.length > 0
       ? stages.repair.hard_failure_reasons.slice()
       : Array.isArray(stages.generation.hard_failure_reasons)
         ? stages.generation.hard_failure_reasons.slice()
         : [],
-    soft_failure_reasons: Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
+    soft_failure_reasons: Array.isArray(stages.fallback?.soft_failure_reasons) && stages.fallback.soft_failure_reasons.length > 0
+      ? stages.fallback.soft_failure_reasons.slice()
+      : Array.isArray(stages.repair.soft_failure_reasons) && stages.repair.soft_failure_reasons.length > 0
       ? stages.repair.soft_failure_reasons.slice()
       : Array.isArray(stages.generation.soft_failure_reasons)
         ? stages.generation.soft_failure_reasons.slice()
@@ -284,7 +306,9 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
     writeup_status: status,
     writeup_attempt_count: Math.max(
       1,
-      Number(stages.generation.attempt_count || 0) + (stages.repair.attempted === true ? 1 : 0)
+      Number(stages.generation.attempt_count || 0)
+      + (stages.repair.attempted === true ? 1 : 0)
+      + (attemptedFallback ? 1 : 0)
     ),
     writeup_rejection_reasons: [],
     writeup_version: "v3",
@@ -293,7 +317,10 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
       extraction: stages.extraction,
       generation: stages.generation,
       repair: stages.repair,
+      fallback: stages.fallback,
       first_pass_succeeded: status === "model_pass",
+      fallback_used: fallbackUsed,
+      missing_prevented: missingPrevented,
     },
   };
 }
@@ -324,6 +351,8 @@ function collectWriteupStats(items = [], repeatedPhraseRejectCount = 0, provider
   const firstPassSuccessCount = rows.filter((item) => item?.first_pass_succeeded === true).length;
   const repairAttemptedCount = rows.filter((item) => item?.writeup_stage_diagnostics?.repair?.attempted === true).length;
   const repairSuccessCount = rows.filter((item) => String(item?.writeup_status || "").trim().toLowerCase() === "repair_pass").length;
+  const fallbackUsedCount = rows.filter((item) => item?.writeup_stage_diagnostics?.fallback_used === true).length;
+  const missingPreventedCount = rows.filter((item) => item?.writeup_stage_diagnostics?.missing_prevented === true).length;
   const dropCount = rows.filter((item) => String(item?.writeup_status || "").trim().toLowerCase() === "failed_dropped").length;
   const modelGeneratedCount = rows.filter((item) => String(item?.writeup_status || "").trim().toLowerCase() !== "failed_dropped").length;
   const extractionSuccessCount = rows.filter((item) => item?.writeup_stage_diagnostics?.extraction?.status !== "failed").length;
@@ -371,6 +400,8 @@ function collectWriteupStats(items = [], repeatedPhraseRejectCount = 0, provider
     repair_attempted_count: repairAttemptedCount,
     repair_success_count: repairSuccessCount,
     repair_pass_success_rate_pct: repairAttemptedCount > 0 ? Number(((repairSuccessCount / repairAttemptedCount) * 100).toFixed(2)) : 0,
+    wim_fallback_used_count: fallbackUsedCount,
+    wim_missing_prevented_count: missingPreventedCount,
     drop_count: dropCount,
     hard_fail_count: hardFailCount,
     soft_fail_count: softFailCount,

@@ -69,6 +69,8 @@ function toSelectionAuditCandidate(item, extras = {}) {
     strategic_relevance_reason: item?.strategic_relevance_reason
       ? String(item.strategic_relevance_reason).slice(0, 120)
       : null,
+    procedural_notice: item?.procedural_notice === true,
+    procedural_notice_has_strategic_shift: item?.procedural_notice_has_strategic_shift === true,
     duplicate_of: item?.duplicate_of ? String(item.duplicate_of) : null,
     ...extras,
   };

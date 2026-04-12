@@ -12,7 +12,7 @@ function sanitizePromptField(value, maxLength) {
 function mapPromptItem(item = {}) {
   return {
     headline: sanitizePromptField(item?.headline, 220),
-    summary: sanitizePromptField(item?.summary, 700),
+    summary: sanitizePromptField(item?.summary, 520),
     tag: sanitizePromptField(item?.tag, 60),
     source: sanitizePromptField(item?.source || item?.source_domain, 100),
     source_tier: sanitizePromptField(item?.source_tier, 20),
@@ -23,8 +23,8 @@ function mapPromptItem(item = {}) {
     failed_writeup_reasons: Array.isArray(item?.failed_writeup_reasons)
       ? item.failed_writeup_reasons.map((reason) => sanitizePromptField(reason, 60)).filter(Boolean)
       : [],
-    prior_wim: sanitizePromptField(item?.prior_wim, 900),
-    prior_wim_brief: sanitizePromptField(item?.prior_wim_brief, 220),
+    prior_wim: sanitizePromptField(item?.prior_wim, 520),
+    prior_wim_brief: sanitizePromptField(item?.prior_wim_brief, 180),
   };
 }
 
@@ -149,10 +149,45 @@ Priority:
 ${hasSimplify ? "Simplify while preserving mechanism and implication." : "Preserve mechanism and implication while fixing the listed failures."}`;
 }
 
+function buildDigestDataWimFallbackPrompt(item, extraction, failureReasons = [], priorWim = "") {
+  const reasons = Array.isArray(failureReasons) ? failureReasons.filter(Boolean) : [];
+  return `Write a backup "Why it matters" for this item.
+
+This is a recovery pass after earlier writeup failures. Keep the same quality bar, but prioritize returning a concrete, usable business implication.
+
+Hard constraints:
+- Return ONLY valid JSON: { "wim": "..." }
+- Keep it concise
+- Include a clear mechanism
+- Include a concrete business, regulatory, operational, competitive, or capital implication
+- Anchor to a real operator, company, market, regulator, or system
+- Do not mention writeup failures, missing context, providers, or inability to generate
+- Do not output placeholders
+
+Prior failures:
+${JSON.stringify(reasons, null, 2)}
+
+Previous WIM:
+${sanitizePromptField(priorWim, 900) || ""}
+
+Article:
+${JSON.stringify(mapPromptItem(item), null, 2)}
+
+Structured extraction:
+${JSON.stringify({
+  what_happened: sanitizePromptField(extraction?.what_happened, 220),
+  mechanism: sanitizePromptField(extraction?.mechanism, 220),
+  who_it_impacts: sanitizePromptField(extraction?.who_it_impacts, 220),
+  implication: sanitizePromptField(extraction?.implication, 220),
+  confidence: sanitizePromptField(extraction?.confidence, 20),
+}, null, 2)}`;
+}
+
 module.exports = {
   buildDigestDataExtractionPrompt,
   buildDigestDataFormattingRetryPrompt,
   buildDigestDataWimPrompt,
+  buildDigestDataWimFallbackPrompt,
   buildDigestDataWimRepairPrompt,
   mapPromptItem,
   sanitizePromptField,

@@ -299,8 +299,9 @@ function classifyTopicCoverage(state) {
   const hasProviderFailure = Number(state?.provider?.failed_calls || 0) > 0
     || Number(state?.provider?.transport_errors || 0) > 0
     || countStatusCode(state, 429) > 0;
-  if (usableCount >= 2) return "covered";
-  if (usableCount === 1) return hasProviderFailure ? "provider_limited_thin" : "thin";
+  if (usableCount >= 10) return "covered";
+  if (usableCount >= 5) return hasProviderFailure ? "provider_limited_thin" : "thin";
+  if (usableCount >= 1) return hasProviderFailure ? "provider_limited_retrieval_failure" : "retrieval_failure";
   if (hasProviderFailure) return "provider_limited_zero";
   return "zero_yield";
 }
@@ -399,6 +400,7 @@ function buildFetchDiagnostics(states, budgetTracker, maxFetchConcurrency, broke
     degraded: state?.provider?.degraded === true,
     last_error: String(state?.provider?.last_error || "").trim() || null,
     coverage_status: classifyTopicCoverage(state),
+    topic_health: countUsableItems(state?.items, () => true) < 10 ? "THIN" : "HEALTHY",
     search_result_domains: Array.isArray(state?.searchResultDomains) ? state.searchResultDomains.slice() : [],
     preferred_search_result_domains: Array.isArray(state?.preferredSearchResultDomains) ? state.preferredSearchResultDomains.slice() : [],
     preferred_search_result_hit_count: Number(state?.preferredSearchResultHitCount || 0),

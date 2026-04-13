@@ -11,6 +11,7 @@ const {
   buildTopicSelectionState,
   buildTopicReserveQueue,
   getBackfillRejectionReason,
+  getSelectionScore,
   isStandardSourceTier,
   resolveBackfillUnlockPolicy,
   resolveTrustGuardrailPolicy,
@@ -21,6 +22,7 @@ const {
 } = require("./digest-orchestrator-selection-pools-runtime");
 const {
   canonicalizeCandidateTopicTags,
+  filterPreSelectionSignalQuality,
   prepareSelectionCandidates,
   toSelectionAuditCandidate,
 } = require("./digest-orchestrator-selection-candidates-runtime");
@@ -53,17 +55,64 @@ function resolveEffectiveSourceCap(paramScoringConfig, configDigest) {
 
 function findWeakestNonTrustedIndex(items = []) {
   let weakestIndex = -1;
+  let weakestPriority = Infinity;
   let weakestScore = Infinity;
   for (let index = 0; index < items.length; index += 1) {
-    if (isTrustedSourceTier(items[index])) continue;
-    const score = Number(items[index]?._score);
-    const normalizedScore = Number.isFinite(score) ? score : -Infinity;
-    if (normalizedScore < weakestScore) {
+    const item = items[index];
+    if (isTrustedSourceTier(item)) continue;
+    const replacementPriority = item?._low_signal_procedural === true
+      ? 0
+      : String(item?.source_tier || "").trim().toLowerCase() === "unknown"
+        ? 1
+        : 2;
+    const normalizedScore = getSelectionScore(item);
+    if (replacementPriority < weakestPriority || (replacementPriority === weakestPriority && normalizedScore < weakestScore)) {
+      weakestPriority = replacementPriority;
       weakestScore = normalizedScore;
       weakestIndex = index;
     }
   }
   return weakestIndex;
+}
+
+function classifyTopicHealth({ totalCandidates = 0, selectedCount = 0, trustedCount = 0, trustedFloor = 3 }) {
+  if (Number(totalCandidates || 0) < 10 || Number(selectedCount || 0) < 5) return "THIN";
+  if (Number(trustedCount || 0) < Number(trustedFloor || 3)) return "LOW_TRUST";
+  return "HEALTHY";
+}
+
+function capThinExpansionCandidates(items = [], maxShare = 0.4) {
+  const grouped = new Map();
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const tag = String(item?.tag || "").trim().toUpperCase() || "__untagged__";
+    if (!grouped.has(tag)) grouped.set(tag, []);
+    grouped.get(tag).push(item);
+  }
+  const kept = [];
+  const diagnostics = Object.create(null);
+  for (const [tag, topicItems] of grouped.entries()) {
+    const expanded = topicItems.filter((item) => item?._thin_topic_expansion === true);
+    const baseline = topicItems.filter((item) => item?._thin_topic_expansion !== true);
+    const allowedExpanded = Math.max(0, Math.floor(topicItems.length * maxShare));
+    const retainedExpanded = expanded
+      .slice()
+      .sort((left, right) => getSelectionScore(right) - getSelectionScore(left))
+      .slice(0, Math.max(allowedExpanded, baseline.length > 0 ? 1 : 0));
+    const retainedUrls = new Set(retainedExpanded.map((item) => String(item?.url || "").trim()).filter(Boolean));
+    diagnostics[tag] = {
+      expanded_candidate_count: expanded.length,
+      expanded_candidate_cap: Math.max(allowedExpanded, baseline.length > 0 ? 1 : 0),
+      expanded_candidate_capped_count: Math.max(0, expanded.length - retainedExpanded.length),
+    };
+    kept.push(
+      ...baseline,
+      ...expanded.filter((item) => retainedUrls.has(String(item?.url || "").trim()))
+    );
+  }
+  return {
+    items: kept,
+    diagnostics,
+  };
 }
 
 function canSwapCandidateIntoTopic(candidate, selectedItems = [], replaceIndex, policy = {}) {
@@ -117,21 +166,21 @@ function applyPrimaryTrustGuardrail(params = {}) {
     const selectedItem = topicAcceptedItems[index];
     if (isTrustedSourceTier(selectedItem)) continue;
     const betterTrusted = remainingStrongReserve.find((candidate) =>
-      Number(candidate?._score || 0) > Number(selectedItem?._score || 0)
+      getSelectionScore(candidate) > getSelectionScore(selectedItem)
       && canSwapCandidateIntoTopic(candidate, topicAcceptedItems, index, policy)
     );
     if (!betterTrusted) continue;
-    selectedItem._better_trusted_available = {
-      trusted_url: String(betterTrusted?.url || "").trim() || null,
-      trusted_score: Number(betterTrusted?._score || 0),
-    };
+      selectedItem._better_trusted_available = {
+        trusted_url: String(betterTrusted?.url || "").trim() || null,
+        trusted_score: getSelectionScore(betterTrusted),
+      };
     diagnostics.better_trusted_available_count += 1;
     diagnostics.better_trusted_available_details.push({
-      selected_url: String(selectedItem?.url || "").trim() || null,
-      selected_score: Number(selectedItem?._score || 0),
-      trusted_url: String(betterTrusted?.url || "").trim() || null,
-      trusted_score: Number(betterTrusted?._score || 0),
-    });
+        selected_url: String(selectedItem?.url || "").trim() || null,
+        selected_score: getSelectionScore(selectedItem),
+        trusted_url: String(betterTrusted?.url || "").trim() || null,
+        trusted_score: getSelectionScore(betterTrusted),
+      });
   }
 
   return {
@@ -439,6 +488,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     let filterDiagnostics = null;
     let boostDiagnostics = null;
     let strictQualityPrefilterDiagnostics = null;
+    let signalQualityPrefilterDiagnostics = null;
     const strictQualityConfig = resolveStrictQualityConfig(CONFIG.digest || {});
     const nowMs = Number.isFinite(paramNowMs) ? paramNowMs : Date.now();
     let preRankingItems = annotatedItems;
@@ -453,6 +503,12 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       if (Number(strictQualityPrefilterDiagnostics?.removed_count || 0) > 0) {
         log(`Strict quality prefilter removed ${strictQualityPrefilterDiagnostics.removed_count} candidate(s) before scoring`);
       }
+    }
+    const signalQualityPrefilter = filterPreSelectionSignalQuality(preRankingItems);
+    signalQualityPrefilterDiagnostics = signalQualityPrefilter.diagnostics;
+    preRankingItems = signalQualityPrefilter.kept;
+    if (Number(signalQualityPrefilterDiagnostics?.removed_count || 0) > 0) {
+      log(`Signal-quality prefilter removed ${signalQualityPrefilterDiagnostics.removed_count} low-signal procedural candidate(s) before scoring`);
     }
     const classificationEnabled = CONFIG.digest?.classification?.enabled === true;
     let scoringInput = preRankingItems;
@@ -513,6 +569,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       boosted.sort((a, b) => (b._score || 0) - (a._score || 0));
       postScoreItems = boosted;
     }
+    const thinExpansionCapResult = capThinExpansionCandidates(postScoreItems, 0.4);
+    postScoreItems = thinExpansionCapResult.items;
 
     if (postScoreItems.length > 0) {
       const topScore = postScoreItems[0]?._score?.toFixed(3) ?? "?";
@@ -597,6 +655,12 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       reserveByTopic[topicTag] = reserveState;
       const selectedTrustedCount = countTrustedSourceTier(topicAcceptedItems);
       const selectedStandardCount = (Array.isArray(topicAcceptedItems) ? topicAcceptedItems : []).filter((item) => isStandardSourceTier(item)).length;
+      const topicHealth = classifyTopicHealth({
+        totalCandidates: tieredPool.length,
+        selectedCount: topicAcceptedItems.length,
+        trustedCount: selectedTrustedCount,
+        trustedFloor: trustGuardrailPolicy.minTrustedItemsPerTopic,
+      });
 
       const topicReasonCounts = Object.create(null);
       const selectedSet = new Set(topicAcceptedItems);
@@ -642,6 +706,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           ...primaryGuardrail.diagnostics,
           final_trusted_count: selectedTrustedCount,
         },
+        topic_health: topicHealth,
         trusted_first_override_count: Number(trustedFloor.trusted_override_count || 0),
         trusted_first_override_details: Array.isArray(trustedFloor.trusted_override_details)
           ? trustedFloor.trusted_override_details.slice()
@@ -728,6 +793,8 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         classification_boost: boostDiagnostics,
         strict_quality: {
           prefilter: strictQualityPrefilterDiagnostics,
+          signal_quality_prefilter: signalQualityPrefilterDiagnostics,
+          thin_expansion_cap: thinExpansionCapResult.diagnostics,
         },
         candidate_pool_after_pre_ranking_quality: strictQualityConfig.enabled ? preRankingItems.length : annotatedItems.length,
         candidate_pool_after_classification: classificationEnabled ? scoringInput.length : null,

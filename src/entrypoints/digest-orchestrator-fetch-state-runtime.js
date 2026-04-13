@@ -110,6 +110,7 @@ function buildTrustedFamilyQueue(shortlist = {}, familyShortlists = {}) {
 function buildTopicState(topic, shortlist, familyShortlists, priority, originalIndex) {
   return {
     topic,
+    thinTopicQueries: Array.isArray(topic?.thin_queries) ? topic.thin_queries.slice() : [],
     priority: Math.max(0, Number(priority || 0)),
     originalIndex: Math.max(0, Number(originalIndex || 0)),
     preferredDomains: Array.isArray(shortlist?.domains)
@@ -172,6 +173,7 @@ function buildTopicState(topic, shortlist, familyShortlists, priority, originalI
     brokerOfficialItemCount: 0,
     brokerPublisherFeedItemCount: 0,
     brokerSourceIds: [],
+    thinExpansionCappedItemCount: 0,
   };
 }
 

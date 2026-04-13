@@ -215,6 +215,12 @@ function buildTopicMetrics(tag, topic = {}, fetchTopic = {}) {
   const writeup = topic?.writeup && typeof topic.writeup === "object" ? topic.writeup : {};
   const strictQuality = topic?.strict_quality && typeof topic.strict_quality === "object" ? topic.strict_quality : {};
 
+  const derivedTopicHealth = Math.max(0, num(topic?.total_candidates, candidates.length)) < 10
+    || Math.max(0, num(topic?.selected_count, selectedCandidates.length)) < 5
+    ? "THIN"
+    : ratio(trustedSelectedCount, selectedCandidates.length) < 0.6
+      ? "LOW_TRUST"
+      : "HEALTHY";
   return {
     tag: String(tag || "").trim().toUpperCase(),
     totalCandidates: Math.max(0, num(topic?.total_candidates, candidates.length)),
@@ -238,6 +244,7 @@ function buildTopicMetrics(tag, topic = {}, fetchTopic = {}) {
     softFailCount: Math.max(0, num(writeup.soft_fail_count, 0)),
     softFailRecoveryCount: Math.max(0, num(writeup.soft_fail_recovery_count, 0)),
     minimumViableAcceptCount: Math.max(0, num(writeup.minimum_viable_accept_count, 0)),
+    minimumViableAcceptRate: ratio(writeup.minimum_viable_accept_count, writeup.attempted_count),
     parseFailureCounts: writeup?.parse_failure_counts && typeof writeup.parse_failure_counts === "object"
       ? writeup.parse_failure_counts
       : {},
@@ -251,6 +258,9 @@ function buildTopicMetrics(tag, topic = {}, fetchTopic = {}) {
     standardTierBlockedWhileStrongAvailable: strictQuality?.standard_tier_blocked_while_strong_available === true,
     blockedBucket: strictQuality?.pass === false,
     selectedContainsLowTrust: selectedCandidates.some((candidate) => !isTrustedCandidate(candidate)),
+    trustedFloorFailedDueToSupply: topic?.trust_guardrail?.trusted_floor_failed_due_to_supply === true
+      || topic?.trusted_floor?.relaxed_reason === "trusted_floor_failed_due_to_supply",
+    topicHealth: String(topic?.topic_health || topic?.trust_guardrail?.topic_health || fetchTopic?.topic_health || derivedTopicHealth).trim().toUpperCase() || null,
   };
 }
 
@@ -263,6 +273,8 @@ function buildTopicEvidence(metrics = {}) {
     underfill: Math.max(0, 5 - metrics.selectedCount),
     totalCandidates: metrics.totalCandidates,
     missedStoryFlags: metrics.missedStoryFlagCount,
+    minimumViableAcceptRate: metrics.minimumViableAcceptRate,
+    topicHealth: metrics.topicHealth,
   };
 }
 
@@ -302,10 +314,14 @@ function deriveTopicDiagnosis(tag, topic = {}, fetchTopic = {}, topicCauseCounts
   const lowTrustMix = metrics.totalCandidates >= 15
     && metrics.selectedCount > 0
     && metrics.trustedShare < 0.5;
+  const highMinimumViableLowTrust = metrics.minimumViableAcceptRate >= 0.6 && metrics.trustedShare < 0.6;
 
   if (retrievalThin) {
     primaryRootCause = "retrieval_supply_thin";
     severity = metrics.totalCandidates < 10 || metrics.selectedCount < 5 ? "high" : "medium";
+  } else if (metrics.trustedFloorFailedDueToSupply) {
+    primaryRootCause = "retrieval_supply_thin";
+    severity = "high";
   } else if (writeupStrongLoss) {
     primaryRootCause = "writeup_failure_causing_strong_tier_loss";
     severity = metrics.underfillDueWriteupCount > 0 || metrics.strongTierDropCount >= 2 ? "high" : "medium";
@@ -334,6 +350,9 @@ function deriveTopicDiagnosis(tag, topic = {}, fetchTopic = {}, topicCauseCounts
   }
   if (primaryRootCause === "trusted_pool_available_but_not_selected" && weakerStoryShapes) {
     secondaryRootCauses.push("selection_prefers_weaker_story_shapes");
+  }
+  if (highMinimumViableLowTrust && primaryRootCause !== "retrieval_supply_thin" && primaryRootCause !== "trusted_pool_available_but_not_selected") {
+    secondaryRootCauses.push(metrics.totalCandidates < 10 ? "retrieval_supply_thin" : "trusted_pool_available_but_not_selected");
   }
   if (primaryRootCause === "retrieval_supply_thin" && metrics.strongPoolExhausted) {
     secondaryRootCauses.push("strong_pool_exhausted");

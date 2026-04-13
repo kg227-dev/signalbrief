@@ -60,6 +60,24 @@ const TRACKED_TOPIC_QUERY_OVERRIDES = Object.freeze({
     "procurement tariff trade industrial supply chain last 48 hours",
   ]),
 });
+const THIN_TOPIC_QUERY_EXPANSIONS = Object.freeze({
+  HEALTHCARE: Object.freeze([
+    "hospital investment partnership operations cost margin healthcare regulatory impact last 48 hours",
+    "provider payer M&A partnership strategy reimbursement cost margin last 48 hours",
+  ]),
+  "CONSUMER & RETAIL": Object.freeze([
+    "retail investment partnership operations cost margin consumer strategy last 48 hours",
+    "grocery apparel restaurant retail regulatory impact M&A margin last 48 hours",
+  ]),
+  "LIFE SCIENCES": Object.freeze([
+    "biotech investment partnership operations cost margin regulatory impact last 48 hours",
+    "biopharma M&A partnership manufacturing strategy margin clinical operations last 48 hours",
+  ]),
+  INDUSTRIALS: Object.freeze([
+    "industrial investment partnership operations cost margin manufacturing regulatory impact last 48 hours",
+    "supply chain logistics factory M&A strategy operations margin last 48 hours",
+  ]),
+});
 const TRACKED_DEEP_STANDARD_TAGS = new Set(MVP_TOPIC_TAGS);
 const FULL_EXHAUST_STANDARD_TAGS = new Set([
   "HEALTHCARE",
@@ -102,6 +120,9 @@ function sanitizeConfigTopicsToMvp(configTopics = []) {
       queries: Array.isArray(overrideQueries) && overrideQueries.length > 0
         ? overrideQueries.slice()
         : (Array.isArray(rawTopic?.queries) ? rawTopic.queries.slice() : []),
+      thin_queries: Array.isArray(THIN_TOPIC_QUERY_EXPANSIONS[canonicalTag])
+        ? THIN_TOPIC_QUERY_EXPANSIONS[canonicalTag].slice()
+        : [],
     });
   }
   return topics;

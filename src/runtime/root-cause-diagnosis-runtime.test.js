@@ -219,6 +219,25 @@ function buildAuditDoc({
 }
 
 {
+  const thinDoc = attachDiagnosisToAuditDocument(buildAuditDoc({
+    topics: {
+      CONSUMER: buildTopic({
+        totalCandidates: 4,
+        selectedCount: 3,
+        trustedSelectedCount: 0,
+        writeup: {
+          attempted_count: 3,
+          minimum_viable_accept_count: 3,
+        },
+      }),
+    },
+  }));
+
+  assert.strictEqual(thinDoc.topics.CONSUMER.topicDiagnosis.primaryRootCause, "retrieval_supply_thin");
+  assert.strictEqual(thinDoc.topics.CONSUMER.topicDiagnosis.evidence.topicHealth, "THIN");
+}
+
+{
   const doc = attachDiagnosisToAuditDocument(buildAuditDoc({
     topics: {
       INDUSTRIALS: buildTopic({

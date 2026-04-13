@@ -233,6 +233,53 @@
       "content_kind": "article"
     },
     {
+      "_comment": "Healthcare Dive — provider operations, health IT, payer and regulatory impact coverage.",
+      "id": "healthcare_dive",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "HEALTHCARE"
+      ],
+      "family": "healthcare_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "healthcaredive.com"
+      ],
+      "endpoint": "https://www.healthcaredive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
+    },
+    {
+      "_comment": "MedTech Dive — devices, medtech, operations, and regulatory impact coverage.",
+      "id": "healthcare_medtech_dive",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "HEALTHCARE",
+        "LIFE SCIENCES"
+      ],
+      "family": "healthcare_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "medtechdive.com"
+      ],
+      "endpoint": "https://www.medtechdive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
+    },
+    {
       "_comment": "FDA Press Releases — primary official for drug/device approvals, warnings, guidance.",
       "id": "healthcare_fda_press",
       "enabled": true,
@@ -412,6 +459,29 @@
         "biopharmadive.com"
       ],
       "endpoint": "https://www.biopharmadive.com/feeds/news/",
+      "parser": "rss",
+      "content_kind": "article",
+      "allow_article_like_listing_urls": true,
+      "url_exclude_patterns": [
+        "/spons/"
+      ]
+    },
+    {
+      "_comment": "PharmaVoice — pharma strategy, commercialization, policy and partnerships.",
+      "id": "life_pharmavoice",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "LIFE SCIENCES"
+      ],
+      "family": "life_sciences_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "pharmavoice.com"
+      ],
+      "endpoint": "https://www.pharmavoice.com/feeds/news/",
       "parser": "rss",
       "content_kind": "article",
       "allow_article_like_listing_urls": true,
@@ -1249,6 +1319,63 @@
       "content_kind": "article"
     },
     {
+      "_comment": "RetailWire — retail operations, merchandising, store strategy.",
+      "id": "consumer_retailwire",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "retailwire.com"
+      ],
+      "endpoint": "https://retailwire.com/feed/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Business of Fashion — apparel, beauty, luxury retail strategy.",
+      "id": "consumer_business_of_fashion",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "businessoffashion.com"
+      ],
+      "endpoint": "https://www.businessoffashion.com/feed/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Glossy — beauty, fashion, commerce, retail media strategy.",
+      "id": "consumer_glossy",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "CONSUMER & RETAIL"
+      ],
+      "family": "consumer_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "glossy.co"
+      ],
+      "endpoint": "https://www.glossy.co/feed/",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
       "_comment": "Food Dive — food/beverage industry, grocery retail, CPG brands. Industry Dive network.",
       "id": "consumer_food_dive",
       "enabled": true,
@@ -1524,6 +1651,63 @@
       "url_exclude_patterns": [
         "/spons/"
       ]
+    },
+    {
+      "_comment": "Manufacturing.net — plant operations, factory automation, industrial strategy.",
+      "id": "industrials_manufacturing_net",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "manufacturing.net"
+      ],
+      "endpoint": "https://www.manufacturing.net/rss.xml",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Assembly Magazine — factory automation, assembly operations, plant strategy.",
+      "id": "industrials_assembly_mag",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "assemblymag.com"
+      ],
+      "endpoint": "https://www.assemblymag.com/rss/topic/2636-news",
+      "parser": "rss",
+      "content_kind": "article"
+    },
+    {
+      "_comment": "Plant Services — industrial operations, maintenance, plant reliability, costs.",
+      "id": "industrials_plant_services",
+      "enabled": true,
+      "tier": 2,
+      "lane": "publisher_feed",
+      "topic_tags": [
+        "INDUSTRIALS"
+      ],
+      "family": "industrials_specialist",
+      "source_kind": "trade_specialist",
+      "source_family": "specialist",
+      "domains": [
+        "plantservices.com"
+      ],
+      "endpoint": "https://www.plantservices.com/rss",
+      "parser": "rss",
+      "content_kind": "article"
     },
     {
       "_comment": "Industry Week — manufacturing strategy, automation, workforce. Disabled: all feed URL paths return 404; site appears to no longer publish RSS.",

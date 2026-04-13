@@ -95,6 +95,22 @@ function needsStandardTrustedSourcePass(state, annotateFetchedItems, isFetchedIt
   return summarizeAnnotatedTrustMix(state?.items, annotateFetchedItems, isFetchedItemEligible).review_heavy === true;
 }
 
+function resolveTopicQueryList(state) {
+  const thinTopicQueries = Array.isArray(state?.thinTopicQueries) ? state.thinTopicQueries : [];
+  const baseQueries = Array.isArray(state?.topic?.queries) ? state.topic.queries : [];
+  const currentCandidateCount = Array.isArray(state?.items) ? state.items.length : 0;
+  if (currentCandidateCount < 10 && thinTopicQueries.length > 0) {
+    return {
+      queries: [...thinTopicQueries, ...baseQueries],
+      thinTopicExpansion: true,
+    };
+  }
+  return {
+    queries: baseQueries,
+    thinTopicExpansion: false,
+  };
+}
+
 function resolveBatchConcurrency(batchName, jobCount, budgetTracker, maxFetchConcurrency) {
   const batch = String(batchName || "").trim().toLowerCase();
   let limit = Math.max(1, Number(maxFetchConcurrency || 1));
@@ -109,7 +125,8 @@ function resolveBatchConcurrency(batchName, jobCount, budgetTracker, maxFetchCon
 }
 
 function buildPreferredInvocation(state, queryIndex, { countsAsRetry = false, maxAgeHours = 48 } = {}) {
-  const query = Array.isArray(state?.topic?.queries) ? state.topic.queries[queryIndex] : "";
+  const queryPlan = resolveTopicQueryList(state);
+  const query = Array.isArray(queryPlan.queries) ? queryPlan.queries[queryIndex] : "";
   if (!query) return null;
   return {
     phase: "preferred",
@@ -130,13 +147,15 @@ function buildPreferredInvocation(state, queryIndex, { countsAsRetry = false, ma
         official_friendly: state.officialFriendly === true,
         topic_keys: Array.isArray(state.topicKeys) ? state.topicKeys.slice() : [],
         allow_broad_fallback: false,
+        thin_topic_expansion: queryPlan.thinTopicExpansion === true,
       },
     },
   };
 }
 
 function buildBroadInvocation(state, queryIndex, { countsAsRetry = false, broadFallback = false, maxAgeHours = 48 } = {}) {
-  const query = Array.isArray(state?.topic?.queries) ? state.topic.queries[queryIndex] : "";
+  const queryPlan = resolveTopicQueryList(state);
+  const query = Array.isArray(queryPlan.queries) ? queryPlan.queries[queryIndex] : "";
   if (!query) return null;
   return {
     phase: "broad",
@@ -157,6 +176,7 @@ function buildBroadInvocation(state, queryIndex, { countsAsRetry = false, broadF
         official_friendly: state.officialFriendly === true,
         topic_keys: Array.isArray(state.topicKeys) ? state.topicKeys.slice() : [],
         broad_only: true,
+        thin_topic_expansion: queryPlan.thinTopicExpansion === true,
       },
     },
   };
@@ -166,7 +186,8 @@ function buildTrustedFamilyInvocation(state, { countsAsRetry = true, maxAgeHours
   const family = Array.isArray(state?.trustedFamilyQueue)
     ? state.trustedFamilyQueue[Number(state?.nextTrustedFamilyIndex || 0)]
     : null;
-  const query = Array.isArray(state?.topic?.queries) ? state.topic.queries[0] : "";
+  const queryPlan = resolveTopicQueryList(state);
+  const query = Array.isArray(queryPlan.queries) ? queryPlan.queries[0] : "";
   if (!family || !query) return null;
   return {
     phase: "trusted",
@@ -190,6 +211,7 @@ function buildTrustedFamilyInvocation(state, { countsAsRetry = true, maxAgeHours
         allow_broad_fallback: false,
         trusted_source_second_pass: true,
         trusted_source_family: String(family.name || "").trim() || "reported",
+        thin_topic_expansion: queryPlan.thinTopicExpansion === true,
       },
     },
   };
@@ -209,4 +231,5 @@ module.exports = {
   shouldPreferBroadFallbackRetry,
   toBoundedInt,
   uniqueValues,
+  resolveTopicQueryList,
 };

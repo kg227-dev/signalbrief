@@ -28,12 +28,23 @@ const {
 
 function findWeakestNonTrustedIndex(items = []) {
   let weakestIndex = -1;
+  let weakestPriority = Infinity;
   let weakestScore = Infinity;
   for (let index = 0; index < items.length; index += 1) {
-    if (countTrustedSourceTier([items[index]]) > 0) continue;
-    const score = Number(items[index]?._score);
-    const normalizedScore = Number.isFinite(score) ? score : -Infinity;
-    if (normalizedScore < weakestScore) {
+    const item = items[index];
+    if (countTrustedSourceTier([item]) > 0) continue;
+    const replacementPriority = item?._low_signal_procedural === true
+      ? 0
+      : String(item?.source_tier || "").trim().toLowerCase() === "unknown"
+        ? 1
+        : 2;
+    const normalizedScore = Number.isFinite(Number(item?._selection_score))
+      ? Number(item._selection_score)
+      : Number.isFinite(Number(item?._score))
+        ? Number(item._score)
+        : -Infinity;
+    if (replacementPriority < weakestPriority || (replacementPriority === weakestPriority && normalizedScore < weakestScore)) {
+      weakestPriority = replacementPriority;
       weakestScore = normalizedScore;
       weakestIndex = index;
     }
@@ -464,7 +475,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
         const item = acceptedItems[index];
         if (countTrustedSourceTier([item]) > 0) continue;
         const betterTrusted = remainingStrongReserve.find((candidate) =>
-          Number(candidate?._score || 0) > Number(item?._score || 0)
+          Number((candidate?._selection_score ?? candidate?._score) || 0) > Number((item?._selection_score ?? item?._score) || 0)
           && !resolveBackfillRejection(candidate, acceptedItems.filter((_, innerIndex) => innerIndex !== index), {
             maxItemsPerSourceDomain: backfillPolicy.maxItemsPerSourceDomain,
             maxDiscoveryPerTopic: backfillPolicy.maxDiscoveryPerTopic,
@@ -475,7 +486,8 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
         if (!betterTrusted) continue;
         item._better_trusted_available = {
           trusted_url: String(betterTrusted?.url || "").trim() || null,
-          trusted_score: Number(betterTrusted?._score || 0),
+          trusted_score: Number((betterTrusted?._selection_score ?? betterTrusted?._score) || 0),
+          diagnosis: "better_trusted_candidate_not_selected",
         };
         betterTrustedAvailableCount += 1;
       }
@@ -628,11 +640,15 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       const strongPoolExhausted = trustedFloorState.active === true
         && currentStrongSelectedCount < Math.max(0, Number(trustedFloorState.minTrustedItemsPerTopic || 0))
         && remainingStrongReserveCount <= 0;
+      const trustedFloorFailedDueToSupply = trustedFloorState.active === true
+        && currentStrongSelectedCount < Math.max(0, Number(backfillPolicy.trustGuardrailPolicy.minTrustedItemsPerTopic || 0))
+        && remainingStrongReserveCount <= 0;
       topicReserveDiagnostics[topicTag] = {
         remaining_reserve_count: remainingStrongReserveCount + remainingStandardReserveCount,
         remaining_strong_reserve_count: remainingStrongReserveCount,
         remaining_standard_reserve_count: remainingStandardReserveCount,
         strong_pool_exhausted: strongPoolExhausted,
+        trusted_floor_failed_due_to_supply: trustedFloorFailedDueToSupply,
         standard_tier_blocked_while_strong_available: standardTierBlockedWhileStrongAvailable,
         trusted_reserve_failure_count: Math.max(0, Number(strongBackfillFailureCounts[topicTag] || 0)),
         trusted_reserve_failure_threshold: standardBackfillUnlockThreshold,

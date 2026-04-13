@@ -234,6 +234,40 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
   assert.strictEqual(proceduralCountOut.selectionDiagnostics.procedural_notice_selected_count, 1);
 
+  const lowSignalOut = await proceduralCountRuntime.selectForEnrichment({
+    allItems: [
+      {
+        url: "https://example.com/notice-only",
+        headline: "Conference notice for advisory council",
+        summary: "The agency published an administrative update for an upcoming meeting.",
+        tag: "TECHNOLOGY",
+        published_date: "2026-03-27T10:00:00.000Z",
+        source_domain: "federalregister.gov",
+        source_type: "primary_official",
+        procedural_notice: true,
+      },
+      {
+        url: "https://example.com/real-signal",
+        headline: "Vendor raises platform prices after compliance rule",
+        summary: "The change lifts compliance costs and slows enterprise buying decisions.",
+        tag: "TECHNOLOGY",
+        published_date: "2026-03-27T09:00:00.000Z",
+        source_domain: "theregister.com",
+        source_type: "reported_media",
+      },
+    ],
+    selectionTarget: 5,
+    tagPriority: { technology: 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 1,
+    nowMs,
+  });
+  assert.strictEqual(lowSignalOut.selectionDiagnostics.strict_quality.signal_quality_prefilter.removed_count, 1);
+  assert.strictEqual(lowSignalOut.selected.length, 1);
+  assert.strictEqual(lowSignalOut.selectionDiagnostics.topic_selection_audit[0].topic_health, "THIN");
+
   const failIncidents = [];
   const failRuntime = createDigestOrchestratorSelectionRuntime({
     CONFIG: { digest: { itemCount: 5, crossDayDedupDays: 3 } },

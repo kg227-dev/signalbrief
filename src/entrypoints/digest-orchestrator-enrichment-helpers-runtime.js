@@ -349,7 +349,7 @@ function pickNextReserveCandidate(params = {}) {
   const standardReserve = Array.isArray(reserveState.standardReserve) ? reserveState.standardReserve : [];
   const allowStandardBackfill = policy.allowStandardBackfill !== false;
 
-  function pickFromBucket(bucket, bucketName, cursor) {
+  function pickFromBucket(bucket, bucketName, cursor, allowSourceCapOverrideWhenExhausted = false) {
     for (let index = cursor; index < bucket.length; index += 1) {
       const candidate = bucket[index];
       const url = String(candidate?.url || "").trim();
@@ -359,6 +359,7 @@ function pickNextReserveCandidate(params = {}) {
         maxDiscoveryPerTopic: policy.maxDiscoveryPerTopic,
         commentaryCap: policy.commentaryCapPerTopic,
         backfillTrustFloor: policy.backfillTrustFloor === true,
+        allowSourceCapOverrideWhenExhausted,
       });
       if (rejectionReason) continue;
       return {
@@ -375,6 +376,8 @@ function pickNextReserveCandidate(params = {}) {
 
   const strongPick = pickFromBucket(strongReserve, "strong", reserveCursor.strong);
   if (strongPick) return strongPick;
+  const strongCapOverridePick = pickFromBucket(strongReserve, "strong", reserveCursor.strong, true);
+  if (strongCapOverridePick) return strongCapOverridePick;
   if (!allowStandardBackfill) {
     return {
       candidate: null,
@@ -387,6 +390,8 @@ function pickNextReserveCandidate(params = {}) {
   }
   const standardPick = pickFromBucket(standardReserve, "standard", reserveCursor.standard);
   if (standardPick) return standardPick;
+  const standardCapOverridePick = pickFromBucket(standardReserve, "standard", reserveCursor.standard, true);
+  if (standardCapOverridePick) return standardCapOverridePick;
 
   return {
     candidate: null,
@@ -644,13 +649,18 @@ function updateSelectionDiagnosticsForWriteups(selectionDiagnostics = {}, params
       swaps_completed: Math.max(0, Number(reserveDiagnostics.trust_guardrail_swaps_completed || 0)),
       final_trusted_count: Math.max(0, Number(reserveDiagnostics.final_trusted_count || strongSelectedCount)),
       better_trusted_available_count: Math.max(0, Number(reserveDiagnostics.better_trusted_available_count || 0)),
+      trusted_floor_failed_due_to_supply: reserveDiagnostics.trusted_floor_failed_due_to_supply === true,
     };
     topicAudit.trusted_floor = {
       ...existingTrustedFloor,
       selected_trusted_count: strongSelectedCount,
       standard_tier_blocked_while_strong_available: standardTierBlockedWhileStrongAvailable,
       strong_pool_exhausted: strongPoolExhausted,
-      relaxed_reason: floorActive && strongPoolExhausted ? "strong_pool_exhausted" : (existingTrustedFloor.relaxed_reason || null),
+      relaxed_reason: reserveDiagnostics.trusted_floor_failed_due_to_supply === true
+        ? "trusted_floor_failed_due_to_supply"
+        : floorActive && strongPoolExhausted
+          ? "strong_pool_exhausted"
+          : (existingTrustedFloor.relaxed_reason || null),
     };
     topicAudit.writeup = normalizeAggregateWriteupStats(topicStats, params.itemsPerTopic);
     topicAudit.strict_quality = strictQualityDiagnostics.topic_buckets?.[tag]

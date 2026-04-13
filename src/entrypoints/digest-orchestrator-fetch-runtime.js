@@ -214,6 +214,9 @@ function createDigestOrchestratorFetchRuntime(deps) {
       for (let index = 0; index < merged.addedItems.length; index += 1) {
         const item = merged.addedItems[index];
         const annotatedItem = annotatedAddedItems[index] || item;
+        if (entry.invocation?.opts?.retrievalPlan?.thin_topic_expansion === true) {
+          item._thin_topic_expansion = true;
+        }
         const sourceFamily = classifyRetrievedSourceFamily(annotatedItem, state);
         item.retrieval_origin = originKey;
         item.retrieval_source_family = sourceFamily;

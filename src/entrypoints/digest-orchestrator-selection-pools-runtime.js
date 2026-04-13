@@ -6,6 +6,9 @@ const {
   normalizeSourceTier,
   splitByFreshnessTiers,
 } = require("../domains/digest/candidate-quality-runtime");
+const {
+  isLowSignalProceduralItem,
+} = require("./digest-orchestrator-selection-candidates-runtime");
 
 function isDiscoveryLaneItem(item) {
   const origin = String(item?.retrieval_origin || item?.retrieval_lane || "").trim().toLowerCase();
@@ -28,9 +31,35 @@ function isStandardSourceTier(item) {
   return normalizeSourceTier(item) === 3;
 }
 
+function annotateSelectorPenalties(item) {
+  if (!item || typeof item !== "object") return item;
+  const penalties = Object.create(null);
+  const sourceDomain = String(item?.source_domain || item?.source || "").trim().toLowerCase();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const lowSignalProcedural = isLowSignalProceduralItem(item);
+  if (lowSignalProcedural) penalties.low_signal_procedural = 0.24;
+  if (item?.procedural_notice === true && sourceType === "primary_official") penalties.procedural_official = 0.1;
+  if (sourceType === "aggregator_republisher") penalties.aggregator = 0.08;
+  if (sourceDomain === "marketwatch.com") penalties.weak_domain_marketwatch = 0.06;
+  if (sourceDomain === "federalregister.gov") penalties.procedural_gov = 0.05;
+  const totalPenalty = Object.values(penalties).reduce((sum, value) => sum + Number(value || 0), 0);
+  return {
+    ...item,
+    _low_signal_procedural: lowSignalProcedural,
+    _selector_penalties: penalties,
+    _selection_score: Number((Number(item?._score || 0) - totalPenalty).toFixed(4)),
+  };
+}
+
+function getSelectionScore(item) {
+  if (!item) return 0;
+  if (Number.isFinite(Number(item?._selection_score))) return Number(item._selection_score);
+  return Number(item?._score || 0);
+}
+
 function sortByScoreDesc(items) {
   return (Array.isArray(items) ? items : []).slice().sort((left, right) => {
-    const scoreDelta = Number(right?._score || 0) - Number(left?._score || 0);
+    const scoreDelta = getSelectionScore(right) - getSelectionScore(left);
     if (scoreDelta !== 0) return scoreDelta;
     return String(left?.headline || "").localeCompare(String(right?.headline || ""));
   });
@@ -61,7 +90,7 @@ function getSourceTypePreferenceRank(item) {
 }
 
 function compareCandidatePreference(left, right) {
-  const scoreDelta = Number(right?._score || 0) - Number(left?._score || 0);
+  const scoreDelta = getSelectionScore(right) - getSelectionScore(left);
   if (scoreDelta !== 0) return scoreDelta;
   const sourceTypeDelta = getSourceTypePreferenceRank(left) - getSourceTypePreferenceRank(right);
   if (sourceTypeDelta !== 0) return sourceTypeDelta;
@@ -110,7 +139,8 @@ function buildTopicFallbackPools(topicItems, nowMs, opts = {}) {
   const items = opts.clusterOfficialSuppression
     ? suppressOfficialsByCluster(Array.isArray(topicItems) ? topicItems : [])
     : (Array.isArray(topicItems) ? topicItems : []);
-  const { tier1, tier2, tier3 } = splitByFreshnessTiers(items, nowMs);
+  const scoredItems = items.map(annotateSelectorPenalties);
+  const { tier1, tier2, tier3 } = splitByFreshnessTiers(scoredItems, nowMs);
   const eventTier1 = sortWithSourceTypePreference(
     tier1.filter((item) => !isAnalysisOrCommentaryItem(item) && !item._official_suppressed_by_cluster)
   );
@@ -242,24 +272,26 @@ function selectTopicItemsWithFallback(params = {}) {
       let nextItem = bestTrusted || bestStandard;
       let selectionStage = stageName;
       if (bestStandard && bestTrusted) {
-        const scoreMargin = Number(bestStandard?._score || 0) - Number(bestTrusted?._score || 0);
+        const scoreMargin = getSelectionScore(bestStandard) - getSelectionScore(bestTrusted);
         if (scoreMargin >= trustedFloor.standardOverrideMargin) {
           nextItem = bestStandard;
           selectionStage = `${stageName}_trusted_override`;
           trustedOverrideDetails.push({
             selected_url: String(bestStandard?.url || "").trim() || null,
             selected_headline: String(bestStandard?.headline || "").slice(0, 160) || null,
-            selected_score: Number(bestStandard?._score || 0),
+            selected_score: getSelectionScore(bestStandard),
             trusted_url: String(bestTrusted?.url || "").trim() || null,
             trusted_headline: String(bestTrusted?.headline || "").slice(0, 160) || null,
-            trusted_score: Number(bestTrusted?._score || 0),
+            trusted_score: getSelectionScore(bestTrusted),
             score_margin: Number(scoreMargin.toFixed(4)),
             stage: stageName,
+            override_reason: "standard_won_over_trusted_with_gap",
           });
           bestStandard._trusted_override = {
             margin: Number(scoreMargin.toFixed(4)),
             trusted_candidate_url: String(bestTrusted?.url || "").trim() || null,
-            trusted_candidate_score: Number(bestTrusted?._score || 0),
+            trusted_candidate_score: getSelectionScore(bestTrusted),
+            override_reason: "standard_won_over_trusted_with_gap",
           };
         } else {
           standardCandidatesBlockedByTrustedFirstCount += 1;
@@ -360,7 +392,7 @@ function getBackfillRejectionReason(candidate, currentSelected = [], opts = {}) 
 
   const domain = String(candidate?.source_domain || candidate?.source || "unknown").trim().toLowerCase();
   const domainCount = state.domainCounts[domain] || 0;
-  if (domainCount >= perSourceCap) {
+  if (domainCount >= perSourceCap && opts.allowSourceCapOverrideWhenExhausted !== true) {
     return `selection_source_cap (${domain}: ${domainCount}/${perSourceCap})`;
   }
 
@@ -445,6 +477,7 @@ function resolveTrustGuardrailPolicy(configDigest = {}, itemsPerTopic = 5) {
 module.exports = {
   buildTopicSelectionState,
   buildTopicReserveQueue,
+  getSelectionScore,
   getBackfillRejectionReason,
   isStandardSourceTier,
   resolveBackfillUnlockPolicy,

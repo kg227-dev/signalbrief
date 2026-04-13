@@ -33,6 +33,21 @@ const DOMAIN_TOPIC_SCOPE = new Map([
   ["utilitydive.com", new Set(["ENERGY"])],
 ]);
 
+const PROCEDURAL_HEADLINE_PATTERNS = [
+  /\bnotice of filing\b/i,
+  /\bconference notice\b/i,
+  /\bguidance published\b/i,
+  /\badministrative update\b/i,
+  /\bclosed meeting\b/i,
+  /\bnotice of (availability|hearing|meeting|proposed)/i,
+];
+
+const STRATEGIC_IMPLICATION_PATTERNS = [
+  /\b(regulatory impact|compliance cost|margin|pricing|operations?|strategy|investment|m&a|partnership)\b/i,
+  /\b(approval|approved|enforcement|rule|rulemaking|settlement|tariff|layoff|capex|restructuring)\b/i,
+  /\b(demand|supply chain|factory|manufacturing|clinical|trial|payer|provider|bank|lender|utility)\b/i,
+];
+
 function classifySourceTypeClass(sourceType) {
   const st = String(sourceType || "").trim().toLowerCase();
   if (st === "reported_media" || st === "trade_specialist") return "reported";
@@ -71,6 +86,7 @@ function toSelectionAuditCandidate(item, extras = {}) {
       : null,
     procedural_notice: item?.procedural_notice === true,
     procedural_notice_has_strategic_shift: item?.procedural_notice_has_strategic_shift === true,
+    low_signal_procedural: item?._low_signal_procedural === true,
     selector_penalties: item?._selector_penalties && typeof item._selector_penalties === "object"
       ? { ...item._selector_penalties }
       : null,
@@ -85,6 +101,52 @@ function toSelectionAuditCandidate(item, extras = {}) {
       : null,
     duplicate_of: item?.duplicate_of ? String(item.duplicate_of) : null,
     ...extras,
+  };
+}
+
+function textHasStrategicImplication(text) {
+  const normalized = String(text || "").trim();
+  if (!normalized) return false;
+  return STRATEGIC_IMPLICATION_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function isLowSignalProceduralItem(item) {
+  const headline = String(item?.headline || item?.title || "").trim();
+  const summary = String(item?.summary || "").trim();
+  const strategicReason = String(item?.strategic_relevance_reason || "").trim();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const proceduralFlag = item?.procedural_notice === true
+    || PROCEDURAL_HEADLINE_PATTERNS.some((pattern) => pattern.test(headline));
+  if (!proceduralFlag) return false;
+  if (item?.procedural_notice_has_strategic_shift === true) return false;
+  if (textHasStrategicImplication(`${headline} ${summary} ${strategicReason}`)) return false;
+  if (sourceType === "reported_media" || sourceType === "trade_specialist") return false;
+  return true;
+}
+
+function filterPreSelectionSignalQuality(items = []) {
+  const kept = [];
+  const dropped = [];
+  for (const item of (Array.isArray(items) ? items : [])) {
+    if (!isLowSignalProceduralItem(item)) {
+      kept.push(item);
+      continue;
+    }
+    dropped.push({
+      ...item,
+      _low_signal_procedural: true,
+      _selection_prefilter_reason: "selection_low_signal_procedural",
+    });
+  }
+  return {
+    kept,
+    dropped,
+    diagnostics: {
+      removed_count: dropped.length,
+      removed_reason_counts: dropped.length > 0
+        ? { selection_low_signal_procedural: dropped.length }
+        : {},
+    },
   };
 }
 
@@ -191,6 +253,9 @@ function prepareSelectionCandidates(items = [], opts = {}) {
 module.exports = {
   canonicalizeCandidateTopicTags,
   classifySourceTypeClass,
+  filterPreSelectionSignalQuality,
+  isLowSignalProceduralItem,
   prepareSelectionCandidates,
+  textHasStrategicImplication,
   toSelectionAuditCandidate,
 };

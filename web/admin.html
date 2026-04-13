@@ -5202,10 +5202,11 @@ async function load(silent = false) {
 
     // ── Run log ───────────────────────────────────────────────────────────────────
     const runsBody = document.getElementById("runsBody");
-    if (!runs || runs.length === 0) {
+    const deliveryRuns = (runs || []).filter(r => Number(r.users_served || 0) > 0);
+    if (!deliveryRuns.length) {
       runsBody.innerHTML = `<tr><td colspan="9" class="empty">No runs logged yet. Run a digest to start tracking.</td></tr>`;
     } else {
-      runsBody.innerHTML = runs.map(r => {
+      runsBody.innerHTML = deliveryRuns.map(r => {
         const typeBadge = `<span class="badge-scheduled">scheduled</span>`;
         const totalClass = costClass(r.total_cost_usd || 0);
         // Cost breakdown on hover

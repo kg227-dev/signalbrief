@@ -8,5 +8,5 @@ This path remains as a compatibility summary for tooling that still checks `docs
 
 ## Current MVP Validation Note
 
-- Day 16 audit (2026-04-12): [`./archive/planning/2026-03/mvp-day-16-2026-04-12.md`](./archive/planning/2026-03/mvp-day-16-2026-04-12.md)
-- Current conclusion: the three-run validator calibration window completed with a clean writeup pass, but category expansion remains blocked. Day 16 delivered 35/35 with 284 retained candidates, 0 writeup drops, 0 strong-tier drops, and 23/35 trusted Tier 1/2 selections (65.7%). The blocker has moved from validator mismatch to selector ranking, with Industrials at 0/5 trusted and Consumer & Retail still at 2/5 trusted.
+- Day 17 audit (2026-04-13): [`./archive/planning/2026-03/mvp-day-17-2026-04-13.md`](./archive/planning/2026-03/mvp-day-17-2026-04-13.md)
+- Current conclusion: the Day 14-16 calibration window remained failed, and Day 17 regressed further. The run delivered 33/35 with a Consumer & Retail underfill, only 128 retained candidates, 0 writeup drops, 0 strong-tier drops, and just 14/33 trusted Tier 1/2 selections (42.4%). Expansion remains blocked by retrieval thinness first, then ranking and source mix in the healthier lanes.

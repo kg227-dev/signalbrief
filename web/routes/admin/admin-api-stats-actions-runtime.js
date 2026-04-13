@@ -252,7 +252,7 @@ function buildAdminStatsPayload({
   return {
     summary,
     health,
-    runs: runsForTable.slice(0, 10),
+    runs: runsForTable.filter(r => Number(r.users_served || 0) > 0).slice(0, 10),
     per_user: perUser,
     roster,
     engagement,

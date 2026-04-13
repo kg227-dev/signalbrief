@@ -68,8 +68,9 @@ function buildSummaryPayload({
     projected_7d_deliveries: Math.max(0, Number(projected.projected_deliveries || 0)),
     projected_7d_active_users: Math.max(0, Number(projected.active_users || 0)),
     projected_7d_projection_basis: projected.projection_basis || null,
-    projected_7d_historical_avg_users_per_run: projected.historical_avg_users_per_run ?? null,
     projected_7d_historical_avg_cost_per_run: Number.isFinite(hist.avg_cost_per_run) ? parseFloat(hist.avg_cost_per_run.toFixed(5)) : null,
+    projected_7d_historical_avg_perplexity_per_run: Number.isFinite(hist.avg_perplexity_per_run) ? parseFloat(hist.avg_perplexity_per_run.toFixed(5)) : null,
+    projected_7d_historical_avg_claude_per_user: Number.isFinite(hist.avg_claude_per_user) ? parseFloat(hist.avg_claude_per_user.toFixed(5)) : null,
     projected_7d_historical_sample_size: Number.isFinite(hist.sample_size) ? hist.sample_size : null,
   };
 }

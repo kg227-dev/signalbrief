@@ -5160,12 +5160,13 @@ async function load(silent = false) {
       const basis = summary.projected_7d_projection_basis;
       const avgCost = summary.projected_7d_historical_avg_cost_per_run;
       const sampleSize = summary.projected_7d_historical_sample_size;
-      const avgUsers = summary.projected_7d_historical_avg_users_per_run;
+      const avgPerplexity = summary.projected_7d_historical_avg_perplexity_per_run;
+      const avgClaudePerUser = summary.projected_7d_historical_avg_claude_per_user;
       let basisNote;
-      if (basis === "historical_30d") {
-        basisNote = `historical avg ${fmt$(avgCost)}/run · ${sampleSize}d sample`;
-      } else if (basis === "degraded_user_count") {
-        basisNote = `scaled — roster grew vs historical avg (${avgUsers ? avgUsers.toFixed(1) : "?"} users/run baseline)`;
+      if (basis === "historical_30d" && avgPerplexity != null) {
+        basisNote = `${fmt$(avgPerplexity)}/run (fetch) + ${fmt$(avgClaudePerUser)}/user (claude) · ${sampleSize}-run sample`;
+      } else if (basis === "historical_30d") {
+        basisNote = `historical avg ${fmt$(avgCost)}/run · ${sampleSize}-run sample`;
       } else {
         basisNote = "fallback estimate";
       }

@@ -139,15 +139,26 @@ function buildHistoricalAvgCostPerRun(runs, { nowParts, days = 30 } = {}) {
   }
   const endKey = buildEtDateKeyFromParts(parts, 0);
   const startKey = buildEtDateKeyFromParts(parts, -(days - 1));
+  // Only delivery runs (users_served > 0) have representative costs.
+  // Zero-delivery passes have $0 cost and 0 users — including them deflates
+  // avg_users_per_run toward 0, causing user-dynamics scaling to explode.
   const windowRuns = filterRunsWithinEtWindow(runs, startKey, endKey)
-    .filter((run) => isScheduledRunRecord(run));
+    .filter((run) => isScheduledRunRecord(run) && Number(run.users_served || 0) > 0);
 
-  if (windowRuns.length === 0) return { avg_cost_per_run: 0, avg_users_per_run: 0, sample_size: 0 };
+  if (windowRuns.length === 0) return { avg_cost_per_run: 0, avg_perplexity_per_run: 0, avg_claude_per_user: 0, avg_users_per_run: 0, sample_size: 0 };
 
   const totalCost = windowRuns.reduce((s, r) => s + (r.total_cost_usd || 0), 0);
   const totalUsers = windowRuns.reduce((s, r) => s + (r.users_served || 0), 0);
+  const totalPerplexity = windowRuns.reduce((s, r) => s + (r.perplexity_cost_usd || 0), 0);
+  // Claude cost per user: sum(claude_cost / users_served) across runs, then avg
+  const totalClaudePerUser = windowRuns.reduce((s, r) => {
+    const u = Number(r.users_served || 1);
+    return s + (r.claude_cost_usd || 0) / u;
+  }, 0);
   return {
     avg_cost_per_run: parseFloat((totalCost / windowRuns.length).toFixed(5)),
+    avg_perplexity_per_run: parseFloat((totalPerplexity / windowRuns.length).toFixed(5)),
+    avg_claude_per_user: parseFloat((totalClaudePerUser / windowRuns.length).toFixed(5)),
     avg_users_per_run: parseFloat((totalUsers / windowRuns.length).toFixed(4)),
     sample_size: windowRuns.length,
   };
@@ -165,26 +176,21 @@ function buildProjectedWindowCostSummary({
   const standardTopics = configTopics.map((topic) => topic?.tag).filter(Boolean);
   const useHistorical = historicalAvg && Number(historicalAvg.sample_size || 0) >= 5;
 
+  // Split model: Perplexity is fixed per run; Claude scales per user.
+  // projected_slot_cost = avg_perplexity_per_run + avg_claude_per_user × slot_users
+  // This handles roster growth correctly — adding users doesn't multiply Perplexity cost.
+  const avgPerplexityPerRun = useHistorical ? toFiniteNumber(historicalAvg.avg_perplexity_per_run, 0) : 0;
+  const avgClaudePerUser = useHistorical ? toFiniteNumber(historicalAvg.avg_claude_per_user, 0) : 0;
+
   let totalCost = 0;
   let projectedDeliveries = 0;
-  let anySlotDegraded = false;
-
-  const avgUsersPerRun = useHistorical ? toFiniteNumber(historicalAvg.avg_users_per_run, 0) : 0;
 
   const projectedRuns = slots.map((slot) => {
     const users = Array.isArray(slot.users) ? slot.users : [];
     const itemCount = 5;
     let estimatedCost;
-    let slotDegraded = false;
     if (useHistorical) {
-      const baseCost = toFiniteNumber(historicalAvg.avg_cost_per_run, 0);
-      if (avgUsersPerRun > 0 && users.length > 2 * avgUsersPerRun) {
-        estimatedCost = baseCost * (users.length / avgUsersPerRun);
-        slotDegraded = true;
-        anySlotDegraded = true;
-      } else {
-        estimatedCost = baseCost;
-      }
+      estimatedCost = avgPerplexityPerRun + avgClaudePerUser * users.length;
     } else {
       const estimate = fallbackEstimateDigestCost({
         topics: standardTopics,
@@ -199,18 +205,10 @@ function buildProjectedWindowCostSummary({
       user_count: users.length,
       item_count: itemCount,
       estimated_cost_usd: parseFloat(estimatedCost.toFixed(5)),
-      ...(slotDegraded ? { degraded_user_count: true } : {}),
     };
   });
 
-  let projectionBasis;
-  if (!useHistorical) {
-    projectionBasis = "fallback_estimate";
-  } else if (anySlotDegraded) {
-    projectionBasis = "degraded_user_count";
-  } else {
-    projectionBasis = "historical_30d";
-  }
+  const projectionBasis = useHistorical ? "historical_30d" : "fallback_estimate";
 
   return {
     days: Math.max(1, Number(days || 7)),
@@ -220,7 +218,8 @@ function buildProjectedWindowCostSummary({
     total_cost: parseFloat(totalCost.toFixed(4)),
     projected_runs: projectedRuns,
     projection_basis: projectionBasis,
-    historical_avg_users_per_run: useHistorical ? avgUsersPerRun : null,
+    historical_avg_perplexity_per_run: useHistorical ? avgPerplexityPerRun : null,
+    historical_avg_claude_per_user: useHistorical ? avgClaudePerUser : null,
   };
 }
 

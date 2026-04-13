@@ -416,7 +416,7 @@ function computeProjectionCorrected(runs, nowParts) {
 
   const historical30d = runs.filter((r) => {
     const d = String(r.date || "").trim();
-    return d >= startKey && d <= endKey && isScheduledRunRecord(r);
+    return d >= startKey && d <= endKey && isScheduledRunRecord(r) && Number(r.users_served || 0) > 0;
   });
 
   const sampleSize = historical30d.length;

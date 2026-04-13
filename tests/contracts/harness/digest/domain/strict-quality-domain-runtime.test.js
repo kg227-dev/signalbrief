@@ -214,6 +214,34 @@ function makeItem(url, headline, overrides = {}) {
 }
 
 {
+  const minimumViableSoftFail = evaluateTopicBucketShipReady([
+    makeItem("https://example.com/soft-pass", "Soft-pass lead", {
+      _score: 0.92,
+      writeup_rejection_reasons: ["missing_lever"],
+    }),
+  ], {
+    configDigest: {
+      strict_quality: {
+        ship_ready: {
+          anchor_base_score: 8.5,
+          anchor_strategic_value: 0.8,
+        },
+      },
+    },
+    topicCandidates: [
+      makeItem("https://example.com/soft-pass", "Soft-pass lead", {
+        _score: 0.92,
+        writeup_rejection_reasons: ["missing_lever"],
+      }),
+    ],
+    maxItemsPerSourceDomain: 5,
+    nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+  });
+  assert.strictEqual(minimumViableSoftFail.pass, true);
+  assert.strictEqual(minimumViableSoftFail.reason, "bucket_ship_ready");
+}
+
+{
   const assembly = evaluateFinalDigestAssembly({
     TECHNOLOGY: [makeItem("https://example.com/tech", "Technology lead", {
       storyline_key: "shared-story",

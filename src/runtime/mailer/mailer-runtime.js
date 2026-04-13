@@ -34,7 +34,9 @@ const MAILER_RETRY_BASE_DELAY_MS = Math.max(100, readEnvNumber(["SIGNALBRIEF_MAI
 const MAILER_RETRY_MAX_DELAY_MS = Math.max(MAILER_RETRY_BASE_DELAY_MS, readEnvNumber(["SIGNALBRIEF_MAILER_RETRY_MAX_DELAY_MS"], 10_000));
 
 function getConfig() {
-  return loadConfig();
+  // Mail delivery credentials can be injected by the current process env during
+  // tests and operational overrides, so avoid serving a stale cached snapshot.
+  return loadConfig({ reload: true });
 }
 
 function getConfigKeys() {

@@ -342,6 +342,20 @@ function createDigestDataEnrichRuntime(deps) {
       degraded = true;
       degradation = extractionResult.degradation;
       providerFailureDetails.push(buildProviderFailureDetail(index, item, stages.extraction));
+      return {
+        item: buildFailedItem(
+          item,
+          policy,
+          stages,
+          stages.extraction.failure_reason || "provider_request_failed",
+          [stages.extraction.failure_reason || "provider_request_failed"],
+          null
+        ),
+        usage,
+        degraded,
+        degradation,
+        providerFailureDetails,
+      };
     }
     const extractionOutput = extractionResult.ok
       ? extractionResult.stageRecord.output
@@ -402,6 +416,7 @@ function createDigestDataEnrichRuntime(deps) {
         ? generationValidationResult.soft_failure_reasons
         : stages.generation.validator_reasons
     );
+    let repairValidationResult = null;
     stages.repair.attempted = repairType != null && policy.allowRepair === true;
     stages.repair.repair_type = repairType;
     if (stages.repair.attempted) {
@@ -431,7 +446,7 @@ function createDigestDataEnrichRuntime(deps) {
         degradation = degradation || repairResult.degradation;
         providerFailureDetails.push(buildProviderFailureDetail(index, item, stages.repair));
       }
-      const repairValidationResult = repairResult.validation && typeof repairResult.validation === "object"
+      repairValidationResult = repairResult.validation && typeof repairResult.validation === "object"
         ? repairResult.validation
         : null;
       const repairHardFail = repairValidationResult?.validation_tier === "hard_fail";
@@ -451,6 +466,31 @@ function createDigestDataEnrichRuntime(deps) {
           providerFailureDetails,
         };
       }
+    }
+
+    const hardInvalidWriteup = generationValidationResult?.validation_tier === "hard_fail"
+      || repairValidationResult?.validation_tier === "hard_fail";
+    if (hardInvalidWriteup) {
+      const failureStage = stages.repair.attempted ? stages.repair : stages.generation;
+      const rejectionReasons = Array.isArray(failureStage.hard_failure_reasons) && failureStage.hard_failure_reasons.length > 0
+        ? failureStage.hard_failure_reasons
+        : Array.isArray(failureStage.validator_reasons) && failureStage.validator_reasons.length > 0
+          ? failureStage.validator_reasons
+          : [failureStage.failure_reason || "validator_failure"];
+      return {
+        item: buildFailedItem(
+          item,
+          policy,
+          stages,
+          failureStage.failure_reason || "validator_failure",
+          rejectionReasons,
+          extractionOutput
+        ),
+        usage,
+        degraded,
+        degradation,
+        providerFailureDetails,
+      };
     }
 
     const fallbackReasons = Array.from(new Set([

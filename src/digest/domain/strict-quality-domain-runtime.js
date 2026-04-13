@@ -150,7 +150,6 @@ function evaluateWriteupStrength(item = {}) {
   const hasWriteup = String(item?.wim || "").trim().length > 0 && String(item?.wim_brief || "").trim().length > 0;
   const passed = hasWriteup
     && (status === "model_pass" || status === "repair_pass" || !status)
-    && mergedReasons.length === 0
     && validation?.ok === true;
   return {
     pass: passed,

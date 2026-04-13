@@ -372,10 +372,12 @@ function expandRunsByRecipient(runs) {
       continue;
     }
 
+    const perUserCost = parseFloat(((row.total_cost_usd || 0) / perUserRows.length).toFixed(5));
     for (const perUserRow of perUserRows) {
       expanded.push({
         ...row,
         users_served: 1,
+        total_cost_usd: perUserCost,
         per_user: [{ ...perUserRow }],
       });
     }

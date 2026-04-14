@@ -232,6 +232,7 @@ function buildFailedItem(item, policy, stages, failureReason, rejectionReasons, 
     wim_extraction: extractionOutput,
     extraction_output: extractionOutput,
     wim_output: null,
+    wim_output_present: false,
     failure_reason: failureReason,
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: parseFailureType,
@@ -267,6 +268,7 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
   const attemptedFallback = stages.fallback?.attempted === true;
   const fallbackUsed = status === "fallback_pass" || status === "deterministic_fallback_pass";
   const missingPrevented = extras.missingPrevented === true;
+  const wimContractSource = extras.wimContractSource || null;
   return {
     ...item,
     signal_shift: extractionOutput?.what_happened || null,
@@ -282,6 +284,7 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
     wim_extraction: extractionOutput,
     extraction_output: extractionOutput,
     wim_output: wimText,
+    wim_output_present: typeof wimText === "string" && wimText.trim().length > 0,
     failure_reason: null,
     repair_type: stages.repair.repair_type || null,
     parse_failure_type: null,
@@ -321,6 +324,7 @@ function buildPassedItem(item, policy, stages, extractionOutput, wimText, status
       first_pass_succeeded: status === "model_pass",
       fallback_used: fallbackUsed,
       missing_prevented: missingPrevented,
+      wim_contract_source: wimContractSource,
     },
   };
 }

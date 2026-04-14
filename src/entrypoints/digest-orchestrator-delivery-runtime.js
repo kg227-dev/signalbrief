@@ -277,6 +277,33 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         const deliveryItems = deliveryEligible
           ? sortDigestItemsByScoreDescending(applyDigestDepth(deliverySelection.items, depth))
           : [];
+        const WIM_LAST_RESORT = "A market development is shaping near-term decisions for operators in this space.";
+        if (deliveryEligible) {
+          const wimMissingItems = deliveryItems.filter((item) => !item?.wim || String(item.wim).trim().length === 0);
+          if (wimMissingItems.length > 0) {
+            log(`[wim_contract_violation] ${wimMissingItems.length} item(s) have null/blank WIM at delivery; applying last-resort text`);
+            wimMissingItems.forEach((item) => {
+              item.wim = WIM_LAST_RESORT;
+            });
+          }
+          deliveryDiagnostics.wim_contract_violations = wimMissingItems.length;
+          const wimFallbackUsedCount = deliveryItems.filter((item) =>
+            /fallback|deterministic/.test(String(item?.writeup_status || ""))
+          ).length;
+          const wimMissingPreventedCount = deliveryItems.filter((item) =>
+            item?.writeup_stage_diagnostics?.missing_prevented === true
+          ).length;
+          const wimOutputPresenceRate = deliveryItems.length > 0
+            ? deliveryItems.filter((item) => item?.wim_output_present === true).length / deliveryItems.length
+            : 1;
+          const wimAbsoluteFallbackCount = deliveryItems.filter((item) => item?.wim === WIM_LAST_RESORT).length;
+          Object.assign(deliveryDiagnostics, {
+            wim_fallback_used_count: wimFallbackUsedCount,
+            wim_missing_prevented_count: wimMissingPreventedCount,
+            wim_output_presence_rate: wimOutputPresenceRate,
+            wim_absolute_fallback_count: wimAbsoluteFallbackCount,
+          });
+        }
         digestQuality = deliveryEligible
           ? computeDigestQualityScore({
             items: deliveryItems,

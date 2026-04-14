@@ -69,6 +69,7 @@ function createDigestDataEnrichRuntime(deps) {
     structure: "market structure, channel leverage, and partnership choices",
     other: "operating priorities and strategic planning",
   });
+  const ABSOLUTE_FALLBACK_WIM = "A market development is shaping near-term decisions for operators in this space.";
 
   function cleanSentenceFragment(value, maxLength = 180) {
     return String(value || "")
@@ -100,15 +101,20 @@ function createDigestDataEnrichRuntime(deps) {
   }
 
   function buildDeterministicWim(item, extractionOutput) {
-    const extraction = extractionOutput || deriveFallbackExtraction(item);
-    const whatHappened = titleCase(extraction?.what_happened || item?.headline || item?.summary || "A material development emerged");
-    const mechanism = cleanSentenceFragment(extraction?.mechanism || item?.summary || "the reported change alters operating conditions");
-    const actor = cleanSentenceFragment(extraction?.who_it_impacts || deriveFallbackExtraction(item).who_it_impacts, 120) || "operators and planning teams";
-    const implicationType = deriveImplicationType(extraction, "");
-    const lever = IMPLICATION_FALLBACKS[implicationType] || IMPLICATION_FALLBACKS.other;
-    const firstSentence = `${whatHappened}, and ${mechanism || "the reported change alters operating conditions"}.`;
-    const secondSentence = `For ${actor}, this affects ${lever}.`;
-    return `${firstSentence} ${secondSentence}`.replace(/\s+/g, " ").trim();
+    try {
+      const extraction = extractionOutput || deriveFallbackExtraction(item);
+      const whatHappened = titleCase(extraction?.what_happened || item?.headline || item?.summary || "A material development emerged");
+      const mechanism = cleanSentenceFragment(extraction?.mechanism || item?.summary || "the reported change alters operating conditions");
+      const actor = cleanSentenceFragment(extraction?.who_it_impacts || deriveFallbackExtraction(item).who_it_impacts, 120) || "operators and planning teams";
+      const implicationType = deriveImplicationType(extraction, "");
+      const lever = IMPLICATION_FALLBACKS[implicationType] || IMPLICATION_FALLBACKS.other;
+      const firstSentence = `${whatHappened}, and ${mechanism || "the reported change alters operating conditions"}.`;
+      const secondSentence = `For ${actor}, this affects ${lever}.`;
+      const result = `${firstSentence} ${secondSentence}`.replace(/\s+/g, " ").trim();
+      return result || ABSOLUTE_FALLBACK_WIM;
+    } catch (_error) {
+      return ABSOLUTE_FALLBACK_WIM;
+    }
   }
 
   async function callAnthropic(prompt, model, maxTokens, providerPolicy) {
@@ -550,17 +556,28 @@ function createDigestDataEnrichRuntime(deps) {
 
     const deterministicWim = buildDeterministicWim(item, extractionOutput);
     stages.fallback.status = stages.fallback.status === "not_started" ? "failed" : stages.fallback.status;
-    stages.fallback.output = stages.fallback.output || { wim: deterministicWim };
-    if (deterministicWim) {
+    const finalWim = deterministicWim || ABSOLUTE_FALLBACK_WIM;
+    const wimUsedAbsoluteFallback = !deterministicWim;
+    stages.fallback.output = stages.fallback.output || { wim: finalWim };
+
+    // Ship through the deterministic fallback when the item still has recoverable context.
+    const hasMinimalItemData = Boolean(item?.headline || item?.summary || extractionOutput?.what_happened);
+    if (hasMinimalItemData) {
+      if (typeof log === "function" && finalWim.split(/[.!?]/).filter(Boolean).length < 2) {
+        log(`[wim_single_sentence] item ${index} shipped with 1-sentence WIM: ${String(item?.headline || "").slice(0, 60)}`);
+      }
       return {
         item: buildPassedItem(
           item,
           policy,
           stages,
           extractionOutput,
-          deterministicWim,
+          finalWim,
           "deterministic_fallback_pass",
-          { missingPrevented: true }
+          {
+            missingPrevented: true,
+            wimContractSource: wimUsedAbsoluteFallback ? "absolute_fallback" : "deterministic_fallback",
+          }
         ),
         usage,
         degraded,
@@ -569,6 +586,7 @@ function createDigestDataEnrichRuntime(deps) {
       };
     }
 
+    // True failure path: no recoverable item data survived generation, repair, or fallback.
     const failureStage = stages.fallback.attempted ? stages.fallback : (stages.repair.attempted ? stages.repair : stages.generation);
     const rejectionReasons = failureStage.failure_reason === "provider_parse_failure"
       ? ["provider_parse_failure"]

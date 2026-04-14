@@ -8,5 +8,5 @@ This path remains as a compatibility summary for tooling that still checks `docs
 
 ## Current MVP Validation Note
 
-- Day 17 audit (2026-04-13): [`./archive/planning/2026-03/mvp-day-17-2026-04-13.md`](./archive/planning/2026-03/mvp-day-17-2026-04-13.md)
-- Current conclusion: the Day 14-16 calibration window remained failed, and Day 17 regressed further. The run delivered 33/35 with a Consumer & Retail underfill, only 128 retained candidates, 0 writeup drops, 0 strong-tier drops, and just 14/33 trusted Tier 1/2 selections (42.4%). Expansion remains blocked by retrieval thinness first, then ranking and source mix in the healthier lanes.
+- Day 18 audit (2026-04-14): [`./archive/planning/2026-03/mvp-day-18-2026-04-14.md`](./archive/planning/2026-03/mvp-day-18-2026-04-14.md)
+- Current conclusion: Day 18 recovered to 35/35, 7/7 depth-healthy topics, and 30/35 trusted Tier 1/2 selections (85.7%), but expansion remains blocked. Two `validator_mismatch` drops reappeared and Industrials still finished only 2/5 trusted, so the next fixes stay on parser resilience first and trusted-first ranking second.

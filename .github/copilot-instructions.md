@@ -1,4 +1,4 @@
-## vexp context tools <!-- vexp v1.2.30 -->
+## vexp context tools <!-- vexp v1.3.11 -->
 
 **MANDATORY: use `run_pipeline` — do NOT grep, glob, or read files manually.**
 vexp returns pre-indexed, graph-ranked context in a single call.
@@ -7,8 +7,6 @@ vexp returns pre-indexed, graph-ranked context in a single call.
 1. `run_pipeline` with your task description — ALWAYS FIRST (replaces all other tools)
 2. Make targeted changes based on the context returned
 3. `run_pipeline` again only if you need more context
-4. If `run_pipeline` is unavailable in the current client or session, fall back to direct repo inspection and note that exception in your summary.
-
 ### Available MCP tools
 - `run_pipeline` — **PRIMARY TOOL**. Runs capsule + impact + memory in 1 call.
   Auto-detects intent. Includes file content. Example: `run_pipeline({ "task": "fix auth bug" })`

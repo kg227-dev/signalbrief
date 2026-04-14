@@ -762,6 +762,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
     return {
       enriched: finalSelected,
       finalSelectedByTopic: finalTopicBuckets,
+      reserveByTopic: reserves,
       failedByTopic,
       claudeUsage: aggregateUsage,
       degraded,

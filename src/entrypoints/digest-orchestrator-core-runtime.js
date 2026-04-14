@@ -648,6 +648,7 @@ async function main() {
   const {
     enriched,
     finalSelectedByTopic,
+    reserveByTopic: enrichedReserveByTopic,
     selectionDiagnostics: finalSelectionDiagnostics,
     claudeUsage,
     writeupDiagnostics,
@@ -746,6 +747,7 @@ async function main() {
       deliveryEventSource,
       claudeUsage,
       writeupDiagnostics,
+      reserveByTopic: enrichedReserveByTopic,
       engagementEvents,
       repetitionNote,
       runDiagnostics: {

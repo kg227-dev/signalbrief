@@ -1,6 +1,7 @@
 "use strict";
 
 const { sortDigestItemsByScoreDescending } = require("../digest/runtime/digest-item-ordering-runtime");
+const { runSignalQualityShadowGate } = require("../domains/signal-quality/signal-quality-gate");
 const {
   evaluateFinalDigestAssembly,
   resolveStrictQualityConfig,
@@ -141,6 +142,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
       runDiagnostics,
       repetitionNote,
       writeupDiagnostics,
+      reserveByTopic,
     } = params;
     const strictQualityConfig = resolveStrictQualityConfig(CONFIG.digest || {});
     const strictQualityEnabled = strictQualityConfig.enabled === true;
@@ -311,6 +313,14 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
             previous_items: previousDigestItems,
           })
           : candidateDigestQuality;
+        if (deliveryEligible) {
+          const { shadowDiagnostics } = runSignalQualityShadowGate(
+            deliveryItems,
+            reserveByTopic,
+            {}
+          );
+          Object.assign(deliveryDiagnostics, shadowDiagnostics);
+        }
         selectedSnapshotItems = buildDigestSnapshotItems(
           deliveryEligible ? deliveryItems : candidateDisplayItems,
           parseSourceDomain

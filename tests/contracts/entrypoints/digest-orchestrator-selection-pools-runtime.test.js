@@ -177,4 +177,25 @@ const unrelatedOfficial = {
   );
 }
 
+{
+  const topicItems = [
+    { tag: "INDUSTRIALS", url: "https://example.com/industrial-standard", headline: "Industrial standard", published_date: "2026-03-27T11:55:00.000Z", source_domain: "freightwaves.com", retrieval_origin: "broker_publisher_feed", source_type: "trade_specialist", source_tier: "standard", _score: 0.81 },
+    { tag: "INDUSTRIALS", url: "https://example.com/industrial-trusted", headline: "Industrial trusted", published_date: "2026-03-27T11:50:00.000Z", source_domain: "supplychaindive.com", retrieval_origin: "broker_publisher_feed", source_type: "trade_specialist", source_tier: "strong", _score: 0.70 },
+  ];
+  const topicSelection = selectTopicItemsWithFallback({
+    topicItems,
+    itemsPerTopic: 1,
+    maxItemsPerSourceDomain: 2,
+    maxDiscoveryPerTopic: 1,
+    nowMs,
+    trustedSelectionFloor: {
+      enabled: true,
+      minTrustedItemsPerTopic: 1,
+      activationStrongCandidateCount: 1,
+    },
+  });
+  assert.strictEqual(topicSelection.selected[0].url, "https://example.com/industrial-trusted");
+  assert.strictEqual(topicSelection.trustedFloor.standardOverrideMargin, 0.12);
+}
+
 process.stdout.write("[digest-orchestrator-selection-pools-runtime] all assertions passed\n");

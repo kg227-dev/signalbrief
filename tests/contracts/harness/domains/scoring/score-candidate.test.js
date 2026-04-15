@@ -203,5 +203,9 @@ assert.ok(
   Number(industrialWeakDomain._score_components.domain_penalty || 0) < 0,
   "Industrials weak domains should receive a topic-aware domain penalty"
 );
+assert.ok(
+  Number(industrialWeakDomain._score_components.domain_penalty || 0) <= -0.18,
+  "FreightWaves should carry a stronger Industrials domain penalty to protect trusted-first selection"
+);
 
 console.log("selector story-shape and domain penalties ✓");

@@ -49,7 +49,7 @@ const DEFAULT_SELECTOR_PENALTIES = Object.freeze({
   proceduralGovDomainPenalty: -0.08,
   topicDomainPenalties: Object.freeze({
     INDUSTRIALS: Object.freeze({
-      "freightwaves.com": -0.12,
+      "freightwaves.com": -0.18,
       "areadevelopment.com": -0.18,
     }),
   }),

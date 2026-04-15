@@ -370,6 +370,7 @@ function createDigestDataEnrichRuntime(deps) {
       ...candidate,
       mechanism: extractionOutput?.mechanism,
       what_happened: extractionOutput?.what_happened,
+      who_it_impacts: extractionOutput?.who_it_impacts,
       implication_type: deriveImplicationType(extractionOutput, candidate?.wim),
       candidate_tier: policy.candidateTier,
     });

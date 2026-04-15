@@ -152,6 +152,19 @@ function testWriteupValidation() {
   assert.strictEqual(highLevelButConcrete.validation_tier, "soft_fail");
   assert.strictEqual(highLevelButConcrete.minimum_viable_accept, true);
 
+  const actorAnchoredByExtraction = validateStrategicWriteup(
+    { headline: "BayCom hires 3 PacWest alums in a shift toward dealmaking", summary: "The lender is leaning further into business banking expansion." },
+    {
+      signal_shift: "BayCom is hiring a PacWest deal team",
+      implication_type: "competition",
+      mechanism: "the hires add origination and advisory capacity",
+      who_it_impacts: "regional bank operators",
+      wim: "BayCom's PacWest hiring push adds dealmaking capacity and raises competition for regional banking relationships.",
+    }
+  );
+  assert.strictEqual(actorAnchoredByExtraction.ok, true);
+  assert.ok(!actorAnchoredByExtraction.hard_failure_reasons.includes("missing_operational_anchor"));
+
   assert.strictEqual(deriveWimBrief("First sentence matters. Second sentence here."), "First sentence matters.");
 }
 

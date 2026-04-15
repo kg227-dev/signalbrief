@@ -351,6 +351,7 @@ function validateStrategicWriteup(item, candidate = {}) {
   const wim = stringOrNull(candidate?.wim);
   const wimBrief = stringOrNull(candidate?.wim_brief) || deriveWimBrief(wim);
   const mechanism = stringOrNull(candidate?.mechanism);
+  const whoItImpacts = stringOrNull(candidate?.who_it_impacts);
   const candidateTier = String(candidate?.candidate_tier || "").trim().toLowerCase();
   const headline = String(item?.headline || "");
   const summary = String(item?.summary || "");
@@ -387,7 +388,14 @@ function validateStrategicWriteup(item, candidate = {}) {
   const systemAnchor = SYSTEM_ANCHOR_PATTERN.test(plain);
   const quantAnchor = QUANT_ANCHOR_PATTERN.test(plain);
   const vagueActor = VAGUE_ACTOR_PATTERN.test(plain);
-  const hasActorOrSystemAnchor = systemAnchor || quantAnchor || (namedAnchor && !vagueActor);
+  const fallbackActorAnchor = Boolean(whoItImpacts)
+    && !VAGUE_ACTOR_PATTERN.test(String(whoItImpacts || ""))
+    && (
+      SYSTEM_ANCHOR_PATTERN.test(String(whoItImpacts || ""))
+      || hasNamedAnchor(String(whoItImpacts || ""))
+      || overlapRatio(String(whoItImpacts || ""), contextText) >= 0.15
+    );
+  const hasActorOrSystemAnchor = systemAnchor || quantAnchor || (namedAnchor && !vagueActor) || fallbackActorAnchor;
   const genericSignal = GENERIC_WIM_PATTERNS.some((pattern) => pattern.test(plain)) || REUSABLE_CATEGORY_PATTERN.test(plain);
   if (SELF_REJECTING_WIM_PATTERN.test(plain)) hardReasons.push("self_rejecting_wim");
   if (vagueActor && !namedAnchor && !systemAnchor) softReasons.push("vague_actor");

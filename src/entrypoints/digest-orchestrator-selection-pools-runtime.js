@@ -107,6 +107,17 @@ function getTrustedOverrideMargin(config = {}) {
   return Math.max(0, configured);
 }
 
+function getTopicAwareTrustedOverrideMargin(config = {}, topicTag = "") {
+  const normalizedTag = String(topicTag || "").trim().toUpperCase();
+  const topicMargins = config?.topicOverrideMargins && typeof config.topicOverrideMargins === "object"
+    ? config.topicOverrideMargins
+    : {};
+  const configuredTopicMargin = Number(topicMargins[normalizedTag]);
+  if (Number.isFinite(configuredTopicMargin)) return Math.max(0, configuredTopicMargin);
+  if (normalizedTag === "INDUSTRIALS") return Math.max(0.12, getTrustedOverrideMargin(config));
+  return getTrustedOverrideMargin(config);
+}
+
 function suppressOfficialsByCluster(topicItems) {
   const items = Array.isArray(topicItems) ? topicItems : [];
   const clusters = new Map();
@@ -174,6 +185,7 @@ function selectTopicItemsWithFallback(params = {}) {
   const targetCount = Math.max(1, Number(itemsPerTopic || 5));
   const perSourceCap = Math.max(1, Number(maxItemsPerSourceDomain || 2));
   const discoveryCap = Math.max(0, Number(maxDiscoveryPerTopic ?? 1));
+  const topicTag = String(Array.isArray(topicItems) && topicItems[0]?.tag ? topicItems[0].tag : "").trim().toUpperCase();
   const pools = buildTopicFallbackPools(topicItems, nowMs, {
     clusterOfficialSuppression: clusterOfficialSuppression === true,
   });
@@ -201,7 +213,7 @@ function selectTopicItemsWithFallback(params = {}) {
       && minTrustedItems > 0,
     minTrustedItemsPerTopic: minTrustedItems,
     activationStrongCandidateCount,
-    standardOverrideMargin: getTrustedOverrideMargin(trustedFloorConfig),
+    standardOverrideMargin: getTopicAwareTrustedOverrideMargin(trustedFloorConfig, topicTag),
     candidate_count: freshSelectablePool.length,
     trusted_candidate_count: trustedCandidateCount,
   };

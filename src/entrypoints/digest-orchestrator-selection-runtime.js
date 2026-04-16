@@ -117,7 +117,54 @@ function capThinExpansionCandidates(items = [], maxShare = 0.4) {
 
 function canSwapCandidateIntoTopic(candidate, selectedItems = [], replaceIndex, policy = {}) {
   const remaining = (Array.isArray(selectedItems) ? selectedItems : []).filter((_, index) => index !== replaceIndex);
-  return !getBackfillRejectionReason(candidate, remaining, policy);
+  const rejectionReason = getBackfillRejectionReason(candidate, remaining, policy);
+  if (!rejectionReason) return true;
+  if (!String(rejectionReason).startsWith("selection_source_cap")) return false;
+  if (!isTrustedSourceTier(candidate)) return false;
+  if (policy.allowTrustedSourceCapOverflow !== true) return false;
+
+  const state = buildTopicSelectionState(remaining);
+  const perSourceCap = Math.max(1, Number(policy.maxItemsPerSourceDomain || 2));
+  const sourceDomain = String(candidate?.source_domain || candidate?.source || "unknown").trim().toLowerCase();
+  const sourceDomainCount = Number(state.domainCounts[sourceDomain] || 0);
+  if (sourceDomainCount !== perSourceCap) return false;
+
+  const replaced = Array.isArray(selectedItems) ? selectedItems[replaceIndex] : null;
+  if (!replaced) return false;
+  const replacedTrusted = isTrustedSourceTier(replaced);
+  const replacedSourceType = String(replaced?.source_type || "").trim().toLowerCase();
+  const replacedLowSignalOfficial = replaced?._low_signal_procedural === true
+    || (replacedSourceType === "primary_official" && replaced?.procedural_notice === true);
+  if (!replacedLowSignalOfficial && replacedTrusted) return false;
+
+  const scoreTolerance = Number(policy.trustedSourceCapOverflowScoreTolerance);
+  const allowedTolerance = Number.isFinite(scoreTolerance) ? Math.max(0, scoreTolerance) : 0.1;
+  return getSelectionScore(candidate) >= (getSelectionScore(replaced) - allowedTolerance);
+}
+
+function findWeakestTrustedUpgradeIndex(items = []) {
+  let weakestIndex = -1;
+  let weakestPriority = Infinity;
+  let weakestScore = Infinity;
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!isTrustedSourceTier(item)) continue;
+    const sourceType = String(item?.source_type || "").trim().toLowerCase();
+    const upgradePriority = item?._low_signal_procedural === true
+      || (sourceType === "primary_official" && item?.procedural_notice === true)
+      ? 0
+      : sourceType === "primary_official"
+        ? 1
+        : 2;
+    if (upgradePriority >= 2) continue;
+    const normalizedScore = getSelectionScore(item);
+    if (upgradePriority < weakestPriority || (upgradePriority === weakestPriority && normalizedScore < weakestScore)) {
+      weakestPriority = upgradePriority;
+      weakestScore = normalizedScore;
+      weakestIndex = index;
+    }
+  }
+  return weakestIndex;
 }
 
 function applyPrimaryTrustGuardrail(params = {}) {
@@ -145,7 +192,10 @@ function applyPrimaryTrustGuardrail(params = {}) {
   while (countTrustedSourceTier(topicAcceptedItems) < desiredTrusted && strongReserve.length > 0) {
     const weakestIndex = findWeakestNonTrustedIndex(topicAcceptedItems);
     if (weakestIndex === -1) break;
-    const replacementIndex = strongReserve.findIndex((candidate) => canSwapCandidateIntoTopic(candidate, topicAcceptedItems, weakestIndex, policy));
+    const replacementIndex = strongReserve.findIndex((candidate) => canSwapCandidateIntoTopic(candidate, topicAcceptedItems, weakestIndex, {
+      ...policy,
+      allowTrustedSourceCapOverflow: true,
+    }));
     if (replacementIndex === -1) break;
     diagnostics.triggered = true;
     diagnostics.swaps_attempted += 1;
@@ -160,6 +210,33 @@ function applyPrimaryTrustGuardrail(params = {}) {
     diagnostics.swaps_completed += 1;
   }
 
+  while (strongReserve.length > 0) {
+    let weakestIndex = findWeakestNonTrustedIndex(topicAcceptedItems);
+    if (weakestIndex === -1) weakestIndex = findWeakestTrustedUpgradeIndex(topicAcceptedItems);
+    if (weakestIndex === -1) break;
+    const weakestSelected = topicAcceptedItems[weakestIndex];
+    const replacementIndex = strongReserve.findIndex((candidate) =>
+      canSwapCandidateIntoTopic(candidate, topicAcceptedItems, weakestIndex, {
+        ...policy,
+        allowTrustedSourceCapOverflow: true,
+      })
+      && getSelectionScore(candidate) >= (getSelectionScore(weakestSelected) - 0.1)
+    );
+    if (replacementIndex === -1) break;
+    diagnostics.triggered = true;
+    diagnostics.swaps_attempted += 1;
+    const replacement = strongReserve.splice(replacementIndex, 1)[0];
+    const replaced = topicAcceptedItems[weakestIndex];
+    replacement._selection_stage = `${replacement._selection_stage || "reserve"}_guardrail_swap`;
+    replacement._guardrail_swap = {
+      replaced_url: String(replaced?.url || "").trim() || null,
+      replaced_score: Number(getSelectionScore(replaced) || 0),
+      source_cap_overflow_allowed: true,
+    };
+    topicAcceptedItems.splice(weakestIndex, 1, replacement);
+    diagnostics.swaps_completed += 1;
+  }
+
   const selectedUrls = new Set(topicAcceptedItems.map((item) => String(item?.url || "").trim()).filter(Boolean));
   const remainingStrongReserve = strongReserve.filter((candidate) => !selectedUrls.has(String(candidate?.url || "").trim()));
   for (let index = 0; index < topicAcceptedItems.length; index += 1) {
@@ -167,7 +244,10 @@ function applyPrimaryTrustGuardrail(params = {}) {
     if (isTrustedSourceTier(selectedItem)) continue;
     const betterTrusted = remainingStrongReserve.find((candidate) =>
       getSelectionScore(candidate) > getSelectionScore(selectedItem)
-      && canSwapCandidateIntoTopic(candidate, topicAcceptedItems, index, policy)
+      && canSwapCandidateIntoTopic(candidate, topicAcceptedItems, index, {
+        ...policy,
+        allowTrustedSourceCapOverflow: true,
+      })
     );
     if (!betterTrusted) continue;
       selectedItem._better_trusted_available = {

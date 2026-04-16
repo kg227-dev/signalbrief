@@ -311,6 +311,199 @@ async function run() {
     failed++;
   }
 
+  // Test 8: trust guardrail can exceed source cap by one to replace a weaker standard slot with a trusted reserve item
+  try {
+    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps({
+      CONFIG: {
+        topics: [{ tag: "TECHNOLOGY" }],
+        digest: {
+          crossDayDedupDays: 3,
+          maxItemsPerTag: 5,
+          maxItemsPerSourceDomain: 3,
+          trustGuardrail: {
+            minTrustedItemsPerTopic: 4,
+            aspirationalTrustedItemsPerTopic: 4,
+          },
+        },
+      },
+    }));
+    const result = await runtime.selectForEnrichment({
+      allItems: [
+        {
+          ...itemAgedHours(1, "TECHNOLOGY", "https://tech.example.com/std-1"),
+          headline: "Standard but higher raw score",
+          source_domain: "std.example.com",
+          source_type: "reported_media",
+          source_tier: "standard",
+          _score: 0.95,
+        },
+        {
+          ...itemAgedHours(2, "TECHNOLOGY", "https://tech.example.com/trusted-1"),
+          headline: "Trusted 1",
+          source_domain: "ars.example.com",
+          source_type: "reported_media",
+          source_tier: "strong",
+          _score: 0.92,
+        },
+        {
+          ...itemAgedHours(3, "TECHNOLOGY", "https://tech.example.com/trusted-2"),
+          headline: "Trusted 2",
+          source_domain: "ars.example.com",
+          source_type: "reported_media",
+          source_tier: "strong",
+          _score: 0.91,
+        },
+        {
+          ...itemAgedHours(4, "TECHNOLOGY", "https://tech.example.com/trusted-3"),
+          headline: "Trusted 3",
+          source_domain: "ars.example.com",
+          source_type: "reported_media",
+          source_tier: "strong",
+          _score: 0.90,
+        },
+        {
+          ...itemAgedHours(5, "TECHNOLOGY", "https://tech.example.com/trusted-4"),
+          headline: "Trusted 4",
+          source_domain: "ars.example.com",
+          source_type: "reported_media",
+          source_tier: "strong",
+          _score: 0.86,
+        },
+        {
+          ...itemAgedHours(6, "TECHNOLOGY", "https://tech.example.com/std-2"),
+          headline: "Standard filler",
+          source_domain: "filler.example.com",
+          source_type: "reported_media",
+          source_tier: "standard",
+          _score: 0.54,
+        },
+        {
+          ...itemAgedHours(7, "TECHNOLOGY", "https://tech.example.com/trusted-5"),
+          headline: "Trusted 5",
+          source_domain: "wired.example.com",
+          source_type: "reported_media",
+          source_tier: "strong",
+          _score: 0.85,
+        },
+      ],
+      selectionTarget: 5,
+      customTags: [],
+      tagPriority: { technology: 1 },
+      runMode: "scheduled",
+      digestDateKey: "2026-03-25",
+      dueUsersCount: 1,
+      standardFetchCallsPlanned: 1,
+    });
+    assert.strictEqual(result.selected.length, 5);
+    assert.strictEqual(result.selected.filter((item) => item.source_tier === "strong").length, 5);
+    assert.ok(result.selected.some((item) => item.url === "https://tech.example.com/trusted-4"));
+    assert.ok(result.selected.some((item) => item.url === "https://tech.example.com/trusted-5"));
+    assert.ok(!result.selected.some((item) => item.url === "https://tech.example.com/std-1"));
+    console.log("✓ Test 8: guardrail upgrades a standard slot with capped trusted reserve");
+    passed++;
+  } catch (e) {
+    console.error("✗ Test 8:", e.message);
+    failed++;
+  }
+
+  // Test 9: trust guardrail can replace a low-signal official trusted item with a better trusted reserve item
+  try {
+    const runtime = createDigestOrchestratorSelectionRuntime(makeDeps({
+      CONFIG: {
+        topics: [{ tag: "INDUSTRIALS" }],
+        digest: {
+          crossDayDedupDays: 3,
+          maxItemsPerTag: 5,
+          maxItemsPerSourceDomain: 3,
+          trustGuardrail: {
+            minTrustedItemsPerTopic: 4,
+            aspirationalTrustedItemsPerTopic: 4,
+          },
+        },
+      },
+    }));
+    const result = await runtime.selectForEnrichment({
+      allItems: [
+        {
+          ...itemAgedHours(1, "INDUSTRIALS", "https://industrial.example.com/trusted-1"),
+          headline: "Supply chain trusted 1",
+          source_domain: "supply.example.com",
+          source_type: "trade_specialist",
+          source_tier: "strong",
+          _score: 0.93,
+        },
+        {
+          ...itemAgedHours(2, "INDUSTRIALS", "https://industrial.example.com/trusted-2"),
+          headline: "Supply chain trusted 2",
+          source_domain: "supply.example.com",
+          source_type: "trade_specialist",
+          source_tier: "strong",
+          _score: 0.92,
+        },
+        {
+          ...itemAgedHours(3, "INDUSTRIALS", "https://industrial.example.com/trusted-3"),
+          headline: "Supply chain trusted 3",
+          source_domain: "supply.example.com",
+          source_type: "trade_specialist",
+          source_tier: "strong",
+          _score: 0.91,
+        },
+        {
+          ...itemAgedHours(4, "INDUSTRIALS", "https://industrial.example.com/trusted-4"),
+          headline: "Supply chain trusted 4",
+          source_domain: "supply.example.com",
+          source_type: "trade_specialist",
+          source_tier: "strong",
+          _score: 0.87,
+        },
+        {
+          ...itemAgedHours(5, "INDUSTRIALS", "https://industrial.example.com/official"),
+          headline: "Notice of rulemaking for industrial tariff cost recovery",
+          summary: "The rule changes pricing and compliance costs for factory operators.",
+          source_domain: "federalregister.gov",
+          source_type: "primary_official",
+          source_tier: "premium",
+          procedural_notice: true,
+          procedural_notice_has_strategic_shift: true,
+          _score: 0.84,
+        },
+        {
+          ...itemAgedHours(6, "INDUSTRIALS", "https://industrial.example.com/std-1"),
+          headline: "Industrial standard filler",
+          source_domain: "filler.example.com",
+          source_type: "reported_media",
+          source_tier: "standard",
+          _score: 0.83,
+        },
+        {
+          ...itemAgedHours(7, "INDUSTRIALS", "https://industrial.example.com/trusted-5"),
+          headline: "Supply chain trusted 5",
+          source_domain: "manufacturing.example.com",
+          source_type: "trade_specialist",
+          source_tier: "strong",
+          _score: 0.86,
+        },
+      ],
+      selectionTarget: 5,
+      customTags: [],
+      tagPriority: { industrials: 1 },
+      runMode: "scheduled",
+      digestDateKey: "2026-03-25",
+      dueUsersCount: 1,
+      standardFetchCallsPlanned: 1,
+    });
+    assert.strictEqual(result.selected.length, 5);
+    assert.strictEqual(result.selected.filter((item) => item.source_tier === "strong").length, 5);
+    assert.ok(result.selected.some((item) => item.url === "https://industrial.example.com/trusted-4"));
+    assert.ok(result.selected.some((item) => item.url === "https://industrial.example.com/trusted-5"));
+    assert.ok(!result.selected.some((item) => item.url === "https://industrial.example.com/official"));
+    console.log("✓ Test 9: guardrail upgrades out low-signal official trusted slots");
+    passed++;
+  } catch (e) {
+    console.error("✗ Test 9:", e.message);
+    failed++;
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

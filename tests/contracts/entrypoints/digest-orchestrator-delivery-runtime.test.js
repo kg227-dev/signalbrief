@@ -55,6 +55,7 @@ function makeStrictItem(tag, headline, url, overrides = {}) {
 (async () => {
   const sentEmailOrders = [];
   const sentQuickScanRows = [];
+  const sentEmailItems = [];
   const snapshotOrders = [];
   const recordPayloads = [];
   const qualityOrders = [];
@@ -185,6 +186,7 @@ function makeStrictItem(tag, headline, url, overrides = {}) {
     generateLeadSubjectLine: async () => ({ subject: "Subject", usage: {} }),
     generateEditorialNote: async () => ({ note: "", usage: {} }),
     buildEmail: (items, _dateStr, quickScanRows) => {
+      sentEmailItems.push(items);
       sentEmailOrders.push(items.map((item) => item.headline));
       sentQuickScanRows.push(quickScanRows);
       return "<html></html>";
@@ -325,6 +327,14 @@ function makeStrictItem(tag, headline, url, overrides = {}) {
   assert.ok(
     sentQuickScanRows[0].includes("Beyond detection — Middle scored item"),
     "email quick scan rows should preserve em dash headlines"
+  );
+  assert.ok(
+    Array.isArray(sentEmailItems[0]) && sentEmailItems[0][0]?.wim,
+    "delivery runtime should ensure delivered items include why-it-matters text"
+  );
+  assert.ok(
+    !sentEmailItems[0][0].wim.includes("A market development is shaping near-term decisions for operators in this space."),
+    "delivery runtime should avoid the absolute generic last-resort sentence"
   );
   assert.strictEqual(sentRecord.selected_count, 5);
   assert.strictEqual(sentRecord.available_count, 5);

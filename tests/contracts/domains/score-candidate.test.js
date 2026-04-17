@@ -88,4 +88,55 @@ assert.ok(
   "topic-aware weak domains should receive a negative domain penalty"
 );
 
+const technologyFalsePositive = scoreCandidate({
+  headline: "Florida surgeon charged with killing man after removing liver instead of spleen",
+  summary: "A criminal case against a surgeon triggered a hospital review after the wrong organ was removed.",
+  source_domain: "arstechnica.com",
+  source_type: "reported_media",
+  source_tier: "strong",
+  retrieval_origin: "broker_publisher_feed",
+  published_date: "2026-04-11T10:00:00.000Z",
+  tag: "TECHNOLOGY",
+  novelty_score: 0.8,
+  topic_fit: 0.9,
+}, { nowMs });
+assert.ok(
+  Number(technologyFalsePositive._score_components.story_shape_penalty || 0) <= -0.3,
+  "obvious medical-crime false positives should be heavily penalized in technology"
+);
+
+const energyFalsePositive = scoreCandidate({
+  headline: "New 3D map of Universe could solve dark energy mystery",
+  summary: "Cosmologists said a new map of the universe may reshape theory on dark energy over time.",
+  source_domain: "arstechnica.com",
+  source_type: "reported_media",
+  source_tier: "strong",
+  retrieval_origin: "broker_publisher_feed",
+  published_date: "2026-04-11T10:00:00.000Z",
+  tag: "ENERGY",
+  novelty_score: 0.8,
+  topic_fit: 0.9,
+}, { nowMs });
+assert.ok(
+  Number(energyFalsePositive._score_components.story_shape_penalty || 0) <= -0.4,
+  "astronomy stories should be heavily penalized when tagged as energy"
+);
+
+const industrialOfficialFalsePositive = scoreCandidate({
+  headline: "Drug Supply Chain Security Act Law and Policies",
+  summary: "FDA guidance on the Drug Supply Chain Security Act requires pharmaceutical manufacturers and distributors to implement serialization.",
+  source_domain: "fda.gov",
+  source_type: "primary_official",
+  source_tier: "premium",
+  retrieval_origin: "broker_official",
+  published_date: "2026-04-11T10:00:00.000Z",
+  tag: "INDUSTRIALS",
+  novelty_score: 0.8,
+  topic_fit: 0.9,
+}, { nowMs });
+assert.ok(
+  Number(industrialOfficialFalsePositive._score_components.story_shape_penalty || 0) <= -0.3,
+  "pharma official guidance should be heavily penalized when tagged as industrials"
+);
+
 process.stdout.write("[score-candidate] all assertions passed\n");

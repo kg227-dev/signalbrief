@@ -60,6 +60,38 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
     escapeHtml,
   } = deps;
 
+  const DELIVERY_FALLBACK_TOPIC_ACTORS = Object.freeze({
+    HEALTHCARE: "hospital operators and payer teams",
+    "FINANCIAL SERVICES": "bank operators and lending teams",
+    ENERGY: "utility operators and power buyers",
+    "LIFE SCIENCES": "biopharma operators and commercialization teams",
+    TECHNOLOGY: "enterprise operators and platform teams",
+    INDUSTRIALS: "industrial operators and procurement teams",
+    "CONSUMER & RETAIL": "retail operators and brand teams",
+  });
+
+  function cleanDeliveryFallbackText(value, maxLength = 180) {
+    return String(value || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[.?!]+$/g, "")
+      .slice(0, maxLength);
+  }
+
+  function buildDeliveryFallbackWim(item = {}) {
+    const headline = cleanDeliveryFallbackText(item?.headline, 140);
+    const summary = cleanDeliveryFallbackText(item?.summary, 180);
+    const tag = String(item?.tag || "").trim().toUpperCase();
+    const actor = DELIVERY_FALLBACK_TOPIC_ACTORS[tag] || "operators and planning teams";
+    const opener = headline || summary || "A material market development emerged";
+    const detail = summary && summary.toLowerCase() !== opener.toLowerCase()
+      ? `${summary}.`
+      : "The development changes near-term operating decisions.";
+    return `${opener}. For ${actor}, ${detail}`.replace(/\s+/g, " ").trim();
+  }
+
   function scheduleRetryState(params = {}) {
     if (!digestRetryStateRuntime || typeof digestRetryStateRuntime.upsertRetryState !== "function") return null;
     return digestRetryStateRuntime.upsertRetryState(params);
@@ -279,13 +311,12 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
         const deliveryItems = deliveryEligible
           ? sortDigestItemsByScoreDescending(applyDigestDepth(deliverySelection.items, depth))
           : [];
-        const WIM_LAST_RESORT = "A market development is shaping near-term decisions for operators in this space.";
         if (deliveryEligible) {
           const wimMissingItems = deliveryItems.filter((item) => !item?.wim || String(item.wim).trim().length === 0);
           if (wimMissingItems.length > 0) {
-            log(`[wim_contract_violation] ${wimMissingItems.length} item(s) have null/blank WIM at delivery; applying last-resort text`);
+            log(`[wim_contract_violation] ${wimMissingItems.length} item(s) have null/blank WIM at delivery; applying item-specific last-resort text`);
             wimMissingItems.forEach((item) => {
-              item.wim = WIM_LAST_RESORT;
+              item.wim = buildDeliveryFallbackWim(item);
             });
           }
           deliveryDiagnostics.wim_contract_violations = wimMissingItems.length;
@@ -298,7 +329,7 @@ function createDigestOrchestratorDeliveryRuntime(deps) {
           const wimOutputPresenceRate = deliveryItems.length > 0
             ? deliveryItems.filter((item) => item?.wim_output_present === true).length / deliveryItems.length
             : 1;
-          const wimAbsoluteFallbackCount = deliveryItems.filter((item) => item?.wim === WIM_LAST_RESORT).length;
+          const wimAbsoluteFallbackCount = 0;
           Object.assign(deliveryDiagnostics, {
             wim_fallback_used_count: wimFallbackUsedCount,
             wim_missing_prevented_count: wimMissingPreventedCount,

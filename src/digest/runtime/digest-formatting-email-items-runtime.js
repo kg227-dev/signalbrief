@@ -34,8 +34,6 @@ function createDigestEmailItemsRuntime(deps) {
       });
   }
 
-  const EMAIL_FLAG_LABELS = { earnings: "Earnings", guidance: "Guidance", m_and_a: "Deal", regulatory: "Regulatory", leadership: "Leadership", ipo: "IPO" };
-
   function renderEmailSourceBadge(tier) {
     if (tier === "premium") return " · <span style=\"font-size:11px;color:#1d4ed8;font-weight:600;\">Primary</span>";
     if (tier === "strong") return " · <span style=\"font-size:11px;color:#15803d;font-weight:600;\">Verified</span>";
@@ -75,11 +73,6 @@ function createDigestEmailItemsRuntime(deps) {
     })() : "";
 
     // Content flag chips (muted text, before headline)
-    const knownFlags = (item.content_flags || []).filter((f) => EMAIL_FLAG_LABELS[f]);
-    const flagsHtml = knownFlags.length
-      ? `<div style="margin-bottom:8px;">${knownFlags.map((f) => `<span style="font-size:11px;font-weight:600;color:#6B7280;background:#F3F4F6;padding:2px 7px;border-radius:100px;margin-right:4px;">${EMAIL_FLAG_LABELS[f]}</span>`).join("")}</div>`
-      : "";
-
     const bodyText = String(item.wim || "").trim();
     const bodyHtml = bodyText
       ? `<div style="font-size:15px;color:#111827;line-height:1.65;margin-bottom:12px;">${escapeHtml(decodeHtmlEntities(bodyText))}</div>`
@@ -103,7 +96,6 @@ function createDigestEmailItemsRuntime(deps) {
             <td style="text-align:right;vertical-align:middle;padding:0;white-space:nowrap;">${scoreHtml}</td>
           </tr>
         </table>
-        ${flagsHtml}
         <a href="${trackedLinkUrl}" style="text-decoration:none;color:inherit;">
           <div style="font-size:20px;font-weight:700;color:#111827;line-height:1.3;letter-spacing:-0.01em;margin-bottom:12px;font-family:'Playfair Display',Georgia,serif;">${escapeHtml(decodeHtmlEntities(item.headline))}</div>
         </a>

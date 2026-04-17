@@ -40,6 +40,7 @@ assert.ok(html.includes("Why it matters."), "email item should render wim when p
 assert.ok(!html.includes("Summary text."), "email item should not render raw summary when wim is present");
 assert.ok(!html.includes("Why included:"), "email item should not render why_shown text");
 assert.ok(!html.includes("Lower confidence"), "email item should not render lower-confidence badges in the active MVP email path");
+assert.ok(!html.includes("Deal"), "email item should not render generic content-flag chips in the active MVP email path");
 
 // deep mode should only render the validated why-it-matters block
 const noWimHtml = emailItemsRuntime.renderDigestItemHtml({
@@ -88,3 +89,14 @@ const safetyFallbackHtml = emailItemsRuntime.renderDigestItemHtml({
   url: "https://example.com/fda-warning",
 }, 0, { depth: "headline_plus_why" });
 assert.ok(!safetyFallbackHtml.includes("targeted safety or enforcement notice"), "email item should not render safety-notice fallback copy");
+
+const noFlagChipHtml = emailItemsRuntime.renderDigestItemHtml({
+  tag: "LIFE SCIENCES",
+  headline: "Daiichi Sankyo explores consumer-health sale",
+  wim: "The asset sale shifts capital toward higher-margin oncology programs and narrows management focus.",
+  source: "fiercepharma.com",
+  url: "https://example.com/deal",
+  content_flags: ["m_and_a", "guidance", "regulatory"],
+}, 0, { depth: "headline_plus_why" });
+assert.ok(!noFlagChipHtml.includes("Regulatory"), "email item should suppress content-flag chips even when flags are present");
+assert.ok(!noFlagChipHtml.includes("Guidance"), "email item should suppress generic guidance chips");

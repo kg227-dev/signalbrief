@@ -63,6 +63,9 @@ const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety
 const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(commentary|analysis|feature)\b|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|excerpt from|reporter goes up against)\b/i;
 const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b|vision pro|steam link|offline dictation|dictation app|continuous glucose|glucose monitor|vibe coding|rooting for|blaming everything|users are mastering|social app|creator culture|meme)\b/i;
 const TECH_STRATEGIC_PATTERN = /\b(ai security|cybersecurity|ransomware|data breach|platform policy|antitrust|supreme court|scotus|isp|piracy|chip|semiconductor|compute|data centers?|capital allocation|funding round|venture fund|ai infrastructure|open[- ]source model|enterprise ai|procurement|model safety|frontier model|regulator|regulation)\b/i;
+const TECH_FALSE_POSITIVE_PATTERN = /\b(surgeon|liver|spleen|patient|medical examiner|charged with killing|hospital worker|autopsy)\b/i;
+const ENERGY_FALSE_POSITIVE_PATTERN = /\b(dark energy|3d map of universe|universe|cosmolog(?:y|ists?)|astronom(?:y|ers?)|galax(?:y|ies)|cosmic)\b/i;
+const INDUSTRIALS_FALSE_POSITIVE_PATTERN = /\b(drug supply chain security act|pharma|pharmaceutical|biotech|peptide|drug compounding|advisory committee)\b/i;
 const PROCEDURAL_NOTICE_PATTERN = /\b(notice of|combined notice|notice announcing|informal settlement conference|guidance documents published|federal register|notice of filing|notice of conference|meeting notice|availability of guidance|guidance for industry|filing(?:s)? received)\b/i;
 const STRATEGIC_SHIFT_PATTERN = /\b(enforcement|penalt(?:y|ies)|deadline|effective date|timeline|within \d+ (?:days|weeks|months)|cost|costs|margin|margins|capex|pricing|price|rate increase|fee|fees|competition|competitive|market share|buyer leverage|seller leverage|capacity|throughput|supply|demand|tariff|capital|procurement)\b/i;
 const GOV_NOTICE_DOMAIN_PATTERN = /\b(federalregister\.gov|ferc\.gov|fda\.gov|sec\.gov|cms\.gov|justice\.gov)\b/i;
@@ -279,6 +282,19 @@ function computeQualityAdjustment(item, opts = {}) {
   if (topicTag === "TECHNOLOGY") {
     if (TECH_NOISE_PATTERN.test(combined)) storyShapePenalty -= 0.24;
     if (TECH_STRATEGIC_PATTERN.test(combined)) adjustment += 0.06;
+    if (TECH_FALSE_POSITIVE_PATTERN.test(combined) && !TECH_STRATEGIC_PATTERN.test(combined)) {
+      storyShapePenalty -= 0.34;
+    }
+  }
+
+  if (topicTag === "ENERGY" && ENERGY_FALSE_POSITIVE_PATTERN.test(combined)) {
+    storyShapePenalty -= 0.42;
+  }
+
+  if (topicTag === "INDUSTRIALS"
+      && sourceDomain === "fda.gov"
+      && INDUSTRIALS_FALSE_POSITIVE_PATTERN.test(combined)) {
+    storyShapePenalty -= 0.34;
   }
 
   if ((sourceType === "reported_media" || sourceType === "trade_specialist")

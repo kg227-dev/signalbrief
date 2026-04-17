@@ -53,6 +53,65 @@ function resolveEffectiveSourceCap(paramScoringConfig, configDigest) {
   return Math.max(1, Math.trunc(configured));
 }
 
+const SOURCE_CAP_OVERFLOW_TOPICS = new Set([
+  "TECHNOLOGY",
+  "CONSUMER & RETAIL",
+  "ENERGY",
+]);
+
+const TRADE_FIRST_TOPICS = new Set([
+  "INDUSTRIALS",
+  "LIFE SCIENCES",
+  "ENERGY",
+]);
+
+function getTopicAwareSourceCapOverflowMargin(topicTag = "") {
+  const normalizedTag = String(topicTag || "").trim().toUpperCase();
+  if (normalizedTag === "TECHNOLOGY" || normalizedTag === "CONSUMER & RETAIL") return 0.04;
+  if (normalizedTag === "ENERGY") return 0.06;
+  return 0.08;
+}
+
+function getUpgradePriorityForTopic(item, topicTag = "") {
+  const normalizedTag = String(topicTag || "").trim().toUpperCase();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const tier = normalizeSourceTier(item);
+  if (item?._low_signal_procedural === true
+      || (sourceType === "primary_official" && item?.procedural_notice === true)) {
+    return 0;
+  }
+  if (TRADE_FIRST_TOPICS.has(normalizedTag) && sourceType === "primary_official") return 1;
+  if (tier != null && tier >= 3) return 2;
+  if (normalizedTag === "TECHNOLOGY" || normalizedTag === "CONSUMER & RETAIL") {
+    if (sourceType === "analysis_blog" || sourceType === "aggregator_republisher" || sourceType === "corporate_pr") return 2;
+  }
+  return 3;
+}
+
+function candidateOutranksSelectedForTopic(candidate, selectedItem, topicTag = "") {
+  const normalizedTag = String(topicTag || "").trim().toUpperCase();
+  const candidateScore = getSelectionScore(candidate);
+  const selectedScore = getSelectionScore(selectedItem);
+  const scoreMargin = candidateScore - selectedScore;
+  const candidateType = String(candidate?.source_type || "").trim().toLowerCase();
+  const selectedType = String(selectedItem?.source_type || "").trim().toLowerCase();
+  const candidateTier = normalizeSourceTier(candidate);
+  const selectedTier = normalizeSourceTier(selectedItem);
+
+  if (getUpgradePriorityForTopic(selectedItem, normalizedTag) <= 1) {
+    return scoreMargin >= -0.02;
+  }
+  if (selectedTier != null && candidateTier != null && candidateTier < selectedTier) {
+    return scoreMargin >= -0.03;
+  }
+  if (TRADE_FIRST_TOPICS.has(normalizedTag)
+      && (candidateType === "trade_specialist" || candidateType === "reported_media")
+      && selectedType === "primary_official") {
+    return scoreMargin >= -0.02;
+  }
+  return scoreMargin >= getTopicAwareSourceCapOverflowMargin(normalizedTag);
+}
+
 function findWeakestNonTrustedIndex(items = []) {
   let weakestIndex = -1;
   let weakestPriority = Infinity;
@@ -115,7 +174,7 @@ function capThinExpansionCandidates(items = [], maxShare = 0.4) {
   };
 }
 
-function canSwapCandidateIntoTopic(candidate, selectedItems = [], replaceIndex, policy = {}) {
+function canSwapCandidateIntoTopic(candidate, selectedItems = [], replaceIndex, policy = {}, topicTag = "") {
   const remaining = (Array.isArray(selectedItems) ? selectedItems : []).filter((_, index) => index !== replaceIndex);
   const rejectionReason = getBackfillRejectionReason(candidate, remaining, policy);
   if (!rejectionReason) return true;
@@ -131,32 +190,27 @@ function canSwapCandidateIntoTopic(candidate, selectedItems = [], replaceIndex, 
 
   const replaced = Array.isArray(selectedItems) ? selectedItems[replaceIndex] : null;
   if (!replaced) return false;
+  const normalizedTag = String(topicTag || replaced?.tag || candidate?.tag || "").trim().toUpperCase();
   const replacedTrusted = isTrustedSourceTier(replaced);
   const replacedSourceType = String(replaced?.source_type || "").trim().toLowerCase();
   const replacedLowSignalOfficial = replaced?._low_signal_procedural === true
     || (replacedSourceType === "primary_official" && replaced?.procedural_notice === true);
-  if (!replacedLowSignalOfficial && replacedTrusted) return false;
+  if (!replacedLowSignalOfficial && replacedTrusted && !SOURCE_CAP_OVERFLOW_TOPICS.has(normalizedTag)) return false;
 
   const scoreTolerance = Number(policy.trustedSourceCapOverflowScoreTolerance);
   const allowedTolerance = Number.isFinite(scoreTolerance) ? Math.max(0, scoreTolerance) : 0.1;
+  if (!candidateOutranksSelectedForTopic(candidate, replaced, normalizedTag)) return false;
   return getSelectionScore(candidate) >= (getSelectionScore(replaced) - allowedTolerance);
 }
 
-function findWeakestTrustedUpgradeIndex(items = []) {
+function findWeakestTrustedUpgradeIndex(items = [], topicTag = "") {
   let weakestIndex = -1;
   let weakestPriority = Infinity;
   let weakestScore = Infinity;
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
-    if (!isTrustedSourceTier(item)) continue;
-    const sourceType = String(item?.source_type || "").trim().toLowerCase();
-    const upgradePriority = item?._low_signal_procedural === true
-      || (sourceType === "primary_official" && item?.procedural_notice === true)
-      ? 0
-      : sourceType === "primary_official"
-        ? 1
-        : 2;
-    if (upgradePriority >= 2) continue;
+    const upgradePriority = getUpgradePriorityForTopic(item, topicTag);
+    if (upgradePriority >= 3) continue;
     const normalizedScore = getSelectionScore(item);
     if (upgradePriority < weakestPriority || (upgradePriority === weakestPriority && normalizedScore < weakestScore)) {
       weakestPriority = upgradePriority;
@@ -181,6 +235,12 @@ function applyPrimaryTrustGuardrail(params = {}) {
     better_trusted_available_details: [],
   };
   const strongReserve = Array.isArray(reserveState.strongReserve) ? reserveState.strongReserve.slice() : [];
+  const topicTag = String(
+    params.topicTag
+      || topicAcceptedItems[0]?.tag
+      || params.topicItems?.[0]?.tag
+      || ""
+  ).trim().toUpperCase();
 
   const desiredTrusted = Math.min(
     topicAcceptedItems.length,
@@ -195,7 +255,7 @@ function applyPrimaryTrustGuardrail(params = {}) {
     const replacementIndex = strongReserve.findIndex((candidate) => canSwapCandidateIntoTopic(candidate, topicAcceptedItems, weakestIndex, {
       ...policy,
       allowTrustedSourceCapOverflow: true,
-    }));
+    }, topicTag));
     if (replacementIndex === -1) break;
     diagnostics.triggered = true;
     diagnostics.swaps_attempted += 1;
@@ -212,15 +272,15 @@ function applyPrimaryTrustGuardrail(params = {}) {
 
   while (strongReserve.length > 0) {
     let weakestIndex = findWeakestNonTrustedIndex(topicAcceptedItems);
-    if (weakestIndex === -1) weakestIndex = findWeakestTrustedUpgradeIndex(topicAcceptedItems);
+    if (weakestIndex === -1) weakestIndex = findWeakestTrustedUpgradeIndex(topicAcceptedItems, topicTag);
     if (weakestIndex === -1) break;
     const weakestSelected = topicAcceptedItems[weakestIndex];
     const replacementIndex = strongReserve.findIndex((candidate) =>
       canSwapCandidateIntoTopic(candidate, topicAcceptedItems, weakestIndex, {
         ...policy,
         allowTrustedSourceCapOverflow: true,
-      })
-      && getSelectionScore(candidate) >= (getSelectionScore(weakestSelected) - 0.1)
+      }, topicTag)
+      && candidateOutranksSelectedForTopic(candidate, weakestSelected, topicTag)
     );
     if (replacementIndex === -1) break;
     diagnostics.triggered = true;

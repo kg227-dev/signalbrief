@@ -268,6 +268,127 @@ assertModuleExports(() => runtime, TARGET_REL);
   assert.strictEqual(lowSignalOut.selected.length, 1);
   assert.strictEqual(lowSignalOut.selectionDiagnostics.topic_selection_audit[0].topic_health, "THIN");
 
+  function buildGuardrailRuntime() {
+    return createDigestOrchestratorSelectionRuntime({
+      CONFIG: {
+        digest: {
+          itemCount: 5,
+          crossDayDedupDays: 3,
+          minBackfillItemsAfterDedup: 3,
+          maxItemsPerSourceDomain: 3,
+          trustedSelectionFloor: {
+            enabled: true,
+            minTrustedItemsPerTopic: 4,
+            activationStrongCandidateCount: 1,
+          },
+          trustGuardrail: {
+            minTrustedItemsPerTopic: 4,
+            aspirationalTrustedItemsPerTopic: 5,
+          },
+        },
+      },
+      log: () => {},
+      createDigestPolicies: () => ({
+        rankingPolicy: { repeatPenalty: 0, minBaseScoreForFinal: 6.5 },
+        depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+      }),
+      dedupAgainstRecentArchives: (items) => ({ items: items.slice(), removed: 0, archive_days_used: 3, backfilled: 0 }),
+      buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+      loadRecentArchiveByDate: () => [],
+      buildRepeatHistory: () => new Map(),
+      filterItemsAgainstHistory: (items) => ({ items: items.slice(), suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+      buildRepetitionNote: () => "",
+      emitDigestIncident: async () => {},
+      articleAgeTooOld: () => false,
+      classifyStoryRelationship: () => "new",
+      loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+      editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+      isUrlExcluded: () => false,
+      isDomainSuppressed: () => false,
+      getPinsForDate: () => [],
+      annotateEditorialSignals: (items) => items.slice(),
+      buildStorylineCandidates: (items) => items.slice(),
+    });
+  }
+
+  function makeGuardrailItem(overrides = {}) {
+    return {
+      summary: "Operators are adjusting budgets and workflows around this development.",
+      published_date: "2026-03-27T10:00:00.000Z",
+      retrieval_origin: "broker_publisher_feed",
+      source_type: "trade_specialist",
+      source_tier: "strong",
+      novelty_score: 0.8,
+      topic_fit: 0.9,
+      ...overrides,
+    };
+  }
+
+  const industrialsRuntime = buildGuardrailRuntime();
+  const industrialsOut = await industrialsRuntime.selectForEnrichment({
+    allItems: [
+      makeGuardrailItem({ url: "https://example.com/ind-1", headline: "Ocean freight contracts steer shipper margins", tag: "INDUSTRIALS", source_domain: "supplychaindive.com", _score: 0.95 }),
+      makeGuardrailItem({ url: "https://example.com/ind-2", headline: "Factory automation budgets rise with component costs", tag: "INDUSTRIALS", source_domain: "manufacturingdive.com", _score: 0.93 }),
+      makeGuardrailItem({ url: "https://example.com/ind-3", headline: "Distribution reshoring raises warehouse demand", tag: "INDUSTRIALS", source_domain: "supplychaindive.com", _score: 0.91 }),
+      makeGuardrailItem({ url: "https://example.com/ind-4", headline: "Carrier procurement shifts after fuel surcharge reset", tag: "INDUSTRIALS", source_domain: "freightwaves.com", source_tier: "standard", _score: 0.90 }),
+      makeGuardrailItem({ url: "https://example.com/ind-official", headline: "Drug Supply Chain Security Act Law and Policies", tag: "INDUSTRIALS", source_domain: "fda.gov", source_type: "primary_official", retrieval_origin: "broker_official", source_tier: "premium", summary: "FDA guidance for pharmaceutical manufacturers and distributors.", _score: 0.89 }),
+      makeGuardrailItem({ url: "https://example.com/ind-reserve", headline: "J.B. Hunt resets trucking procurement strategy", tag: "INDUSTRIALS", source_domain: "freightwaves.com", _score: 0.88 }),
+      makeGuardrailItem({ url: "https://example.com/ind-reserve-2", headline: "NSC cargo mix changes warehouse planning", tag: "INDUSTRIALS", source_domain: "supplychaindive.com", published_date: "2026-03-26T03:00:00.000Z", _score: 0.87 }),
+    ],
+    selectionTarget: 5,
+    tagPriority: { industrials: 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 1,
+    nowMs,
+  });
+  assert.ok(!industrialsOut.selected.some((item) => item.url === "https://example.com/ind-official"));
+  assert.ok(industrialsOut.selected.some((item) => item.url === "https://example.com/ind-reserve"));
+
+  const technologyRuntime = buildGuardrailRuntime();
+  const technologyOut = await technologyRuntime.selectForEnrichment({
+    allItems: [
+      makeGuardrailItem({ url: "https://example.com/tech-1", headline: "Ars enterprise AI infra story 1", tag: "TECHNOLOGY", source_domain: "arstechnica.com", source_type: "reported_media", _score: 0.97 }),
+      makeGuardrailItem({ url: "https://example.com/tech-2", headline: "Ars enterprise AI infra story 2", tag: "TECHNOLOGY", source_domain: "arstechnica.com", source_type: "reported_media", _score: 0.96 }),
+      makeGuardrailItem({ url: "https://example.com/tech-3", headline: "Ars enterprise AI infra story 3", tag: "TECHNOLOGY", source_domain: "arstechnica.com", source_type: "reported_media", _score: 0.95 }),
+      makeGuardrailItem({ url: "https://example.com/tech-overflow", headline: "Ars enterprise AI infra story 4", tag: "TECHNOLOGY", source_domain: "arstechnica.com", source_type: "reported_media", _score: 0.94 }),
+      makeGuardrailItem({ url: "https://example.com/tech-weak", headline: "Lower-value platform trend story", tag: "TECHNOLOGY", source_domain: "wired.com", source_type: "reported_media", _score: 0.80 }),
+      makeGuardrailItem({ url: "https://example.com/tech-last", headline: "Another lower-value platform trend story", tag: "TECHNOLOGY", source_domain: "theverge.com", source_type: "reported_media", source_tier: "standard", _score: 0.78 }),
+    ],
+    selectionTarget: 5,
+    tagPriority: { technology: 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 1,
+    nowMs,
+  });
+  assert.ok(technologyOut.selected.some((item) => item.url === "https://example.com/tech-overflow"));
+  assert.strictEqual(technologyOut.selected.filter((item) => item.source_domain === "arstechnica.com").length, 4);
+
+  const lifeSciencesRuntime = buildGuardrailRuntime();
+  const lifeSciencesOut = await lifeSciencesRuntime.selectForEnrichment({
+    allItems: [
+      makeGuardrailItem({ url: "https://example.com/ls-1", headline: "Biotech funding slump reshapes startup runway", tag: "LIFE SCIENCES", source_domain: "fiercebiotech.com", _score: 0.95 }),
+      makeGuardrailItem({ url: "https://example.com/ls-2", headline: "Large-cap pharma unit sale redirects oncology capital", tag: "LIFE SCIENCES", source_domain: "fiercepharma.com", _score: 0.93 }),
+      makeGuardrailItem({ url: "https://example.com/ls-3", headline: "Cell therapy spinout takes Bristol assets", tag: "LIFE SCIENCES", source_domain: "biopharmadive.com", _score: 0.91 }),
+      makeGuardrailItem({ url: "https://example.com/ls-official", headline: "Drug Master Files (DMFs)", tag: "LIFE SCIENCES", source_domain: "fda.gov", source_type: "primary_official", retrieval_origin: "broker_official", source_tier: "premium", summary: "FDA filing documentation for drug master files.", _score: 0.90 }),
+      makeGuardrailItem({ url: "https://example.com/ls-weak", headline: "General biotech market tracker", tag: "LIFE SCIENCES", source_domain: "example.com", source_tier: "standard", _score: 0.82 }),
+      makeGuardrailItem({ url: "https://example.com/ls-reserve", headline: "Reverse merger advances cell therapy pipeline", tag: "LIFE SCIENCES", source_domain: "biopharmadive.com", _score: 0.89 }),
+      makeGuardrailItem({ url: "https://example.com/ls-reserve-2", headline: "Drug compounding startup raises follow-on round", tag: "LIFE SCIENCES", source_domain: "fiercebiotech.com", published_date: "2026-03-26T04:00:00.000Z", _score: 0.88 }),
+    ],
+    selectionTarget: 5,
+    tagPriority: { "life sciences": 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 1,
+    nowMs,
+  });
+  assert.ok(!lifeSciencesOut.selected.some((item) => item.url === "https://example.com/ls-official"));
+  assert.ok(lifeSciencesOut.selected.some((item) => item.url === "https://example.com/ls-reserve"));
+
   const failIncidents = [];
   const failRuntime = createDigestOrchestratorSelectionRuntime({
     CONFIG: { digest: { itemCount: 5, crossDayDedupDays: 3 } },

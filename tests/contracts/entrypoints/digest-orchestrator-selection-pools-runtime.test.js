@@ -221,7 +221,7 @@ const unrelatedOfficial = {
   );
   assert.strictEqual(appliedPenalty.applied, true, "same-domain penalty should apply when a competitor is close");
 
-  const topicSelection = selectTopicItemsV2({
+  const v2TopicSelection = selectTopicItemsV2({
     topicItems: v2TopicItems,
     itemsPerTopic: 2,
     maxDiscoveryPerTopic: 1,
@@ -229,12 +229,12 @@ const unrelatedOfficial = {
     sameDomainPenalty: { enabled: true, min_competitive_gap_for_bypass: 0.10, penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 } },
     sameDomainGuardrail: { enabled: false, max_per_topic: 3 },
   });
-  assert.strictEqual(topicSelection.selected.length, 2);
-  assert.strictEqual(topicSelection.selected[0].ranking_version, "v2");
+  assert.strictEqual(v2TopicSelection.selected.length, 2);
+  assert.strictEqual(v2TopicSelection.selected[0].ranking_version, "v2");
 
   const reserve = buildTopicReserveQueueV2({
-    pools: topicSelection.pools,
-    selectedItems: topicSelection.selected,
+    pools: v2TopicSelection.pools,
+    selectedItems: v2TopicSelection.selected,
     maxDiscoveryPerTopic: 1,
     commentaryCap: 1,
     sameDomainPenalty: { enabled: true, min_competitive_gap_for_bypass: 0.10, penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 } },

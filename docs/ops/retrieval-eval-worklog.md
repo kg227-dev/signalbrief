@@ -1,6 +1,6 @@
 # Retrieval Eval Worklog
 
-*Last reviewed: April 15, 2026*
+*Last reviewed: April 18, 2026*
 
 This is the live operator summary for retrieval-evaluation work. The full March 2026 historical log is archived under [`../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md`](../archive/planning/2026-03/retrieval-eval-worklog-2026-03.md).
 
@@ -16,21 +16,21 @@ Track the current retrieval-quality loop without mixing a large historical execu
 
 ## Current Working Conclusion
 
-As of April 15, 2026 (Day 19), the system is in the **second of three live calibration runs** after validator commit `f95130c83e7733a43a4c7dc011021d46f1cc02d2`. The latest audit is archived at [`../archive/planning/2026-03/mvp-day-19-2026-04-15.md`](../archive/planning/2026-03/mvp-day-19-2026-04-15.md).
+As of April 18, 2026 (Day 22), the three-run post-`f95130c83e7733a43a4c7dc011021d46f1cc02d2` calibration window has already completed, and the latest audit is archived at [`../archive/planning/2026-03/mvp-day-22-2026-04-18.md`](../archive/planning/2026-03/mvp-day-22-2026-04-18.md).
 
-**Current status - on track for expansion, but still blocked pending the third calibration run.**
-Day 19 delivered **35/35**, kept **7/7 topics** at **5/5**, held **7/7 topics** at **depth >=15**, and landed **29/35 trusted Tier 1/2 selections (82.9%)**. Together with Day 18's **30/35 (85.7%)**, the rolling Day 18-19 calibration view is **59/70 (84.3%)**, which is above both the **75% floor** and the ideal **80%** target.
+**Current status - still on track by the threshold metrics, but category expansion remains blocked.**
+The Day 18-20 calibration window was strong enough to support expansion: **91/105 trusted Tier 1/2 selections (86.7%)**, **2/107 writeup drops (1.9%)**, **1/95 strong-tier drops (1.1%)**, and **105/105 fulfillment**. The latest Day 22 run still cleared the core thresholds at **31/35 trusted (88.6%)**, **2/37 writeup drops (5.4%)**, **2/33 strong-tier drops (6.1%)**, and **35/35 fulfillment**, but it was not clean enough to remove the block.
 
-**Current status - writeup is healthy enough for launch.**
-Day 19 attempted **35** writeups, passed **14/35 (40.0%)** on the first try, recovered **21/21** repairs, dropped **0/35**, preserved **31/31** strong-tier attempts, posted a **0.0%** strong-tier drop rate, and recorded **no parse failures**. The remaining blocker is not validator fragility.
+**Current blocker - parser/validator relapse plus a renewed weak Industrials lane.**
+Day 22's primary diagnosis is **`parse_or_structured_output_failure`** with **2 `validator_mismatch` parse failures**, **2 hard fails**, and **2 dropped strong-tier writeups** across Healthcare and Technology. At the same time, **Industrials** regressed to **2/5 trusted**, which is materially worse than Day 20's **3/5** and Day 21's **4/5**.
 
-**Current blocker - ranking is still choosing weaker shapes despite healthy supply.**
-The run-level diagnosis is **`selection_ranking_failure`**. All **7 topics** were flagged with **`trusted_pool_available_but_not_selected`**, there were **21 missed-story flags**, and the weakest lane, **Industrials**, still finished only **3/5 trusted** while admitting a low-score Federal Register item.
+**Current ranking picture - mostly healthy, but not uniformly clean.**
+Technology, Financial Services, Healthcare, Life Sciences, and Energy all stayed at **5/5 trusted**, while **Consumer & Retail** remained acceptable at **4/5**. The remaining non-parser ranking issue is concentrated in **Industrials**, with a secondary cleanup need in **Consumer & Retail** where the audit still flags **`selection_prefers_weaker_story_shapes`**.
 
-**Current caution - minimum-viable accepts remain elevated.**
-Day 19 still shipped **26 minimum-viable accepts**, **23 soft fails**, and **0 hard fails**. That is acceptable during calibration, but it means the last-mile ranking and story-shape choices still need work before expansion is unlocked.
+**Current caution - minimum-viable recovery remains heavy.**
+Day 22 still relied on **30 minimum-viable accepts** and **31 soft fails**. That keeps the system above the operating floor, but it is not the profile to use for opening category expansion.
 
-The current readiness picture is materially better than the Day 17 regression. The validator path is now stable, fulfillment is stable, and trust is above target across the first two calibration runs. Category expansion should remain blocked until Day 20 confirms the same pattern and Industrials stops being the weakest quality lane.
+The correct read is that the calibration window succeeded, but the latest live run regressed. Expansion should stay blocked until the parser mismatch path is repaired and a new clean live run restores **0 parse failures**, **0 strong-tier drops**, and a healthier Industrials mix.
 
 ## Update Rules
 

@@ -15,10 +15,13 @@ const runtime = require(TARGET_PATH);
 assertModuleExports(() => runtime, TARGET_REL);
 
 const {
+  applyDynamicSourcePenalty,
   buildTopicReserveQueue,
+  buildTopicReserveQueueV2,
   getBackfillRejectionReason,
   resolveTrustedSelectionFloor,
   selectTopicItemsWithFallback,
+  selectTopicItemsV2,
   sortWithSourceTypePreference,
   suppressOfficialsByCluster,
 } = runtime;
@@ -196,6 +199,47 @@ const unrelatedOfficial = {
   });
   assert.strictEqual(topicSelection.selected[0].url, "https://example.com/industrial-trusted");
   assert.strictEqual(topicSelection.trustedFloor.standardOverrideMargin, 0.12);
+
+  const v2TopicItems = [
+    { url: "https://alpha.example.com/1", headline: "Alpha 1", published_date: "2026-03-27T11:55:00.000Z", source_domain: "alpha.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", final_rank_score: 0.91, strategic_value: 0.9, story_quality_score: 0.8, source_authority_score: 0.85, freshness_score: 0.9 },
+    { url: "https://alpha.example.com/2", headline: "Alpha 2", published_date: "2026-03-27T11:50:00.000Z", source_domain: "alpha.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", final_rank_score: 0.89, strategic_value: 0.88, story_quality_score: 0.79, source_authority_score: 0.84, freshness_score: 0.88 },
+    { url: "https://beta.example.com/1", headline: "Beta 1", published_date: "2026-03-27T11:49:00.000Z", source_domain: "beta.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", final_rank_score: 0.84, strategic_value: 0.84, story_quality_score: 0.78, source_authority_score: 0.83, freshness_score: 0.87 },
+  ];
+  const bypassedPenalty = applyDynamicSourcePenalty(
+    v2TopicItems[1],
+    v2TopicItems,
+    { domainCounts: { "alpha.example.com": 1 } },
+    { enabled: true, min_competitive_gap_for_bypass: 0.03, penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 } }
+  );
+  assert.strictEqual(bypassedPenalty.applied, false, "same-domain penalty should bypass when score gap is wide");
+
+  const appliedPenalty = applyDynamicSourcePenalty(
+    { ...v2TopicItems[1], final_rank_score: 0.86 },
+    [{ ...v2TopicItems[1], final_rank_score: 0.86 }, v2TopicItems[2]],
+    { domainCounts: { "alpha.example.com": 1 } },
+    { enabled: true, min_competitive_gap_for_bypass: 0.10, penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 } }
+  );
+  assert.strictEqual(appliedPenalty.applied, true, "same-domain penalty should apply when a competitor is close");
+
+  const topicSelection = selectTopicItemsV2({
+    topicItems: v2TopicItems,
+    itemsPerTopic: 2,
+    maxDiscoveryPerTopic: 1,
+    nowMs,
+    sameDomainPenalty: { enabled: true, min_competitive_gap_for_bypass: 0.10, penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 } },
+    sameDomainGuardrail: { enabled: false, max_per_topic: 3 },
+  });
+  assert.strictEqual(topicSelection.selected.length, 2);
+  assert.strictEqual(topicSelection.selected[0].ranking_version, "v2");
+
+  const reserve = buildTopicReserveQueueV2({
+    pools: topicSelection.pools,
+    selectedItems: topicSelection.selected,
+    maxDiscoveryPerTopic: 1,
+    commentaryCap: 1,
+    sameDomainPenalty: { enabled: true, min_competitive_gap_for_bypass: 0.10, penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 } },
+  });
+  assert.ok(Array.isArray(reserve.allReserve));
 }
 
 process.stdout.write("[digest-orchestrator-selection-pools-runtime] all assertions passed\n");

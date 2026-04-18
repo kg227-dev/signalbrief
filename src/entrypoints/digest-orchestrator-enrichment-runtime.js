@@ -118,6 +118,9 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
       trustGuardrailPolicy: writeupBackfillPolicy?.trustGuardrailPolicy && typeof writeupBackfillPolicy.trustGuardrailPolicy === "object"
         ? writeupBackfillPolicy.trustGuardrailPolicy
         : { minTrustedItemsPerTopic: 3, aspirationalTrustedItemsPerTopic: 4 },
+      rankingVersionByTopic: writeupBackfillPolicy?.rankingVersionByTopic && typeof writeupBackfillPolicy.rankingVersionByTopic === "object"
+        ? { ...writeupBackfillPolicy.rankingVersionByTopic }
+        : {},
       trustedFloor: writeupBackfillPolicy?.trustedFloor && typeof writeupBackfillPolicy.trustedFloor === "object"
         ? writeupBackfillPolicy.trustedFloor
         : { enabled: false, byTopic: {} },
@@ -371,6 +374,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
             getBackfillRejectionReason: resolveBackfillRejection,
             policy: {
               ...backfillPolicy,
+              rankingVersion: backfillPolicy.rankingVersionByTopic?.[topicTag] || "v1",
               allowStandardBackfill,
               trustedFloor: backfillPolicy.trustedFloor?.byTopic?.[topicTag] || { active: false },
             },
@@ -428,6 +432,7 @@ function createDigestOrchestratorEnrichmentRuntime(deps) {
           getBackfillRejectionReason: resolveBackfillRejection,
           policy: {
             ...backfillPolicy,
+            rankingVersion: backfillPolicy.rankingVersionByTopic?.[topicTag] || "v1",
             allowStandardBackfill: false,
             trustedFloor: backfillPolicy.trustedFloor?.byTopic?.[topicTag] || { active: false },
           },

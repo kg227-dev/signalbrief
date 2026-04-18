@@ -13,6 +13,8 @@ assertNodeSyntaxFile(TARGET_PATH);
 const runtime = require(TARGET_PATH);
 const {
   classifyProceduralNotice,
+  computeFinalRankScore,
+  computeStoryQualityScore,
   scoreCandidate,
 } = runtime;
 assertModuleExports(() => runtime, TARGET_REL);
@@ -138,5 +140,28 @@ assert.ok(
   Number(industrialOfficialFalsePositive._score_components.story_shape_penalty || 0) <= -0.3,
   "pharma official guidance should be heavily penalized when tagged as industrials"
 );
+
+const v2Candidate = {
+  headline: "Bank reprices warehouse lines after funding costs jump",
+  summary: "Lenders raised pricing and tightened terms, forcing fintech partners to reset unit economics.",
+  source_domain: "reuters.com",
+  source_type: "reported_media",
+  source_tier: 2,
+  retrieval_origin: "broker_publisher_feed",
+  strategic_value: 0.9,
+  originality_signal: 0.9,
+  cross_source_count: 2,
+  topic_fit: 0.9,
+  published_date: "2026-04-11T10:00:00.000Z",
+  novelty_score: 0.8,
+  content_flags: ["regulatory"],
+  entity_keys: ["bank"],
+};
+const storyQuality = computeStoryQualityScore(v2Candidate);
+const finalRank = computeFinalRankScore(v2Candidate, { nowMs });
+assert.ok(storyQuality.total > 0.7, `story quality should be explicit and strong, got ${storyQuality.total}`);
+assert.strictEqual(finalRank.components.strategic_value, 0.9);
+assert.strictEqual(finalRank.components.story_quality_score, storyQuality.total);
+assert.ok(finalRank.total <= 1 && finalRank.total >= 0, "final rank should clamp to [0,1]");
 
 process.stdout.write("[score-candidate] all assertions passed\n");

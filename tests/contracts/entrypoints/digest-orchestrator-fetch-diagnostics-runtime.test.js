@@ -249,7 +249,7 @@ function buildState(tag, priority, originalIndex) {
   assert.strictEqual(diagnostics.standard_topic_broker.enabled, true);
   assert.deepStrictEqual(diagnostics.standard_topic_broker.topic_diagnostics, [{ tag: "TECHNOLOGY", item_count: 1 }]);
   assert.strictEqual(diagnostics.topic_diagnostics.length, 1);
-  assert.strictEqual(diagnostics.topic_diagnostics[0].coverage_status, "covered");
+  assert.strictEqual(diagnostics.topic_diagnostics[0].coverage_status, "provider_limited_retrieval_failure");
   assert.strictEqual(diagnostics.topic_diagnostics[0].broker_item_count, 1);
 }
 

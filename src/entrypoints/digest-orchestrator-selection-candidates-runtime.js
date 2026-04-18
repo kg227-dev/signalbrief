@@ -70,16 +70,39 @@ function toSelectionAuditCandidate(item, extras = {}) {
     source_type_class: classifySourceTypeClass(item?.source_type),
     source_authority: Number.isFinite(Number(item?.source_authority)) ? Number(item.source_authority) : null,
     lane: String(item?.retrieval_origin || item?.retrieval_lane || ""),
+    ranking_version: String(item?.ranking_version || "").trim() || null,
     _score: item?._score ?? null,
     _score_components: item?._score_components ?? null,
+    final_rank_score: Number.isFinite(Number(item?.final_rank_score)) ? Number(item.final_rank_score) : null,
+    final_rank_components: item?.final_rank_components && typeof item.final_rank_components === "object"
+      ? { ...item.final_rank_components }
+      : null,
+    story_quality_score: Number.isFinite(Number(item?.story_quality_score)) ? Number(item.story_quality_score) : null,
+    story_quality_components: item?.story_quality_components && typeof item.story_quality_components === "object"
+      ? { ...item.story_quality_components }
+      : null,
+    source_authority_score: Number.isFinite(Number(item?.source_authority_score)) ? Number(item.source_authority_score) : null,
+    freshness_score: Number.isFinite(Number(item?.freshness_score)) ? Number(item.freshness_score) : null,
+    novelty_score: Number.isFinite(Number(item?.novelty_score)) ? Number(item.novelty_score) : null,
+    soft_penalties: item?.soft_penalties && typeof item.soft_penalties === "object"
+      ? JSON.parse(JSON.stringify(item.soft_penalties))
+      : null,
+    dynamic_source_penalty: Number.isFinite(Number(item?.dynamic_source_penalty)) ? Number(item.dynamic_source_penalty) : null,
+    tie_break_outcome: item?.tie_break_outcome || null,
+    cluster_rep_selected_by_final_rank_score: item?.cluster_rep_selected_by_final_rank_score === true,
     _story_relationship: item?._story_relationship ?? "new",
     storyline_key: String(item?.storyline_key || "").trim() || null,
     cross_source_count: Number.isFinite(Number(item?.cross_source_count)) ? Number(item.cross_source_count) : null,
+    cluster_size: Number.isFinite(Number(item?.cluster_size)) ? Number(item.cluster_size) : null,
+    cluster_density: Number.isFinite(Number(item?.cluster_density)) ? Number(item.cluster_density) : null,
+    cluster_score_variance: Number.isFinite(Number(item?.cluster_score_variance)) ? Number(item.cluster_score_variance) : null,
     published_at: String(item?.published_date || item?.published_at || item?.date || "") || null,
     freshness_hours: Number.isFinite(Number(extras?.freshness_hours))
       ? Number(Number(extras.freshness_hours).toFixed(2))
       : null,
     content_flags: Array.isArray(item?.content_flags) ? item.content_flags.slice() : [],
+    event_markers: Array.isArray(item?.event_markers) ? item.event_markers.slice() : [],
+    entity_keys: Array.isArray(item?.entity_keys) ? item.entity_keys.slice() : [],
     strategic_relevance: item?.strategic_relevance || null,
     strategic_relevance_reason: item?.strategic_relevance_reason
       ? String(item.strategic_relevance_reason).slice(0, 120)
@@ -100,6 +123,14 @@ function toSelectionAuditCandidate(item, extras = {}) {
       ? { ...item._guardrail_swap }
       : null,
     duplicate_of: item?.duplicate_of ? String(item.duplicate_of) : null,
+    v1_selected: item?.v1_selected === true,
+    v2_selected: item?.v2_selected === true,
+    selection_disagreement_reason: item?.selection_disagreement_reason || null,
+    v2_regret_flag: item?.v2_regret_flag === true,
+    v2_regret_reason: item?.v2_regret_reason || null,
+    top1_changed: item?.top1_changed === true,
+    kill_switch_triggered: item?.kill_switch_triggered === true,
+    kill_switch_reasons: Array.isArray(item?.kill_switch_reasons) ? item.kill_switch_reasons.slice() : [],
     ...extras,
   };
 }

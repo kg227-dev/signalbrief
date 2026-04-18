@@ -429,4 +429,88 @@ assertModuleExports(() => runtime, TARGET_REL);
     /No live items available after freshness and selection filters; digest aborted/
   );
   assert.deepStrictEqual(failIncidents, ["no-selectable-items"]);
+
+  const rankingIncidents = [];
+  const rankingRuntime = createDigestOrchestratorSelectionRuntime({
+    CONFIG: {
+      topics: [{ tag: "AI×TECH" }],
+      digest: {
+        itemCount: 5,
+        crossDayDedupDays: 3,
+        minBackfillItemsAfterDedup: 3,
+        maxItemsPerSourceDomain: 2,
+        ranking: {
+          primary_version: "v2",
+          shadow_version: "v1",
+          live_topic_tags: ["AI×TECH"],
+          same_domain_penalty: {
+            enabled: true,
+            min_competitive_gap_for_bypass: 0.10,
+            penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 },
+          },
+          same_domain_guardrail: {
+            enabled: false,
+            max_per_topic: 3,
+          },
+          kill_switch: {
+            enabled: true,
+            action: "fallback_to_v1",
+            thresholds: {
+              min_selection_overlap_pct: 0.40,
+              max_trusted_share_drop_pct: 20,
+              max_avg_final_rank_drop: 0.15,
+            },
+          },
+        },
+      },
+    },
+    log: () => {},
+    createDigestPolicies: () => ({
+      rankingPolicy: { repeatPenalty: 0, minBaseScoreForFinal: 6.5 },
+      depthPolicy: { minFilteredItems: 3, defaultItemCount: 5 },
+    }),
+    dedupAgainstRecentArchives: (items) => ({ items: items.slice(), removed: 0, archive_days_used: 3, backfilled: 0 }),
+    buildRecentRepeatIndex: () => ({ days: 3, urlKeys: new Set(), headlineKeys: new Set() }),
+    loadRecentArchiveByDate: () => [],
+    buildRepeatHistory: () => new Map(),
+    filterItemsAgainstHistory: (items) => ({ items: items.slice(), suppressedCount: 0, suppressedFrequentCount: 0, streaks: [] }),
+    buildRepetitionNote: () => "",
+    emitDigestIncident: async (type) => { rankingIncidents.push(type); },
+    articleAgeTooOld: () => false,
+    classifyStoryRelationship: () => "new",
+    loadEditorialOverrides: () => ({ pins: [], excludes: [], source_suppressions: [] }),
+    editorialOverridesPath: "/tmp/selection-runtime-test-editorial-overrides.json",
+    isUrlExcluded: () => false,
+    isDomainSuppressed: () => false,
+    getPinsForDate: () => [],
+    annotateEditorialSignals: (items) => items.slice(),
+    buildStorylineCandidates: (items) => items.slice(),
+  });
+
+  const rankingOut = await rankingRuntime.selectForEnrichment({
+    allItems: [
+      { url: "https://example.com/std1", headline: "Std 1", tag: "AI×TECH", published_date: "2026-03-27T11:55:00.000Z", source_domain: "std1.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", strategic_value: 0.95, source_authority: 0.45, final_rank_score: 0.95 },
+      { url: "https://example.com/std2", headline: "Std 2", tag: "AI×TECH", published_date: "2026-03-27T11:54:00.000Z", source_domain: "std2.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", strategic_value: 0.94, source_authority: 0.45 },
+      { url: "https://example.com/std3", headline: "Std 3", tag: "AI×TECH", published_date: "2026-03-27T11:53:00.000Z", source_domain: "std3.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "standard", strategic_value: 0.93, source_authority: 0.45 },
+      { url: "https://example.com/tr1", headline: "Trusted 1", tag: "AI×TECH", published_date: "2026-03-27T11:52:00.000Z", source_domain: "tr1.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", strategic_value: 0.70, source_authority: 0.9 },
+      { url: "https://example.com/tr2", headline: "Trusted 2", tag: "AI×TECH", published_date: "2026-03-27T11:51:00.000Z", source_domain: "tr2.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", strategic_value: 0.69, source_authority: 0.9 },
+      { url: "https://example.com/tr3", headline: "Trusted 3", tag: "AI×TECH", published_date: "2026-03-27T11:50:00.000Z", source_domain: "tr3.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", strategic_value: 0.68, source_authority: 0.9 },
+      { url: "https://example.com/tr4", headline: "Trusted 4", tag: "AI×TECH", published_date: "2026-03-27T11:49:00.000Z", source_domain: "tr4.example.com", retrieval_origin: "broker_publisher_feed", source_type: "reported_media", source_tier: "strong", strategic_value: 0.67, source_authority: 0.9 },
+    ],
+    selectionTarget: 5,
+    tagPriority: { "ai×tech": 1 },
+    runMode: "scheduled",
+    digestDateKey: "2026-03-27",
+    dueUsersCount: 1,
+    standardFetchCallsPlanned: 7,
+    nowMs,
+  });
+
+  assert.ok(
+    rankingOut.selectedByTopic["AI×TECH"].filter((item) => String(item?.source_tier || "").toLowerCase() !== "standard").length >= 4,
+    "kill switch should fall back to V1 trusted mix"
+  );
+  assert.strictEqual(rankingOut.selectionDiagnostics.topic_selection_audit[0].kill_switch_triggered, true);
+  assert.strictEqual(rankingOut.selectionDiagnostics.topic_selection_audit[0].ranking_primary_version, "v2");
+  assert.strictEqual(rankingOut.selectionDiagnostics.topic_selection_audit[0].ranking_live_version, "v1");
 })();

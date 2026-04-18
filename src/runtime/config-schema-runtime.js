@@ -147,6 +147,71 @@ function validateConfigSchema(config) {
     if (digest.lookbackHours != null) {
       expectPositiveInteger(errors, "digest.lookbackHours", digest.lookbackHours, { min: 1, max: 168 });
     }
+    if (digest.ranking != null && expectObject(errors, "digest.ranking", digest.ranking)) {
+      const ranking = digest.ranking;
+      if (ranking.primary_version != null) {
+        if (!["v1", "v2"].includes(String(ranking.primary_version))) {
+          pushError(errors, "digest.ranking.primary_version", "must be one of v1, v2");
+        }
+      }
+      if (ranking.shadow_version != null) {
+        if (!(ranking.shadow_version === null || ["v1", "v2"].includes(String(ranking.shadow_version)))) {
+          pushError(errors, "digest.ranking.shadow_version", "must be one of v1, v2, null");
+        }
+      }
+      if (ranking.live_topic_tags != null) {
+        if (!Array.isArray(ranking.live_topic_tags)) {
+          pushError(errors, "digest.ranking.live_topic_tags", "must be an array");
+        } else {
+          ranking.live_topic_tags.forEach((tag, idx) => {
+            if (!isNonEmptyString(tag)) pushError(errors, `digest.ranking.live_topic_tags[${idx}]`, "must be a non-empty string");
+          });
+        }
+      }
+      if (ranking.same_domain_penalty != null && expectObject(errors, "digest.ranking.same_domain_penalty", ranking.same_domain_penalty)) {
+        if (ranking.same_domain_penalty.enabled != null) {
+          expectBoolean(errors, "digest.ranking.same_domain_penalty.enabled", ranking.same_domain_penalty.enabled);
+        }
+        if (ranking.same_domain_penalty.min_competitive_gap_for_bypass != null) {
+          expectNumberRange(errors, "digest.ranking.same_domain_penalty.min_competitive_gap_for_bypass", ranking.same_domain_penalty.min_competitive_gap_for_bypass, { min: 0, max: 1 });
+        }
+        if (ranking.same_domain_penalty.penalties != null && expectObject(errors, "digest.ranking.same_domain_penalty.penalties", ranking.same_domain_penalty.penalties)) {
+          ["second", "third", "fourth_or_more"].forEach((field) => {
+            if (ranking.same_domain_penalty.penalties[field] != null) {
+              expectNumberRange(errors, `digest.ranking.same_domain_penalty.penalties.${field}`, ranking.same_domain_penalty.penalties[field], { min: 0, max: 1 });
+            }
+          });
+        }
+      }
+      if (ranking.same_domain_guardrail != null && expectObject(errors, "digest.ranking.same_domain_guardrail", ranking.same_domain_guardrail)) {
+        if (ranking.same_domain_guardrail.enabled != null) {
+          expectBoolean(errors, "digest.ranking.same_domain_guardrail.enabled", ranking.same_domain_guardrail.enabled);
+        }
+        if (ranking.same_domain_guardrail.max_per_topic != null) {
+          expectPositiveInteger(errors, "digest.ranking.same_domain_guardrail.max_per_topic", ranking.same_domain_guardrail.max_per_topic, { min: 1, max: 5 });
+        }
+      }
+      if (ranking.kill_switch != null && expectObject(errors, "digest.ranking.kill_switch", ranking.kill_switch)) {
+        if (ranking.kill_switch.enabled != null) {
+          expectBoolean(errors, "digest.ranking.kill_switch.enabled", ranking.kill_switch.enabled);
+        }
+        if (ranking.kill_switch.action != null && String(ranking.kill_switch.action) !== "fallback_to_v1") {
+          pushError(errors, "digest.ranking.kill_switch.action", "must be fallback_to_v1");
+        }
+        if (ranking.kill_switch.thresholds != null && expectObject(errors, "digest.ranking.kill_switch.thresholds", ranking.kill_switch.thresholds)) {
+          const thresholds = ranking.kill_switch.thresholds;
+          if (thresholds.min_selection_overlap_pct != null) {
+            expectNumberRange(errors, "digest.ranking.kill_switch.thresholds.min_selection_overlap_pct", thresholds.min_selection_overlap_pct, { min: 0, max: 1 });
+          }
+          if (thresholds.max_trusted_share_drop_pct != null) {
+            expectNumberRange(errors, "digest.ranking.kill_switch.thresholds.max_trusted_share_drop_pct", thresholds.max_trusted_share_drop_pct, { min: 0, max: 100 });
+          }
+          if (thresholds.max_avg_final_rank_drop != null) {
+            expectNumberRange(errors, "digest.ranking.kill_switch.thresholds.max_avg_final_rank_drop", thresholds.max_avg_final_rank_drop, { min: 0, max: 1 });
+          }
+        }
+      }
+    }
     if (digest.search_budget != null && expectObject(errors, "digest.search_budget", digest.search_budget)) {
       const searchBudget = digest.search_budget;
       if (searchBudget.scheduled != null && expectObject(errors, "digest.search_budget.scheduled", searchBudget.scheduled)) {

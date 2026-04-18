@@ -44,6 +44,37 @@
         "unknown": 0.2
       }
     },
+    "ranking": {
+      "primary_version": "v1",
+      "shadow_version": "v2",
+      "live_topic_tags": [
+        "AI×TECH",
+        "FINANCIAL SERVICES",
+        "LIFE SCIENCES"
+      ],
+      "same_domain_penalty": {
+        "enabled": true,
+        "min_competitive_gap_for_bypass": 0.1,
+        "penalties": {
+          "second": 0.03,
+          "third": 0.08,
+          "fourth_or_more": 0.15
+        }
+      },
+      "same_domain_guardrail": {
+        "enabled": false,
+        "max_per_topic": 3
+      },
+      "kill_switch": {
+        "enabled": true,
+        "action": "fallback_to_v1",
+        "thresholds": {
+          "min_selection_overlap_pct": 0.4,
+          "max_trusted_share_drop_pct": 20,
+          "max_avg_final_rank_drop": 0.15
+        }
+      }
+    },
     "classification": {
       "enabled": false,
       "concurrency": 8,

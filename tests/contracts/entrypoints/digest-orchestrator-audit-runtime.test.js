@@ -53,6 +53,8 @@ const baseDoc = buildDigestAuditDocument({
             source_tier: 1,
             lane: "broker_publisher_feed",
             _score: 0.91,
+            final_rank_score: 0.88,
+            ranking_version: "v2",
             selected: true,
           },
           {
@@ -62,10 +64,22 @@ const baseDoc = buildDigestAuditDocument({
             source_tier: 2,
             lane: "perplexity_discovery",
             _score: 0.62,
+            final_rank_score: 0.55,
             selected: false,
             selection_reason: "selection_not_selected",
           },
         ],
+        ranking_primary_version: "v2",
+        ranking_live_version: "v2",
+        ranking_shadow_version: "v1",
+        selection_overlap_pct: 60,
+        trusted_share_delta_pct: 20,
+        avg_final_rank_delta: 0.12,
+        top1_changed: true,
+        kill_switch_triggered: false,
+        kill_switch_reasons: [],
+        regret_flag_count: 1,
+        regret_reason_counts: { weaker_source: 1 },
       },
     ],
   },
@@ -84,6 +98,8 @@ const baseDoc = buildDigestAuditDocument({
 
 assert.strictEqual(baseDoc.summary.total_selected, 1);
 assert.strictEqual(baseDoc.topics.TECHNOLOGY.total_candidates, 2);
+assert.strictEqual(baseDoc.topics.TECHNOLOGY.selection_overlap_pct, 60);
+assert.strictEqual(baseDoc.topics.TECHNOLOGY.candidates[0].final_rank_score, 0.88);
 
 const mergedDoc = mergeTopicAuditDocument(
   {

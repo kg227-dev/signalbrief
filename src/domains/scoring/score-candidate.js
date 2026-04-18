@@ -55,6 +55,14 @@ const DEFAULT_SELECTOR_PENALTIES = Object.freeze({
   }),
 });
 
+const DEFAULT_FINAL_RANK_WEIGHTS = Object.freeze({
+  strategic_value: 0.35,
+  story_quality: 0.30,
+  source_authority: 0.15,
+  freshness: 0.10,
+  novelty: 0.10,
+});
+
 // Freshness: how many hours to treat as max age.
 // Items at 0h score 1.0; items at maxAgeHours score 0.05 (not 0 — they're still eligible).
 const DEFAULT_MAX_AGE_HOURS = 48;
@@ -224,6 +232,252 @@ function normalizeTopicFitScore(item) {
   return clamp(raw, 0, 1);
 }
 
+function normalizeCrossSourceSupport(item) {
+  const crossSourceCount = Number(item?.cross_source_count || item?.storyline_size || 0);
+  if (!Number.isFinite(crossSourceCount) || crossSourceCount <= 1) return 0;
+  return clamp((crossSourceCount - 1) / 3, 0, 1);
+}
+
+function normalizeSourceAuthorityScore(item, tierScores = DEFAULT_TIER_SCORES) {
+  const authority = Number(item?.source_authority);
+  if (Number.isFinite(authority) && authority >= 0) return clamp(authority, 0, 1);
+  return computeSourceTierScore(item, tierScores);
+}
+
+function classifyActorActionSignals(item) {
+  const headline = String(item?.headline || "");
+  const summary = String(item?.summary || "");
+  const combined = `${headline} ${summary}`.trim();
+  const entityKeys = Array.isArray(item?.entity_keys) ? item.entity_keys.filter(Boolean) : [];
+  const contentFlags = Array.isArray(item?.content_flags)
+    ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase())
+    : [];
+  const eventMarkers = Array.isArray(item?.event_markers)
+    ? item.event_markers.map((marker) => String(marker || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  const actorClarity = entityKeys.length > 0
+    ? 1
+    : /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}|fda|sec|ftc|doj|cms|epa|fed|federal reserve)\b/.test(headline)
+      ? 0.7
+      : 0;
+  const actionSignal = contentFlags.some((flag) => (
+    flag === "m_and_a"
+    || flag === "trial_readout"
+    || flag === "regulatory"
+    || flag === "earnings"
+    || flag === "product_launch"
+    || flag === "guidance"
+  )) || eventMarkers.length > 0
+    || /\b(acquires?|acquisition|merger|sale|sells?|launch(?:es|ed)?|approval|approved|rule|deadline|pricing|price|contract|investment|raises?|cuts?|trial|study|partner(?:s|ed)?|shut(?:s|ting)? down|restructures?)\b/i.test(combined);
+  const mechanismSignal = STRATEGIC_SHIFT_PATTERN.test(combined)
+    || /\b(unit economics|reprice|repricing|margin|pricing|throughput|capacity|capital allocation|buyer leverage|seller leverage|procurement|reimbursement|interest margin|compliance cost|cost of capital)\b/i.test(combined);
+  return {
+    actorClarity: actorClarity > 0 ? 1 : 0,
+    actionClarity: actionSignal ? 1 : 0,
+    mechanismPresence: mechanismSignal ? 1 : 0,
+  };
+}
+
+function computeStoryQualityScore(item, context = {}) {
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const originalityProfile = String(item?.originality_profile || "").trim().toLowerCase();
+  const contentFlags = Array.isArray(item?.content_flags)
+    ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase())
+    : [];
+  const headline = String(item?.headline || "");
+  const summary = String(item?.summary || "");
+  const combined = `${headline} ${summary}`.trim();
+  const originalitySignal = Number.isFinite(Number(item?.originality_signal))
+    ? clamp(Number(item.originality_signal), 0, 1)
+    : (originalityProfile === "rewrite_aggregator" || originalityProfile === "press_release_repost")
+      ? 0.15
+      : (originalityProfile === "derived_synthesis" ? 0.35 : 0.6);
+  const corroboration = normalizeCrossSourceSupport(item);
+  const routineItemScore = Number.isFinite(Number(item?.routine_item_score))
+    ? clamp(Number(item.routine_item_score), 0, 1)
+    : 0;
+  const proceduralNoticeAssessment = context.proceduralNoticeAssessment || classifyProceduralNotice(item);
+  const actorActionSignals = classifyActorActionSignals(item);
+  const commentaryLike = sourceType === "analysis_blog"
+    || originalityProfile === "derived_synthesis"
+    || contentFlags.includes("generic_commentary")
+    || COMMENTARY_PATTERN.test(combined);
+
+  const actorClarity = actorActionSignals.actorClarity ? 0.20 : 0;
+  const actionClarity = actorActionSignals.actionClarity ? 0.20 : 0;
+  const mechanism = actorActionSignals.mechanismPresence ? 0.20 : 0;
+  let specificity = 0.20;
+  if (commentaryLike) specificity -= 0.10;
+  if (contentFlags.includes("generic_commentary")) specificity -= 0.06;
+  if (proceduralNoticeAssessment.proceduralNotice) specificity -= proceduralNoticeAssessment.hasStrategicShift ? 0.04 : 0.12;
+  specificity -= routineItemScore * 0.12;
+  if (OFFICIAL_FILLER_PATTERN.test(combined)) specificity -= 0.08;
+  specificity = clamp(specificity, 0, 0.20);
+
+  let originalityAndCorroboration = clamp(
+    (originalitySignal * 0.14) + (corroboration * 0.06),
+    0,
+    0.20
+  );
+  if (sourceType === "trade_specialist") {
+    originalityAndCorroboration = clamp(
+      originalityAndCorroboration + (normalizeTopicFitScore(item) * 0.04),
+      0,
+      0.20
+    );
+  }
+  if (sourceType === "aggregator_republisher" || sourceType === "platform_user_generated") {
+    originalityAndCorroboration = clamp(originalityAndCorroboration - 0.06, 0, 0.20);
+  }
+
+  const total = clamp(
+    actorClarity + actionClarity + mechanism + specificity + originalityAndCorroboration,
+    0,
+    1
+  );
+
+  return {
+    total: Number(total.toFixed(4)),
+    components: {
+      actor_clarity: Number(actorClarity.toFixed(4)),
+      action_clarity: Number(actionClarity.toFixed(4)),
+      mechanism: Number(mechanism.toFixed(4)),
+      specificity: Number(specificity.toFixed(4)),
+      originality_corroboration: Number(originalityAndCorroboration.toFixed(4)),
+    },
+  };
+}
+
+function computeSoftPenalties(item, context = {}) {
+  const sourceDomain = String(item?.source_domain || item?.source || "").trim().toLowerCase();
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const contentFlags = Array.isArray(item?.content_flags)
+    ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase())
+    : [];
+  const proceduralNoticeAssessment = context.proceduralNoticeAssessment || classifyProceduralNotice(item);
+  const topicTag = String(item?.tag || "").trim().toUpperCase();
+  const selectorPenalties = context?.selectorPenalties && typeof context.selectorPenalties === "object"
+    ? context.selectorPenalties
+    : DEFAULT_SELECTOR_PENALTIES;
+  const topicPenaltyMap = selectorPenalties.topicDomainPenalties
+    && typeof selectorPenalties.topicDomainPenalties[topicTag] === "object"
+    ? selectorPenalties.topicDomainPenalties[topicTag]
+    : null;
+  const penalties = Object.create(null);
+  if (contentFlags.includes("generic_commentary")) penalties.generic_commentary = 0.04;
+  if (proceduralNoticeAssessment.proceduralNotice) {
+    penalties.procedural_notice = proceduralNoticeAssessment.hasStrategicShift ? 0.03 : 0.10;
+  }
+  if (sourceType === "aggregator_republisher") penalties.aggregator = 0.08;
+  if (sourceType === "corporate_pr") penalties.corporate_pr = 0.05;
+  if (context.ignoreCompetitivePenalties !== true && Number(item?.preferred_close_substitute_penalty || 0) > 0) {
+    penalties.preferred_close_substitute = Number(item.preferred_close_substitute_penalty || 0) * 0.4;
+  }
+  if (context.ignoreCompetitivePenalties !== true && Number(item?.derivative_competitive_penalty || 0) > 0) {
+    penalties.derivative_competitive = Number(item.derivative_competitive_penalty || 0) * 0.45;
+  }
+  if (topicPenaltyMap && topicPenaltyMap[sourceDomain] != null) {
+    penalties.topic_domain = Math.abs(Number(topicPenaltyMap[sourceDomain] || 0));
+  }
+  if (
+    selectorPenalties.proceduralGovDomainPenalty != null
+    && proceduralNoticeAssessment.proceduralNotice
+    && GOV_NOTICE_DOMAIN_PATTERN.test(sourceDomain)
+  ) {
+    penalties.procedural_gov_domain = Math.abs(Number(selectorPenalties.proceduralGovDomainPenalty || 0));
+  }
+  const total = Object.values(penalties).reduce((sum, value) => sum + Number(value || 0), 0);
+  return {
+    total: Number(clamp(total, 0, 1).toFixed(4)),
+    components: Object.fromEntries(
+      Object.entries(penalties).map(([key, value]) => [key, Number(Number(value || 0).toFixed(4))])
+    ),
+  };
+}
+
+function computeFinalRankScore(item, context = {}) {
+  const nowMs = typeof context.nowMs === "number" && Number.isFinite(context.nowMs)
+    ? context.nowMs
+    : Date.now();
+  const maxAgeHours = Number.isFinite(Number(context.maxAgeHours))
+    ? Number(context.maxAgeHours)
+    : DEFAULT_MAX_AGE_HOURS;
+  const tierScores = context.tierScores && typeof context.tierScores === "object"
+    ? { ...DEFAULT_TIER_SCORES, ...context.tierScores }
+    : DEFAULT_TIER_SCORES;
+  const weights = context.weights && typeof context.weights === "object"
+    ? {
+        strategic_value: Number(context.weights.strategic_value ?? DEFAULT_FINAL_RANK_WEIGHTS.strategic_value),
+        story_quality: Number(context.weights.story_quality ?? DEFAULT_FINAL_RANK_WEIGHTS.story_quality),
+        source_authority: Number(context.weights.source_authority ?? DEFAULT_FINAL_RANK_WEIGHTS.source_authority),
+        freshness: Number(context.weights.freshness ?? DEFAULT_FINAL_RANK_WEIGHTS.freshness),
+        novelty: Number(context.weights.novelty ?? DEFAULT_FINAL_RANK_WEIGHTS.novelty),
+      }
+    : DEFAULT_FINAL_RANK_WEIGHTS;
+  const strategicValue = clamp(
+    Number.isFinite(Number(item?.strategic_value))
+      ? Number(item.strategic_value)
+      : Number(item?.storyline_strategic_value || 0),
+    0,
+    1
+  );
+  const proceduralNoticeAssessment = context.proceduralNoticeAssessment || classifyProceduralNotice(item);
+  const storyQuality = computeStoryQualityScore(item, { proceduralNoticeAssessment });
+  const sourceAuthority = normalizeSourceAuthorityScore(item, tierScores);
+  const freshness = computeFreshnessScore(item, nowMs, maxAgeHours);
+  const novelty = computeNoveltyScore(item);
+  const softPenalties = computeSoftPenalties(item, {
+    proceduralNoticeAssessment,
+    selectorPenalties: context.selectorPenalties,
+  });
+  const rawScore =
+    (strategicValue * weights.strategic_value)
+    + (storyQuality.total * weights.story_quality)
+    + (sourceAuthority * weights.source_authority)
+    + (freshness * weights.freshness)
+    + (novelty * weights.novelty);
+  const total = clamp(rawScore - softPenalties.total, 0, 1);
+  return {
+    total: Number(total.toFixed(4)),
+    components: {
+      strategic_value: Number(strategicValue.toFixed(4)),
+      story_quality_score: Number(storyQuality.total.toFixed(4)),
+      source_authority_score: Number(sourceAuthority.toFixed(4)),
+      freshness_score: Number(freshness.toFixed(4)),
+      novelty_score: Number(novelty.toFixed(4)),
+      soft_penalties: Number(softPenalties.total.toFixed(4)),
+      raw_score: Number(rawScore.toFixed(4)),
+    },
+    storyQualityComponents: storyQuality.components,
+    softPenaltyComponents: softPenalties.components,
+  };
+}
+
+function compareByFinalRank(left, right, context = {}) {
+  const leftEffective = Number.isFinite(Number(context?.effectiveScoreResolver?.(left)))
+    ? Number(context.effectiveScoreResolver(left))
+    : Number(left?.effective_final_rank_score ?? left?.final_rank_score ?? 0);
+  const rightEffective = Number.isFinite(Number(context?.effectiveScoreResolver?.(right)))
+    ? Number(context.effectiveScoreResolver(right))
+    : Number(right?.effective_final_rank_score ?? right?.final_rank_score ?? 0);
+  const effectiveDelta = rightEffective - leftEffective;
+  if (effectiveDelta !== 0) return effectiveDelta;
+
+  const tieBreakers = [
+    ["strategic_value", Number(right?.strategic_value || 0) - Number(left?.strategic_value || 0)],
+    ["story_quality_score", Number(right?.story_quality_score || 0) - Number(left?.story_quality_score || 0)],
+    ["source_authority_score", Number(right?.source_authority_score || 0) - Number(left?.source_authority_score || 0)],
+    ["freshness_score", Number(right?.freshness_score || 0) - Number(left?.freshness_score || 0)],
+    ["same_domain_concentration", Number(left?._same_domain_count || 0) - Number(right?._same_domain_count || 0)],
+  ];
+  for (const [, delta] of tieBreakers) {
+    if (delta !== 0) return delta;
+  }
+  return String(left?.url || left?.candidate_id || left?.headline || "").localeCompare(
+    String(right?.url || right?.candidate_id || right?.headline || "")
+  );
+}
+
 function classifyProceduralNotice(item) {
   const headline = String(item?.headline || "");
   const summary = String(item?.summary || "");
@@ -367,6 +621,12 @@ function scoreCandidate(item, opts = {}) {
     0, 1
   );
   const score = clamp(baseScore + qualityAdjustment.total, 0, 1);
+  const finalRank = computeFinalRankScore(item, {
+    nowMs,
+    maxAgeHours: cfg.maxAgeHours,
+    tierScores: cfg.tierScores,
+    selectorPenalties: cfg.selectorPenalties,
+  });
 
   // Build human-readable explanation for the admin audit log
   const reasons = [
@@ -403,6 +663,20 @@ function scoreCandidate(item, opts = {}) {
       story_shape_penalty: qualityAdjustment.story_shape_penalty,
       domain_penalty: qualityAdjustment.domain_penalty,
     },
+    ranking_version: item?.ranking_version || "v1",
+    final_rank_score: finalRank.total,
+    final_rank_components: finalRank.components,
+    story_quality_score: finalRank.components.story_quality_score,
+    story_quality_components: finalRank.storyQualityComponents,
+    source_authority_score: finalRank.components.source_authority_score,
+    freshness_score: finalRank.components.freshness_score,
+    novelty_score: finalRank.components.novelty_score,
+    soft_penalties: {
+      total: finalRank.components.soft_penalties,
+      components: finalRank.softPenaltyComponents,
+    },
+    dynamic_source_penalty: Number(item?.dynamic_source_penalty || 0),
+    tie_break_outcome: item?.tie_break_outcome || null,
   };
 }
 
@@ -472,7 +746,11 @@ module.exports = {
   computeLaneBonusScore,
   computeNoveltyScore,
   classifyProceduralNotice,
+  compareByFinalRank,
+  computeFinalRankScore,
   DEFAULT_WEIGHTS,
+  DEFAULT_FINAL_RANK_WEIGHTS,
   DEFAULT_TIER_SCORES,
   DEFAULT_LANE_BONUSES,
+  computeStoryQualityScore,
 };

@@ -177,6 +177,7 @@ function sortedKeys(obj) {
       "enrichmentDiagnostics",
       "failedByTopic",
       "finalSelectedByTopic",
+      "reserveByTopic",
       "selectionDiagnostics",
       "writeupDiagnostics",
     ],

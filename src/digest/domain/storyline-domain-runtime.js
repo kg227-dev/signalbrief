@@ -7,6 +7,10 @@ const {
   topicsRelated,
 } = require("../../runtime/topic-normalization-runtime");
 const {
+  compareByFinalRank,
+  computeFinalRankScore,
+} = require("../../domains/scoring/score-candidate");
+const {
   parseSourceIdentity,
 } = require("./source-domain-runtime");
 const { buildFreshnessKey } = require("../runtime/repeat-freshness-runtime");
@@ -606,63 +610,50 @@ function computePreferredRepresentativeBoost(item) {
 }
 
 function computeRepresentativeScore(item, opts = {}) {
-  const ignoreCompetitivePenalties = opts.ignoreCompetitivePenalties === true;
-  const sourceType = String(item?.source_type || "").trim().toLowerCase();
-  const preferredBoost = computePreferredRepresentativeBoost(item);
-  const primaryBonus = sourceType === "primary_official" ? 0.08 : 0;
-  const originBonus = isOriginClusterCandidate(item) ? 0.04 : 0;
-  const specialistFitBonus = sourceType === "trade_specialist"
-    ? clamp(Number(item?.topic_fit || 0), 0, 1) * 0.07
-    : 0;
-  const platformAmbiguityPenalty = item?.source_identity_ambiguous === true ? 0.05 : 0;
-  const availablePreferredPenalty = item?.preferred_source_available_in_search === true && isWeakClusterCandidate(item)
-    ? 0.08
-    : 0;
-  const competitivePenalty = ignoreCompetitivePenalties
-    ? 0
-    : (
-      Number(item?.preferred_close_substitute_penalty || 0) * 0.4
-      + Number(item?.derivative_competitive_penalty || 0) * 0.45
-    );
-
-  return (
-    Number(item?.strategic_value || 0) * 0.34
-    + Number(item?.source_authority || 0) * 0.22
-    + clamp(Number(item?.baseScore || 0) / 10, 0, 1) * 0.12
-    + (1 - Number(item?.routine_item_score || 0)) * 0.08
-    + Number(item?.originality_signal || 0.5) * 0.14
-    + Number(item?.topic_fit || 0) * 0.08
-    + preferredBoost * 0.09
-    + primaryBonus
-    + originBonus
-    + specialistFitBonus
-    - availablePreferredPenalty
-    - platformAmbiguityPenalty
-    - competitivePenalty
-  );
+  const finalRank = computeFinalRankScore(item, opts);
+  return Number(finalRank?.total || 0);
 }
 
 function chooseRepresentative(items, opts = {}) {
   const ignoreCompetitivePenalties = opts.ignorePreferredSuppression === true || opts.ignoreCompetitivePenalties === true;
-  const ranked = (Array.isArray(items) ? items : []).slice().map((item) => ({
-    item,
-    score: computeRepresentativeScore(item, { ignoreCompetitivePenalties }),
-  })).sort((left, right) => right.score - left.score);
-  const winner = ranked[0]?.item || null;
+  const ranked = (Array.isArray(items) ? items : []).slice().map((item) => {
+    const finalRank = computeFinalRankScore(item, {
+      ...opts,
+      selectorPenalties: opts.selectorPenalties,
+      nowMs: opts.nowMs,
+      ignoreCompetitivePenalties,
+    });
+    return {
+      ...item,
+      final_rank_score: finalRank.total,
+      final_rank_components: finalRank.components,
+      story_quality_score: finalRank.components.story_quality_score,
+      story_quality_components: finalRank.storyQualityComponents,
+      source_authority_score: finalRank.components.source_authority_score,
+      freshness_score: finalRank.components.freshness_score,
+      novelty_score: finalRank.components.novelty_score,
+      soft_penalties: {
+        total: finalRank.components.soft_penalties,
+        components: finalRank.softPenaltyComponents,
+      },
+      cluster_rep_selected_by_final_rank_score: true,
+    };
+  }).sort((left, right) => compareByFinalRank(left, right));
+  const winner = ranked[0] || null;
   if (!winner) return null;
-  const winnerOfficial = String(winner?.content_kind || "").trim().toLowerCase() !== "article"
+  const winnerOfficial = String(winner?.content_kind || "article").trim().toLowerCase() !== "article"
     || String(winner?.source_type || "").trim().toLowerCase() === "primary_official";
   if (!winnerOfficial) return winner;
   const reportedAlternative = ranked.find((entry) => {
-    if (!entry?.item || entry.item === winner) return false;
-    const sourceType = String(entry.item?.source_type || "").trim().toLowerCase();
-    const contentKind = String(entry.item?.content_kind || "article").trim().toLowerCase();
+    if (!entry || entry === winner) return false;
+    const sourceType = String(entry?.source_type || "").trim().toLowerCase();
+    const contentKind = String(entry?.content_kind || "article").trim().toLowerCase();
     if (contentKind !== "article") return false;
     if (sourceType !== "reported_media" && sourceType !== "trade_specialist") return false;
-    if (!isGovernanceEligiblePreferredItem(entry.item)) return false;
-    return entry.score >= (ranked[0].score - 0.06);
+    if (!isGovernanceEligiblePreferredItem(entry)) return false;
+    return Number(entry?.final_rank_score || 0) >= (Number(ranked[0]?.final_rank_score || 0) - 0.06);
   });
-  return reportedAlternative?.item || winner;
+  return reportedAlternative || winner;
 }
 
 function isGovernanceEligiblePreferredItem(item) {
@@ -994,6 +985,15 @@ function clusterStorylines(items = []) {
     const representative = chooseRepresentative(cluster.items);
     const outcome = annotateClusterOutcome(cluster, baselineRepresentative, representative, competitionStats);
     const sources = uniqSorted(cluster.items.map((item) => String(item?.source_domain || item?.source || "").trim()).filter(Boolean));
+    const clusterRankScores = cluster.items
+      .map((item) => Number(computeRepresentativeScore(item)))
+      .filter((value) => Number.isFinite(value));
+    const meanClusterScore = clusterRankScores.length > 0
+      ? clusterRankScores.reduce((sum, value) => sum + value, 0) / clusterRankScores.length
+      : 0;
+    const clusterScoreVariance = clusterRankScores.length > 0
+      ? clusterRankScores.reduce((sum, value) => sum + ((value - meanClusterScore) ** 2), 0) / clusterRankScores.length
+      : 0;
     const confidence = cluster.similarities.length
       ? cluster.similarities.reduce((sum, value) => sum + value, 0) / cluster.similarities.length
       : 1;
@@ -1011,6 +1011,9 @@ function clusterStorylines(items = []) {
       supporting_headlines: cluster.items.map((item) => String(item?.headline || "")).filter(Boolean),
       cross_source_count: sources.length,
       storyline_size: cluster.items.length,
+      cluster_size: cluster.items.length,
+      cluster_density: Number((cluster.items.length / Math.max(1, sources.length)).toFixed(3)),
+      cluster_score_variance: Number(clusterScoreVariance.toFixed(4)),
       entity_keys: uniqSorted(cluster.items.flatMap((item) => item?.entity_keys || [])),
       storyline_hints: uniqSorted(cluster.items.flatMap((item) => item?.storyline_hints || [])),
       cluster_confidence: Number(clamp(confidence, 0, 1).toFixed(3)),
@@ -1057,6 +1060,9 @@ function buildStorylineCandidates(items = []) {
       storyline_hints: cluster.storyline_hints,
       cluster_confidence: cluster.cluster_confidence,
       storyline_strategic_value: cluster.strategic_value,
+      cluster_size: Number(cluster.cluster_size || cluster.storyline_size || 0),
+      cluster_density: Number(cluster.cluster_density || 0),
+      cluster_score_variance: Number(cluster.cluster_score_variance || 0),
       won_by_preferred_substitute: cluster.preferred_displaced_weak === true,
       cluster_derivative_suppressed_count: Number(cluster.derivative_suppressed_count || 0),
       cluster_preferred_suppressed_count: Number(cluster.preferred_suppressed_count || 0),

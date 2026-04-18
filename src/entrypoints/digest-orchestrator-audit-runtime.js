@@ -44,14 +44,37 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
     source_type: String(candidate?.source_type || ""),
     source_authority: Number.isFinite(Number(candidate?.source_authority)) ? Number(candidate.source_authority) : null,
     lane: String(candidate?.lane || ""),
+    ranking_version: candidate?.ranking_version || null,
     _score: candidate?._score ?? null,
     _score_components: candidate?._score_components ?? null,
+    final_rank_score: Number.isFinite(Number(candidate?.final_rank_score)) ? Number(candidate.final_rank_score) : null,
+    final_rank_components: candidate?.final_rank_components && typeof candidate.final_rank_components === "object"
+      ? cloneJsonValue(candidate.final_rank_components)
+      : null,
+    story_quality_score: Number.isFinite(Number(candidate?.story_quality_score)) ? Number(candidate.story_quality_score) : null,
+    story_quality_components: candidate?.story_quality_components && typeof candidate.story_quality_components === "object"
+      ? cloneJsonValue(candidate.story_quality_components)
+      : null,
+    source_authority_score: Number.isFinite(Number(candidate?.source_authority_score)) ? Number(candidate.source_authority_score) : null,
+    freshness_score: Number.isFinite(Number(candidate?.freshness_score)) ? Number(candidate.freshness_score) : null,
+    novelty_score: Number.isFinite(Number(candidate?.novelty_score)) ? Number(candidate.novelty_score) : null,
+    soft_penalties: candidate?.soft_penalties && typeof candidate.soft_penalties === "object"
+      ? cloneJsonValue(candidate.soft_penalties)
+      : null,
+    dynamic_source_penalty: Number.isFinite(Number(candidate?.dynamic_source_penalty)) ? Number(candidate.dynamic_source_penalty) : null,
+    tie_break_outcome: candidate?.tie_break_outcome || null,
+    cluster_rep_selected_by_final_rank_score: candidate?.cluster_rep_selected_by_final_rank_score === true,
     _story_relationship: candidate?._story_relationship ?? "new",
     storyline_key: String(candidate?.storyline_key || "").trim() || null,
     cross_source_count: Number.isFinite(Number(candidate?.cross_source_count)) ? Number(candidate.cross_source_count) : null,
+    cluster_size: Number.isFinite(Number(candidate?.cluster_size)) ? Number(candidate.cluster_size) : null,
+    cluster_density: Number.isFinite(Number(candidate?.cluster_density)) ? Number(candidate.cluster_density) : null,
+    cluster_score_variance: Number.isFinite(Number(candidate?.cluster_score_variance)) ? Number(candidate.cluster_score_variance) : null,
     published_at: String(candidate?.published_at || "").trim() || null,
     freshness_hours: Number.isFinite(Number(candidate?.freshness_hours)) ? Number(candidate.freshness_hours) : null,
     content_flags: Array.isArray(candidate?.content_flags) ? candidate.content_flags.slice() : [],
+    event_markers: Array.isArray(candidate?.event_markers) ? candidate.event_markers.slice() : [],
+    entity_keys: Array.isArray(candidate?.entity_keys) ? candidate.entity_keys.slice() : [],
     selected,
     selection_reason: selectionReason,
     writeup_status: candidate?.writeup_status || null,
@@ -73,6 +96,14 @@ function sanitizeAuditCandidate(candidate, selectedFallback = false) {
       ? String(candidate.strategic_relevance_reason).slice(0, 120)
       : null,
     duplicate_of: candidate?.duplicate_of ? String(candidate.duplicate_of) : null,
+    v1_selected: candidate?.v1_selected === true,
+    v2_selected: candidate?.v2_selected === true,
+    selection_disagreement_reason: candidate?.selection_disagreement_reason || null,
+    v2_regret_flag: candidate?.v2_regret_flag === true,
+    v2_regret_reason: candidate?.v2_regret_reason || null,
+    top1_changed: candidate?.top1_changed === true,
+    kill_switch_triggered: candidate?.kill_switch_triggered === true,
+    kill_switch_reasons: Array.isArray(candidate?.kill_switch_reasons) ? candidate.kill_switch_reasons.slice() : [],
   };
 }
 
@@ -169,6 +200,21 @@ function buildTopicSummariesFromSelectionDiagnostics(selectionDiagnostics, selec
         strict_quality: topic?.strict_quality && typeof topic.strict_quality === "object"
           ? cloneJsonValue(topic.strict_quality)
           : null,
+        ranking_primary_version: topic?.ranking_primary_version || null,
+        ranking_live_version: topic?.ranking_live_version || null,
+        ranking_shadow_version: topic?.ranking_shadow_version || null,
+        selection_overlap_pct: Number.isFinite(Number(topic?.selection_overlap_pct)) ? Number(topic.selection_overlap_pct) : null,
+        trusted_share_pct_v1: Number.isFinite(Number(topic?.trusted_share_pct_v1)) ? Number(topic.trusted_share_pct_v1) : null,
+        trusted_share_pct_v2: Number.isFinite(Number(topic?.trusted_share_pct_v2)) ? Number(topic.trusted_share_pct_v2) : null,
+        trusted_share_delta_pct: Number.isFinite(Number(topic?.trusted_share_delta_pct)) ? Number(topic.trusted_share_delta_pct) : null,
+        avg_final_rank_v1_selected: Number.isFinite(Number(topic?.avg_final_rank_v1_selected)) ? Number(topic.avg_final_rank_v1_selected) : null,
+        avg_final_rank_v2_selected: Number.isFinite(Number(topic?.avg_final_rank_v2_selected)) ? Number(topic.avg_final_rank_v2_selected) : null,
+        avg_final_rank_delta: Number.isFinite(Number(topic?.avg_final_rank_delta)) ? Number(topic.avg_final_rank_delta) : null,
+        top1_changed: topic?.top1_changed === true,
+        kill_switch_triggered: topic?.kill_switch_triggered === true,
+        kill_switch_reasons: Array.isArray(topic?.kill_switch_reasons) ? topic.kill_switch_reasons.slice() : [],
+        regret_flag_count: Number(topic?.regret_flag_count || 0),
+        regret_reason_counts: sanitizeCountMap(topic?.regret_reason_counts),
         candidates,
       };
     }

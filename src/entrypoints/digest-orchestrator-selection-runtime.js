@@ -10,6 +10,7 @@ const {
 const {
   buildTopicSelectionState,
   buildTopicReserveQueue,
+  buildTopicReserveQueueV2,
   getBackfillRejectionReason,
   getSelectionScore,
   isStandardSourceTier,
@@ -17,6 +18,7 @@ const {
   resolveTrustGuardrailPolicy,
   resolveTrustedSelectionFloor,
   selectTopicItemsWithFallback,
+  selectTopicItemsV2,
   sortWithSourceTypePreference,
   suppressOfficialsByCluster,
 } = require("./digest-orchestrator-selection-pools-runtime");
@@ -34,6 +36,7 @@ const {
   resolveStrictQualityConfig,
   runPreRankingFilter,
 } = require("../digest/domain/strict-quality-domain-runtime");
+const { normalizeTopicToken } = require("../runtime/topic-normalization-runtime");
 const path = require("path");
 
 function incrementCount(target, key) {
@@ -112,6 +115,107 @@ function candidateOutranksSelectedForTopic(candidate, selectedItem, topicTag = "
   return scoreMargin >= getTopicAwareSourceCapOverflowMargin(normalizedTag);
 }
 
+function normalizeRankingTopicTag(value) {
+  return normalizeTopicToken(String(value || "").trim());
+}
+
+function resolveRankingConfig(configDigest = {}) {
+  const raw = configDigest?.ranking && typeof configDigest.ranking === "object"
+    ? configDigest.ranking
+    : {};
+  const liveTopicTags = Array.isArray(raw.live_topic_tags) ? raw.live_topic_tags : [];
+  return {
+    primaryVersion: raw.primary_version === "v2" ? "v2" : "v1",
+    shadowVersion: raw.shadow_version === "v1" || raw.shadow_version === "v2"
+      ? raw.shadow_version
+      : null,
+    liveTopicTags,
+    liveTopicTagSet: new Set(liveTopicTags.map(normalizeRankingTopicTag).filter(Boolean)),
+    sameDomainPenalty: raw.same_domain_penalty && typeof raw.same_domain_penalty === "object"
+      ? raw.same_domain_penalty
+      : {
+          enabled: true,
+          min_competitive_gap_for_bypass: 0.10,
+          penalties: { second: 0.03, third: 0.08, fourth_or_more: 0.15 },
+        },
+    sameDomainGuardrail: raw.same_domain_guardrail && typeof raw.same_domain_guardrail === "object"
+      ? raw.same_domain_guardrail
+      : { enabled: false, max_per_topic: 3 },
+    killSwitch: raw.kill_switch && typeof raw.kill_switch === "object"
+      ? raw.kill_switch
+      : {
+          enabled: true,
+          action: "fallback_to_v1",
+          thresholds: {
+            min_selection_overlap_pct: 0.40,
+            max_trusted_share_drop_pct: 20,
+            max_avg_final_rank_drop: 0.15,
+          },
+        },
+  };
+}
+
+function isTopicV2Pilot(topicTag, rankingConfig) {
+  if (!rankingConfig || rankingConfig.primaryVersion !== "v2") return false;
+  return rankingConfig.liveTopicTagSet.has(normalizeRankingTopicTag(topicTag));
+}
+
+function cloneScoredItems(items = [], rankingVersion = "v1") {
+  return (Array.isArray(items) ? items : []).map((item) => ({
+    ...item,
+    ranking_version: rankingVersion,
+  }));
+}
+
+function pctShare(numerator, denominator) {
+  const denom = Number(denominator || 0);
+  if (!Number.isFinite(denom) || denom <= 0) return 0;
+  return Number((((Number(numerator || 0) / denom) * 100)).toFixed(2));
+}
+
+function average(values = []) {
+  const nums = (Array.isArray(values) ? values : []).map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (!nums.length) return 0;
+  return Number((nums.reduce((sum, value) => sum + value, 0) / nums.length).toFixed(4));
+}
+
+function getSelectedUrls(items = []) {
+  return new Set((Array.isArray(items) ? items : []).map((item) => String(item?.url || "").trim()).filter(Boolean));
+}
+
+function calculateOverlapPct(leftItems = [], rightItems = []) {
+  const leftUrls = getSelectedUrls(leftItems);
+  const rightUrls = getSelectedUrls(rightItems);
+  const union = new Set([...leftUrls, ...rightUrls]);
+  if (!union.size) return 100;
+  let overlap = 0;
+  for (const url of leftUrls) {
+    if (rightUrls.has(url)) overlap += 1;
+  }
+  return Number(((overlap / union.size) * 100).toFixed(2));
+}
+
+function calculateTrustedSharePct(items = []) {
+  const selectedItems = Array.isArray(items) ? items : [];
+  return pctShare(countTrustedSourceTier(selectedItems), selectedItems.length);
+}
+
+function calculateAverageFinalRank(items = []) {
+  return average((Array.isArray(items) ? items : []).map((item) => Number(item?.final_rank_score || 0)));
+}
+
+function jaccardSimilarity(left = [], right = []) {
+  const leftSet = new Set((Array.isArray(left) ? left : []).map((value) => String(value || "").trim()).filter(Boolean));
+  const rightSet = new Set((Array.isArray(right) ? right : []).map((value) => String(value || "").trim()).filter(Boolean));
+  const union = new Set([...leftSet, ...rightSet]);
+  if (!union.size) return 0;
+  let intersection = 0;
+  for (const value of leftSet) {
+    if (rightSet.has(value)) intersection += 1;
+  }
+  return intersection / union.size;
+}
+
 function findWeakestNonTrustedIndex(items = []) {
   let weakestIndex = -1;
   let weakestPriority = Infinity;
@@ -140,7 +244,7 @@ function classifyTopicHealth({ totalCandidates = 0, selectedCount = 0, trustedCo
   return "HEALTHY";
 }
 
-function capThinExpansionCandidates(items = [], maxShare = 0.4) {
+function capThinExpansionCandidates(items = [], maxShare = 0.4, scoreResolver = getSelectionScore) {
   const grouped = new Map();
   for (const item of (Array.isArray(items) ? items : [])) {
     const tag = String(item?.tag || "").trim().toUpperCase() || "__untagged__";
@@ -155,7 +259,7 @@ function capThinExpansionCandidates(items = [], maxShare = 0.4) {
     const allowedExpanded = Math.max(0, Math.floor(topicItems.length * maxShare));
     const retainedExpanded = expanded
       .slice()
-      .sort((left, right) => getSelectionScore(right) - getSelectionScore(left))
+      .sort((left, right) => Number(scoreResolver(right) || 0) - Number(scoreResolver(left) || 0))
       .slice(0, Math.max(allowedExpanded, baseline.length > 0 ? 1 : 0));
     const retainedUrls = new Set(retainedExpanded.map((item) => String(item?.url || "").trim()).filter(Boolean));
     diagnostics[tag] = {
@@ -219,6 +323,132 @@ function findWeakestTrustedUpgradeIndex(items = [], topicTag = "") {
     }
   }
   return weakestIndex;
+}
+
+function evaluateKillSwitchForTopic(v2SelectedItems = [], v1ShadowSelectedItems = [], rankingConfig = {}) {
+  const overlapPct = calculateOverlapPct(v2SelectedItems, v1ShadowSelectedItems);
+  const trustedSharePctV1 = calculateTrustedSharePct(v1ShadowSelectedItems);
+  const trustedSharePctV2 = calculateTrustedSharePct(v2SelectedItems);
+  const trustedShareDropPct = Number((trustedSharePctV1 - trustedSharePctV2).toFixed(2));
+  const avgFinalRankV1 = calculateAverageFinalRank(v1ShadowSelectedItems);
+  const avgFinalRankV2 = calculateAverageFinalRank(v2SelectedItems);
+  const avgFinalRankDrop = Number((avgFinalRankV1 - avgFinalRankV2).toFixed(4));
+  const top1Changed = String(v2SelectedItems[0]?.url || "").trim() !== String(v1ShadowSelectedItems[0]?.url || "").trim();
+  const thresholds = rankingConfig?.killSwitch?.thresholds && typeof rankingConfig.killSwitch.thresholds === "object"
+    ? rankingConfig.killSwitch.thresholds
+    : {};
+  const reasons = [];
+  if (overlapPct < Number((thresholds.min_selection_overlap_pct ?? 0.40) * 100)) {
+    reasons.push("selection_overlap_breach");
+  }
+  if (trustedShareDropPct > Number(thresholds.max_trusted_share_drop_pct ?? 20)) {
+    reasons.push("trusted_share_drop_breach");
+  }
+  if (avgFinalRankDrop > Number(thresholds.max_avg_final_rank_drop ?? 0.15)) {
+    reasons.push("avg_final_rank_drop_breach");
+  }
+  return {
+    selection_overlap_pct: overlapPct,
+    trusted_share_pct_v1: trustedSharePctV1,
+    trusted_share_pct_v2: trustedSharePctV2,
+    trusted_share_drop_pct: trustedShareDropPct,
+    avg_final_rank_v1_selected: avgFinalRankV1,
+    avg_final_rank_v2_selected: avgFinalRankV2,
+    avg_final_rank_drop: avgFinalRankDrop,
+    top1_changed: top1Changed,
+    kill_switch_triggered: rankingConfig?.killSwitch?.enabled === true && reasons.length > 0,
+    kill_switch_reasons: reasons,
+  };
+}
+
+function resolveV2RegretReason(v2Item, displacedV1Item, v2SelectedItems = [], context = {}) {
+  if (!v2Item || !displacedV1Item) return null;
+  const authorityGap = Number(displacedV1Item?.source_authority_score || displacedV1Item?.source_authority || 0)
+    - Number(v2Item?.source_authority_score || v2Item?.source_authority || 0);
+  const v2StoryQuality = Number(v2Item?.story_quality_score || 0);
+  const v1StoryQuality = Number(displacedV1Item?.story_quality_score || 0);
+  const v2Specificity = Number(v2Item?.story_quality_components?.specificity || 0);
+  const v1Specificity = Number(displacedV1Item?.story_quality_components?.specificity || 0);
+  if (authorityGap >= 0.15 && (v2StoryQuality - v1StoryQuality) < 0.05) {
+    return "weaker_source";
+  }
+  if ((v1Specificity - v2Specificity) >= 0.10 && (v1StoryQuality - v2StoryQuality) >= 0.08) {
+    return "lower_specificity";
+  }
+  const overlapsAnotherV2 = (Array.isArray(v2SelectedItems) ? v2SelectedItems : []).some((candidate) => {
+    if (!candidate || candidate === v2Item) return false;
+    if (String(candidate?.storyline_key || "").trim() && String(candidate?.storyline_key || "").trim() === String(v2Item?.storyline_key || "").trim()) {
+      return true;
+    }
+    return jaccardSimilarity(candidate?.event_markers || [], v2Item?.event_markers || []) >= 0.5;
+  });
+  const displacedDiversifies = (Array.isArray(v2SelectedItems) ? v2SelectedItems : []).every((candidate) => {
+    if (!candidate || candidate === v2Item) return true;
+    const sameDomain = String(candidate?.source_domain || "").trim().toLowerCase() === String(displacedV1Item?.source_domain || "").trim().toLowerCase();
+    const sameStory = String(candidate?.storyline_key || "").trim() && String(candidate?.storyline_key || "").trim() === String(displacedV1Item?.storyline_key || "").trim();
+    return !sameDomain && !sameStory;
+  });
+  if (overlapsAnotherV2 && displacedDiversifies) {
+    return "duplicate_angle";
+  }
+  const displacedIsPrimaryType = ["reported_media", "primary_official"].includes(String(displacedV1Item?.source_type || "").trim().toLowerCase());
+  const displacedStrategicGap = Number(displacedV1Item?.strategic_value || 0) - Number(v2Item?.strategic_value || 0);
+  if (context.displacedWasTop1 === true && displacedIsPrimaryType && displacedStrategicGap >= 0.10) {
+    return "missed_primary_story";
+  }
+  return null;
+}
+
+function buildSelectionComparisonMetadata(params = {}) {
+  const liveCandidates = Array.isArray(params.liveCandidates) ? params.liveCandidates : [];
+  const v1Selected = Array.isArray(params.v1Selected) ? params.v1Selected : [];
+  const v2Selected = Array.isArray(params.v2Selected) ? params.v2Selected : [];
+  const byUrl = new Map();
+  for (const candidate of liveCandidates) {
+    byUrl.set(String(candidate?.url || "").trim(), candidate);
+  }
+  const v1SelectedUrls = getSelectedUrls(v1Selected);
+  const v2SelectedUrls = getSelectedUrls(v2Selected);
+  const v1Only = v1Selected.filter((candidate) => !v2SelectedUrls.has(String(candidate?.url || "").trim()));
+  const v2Only = v2Selected.filter((candidate) => !v1SelectedUrls.has(String(candidate?.url || "").trim()));
+  const v1OnlyByRank = v1Only.slice().sort((left, right) => getSelectionScore(right) - getSelectionScore(left));
+
+  for (const candidate of byUrl.values()) {
+    const url = String(candidate?.url || "").trim();
+    candidate.v1_selected = v1SelectedUrls.has(url);
+    candidate.v2_selected = v2SelectedUrls.has(url);
+    candidate.selection_disagreement_reason = candidate.v1_selected === candidate.v2_selected
+      ? null
+      : (candidate.v2_selected ? "v2_only" : "v1_only");
+    candidate.v2_regret_flag = false;
+    candidate.v2_regret_reason = null;
+    candidate.top1_changed = params.top1Changed === true;
+    candidate.kill_switch_triggered = params.killSwitchTriggered === true;
+    candidate.kill_switch_reasons = Array.isArray(params.killSwitchReasons) ? params.killSwitchReasons.slice() : [];
+  }
+
+  v2Only.forEach((candidate, index) => {
+    const displaced = v1OnlyByRank[index] || null;
+    const regretReason = resolveV2RegretReason(candidate, displaced, v2Selected, {
+      displacedWasTop1: displaced && String(displaced?.url || "").trim() === String(v1Selected[0]?.url || "").trim(),
+    });
+    const liveCandidate = byUrl.get(String(candidate?.url || "").trim());
+    if (!liveCandidate) return;
+    liveCandidate.v2_regret_flag = Boolean(regretReason);
+    liveCandidate.v2_regret_reason = regretReason;
+  });
+
+  const regretReasonCounts = Object.create(null);
+  for (const candidate of byUrl.values()) {
+    if (!candidate?.v2_regret_reason) continue;
+    incrementCount(regretReasonCounts, candidate.v2_regret_reason);
+  }
+
+  return {
+    candidates: Array.from(byUrl.values()),
+    regret_flag_count: Array.from(byUrl.values()).filter((candidate) => candidate?.v2_regret_flag === true).length,
+    regret_reason_counts: regretReasonCounts,
+  };
 }
 
 function applyPrimaryTrustGuardrail(params = {}) {
@@ -689,40 +919,39 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       log(`Strategic classifier: ${classRunDiag.total_classified} classified (${classRunDiag.cache_hits} cached, ${classRunDiag.model_calls} model), ${dropped.length} LOW dropped, ${filtered.length} remain`);
     }
 
-    // MVP transparent scoring: score every candidate before selection.
-    // The formula (spec §2.4): score = freshness×0.35 + source_tier×0.35 + lane_bonus×0.15 + novelty×0.15
-    // Scored items are sorted by _score descending so the selection policy
-    // always sees the highest-scoring items first.
     const scoringConfig = paramScoringConfig && typeof paramScoringConfig === "object"
       ? paramScoringConfig
       : (CONFIG.digest?.scoring || {});
-    const scoredItems = scoreCandidates(scoringInput, { scoringConfig, nowMs });
+    const rankingConfig = resolveRankingConfig(CONFIG.digest || {});
+    const baseScoredItems = scoreCandidates(scoringInput, { scoringConfig, nowMs });
+    const v1ScoredItems = cloneScoredItems(baseScoredItems, "v1");
+    const v2ScoredItems = cloneScoredItems(baseScoredItems, "v2");
 
-    // --- Post-score strategic boost ---
-    let postScoreItems = scoredItems;
+    let v1PostScoreItems = v1ScoredItems;
     if (classificationEnabled) {
       const boostAmount = CONFIG.digest?.classification?.boost_amount ?? 0.12;
       const boostInThinPool = CONFIG.digest?.classification?.boost_in_thin_pool ?? true;
-      const { boosted, diagnostics: bDiag } = boostHighRelevance(scoredItems, { boostAmount, boostInThinPool, log });
+      const { boosted, diagnostics: bDiag } = boostHighRelevance(v1ScoredItems, { boostAmount, boostInThinPool, log });
       boostDiagnostics = bDiag;
-      // Re-sort after boost so selection sees correct order
       boosted.sort((a, b) => (b._score || 0) - (a._score || 0));
-      postScoreItems = boosted;
+      v1PostScoreItems = boosted;
     }
-    const thinExpansionCapResult = capThinExpansionCandidates(postScoreItems, 0.4);
-    postScoreItems = thinExpansionCapResult.items;
+    const v1ThinExpansionCapResult = capThinExpansionCandidates(v1PostScoreItems, 0.4, getSelectionScore);
+    v1PostScoreItems = v1ThinExpansionCapResult.items;
+    const v2ThinExpansionCapResult = capThinExpansionCandidates(v2ScoredItems, 0.4, (item) => Number(item?.final_rank_score || 0));
+    const v2PostScoreItems = v2ThinExpansionCapResult.items;
+    const scoreSummaryItems = rankingConfig.primaryVersion === "v2" ? v2PostScoreItems : v1PostScoreItems;
 
-    if (postScoreItems.length > 0) {
-      const topScore = postScoreItems[0]?._score?.toFixed(3) ?? "?";
-      const bottomScore = postScoreItems[postScoreItems.length - 1]?._score?.toFixed(3) ?? "?";
-      log(`Scored ${postScoreItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
+    if (scoreSummaryItems.length > 0) {
+      const topScore = rankingConfig.primaryVersion === "v2"
+        ? scoreSummaryItems[0]?.final_rank_score?.toFixed(3) ?? "?"
+        : scoreSummaryItems[0]?._score?.toFixed(3) ?? "?";
+      const bottomScore = rankingConfig.primaryVersion === "v2"
+        ? scoreSummaryItems[scoreSummaryItems.length - 1]?.final_rank_score?.toFixed(3) ?? "?"
+        : scoreSummaryItems[scoreSummaryItems.length - 1]?._score?.toFixed(3) ?? "?";
+      log(`Scored ${scoreSummaryItems.length} candidate(s): top=${topScore}, bottom=${bottomScore}`);
     }
 
-    // MVP per-topic selection: exactly 5 items per topic when the pool supports it.
-    // Fallback hierarchy stays inside the 48h cap:
-    // 1. event-driven items from the last 24h
-    // 2. event-driven items from 24–48h
-    // 3. at most one strong analysis/commentary item if still needed
     const itemsPerTopic = 5;
     const maxDiscoveryPerTopic = Math.max(0, Number(CONFIG.digest.maxDiscoveryItemsPerTopic ?? 1));
     const effectiveMaxItemsPerSourceDomain = resolveEffectiveSourceCap(paramScoringConfig, CONFIG.digest);
@@ -730,23 +959,72 @@ function createDigestOrchestratorSelectionRuntime(deps) {
     const trustGuardrailPolicy = resolveTrustGuardrailPolicy(CONFIG.digest || {}, itemsPerTopic);
     const backfillUnlockPolicy = resolveBackfillUnlockPolicy(CONFIG.digest || {});
 
-    // Group scored+sorted candidates by topic tag.
-    const byTag = new Map();
-    for (const item of postScoreItems) {
-      const topicTag = String(item?.tag || "").trim().toUpperCase() || "__untagged__";
-      if (!byTag.has(topicTag)) byTag.set(topicTag, []);
-      byTag.get(topicTag).push(item);
+    function groupByTag(items = []) {
+      const byTag = new Map();
+      for (const item of (Array.isArray(items) ? items : [])) {
+        const topicTag = String(item?.tag || "").trim().toUpperCase() || "__untagged__";
+        if (!byTag.has(topicTag)) byTag.set(topicTag, []);
+        byTag.get(topicTag).push(item);
+      }
+      return byTag;
     }
 
-    // Select per topic with a controlled fallback hierarchy that never exceeds 48h.
-    const perTopicSelected = [];
-    const selectedByTopic = Object.create(null);
-    const reserveByTopic = Object.create(null);
-    const trustedFloorByTopic = Object.create(null);
-    let totalDiscoveryCapped = 0;
-    const topicSelectionAudit = [];
-    const selectionRejectionCounts = Object.create(null);
-    for (const [topicTag, topicItems] of byTag.entries()) {
+    function executeTopicSelection(version, topicTag, topicItems) {
+      if (version === "v2") {
+        const topicSelection = selectTopicItemsV2({
+          topicItems,
+          itemsPerTopic,
+          maxDiscoveryPerTopic,
+          nowMs,
+          clusterOfficialSuppression: CONFIG.digest?.clusterOfficialSuppression === true,
+          sameDomainPenalty: rankingConfig.sameDomainPenalty,
+          sameDomainGuardrail: rankingConfig.sameDomainGuardrail,
+        });
+        const reserveState = buildTopicReserveQueueV2({
+          pools: topicSelection.pools,
+          selectedItems: topicSelection.selected,
+          maxDiscoveryPerTopic,
+          commentaryCap: 1,
+          sameDomainPenalty: rankingConfig.sameDomainPenalty,
+        });
+        return {
+          version,
+          topicSelection,
+          rawTopicAcceptedItems: topicSelection.selected.slice(),
+          selectedItems: topicSelection.selected.slice(),
+          reserveState: {
+            ...reserveState,
+            ranking_version: "v2",
+          },
+          initialReserveState: reserveState,
+          primaryGuardrail: {
+            selectedItems: topicSelection.selected.slice(),
+            reserveState,
+            diagnostics: {
+              triggered: false,
+              swaps_attempted: 0,
+              swaps_completed: 0,
+              better_trusted_available_count: 0,
+              better_trusted_available_details: [],
+            },
+          },
+          tieredPool: [
+            ...(Array.isArray(topicSelection.pools?.tier1) ? topicSelection.pools.tier1 : []),
+            ...(Array.isArray(topicSelection.pools?.tier2) ? topicSelection.pools.tier2 : []),
+          ],
+          trustedFloor: {
+            enabled: false,
+            active: false,
+            minTrustedItemsPerTopic: 0,
+            trusted_candidate_count: countTrustedSourceTier(topicItems),
+            selected_trusted_count: countTrustedSourceTier(topicSelection.selected),
+          },
+          commentarySelectedCount: Number(topicSelection.commentarySelectedCount || 0),
+          rejectionReasonByItem: topicSelection.rejectionReasonByItem,
+          pools: topicSelection.pools,
+        };
+      }
+
       const topicSelection = selectTopicItemsWithFallback({
         topicItems,
         itemsPerTopic,
@@ -762,11 +1040,6 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         commentarySelectedCount,
         trustedFloor,
       } = topicSelection;
-      trustedFloorByTopic[topicTag] = {
-        ...trustedFloor,
-      };
-      const { tier1, tier2, tier3, commentaryPool } = pools;
-      const tieredPool = [...tier1, ...tier2];
       const initialReserveState = buildTopicReserveQueue({
         pools,
         selectedItems: rawTopicAcceptedItems,
@@ -782,11 +1055,96 @@ function createDigestOrchestratorSelectionRuntime(deps) {
           commentaryCap: 1,
         },
       });
-      const topicAcceptedItems = primaryGuardrail.selectedItems;
-      const reserveState = primaryGuardrail.reserveState;
+      return {
+        version,
+        topicSelection,
+        rawTopicAcceptedItems,
+        selectedItems: primaryGuardrail.selectedItems,
+        reserveState: {
+          ...primaryGuardrail.reserveState,
+          ranking_version: "v1",
+        },
+        initialReserveState,
+        primaryGuardrail,
+        tieredPool: [...pools.tier1, ...pools.tier2],
+        trustedFloor,
+        commentarySelectedCount,
+        rejectionReasonByItem,
+        pools,
+      };
+    }
+
+    const byTagV1 = groupByTag(v1PostScoreItems);
+    const byTagV2 = groupByTag(v2PostScoreItems);
+    const topicTags = Array.from(new Set([...byTagV1.keys(), ...byTagV2.keys()])).sort((left, right) => left.localeCompare(right));
+
+    const perTopicSelected = [];
+    const selectedByTopic = Object.create(null);
+    const reserveByTopic = Object.create(null);
+    const trustedFloorByTopic = Object.create(null);
+    const rankingVersionByTopic = Object.create(null);
+    let totalDiscoveryCapped = 0;
+    const topicSelectionAudit = [];
+    const selectionRejectionCounts = Object.create(null);
+    let killSwitchTriggeredTopics = 0;
+    for (const topicTag of topicTags) {
+      const topicItemsV1 = byTagV1.get(topicTag) || [];
+      const topicItemsV2 = byTagV2.get(topicTag) || [];
+      const liveVersion = isTopicV2Pilot(topicTag, rankingConfig) ? "v2" : "v1";
+      const shadowVersion = rankingConfig.shadowVersion && rankingConfig.shadowVersion !== liveVersion
+        ? rankingConfig.shadowVersion
+        : null;
+      const liveInput = liveVersion === "v2" ? topicItemsV2 : topicItemsV1;
+      const liveResult = executeTopicSelection(liveVersion, topicTag, liveInput);
+      const v1Result = liveVersion === "v1"
+        ? liveResult
+        : (shadowVersion === "v1" ? executeTopicSelection("v1", topicTag, topicItemsV1) : null);
+      const v2Result = liveVersion === "v2"
+        ? liveResult
+        : (shadowVersion === "v2" ? executeTopicSelection("v2", topicTag, topicItemsV2) : null);
+
+      const comparisonMetrics = liveVersion === "v2" && shadowVersion === "v1" && v1Result
+        ? evaluateKillSwitchForTopic(liveResult.selectedItems, v1Result.selectedItems, rankingConfig)
+        : {
+            selection_overlap_pct: null,
+            trusted_share_pct_v1: null,
+            trusted_share_pct_v2: null,
+            trusted_share_drop_pct: null,
+            avg_final_rank_v1_selected: null,
+            avg_final_rank_v2_selected: null,
+            avg_final_rank_drop: null,
+            top1_changed: false,
+            kill_switch_triggered: false,
+            kill_switch_reasons: [],
+          };
+
+      let finalTopicResult = liveResult;
+      if (comparisonMetrics.kill_switch_triggered === true && v1Result) {
+        finalTopicResult = {
+          ...v1Result,
+          killSwitchTriggered: true,
+          killSwitchReasons: comparisonMetrics.kill_switch_reasons.slice(),
+        };
+        killSwitchTriggeredTopics += 1;
+      }
+
+      const {
+        selectedItems: topicAcceptedItems,
+        reserveState,
+        pools,
+        commentarySelectedCount,
+        trustedFloor,
+        tieredPool,
+        rejectionReasonByItem,
+        initialReserveState,
+        primaryGuardrail,
+      } = finalTopicResult;
+      trustedFloorByTopic[topicTag] = { ...(trustedFloor || { enabled: false, active: false }) };
+      rankingVersionByTopic[topicTag] = finalTopicResult.version;
+      const { tier1 = [], tier2 = [], tier3 = [], commentaryPool = [] } = pools || {};
 
       if (topicAcceptedItems.length < itemsPerTopic) {
-        log(`⚠️ Topic ${topicTag}: only ${topicAcceptedItems.length}/${itemsPerTopic} items selected (event_0_24=${pools.eventTier1.length}, event_24_48=${pools.eventTier2.length}, commentary=${commentaryPool.length}, stale=${tier3.length})`);
+        log(`⚠️ Topic ${topicTag}: only ${topicAcceptedItems.length}/${itemsPerTopic} items selected (event_0_24=${tier1.length}, event_24_48=${tier2.length}, commentary=${commentaryPool.length}, stale=${tier3.length})`);
       }
 
       totalDiscoveryCapped += Array.from(rejectionReasonByItem.values()).filter((reason) => reason === "selection_discovery_cap").length;
@@ -802,13 +1160,32 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         trustedFloor: trustGuardrailPolicy.minTrustedItemsPerTopic,
       });
 
+      const liveSelectedUrls = getSelectedUrls(topicAcceptedItems);
+      const rejectionReasonByUrl = new Map(
+        Array.from(rejectionReasonByItem.entries()).map(([candidate, reason]) => [String(candidate?.url || "").trim(), reason])
+      );
+      const auditUniverse = [];
+      const seenUrls = new Set();
+      for (const item of [...topicItemsV1, ...topicItemsV2]) {
+        const url = String(item?.url || "").trim();
+        if (!url || seenUrls.has(url)) continue;
+        seenUrls.add(url);
+        auditUniverse.push({ ...item });
+      }
+      const comparisonMetadata = buildSelectionComparisonMetadata({
+        liveCandidates: auditUniverse,
+        v1Selected: v1Result?.selectedItems || [],
+        v2Selected: v2Result?.selectedItems || [],
+        top1Changed: comparisonMetrics.top1_changed === true,
+        killSwitchTriggered: comparisonMetrics.kill_switch_triggered === true,
+        killSwitchReasons: comparisonMetrics.kill_switch_reasons || [],
+      });
       const topicReasonCounts = Object.create(null);
-      const selectedSet = new Set(topicAcceptedItems);
-      const topicCandidates = tieredPool.map((item) => {
-        const selectedForTopic = selectedSet.has(item);
+      const topicCandidates = comparisonMetadata.candidates.map((item) => {
+        const selectedForTopic = liveSelectedUrls.has(String(item?.url || "").trim());
         const selectionReason = selectedForTopic
-          ? (item._selection_stage || "primary_selection")
-          : String(rejectionReasonByItem.get(item) || "selection_not_selected");
+          ? (item._selection_stage || (finalTopicResult.version === "v2" ? "v2_primary_selection" : "primary_selection"))
+          : String(rejectionReasonByUrl.get(String(item?.url || "").trim()) || "selection_not_selected");
         if (!selectedForTopic) incrementCount(topicReasonCounts, selectionReason);
         return toSelectionAuditCandidate(item, {
           freshness_hours: computeItemAgeHours(item, nowMs),
@@ -825,37 +1202,54 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         tag: topicTag,
         total_candidates: tieredPool.length,
         selected_count: topicAcceptedItems.length,
-        rejected_count: Math.max(0, topicItems.length - topicAcceptedItems.length),
+        rejected_count: Math.max(0, auditUniverse.length - topicAcceptedItems.length),
         tier_counts: {
           tier1: tier1.length,
           tier2: tier2.length,
           tier3: tier3.length,
         },
         fallback_stage_counts: {
-          event_tier1: pools.eventTier1.length,
-          event_tier2: pools.eventTier2.length,
+          event_tier1: tier1.length,
+          event_tier2: tier2.length,
           commentary_candidates: commentaryPool.length,
           commentary_selected: commentarySelectedCount,
         },
         trusted_floor: {
-          ...trustedFloor,
+          ...(trustedFloor || {}),
         },
         trust_guardrail: {
           min_trusted_items_per_topic: trustGuardrailPolicy.minTrustedItemsPerTopic,
           aspirational_trusted_items_per_topic: trustGuardrailPolicy.aspirationalTrustedItemsPerTopic,
-          ...primaryGuardrail.diagnostics,
+          ...(primaryGuardrail?.diagnostics || {}),
           final_trusted_count: selectedTrustedCount,
         },
+        ranking_primary_version: liveVersion,
+        ranking_live_version: finalTopicResult.version,
+        ranking_shadow_version: shadowVersion,
+        selection_overlap_pct: comparisonMetrics.selection_overlap_pct,
+        trusted_share_pct_v1: comparisonMetrics.trusted_share_pct_v1,
+        trusted_share_pct_v2: comparisonMetrics.trusted_share_pct_v2,
+        trusted_share_delta_pct: comparisonMetrics.trusted_share_drop_pct,
+        avg_final_rank_v1_selected: comparisonMetrics.avg_final_rank_v1_selected,
+        avg_final_rank_v2_selected: comparisonMetrics.avg_final_rank_v2_selected,
+        avg_final_rank_delta: comparisonMetrics.avg_final_rank_drop,
+        top1_changed: comparisonMetrics.top1_changed === true,
+        kill_switch_triggered: comparisonMetrics.kill_switch_triggered === true,
+        kill_switch_reasons: Array.isArray(comparisonMetrics.kill_switch_reasons)
+          ? comparisonMetrics.kill_switch_reasons.slice()
+          : [],
+        regret_flag_count: comparisonMetadata.regret_flag_count,
+        regret_reason_counts: comparisonMetadata.regret_reason_counts,
         topic_health: topicHealth,
-        trusted_first_override_count: Number(trustedFloor.trusted_override_count || 0),
-        trusted_first_override_details: Array.isArray(trustedFloor.trusted_override_details)
+        trusted_first_override_count: Number(trustedFloor?.trusted_override_count || 0),
+        trusted_first_override_details: Array.isArray(trustedFloor?.trusted_override_details)
           ? trustedFloor.trusted_override_details.slice()
           : [],
-        standard_candidates_blocked_by_trusted_first_count: Number(trustedFloor.standard_candidates_blocked_by_trusted_first_count || 0),
-        strong_tier_candidate_count: Number(trustedFloor.trusted_candidate_count || 0),
+        standard_candidates_blocked_by_trusted_first_count: Number(trustedFloor?.standard_candidates_blocked_by_trusted_first_count || 0),
+        strong_tier_candidate_count: Number(trustedFloor?.trusted_candidate_count || countTrustedSourceTier(tieredPool)),
         strong_tier_selected_count: selectedTrustedCount,
         standard_tier_selected_count: selectedStandardCount,
-        standard_tier_blocked_while_strong_available: trustedFloor.standard_tier_blocked_while_strong_available === true,
+        standard_tier_blocked_while_strong_available: trustedFloor?.standard_tier_blocked_while_strong_available === true,
         reserve_candidate_count: reserveByTopic[topicTag].allReserve.length,
         reserve_strong_count: reserveByTopic[topicTag].strongReserve.length,
         reserve_standard_count: reserveByTopic[topicTag].standardReserve.length,
@@ -873,6 +1267,17 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         rejection_reason_counts: topicReasonCounts,
         candidates: topicCandidates,
       });
+    }
+    if (killSwitchTriggeredTopics >= 2) {
+      await emitDigestIncident(
+        "ranking-v2-kill-switch",
+        "Ranking V2 kill switch triggered for multiple pilot topics",
+        {
+          mode: runMode,
+          due_users: dueUsersCount,
+          triggered_topics: killSwitchTriggeredTopics,
+        }
+      );
     }
     let selected = perTopicSelected;
     const proceduralNoticeSelectedCount = selected.filter((item) => item?.procedural_notice === true).length;
@@ -894,7 +1299,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
       throw new Error("No live items available after freshness and selection filters; digest aborted");
     }
 
-    log(`Selected ${selected.length} items (${byTag.size} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${effectiveMaxItemsPerSourceDomain})`);
+    log(`Selected ${selected.length} items (${topicTags.length} topic(s), ${itemsPerTopic}/topic, discoveryCapPerTopic=${maxDiscoveryPerTopic}, sourceCap=${effectiveMaxItemsPerSourceDomain})`);
 
     return {
       selected,
@@ -913,6 +1318,7 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         backfillTrustFloor: CONFIG.digest.backfillTrustFloor === true,
         backfillUnlockPolicy,
         trustGuardrailPolicy,
+        rankingVersionByTopic,
         trustedFloor: {
           ...trustedSelectionFloor,
           byTopic: trustedFloorByTopic,
@@ -934,14 +1340,26 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         strict_quality: {
           prefilter: strictQualityPrefilterDiagnostics,
           signal_quality_prefilter: signalQualityPrefilterDiagnostics,
-          thin_expansion_cap: thinExpansionCapResult.diagnostics,
+          thin_expansion_cap: {
+            v1: v1ThinExpansionCapResult.diagnostics,
+            v2: v2ThinExpansionCapResult.diagnostics,
+          },
         },
         candidate_pool_after_pre_ranking_quality: strictQualityConfig.enabled ? preRankingItems.length : annotatedItems.length,
         candidate_pool_after_classification: classificationEnabled ? scoringInput.length : null,
         effective_max_items_per_source_domain: effectiveMaxItemsPerSourceDomain,
+        ranking: {
+          primary_version: rankingConfig.primaryVersion,
+          shadow_version: rankingConfig.shadowVersion,
+          live_topic_tags: rankingConfig.liveTopicTags.slice(),
+          kill_switch: {
+            enabled: rankingConfig.killSwitch?.enabled === true,
+            triggered_topic_count: killSwitchTriggeredTopics,
+          },
+        },
         storyline_cluster_removed_count: storylineClusterRemovedCount,
         best_fit_topic_reassigned_count: bestFitTopicReassignedCount,
-        candidate_pool_scored: postScoreItems.length,
+        candidate_pool_scored: scoreSummaryItems.length,
         archive_repeat_block_count: Math.max(0, Number(dedupRes.removed || 0)),
         stale_removed_count: Math.max(0, Number(staleRemoved || 0)),
         history_suppressed_count: Math.max(0, Number(historyResult.suppressedCount || 0)),
@@ -954,10 +1372,16 @@ function createDigestOrchestratorSelectionRuntime(deps) {
         editorial_pin_count: injectedPinCount,
         discovery_capped_count: totalDiscoveryCapped,
         procedural_notice_selected_count: proceduralNoticeSelectedCount,
-        score_top: postScoreItems[0]?._score ?? null,
-        score_bottom: postScoreItems.length > 0 ? postScoreItems[postScoreItems.length - 1]?._score ?? null : null,
+        score_top: rankingConfig.primaryVersion === "v2"
+          ? scoreSummaryItems[0]?.final_rank_score ?? null
+          : scoreSummaryItems[0]?._score ?? null,
+        score_bottom: scoreSummaryItems.length > 0
+          ? (rankingConfig.primaryVersion === "v2"
+            ? scoreSummaryItems[scoreSummaryItems.length - 1]?.final_rank_score ?? null
+            : scoreSummaryItems[scoreSummaryItems.length - 1]?._score ?? null)
+          : null,
         selection_rejection_counts: selectionRejectionCounts,
-        scored_candidates: postScoreItems.map((item) => toSelectionAuditCandidate(item)),
+        scored_candidates: scoreSummaryItems.map((item) => toSelectionAuditCandidate(item)),
         topic_selection_audit: topicSelectionAudit,
         editorial_dropped_items: editorialDroppedItems,
         archive_dedup_dropped_items: archiveDedupDroppedItems,

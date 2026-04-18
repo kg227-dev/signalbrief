@@ -5,6 +5,9 @@ const {
   buildStorylineCandidates: buildStorylineCandidatesDefault,
 } = require("../domains/digest");
 const {
+  classifyProceduralNotice,
+} = require("../domains/scoring/score-candidate");
+const {
   assignCanonicalTopic: assignCanonicalTopicDefault,
   scoreBestFitTopicTag: scoreBestFitTopicTagDefault,
 } = require("../runtime/standard-topic-broker-topic-fit-runtime");
@@ -47,6 +50,13 @@ const STRATEGIC_IMPLICATION_PATTERNS = [
   /\b(approval|approved|enforcement|rule|rulemaking|settlement|tariff|layoff|capex|restructuring)\b/i,
   /\b(demand|supply chain|factory|manufacturing|clinical|trial|payer|provider|bank|lender|utility)\b/i,
 ];
+
+const TOPIC_ANCHOR_PATTERNS = new Map([
+  ["TECHNOLOGY", /\b(ai|software|cloud|cyber|chip|semiconductor|data center|platform|app store|antitrust|developer|model|infrastructure)\b/i],
+  ["AI×TECH", /\b(ai|software|cloud|cyber|chip|semiconductor|data center|platform|app store|antitrust|developer|model|infrastructure)\b/i],
+  ["ENERGY", /\b(utility|grid|power|electricity|gas|oil|solar|wind|nuclear|ppa|interconnection|transmission|pipeline|lng)\b/i],
+  ["LIFE SCIENCES", /\b(trial|drug|therapy|fda|biotech|pharma|approval|oncology|clinical)\b/i],
+]);
 
 function classifySourceTypeClass(sourceType) {
   const st = String(sourceType || "").trim().toLowerCase();
@@ -141,6 +151,15 @@ function textHasStrategicImplication(text) {
   return STRATEGIC_IMPLICATION_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+function isOffTopicProceduralOfficial(item) {
+  const topicTag = String(item?.tag || "").trim().toUpperCase();
+  if (topicTag !== "TECHNOLOGY" && topicTag !== "ENERGY" && topicTag !== "AI×TECH") return false;
+  if (String(item?.source_type || "").trim().toLowerCase() !== "primary_official") return false;
+  const proceduralNoticeAssessment = classifyProceduralNotice(item);
+  return proceduralNoticeAssessment.proceduralNotice === true
+    && proceduralNoticeAssessment.hasStrategicShift !== true;
+}
+
 function isLowSignalProceduralItem(item) {
   const headline = String(item?.headline || item?.title || "").trim();
   const summary = String(item?.summary || "").trim();
@@ -159,6 +178,14 @@ function filterPreSelectionSignalQuality(items = []) {
   const kept = [];
   const dropped = [];
   for (const item of (Array.isArray(items) ? items : [])) {
+    if (isOffTopicProceduralOfficial(item)) {
+      dropped.push({
+        ...item,
+        _low_signal_procedural: true,
+        _selection_prefilter_reason: "selection_offtopic_procedural_official",
+      });
+      continue;
+    }
     if (!isLowSignalProceduralItem(item)) {
       kept.push(item);
       continue;
@@ -174,9 +201,11 @@ function filterPreSelectionSignalQuality(items = []) {
     dropped,
     diagnostics: {
       removed_count: dropped.length,
-      removed_reason_counts: dropped.length > 0
-        ? { selection_low_signal_procedural: dropped.length }
-        : {},
+      removed_reason_counts: dropped.reduce((counts, item) => {
+        const reason = String(item?._selection_prefilter_reason || "selection_low_signal_procedural");
+        counts[reason] = (counts[reason] || 0) + 1;
+        return counts;
+      }, {}),
     },
   };
 }
@@ -187,6 +216,12 @@ function normalizeBestFitText(value) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function hasTopicAnchor(topicTag, fitText) {
+  const pattern = TOPIC_ANCHOR_PATTERNS.get(String(topicTag || "").trim().toUpperCase());
+  if (!pattern) return true;
+  return pattern.test(String(fitText || ""));
 }
 
 function resolveConfiguredTopicTags(configTopics = []) {
@@ -227,6 +262,7 @@ function canonicalizeCandidateTopicTags(items = [], opts = {}) {
     const bestScore = Number(scoreBestFitTopicTag(bestTag, fitText) || 0);
     const currentScore = originalTag ? Number(scoreBestFitTopicTag(originalTag, fitText) || 0) : 0;
     if (bestScore <= 0 || bestTag === originalTag || bestScore <= currentScore) return item;
+    if (!hasTopicAnchor(bestTag, fitText)) return item;
     const sourceDomain = String(item?.source_domain || "").trim().toLowerCase();
     const domainScope = DOMAIN_TOPIC_SCOPE.get(sourceDomain);
     if (domainScope && !domainScope.has(bestTag)) return item;

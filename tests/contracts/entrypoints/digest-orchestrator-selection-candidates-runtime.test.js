@@ -18,6 +18,7 @@ const runtime = require(TARGET_PATH);
 const {
   canonicalizeCandidateTopicTags,
   classifySourceTypeClass,
+  filterPreSelectionSignalQuality,
   prepareSelectionCandidates,
   toSelectionAuditCandidate,
 } = runtime;
@@ -57,6 +58,32 @@ assertModuleExports(() => runtime, TARGET_REL);
   });
   assert.strictEqual(scopeBlocked.bestFitTopicReassignedCount, 0);
   assert.strictEqual(scopeBlocked.items[0].tag, "TECHNOLOGY");
+
+  const anchorBlocked = canonicalizeCandidateTopicTags([{
+    tag: "CONSUMER & RETAIL",
+    headline: "Congress presses DHS over Palantir contract",
+    summary: "A surveillance contract drew political scrutiny.",
+    url: "https://scope.example.com/energy-misfit",
+    source_domain: "wired.com",
+  }], {
+    configTopics: [{ tag: "CONSUMER & RETAIL" }, { tag: "ENERGY" }],
+    assignCanonicalTopic: () => "ENERGY",
+    scoreBestFitTopicTag: (tag) => (tag === "ENERGY" ? 9 : 1),
+  });
+  assert.strictEqual(anchorBlocked.bestFitTopicReassignedCount, 0);
+  assert.strictEqual(anchorBlocked.items[0].tag, "CONSUMER & RETAIL");
+
+  const signalPrefilter = filterPreSelectionSignalQuality([{
+    tag: "TECHNOLOGY",
+    headline: "Agency Information Collection Activities; Proposed eCollection eComments Requested",
+    summary: "Federal Register notice of a previously approved information collection request.",
+    url: "https://prefilter.example.com/1",
+    source_domain: "federalregister.gov",
+    source_type: "primary_official",
+  }]);
+  assert.strictEqual(signalPrefilter.kept.length, 0);
+  assert.strictEqual(signalPrefilter.dropped.length, 1);
+  assert.strictEqual(signalPrefilter.diagnostics.removed_reason_counts.selection_offtopic_procedural_official, 1);
 
   const prepared = prepareSelectionCandidates([
     {

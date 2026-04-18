@@ -67,16 +67,29 @@ const DEFAULT_FINAL_RANK_WEIGHTS = Object.freeze({
 // Items at 0h score 1.0; items at maxAgeHours score 0.05 (not 0 — they're still eligible).
 const DEFAULT_MAX_AGE_HOURS = 48;
 const FRESHNESS_FLOOR = 0.05;
-const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety communication|recall|warns consumers|alerts customers|consumer update|fact sheet|guidance for industry|companies that have not submitted|drug amount reports|shortage mitigation efforts|proactively posted|final rule|proposed rule|podcast(?:s)?|things? to know|how you can find|user fee amendments?|labeling resources?|facilities?, sites? and organization|drug safety and availability|notice of (?:public )?meeting|advisory committee meeting)\b/i;
+const OFFICIAL_FILLER_PATTERN = /\b(frequently requested|what'?s new|drug safety communication|recall|warns consumers|alerts customers|consumer update|fact sheet|guidance for industry|companies that have not submitted|drug amount reports|shortage mitigation efforts|proactively posted|final rule|proposed rule|podcast(?:s)?|things? to know|how you can find|user fee amendments?|labeling resources?|facilities?, sites? and organization|drug safety and availability|notice of (?:public )?meeting|advisory committee meeting|meeting goals summary|information collection activit(?:y|ies)|order establishing|operating limitations|scheduling limits|fda-track)\b/i;
 const COMMENTARY_PATTERN = /(^|[\s"“])opinion:|\b(commentary|analysis|feature)\b|\b(watch now|best noise-canceling|readers are buying|spring sale|get ready with me|music video|excerpt from|reporter goes up against)\b/i;
 const TECH_NOISE_PATTERN = /\b(earbuds?|shopping|sale|coupon|music video|camera test|review roundup|best .{0,30}\b|vision pro|steam link|offline dictation|dictation app|continuous glucose|glucose monitor|vibe coding|rooting for|blaming everything|users are mastering|social app|creator culture|meme)\b/i;
 const TECH_STRATEGIC_PATTERN = /\b(ai security|cybersecurity|ransomware|data breach|platform policy|antitrust|supreme court|scotus|isp|piracy|chip|semiconductor|compute|data centers?|capital allocation|funding round|venture fund|ai infrastructure|open[- ]source model|enterprise ai|procurement|model safety|frontier model|regulator|regulation)\b/i;
 const TECH_FALSE_POSITIVE_PATTERN = /\b(surgeon|liver|spleen|patient|medical examiner|charged with killing|hospital worker|autopsy)\b/i;
 const ENERGY_FALSE_POSITIVE_PATTERN = /\b(dark energy|3d map of universe|universe|cosmolog(?:y|ists?)|astronom(?:y|ers?)|galax(?:y|ies)|cosmic)\b/i;
 const INDUSTRIALS_FALSE_POSITIVE_PATTERN = /\b(drug supply chain security act|pharma|pharmaceutical|biotech|peptide|drug compounding|advisory committee)\b/i;
-const PROCEDURAL_NOTICE_PATTERN = /\b(notice of|combined notice|notice announcing|informal settlement conference|guidance documents published|federal register|notice of filing|notice of conference|meeting notice|availability of guidance|guidance for industry|filing(?:s)? received)\b/i;
+const PROCEDURAL_NOTICE_PATTERN = /\b(notice of|combined notice|notice announcing|informal settlement conference|guidance documents published|federal register|notice of filing|notice of conference|meeting notice|availability of guidance|guidance for industry|filing(?:s)? received|order establishing|information collection activit(?:y|ies)|meeting goals summary|operating limitations)\b/i;
 const STRATEGIC_SHIFT_PATTERN = /\b(enforcement|penalt(?:y|ies)|deadline|effective date|timeline|within \d+ (?:days|weeks|months)|cost|costs|margin|margins|capex|pricing|price|rate increase|fee|fees|competition|competitive|market share|buyer leverage|seller leverage|capacity|throughput|supply|demand|tariff|capital|procurement)\b/i;
 const GOV_NOTICE_DOMAIN_PATTERN = /\b(federalregister\.gov|ferc\.gov|fda\.gov|sec\.gov|cms\.gov|justice\.gov)\b/i;
+const GENERIC_FORMAL_HEADLINE_PATTERN = /^(notice|agency|office|board|commission|department|order establishing|information collection activities|operating limitations|city of|scout v)\b/i;
+const STRATEGIC_ACTION_PATTERN = /\b(acquires?|acquisition|merger|buyout|launch(?:es|ed)?|approval|approved|wins?|won|signs?|signed|invest(?:s|ed|ment)|funding|raises?|cuts?|layoffs?|contracts?|partnership|partners?|pricing|repric(?:e|es|ed|ing)|shut(?:s|ting)? down|expand(?:s|ed|ing)|restart(?:s|ed)?|settlement|enforcement action|penalt(?:y|ies)|tariff|block(?:s|ed)?|ban(?:s|ned)?|orders?|mandates?)\b/i;
+const NON_STRATEGIC_OFFICIAL_ACTION_PATTERN = /\b(notice|request|meeting|filing|summary|agenda|hearing|comment(?:s)?|collection|information collection|order establishing|soliciting|intervention deadline|conference)\b/i;
+const TECHNOLOGY_DEAL_NOISE_PATTERN = /\b(airpods?|best-ever price|sale|discount|deal\b|shopping|coupon|doorbell|earbuds?|tinder)\b/i;
+const ENERGY_TOPIC_ANCHOR_PATTERN = /\b(utility|grid|power|electricity|gas|oil|solar|wind|nuclear|ppa|interconnection|transmission|pipeline|lng|rate hike|permitting|reactor|battery storage|renewable)\b/i;
+const ENERGY_OFF_TOPIC_PATTERN = /\b(immigration|dhs|palantir|surveillance|dating|tinder|airpods?|smartphone|headset|tax holiday)\b/i;
+const ACTION_FLAG_ALLOWLIST = new Set([
+  "m_and_a",
+  "trial_readout",
+  "earnings",
+  "product_launch",
+  "guidance",
+]);
 
 function clamp(value, lo, hi) {
   const n = Number(value);
@@ -257,18 +270,13 @@ function classifyActorActionSignals(item) {
     : [];
   const actorClarity = entityKeys.length > 0
     ? 1
-    : /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}|fda|sec|ftc|doj|cms|epa|fed|federal reserve)\b/.test(headline)
+    : (!GENERIC_FORMAL_HEADLINE_PATTERN.test(headline)
+        && /\b([A-Z][A-Za-z0-9&.-]+(?:\s+[A-Z][A-Za-z0-9&.-]+){0,3}|FDA|SEC|FTC|DOJ|CMS|EPA|FERC|OCC|CFPB|Fed|Federal Reserve)\b/.test(headline))
       ? 0.7
       : 0;
-  const actionSignal = contentFlags.some((flag) => (
-    flag === "m_and_a"
-    || flag === "trial_readout"
-    || flag === "regulatory"
-    || flag === "earnings"
-    || flag === "product_launch"
-    || flag === "guidance"
-  )) || eventMarkers.length > 0
-    || /\b(acquires?|acquisition|merger|sale|sells?|launch(?:es|ed)?|approval|approved|rule|deadline|pricing|price|contract|investment|raises?|cuts?|trial|study|partner(?:s|ed)?|shut(?:s|ting)? down|restructures?)\b/i.test(combined);
+  const actionSignal = contentFlags.some((flag) => ACTION_FLAG_ALLOWLIST.has(flag))
+    || eventMarkers.length > 0
+    || (STRATEGIC_ACTION_PATTERN.test(combined) && !NON_STRATEGIC_OFFICIAL_ACTION_PATTERN.test(combined));
   const mechanismSignal = STRATEGIC_SHIFT_PATTERN.test(combined)
     || /\b(unit economics|reprice|repricing|margin|pricing|throughput|capacity|capital allocation|buyer leverage|seller leverage|procurement|reimbursement|interest margin|compliance cost|cost of capital)\b/i.test(combined);
   return {
@@ -330,20 +338,37 @@ function computeStoryQualityScore(item, context = {}) {
     originalityAndCorroboration = clamp(originalityAndCorroboration - 0.06, 0, 0.20);
   }
 
-  const total = clamp(
-    actorClarity + actionClarity + mechanism + specificity + originalityAndCorroboration,
+  const isNonStrategicProceduralOfficial = sourceType === "primary_official"
+    && proceduralNoticeAssessment.proceduralNotice === true
+    && proceduralNoticeAssessment.hasStrategicShift !== true;
+  let adjustedActionClarity = actionClarity;
+  let adjustedMechanism = mechanism;
+  let adjustedSpecificity = specificity;
+  let adjustedOriginalityAndCorroboration = originalityAndCorroboration;
+
+  if (isNonStrategicProceduralOfficial) {
+    adjustedActionClarity = 0;
+    adjustedMechanism = 0;
+    adjustedSpecificity = Math.min(adjustedSpecificity, 0.08);
+    adjustedOriginalityAndCorroboration = Math.min(adjustedOriginalityAndCorroboration, 0.06);
+  }
+
+  let total = clamp(
+    actorClarity + adjustedActionClarity + adjustedMechanism + adjustedSpecificity + adjustedOriginalityAndCorroboration,
     0,
     1
   );
+  if (isNonStrategicProceduralOfficial) total = Math.min(total, 0.35);
+  if (isNonStrategicProceduralOfficial && OFFICIAL_FILLER_PATTERN.test(combined)) total = Math.min(total, 0.25);
 
   return {
     total: Number(total.toFixed(4)),
     components: {
       actor_clarity: Number(actorClarity.toFixed(4)),
-      action_clarity: Number(actionClarity.toFixed(4)),
-      mechanism: Number(mechanism.toFixed(4)),
-      specificity: Number(specificity.toFixed(4)),
-      originality_corroboration: Number(originalityAndCorroboration.toFixed(4)),
+      action_clarity: Number(adjustedActionClarity.toFixed(4)),
+      mechanism: Number(adjustedMechanism.toFixed(4)),
+      specificity: Number(adjustedSpecificity.toFixed(4)),
+      originality_corroboration: Number(adjustedOriginalityAndCorroboration.toFixed(4)),
     },
   };
 }
@@ -351,6 +376,9 @@ function computeStoryQualityScore(item, context = {}) {
 function computeSoftPenalties(item, context = {}) {
   const sourceDomain = String(item?.source_domain || item?.source || "").trim().toLowerCase();
   const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  const headline = String(item?.headline || "");
+  const summary = String(item?.summary || "");
+  const combined = `${headline} ${summary}`.trim();
   const contentFlags = Array.isArray(item?.content_flags)
     ? item.content_flags.map((flag) => String(flag || "").trim().toLowerCase())
     : [];
@@ -368,8 +396,26 @@ function computeSoftPenalties(item, context = {}) {
   if (proceduralNoticeAssessment.proceduralNotice) {
     penalties.procedural_notice = proceduralNoticeAssessment.hasStrategicShift ? 0.03 : 0.10;
   }
+  if (sourceType === "primary_official"
+      && proceduralNoticeAssessment.proceduralNotice
+      && proceduralNoticeAssessment.hasStrategicShift !== true) {
+    penalties.primary_official_procedural_no_shift = 0.18;
+  }
+  if (sourceType === "primary_official" && OFFICIAL_FILLER_PATTERN.test(combined)) {
+    penalties.official_filler = 0.12;
+  }
   if (sourceType === "aggregator_republisher") penalties.aggregator = 0.08;
   if (sourceType === "corporate_pr") penalties.corporate_pr = 0.05;
+  if (topicTag === "TECHNOLOGY"
+      && TECHNOLOGY_DEAL_NOISE_PATTERN.test(combined)
+      && !TECH_STRATEGIC_PATTERN.test(combined)) {
+    penalties.consumer_deal_noise_in_technology = 0.10;
+  }
+  if (topicTag === "ENERGY"
+      && !ENERGY_TOPIC_ANCHOR_PATTERN.test(combined)
+      && (ENERGY_FALSE_POSITIVE_PATTERN.test(combined) || ENERGY_OFF_TOPIC_PATTERN.test(combined))) {
+    penalties.off_topic_non_energy_story_in_energy = 0.18;
+  }
   if (context.ignoreCompetitivePenalties !== true && Number(item?.preferred_close_substitute_penalty || 0) > 0) {
     penalties.preferred_close_substitute = Number(item.preferred_close_substitute_penalty || 0) * 0.4;
   }

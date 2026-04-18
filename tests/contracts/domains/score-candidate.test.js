@@ -164,4 +164,31 @@ assert.strictEqual(finalRank.components.strategic_value, 0.9);
 assert.strictEqual(finalRank.components.story_quality_score, storyQuality.total);
 assert.ok(finalRank.total <= 1 && finalRank.total >= 0, "final rank should clamp to [0,1]");
 
+const proceduralTechOfficial = {
+  headline: "Agency Information Collection Activities; Proposed eCollection eComments Requested",
+  summary: "Federal Register notice of a previously approved information collection request.",
+  source_domain: "federalregister.gov",
+  source_type: "primary_official",
+  source_tier: "premium",
+  retrieval_origin: "broker_official",
+  published_date: "2026-04-11T10:00:00.000Z",
+  tag: "TECHNOLOGY",
+  novelty_score: 0.8,
+  topic_fit: 0.9,
+  content_flags: ["regulatory"],
+};
+const proceduralTechStoryQuality = computeStoryQualityScore(proceduralTechOfficial);
+const proceduralTechFinalRank = computeFinalRankScore(proceduralTechOfficial, { nowMs });
+assert.ok(proceduralTechStoryQuality.total <= 0.25, `non-strategic procedural official should be capped aggressively, got ${proceduralTechStoryQuality.total}`);
+assert.strictEqual(proceduralTechStoryQuality.components.action_clarity, 0);
+assert.strictEqual(proceduralTechStoryQuality.components.mechanism, 0);
+assert.ok(
+  proceduralTechFinalRank.components.soft_penalties >= 0.3,
+  `procedural official should accrue strong V2 penalties, got ${proceduralTechFinalRank.components.soft_penalties}`
+);
+assert.ok(
+  proceduralTechFinalRank.total < finalRank.total,
+  "procedural official should rank below a clear business signal in V2"
+);
+
 process.stdout.write("[score-candidate] all assertions passed\n");

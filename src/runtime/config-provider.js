@@ -296,6 +296,20 @@ function getDigestLockUnhealthyBlockThreshold() {
   return Math.max(1, readEnvNumber(["DIGEST_LOCK_UNHEALTHY_BLOCK_THRESHOLD"], 3));
 }
 
+function getScheduledTopicAllowlist() {
+  const raw = readEnvString(["SIGNALBRIEF_SCHEDULED_TOPIC_ALLOWLIST"], "");
+  if (!raw) return [];
+  const allowlist = [];
+  const seen = new Set();
+  for (const value of raw.split(/[,\n]/)) {
+    const canonicalTag = canonicalizeMvpTopicTag(value);
+    if (!canonicalTag || seen.has(canonicalTag)) continue;
+    seen.add(canonicalTag);
+    allowlist.push(canonicalTag);
+  }
+  return allowlist;
+}
+
 function getMailerTimeoutMs() {
   return Math.max(1000, readEnvNumber(["SIGNALBRIEF_MAILER_TIMEOUT_MS"], 15_000));
 }
@@ -360,6 +374,7 @@ module.exports = {
   getInventoryStartupDelayMs,
   getDigestWorkerArgsEnv,
   getDigestLockUnhealthyBlockThreshold,
+  getScheduledTopicAllowlist,
   getMailerTimeoutMs,
   getUnsubscribeSigningSecretOverride,
   getStoreBackendOverride,

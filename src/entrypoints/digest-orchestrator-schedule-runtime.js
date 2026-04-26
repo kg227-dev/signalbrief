@@ -1,5 +1,12 @@
 "use strict";
 
+const {
+  canonicalizeMvpTopicTag,
+} = require("../runtime/topic-normalization-runtime");
+const {
+  getScheduledTopicAllowlist,
+} = require("../runtime/config-provider");
+
 const NON_RETRYABLE_UNDERFILL_REASONS = new Set([
   "retrieval_thin",
   "ranking_policy_limited",
@@ -32,6 +39,50 @@ function hasExhaustedScheduledRetryBudget(retryState) {
   return attemptCount >= 2;
 }
 
+function normalizeScheduledTopicAllowlist(values) {
+  const out = [];
+  const seen = new Set();
+  for (const value of (Array.isArray(values) ? values : [])) {
+    const canonicalTag = canonicalizeMvpTopicTag(value);
+    if (!canonicalTag || seen.has(canonicalTag)) continue;
+    seen.add(canonicalTag);
+    out.push(canonicalTag);
+  }
+  return out;
+}
+
+function getScheduledTopicsForUser(user) {
+  const out = [];
+  const seen = new Set();
+  for (const value of (Array.isArray(user?.topics) ? user.topics : [])) {
+    const canonicalTag = canonicalizeMvpTopicTag(value);
+    if (!canonicalTag || seen.has(canonicalTag)) continue;
+    seen.add(canonicalTag);
+    out.push(canonicalTag);
+  }
+  return out;
+}
+
+function getDisallowedScheduledTopics(user, allowlistSet) {
+  if (!(allowlistSet instanceof Set) || allowlistSet.size === 0) return [];
+  const userTopics = getScheduledTopicsForUser(user);
+  const disallowed = [];
+  const seen = new Set();
+  for (const value of userTopics) {
+    if (allowlistSet.has(value) || seen.has(value)) continue;
+    seen.add(value);
+    disallowed.push(value);
+  }
+  return disallowed;
+}
+
+function isWithinScheduledTopicScope(user, allowlistSet) {
+  if (!(allowlistSet instanceof Set) || allowlistSet.size === 0) return true;
+  const userTopics = getScheduledTopicsForUser(user);
+  if (userTopics.length === 0) return false;
+  return getDisallowedScheduledTopics(user, allowlistSet).length === 0;
+}
+
 function resolveDueUsers(deps) {
   const {
     allUsers,
@@ -43,6 +94,7 @@ function resolveDueUsers(deps) {
     log,
     allowExampleEmails = true,
     retryStateRuntime = null,
+    scheduledTopicAllowlist = getScheduledTopicAllowlist(),
   } = deps;
 
   const now = getEtNow();
@@ -61,13 +113,22 @@ function resolveDueUsers(deps) {
   if (blockedExampleCount > 0) {
     log(`[schedule] excluded ${blockedExampleCount} @example.com account(s) from production delivery`);
   }
+  const normalizedScheduledTopicAllowlist = normalizeScheduledTopicAllowlist(scheduledTopicAllowlist);
+  const scheduledTopicAllowlistSet = new Set(normalizedScheduledTopicAllowlist);
+  const topicScopedActive = allActive.filter((user) => isWithinScheduledTopicScope(user, scheduledTopicAllowlistSet));
+  const blockedTopicCount = allActive.length - topicScopedActive.length;
+  if (blockedTopicCount > 0 && normalizedScheduledTopicAllowlist.length > 0) {
+    log(
+      `[schedule] excluded ${blockedTopicCount} user(s) outside scheduled topic scope [${normalizedScheduledTopicAllowlist.join(", ")}]`
+    );
+  }
 
   const todayDOW = Number.isInteger(etNow.todayDOW) ? etNow.todayDOW : now.getDay();
   const catchupWindowMinutes = Math.max(
     30,
     Number(CONFIG?.digest?.catchupWindowMinutes || 60)
   );
-  const dueUsers = allActive.filter((user) => {
+  const dueUsers = topicScopedActive.filter((user) => {
     const prefs = user.preferences || {};
     const retryState = retryStateRuntime && typeof retryStateRuntime.getRetryState === "function"
       ? retryStateRuntime.getRetryState(user.chatId || user.email, todayET)
@@ -112,6 +173,13 @@ function resolveDueUsers(deps) {
   if (allActive.length > 0) {
     const parts = allActive.map((user) => {
       const prefs = user.preferences || {};
+      const blockedTopics = getDisallowedScheduledTopics(user, scheduledTopicAllowlistSet);
+      if (normalizedScheduledTopicAllowlist.length > 0 && getScheduledTopicsForUser(user).length === 0) {
+        return `${user.email || user.chatId}: scopeBlocked(noTopics)`;
+      }
+      if (blockedTopics.length > 0) {
+        return `${user.email || user.chatId}: scopeBlocked(${blockedTopics.join(",")})`;
+      }
       const alreadyToday = toEtDateString(user.last_digest_at) === todayET;
       if (alreadyToday) return `${user.email || user.chatId}: alreadyToday`;
       if (!hasScheduledDeliveryChannel(user)) return `${user.email || user.chatId}: noChannel`;

@@ -27,6 +27,7 @@ function buildUser(lastDigestAt = null) {
     chatId: "8711828141",
     email: "rishigulati129@gmail.com",
     status: "active",
+    topics: ["HEALTHCARE"],
     last_digest_at: lastDigestAt,
     preferences: {
       delivery_time: "21:30",
@@ -243,4 +244,43 @@ function buildRetryStateRuntime(entry) {
     }),
   });
   assert.strictEqual(out.dueUsers.length, 0, "scheduler should hard-stop users that already exhausted the single retry budget");
+}
+
+{
+  const out = resolveDueUsers({
+    targetChatId: null,
+    allUsers: () => [
+      {
+        ...buildUser("2026-03-14T04:04:00.000Z"),
+        chatId: "healthcare-only",
+        email: "healthcare@example.com",
+        topics: ["HEALTHCARE"],
+      },
+      {
+        ...buildUser("2026-03-14T04:04:00.000Z"),
+        chatId: "technology-only",
+        email: "technology@example.com",
+        topics: ["TECHNOLOGY"],
+      },
+      {
+        ...buildUser("2026-03-14T04:04:00.000Z"),
+        chatId: "mixed-user",
+        email: "mixed@example.com",
+        topics: ["LIFE SCIENCES", "INDUSTRIALS"],
+      },
+    ],
+    USER_STATUS: { ACTIVE: "active" },
+    getEtNow: () => new Date("2026-03-16T01:30:00.000Z"),
+    getEtNowParts,
+    toEtDateString,
+    CONFIG: { digest: { catchupWindowMinutes: 60 } },
+    log: () => {},
+    allowExampleEmails: true,
+    scheduledTopicAllowlist: ["HEALTHCARE", "LIFE SCIENCES"],
+  });
+  assert.deepStrictEqual(
+    out.dueUsers.map((user) => user.chatId),
+    ["healthcare-only"],
+    "scheduled topic scope should exclude users with disallowed or mixed topic sets"
+  );
 }
